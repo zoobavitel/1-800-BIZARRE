@@ -1,0 +1,89 @@
+[
+    {
+        "model": "characters.heritage",
+        "pk": 10,
+        "fields": {
+            "name": "Passione Ex-Member",
+            "base_hp": 0,
+            "description": "Originally a member of Passione with adrenaline-driven ambition."
+        }
+    },
+    {
+        "model": "characters.vice",
+        "pk": 10,
+        "fields": {
+            "name": "Fun",
+            "description": "Derives thrill from physical activity, danger, and games."
+        }
+    },
+    {
+        "model": "characters.ability",
+        "pk": 10,
+        "fields": {
+            "name": "Swan Song",
+            "description": "When you would be taken out by harm (Level 4), you may spend all remaining Stand armor charges (minimum 1) to remain standing for a short but heroic moment. You can take one last action before you collapse. If that action prevents or cancels the harm, you remain conscious."
+        }
+    },
+    {
+        "model": "characters.character",
+        "pk": 10,
+        "fields": {
+            "user": 1,
+            "name": "Jack Rice",
+            "heritage": 10,
+            "vice": 10,
+            "insight": {
+                "hunt": 0,
+                "study": 0,
+                "survey": 0,
+                "tinker": 0
+            },
+            "prowess": {
+                "finesse": 1,
+                "prowl": 0,
+                "skirmish": 2,
+                "wreck": 1
+            },
+            "resolve": {
+                "bizarre": 1,
+                "command": 0,
+                "consort": 1,
+                "sway": 1
+            },
+            "close_friend": "David Helmouth (Stand: I Don\u2019t Care)",
+            "rival": "",
+            "xp_clocks": {
+                "insight": 0,
+                "prowess": 3,
+                "resolve": 3,
+                "potential_xp": 4,
+                "action_upgrade": 0,
+                "playbook_upgrade": 0
+            },
+            "xp_triggers": [
+                "You addressed a challenge with your stand",
+                "You expressed your beliefs, drives, heritage, or background",
+                "You struggled with issues from your vice or traumas during the session"
+            ]
+        }
+    },
+    {
+        "model": "characters.stand",
+        "pk": 10,
+        "fields": {
+            "character": 10,
+            "name": "The Phoenix",
+            "type": "Close-Range",
+            "form": "Humanoid",
+            "consciousness_level": "C",
+            "power": "B",
+            "speed": "C",
+            "range": "D",
+            "durability": "C",
+            "precision": "D",
+            "development": "D",
+            "unique_ability": "Burn to the Wayside and Rise From the Ashes: Can imbue anything with decay that acts as acid. Rebirth effect strengthens items. Filling a Decay Clock causes rebirth. Rebirth may grant +1d, +1 effect, resistance, or a mutation.",
+            "standard_ability": 10
+        }
+    }
+]

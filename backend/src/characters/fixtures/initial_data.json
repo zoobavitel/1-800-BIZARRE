@@ -1,0 +1,78 @@
+[
+    {
+      "model": "characters.heritage",
+      "pk": 1,
+      "fields": {
+        "name": "Human",
+        "base_hp": 0,
+        "description": "Flexible and adaptable with no inherent strengths or weaknesses."
+      }
+    },
+    {
+      "model": "characters.heritage",
+      "pk": 2,
+      "fields": {
+        "name": "Vampire",
+        "base_hp": 3,
+        "description": "Immortal, powerful, and cursed by the sun and Hamon energy."
+      }
+    },
+    {
+      "model": "characters.heritage",
+      "pk": 3,
+      "fields": {
+        "name": "Pillar Man",
+        "base_hp": 3,
+        "description": "An ancient being with evolving powers and extreme vulnerabilities."
+      }
+    },
+    {
+      "model": "characters.vice",
+      "pk": 1,
+      "fields": {
+        "name": "Gambling",
+        "description": "You throw yourself into games of chance and reckless bets."
+      }
+    },
+    {
+      "model": "characters.vice",
+      "pk": 2,
+      "fields": {
+        "name": "Obsession",
+        "description": "You relentlessly pursue a goal, no matter the cost."
+      }
+    },
+    {
+      "model": "characters.vice",
+      "pk": 3,
+      "fields": {
+        "name": "Violence",
+        "description": "You only feel release through bloodshed and conflict."
+      }
+    },
+    {
+      "model": "characters.ability",
+      "pk": 1,
+      "fields": {
+        "name": "Shadow",
+        "description": "Expend Stand Armor to resist detection or perform stealth feats."
+      }
+    },
+    {
+      "model": "characters.ability",
+      "pk": 2,
+      "fields": {
+        "name": "Iron Will",
+        "description": "You are immune to the terror that Bizarre entities inflict on sight. +1d when resisting with Resolve."
+      }
+    },
+    {
+      "model": "characters.ability",
+      "pk": 3,
+      "fields": {
+        "name": "Functioning Vice",
+        "description": "Adjust dice outcome when indulging your vice. An ally may do the same."
+      }
+    }
+  ]
+  

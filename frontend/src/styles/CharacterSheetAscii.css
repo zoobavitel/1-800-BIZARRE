@@ -1,0 +1,572 @@
+/* CharacterSheetAscii.css */
+.character-sheet-ascii {
+    font-family: 'Courier New', monospace;
+    max-width: 1200px;
+    margin: 0 auto;
+    background-color: #f8f8f8;
+    padding: 20px;
+    border: 2px solid #333;
+    color: #333;
+    font-size: 14px;
+    line-height: 1.2;
+    overflow-x: auto;
+  }
+  
+  .sheet-header {
+    font-size: 12px;
+    white-space: pre;
+    margin: 0;
+    padding: 0;
+    color: #222;
+    text-align: center;
+    line-height: 1.1;
+  }
+  
+  .sheet-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  
+  /* Fields and inputs */
+  .field-section {
+    margin-bottom: 15px;
+    border-bottom: 1px dashed #999;
+    padding-bottom: 5px;
+  }
+  
+  .field-section label {
+    display: inline-block;
+    font-weight: bold;
+    margin-right: 10px;
+    min-width: 60px;
+  }
+  
+  .full-width-field {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 5px;
+    font-family: 'Courier New', monospace;
+    border: none;
+    border-bottom: 1px solid #999;
+    background: transparent;
+  }
+  
+  .inline-field {
+    width: 150px;
+    padding: 5px;
+    font-family: 'Courier New', monospace;
+    border: none;
+    border-bottom: 1px solid #999;
+    background: transparent;
+  }
+  
+  .inline-select {
+    font-family: 'Courier New', monospace;
+    border: none;
+    background: transparent;
+    border-bottom: 1px solid #999;
+    padding: 3px;
+    margin-right: 10px;
+  }
+  
+  textarea.full-width-field {
+    resize: vertical;
+    min-height: 60px;
+  }
+  
+  /* Stress and Trauma */
+  .stress-trauma-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+  
+  .stress-section, .trauma-section {
+    border: 1px solid #333;
+    padding: 5px;
+  }
+  
+  .stress-section label, .trauma-section label {
+    display: block;
+    font-weight: bold;
+    text-align: center;
+    border-bottom: 1px solid #333;
+    margin-bottom: 5px;
+  }
+  
+  .stress-track {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+  }
+  
+  .stress-box {
+    width: 20px;
+    height: 20px;
+    text-align: center;
+    line-height: 20px;
+    cursor: pointer;
+  }
+  
+  .stress-box.filled {
+    font-weight: bold;
+  }
+  
+  .durability-grades {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    margin-top: 5px;
+  }
+  
+  .grade {
+    min-width: 15px;
+    text-align: center;
+  }
+  
+  .trauma-list {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+  }
+  
+  .trauma-item {
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+  }
+  
+  .trauma-item input {
+    margin-right: 5px;
+  }
+  
+  /* Harm section */
+  .harm-section {
+    margin-bottom: 15px;
+    border: 1px solid #333;
+  }
+  
+  .harm-header {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    text-align: center;
+    font-weight: bold;
+    border-bottom: 1px solid #333;
+    padding: 3px 0;
+  }
+  
+  .harm-grid {
+    display: grid;
+    grid-template-rows: repeat(3, auto);
+    gap: 5px;
+    padding: 5px;
+  }
+  
+  .harm-level {
+    display: grid;
+    grid-template-columns: 30px 30px 1fr 1fr;
+    gap: 5px;
+    align-items: center;
+  }
+  
+  .harm-number {
+    font-weight: bold;
+    text-align: center;
+  }
+  
+  .harm-level input[type="checkbox"] {
+    justify-self: center;
+  }
+  
+  .harm-level input[type="text"] {
+    width: 100%;
+    padding: 2px 5px;
+    font-family: 'Courier New', monospace;
+    border: none;
+    border-bottom: 1px solid #999;
+    background: transparent;
+  }
+  
+  .healing-section, .armor-section, .devils-bargain {
+    display: grid;
+    grid-template-rows: auto auto;
+    gap: 5px;
+    text-align: center;
+    font-size: 12px;
+  }
+  
+  .healing-clock, .armor-boxes {
+    display: flex;
+    justify-content: center;
+    gap: 5px;
+  }
+  
+  .clock-segment, .armor-box {
+    width: 20px;
+    height: 20px;
+    text-align: center;
+    line-height: 20px;
+    cursor: pointer;
+  }
+  
+  .clock-segment.filled, .armor-box.filled {
+    font-weight: bold;
+  }
+  
+  .armor-types {
+    font-size: 10px;
+    letter-spacing: 1px;
+  }
+  
+  .bargain-box {
+    width: 20px;
+    height: 20px;
+    border: 1px solid #333;
+    margin: 0 auto;
+  }
+  
+  /* Stand Stats section */
+  .stand-stats-section {
+    margin-bottom: 15px;
+    border: 1px solid #333;
+  }
+  
+  .section-header {
+    font-weight: bold;
+    text-align: center;
+    border-bottom: 1px solid #333;
+    padding: 3px 0;
+  }
+  
+  .stand-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    padding: 5px;
+  }
+  
+  .stat-labels {
+    padding: 5px;
+  }
+  
+  .stat-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 12px;
+  }
+  
+  .stat-row span:first-child {
+    min-width: 70px;
+  }
+  
+  .grade-option {
+    min-width: 15px;
+    text-align: center;
+    cursor: pointer;
+  }
+  
+  .grade-option.selected {
+    font-weight: bold;
+    text-decoration: underline;
+  }
+  
+  .vector-name {
+    padding: 10px;
+    text-align: center;
+  }
+  
+  .vector-name input {
+    width: 100%;
+    padding: 5px;
+    font-family: 'Courier New', monospace;
+    text-align: center;
+    border: none;
+    border-bottom: 1px solid #999;
+    background: transparent;
+  }
+  
+  .mutation-trigger {
+    padding: 10px;
+    font-size: 12px;
+    text-align: center;
+  }
+  
+  /* Abilities section */
+  .abilities-section {
+    margin-bottom: 15px;
+    border: 1px solid #333;
+  }
+  
+  .ability-field {
+    display: block;
+    width: 100%;
+    padding: 5px;
+    margin: 5px 0;
+    font-family: 'Courier New', monospace;
+    border: none;
+    border-bottom: 1px dashed #999;
+    background: transparent;
+  }
+  
+  /* Notes section */
+  .notes-section {
+    margin-bottom: 15px;
+    border: 1px solid #333;
+  }
+  
+  .note-field {
+    display: block;
+    width: 100%;
+    padding: 5px;
+    margin: 5px 0;
+    font-family: 'Courier New', monospace;
+    border: none;
+    border-bottom: 1px dashed #999;
+    background: transparent;
+    resize: vertical;
+  }
+  
+  /* XP track */
+  .xp-section {
+    margin-bottom: 15px;
+  }
+  
+  .xp-header {
+    font-weight: bold;
+    margin-bottom: 5px;
+  }
+  
+  .xp-track {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+  }
+  
+  .xp-box {
+    width: 20px;
+    height: 20px;
+    text-align: center;
+    line-height: 20px;
+    cursor: pointer;
+  }
+  
+  .xp-box.filled {
+    font-weight: bold;
+  }
+  
+  /* Action ratings */
+  .action-ratings {
+    margin-bottom: 15px;
+  }
+  
+  .attribute-section {
+    margin-bottom: 15px;
+  }
+  
+  .attribute-name {
+    font-weight: bold;
+    border-bottom: 1px solid #333;
+    padding-bottom: 3px;
+    margin-bottom: 5px;
+  }
+  
+  .action-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 5px;
+  }
+  
+  .action-name {
+    font-size: 12px;
+    min-width: 80px;
+  }
+  
+  .action-dots {
+    display: flex;
+    gap: 5px;
+  }
+  
+  .action-dot {
+    width: 20px;
+    height: 20px;
+    text-align: center;
+    line-height: 20px;
+    cursor: pointer;
+  }
+  
+  .action-dot.filled {
+    font-weight: bold;
+  }
+  
+  /* Push yourself section */
+  .push-yourself {
+    margin-bottom: 15px;
+  }
+  
+  .bonus-die {
+    font-weight: bold;
+    margin-bottom: 5px;
+  }
+  
+  .push-section, .devils-bargain-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+    font-size: 12px;
+  }
+  
+  .push-box {
+    width: 20px;
+    height: 20px;
+    text-align: center;
+    line-height: 20px;
+    margin-right: 5px;
+  }
+  
+  /* Loadout section */
+  .loadout-section {
+    margin-bottom: 15px;
+    display: flex;
+    align-items: center;
+  }
+  
+  .loadout-header {
+    font-weight: bold;
+    margin-right: 10px;
+  }
+  
+  .loadout-options {
+    display: flex;
+    gap: 10px;
+  }
+  
+  /* Equipment section */
+  .equipment-section {
+    margin-bottom: 15px;
+  }
+  
+  .equipment-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 5px;
+  }
+  
+  .equipment-item input[type="checkbox"] {
+    margin-right: 5px;
+  }
+  
+  .equipment-item input[type="text"] {
+    flex-grow: 1;
+    padding: 3px;
+    font-family: 'Courier New', monospace;
+    border: none;
+    border-bottom: 1px dashed #999;
+    background: transparent;
+  }
+  
+  .equipment-item input[type="text"]:disabled {
+    color: #999;
+    font-style: italic;
+  }
+  
+  /* Allies and Rivals section */
+  .allies-rivals-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+  
+  .allies-section, .rivals-section {
+    border: 1px solid #333;
+  }
+  
+  .relation-item {
+    padding: 5px;
+  }
+  
+  .relation-item input {
+    width: 100%;
+    padding: 3px;
+    font-family: 'Courier New', monospace;
+    border: none;
+    border-bottom: 1px dashed #999;
+    background: transparent;
+  }
+  
+  /* XP triggers section */
+  .xp-triggers {
+    margin-bottom: 15px;
+    border: 1px solid #333;
+  }
+  
+  .xp-explanation {
+    padding: 5px;
+    font-size: 12px;
+  }
+  
+  .xp-explanation p {
+    margin: 5px 0;
+  }
+  
+  /* Footer sections */
+  .footer-sections {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+  }
+  
+  .footer-section {
+    border: 1px solid #333;
+    font-size: 12px;
+  }
+  
+  .teamwork-item, .planning-item, .gather-item {
+    padding: 3px 5px;
+  }
+  
+  .planning-types {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    padding: 5px;
+  }
+  
+  .planning-type {
+    text-align: center;
+    padding: 2px;
+    border: 1px solid #999;
+    margin: 2px;
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 1000px) {
+    .sheet-grid {
+      grid-template-columns: 1fr;
+    }
+    
+    .footer-sections {
+      grid-template-columns: 1fr;
+    }
+  }
+  
+  @media print {
+    .character-sheet-ascii {
+      background-color: white;
+      color: black;
+      border: none;
+      padding: 0;
+      font-size: 10px;
+    }
+    
+    .action-dot, .stress-box, .xp-box, .clock-segment, .armor-box {
+      border: 1px solid #333;
+    }
+    
+    input, select, textarea {
+      border: none !important;
+    }
+  }

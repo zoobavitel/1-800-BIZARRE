@@ -1,0 +1,30 @@
+[
+    {
+      "model": "auth.user",
+      "pk": 1,
+      "fields": {
+        "username": "z",
+        "is_staff": true,
+        "is_superuser": false,
+        "password": "Steeled12!"  
+      }
+    },
+    {
+      "model": "auth.user",
+      "pk": 2,
+      "fields": {
+        "username": "player_jack"
+      }
+    },
+    {
+      "model": "characters.campaign",
+      "pk": 1,
+      "fields": {
+        "name": "Bad Men, Bad Plans",
+        "description": "A JoJo adventure through Napolese ruins.",
+        "gm": 1,
+        "players": [2]
+      }
+    }
+  ]
+  
