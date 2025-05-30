@@ -1,4 +1,4 @@
-// src/pages/CharacterDashboard.jsx
+// src/pages/CharacterDashboard.jsx - FIXED
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../api/axios';
@@ -42,7 +42,7 @@ export default function CharacterDashboard() {
   const sortedCharacters = [...filteredCharacters].sort((a, b) => {
     switch (sortBy) {
       case 'created_newest':
-        return (b.id || 0) - (a.id || 0); // Use ID as proxy for creation date
+        return (b.id || 0) - (a.id || 0);
       case 'created_oldest':
         return (a.id || 0) - (b.id || 0);
       case 'name_az':
@@ -86,7 +86,7 @@ export default function CharacterDashboard() {
           <input
             type="text"
             className="w-full px-3 py-2 border border-gray-300 rounded mb-4"
-            placeholder="Search by Name, Level, Class, Species, or Campaign"
+            placeholder="Search by Name, Heritage, Stand Name..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
           />
@@ -112,6 +112,14 @@ export default function CharacterDashboard() {
             <p className="text-gray-600">
               {searchTerm ? "No characters match your search." : "You haven't created any characters yet."}
             </p>
+            {!searchTerm && (
+              <Link 
+                to="/create-character"
+                className="mt-4 inline-block bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+              >
+                Create Your First Character
+              </Link>
+            )}
           </div>
         ) : (
           <div className="space-y-6">
@@ -119,30 +127,24 @@ export default function CharacterDashboard() {
               <div key={character.id} className="border-b border-gray-200 pb-4">
                 <h2 className="text-2xl font-bold">{character.true_name || 'Unnamed Character'}</h2>
                 <p>
-                  Level {character.coin_stats?.development || 1}|
-                  {character.heritage ? character.heritage.name : 'Human'}|
+                  Level {character.coin_stats?.development || 1} | 
+                  {character.heritage ? character.heritage.name : 'Human'} | 
                   {character.playbook || 'STAND'}
                 </p>
-                <p className="mb-2">Stand: {character.stand_name || 'aaa'}</p>
+                <p className="mb-2">Stand: {character.stand_name || 'Unnamed Stand'}</p>
                 
                 <div className="flex justify-between mt-2">
-                  <div>
+                  <div className="space-x-4">
                     <Link 
                       to={`/characters/${character.id}`} 
-                      className="text-red-600 mr-2"
+                      className="text-red-600 hover:text-red-800 font-medium"
                     >
-                      VIEW
-                    </Link>
-                    <Link 
-                      to={`/characters/${character.id}/edit`}
-                      className="text-red-600"
-                    >
-                      EDIT
+                      VIEW/EDIT
                     </Link>
                   </div>
                   <button 
                     onClick={() => handleDelete(character.id)}
-                    className="text-red-600 border border-gray-300 px-2 py-1 rounded"
+                    className="text-red-600 hover:text-red-800 border border-red-300 hover:border-red-500 px-3 py-1 rounded"
                   >
                     DELETE
                   </button>

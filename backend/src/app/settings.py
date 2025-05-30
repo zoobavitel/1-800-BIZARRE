@@ -1,70 +1,16 @@
-# backend/src/app/settings.py
-
-"""
-Django settings for JoJo TTRPG app project.
-"""
-
 from pathlib import Path
-
 import os
+from corsheaders.defaults import default_headers
 
 # BASE_DIR path setup
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,  # Keep default Django loggers
-    'formatters': {
-        'verbose': {
-            'format': '[{levelname}] {asctime} {name} - {message}',
-            'style': '{',
-        },
-        'simple': {
-            'format': '[{levelname}] {message}',
-            'style': '{',
-        },
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'simple',
-        },
-        'file': {
-            'level': 'DEBUG',
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'debug.log',
-            'formatter': 'verbose',
-        },
-    },
-    'root': {
-        'handlers': ['console', 'file'],
-        'level': 'DEBUG',
-    },
-}
-
-# backend/src/app/settings.py
-
-# settings.py
-
-REST_FRAMEWORK = {
-  'DEFAULT_AUTHENTICATION_CLASSES': [
-    'rest_framework.authentication.SessionAuthentication',
-    'rest_framework.authentication.TokenAuthentication',
-  ],
-  'DEFAULT_PERMISSION_CLASSES': [
-    'rest_framework.permissions.IsAuthenticated',
-  ],
-}
-
-
 # SECURITY WARNING: keep the secret key secret in production!
 SECRET_KEY = 'django-insecure-z*vp)!q(k+c-$#(vy8ws-h4=+d$r)q89x)ru(o_3yhr=+8lo3)'
 
-# SECURITY WARNING: turn off debug in production!
 DEBUG = True
 
 ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
-
 
 # Application definition
 INSTALLED_APPS = [
@@ -83,7 +29,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # Must be high to handle CORS correctly
+    'corsheaders.middleware.CorsMiddleware',  # must be at top
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -112,7 +58,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'app.wsgi.application'
 
-# Database setup (SQLite)
+# Database setup
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -134,17 +80,54 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
+# Static files
 STATIC_URL = 'static/'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# CORS configuration (frontend integration)
+# Django REST Framework config
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.SessionAuthentication',
+        'rest_framework.authentication.TokenAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}
+
+# Logging for development
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {'format': '[{levelname}] {asctime} {name} - {message}', 'style': '{'},
+        'simple': {'format': '[{levelname}] {message}', 'style': '{'},
+    },
+    'handlers': {
+        'console': {'class': 'logging.StreamHandler', 'formatter': 'simple'},
+        'file': {
+            'level': 'DEBUG',
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'debug.log',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {'handlers': ['console', 'file'], 'level': 'DEBUG'},
+}
+
+# 🔐 CORS settings
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
-    "http://192.168.1.X:3000",
+    "http://192.168.1.X:3000",  # Add your real LAN IP here if needed
 ]
 
-# Alternative simpler setup during development (uncomment to allow all)
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'authorization',
+]
+
+# Dev-only: allow all origins (optional fallback, comment out in production)
 # CORS_ALLOW_ALL_ORIGINS = True
