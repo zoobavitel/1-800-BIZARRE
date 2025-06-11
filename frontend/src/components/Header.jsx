@@ -1,6 +1,7 @@
-// src/components/Header.jsx
-import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+// src/components/Header.jsx - Enhanced with Search
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import api from '../api/axios';
 import '../styles/Header.css';
 
 const Header = ({ isAuthenticated }) => {
@@ -9,12 +10,92 @@ const Header = ({ isAuthenticated }) => {
     gameRules: false,
     collections: false,
   });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  
   const location = useLocation();
+  const navigate = useNavigate();
+  const searchRef = useRef(null);
+  const searchTimeoutRef = useRef(null);
   
   // Close navigation when route changes
   useEffect(() => {
     setNavOpen(false);
   }, [location.pathname]);
+  
+  // Handle search functionality
+  const performSearch = async (query) => {
+    if (!query.trim() || !isAuthenticated) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+
+    setSearchLoading(true);
+    try {
+      const response = await api.get(`/search/?q=${encodeURIComponent(query)}`);
+      setSearchResults(response.data.results || []);
+      setShowSearchResults(true);
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleSearchChange = (e) => {
+    const query = e.target.value;
+    setSearchQuery(query);
+
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // Debounce search - wait 300ms after user stops typing
+    searchTimeoutRef.current = setTimeout(() => {
+      performSearch(query);
+    }, 300);
+  };
+
+  const handleSearchResultClick = (result) => {
+    setShowSearchResults(false);
+    setSearchQuery('');
+    navigate(result.url);
+  };
+
+  const handleSearchSubmit = (e) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      performSearch(searchQuery);
+    }
+  };
+
+  // Close search results when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setShowSearchResults(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Clear search timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
   
   const toggleSection = (section) => {
     setExpandedSections(prev => ({
@@ -43,10 +124,54 @@ const Header = ({ isAuthenticated }) => {
       <header className="header">
         <Link to="/" className="logo">1(800)BIZARRE</Link>
         <div className="header-right">
-          <div className="search-container desktop-search">
-            <input type="text" className="search-input" placeholder="Search..." />
-            <span className="search-icon">🔍</span>
-          </div>
+          {isAuthenticated && (
+            <div className="search-container desktop-search" ref={searchRef}>
+              <form onSubmit={handleSearchSubmit}>
+                <input 
+                  type="text" 
+                  className="search-input" 
+                  placeholder="Search characters, campaigns, abilities..." 
+                  value={searchQuery}
+                  onChange={handleSearchChange}
+                  onFocus={() => searchQuery && setShowSearchResults(true)}
+                />
+                <button type="submit" className="search-icon">🔍</button>
+              </form>
+              
+              {/* Search Results Dropdown */}
+              {showSearchResults && (
+                <div className="search-results">
+                  {searchLoading ? (
+                    <div className="search-loading">Searching...</div>
+                  ) : searchResults.length > 0 ? (
+                    <>
+                      <div className="search-results-header">
+                        Search Results ({searchResults.length})
+                      </div>
+                      {searchResults.map((result, index) => (
+                        <div 
+                          key={`${result.type}-${result.id}-${index}`}
+                          className="search-result-item"
+                          onClick={() => handleSearchResultClick(result)}
+                        >
+                          <div className="search-result-type">{result.type}</div>
+                          <div className="search-result-title">{result.title}</div>
+                          <div className="search-result-subtitle">{result.subtitle}</div>
+                          {result.description && (
+                            <div className="search-result-description">{result.description}</div>
+                          )}
+                        </div>
+                      ))}
+                    </>
+                  ) : searchQuery ? (
+                    <div className="search-no-results">
+                      No results found for "{searchQuery}"
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          )}
           <button 
             className="hamburger" 
             onClick={() => setNavOpen(true)}

@@ -10,17 +10,20 @@ from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
 from django.contrib.auth import authenticate
 from rest_framework.permissions import AllowAny
+from django.db.models import Q
+from rest_framework.decorators import api_view, permission_classes
 
 
 
 from .models import (
     Heritage, Vice, Ability, Character, Stand,
-    Campaign, NPC, Crew, StandAbility
+    Campaign, NPC, Crew, StandAbility, HamonAbility, SpinAbility
 )
 from .serializers import (
     HeritageSerializer, ViceSerializer, AbilitySerializer,
     CharacterSerializer, StandSerializer,
-    CampaignSerializer, NPCSerializer, CrewSerializer, StandAbilitySerializer
+    CampaignSerializer, NPCSerializer, CrewSerializer, StandAbilitySerializer,
+    HamonAbilitySerializer, SpinAbilitySerializer
 )
 
 # Optional root view
@@ -68,6 +71,16 @@ class StandAbilityViewSet(viewsets.ModelViewSet):
     queryset = StandAbility.objects.all()
     serializer_class = StandAbilitySerializer
 
+class HamonAbilityViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = HamonAbility.objects.all()
+    serializer_class = HamonAbilitySerializer
+
+class SpinAbilityViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = SpinAbility.objects.all()
+    serializer_class = SpinAbilitySerializer
+
 class CharacterViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = CharacterSerializer
@@ -94,6 +107,10 @@ class CampaignViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         return Campaign.objects.filter(models.Q(gm=user) | models.Q(players=user)).distinct()
+
+    def perform_create(self, serializer):
+        # Automatically set the current user as the GM
+        serializer.save(gm=self.request.user)
 
 
 class NPCViewSet(viewsets.ModelViewSet):
@@ -165,3 +182,120 @@ class SpendCoinAPIView(APIView):
         crew.coin -= cost
         crew.save()
         return Response({"message": f"Spent {cost} coin from crew '{crew.name}'"}, status=200)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def global_search(request):
+    """
+    Global search endpoint that searches across characters, campaigns, NPCs, abilities, and heritages
+    """
+    query = request.GET.get('q', '').strip()
+    
+    if not query:
+        return Response({
+            'results': [],
+            'message': 'No search query provided'
+        })
+    
+    user = request.user
+    results = []
+    
+    # Search Characters
+    character_queryset = Character.objects.filter(
+        Q(user=user) | Q(campaign__gm=user)
+    ).filter(
+        Q(true_name__icontains=query) |
+        Q(alias__icontains=query) |
+        Q(stand_name__icontains=query) |
+        Q(background_note__icontains=query) |
+        Q(heritage__name__icontains=query)
+    )[:10]
+    
+    for char in character_queryset:
+        results.append({
+            'type': 'character',
+            'id': char.id,
+            'title': char.true_name or 'Unnamed Character',
+            'subtitle': f"{char.heritage.name if char.heritage else 'Human'} • {char.playbook or 'STAND'} User",
+            'description': f"Stand: {char.stand_name or 'Unnamed Stand'}",
+            'url': f'/characters/{char.id}',
+            'campaign': char.campaign.name if char.campaign else None
+        })
+    
+    # Search Campaigns
+    campaign_queryset = Campaign.objects.filter(
+        Q(gm=user) | Q(players=user)
+    ).filter(
+        Q(name__icontains=query) |
+        Q(description__icontains=query)
+    ).distinct()[:10]
+    
+    for campaign in campaign_queryset:
+        results.append({
+            'type': 'campaign',
+            'id': campaign.id,
+            'title': campaign.name,
+            'subtitle': f"Campaign • GM: {campaign.gm.username}",
+            'description': campaign.description or 'No description',
+            'url': f'/campaigns',
+            'campaign': campaign.name
+        })
+    
+    # Search NPCs (only if user is GM)
+    npc_queryset = NPC.objects.filter(
+        campaign__gm=user
+    ).filter(
+        Q(name__icontains=query) |
+        Q(description__icontains=query)
+    )[:10]
+    
+    for npc in npc_queryset:
+        results.append({
+            'type': 'npc',
+            'id': npc.id,
+            'title': npc.name,
+            'subtitle': f"NPC • {npc.campaign.name}",
+            'description': npc.description or 'No description',
+            'url': f'/campaigns',
+            'campaign': npc.campaign.name
+        })
+    
+    # Search Abilities
+    ability_queryset = Ability.objects.filter(
+        Q(name__icontains=query) |
+        Q(description__icontains=query)
+    )[:10]
+    
+    for ability in ability_queryset:
+        results.append({
+            'type': 'ability',
+            'id': ability.id,
+            'title': ability.name,
+            'subtitle': f"Ability • {ability.type.title()}",
+            'description': ability.description[:100] + '...' if len(ability.description) > 100 else ability.description,
+            'url': f'/rules#abilities',
+            'campaign': None
+        })
+    
+    # Search Heritages
+    heritage_queryset = Heritage.objects.filter(
+        Q(name__icontains=query) |
+        Q(description__icontains=query)
+    )[:10]
+    
+    for heritage in heritage_queryset:
+        results.append({
+            'type': 'heritage',
+            'id': heritage.id,
+            'title': heritage.name,
+            'subtitle': f"Heritage • Base HP: {heritage.base_hp}",
+            'description': heritage.description or 'No description',
+            'url': f'/rules#heritages',
+            'campaign': None
+        })
+    
+    return Response({
+        'results': results,
+        'total': len(results),
+        'query': query
+    })

@@ -1,0 +1,112 @@
+[
+  {
+    "model": "characters.detriment",
+    "pk": 1,
+    "fields": {
+      "heritage": 1,
+      "name": "Physically Inferior",
+      "hp_value": 1,
+      "required": false,
+      "description": "-1d when resisting physical harm."
+    }
+  },
+  {
+    "model": "characters.detriment",
+    "pk": 2,
+    "fields": {
+      "heritage": 1,
+      "name": "Bizarre Blindspot",
+      "hp_value": 1,
+      "required": false,
+      "description": "-1d when resisting Stand, Hamon, or supernatural effects."
+    }
+  },
+  {
+    "model": "characters.detriment",
+    "pk": 3,
+    "fields": {
+      "heritage": 1,
+      "name": "Slower Recovery",
+      "hp_value": 1,
+      "required": false,
+      "description": "Healing clock permanently reduced by 1 segment."
+    }
+  },
+  {
+    "model": "characters.detriment",
+    "pk": 4,
+    "fields": {
+      "heritage": 1,
+      "name": "Slower Movement",
+      "hp_value": 1,
+      "required": false,
+      "description": "Base movement speed reduced from 30ft to 20ft."
+    }
+  },
+  {
+    "model": "characters.detriment",
+    "pk": 5,
+    "fields": {
+      "heritage": 2,
+      "name": "Sinks Like a Rock",
+      "hp_value": 1,
+      "required": true,
+      "description": "Cannot swim, cannot float."
+    }
+  },
+  {
+    "model": "characters.detriment",
+    "pk": 6,
+    "fields": {
+      "heritage": 2,
+      "name": "Slow Regeneration",
+      "hp_value": 1,
+      "required": true,
+      "description": "Healing clock has +1 additional segment."
+    }
+  },
+  {
+    "model": "characters.detriment",
+    "pk": 7,
+    "fields": {
+      "heritage": 3,
+      "name": "Sunlight Weakness",
+      "hp_value": 2,
+      "required": true,
+      "description": "Takes Level 4 Harm per minute in direct sunlight."
+    }
+  },
+  {
+    "model": "characters.detriment",
+    "pk": 8,
+    "fields": {
+      "heritage": 3,
+      "name": "Hamon Vulnerability",
+      "hp_value": 1,
+      "required": true,
+      "description": "Hamon techniques deal +1 Harm and bypass armor."
+    }
+  },
+  {
+    "model": "characters.detriment",
+    "pk": 9,
+    "fields": {
+      "heritage": 4,
+      "name": "Sunlight Turns You to Stone",
+      "hp_value": 2,
+      "required": true,
+      "description": "Direct exposure to sunlight petrifies you indefinitely."
+    }
+  },
+  {
+    "model": "characters.detriment",
+    "pk": 10,
+    "fields": {
+      "heritage": 4,
+      "name": "Hamon Weakness",
+      "hp_value": 1,
+      "required": true,
+      "description": "Hamon techniques deal +1 Harm and bypass armor."
+    }
+  }
+]

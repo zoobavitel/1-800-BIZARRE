@@ -1,0 +1,74 @@
+[
+  {
+    "model": "characters.heritage",
+    "pk": 1,
+    "fields": {
+      "name": "Human",
+      "base_hp": 0,
+      "description": "Versatile but without inherent supernatural abilities."
+    }
+  },
+  {
+    "model": "characters.heritage",
+    "pk": 2,
+    "fields": {
+      "name": "Rock Human",
+      "base_hp": 2,
+      "description": "Resilient stone-like beings with natural stealth."
+    }
+  },
+  {
+    "model": "characters.heritage",
+    "pk": 3,
+    "fields": {
+      "name": "Vampire",
+      "base_hp": 3,
+      "description": "Immortal predators vulnerable to sunlight and Hamon."
+    }
+  },
+  {
+    "model": "characters.heritage",
+    "pk": 4,
+    "fields": {
+      "name": "Pillar Man",
+      "base_hp": 1,
+      "description": "Evolved ancients with heightened physicality and intelligence."
+    }
+  },
+  {
+    "model": "characters.heritage",
+    "pk": 5,
+    "fields": {
+      "name": "Gray Matter",
+      "base_hp": 1,
+      "description": "Extraterrestrials adept at mimicry and shapeshifting."
+    }
+  },
+  {
+    "model": "characters.heritage",
+    "pk": 6,
+    "fields": {
+      "name": "Haunting",
+      "base_hp": 1,
+      "description": "Partially spectral entities existing between life and death."
+    }
+  },
+  {
+    "model": "characters.heritage",
+    "pk": 7,
+    "fields": {
+      "name": "Cyborg",
+      "base_hp": 3,
+      "description": "Humans enhanced with advanced cybernetics."
+    }
+  },
+  {
+    "model": "characters.heritage",
+    "pk": 8,
+    "fields": {
+      "name": "Oracle",
+      "base_hp": 1,
+      "description": "Seers attuned deeply to the supernatural."
+    }
+  }
+]

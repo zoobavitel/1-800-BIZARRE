@@ -1,5 +1,47 @@
 {
+  "name": "jojo-ttrpg-platform",
+  "version": "1.0.0",
+  "description": "A comprehensive web platform for the JoJo's Bizarre Adventure TTRPG",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "cd frontend && npm start",
+    "dev:backend": "cd backend && source venv/bin/activate && cd src && python manage.py runserver",
+    "test": "npm run test:frontend && npm run test:backend",
+    "test:frontend": "cd frontend && npm test -- --watchAll=false",
+    "test:backend": "cd backend && source venv/bin/activate && cd src && python manage.py test",
+    "build": "cd frontend && npm run build",
+    "lint": "npm run lint:frontend",
+    "lint:frontend": "cd frontend && npx eslint src/",
+    "lint:fix": "cd frontend && npx eslint src/ --fix",
+    "install:all": "npm install && cd frontend && npm install",
+    "clean": "rm -rf node_modules frontend/node_modules frontend/build backend/src/db.sqlite3"
+  },
   "dependencies": {
     "react-router-dom": "^7.6.0"
-  }
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/jojo-ttrpg-platform.git"
+  },
+  "keywords": [
+    "jojo",
+    "tabletop",
+    "rpg",
+    "character-sheet",
+    "react",
+    "django"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
 }

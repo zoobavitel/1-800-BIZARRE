@@ -1,0 +1,114 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-frontend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+    
+    - name: Install frontend dependencies
+      run: |
+        cd frontend
+        npm ci
+    
+    - name: Run frontend tests
+      run: |
+        cd frontend
+        npm test -- --coverage --watchAll=false
+    
+    - name: Run frontend linting
+      run: |
+        cd frontend
+        npm run lint
+    
+    - name: Build frontend
+      run: |
+        cd frontend
+        npm run build
+
+  test-backend:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install Python dependencies
+      run: |
+        cd backend
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run Django tests
+      run: |
+        cd backend/src
+        python manage.py test
+    
+    - name: Check Django migrations
+      run: |
+        cd backend/src
+        python manage.py makemigrations --check --dry-run
+
+  integration-test:
+    needs: [test-frontend, test-backend]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        npm install
+        cd frontend && npm ci && cd ..
+        cd backend && pip install -r requirements.txt && cd ..
+    
+    - name: Setup test database
+      run: |
+        cd backend/src
+        python manage.py migrate
+        python manage.py loaddata characters/fixtures/*.json
+    
+    - name: Run integration tests
+      run: |
+        # Start backend in background
+        cd backend/src
+        python manage.py runserver &
+        BACKEND_PID=$!
+        
+        # Wait for backend to start
+        sleep 5
+        
+        # Run frontend integration tests
+        cd ../../frontend
+        npm test -- --testPathPattern=integration --watchAll=false
+        
+        # Clean up
+        kill $BACKEND_PID

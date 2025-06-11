@@ -1,0 +1,112 @@
+[
+  {
+    "model": "characters.spinability",
+    "pk": 1,
+    "fields": {
+      "name": "Golden Arc",
+      "spin_type": "FOUNDATION",
+      "description": "Once per scene, a thrown Spin projectile returns. On a 6, it may hit a second target. On a crit, +1 effect or +1d to the return strike.",
+      "stress_cost": 0,
+      "frequency": "Once per scene"
+    }
+  },
+  {
+    "model": "characters.spinability",
+    "pk": 2,
+    "fields": {
+      "name": "Vibrational Scan",
+      "spin_type": "FOUNDATION",
+      "description": "Use a spinning object to perform a Study or Survey roll. +1 effect when detecting structure, weak points, or lifeforms.",
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.spinability",
+    "pk": 3,
+    "fields": {
+      "name": "Kinetic Tether",
+      "spin_type": "FOUNDATION",
+      "description": "Spin threads can connect two objects. Once per score, create a tether that allows movement, redirection, or restraint. +1d when using it for repositioning or rescue.",
+      "stress_cost": 0,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.spinability",
+    "pk": 4,
+    "fields": {
+      "name": "Rebound Tactics",
+      "spin_type": "FOUNDATION",
+      "description": "+1d on attacks that ricochet. On a 6, you may apply splash harm (Level 1, close-range). On a crit, treat it as Level 2.",
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.spinability",
+    "pk": 5,
+    "fields": {
+      "name": "Precision Pulse",
+      "spin_type": "FOUNDATION",
+      "description": "Use Spin to bypass mechanical locks or triggers. Treat as Tinker with +1 effect. Costs 1 stress if disabling advanced systems or supernatural barriers.",
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.spinability",
+    "pk": 6,
+    "fields": {
+      "name": "Reflective Barrier",
+      "spin_type": "FOUNDATION",
+      "description": "Spin two objects at high frequency to bend light or sound. Once per score, redirect a single ranged attack or sound-based effect. Must be declared before the GM reveals the consequence.",
+      "stress_cost": 0,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.spinability",
+    "pk": 7,
+    "fields": {
+      "name": "Aesthetic Surge",
+      "spin_type": "FOUNDATION",
+      "description": "Use Spin to manipulate appearance. Once per scene, you may alter visible features or resonance for disguise or subterfuge. +1 effect on Sway or Consort for misdirection.",
+      "stress_cost": 0,
+      "frequency": "Once per scene"
+    }
+  },
+  {
+    "model": "characters.spinability",
+    "pk": 8,
+    "fields": {
+      "name": "Gyroscopic Mount",
+      "spin_type": "CAVALIER",
+      "description": "+1 effect to movement or melee Spin rolls when mounted or piloting.",
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.spinability",
+    "pk": 9,
+    "fields": {
+      "name": "Signal Pulse",
+      "spin_type": "CAVALIER",
+      "description": "Once per score, issue a one-word command to your mount, no matter the distance.",
+      "stress_cost": 0,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.spinability",
+    "pk": 10,
+    "fields": {
+      "name": "Stirrup Surge",
+      "spin_type": "CAVALIER",
+      "description": "+1d on Skirmish while charging. On a 6, gain a knockback effect. On a crit, Level 2 harm and position upgrade (Risky → Controlled).",
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  }
+]

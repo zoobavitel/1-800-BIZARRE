@@ -1,0 +1,134 @@
+[
+  {
+    "model": "characters.hamonability",
+    "pk": 1,
+    "fields": {
+      "name": "Ripple Breathing",
+      "hamon_type": "FOUNDATION",
+      "description": "+1d to resist poison, fatigue, or fear. Once per score, push yourself with no stress cost.",
+      "stress_cost": 0,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 2,
+    "fields": {
+      "name": "Overdrive",
+      "hamon_type": "FOUNDATION",
+      "description": "Spend 1 stress to charge a strike. +1 effect and +1 harm vs bizarre, undead, or inorganic targets.",
+      "stress_cost": 1,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 3,
+    "fields": {
+      "name": "Ripple Infusion",
+      "hamon_type": "FOUNDATION",
+      "description": "Spend 1 stress to imbue an object with Ripple energy for the scene. Gains +1 effect vs bizarre enemies.",
+      "stress_cost": 1,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 4,
+    "fields": {
+      "name": "Scarlet Overdrive",
+      "hamon_type": "FOUNDATION",
+      "description": "Ignite a weapon or limb. +1 harm and inflicts fire-based secondary effects. Foes must resist or catch fire.",
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 5,
+    "fields": {
+      "name": "Ripple Detector",
+      "hamon_type": "FOUNDATION",
+      "description": "+1 effect to Study or Survey when using liquid, mist, or blood as a conduit.",
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 6,
+    "fields": {
+      "name": "Zoom Punch",
+      "hamon_type": "FOUNDATION",
+      "description": "Make a melee strike at +1 zone distance. +1d when attacking from unexpected angles or cover.",
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 7,
+    "fields": {
+      "name": "Forced Ripple Breathing",
+      "hamon_type": "FOUNDATION",
+      "description": "Once per score, stabilize a dying ally or let them make a Hamon action even while unconscious.",
+      "stress_cost": 0,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 8,
+    "fields": {
+      "name": "Ripple Cutter",
+      "hamon_type": "FOUNDATION",
+      "description": "Spit or project fluid charged with Ripple. Ranged, armor-piercing. On a 6, start a 4-tick \"Slice\" clock.",
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 9,
+    "fields": {
+      "name": "Sendō Overdrive",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Strike bizarre targets through walls or barriers. On a 6, begin a \"Contact Clock\" (4 ticks) to bypass cover.",
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 10,
+    "fields": {
+      "name": "Metal Silver Overdrive",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Ripple conducts through metallic weapons. +1 effect when using chains, blades, or wire tools.",
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 11,
+    "fields": {
+      "name": "Ripple Hypnosis",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Once per score, with skin contact, suggest a command or surface a forgotten memory. Target resists with Resolve.",
+      "stress_cost": 0,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 12,
+    "fields": {
+      "name": "Sunlight Yellow Overdrive",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Spend 1 stress to unleash a radiant barrage. +1 harm and +1 effect vs undead or constructs.",
+      "stress_cost": 1,
+      "frequency": ""
+    }
+  }
+]

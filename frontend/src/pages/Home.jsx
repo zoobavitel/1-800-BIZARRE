@@ -1,13 +1,16 @@
 // src/pages/Home.jsx - UPDATED
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
 import { useAuth } from '../utils/AuthContext';
+import CampaignCreator from '../components/CampaignCreator';
 import '../styles/Home.css';
+import '../styles/CampaignCreator.css';
 
 export default function Home() {
   const navigate = useNavigate();
   const { isAuthenticated, loading } = useAuth();
+  const [showCampaignCreator, setShowCampaignCreator] = useState(false);
 
   const handleCreateCharacterClick = (e) => {
     if (!isAuthenticated) {
@@ -23,6 +26,20 @@ export default function Home() {
       localStorage.setItem('redirectAfterLogin', '/campaigns');
       navigate('/login');
     }
+  };
+
+  const handleCreateCampaign = () => {
+    setShowCampaignCreator(true);
+  };
+
+  const handleCloseCampaignCreator = () => {
+    setShowCampaignCreator(false);
+  };
+
+  const handleCampaignCreated = (newCampaign) => {
+    console.log('New campaign created:', newCampaign);
+    // Optionally redirect to the campaigns page or show a success message
+    navigate('/campaigns');
   };
 
   return (
@@ -67,9 +84,28 @@ export default function Home() {
               <p>Manage your games, track NPCs, control the narrative, and create engaging stories for your players as a Game Master.</p>
             </div>
           )}
+
+          {/* Campaign Creation Card - Only show for authenticated users */}
+          {isAuthenticated && (
+            <div 
+              onClick={handleCreateCampaign}
+              className="card cursor-pointer campaign-creator-card"
+            >
+              <h2>+ Create Campaign</h2>
+              <p>Start a new campaign and invite players to join your next adventure.</p>
+            </div>
+          )}
           
         </div>
       </div>
+
+      {/* Campaign Creator Modal */}
+      {showCampaignCreator && (
+        <CampaignCreator
+          onClose={handleCloseCampaignCreator}
+          onCampaignCreated={handleCampaignCreated}
+        />
+      )}
     </Layout>
   );
 }

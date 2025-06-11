@@ -32,28 +32,122 @@
   position: relative;
 }
 
+.search-container form {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
 .search-input {
   background-color: var(--gray-800);
   color: var(--white);
   border: none;
   border-radius: 4px;
   padding: 8px 40px 8px 16px;
-  width: 240px;
+  width: 280px;
   font-size: 14px;
+  transition: all 0.2s ease;
 }
 
 .search-input:focus {
   outline: none;
   box-shadow: 0 0 0 2px var(--primary-red);
+  background-color: var(--gray-700);
 }
 
 .search-icon {
   position: absolute;
   right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--gray-200);
-  opacity: 0.6;
+  color: var(--gray-400);
+  cursor: pointer;
+  background: none;
+  border: none;
+  font-size: 16px;
+  padding: 4px;
+}
+
+.search-icon:hover {
+  color: var(--white);
+}
+
+/* Search Results Dropdown */
+.search-results {
+  position: absolute;
+    top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--gray-800);
+  border: 1px solid var(--gray-600);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 50;
+  margin-top: 4px;
+}
+
+.search-results-header {
+  padding: 12px 16px;
+  background: var(--gray-700);
+  color: var(--gray-300);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--gray-600);
+}
+
+.search-result-item {
+  padding: 12px 16px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--gray-700);
+  transition: background-color 0.2s ease;
+}
+
+.search-result-item:hover {
+  background-color: var(--gray-700);
+}
+
+.search-result-item:last-child {
+  border-bottom: none;
+}
+
+.search-result-type {
+  font-size: 11px;
+  color: var(--primary-red);
+  text-transform: uppercase;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.search-result-title {
+  color: var(--white);
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.search-result-subtitle {
+  color: var(--gray-400);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.search-result-description {
+  color: var(--gray-500);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.search-loading,
+.search-no-results {
+  padding: 16px;
+  text-align: center;
+  color: var(--gray-400);
+  font-size: 14px;
+}
+
+.search-loading {
+  color: var(--primary-red);
 }
 
 .hamburger {

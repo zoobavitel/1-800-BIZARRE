@@ -1,0 +1,101 @@
+[
+  {
+    "model": "characters.benefit",
+    "pk": 1,
+    "fields": {
+      "heritage": 1,
+      "name": "Skilled From Birth",
+      "hp_cost": 1,
+      "required": false,
+      "description": "Can start with 3 dots in a single skill instead of the usual cap of 2."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 2,
+    "fields": {
+      "heritage": 1,
+      "name": "Sheer Grit",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Once per session, reroll any failed roll."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 3,
+    "fields": {
+      "heritage": 1,
+      "name": "Tactical Awareness",
+      "hp_cost": 1,
+      "required": false,
+      "description": "+1d to all reaction-based rolls in combat."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 4,
+    "fields": {
+      "heritage": 1,
+      "name": "Resourceful",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Gain +1 downtime action for training, healing, or crafting."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 5,
+    "fields": {
+      "heritage": 3,
+      "name": "Bloodthirst",
+      "hp_cost": 0,
+      "required": true,
+      "description": "You are capable of drinking anything through any appendage."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 6,
+    "fields": {
+      "heritage": 3,
+      "name": "Flight",
+      "hp_cost": 0,
+      "required": true,
+      "description": "You are capable of flying and have a flying speed of 30ft/6 seconds."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 7,
+    "fields": {
+      "heritage": 3,
+      "name": "Nocturnal",
+      "hp_cost": 0,
+      "required": true,
+      "description": "You are able to see in the dark up to 100ft. Outside of 100ft, treat darkness as dim light."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 8,
+    "fields": {
+      "heritage": 4,
+      "name": "Hyper-Intelligence",
+      "hp_cost": 1,
+      "required": true,
+      "description": "Gain +2d on Insight-based actions once per scene."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 9,
+    "fields": {
+      "heritage": 4,
+      "name": "Superior Physiology",
+      "hp_cost": 1,
+      "required": true,
+      "description": "+1d to resisting physical harm."
+    }
+  }
+]

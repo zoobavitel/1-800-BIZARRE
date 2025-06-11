@@ -213,3 +213,176 @@ class StandAbility(models.Model):
     def __str__(self):
         return f"{self.name} ({self.stand.name})"
 
+
+class HamonAbility(models.Model):
+    """Hamon abilities for Hamon playbook users based on SRD."""
+    
+    HAMON_TYPE_CHOICES = [
+        ('FOUNDATION', 'Foundation Hamon'),
+        ('TRADITIONALIST', 'Traditionalist (Zeppeli Style)'),
+        ('MEDICAL', 'Medical Hamon'),
+        ('MARTIAL', 'Martial Hamon'),
+        ('INVESTIGATIVE', 'Investigative Hamon'),
+    ]
+    
+    name = models.CharField(max_length=100)
+    hamon_type = models.CharField(max_length=20, choices=HAMON_TYPE_CHOICES)
+    description = models.TextField()
+    stress_cost = models.IntegerField(default=0, help_text="Stress cost to use this ability")
+    frequency = models.CharField(max_length=50, blank=True, help_text="Usage frequency (e.g., 'Once per score')")
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_hamon_type_display()})"
+
+
+class SpinAbility(models.Model):
+    """Spin abilities for Spin playbook users based on SRD."""
+    
+    SPIN_TYPE_CHOICES = [
+        ('FOUNDATION', 'Spin Foundation'),
+        ('CAVALIER', 'Cavalier'),
+        ('ARCHITECT', 'Architect'),
+        ('GUNSLINGER', 'Gunslinger'),
+        ('TUSK', 'Tusk'),
+    ]
+    
+    name = models.CharField(max_length=100)
+    spin_type = models.CharField(max_length=20, choices=SPIN_TYPE_CHOICES)
+    description = models.TextField()
+    stress_cost = models.IntegerField(default=0, help_text="Stress cost to use this ability")
+    frequency = models.CharField(max_length=50, blank=True, help_text="Usage frequency (e.g., 'Once per scene')")
+    
+    def __str__(self):
+        return f"{self.name} ({self.get_spin_type_display()})"
+
+
+class CharacterHamonAbility(models.Model):
+    """Junction table for characters and their selected Hamon abilities."""
+    character = models.ForeignKey('Character', on_delete=models.CASCADE, related_name='hamon_abilities')
+    hamon_ability = models.ForeignKey(HamonAbility, on_delete=models.CASCADE)
+    acquired_at_creation = models.BooleanField(default=True)
+    
+    class Meta:
+        unique_together = ('character', 'hamon_ability')
+
+
+class CharacterSpinAbility(models.Model):
+    """Junction table for characters and their selected Spin abilities."""
+    character = models.ForeignKey('Character', on_delete=models.CASCADE, related_name='spin_abilities')
+    spin_ability = models.ForeignKey(SpinAbility, on_delete=models.CASCADE)
+    acquired_at_creation = models.BooleanField(default=True)
+    
+    class Meta:
+        unique_together = ('character', 'spin_ability')
+
+
+class ProgressClock(models.Model):
+    """Progress clocks for tracking ongoing activities based on SRD."""
+    
+    CLOCK_TYPE_CHOICES = [
+        ('PROJECT', 'Long-term Project'),
+        ('HEALING', 'Healing Clock'),
+        ('COUNTDOWN', 'Countdown Clock'),
+        ('CUSTOM', 'Custom Clock'),
+    ]
+    
+    name = models.CharField(max_length=100)
+    clock_type = models.CharField(max_length=20, choices=CLOCK_TYPE_CHOICES)
+    max_segments = models.IntegerField(default=4, help_text="Total number of segments (4, 6, or 8)")
+    filled_segments = models.IntegerField(default=0, help_text="Currently filled segments")
+    description = models.TextField(blank=True)
+    
+    # Can be associated with campaigns, crews, or characters
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
+    crew = models.ForeignKey(Crew, on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
+    character = models.ForeignKey('Character', on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed = models.BooleanField(default=False)
+    
+    def __str__(self):
+        return f"{self.name} ({self.filled_segments}/{self.max_segments})"
+    
+    @property
+    def progress_percentage(self):
+        return (self.filled_segments / self.max_segments) * 100 if self.max_segments > 0 else 0
+
+
+class ExperienceTracker(models.Model):
+    """Track experience points and advancement based on SRD rules."""
+    
+    XP_TRIGGER_CHOICES = [
+        ('BELIEFS', 'Express beliefs, drives, heritage, or background'),
+        ('STRUGGLE', 'Struggle with issues from vice or trauma'),
+        ('DESPERATE', 'Address a challenge with action rating 0'),
+        ('STANDOUT', 'Standout action or leadership'),
+    ]
+    
+    character = models.ForeignKey('Character', on_delete=models.CASCADE, related_name='experience_entries')
+    session_date = models.DateTimeField(auto_now_add=True)
+    trigger = models.CharField(max_length=20, choices=XP_TRIGGER_CHOICES)
+    description = models.TextField(help_text="What did the character do to earn this XP?")
+    xp_gained = models.IntegerField(default=1)
+    
+    def __str__(self):
+        return f"{self.character.true_name} - {self.get_trigger_display()} ({self.xp_gained} XP)"
+
+
+class DowntimeActivity(models.Model):
+    """Track downtime activities between scores based on SRD."""
+    
+    ACTIVITY_TYPE_CHOICES = [
+        ('ACQUIRE_ASSET', 'Acquire Asset'),
+        ('LONG_TERM_PROJECT', 'Long-term Project'),
+        ('RECOVER', 'Recover'),
+        ('REDUCE_HEAT', 'Reduce Heat'),
+        ('TRAIN', 'Train'),
+        ('INDULGE_VICE', 'Indulge Vice'),
+    ]
+    
+    character = models.ForeignKey('Character', on_delete=models.CASCADE, related_name='downtime_activities')
+    activity_type = models.CharField(max_length=20, choices=ACTIVITY_TYPE_CHOICES)
+    description = models.TextField()
+    result = models.TextField(blank=True, help_text="What was the outcome?")
+    stress_relieved = models.IntegerField(default=0)
+    harm_healed = models.IntegerField(default=0)
+    progress_made = models.IntegerField(default=0, help_text="Progress ticks on clocks")
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    def __str__(self):
+        return f"{self.character.true_name} - {self.get_activity_type_display()}"
+
+
+class Score(models.Model):
+    """Track scores (jobs/missions) for crews based on SRD."""
+    
+    SCORE_TYPE_CHOICES = [
+        ('ASSAULT', 'Assault'),
+        ('DECEPTION', 'Deception'),
+        ('STEALTH', 'Stealth'),
+        ('OCCULT', 'Occult'),
+        ('SOCIAL', 'Social'),
+        ('TRANSPORT', 'Transport'),
+    ]
+    
+    crew = models.ForeignKey(Crew, on_delete=models.CASCADE, related_name='scores')
+    name = models.CharField(max_length=100)
+    score_type = models.CharField(max_length=20, choices=SCORE_TYPE_CHOICES)
+    target = models.CharField(max_length=100, help_text="What/who is the target?")
+    description = models.TextField()
+    
+    rep_gained = models.IntegerField(default=0)
+    coin_gained = models.IntegerField(default=0)
+    heat_gained = models.IntegerField(default=0)
+    
+    completed = models.BooleanField(default=False)
+    success_level = models.CharField(max_length=50, blank=True, help_text="How well did it go?")
+    consequences = models.TextField(blank=True, help_text="What complications arose?")
+    
+    participants = models.ManyToManyField('Character', related_name='scores_participated')
+    created_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"{self.crew.name} - {self.name}"
+

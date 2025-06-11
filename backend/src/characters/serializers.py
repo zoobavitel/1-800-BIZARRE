@@ -2,7 +2,8 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import (
     Heritage, Vice, Ability, Character, Stand,
-    Campaign, NPC, Crew, Detriment, Benefit, StandAbility
+    Campaign, NPC, Crew, Detriment, Benefit, StandAbility,
+    HamonAbility, SpinAbility
 )
 
 class BenefitSerializer(serializers.ModelSerializer):
@@ -37,6 +38,16 @@ class StandAbilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = StandAbility
         fields = ['id','stand','name','description']
+
+class HamonAbilitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HamonAbility
+        fields = ['id', 'name', 'hamon_type', 'description', 'stress_cost', 'frequency']
+
+class SpinAbilitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SpinAbility
+        fields = ['id', 'name', 'spin_type', 'description', 'stress_cost', 'frequency']
 
 class StandSerializer(serializers.ModelSerializer):
     class Meta:
