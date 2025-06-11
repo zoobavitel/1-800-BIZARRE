@@ -11,6 +11,7 @@ import SignUp from './pages/SignUp';
 import CharacterDashboard from './pages/CharacterDashboard';
 import CharacterSheet from './components/CharacterSheet'; 
 import CampaignDashboard from './pages/CampaignDashboard';
+import AccountSettings from './pages/AccountSettings';
 import Rules from './pages/Rules';
 import Learn from './pages/Learn';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -80,6 +81,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <CampaignDashboard />
+              </ProtectedRoute>
+            } 
+          />
+          
+          <Route 
+            path="/account" 
+            element={
+              <ProtectedRoute>
+                <AccountSettings />
               </ProtectedRoute>
             } 
           />

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
 import Clock from './Clock';
+import Layout from './Layout';
 
 const CharacterSheet = () => {
   // ——————————————————————————————
@@ -972,26 +973,23 @@ const CharacterSheet = () => {
   const canAddMoreAbilities = () => getTotalAbilities() < getMaxAllowedAbilities();
 
   return (
-    <div style={{ backgroundColor: '#000', color: '#10b981', fontFamily: 'monospace', minHeight: '100vh', fontSize: '12px' }}>
-      {/* Header */}
+    <Layout>
+      <div style={{ backgroundColor: '#000', color: '#10b981', fontFamily: 'monospace', minHeight: '100vh', fontSize: '12px', paddingTop: '80px' }}>
+      {/* Character Info Header - positioned below main header */}
       <div style={{ 
         backgroundColor: '#1f2937', 
         borderBottom: '2px solid #10b981', 
         padding: '16px',
-        position: 'sticky',
-        top: 0,
-        zIndex: 10
+        margin: '0 16px 16px 16px',
+        borderRadius: '8px'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#fbbf24', margin: 0 }}>
-              📞 1(800)BIZARRE
-            </h1>
             <div>
-              <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
+              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#fbbf24' }}>
                 {character.trueName || 'New Character'} {character.alias && `"${character.alias}"`}
               </div>
-              <div style={{ fontSize: '10px', color: '#6ee7b7' }}>
+              <div style={{ fontSize: '12px', color: '#6ee7b7' }}>
                 {character.heritage} • {character.playbook} User
                 {character.campaign && ` • Campaign: ${character.campaign}`}
               </div>
@@ -2531,7 +2529,8 @@ const CharacterSheet = () => {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </Layout>
   );
 };
 

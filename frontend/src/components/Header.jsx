@@ -209,7 +209,7 @@ const Header = ({ isAuthenticated }) => {
           {/* Auth Buttons */}
           {isAuthenticated ? (
             <div className="auth-buttons">
-              <Link to="/characters" className="auth-button sign-in">My Characters</Link>
+              <Link to="/account" className="auth-button sign-in">Account Settings</Link>
               <button 
                 onClick={() => {
                   localStorage.removeItem('token');
