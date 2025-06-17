@@ -25,75 +25,9 @@ export default function CharacterDashboard() {
           api.get('/heritages/')
         ]);
         
-        // Mock character data for demonstration
-        const mockCharacters = [
-          {
-            id: 1,
-            true_name: "Josuke Higashikata",
-            alias: "JoJo",
-            heritage: { id: 1, name: "Human" },
-            playbook: "STAND",
-            stand_name: "Crazy Diamond",
-            campaign: 1,
-            coin_stats: { development: 3, coin: 15 },
-            stress: 2,
-            wanted: 1,
-            heat: 3,
-            background_note: "A student from Morioh with a healing stand and a bad attitude about his hair."
-          },
-          {
-            id: 2,
-            true_name: "Giorno Giovanna",
-            alias: "GioGio",
-            heritage: { id: 1, name: "Human" },
-            playbook: "STAND",
-            stand_name: "Gold Experience",
-            campaign: 2,
-            coin_stats: { development: 4, coin: 22 },
-            stress: 1,
-            wanted: 2,
-            heat: 1,
-            background_note: "The son of DIO with the power to give life to inanimate objects."
-          },
-          {
-            id: 3,
-            true_name: "Jolyne Cujoh",
-            alias: "Jojo",
-            heritage: { id: 1, name: "Human" },
-            playbook: "STAND",
-            stand_name: "Stone Free",
-            campaign: 3,
-            coin_stats: { development: 2, coin: 8 },
-            stress: 4,
-            wanted: 3,
-            heat: 2,
-            background_note: "Jotaro's daughter imprisoned in Green Dolphin Street Prison."
-          },
-          {
-            id: 4,
-            true_name: "Joseph Joestar",
-            alias: "Old Man",
-            heritage: { id: 1, name: "Human" },
-            playbook: "HAMON",
-            stand_name: "Hermit Purple",
-            campaign: null,
-            coin_stats: { development: 5, coin: 30 },
-            stress: 0,
-            wanted: 0,
-            heat: 0,
-            background_note: "A legendary Hamon master and Stand user with decades of experience."
-          }
-        ];
-
-        const mockCampaigns = [
-          { id: 1, name: "1(800)BIZARRE" },
-          { id: 2, name: "Golden Wind Chronicles" },
-          { id: 3, name: "Stone Ocean Escape" }
-        ];
-
-        // Use API data if available, otherwise use mock data
-        setCharacters(charactersRes.data.length > 0 ? charactersRes.data : mockCharacters);
-        setCampaigns(campaignsRes.data.length > 0 ? campaignsRes.data : mockCampaigns);
+        // Use API data directly - no mock data fallback
+        setCharacters(charactersRes.data || []);
+        setCampaigns(campaignsRes.data || []);
         setHeritages(heritagesRes.data);
       } catch (err) {
         console.error('Failed to load data:', err);

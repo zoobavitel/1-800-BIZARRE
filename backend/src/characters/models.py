@@ -7,6 +7,8 @@ class Campaign(models.Model):
     gm = models.ForeignKey(User, on_delete=models.CASCADE, related_name='campaigns_led')
     players = models.ManyToManyField(User, related_name='campaigns_joined')
     description = models.TextField(blank=True)
+    # Wanted stars for campaign (only GM may edit)
+    wanted_stars = models.IntegerField(default=0)
 
     def __str__(self):
         return self.name
@@ -21,7 +23,6 @@ class Crew(models.Model):
     hold = models.CharField(max_length=10, choices=[('weak', 'Weak'), ('strong', 'Strong')], default='weak')
 
     rep = models.IntegerField(default=0)
-    heat = models.IntegerField(default=0)
     wanted_level = models.IntegerField(default=0)
 
     coin = models.IntegerField(default=0)
@@ -57,6 +58,14 @@ class Benefit(models.Model):
 
 
 class Vice(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+
+    def __str__(self):
+        return self.name
+
+
+class Trauma(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
 

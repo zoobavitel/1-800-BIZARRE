@@ -24,15 +24,15 @@ export const deepClone = (obj) => {
   }
 };
 
-// Default character template
+// Default character template with empty defaults
 export const getDefaultCharacter = () => ({
   trueName: '',
   alias: '',
   crew: '',
   look: '',
-  heritage: 'Human',
-  playbook: 'Stand',
-  vice: 'N/A',
+  heritage: '',
+  playbook: '',
+  vice: '',
   standName: '',
   coinStats: {
     power: 0,
@@ -136,19 +136,13 @@ export const validateCoinStats = (coinStats, characterXP = null) => {
   return { valid: true, totalPoints, maxPoints };
 };
 
-export const validateHeritageHP = (heritage, selectedBenefits = [], selectedDetriments = [], bonusHPFromXP = 0) => {
-  const heritageBaseHP = {
-    'Human': 0,
-    'Rock Human': 2,
-    'Vampire': 3,
-    'Pillar Man': 1,
-    'Gray Matter': 1,
-    'Haunting': 1,
-    'Cyborg': 3,
-    'Oracle': 1
-  };
-  
-  const baseHP = heritageBaseHP[heritage] || 0;
+export const validateHeritageHP = (heritage, selectedBenefits = [], selectedDetriments = [], bonusHPFromXP = 0, heritageData = null) => {
+  // Use dynamic heritage data - no hardcoded fallbacks to ensure everything is dynamic
+  let baseHP = 0;
+  if (heritageData && heritageData[heritage]) {
+    baseHP = heritageData[heritage].baseHP || 0;
+  }
+  // If no dynamic data available, base HP remains 0 - this encourages proper API loading
   
   let detrimentHP = 0;
   let benefitCost = 0;

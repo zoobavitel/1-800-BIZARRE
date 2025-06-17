@@ -35,26 +35,8 @@ export const XP_COSTS = {
   HP_PURCHASE: 5 // 5 XP = 1 HP
 };
 
-export const HERITAGES = {
-  HUMAN: 'Human',
-  ROCK_HUMAN: 'Rock Human',
-  VAMPIRE: 'Vampire',
-  PILLAR_MAN: 'Pillar Man',
-  GRAY_MATTER: 'Gray Matter',
-  HAUNTING: 'Haunting',
-  CYBORG: 'Cyborg',
-  ORACLE: 'Oracle'
-};
-
-export const TRAUMA_OPTIONS = [
-  'Cold', 'Haunted', 'Obsessed', 'Paranoid', 
-  'Reckless', 'Soft', 'Unstable', 'Vicious'
-];
-
-export const VICE_OPTIONS = [
-  'N/A', 'Faith', 'Gambling', 'Luxury', 
-  'Obligation', 'Pleasure', 'Stupor', 'Weird'
-];
+// Character heritage, trauma, and vice options are now loaded dynamically from the API
+// See CharacterSheet.jsx for dynamic loading implementation
 
 export const HARM_LEVELS = {
   LEVEL_1: 'level1',

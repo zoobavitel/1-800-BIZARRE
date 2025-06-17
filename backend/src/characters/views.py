@@ -17,13 +17,13 @@ from rest_framework.decorators import api_view, permission_classes
 
 from .models import (
     Heritage, Vice, Ability, Character, Stand,
-    Campaign, NPC, Crew, StandAbility, HamonAbility, SpinAbility
+    Campaign, NPC, Crew, StandAbility, HamonAbility, SpinAbility, Trauma
 )
 from .serializers import (
     HeritageSerializer, ViceSerializer, AbilitySerializer,
     CharacterSerializer, StandSerializer,
     CampaignSerializer, NPCSerializer, CrewSerializer, StandAbilitySerializer,
-    HamonAbilitySerializer, SpinAbilitySerializer
+    HamonAbilitySerializer, SpinAbilitySerializer, TraumaSerializer
 )
 
 # Optional root view
@@ -81,6 +81,12 @@ class SpinAbilityViewSet(viewsets.ModelViewSet):
     queryset = SpinAbility.objects.all()
     serializer_class = SpinAbilitySerializer
 
+class TraumaViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only endpoint for trauma conditions."""
+    permission_classes = [IsAuthenticated]
+    queryset = Trauma.objects.all()
+    serializer_class = TraumaSerializer
+
 class CharacterViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = CharacterSerializer
@@ -111,6 +117,17 @@ class CampaignViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         # Automatically set the current user as the GM
         serializer.save(gm=self.request.user)
+    def update(self, request, *args, **kwargs):
+        campaign = self.get_object()
+        if request.user != campaign.gm:
+            return Response({'detail': 'Only the GM may edit this campaign.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        campaign = self.get_object()
+        if request.user != campaign.gm:
+            return Response({'detail': 'Only the GM may edit this campaign.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().partial_update(request, *args, **kwargs)
 
 
 class NPCViewSet(viewsets.ModelViewSet):

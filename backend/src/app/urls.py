@@ -6,9 +6,10 @@ from rest_framework import routers
 from characters.views import (
     HeritageViewSet, ViceViewSet, AbilityViewSet,
     StandViewSet, CharacterViewSet,
-    CampaignViewSet, NPCViewSet, CrewViewSet,  
+    CampaignViewSet, NPCViewSet, CrewViewSet,
+    TraumaViewSet,
     home, RegisterView, StandAbilityViewSet, LoginView,
-    HamonAbilityViewSet, SpinAbilityViewSet, global_search
+    HamonAbilityViewSet, SpinAbilityViewSet, global_search,
 )
 
 
@@ -23,7 +24,8 @@ router.register(r'spin-abilities', SpinAbilityViewSet)
 router.register(r'characters', CharacterViewSet, basename='characters')
 router.register(r'campaigns', CampaignViewSet)
 router.register(r'npcs', NPCViewSet)
-router.register(r'crews', CrewViewSet) 
+router.register(r'crews', CrewViewSet)
+router.register(r'traumas', TraumaViewSet)
 
 
 urlpatterns = [

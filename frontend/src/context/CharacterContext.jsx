@@ -129,7 +129,7 @@ const characterReducer = (state, action) => {
 const initialState = {
   tabs: [{
     id: 'default-tab',
-    name: 'Character 1',
+    name: 'New Character',
     character: getDefaultCharacter()
   }],
   activeTab: 'default-tab',

@@ -2,77 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
 import Clock from './Clock';
 import Layout from './Layout';
+import api from '../api/axios';
+import { getDefaultCharacter } from '../utils/characterValidation';
 
 const CharacterSheet = () => {
-  // ——————————————————————————————
-  // Trauma helper data & toggle function
-  // ——————————————————————————————
-  const traumaDescriptions = {
-    Cold: "You're not moved by emotional appeals or social bonds.",
-    Haunted: "You're often lost in reverie, reliving past horrors, seeing things.",
-    Obsessed: "You're enthralled by one thing: an activity, a person, an ideology.",
-    Paranoid: "You imagine danger everywhere; you can't trust others.",
-    Reckless: "You have little regard for your own safety or best interests.",
-    Soft: "You lose your edge; you become sentimental, passive, gentle.",
-    Unstable: "Your emotional state is volatile; you can instantly rage or freeze up.",
-    Vicious: "You seek out opportunities to hurt people, even for no good reason."
-  };
+  // State for dynamic data loading
+  const [campaigns, setCampaigns] = useState([]);
+  const [campaignsLoading, setCampaignsLoading] = useState(false);
+  // Trauma options will be fetched from backend
 
   // Tab management state
   const [tabs, setTabs] = useState([{
     id: 'tab-1',
     name: 'New Character',
-    character: {
-      trueName: '',
-      alias: '',
-      crew: '',
-      look: '',
-      heritage: 'Human',
-      playbook: 'Stand',
-      vice: 'N/A',
-      standName: '',
-      coinStats: {
-        power: 0,
-        speed: 0,
-        range: 0,
-        durability: 0,
-        precision: 0,
-        development: 0
-      },
-      skills: {
-        insight: { hunt: 0, study: 0, survey: 0, tinker: 0 },
-        prowess: { finesse: 0, prowl: 0, skirmish: 0, wreck: 0 },
-        resolve: { bizarre: 0, command: 0, consort: 0, sway: 0 }
-      },
-      standardAbilities: [],
-      playbookAbilities: [],
-      customAbilities: [],
-      campaign: null,
-      isGM: false,
-      heritageHP: 0,
-      selectedDetriments: [],
-      selectedBenefits: [],
-      xp: {
-        insight: 0,
-        prowess: 0,
-        resolve: 0,
-        playbook: 0
-      },
-      stress: Array(12).fill(false),
-      trauma: [],
-              harm: { level3: '', level2_0: '', level2_1: '', level1_0: '', level1_1: '' },
-      heat: 0,
-      wanted: 0,
-      friend: '',
-      rival: '',
-      description: '',
-      equipment: [],
-      background: '',
-      notes: '',
-      clocks: [
-        { id: 'health', name: 'Health', segments: 4, filled: 4, type: 'health', isRequired: true }
-      ]
-    }
+    character: getDefaultCharacter()
   }]);
 
   const [activeTab, setActiveTab] = useState('tab-1');
@@ -106,195 +49,15 @@ const CharacterSheet = () => {
 
   const [saveStatus, setSaveStatus] = useState('');
 
-  // Heritage data
-  const heritages = {
-    'Human': { 
-      baseHP: 0, 
-      description: 'Versatile but without inherent supernatural abilities',
-      requiredBenefits: [],
-      requiredDetriments: [],
-      optionalDetriments: [
-        { name: 'Physically Inferior', description: '-1d when resisting physical harm', hp: 1 },
-        { name: 'Bizarre Blindspot', description: '-1d when resisting Stand, Hamon, or supernatural effects', hp: 1 },
-        { name: 'Slower Recovery', description: 'Healing clock permanently reduced by 1 segment', hp: 1 },
-        { name: 'Slower Movement', description: 'Base movement speed reduced from 30ft to 20ft', hp: 1 }
-      ],
-      benefits: [
-        { name: 'Skilled From Birth', description: 'Can start with 3 dots in a single skill instead of the usual cap of 2', cost: 1 },
-        { name: 'Sheer Grit', description: 'Once per session, reroll any failed roll', cost: 2 },
-        { name: 'Tactical Awareness', description: '+1d to all reaction-based rolls in combat', cost: 1 },
-        { name: 'Resourceful', description: 'Gain +1 downtime action for training, healing, or crafting', cost: 2 }
-      ]
-    },
-    'Rock Human': { 
-      baseHP: 2,
-      description: 'Resilient stone-like beings with natural stealth',
-      requiredBenefits: [
-        { name: 'Sediment Body', description: 'Can reshape into stone or pebbles, allowing stealth and terrain merging' }
-      ],
-      requiredDetriments: [
-        { name: 'Sinks Like a Rock', description: 'Cannot swim, cannot float', hp: 1 },
-        { name: 'Slow Regeneration', description: 'Healing clock has +1 additional segment', hp: 1 }
-      ],
-      optionalDetriments: [
-        { name: 'Hunted by Rock Humans', description: 'Other Rock Humans can sense your location within 100ft', hp: 1 },
-        { name: 'Slow Reflexes', description: '-1d when resisting physical attacks', hp: 1 },
-        { name: 'Vulnerable to High Frequency Vibrations', description: 'Sound-based attacks deal +1 Harm', hp: 1 },
-        { name: 'Cold-Brittle', description: 'Freezing temperatures cause you to move at half speed', hp: 1 }
-      ],
-      benefits: [
-        { name: 'Hardened Physique', description: 'Gain 1 extra Stand Armor charge per scene', cost: 2 },
-        { name: 'Rock Punches', description: 'Unarmed attacks now deal Level 2 Harm', cost: 1 },
-        { name: 'Camouflage', description: 'If stationary, you can merge and move through stone', cost: 1 },
-        { name: 'Mudshot', description: 'Can fire hardened mud that immobilizes targets for 1 turn', cost: 2 },
-        { name: 'Tolerance', description: 'The detrimental effects of larpintas are reduced', cost: 2 }
-      ]
-    },
-    'Vampire': { 
-      baseHP: 3,
-      description: 'Immortal predators vulnerable to sunlight and Hamon',
-      requiredBenefits: [
-        { name: 'Bloodthirst', description: 'You are capable of drinking anything through any appendage' },
-        { name: 'Flight', description: 'You are capable of flying and have a flying speed of 30ft/6 seconds' },
-        { name: 'Nocturnal', description: 'You are able to see in the dark up to 100ft. Outside of 100ft, treat darkness as dim light' }
-      ],
-      requiredDetriments: [
-        { name: 'Sunlight Weakness', description: 'Takes Level 4 Harm per minute in direct sunlight', hp: 2 },
-        { name: 'Hamon Vulnerability', description: 'Hamon techniques deal +1 Harm and bypass armor', hp: 1 }
-      ],
-      optionalDetriments: [
-        { name: 'Must Be Invited Inside', description: 'Cannot enter homes without an invitation', hp: 1 },
-        { name: 'Loses Max Stress Without Feeding', description: 'Every day without feeding, max stress decreases by 1 (restored after feeding)', hp: 1 },
-        { name: 'Holy Symbol Weakness', description: 'Seeing a cross deals Level 2 Harm and stuns for one turn', hp: 1 },
-        { name: 'Silver Allergy', description: 'Weapons made of silver ignore armor and resistances', hp: 1 }
-      ],
-      benefits: [
-        { name: 'Blood Puppeteer', description: 'If you drink a person\'s blood, you can command them for 1 round', cost: 3 },
-        { name: 'Sunlight Immunity', description: 'You are capable of surviving in sunlight', cost: 2 },
-        { name: 'Mist Form', description: 'Can turn into mist for 3 turns but cannot attack while in mist', cost: 2 },
-        { name: 'Regeneration', description: 'Can spend 1 stress to heal 1 segment of harm', cost: 2 },
-        { name: 'Bat Form', description: 'Can fly but must use 1 stress per turn to maintain it', cost: 3 },
-        { name: 'Staying Power', description: 'If you are overwhelmed with harm, a hit that will KO can be avoided by losing a limb', cost: 3 }
-      ]
-    }
-  };
-
-  const standardAbilities = {
-    // Combat Specialists
-    'Steady Barrage': 'You can barrage targets up to your Stand\'s range. Add +1d when making multiple rapid-fire attacks.',
-    'Echo Strikes': 'After a successful Stand attack, push yourself to make an immediate second attack—target the same foe or strike another.',
-    'Final Barrage': 'When reduced to 0 HP or Level 4 harm, make a final +3 effect Stand attack before going down.',
-    'Legendary Guard': 'Once per score, you may completely negate one instance of incoming harm.',
-    'Tough as Nails': 'Reduce the severity of all physical harm by one level (Level 4 harm still kills).',
-    'Extra Attack': 'Push (2 stress) to make two attacks in a single action. Roll once, apply separate consequences to two targets or double down.',
-    'Sharpshooter': 'You can push yourself (2 stress) to make a ranged attack at extreme distance beyond what\'s normal for the Stand—unleash a barrage of rapid-fire to suppress the enemy.',
-    
-    // Mobility & Initiative Control
-    'Reflexes': 'If you and another Stand user act at the same time and have the same Speed stat, you go first.',
-    'Swift Step': 'Push (2 stress) to automatically outrun or outmaneuver a single pursuer of equal or lesser Speed.',
-    'Stand Step': 'Use your Stand\'s Speed to dodge with +1d.',
-    'Spin-Boosted Blow': 'Add Spin to your next Stand attack to supercharge a single strike (adds +1 effect and +1d if using rotational impact logic).',
-    'Bizarre Step': 'Push (2 stress) to instantly reposition within close range. Nearby observers must resist or lose track of you.',
-    
-    // Tactical Manipulation & Counters
-    'Parry and Break': 'On a successful resistance roll, counterattack with +1 effect.',
-    'Trap Sequence': 'Load your Stand with a conditional action (e.g., "If X enters the room, detonate.").',
-    'Cascade Effect': 'If you roll a 6 from your resistance roll to resist a physical or bizarre consequence, the attacker suffers a mirrored backlash.',
-    'Swan Song': 'When you\'d be taken out (Level 4 harm), spend remaining Stand armor charges to stay standing for one heroic action.',
-    
-    // Mob Control & Presence
-    'Echo Roar': 'Your Stand emits a terrifying or awe-inspiring sound. Command rolls gain +1d against NPCs.',
-    'Aura of Confidence': 'Your presence inspires trust and courage. Allies within close range of you gain +1d to resistance rolls against fear or intimidation.',
-    'Savage': 'When you unleash physical violence, it\'s especially frightening. When you Command a frightened target, take +1d.',
-    'Stand Grapple': 'Your Stand can restrain or hold an enemy for one round. While grappled, the enemy loses 1 action.',
-    
-    // Perception & Surveillance
-    'Shared Vision': 'You can see through your Stand\'s eyes, even at extreme distances.',
-    'Like Looking into a Mirror': 'You can always tell when someone is lying.',
-    'Bizarre Intuition': 'You have a bizarre sense for danger. You cannot be surprised and always act first in ambush situations.',
-    'Shadow': 'Expend your Stand armor to resist a consequence from detection, surveillance, or security measures, or to push yourself for a feat of athletics or stealth.',
-    
-    // Mental Resistance
-    'Iron Will': 'You are immune to the terror that some Bizarre entities inflict on sight. When you make a resistance roll with Resolve, take +1d.'
-  };
-
-  const playbookAbilities = {
-    'Stand': {
-      // Foundation abilities available to all Stand users
-      'Stand Rush': 'Your Stand can perform devastating combination attacks. Gain +1d when making rapid successive attacks.',
-      'Stand Proud': 'Your connection to your Stand is unbreakable. Gain +1d to resist mental effects and trauma.',
-      'Bizarre Adventure': 'You thrive in strange situations. Gain +1d when dealing with supernatural or bizarre circumstances.',
-      
-      // Example abilities from Stand Playbook archetypes
-      'Cannibal Chain': 'When one part of your Stand is defeated, it may absorb its ability as a temporary second function.',
-      'Tri-Will Split': 'You may issue separate commands to each part of your Stand (max 3 targets), but reduce effect by 1 for each split action.',
-      'Meltdown Pulse': 'When striking a heat source, melt through armor or terrain as if it were soft.',
-      'Ink Drift': 'After an explosive action, terrain becomes toxic. Movement through the zone costs 1 stress or requires resistance.',
-      'Overdrive': 'When you interact with machinery, you are able to extend the Stand coin properties to that machine.',
-      'Autokill Directive': 'Once per score, name a kill condition. When fulfilled, the Stand auto-triggers an attack, maneuver, or other action.',
-      'Thermic Chain': 'Each attack shifts element. Fire causes lingering burn, ice creates "brittle" status (next hit +1 Harm).',
-      'Blister Swap': 'Once per scene, swap places with your Stand during a resistance roll to ignore 1 level of harm.'
-    },
-    'Hamon': {
-      // Foundation abilities available to all Hamon users
-      'Ripple Breathing': '+1d to resist poison, fatigue, or fear. Once per score, push yourself with no stress cost.',
-      'Overdrive': 'Spend 1 stress to charge a strike. +1 effect and +1 harm vs bizarre, undead, or inorganic targets.',
-      'Ripple Infusion': 'Spend 1 stress to imbue an object with Ripple energy for the scene. Gains +1 effect vs bizarre enemies.',
-      'Scarlet Overdrive': 'Ignite a weapon or limb. +1 harm and inflicts fire-based secondary effects. Foes must resist or catch fire.',
-      'Ripple Detector': '+1 effect to Study or Survey when using liquid, mist, or blood as a conduit.',
-      'Zoom Punch': 'Make a melee strike at +1 zone distance. +1d when attacking from unexpected angles or cover.',
-      'Forced Ripple Breathing': 'Once per score, stabilize a dying ally or let them make a Hamon action even while unconscious.',
-      'Ripple Cutter': 'Spit or project fluid charged with Ripple. Ranged, armor-piercing. On a 6, start a 4-tick "Slice" clock.',
-      
-      // Traditionalist (Zeppeli Style) abilities
-      'Sendō Overdrive': 'Strike bizarre targets through walls or barriers. On a 6, begin a "Contact Clock" to bypass cover.',
-      'Metal Silver Overdrive': 'Ripple conducts through metallic weapons. +1 effect when using chains, blades, or wire tools.',
-      'Ripple Hypnosis': 'Once per score, with skin contact, suggest a command or surface a forgotten memory.',
-      'Sunlight Yellow Overdrive': 'Spend 1 stress to unleash a radiant barrage. +1 harm and +1 effect vs undead or constructs.',
-      'Ripple Chain': 'Imbue rope or chain. Functions as melee weapon or restraint tool. Gain +1d when entangling.',
-      'Age Resistance': 'Once per session, ignore 1 fatigue, aging, or time-based consequence.',
-      'Life Magnetism Overdrive': 'Spend 1 stress to shape plant matter into a glider, cloak, or shield.',
-      'Scarlet Shield': 'Expend Hamon armor. Enemies who touch it take Level 1 Harm unless they resist.',
-      'Stand on Water': 'Gain stable footing over liquid, mist, or unstable surfaces for 1 scene.',
-      'Tornado Overdrive': 'Perform a high-speed rotational dive. +1 harm and break through cover or brittle surfaces.',
-      'Overdrive Barrage': 'Deliver rapid ripple strikes. +1d when clearing minions or crowd control actions.',
-      'Ripple Sentinel': 'Always aware of undead or bizarre presence within Close range.',
-      'Wall Pulse': 'Run across vertical surfaces. +1d on movement rolls when climbing or jumping.',
-      'Healing Touch': 'Once per score, heal 1 Harm from an ally. On a crit, also remove a minor status.',
-      'Dispel Harmonics': 'Once per score, cancel one magical, bizarre, or spiritual effect in your zone.',
-      'Aura Lock': 'Spend 1 stress to suppress ability activation within Near range.',
-      'Guided Overdrive': 'Ripple arcs between two targets. Second target takes splash harm or is disoriented.',
-      'Hamon Blade': 'Imbue a blade with Hamon energy for enhanced cutting power.'
-    },
-    'Spin': {
-      // Foundation abilities available to all Spin users
-      'Golden Arc': 'Once per scene, a thrown Spin projectile returns. On a 6, it may hit a second target.',
-      'Vibrational Scan': 'Use a spinning object to perform a Study or Survey roll. +1 effect when detecting structure or weak points.',
-      'Kinetic Tether': 'Spin threads can connect two objects. Once per score, create a tether for movement or restraint.',
-      'Rebound Tactics': '+1d on attacks that ricochet. On a 6, you may apply splash harm (Level 1, close-range).',
-      'Precision Pulse': 'Use Spin to bypass mechanical locks or triggers. Treat as Tinker with +1 effect.',
-      'Reflective Barrier': 'Spin objects at high frequency to bend light or sound. Once per score, redirect a ranged attack.',
-      'Aesthetic Surge': 'Use Spin to manipulate appearance. Once per scene, alter visible features for disguise.',
-      
-      // Cavalier abilities
-      'Gyroscopic Mount': '+1 effect to movement or melee Spin rolls when mounted or piloting.',
-      'Signal Pulse': 'Once per score, issue a one-word command to your mount, no matter the distance.',
-      'Stirrup Surge': '+1d on Skirmish while charging. On a 6, gain a knockback effect.',
-      'Rotational Grapple': 'Fire a tethered grappling hook. +1d on mobility, chase, or extraction actions.',
-      'Wheel of Warding': 'Once per conflict, use your vehicle to block a projectile.',
-      'Spiral Drift': '+1d on Finesse or Prowl while in motion. Chases use +1 effect.',
-      'Centripetal Shield': 'While moving, gain 1 temporary armor against ranged attacks.',
-      'Echo Hoof': 'Ride at speed to reveal terrain features. Acts as a Survey roll with +1d.',
-      'Lockstep Surge': 'Allies moving with you gain +1d on next Prowess or Resolve roll.',
-      'Gravity Path': 'You may float, pin enemies, or launch into buildings with Spin-warped gravity.',
-      'Drift Through Dimensions': 'Once per campaign, you and your mount may exit the current scene through a dimensional fold.',
-      'Golden Track': 'At full speed, your next thrown Spin attack gains +2 effect and ignores 1 level of armor.',
-      'Spiral Stampede': 'Nearby mounts follow your trajectory. Create a 6-clock "Chaos Charge".'
-    }
-  };
-
-  const traumaOptions = ['Cold', 'Haunted', 'Obsessed', 'Paranoid', 'Reckless', 'Soft', 'Unstable', 'Vicious'];
-  const vices = ['N/A','Faith', 'Gambling', 'Luxury', 'Obligation', 'Pleasure', 'Stupor', 'Weird'];
+  // Dynamic data loading states - all options loaded from API
+  const [traumaOptions, setTraumaOptions] = useState([]);
+  const [vices, setVices] = useState([]);
+  const [heritages, setHeritages] = useState({});
+  const [heritagesLoading, setHeritagesLoading] = useState(true);
+  const [vicesLoading, setVicesLoading] = useState(true);
+  const [standardAbilities, setStandardAbilities] = useState({});
+  const [playbookAbilities, setPlaybookAbilities] = useState({});
+  const [abilitiesLoading, setAbilitiesLoading] = useState(true);
 
   // Auto-save functionality
   useEffect(() => {
@@ -305,6 +68,107 @@ const CharacterSheet = () => {
     }, 1000);
     return () => clearTimeout(saveTimeout);
   }, [character]);
+
+  // Load dynamic data (campaigns, heritages, vices, abilities)
+  useEffect(() => {
+    const loadGameData = async () => {
+      try {
+        // Load campaigns
+        setCampaignsLoading(true);
+        const campaignsResponse = await api.get('/campaigns/');
+        setCampaigns(campaignsResponse.data || []);
+        
+        // Load trauma options
+        const traumaResponse = await api.get('/traumas/');
+        const traumaData = traumaResponse.data || [];
+        setTraumaOptions(traumaData);
+        
+        // Load heritages
+        setHeritagesLoading(true);
+        const heritagesResponse = await api.get('/heritages/');
+        const heritageData = heritagesResponse.data || [];
+        
+        // Convert heritages array to object for easier lookup
+        const heritagesMap = {};
+        heritageData.forEach(heritage => {
+          heritagesMap[heritage.name] = {
+            baseHP: heritage.base_hp,
+            description: heritage.description,
+            requiredBenefits: heritage.benefits?.filter(b => b.required) || [],
+            requiredDetriments: heritage.detriments?.filter(d => d.required) || [],
+            optionalDetriments: heritage.detriments?.filter(d => !d.required) || [],
+            benefits: heritage.benefits?.filter(b => !b.required) || []
+          };
+        });
+        setHeritages(heritagesMap);
+        
+        // Load vices
+        setVicesLoading(true);
+        const vicesResponse = await api.get('/vices/');
+        const viceData = vicesResponse.data || [];
+        const viceNames = viceData.map(vice => vice.name);
+        if (viceNames.length > 0) {
+          setVices(viceNames);
+        }
+        
+        // Load abilities
+        setAbilitiesLoading(true);
+        
+        // Load standard abilities
+        const standardAbilitiesResponse = await api.get('/abilities/');
+        const standardAbilitiesData = standardAbilitiesResponse.data || [];
+        const standardAbilitiesMap = {};
+        standardAbilitiesData.forEach(ability => {
+          standardAbilitiesMap[ability.name] = ability.description;
+        });
+        setStandardAbilities(standardAbilitiesMap);
+        
+        // Load playbook-specific abilities
+        const playbookAbilitiesMap = { Stand: {}, Hamon: {}, Spin: {} };
+        
+        // Load Hamon abilities
+        try {
+          const hamonResponse = await api.get('/hamon-abilities/');
+          const hamonData = hamonResponse.data || [];
+          hamonData.forEach(ability => {
+            playbookAbilitiesMap.Hamon[ability.name] = ability.description;
+          });
+        } catch (error) {
+          console.warn('Failed to load Hamon abilities:', error);
+        }
+        
+        // Load Spin abilities
+        try {
+          const spinResponse = await api.get('/spin-abilities/');
+          const spinData = spinResponse.data || [];
+          spinData.forEach(ability => {
+            playbookAbilitiesMap.Spin[ability.name] = ability.description;
+          });
+        } catch (error) {
+          console.warn('Failed to load Spin abilities:', error);
+        }
+        
+        setPlaybookAbilities(playbookAbilitiesMap);
+        
+      } catch (error) {
+        console.error('Failed to load game data:', error);
+        setCampaigns([]);
+        // Minimal fallback data - user should see loading indicators if API fails
+        setTraumaOptions([]);
+        setVices([]);
+        setHeritages({});
+        setStandardAbilities({});
+        setPlaybookAbilities({ Stand: {}, Hamon: {}, Spin: {} });
+      } finally {
+        setCampaignsLoading(false);
+        setHeritagesLoading(false);
+        setVicesLoading(false);
+        setAbilitiesLoading(false);
+      }
+    };
+    
+    loadGameData();
+  }, []);
 
   // Load saved character
   useEffect(() => {
@@ -720,57 +584,7 @@ const CharacterSheet = () => {
     const newTab = {
       id: newId,
       name: 'New Character',
-      character: {
-        trueName: '',
-        alias: '',
-        crew: '',
-        look: '',
-        heritage: 'Human',
-        playbook: 'Stand',
-        vice: 'N/A',
-        standName: '',
-        coinStats: {
-          power: 0,
-          speed: 0,
-          range: 0,
-          durability: 0,
-          precision: 0,
-          development: 0
-        },
-        skills: {
-          insight: { hunt: 0, study: 0, survey: 0, tinker: 0 },
-          prowess: { finesse: 0, prowl: 0, skirmish: 0, wreck: 0 },
-          resolve: { bizarre: 0, command: 0, consort: 0, sway: 0 }
-        },
-        standardAbilities: [],
-        playbookAbilities: [],
-        customAbilities: [],
-        campaign: null,
-        isGM: false,
-        heritageHP: 0,
-        selectedDetriments: [],
-        selectedBenefits: [],
-        xp: {
-          insight: 0,
-          prowess: 0,
-          resolve: 0,
-          playbook: 0
-        },
-        stress: Array(12).fill(false),
-        trauma: [],
-        harm: { level3: '', level2_0: '', level2_1: '', level1_0: '', level1_1: '' },
-        heat: 0,
-        wanted: 0,
-        friend: '',
-        rival: '',
-        description: '',
-        equipment: [],
-        background: '',
-        notes: '',
-        clocks: [
-          { id: 'health', name: 'Health', segments: 4, filled: 4, type: 'health', isRequired: true }
-        ]
-      }
+      character: getDefaultCharacter()
     };
     setTabs(prev => [...prev, newTab]);
     setActiveTab(newId);
@@ -1011,9 +825,15 @@ const CharacterSheet = () => {
                 }}
               >
                 <option value="">None</option>
-                <option value="1(800)Bizarre">1(800)Bizarre</option>
-                <option value="A History of Bad Men">A History of Bad Men</option>
-                <option value="test">test</option>
+                {campaignsLoading ? (
+                  <option disabled>Loading campaigns...</option>
+                ) : (
+                  campaigns.map(campaign => (
+                    <option key={campaign.id} value={campaign.name}>
+                      {campaign.name}
+                    </option>
+                  ))
+                )}
               </select>
               <div style={{ marginTop: '4px' }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
@@ -1468,7 +1288,7 @@ const CharacterSheet = () => {
           <div>
             <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#6ee7b7', marginBottom: '4px' }}>HERITAGE</div>
             <select 
-              value={character.heritage || 'Human'}
+              value={character.heritage || ''}
               onChange={(e) => setCurrentCharacter(prev => ({...prev, heritage: e.target.value, selectedDetriments: [], selectedBenefits: []}))}
               style={{
                 width: '100%',
@@ -1478,10 +1298,18 @@ const CharacterSheet = () => {
                 fontSize: '11px',
                 padding: '4px'
               }}
+              disabled={heritagesLoading}
             >
-              {Object.keys(heritages).map(heritage => (
-                <option key={heritage} value={heritage}>{heritage}</option>
-              ))}
+              {heritagesLoading ? (
+                <option value="">Loading heritages...</option>
+              ) : (
+                <>
+                  <option value="">Select Heritage</option>
+                  {Object.keys(heritages).map(heritage => (
+                    <option key={heritage} value={heritage}>{heritage}</option>
+                  ))}
+                </>
+              )}
             </select>
             <button
               onClick={() => setGameState(prev => ({...prev, showHeritagePanel: !prev.showHeritagePanel}))}
@@ -1636,7 +1464,7 @@ const CharacterSheet = () => {
           <div>
             <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#6ee7b7', marginBottom: '4px' }}>VICE</div>
             <select 
-              value={character.vice || 'N/A'}
+              value={character.vice || ''}
               onChange={(e) => setCurrentCharacter(prev => ({...prev, vice: e.target.value}))}
               style={{
                 width: '100%',
@@ -1646,16 +1474,24 @@ const CharacterSheet = () => {
                 fontSize: '11px',
                 padding: '4px'
               }}
+              disabled={vicesLoading}
             >
-              {vices.map(vice => (
-                <option key={vice} value={vice}>{vice}</option>
-              ))}
+              {vicesLoading ? (
+                <option value="">Loading vices...</option>
+              ) : (
+                <>
+                  <option value="">Select Vice</option>
+                  {vices.map(vice => (
+                    <option key={vice} value={vice}>{vice}</option>
+                  ))}
+                </>
+              )}
             </select>
           </div>
           <div>
             <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#6ee7b7', marginBottom: '4px' }}>PLAYBOOK</div>
             <select 
-              value={character.playbook || 'Stand'}
+              value={character.playbook || ''}
               onChange={(e) => setCurrentCharacter(prev => ({...prev, playbook: e.target.value}))}
               style={{
                 width: '100%',
@@ -1666,6 +1502,7 @@ const CharacterSheet = () => {
                 padding: '4px'
               }}
             >
+              <option value="">Select Playbook</option>
               <option value="Stand">Stand</option>
               <option value="Hamon">Hamon</option>
               <option value="Spin">Spin</option>
@@ -1779,13 +1616,13 @@ const CharacterSheet = () => {
                 gridTemplateColumns: 'repeat(2, 1fr)',
                 gap: '8px'
               }}>
-                {traumaOptions.map(cond => {
-                  const isActive = (character.trauma || []).includes(cond);
+                {traumaOptions.map(trauma => {
+                  const isActive = (character.trauma || []).includes(trauma.name);
                   return (
                     <button
-                      key={cond}
-                      onClick={() => toggleTrauma(cond)}
-                      title={traumaDescriptions[cond]}
+                      key={trauma.name}
+                      title={trauma.description}
+                      onClick={() => toggleTrauma(trauma.name)}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -1803,7 +1640,7 @@ const CharacterSheet = () => {
                         backgroundColor: isActive ? '#10b981' : 'transparent',
                         transition: 'background-color 0.2s'
                       }} />
-                      <span style={{ fontSize: '9px', color: '#10b981' }}>{cond}</span>
+                      <span style={{ fontSize: '9px', color: '#10b981' }}>{trauma.name}</span>
                     </button>
                   );
                 })}
@@ -2272,7 +2109,16 @@ const CharacterSheet = () => {
                       <div style={{ fontSize: '10px', color: '#6ee7b7', marginBottom: '8px' }}>
                         Select abilities (Max: {getMaxAllowedAbilities()}, Selected: {getTotalAbilities()})
                       </div>
-                      {Object.entries(standardAbilities).map(([name, description]) => {
+                      {abilitiesLoading ? (
+                        <div style={{ fontSize: '10px', color: '#6b7280', fontStyle: 'italic', textAlign: 'center', padding: '16px' }}>
+                          Loading standard abilities...
+                        </div>
+                      ) : Object.keys(standardAbilities).length === 0 ? (
+                        <div style={{ fontSize: '10px', color: '#6b7280', fontStyle: 'italic', textAlign: 'center', padding: '16px' }}>
+                          No standard abilities available. Check your connection.
+                        </div>
+                      ) : (
+                        Object.entries(standardAbilities).map(([name, description]) => {
                         const isSelected = (character.standardAbilities || []).some(a => a.name === name);
                         const canSelect = isSelected || canAddMoreAbilities();
                         return (
@@ -2302,7 +2148,7 @@ const CharacterSheet = () => {
                             <div style={{ marginLeft: '18px', color: '#6ee7b7', fontSize: '8px' }}>{description}</div>
                           </label>
                         );
-                      })}
+                      }))}
                     </div>
                   )}
 
@@ -2449,7 +2295,16 @@ const CharacterSheet = () => {
                       <div style={{ fontSize: '10px', color: '#6ee7b7', marginBottom: '8px' }}>
                         Abilities specific to {character.playbook} users
                       </div>
-                      {Object.entries(playbookAbilities[character.playbook] || {}).map(([name, description]) => {
+                      {abilitiesLoading ? (
+                        <div style={{ fontSize: '10px', color: '#6b7280', fontStyle: 'italic', textAlign: 'center', padding: '16px' }}>
+                          Loading {character.playbook} abilities...
+                        </div>
+                      ) : Object.keys(playbookAbilities[character.playbook] || {}).length === 0 ? (
+                        <div style={{ fontSize: '10px', color: '#6b7280', fontStyle: 'italic', textAlign: 'center', padding: '16px' }}>
+                          No {character.playbook} abilities available. Check your connection.
+                        </div>
+                      ) : (
+                        Object.entries(playbookAbilities[character.playbook] || {}).map(([name, description]) => {
                         const isSelected = (character.playbookAbilities || []).some(a => a.name === name);
                         const canSelect = isSelected || canAddMoreAbilities();
                         return (
@@ -2479,7 +2334,7 @@ const CharacterSheet = () => {
                             <div style={{ marginLeft: '18px', color: '#6ee7b7', fontSize: '8px' }}>{description}</div>
                           </label>
                         );
-                      })}
+                      }))}
                     </div>
                   )}
                 </div>
