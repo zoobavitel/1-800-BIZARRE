@@ -169,6 +169,13 @@ class Character(models.Model):
 
     # JSON field to store additional abilities based on "A" grade logic
     extra_custom_abilities = models.JSONField(default=list, blank=True, null=True)
+    
+    # Faction reputation tracking - list of {name: str, rep: int} objects
+    faction_reputation = models.JSONField(default=list, blank=True, null=True)
+    
+    # GM settings for character creation locking
+    gm_character_locked = models.BooleanField(default=False)
+    gm_allowed_edit_fields = models.JSONField(default=dict, blank=True, null=True)
 
 
 

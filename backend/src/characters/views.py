@@ -12,6 +12,7 @@ from django.contrib.auth import authenticate
 from rest_framework.permissions import AllowAny
 from django.db.models import Q
 from rest_framework.decorators import api_view, permission_classes
+import json
 
 
 
@@ -315,4 +316,138 @@ def global_search(request):
         'results': results,
         'total': len(results),
         'query': query
+    })
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_available_playbook_abilities(request):
+    """
+    Get available Hamon/Spin abilities based on character's A-rank coin stats.
+    Query params:
+    - playbook: 'Hamon' or 'Spin'
+    - coin_stats: JSON string of coin stats (e.g. '{"power":4,"speed":3,"range":5}')
+    """
+    playbook = request.GET.get('playbook')
+    coin_stats_str = request.GET.get('coin_stats', '{}')
+    
+    try:
+        coin_stats = json.loads(coin_stats_str) if coin_stats_str else {}
+    except json.JSONDecodeError:
+        return Response({'error': 'Invalid coin_stats JSON'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Count A-rank stats (value >= 4)
+    a_rank_count = sum(1 for value in coin_stats.values() if value >= 4)
+    
+    available_abilities = []
+    
+    if playbook == 'Hamon':
+        # Get all Hamon abilities
+        all_abilities = HamonAbility.objects.all()
+        
+        # Foundation abilities are always available
+        foundation_abilities = all_abilities.filter(hamon_type='FOUNDATION')
+        for ability in foundation_abilities:
+            available_abilities.append({
+                'id': ability.id,
+                'name': ability.name,
+                'type': ability.hamon_type,
+                'description': ability.description,
+                'stress_cost': ability.stress_cost,
+                'frequency': ability.frequency,
+                'requirement': 'Foundation'
+            })
+        
+        # A-rank dependent abilities
+        if a_rank_count >= 1:
+            # With 1 A-rank, can select some advanced abilities
+            advanced_abilities = all_abilities.filter(hamon_type__in=['TRADITIONALIST', 'MEDICAL'])[:a_rank_count * 2]
+            for ability in advanced_abilities:
+                available_abilities.append({
+                    'id': ability.id,
+                    'name': ability.name,
+                    'type': ability.hamon_type,
+                    'description': ability.description,
+                    'stress_cost': ability.stress_cost,
+                    'frequency': ability.frequency,
+                    'requirement': f'Requires {1} A-rank'
+                })
+                
+    elif playbook == 'Spin':
+        # Get all Spin abilities
+        all_abilities = SpinAbility.objects.all()
+        
+        # Foundation abilities are always available
+        foundation_abilities = all_abilities.filter(spin_type='FOUNDATION')
+        for ability in foundation_abilities:
+            available_abilities.append({
+                'id': ability.id,
+                'name': ability.name,
+                'type': ability.spin_type,
+                'description': ability.description,
+                'stress_cost': ability.stress_cost,
+                'frequency': ability.frequency,
+                'requirement': 'Foundation'
+            })
+        
+        # A-rank dependent abilities by tier
+        cavalier_abilities = all_abilities.filter(spin_type='CAVALIER')
+        
+        # With 1 A: First 2 Cavalier abilities
+        if a_rank_count >= 1:
+            for ability in cavalier_abilities[:2]:
+                available_abilities.append({
+                    'id': ability.id,
+                    'name': ability.name,
+                    'type': ability.spin_type,
+                    'description': ability.description,
+                    'stress_cost': ability.stress_cost,
+                    'frequency': ability.frequency,
+                    'requirement': 'Requires 1 A-rank'
+                })
+        
+        # With 2 A: Next 3 Cavalier abilities
+        if a_rank_count >= 2:
+            for ability in cavalier_abilities[2:5]:
+                available_abilities.append({
+                    'id': ability.id,
+                    'name': ability.name,
+                    'type': ability.spin_type,
+                    'description': ability.description,
+                    'stress_cost': ability.stress_cost,
+                    'frequency': ability.frequency,
+                    'requirement': 'Requires 2 A-ranks'
+                })
+        
+        # With 3 A: Next 4 abilities
+        if a_rank_count >= 3:
+            for ability in cavalier_abilities[5:9]:
+                available_abilities.append({
+                    'id': ability.id,
+                    'name': ability.name,
+                    'type': ability.spin_type,
+                    'description': ability.description,
+                    'stress_cost': ability.stress_cost,
+                    'frequency': ability.frequency,
+                    'requirement': 'Requires 3 A-ranks'
+                })
+        
+        # With 4 A: Advanced abilities
+        if a_rank_count >= 4:
+            architect_abilities = all_abilities.filter(spin_type='ARCHITECT')[:2]
+            for ability in architect_abilities:
+                available_abilities.append({
+                    'id': ability.id,
+                    'name': ability.name,
+                    'type': ability.spin_type,
+                    'description': ability.description,
+                    'stress_cost': ability.stress_cost,
+                    'frequency': ability.frequency,
+                    'requirement': 'Requires 4 A-ranks'
+                })
+    
+    return Response({
+        'playbook': playbook,
+        'a_rank_count': a_rank_count,
+        'abilities': available_abilities,
+        'total_available': len(available_abilities)
     })

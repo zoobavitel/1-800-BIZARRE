@@ -394,23 +394,6 @@ export default function CharacterDashboard() {
                     <div className="text-sm text-gray-400">Wanted ({character.wanted || 0}/4)</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-lg font-bold text-white flex items-center justify-center gap-1">
-                      {Array.from({ length: 9 }, (_, i) => (
-                        <span 
-                          key={i} 
-                          style={{ 
-                            color: i < (character.heat || 0) ? '#ef4444' : '#6b7280',
-                            opacity: i < (character.heat || 0) ? 1 : 0.3,
-                            filter: i < (character.heat || 0) ? 'drop-shadow(0 0 2px #ef4444)' : 'grayscale(1)'
-                          }}
-                        >
-                          🔥
-                        </span>
-                      ))}
-                    </div>
-                    <div className="text-sm text-gray-400">Heat ({character.heat || 0}/9)</div>
-                  </div>
-                  <div className="text-center">
                     <div className="text-lg font-bold text-white">{character.coin_stats?.coin || 0}</div>
                     <div className="text-sm text-gray-400">Coin</div>
                   </div>

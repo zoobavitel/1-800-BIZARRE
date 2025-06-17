@@ -385,8 +385,8 @@ const CrewContent = () => (
           <li><strong>Cohorts:</strong> Recruit specialist gangs or experts</li>
         </ul>
         
-        <h3>Heat & Wanted Level</h3>
-        <p>Your crew's criminal activities attract attention from authorities. Manage your heat carefully to avoid overwhelming pressure.</p>
+        <h3>Wanted Level</h3>
+        <p>Your crew's criminal activities attract attention from authorities. Manage your exposure carefully to avoid overwhelming pressure.</p>
       </div>
     </div>
   </div>
@@ -439,26 +439,26 @@ const ScoreContent = () => (
           <ul>
             <li>Determine success level</li>
             <li>Calculate coin/rep earned</li>
-            <li>Assess heat gained</li>
+            <li>Assess consequences</li>
             <li>Handle entanglements</li>
           </ul>
         </div>
       </div>
       
-      <h2>🔥 Heat & Entanglements</h2>
-      <div className="heat-section">
-        <h3>Generating Heat</h3>
-        <p>Your crew generates heat based on the exposure and violence of your methods:</p>
+      <h2>⚡ Consequences & Entanglements</h2>
+      <div className="consequences-section">
+        <h3>Consequence Levels</h3>
+        <p>Your crew generates consequences based on the exposure and violence of your methods:</p>
         <ul>
-          <li>0 Heat: Smooth and quiet</li>
-          <li>1 Heat: Contained exposure</li>
-          <li>2 Heat: Witnesses or evidence</li>
-          <li>3-4 Heat: Exposed operation</li>
-          <li>5-6 Heat: Wild operation with major evidence</li>
+          <li>0 Consequences: Smooth and quiet</li>
+          <li>1 Consequence: Contained exposure</li>
+          <li>2 Consequences: Witnesses or evidence</li>
+          <li>3-4 Consequences: Exposed operation</li>
+          <li>5-6 Consequences: Wild operation with major evidence</li>
         </ul>
         
         <h3>Entanglements</h3>
-        <p>When heat builds up, roll for entanglements that create ongoing problems for your crew.</p>
+        <p>When consequences build up, roll for entanglements that create ongoing problems for your crew.</p>
       </div>
     </div>
   </div>
@@ -478,7 +478,7 @@ const PlanningContent = () => (
           <p>You go in guns blazing, using force and intimidation to achieve your goals.</p>
           <div className="plan-benefits">
             <span className="benefit">High damage potential</span>
-            <span className="drawback">Lots of heat</span>
+            <span className="drawback">High exposure</span>
           </div>
         </div>
         
@@ -487,7 +487,7 @@ const PlanningContent = () => (
           <p><strong>Detail:</strong> Method of deception</p>
           <p>You create and exploit false beliefs, using lies and misdirection.</p>
           <div className="plan-benefits">
-            <span className="benefit">Lower heat if successful</span>
+            <span className="benefit">Lower exposure if successful</span>
             <span className="drawback">Requires good acting</span>
           </div>
         </div>
@@ -497,7 +497,7 @@ const PlanningContent = () => (
           <p><strong>Detail:</strong> Infiltration method</p>
           <p>You sneak in undetected, avoiding confrontation and witnesses.</p>
           <div className="plan-benefits">
-            <span className="benefit">Minimal heat</span>
+            <span className="benefit">Minimal exposure</span>
             <span className="drawback">Fragile if discovered</span>
           </div>
         </div>
@@ -668,7 +668,7 @@ const DowntimeContent = () => (
         
         <div className="downtime-card">
           <h3>🕵️ Reduce Wanted Level</h3>
-          <p>Lower your heat with the authorities through bribes, misdirection, or laying low.</p>
+          <p>Lower your exposure with the authorities through bribes, misdirection, or laying low.</p>
           <div className="activity-details">
             <span className="complexity">Variable</span>
             <span className="roll">Sway, Consort, or other</span>
@@ -714,8 +714,8 @@ const DowntimeContent = () => (
           <p>Distribute coin and reputation from the completed score</p>
         </div>
         <div className="sequence-step">
-          <h3>2. Heat</h3>
-          <p>Roll for entanglements if your heat level is high</p>
+          <h3>2. Entanglements</h3>
+          <p>Roll for entanglements if your exposure level is high</p>
         </div>
         <div className="sequence-step">
           <h3>3. Downtime Activities</h3>

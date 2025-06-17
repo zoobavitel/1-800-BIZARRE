@@ -49,6 +49,8 @@ export const getDefaultCharacter = () => ({
   },
   specialAbilities: [],
   standardAbilities: [],
+  playbookAbilities: [],
+  customAbilities: [],
   selectedDetriments: [],
   selectedBenefits: [],
   xp: {
@@ -60,7 +62,6 @@ export const getDefaultCharacter = () => ({
   stress: Array(12).fill(false),
   trauma: [],
   harm: { level3: '', level2_0: '', level2_1: '', level1_0: '', level1_1: '' },
-  heat: 0,
   wanted: 0,
   friend: '',
   rival: '',
@@ -238,7 +239,7 @@ export const sanitizeCharacter = (character) => {
     }
     
     // Arrays
-    const arrayFields = ['specialAbilities', 'standardAbilities', 'selectedDetriments', 'selectedBenefits', 'trauma', 'equipment'];
+    const arrayFields = ['specialAbilities', 'standardAbilities', 'playbookAbilities', 'customAbilities', 'selectedDetriments', 'selectedBenefits', 'trauma', 'equipment'];
     for (const field of arrayFields) {
       if (Array.isArray(character[field])) {
         sanitized[field] = character[field].filter(item => item != null);
@@ -274,7 +275,7 @@ export const sanitizeCharacter = (character) => {
     }
     
     // Numeric fields
-    const numericFields = ['heat', 'wanted'];
+    const numericFields = ['wanted'];
     for (const field of numericFields) {
       if (typeof character[field] === 'number' && character[field] >= 0) {
         sanitized[field] = Math.min(character[field], 20); // Reasonable cap

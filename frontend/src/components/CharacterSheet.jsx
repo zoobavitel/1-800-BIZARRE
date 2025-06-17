@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Plus, X } from 'lucide-react';
-import Clock from './Clock';
 import Layout from './Layout';
+import Clock from './Clock';
 import api from '../api/axios';
 import { getDefaultCharacter } from '../utils/characterValidation';
 
@@ -22,7 +22,7 @@ const CharacterSheet = () => {
 
   // Get current character
   const getCurrentCharacter = () => tabs.find(tab => tab.id === activeTab)?.character || tabs[0].character;
-  const setCurrentCharacter = (newCharacterOrUpdater) => {
+  const setCurrentCharacter = useCallback((newCharacterOrUpdater) => {
     setTabs(prev => prev.map(tab => {
       if (tab.id === activeTab) {
         const newCharacter = typeof newCharacterOrUpdater === 'function' 
@@ -32,7 +32,7 @@ const CharacterSheet = () => {
       }
       return tab;
     }));
-  };
+  }, [activeTab]);
 
   const character = getCurrentCharacter();
 
@@ -41,10 +41,14 @@ const CharacterSheet = () => {
     showHeritagePanel: false,
     showAbilitiesPanel: false,
     showAdvancementPanel: false,
+    showFactionPanel: false,
+    showGMPanel: false,
     activeAbilityTab: 'standard',
     position: 'risky',
     effect: 'standard',
-    lastRoll: null
+    lastRoll: null,
+    lastResistanceRoll: null,
+    newFactionName: ''
   });
 
   const [saveStatus, setSaveStatus] = useState('');
@@ -126,27 +130,8 @@ const CharacterSheet = () => {
         // Load playbook-specific abilities
         const playbookAbilitiesMap = { Stand: {}, Hamon: {}, Spin: {} };
         
-        // Load Hamon abilities
-        try {
-          const hamonResponse = await api.get('/hamon-abilities/');
-          const hamonData = hamonResponse.data || [];
-          hamonData.forEach(ability => {
-            playbookAbilitiesMap.Hamon[ability.name] = ability.description;
-          });
-        } catch (error) {
-          console.warn('Failed to load Hamon abilities:', error);
-        }
-        
-        // Load Spin abilities
-        try {
-          const spinResponse = await api.get('/spin-abilities/');
-          const spinData = spinResponse.data || [];
-          spinData.forEach(ability => {
-            playbookAbilitiesMap.Spin[ability.name] = ability.description;
-          });
-        } catch (error) {
-          console.warn('Failed to load Spin abilities:', error);
-        }
+        // Playbook abilities will be loaded dynamically based on A-rank coin stats
+        // when the user opens the abilities panel
         
         setPlaybookAbilities(playbookAbilitiesMap);
         
@@ -209,7 +194,7 @@ const CharacterSheet = () => {
         setTimeout(() => setSaveStatus(''), 3000);
       }
     }
-  }, []);
+  }, [setCurrentCharacter]);
 
   // Helper functions
   
@@ -280,7 +265,7 @@ const CharacterSheet = () => {
   /**
    * Add a new clock to the character
    * @param {string} name - Name of the clock
-   * @param {string} type - Type of clock (custom, project, heat, wanted, health)
+   * @param {string} type - Type of clock (custom, project, wanted, health)
    * @param {number} segments - Number of segments in the clock (4, 6, 8)
    */
   const addClock = (name, type = 'custom', segments = 4) => {
@@ -343,24 +328,42 @@ const CharacterSheet = () => {
    * @param {string} category - The attribute category (insight, prowess, resolve)
    * @param {string} skill - The specific skill to improve
    */
+  /**
+   * Spend XP to improve a skill, properly resetting complete XP tracks
+   * @param {string} category - The skill category
+   * @param {string} skill - The specific skill 
+   */
   const spendXPForSkill = (category, skill) => {
     if (!canAdvance5XP()) return;
     
     const currentValue = ((character.skills || {})[category] || {})[skill] || 0;
-    if (currentValue >= 4) return; // Max skill level
+    if (currentValue >= 4) return;
     
-    // Spend 5 XP from attribute tracks only (not playbook)
+    // Find which tracks to reset (those that total 5+ XP)
     const newXP = { ...character.xp };
+    const tracksToReset = [];
     let remaining = 5;
     
-    // Subtract XP from attribute tracks only
+    // Check which complete tracks can be used
     ['insight', 'prowess', 'resolve'].forEach(track => {
-      if (remaining > 0 && newXP[track] > 0) {
-        const toSubtract = Math.min(remaining, newXP[track]);
-        newXP[track] -= toSubtract;
-        remaining -= toSubtract;
+      if (newXP[track] >= 5 && remaining > 0) {
+        tracksToReset.push(track);
+        remaining -= 5;
+        newXP[track] = 0; // Reset complete tracks
       }
     });
+    
+    // If we still need XP, partial tracks can be used
+    if (remaining > 0) {
+      ['insight', 'prowess', 'resolve'].forEach(track => {
+        if (remaining > 0 && newXP[track] > 0) {
+          const toSubtract = Math.min(remaining, newXP[track]);
+          newXP[track] -= toSubtract;
+          remaining -= toSubtract;
+          if (newXP[track] === 0) tracksToReset.push(track);
+        }
+      });
+    }
     
     setCurrentCharacter(prev => ({
       ...prev,
@@ -375,8 +378,8 @@ const CharacterSheet = () => {
     }));
     
     setGameState(prev => ({...prev, showAdvancementPanel: false}));
-    setSaveStatus('Skill improved!');
-    setTimeout(() => setSaveStatus(''), 2000);
+    setSaveStatus(`Skill improved! Reset XP tracks: ${tracksToReset.join(', ')}`);
+    setTimeout(() => setSaveStatus(''), 3000);
   };
 
   /**
@@ -407,6 +410,163 @@ const CharacterSheet = () => {
     setTimeout(() => setSaveStatus(''), 2000);
   };
 
+  /**
+   * Roll resistance dice and display results
+   * @param {string} attribute - The attribute being used (insight, prowess, resolve)
+   */
+  const rollResistance = (attribute) => {
+    const diceCount = getAttributeRating(attribute);
+    const dice = Array.from({ length: diceCount }, () => Math.floor(Math.random() * 6) + 1);
+    const highest = Math.max(...dice);
+    
+    let result, resultColor, stressReduction;
+    if (highest === 6) {
+      const sixes = dice.filter(d => d === 6).length;
+      if (sixes >= 2) {
+        result = 'Critical: Clear all stress or reduce harm by 2 levels';
+        resultColor = '#10b981';
+        stressReduction = 'all';
+      } else {
+        result = 'Success: Clear 1 stress or reduce harm by 1 level';
+        resultColor = '#10b981'; 
+        stressReduction = 1;
+      }
+    } else if (highest >= 4) {
+      result = 'Partial: Take 1 stress to clear 1 stress or reduce harm';
+      resultColor = '#fbbf24';
+      stressReduction = 1;
+    } else {
+      result = 'Failure: Take 2 stress';
+      resultColor = '#ef4444';
+      stressReduction = 0;
+    }
+    
+    setGameState(prev => ({
+      ...prev,
+      lastResistanceRoll: {
+        attribute,
+        dice,
+        highest,
+        result,
+        resultColor,
+        stressReduction,
+        timestamp: Date.now()
+      }
+    }));
+    
+    // Clear after 15 seconds
+    setTimeout(() => {
+      setGameState(prev => {
+        if (prev.lastResistanceRoll && prev.lastResistanceRoll.timestamp === Date.now()) {
+          return { ...prev, lastResistanceRoll: null };
+        }
+        return prev;
+      });
+    }, 15000);
+  };
+
+  /**
+   * Get coin stat bonus for rolls based on skill type
+   * @param {string} skillName - The skill being rolled
+   * @returns {object} Enhanced coin stat effects
+   */
+  const getCoinStatBonus = (skillName) => {
+    const coinStats = character.coinStats || {};
+    const skillLower = skillName.toLowerCase();
+    
+    // Map skills to coin stats
+    const skillToCoinStat = {
+      'finesse': 'precision',
+      'prowl': 'speed', 
+      'skirmish': 'power',
+      'wreck': 'power',
+      'hunt': 'precision',
+      'study': 'development',
+      'survey': 'range',
+      'tinker': 'development',
+      'bizarre': 'development',
+      'command': 'power',
+      'consort': 'development',
+      'sway': 'precision'
+    };
+    
+    const relevantStat = skillToCoinStat[skillLower];
+    if (!relevantStat) return { dice: 0, effects: [] };
+    
+    const statValue = coinStats[relevantStat] || 0;
+    const gradeLetter = getGradeLetter(statValue);
+    
+    // Calculate dice bonus (each point above 2 gives +1d, max +2d)
+    const diceBonus = Math.min(2, Math.max(0, statValue - 2));
+    
+    // Enhanced effects based on stat grade
+    const effects = [];
+    
+    switch (relevantStat) {
+      case 'power':
+        if (statValue >= 3) effects.push('+1 Effect on destructive actions');
+        if (statValue >= 4) effects.push('+1 Harm when attacking');
+        if (statValue >= 5) effects.push('Critical hits cause knockback');
+        break;
+        
+      case 'speed':
+        if (statValue >= 3) effects.push('+1 Effect on movement/escape');
+        if (statValue >= 4) effects.push('Act first in combat');
+        if (statValue >= 5) effects.push('Extra action on 6');
+        break;
+        
+      case 'range':
+        if (statValue >= 3) effects.push('+1 Zone reach for abilities');
+        if (statValue >= 4) effects.push('Ignore range penalties');
+        if (statValue >= 5) effects.push('Affect multiple zones');
+        break;
+        
+      case 'durability':
+        if (statValue >= 3) effects.push('+1 Resistance to consequences');
+        if (statValue >= 4) effects.push('Reduce harm by 1 level');
+        if (statValue >= 5) effects.push('Ignore first harm per scene');
+        break;
+        
+      case 'precision':
+        if (statValue >= 3) effects.push('+1 Effect on targeted actions');
+        if (statValue >= 4) effects.push('Crits on 5-6 instead of just 6');
+        if (statValue >= 5) effects.push('Ignore armor/cover penalties');
+        break;
+        
+      case 'development':
+        if (statValue >= 3) effects.push('+1 Effect on complex actions');
+        if (statValue >= 4) effects.push('Partial success counts as success');
+        if (statValue >= 5) effects.push('Learn enemy weaknesses on Study');
+        break;
+      default:
+        // No effects for unknown stat types
+        break;
+    }
+    
+    return { 
+      dice: diceBonus, 
+      effects, 
+      grade: gradeLetter,
+      statName: relevantStat 
+    };
+  };
+
+  /**
+   * Get clock color based on clock type
+   * @param {string} clockType - The type of clock
+   * @returns {string} Color hex code
+   */
+  const getClockColor = (clockType) => {
+    switch (clockType) {
+      case 'healing': return '#ef4444'; // Red
+      case 'health': return '#ef4444'; // Red (legacy support)
+      case 'project': return '#3b82f6'; // Blue  
+      case 'wanted': return '#fbbf24'; // Yellow
+      case 'custom': return '#8b5cf6'; // Purple
+      default: return '#10b981';
+    }
+  };
+
   // Trauma toggle function
   const toggleTrauma = (condition) => {
     setCurrentCharacter(prev => {
@@ -417,6 +577,9 @@ const CharacterSheet = () => {
       return { ...prev, trauma: updated };
     });
   };
+
+  // Add state for trauma selection prompt
+  const [traumaSelection, setTraumaSelection] = useState({ show: false, forced: false });
 
   /**
    * Handle coin stat changes and update character state
@@ -450,9 +613,13 @@ const CharacterSheet = () => {
    * @param {string} note - Optional note about the roll
    */
   const rollDice = (diceCount, skillName, note = '') => {
-    if (diceCount <= 0) diceCount = 2; // Desperate roll
+    // Apply coin stat bonuses based on skill type
+    const coinStatBonus = getCoinStatBonus(skillName);
+    let finalDiceCount = Math.max(1, diceCount + coinStatBonus.dice);
     
-    const dice = Array.from({ length: diceCount }, () => Math.floor(Math.random() * 6) + 1);
+    if (finalDiceCount <= 0) finalDiceCount = 2; // Desperate roll
+    
+    const dice = Array.from({ length: finalDiceCount }, () => Math.floor(Math.random() * 6) + 1);
     const highest = Math.max(...dice);
     
     let result, resultColor;
@@ -473,13 +640,24 @@ const CharacterSheet = () => {
       resultColor = '#ef4444';
     }
     
+    // Build enhanced note with coin stat effects
+    let enhancedNote = note || '';
+    if (coinStatBonus.dice > 0) {
+      enhancedNote += (enhancedNote ? ' | ' : '') + `+${coinStatBonus.dice}d from ${coinStatBonus.statName} (${coinStatBonus.grade})`;
+    }
+    if (coinStatBonus.effects.length > 0) {
+      enhancedNote += (enhancedNote ? ' | ' : '') + coinStatBonus.effects.join(', ');
+    }
+    
     const rollResult = {
       skill: skillName,
       dice,
       highest,
       result,
       resultColor,
-      note: note || (diceCount === 2 ? 'Desperate position (rolled 2d)' : ''),
+      coinStatBonus: coinStatBonus.dice,
+      coinStatEffects: coinStatBonus.effects,
+      note: enhancedNote,
       timestamp: Date.now()
     };
     
@@ -632,36 +810,6 @@ const CharacterSheet = () => {
   );
 
   /**
-   * Heat indicator component using fire emojis
-   * @param {number} count - Number of heat levels
-   * @param {number} filled - Current heat level
-   * @param {function} onChange - Callback when heat level is clicked
-   * @param {boolean} disabled - Whether interaction is disabled
-   */
-  const HeatIndicator = ({ count = 9, filled = 0, onChange, disabled = false }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
-      {Array.from({ length: count }, (_, i) => (
-        <span
-          key={i}
-          onClick={() => !disabled && onChange && onChange(i < filled ? i : i + 1)}
-          style={{
-            fontSize: '14px',
-            color: i < filled ? '#ef4444' : '#6b7280',
-            opacity: i < filled ? 1 : 0.3,
-            cursor: disabled ? 'not-allowed' : 'pointer',
-            transition: 'all 0.2s',
-            userSelect: 'none',
-            filter: i < filled ? 'drop-shadow(0 0 2px #ef4444)' : 'grayscale(1)'
-          }}
-          title={`Heat Level ${i + 1}`}
-        >
-          🔥
-        </span>
-      ))}
-    </div>
-  );
-
-  /**
    * Star group component for wanted levels
    * @param {number} count - Number of stars
    * @param {number} filled - Number of filled stars
@@ -675,14 +823,14 @@ const CharacterSheet = () => {
           key={i}
           onClick={() => !disabled && onChange && onChange(i < filled ? i : i + 1)}
           style={{
-            fontSize: '14px',
+            fontSize: '16px',
             color: i < filled ? '#fbbf24' : '#374151',
             cursor: disabled ? 'not-allowed' : 'pointer',
             transition: 'color 0.2s',
             userSelect: 'none'
           }}
         >
-          ★
+          {i < filled ? '★' : '☆'}
         </span>
       ))}
     </div>
@@ -690,6 +838,7 @@ const CharacterSheet = () => {
 
   const SkillDots = ({ category, skill, value, max = 4 }) => {
     const isLastRolled = gameState.lastRoll && gameState.lastRoll.skill === skill;
+    const coinBonus = getCoinStatBonus(skill);
     
     return (
       <div style={{ 
@@ -724,8 +873,10 @@ const CharacterSheet = () => {
             }}
             onMouseOver={(e) => e.target.style.opacity = 1}
             onMouseOut={(e) => e.target.style.opacity = 0.7}
+            title={coinBonus.effects.length > 0 ? `Coin effects: ${coinBonus.effects.join(', ')}` : ''}
           >
             {value === 0 ? '2d⬇' : `${value}d`}
+            {coinBonus.dice > 0 && <span style={{ fontSize: '7px', color: '#fbbf24' }}>+{coinBonus.dice}</span>}
           </button>
           {isLastRolled && (
             <div style={{ 
@@ -737,6 +888,11 @@ const CharacterSheet = () => {
               gap: '4px'
             }}>
               [{gameState.lastRoll.dice.join(', ')}] → {gameState.lastRoll.result}
+              {gameState.lastRoll.coinStatEffects && gameState.lastRoll.coinStatEffects.length > 0 && (
+                <div style={{ fontSize: '7px', color: '#fbbf24', marginLeft: '4px' }}>
+                  {gameState.lastRoll.coinStatEffects.slice(0, 1).join('')}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -758,6 +914,24 @@ const CharacterSheet = () => {
         </div>
       </div>
     );
+  };
+
+  /**
+   * Calculate current trauma count and check if character is dead
+   * @returns {object} Trauma status information
+   */
+  const getTraumaStatus = () => {
+    const traumaCount = (character.trauma || []).length;
+    const stressCount = (character.stress || []).filter(Boolean).length;
+    const isDead = traumaCount >= 4;
+    const shouldTakeTrauma = stressCount >= maxStress && traumaCount < 4;
+    
+    return {
+      count: traumaCount,
+      maxTrauma: 4,
+      isDead,
+      shouldTakeTrauma
+    };
   };
 
   /**
@@ -786,9 +960,97 @@ const CharacterSheet = () => {
    */
   const canAddMoreAbilities = () => getTotalAbilities() < getMaxAllowedAbilities();
 
+  // Add state for harm selection prompt
+  const [harmSelection, setHarmSelection] = useState({ show: false, level: null, options: [], onSelect: null });
+
+  // Helper to get harm entries by level
+  const getHarmEntriesByLevel = (level) => {
+    return Object.entries(character.harm || {})
+      .filter(([key, value]) => key.startsWith(`level${level}`) && value && value.trim() !== '')
+      .map(([key, value]) => ({ key, value }));
+  };
+
+  // Function to handle harm reduction after resistance roll
+  const handleReduceHarm = (level, reduction = 1) => {
+    const harmEntries = getHarmEntriesByLevel(level);
+    if (harmEntries.length === 0) return;
+    if (harmEntries.length === 1) {
+      // Only one harm, auto-reduce
+      setCurrentCharacter(prev => ({
+        ...prev,
+        harm: { ...prev.harm, [harmEntries[0].key]: '' }
+      }));
+    } else {
+      // Multiple harms, prompt user
+      setHarmSelection({
+        show: true,
+        level,
+        options: harmEntries,
+        onSelect: (selectedKey) => {
+          setCurrentCharacter(prev => ({
+            ...prev,
+            harm: { ...prev.harm, [selectedKey]: '' }
+          }));
+          setHarmSelection({ show: false, level: null, options: [], onSelect: null });
+        }
+      });
+    }
+  };
+
+  // Helper function to render harm options for selection
+  const renderHarmOptions = (level) => {
+    const harmEntries = getHarmEntriesByLevel(level);
+    return harmEntries.map(opt => (
+      <button
+        key={opt.key}
+        style={{ display: 'block', width: '100%', marginBottom: '8px', background: '#10b981', color: '#000', border: 'none', borderRadius: '4px', padding: '6px', fontWeight: 'bold', cursor: 'pointer' }}
+        onClick={() => harmSelection.onSelect(opt.key)}
+      >
+        {opt.value}
+      </button>
+    ));
+  };
+
+  /**
+   * Load playbook abilities dynamically based on A-rank coin stats
+   * @param {string} playbook - The playbook type ('Hamon' or 'Spin')
+   * @param {object} coinStats - Current coin stats
+   */
+  const loadDynamicPlaybookAbilities = async (playbook, coinStats) => {
+    if (!playbook || !['Hamon', 'Spin'].includes(playbook)) return;
+    
+    try {
+      const coinStatsParam = encodeURIComponent(JSON.stringify(coinStats || {}));
+      const response = await api.get(`/get_available_playbook_abilities/?playbook=${playbook}&coin_stats=${coinStatsParam}`);
+      const data = response.data;
+      
+      if (data && data.abilities) {
+        const abilitiesMap = {};
+        data.abilities.forEach(ability => {
+          abilitiesMap[ability.name] = ability.description;
+        });
+        
+        setPlaybookAbilities(prev => ({
+          ...prev,
+          [playbook]: abilitiesMap
+        }));
+      }
+    } catch (error) {
+      console.error(`Failed to load ${playbook} abilities:`, error);
+      // Keep existing abilities or use fallback
+    }
+  };
+
+  // Load dynamic playbook abilities when coin stats change or abilities panel is opened
+  useEffect(() => {
+    if (character.playbook && ['Hamon', 'Spin'].includes(character.playbook) && gameState.showAbilitiesPanel) {
+      loadDynamicPlaybookAbilities(character.playbook, character.coinStats);
+    }
+  }, [character.playbook, character.coinStats, gameState.showAbilitiesPanel]);
+
   return (
     <Layout>
-      <div style={{ backgroundColor: '#000', color: '#10b981', fontFamily: 'monospace', minHeight: '100vh', fontSize: '12px', paddingTop: '80px' }}>
+      <div style={{ backgroundColor: '#000', color: '#10b981', fontFamily: 'monospace', minHeight: '100vh', fontSize: '14px', paddingTop: '80px' }}>
       {/* Character Info Header - positioned below main header */}
       <div style={{ 
         backgroundColor: '#1f2937', 
@@ -851,24 +1113,7 @@ const CharacterSheet = () => {
 
           {/* Game Controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>          <div style={{ fontSize: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-              <span>HEAT:</span>
-              <HeatIndicator 
-                count={9} 
-                filled={character.heat}
-                disabled={character.campaign && !character.isGM}
-                onChange={(val) => {
-                  // Only allow GM or character owner to edit heat level
-                  if (character.isGM || !character.campaign) {
-                    setCurrentCharacter(prev => ({...prev, heat: val}));
-                  }
-                }}
-              />
-              {character.campaign && !character.isGM && (
-                <span style={{ fontSize: '8px', color: '#f59e0b' }}>(GM only)</span>
-              )}
-            </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span>WANTED:</span>
                 <StarGroup 
                   count={4} 
@@ -945,6 +1190,36 @@ const CharacterSheet = () => {
                   ⬆️ Advance
                 </button>
               )}
+              {character.isGM && (
+                <button
+                  onClick={() => setGameState(prev => ({...prev, showGMPanel: !prev.showGMPanel}))}
+                  style={{
+                    backgroundColor: '#dc2626',
+                    color: '#fff',
+                    border: 'none',
+                    padding: '6px 12px',
+                    fontSize: '11px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🛡️ GM
+                </button>
+              )}
+              <button
+                onClick={() => setGameState(prev => ({...prev, showFactionPanel: !prev.showFactionPanel}))}
+                style={{
+                  backgroundColor: '#7c3aed',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '6px 12px',
+                  fontSize: '11px',
+                  fontWeight: 'bold',
+                  cursor: 'pointer'
+                }}
+              >
+                🏛️ Factions
+              </button>
               <input 
                 type="file" 
                 accept=".json"
@@ -1142,9 +1417,6 @@ const CharacterSheet = () => {
                           padding: '4px 8px',
                           marginBottom: '4px',
                           backgroundColor: value >= 5 ? '#374151' : '#1f2937',
-                          color: value >= 5 ? '#6b7280' : '#fbbf24',
-                          border: '1px solid #374151',
-                          cursor: value >= 5 ? 'not-allowed' : 'pointer',
                           fontSize: '9px',
                           textTransform: 'uppercase'
                         }}
@@ -1582,9 +1854,15 @@ const CharacterSheet = () => {
                 padding: '6px 12px', 
                 fontSize: '11px', 
                 fontWeight: 'bold',
-                marginBottom: '8px'
+                marginBottom: '8px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
               }}>
-                STRESS ({(character.stress || []).filter(Boolean).length}/{maxStress})
+                <span>STRESS ({(character.stress || []).filter(Boolean).length}/{maxStress})</span>
+                {getTraumaStatus().shouldTakeTrauma && (
+                  <span style={{ color: '#ef4444', fontSize: '9px' }}>TAKE TRAUMA!</span>
+                )}
               </div>
               <CheckboxGroup 
                 count={maxStress} 
@@ -1594,6 +1872,11 @@ const CharacterSheet = () => {
                   const newStress = Array(maxStress).fill(false);
                   for(let i = 0; i < val; i++) newStress[i] = true;
                   setCurrentCharacter(prev => ({...prev, stress: newStress}));
+                  
+                  // Check if stress has reached maximum capacity and trauma should be selected
+                  if (val >= maxStress && (character.trauma || []).length < 4) {
+                    setTraumaSelection({ show: true, forced: true });
+                  }
                 }}
               />
             </div>
@@ -1601,14 +1884,23 @@ const CharacterSheet = () => {
             {/* Trauma */}
             <div style={{ marginBottom: '20px' }}>
               <div style={{
-                backgroundColor: '#10b981',
-                color: '#000',
+                backgroundColor: getTraumaStatus().isDead ? '#ef4444' : '#10b981',
+                color: getTraumaStatus().isDead ? '#fff' : '#000',
                 padding: '6px 12px',
                 fontSize: '11px',
                 fontWeight: 'bold',
-                marginBottom: '8px'
+                marginBottom: '8px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
               }}>
-                TRAUMA
+                <span>TRAUMA ({getTraumaStatus().count}/4)</span>
+                {getTraumaStatus().isDead && (
+                  <span style={{ fontSize: '9px' }}>DEAD</span>
+                )}
+                {character.campaign && !character.isGM && (
+                  <span style={{ fontSize: '8px', color: getTraumaStatus().isDead ? '#fbbf24' : '#f59e0b' }}>(GM View)</span>
+                )}
               </div>
 
               <div style={{
@@ -1661,39 +1953,56 @@ const CharacterSheet = () => {
                 marginBottom: '8px'
               }}>
                 <span>CLOCKS</span>
-                <button
-                  onClick={() => {
-                    const name = prompt('Clock name:');
-                    if (name) {
-                      const segments = parseInt(prompt('Number of segments (4, 6, or 8):', '4')) || 4;
-                      addClock(name, 'custom', segments);
-                    }
-                  }}
-                  style={{
-                    backgroundColor: '#000',
-                    color: '#10b981',
-                    border: '1px solid #10b981',
-                    padding: '2px 6px',
-                    fontSize: '9px',
-                    cursor: 'pointer',
-                    marginRight: '4px'
-                  }}
-                >
-                  + Add
-                </button>
-                <button
-                  onClick={() => addClock('Project Clock', 'project', 8)}
-                  style={{
-                    backgroundColor: '#000',
-                    color: '#3b82f6',
-                    border: '1px solid #3b82f6',
-                    padding: '2px 6px',
-                    fontSize: '9px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  + Project
-                </button>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button
+                    onClick={() => addClock('Healing Clock', 'healing', 4)}
+                    style={{
+                      backgroundColor: '#000',
+                      color: '#ef4444',
+                      border: '1px solid #ef4444',
+                      padding: '2px 6px',
+                      fontSize: '9px',
+                      cursor: 'pointer',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    + Healing
+                  </button>
+                  <button
+                    onClick={() => addClock('Project Clock', 'project', 8)}
+                    style={{
+                      backgroundColor: '#000',
+                      color: '#3b82f6',
+                      border: '1px solid #3b82f6',
+                      padding: '2px 6px',
+                      fontSize: '9px',
+                      cursor: 'pointer',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    + Project
+                  </button>
+                  <button
+                    onClick={() => {
+                      const name = prompt('Clock name:');
+                      if (name) {
+                        const segments = parseInt(prompt('Number of segments (4, 6, or 8):', '4')) || 4;
+                        addClock(name, 'custom', segments);
+                      }
+                    }}
+                    style={{
+                      backgroundColor: '#000',
+                      color: '#8b5cf6',
+                      border: '1px solid #8b5cf6',
+                      padding: '2px 6px',
+                      fontSize: '9px',
+                      cursor: 'pointer',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    + Custom
+                  </button>
+                </div>
               </div>
               <div style={{ border: '1px solid #10b981', padding: '8px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '12px' }}>
@@ -1703,17 +2012,17 @@ const CharacterSheet = () => {
                         fontSize: '9px', 
                         fontWeight: 'bold', 
                         marginBottom: '4px',
-                        color: clock.type === 'health' ? '#ef4444' : 
-                               clock.type === 'project' ? '#3b82f6' :
-                               clock.type === 'heat' ? '#f59e0b' :
-                               clock.type === 'wanted' ? '#fbbf24' : '#10b981'
+                        color: getClockColor(clock.type),
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px'
                       }}>
                         {clock.name}
                         {!clock.isRequired && (
                           <button
                             onClick={() => deleteClock(clock.id)}
                             style={{
-                              marginLeft: '4px',
                               backgroundColor: 'transparent',
                               border: 'none',
                               color: '#ef4444',
@@ -1725,21 +2034,17 @@ const CharacterSheet = () => {
                           </button>
                         )}
                       </div>
-                      <div
-                        onClick={() => {
-                          const newFilled = (clock.filled + 1) % (clock.segments + 1);
+                      <Clock
+                        total={clock.segments}
+                        filled={clock.filled}
+                        size={60}
+                        strokeWidth={8}
+                        color={getClockColor(clock.type)}
+                        onSegmentClick={(segmentIndex) => {
+                          const newFilled = segmentIndex + 1 === clock.filled ? Math.max(0, clock.filled - 1) : segmentIndex + 1;
                           updateClock(clock.id, { filled: newFilled });
                         }}
-                        style={{ cursor: 'pointer' }}
-                      >
-                        <Clock 
-                          label=""
-                          total={clock.segments}
-                          filled={clock.filled}
-                          size={60}
-                          strokeWidth={8}
-                        />
-                      </div>
+                      />
                       <div style={{ fontSize: '8px', marginTop: '2px', color: '#6ee7b7' }}>
                         {clock.filled}/{clock.segments}
                         {clock.type === 'wanted' && clock.filled > 0 && (
@@ -1756,7 +2061,7 @@ const CharacterSheet = () => {
                     No clocks created yet
                   </div>
                 )}
-                           </div>
+              </div>
             </div>
 
             {/* Harm */}
@@ -1775,7 +2080,7 @@ const CharacterSheet = () => {
                 <span>HARM</span>
                 <div style={{ display: 'flex', gap: '4px' }}>
                   <button
-                    onClick={() => rollDice(getAttributeRating('insight'), 'Resist Harm (Insight)')}
+                    onClick={() => rollResistance('insight')}
                     style={{
                       backgroundColor: '#000',
                       color: '#10b981',
@@ -1786,10 +2091,10 @@ const CharacterSheet = () => {
                       fontWeight: 'bold'
                     }}
                   >
-                    Insight
+                    Insight ({getAttributeRating('insight')}d)
                   </button>
                   <button
-                    onClick={() => rollDice(getAttributeRating('prowess'), 'Resist Harm (Prowess)')}
+                    onClick={() => rollResistance('prowess')}
                     style={{
                       backgroundColor: '#000',
                       color: '#10b981',
@@ -1800,10 +2105,10 @@ const CharacterSheet = () => {
                       fontWeight: 'bold'
                     }}
                   >
-                    Prowess
+                    Prowess ({getAttributeRating('prowess')}d)
                   </button>
                   <button
-                    onClick={() => rollDice(getAttributeRating('resolve'), 'Resist Harm (Resolve)')}
+                    onClick={() => rollResistance('resolve')}
                     style={{
                       backgroundColor: '#000',
                       color: '#10b981',
@@ -1814,10 +2119,58 @@ const CharacterSheet = () => {
                       fontWeight: 'bold'
                     }}
                   >
-                    Resolve
+                    Resolve ({getAttributeRating('resolve')}d)
                   </button>
                 </div>
               </div>
+
+              {/* Resistance Roll Display */}
+              {gameState.lastResistanceRoll && (
+                <div style={{ 
+                  marginTop: '8px',
+                  padding: '8px',
+                  border: `1px solid ${gameState.lastResistanceRoll.resultColor}`,
+                  backgroundColor: 'rgba(0,0,0,0.3)',
+                  fontSize: '10px'
+                }}>
+                  <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                    {gameState.lastResistanceRoll.attribute.toUpperCase()} Resistance Roll
+                  </div>
+                  <div style={{ marginBottom: '4px' }}>
+                    Dice: [{gameState.lastResistanceRoll.dice.join(', ')}] Highest: {gameState.lastResistanceRoll.highest}
+                  </div>
+                  <div style={{ color: gameState.lastResistanceRoll.resultColor, fontWeight: 'bold' }}>
+                    {gameState.lastResistanceRoll.result}
+                  </div>
+                  {/* Show explicit stress cost info */}
+                  {gameState.lastResistanceRoll.highest === 6 && (
+                    <div style={{ color: '#10b981', fontWeight: 'bold' }}>No stress cost!</div>
+                  )}
+                  {gameState.lastResistanceRoll.highest >= 4 && gameState.lastResistanceRoll.highest < 6 && (
+                    <div style={{ color: '#fbbf24' }}>Pay 1 stress.</div>
+                  )}
+                  {gameState.lastResistanceRoll.highest < 4 && (
+                    <div style={{ color: '#ef4444' }}>Pay 2 stress.</div>
+                  )}
+                  {/* Harm reduction button if applicable */}
+                  {(gameState.lastResistanceRoll.result && (gameState.lastResistanceRoll.result.includes('reduce harm') || gameState.lastResistanceRoll.result.includes('Critical'))) && (
+                    <div style={{ marginTop: '6px' }}>
+                      <button
+                        style={{ backgroundColor: '#10b981', color: '#000', border: 'none', padding: '4px 8px', fontSize: '9px', cursor: 'pointer', fontWeight: 'bold' }}
+                        onClick={() => {
+                          // Determine which harm level to reduce (prefer highest)
+                          let level = 3;
+                          while (level > 0 && getHarmEntriesByLevel(level).length === 0) level--;
+                          if (level > 0) handleReduceHarm(level);
+                        }}
+                      >
+                        Reduce Harm
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div style={{ border: '1px solid #10b981', padding: '8px' }}>
                 {[
                   { level: 3, label: 'SEVERE', effect: 'Need Help' },
@@ -2237,7 +2590,6 @@ const CharacterSheet = () => {
                             padding: '4px 8px',
                             fontSize: '8px',
                             cursor: canAddMoreAbilities() ? 'pointer' : 'not-allowed',
-                            cursor: 'pointer',
                             fontWeight: 'bold'
                           }}
                         >
@@ -2385,6 +2737,77 @@ const CharacterSheet = () => {
         </div>
       </div>
       </div>
+
+      {/* Harm selection prompt modal */}
+      {harmSelection.show && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#1f2937', border: '2px solid #10b981', borderRadius: '8px', padding: '24px', minWidth: '300px' }}>
+            <div style={{ fontWeight: 'bold', color: '#10b981', marginBottom: '12px' }}>
+              Select which harm to reduce (Level {harmSelection.level})
+            </div>
+            {renderHarmOptions(harmSelection.level)}
+            <button
+              style={{ background: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', padding: '6px', fontWeight: 'bold', marginTop: '8px', width: '100%' }}
+              onClick={() => setHarmSelection({ show: false, level: null, options: [], onSelect: null })}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Trauma selection modal when stress reaches maximum */}
+      {traumaSelection.show && (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.7)', zIndex: 1001, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#1f2937', border: '2px solid #ef4444', borderRadius: '8px', padding: '24px', minWidth: '350px', maxWidth: '500px' }}>
+            <div style={{ fontWeight: 'bold', color: '#ef4444', marginBottom: '12px', fontSize: '14px', textAlign: 'center' }}>
+              ⚠️ STRESS MAXED OUT ⚠️
+            </div>
+            <div style={{ color: '#fbbf24', marginBottom: '16px', fontSize: '12px', textAlign: 'center' }}>
+              Your stress track is full! You must take a trauma condition to continue.
+            </div>
+            <div style={{ marginBottom: '16px' }}>
+              <div style={{ fontWeight: 'bold', color: '#10b981', marginBottom: '8px', fontSize: '12px' }}>
+                Choose a trauma condition:
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                {traumaOptions.filter(trauma => !(character.trauma || []).includes(trauma.name)).map(trauma => (
+                  <button
+                    key={trauma.name}
+                    title={trauma.description}
+                    onClick={() => {
+                      toggleTrauma(trauma.name);
+                      // Completely reset stress track after taking trauma
+                      const newStress = Array(maxStress).fill(false);
+                      setCurrentCharacter(prev => ({...prev, stress: newStress}));
+                      setTraumaSelection({ show: false, forced: false });
+                    }}
+                    style={{
+                      background: '#374151',
+                      border: '1px solid #10b981',
+                      color: '#10b981',
+                      padding: '8px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: '9px',
+                      textAlign: 'center',
+                      fontWeight: 'bold',
+                      transition: 'background-color 0.2s'
+                    }}
+                    onMouseOver={(e) => e.target.style.backgroundColor = '#4b5563'}
+                    onMouseOut={(e) => e.target.style.backgroundColor = '#374151'}
+                  >
+                    {trauma.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ fontSize: '9px', color: '#6b7280', fontStyle: 'italic', textAlign: 'center' }}>
+              Taking trauma will reset your stress track and allow you to continue.
+            </div>
+          </div>
+        </div>
+      )}
     </Layout>
   );
 };

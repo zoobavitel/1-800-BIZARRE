@@ -10,6 +10,7 @@ from characters.views import (
     TraumaViewSet,
     home, RegisterView, StandAbilityViewSet, LoginView,
     HamonAbilityViewSet, SpinAbilityViewSet, global_search,
+    get_available_playbook_abilities,
 )
 
 
@@ -33,6 +34,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
     path('api/search/', global_search, name='global_search'),
+    path('api/get_available_playbook_abilities/', get_available_playbook_abilities, name='get_available_playbook_abilities'),
     # Use your custom LoginView instead of obtain_auth_token
     path('api/accounts/login/', LoginView.as_view(), name='login'),
     path('api/accounts/signup/', RegisterView.as_view(), name='signup'),

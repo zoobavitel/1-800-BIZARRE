@@ -102,12 +102,30 @@ class CharacterSerializer(serializers.ModelSerializer):
     custom_vice = serializers.CharField(write_only=True, required=False, allow_blank=True)
     # trauma list details from JSONField
     trauma_details = serializers.SerializerMethodField()
+    
+    # Faction reputation and GM settings
+    faction_reputation = serializers.JSONField(required=False)
+    gm_character_locked = serializers.BooleanField(required=False)
+    gm_allowed_edit_fields = serializers.JSONField(required=False)
 
     class Meta:
         model = Character
         fields = '__all__'
 
     def validate(self, data):
+        # Validate stress/trauma system
+        stress = data.get('stress', 0) or getattr(self.instance, 'stress', 0)
+        trauma_list = data.get('trauma', []) or getattr(self.instance, 'trauma', [])
+        
+        # Check if character should take trauma at 11+ stress
+        if stress >= 11:
+            trauma_count = len(trauma_list)
+            if trauma_count >= 4:
+                raise serializers.ValidationError(
+                    "Character is dead (4+ trauma). Cannot continue playing."
+                )
+            # Note: We don't auto-add trauma here, that's handled by the frontend
+        
         # enforce playbook ability prerequisites based on coin_stats
         # count 'A' ratings in coin_stats
         coin_stats = data.get('coin_stats') or getattr(self.instance, 'coin_stats', {})
@@ -178,6 +196,26 @@ class CharacterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 f"Playbook track XP cannot exceed 10; received {playbook_xp}."
             )
+        
+        # GM character locking validation
+        if self.instance and self.instance.campaign:
+            gm_locked = data.get('gm_character_locked') or getattr(self.instance, 'gm_character_locked', False)
+            allowed_fields = data.get('gm_allowed_edit_fields') or getattr(self.instance, 'gm_allowed_edit_fields', {})
+            
+            # Only GM can modify locking settings
+            request = self.context.get('request')
+            if request and hasattr(request, 'user'):
+                is_gm = self.instance.campaign.gm == request.user
+                
+                if gm_locked and not is_gm:
+                    # Check if any locked fields are being modified
+                    restricted_fields = ['heritage', 'selected_benefits', 'selected_detriments', 'playbook']
+                    for field in restricted_fields:
+                        if field in data and not allowed_fields.get(field, True):
+                            raise serializers.ValidationError(
+                                f"Field '{field}' is locked by GM and cannot be modified."
+                            )
+        
         return data
 
     def create(self, validated_data):

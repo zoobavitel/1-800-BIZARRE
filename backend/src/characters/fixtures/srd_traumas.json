@@ -1,0 +1,66 @@
+[
+  {
+    "model": "characters.trauma",
+    "pk": 1,
+    "fields": {
+      "name": "Cold",
+      "description": "You're not moved by emotional appeals or social bonds."
+    }
+  },
+  {
+    "model": "characters.trauma",
+    "pk": 2,
+    "fields": {
+      "name": "Haunted",
+      "description": "You're often lost in reverie, reliving past horrors, seeing things."
+    }
+  },
+  {
+    "model": "characters.trauma",
+    "pk": 3,
+    "fields": {
+      "name": "Obsessed",
+      "description": "You're enthralled by one thing: an activity, a person, an ideology."
+    }
+  },
+  {
+    "model": "characters.trauma",
+    "pk": 4,
+    "fields": {
+      "name": "Paranoid",
+      "description": "You imagine danger everywhere; you can't trust others."
+    }
+  },
+  {
+    "model": "characters.trauma",
+    "pk": 5,
+    "fields": {
+      "name": "Reckless",
+      "description": "You have little regard for your own safety or best interests."
+    }
+  },
+  {
+    "model": "characters.trauma",
+    "pk": 6,
+    "fields": {
+      "name": "Soft",
+      "description": "You lose your edge; you become sentimental, passive, gentle."
+    }
+  },
+  {
+    "model": "characters.trauma",
+    "pk": 7,
+    "fields": {
+      "name": "Unstable",
+      "description": "Your emotional state is volatile. You can instantly rage, or fall into despair, act impulsively, or freeze up."
+    }
+  },
+  {
+    "model": "characters.trauma",
+    "pk": 8,
+    "fields": {
+      "name": "Vicious",
+      "description": "You seek out opportunities to hurt people, even for no good reason."
+    }
+  }
+]

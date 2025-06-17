@@ -10,8 +10,20 @@ import React from 'react';
  *  - filled: Number of segments to fill (0..total)
  *  - size: Optional diameter of the SVG in pixels (default: 80)
  *  - strokeWidth: Optional segment thickness (default: 10)
+ *  - color: Color for filled segments (default: '#3b82f6')
+ *  - onSegmentClick: Function called when a segment is clicked (index)
+ *  - style: Additional styles for the container
  */
-export default function Clock({ label, total, filled, size = 80, strokeWidth = 10 }) {
+export default function Clock({ 
+  label, 
+  total, 
+  filled, 
+  size = 80, 
+  strokeWidth = 10, 
+  color = '#3b82f6',
+  onSegmentClick,
+  style = {}
+}) {
   const segments = [];
   const anglePer = 360 / total;
   const radius = (size - strokeWidth) / 2;
@@ -33,20 +45,32 @@ export default function Clock({ label, total, filled, size = 80, strokeWidth = 1
       <path
         key={i}
         d={d}
-        stroke={i < filled ? 'currentColor' : '#e5e7eb'}
+        stroke={i < filled ? color : '#374151'}
         strokeWidth={strokeWidth}
         fill="none"
         strokeLinecap="butt"
+        style={{ cursor: onSegmentClick ? 'pointer' : 'default' }}
+        onClick={() => onSegmentClick && onSegmentClick(i)}
       />
     );
   }
 
   return (
-    <div className="flex flex-col items-center">
-      <svg width={size} height={size} className="text-indigo-600">
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', ...style }}>
+      <svg width={size} height={size}>
         {segments}
       </svg>
-      {label && <div className="mt-1 text-sm font-medium text-gray-700">{label}</div>}
+      {label && (
+        <div style={{ 
+          marginTop: '4px', 
+          fontSize: '9px', 
+          fontWeight: 'bold', 
+          color: color,
+          textAlign: 'center'
+        }}>
+          {label}
+        </div>
+      )}
     </div>
   );
 }
