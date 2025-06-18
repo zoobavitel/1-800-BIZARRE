@@ -48,6 +48,7 @@ const CharacterSheet = () => {
     effect: 'standard',
     lastRoll: null,
     lastResistanceRoll: null,
+    lastAttributeRoll: null,
     newFactionName: ''
   });
 
@@ -441,6 +442,7 @@ const CharacterSheet = () => {
       stressReduction = 0;
     }
     
+    // Always set lastResistanceRoll for inline display
     setGameState(prev => ({
       ...prev,
       lastResistanceRoll: {
@@ -611,8 +613,9 @@ const CharacterSheet = () => {
    * @param {number} diceCount - Number of dice to roll
    * @param {string} skillName - Name of the skill being rolled
    * @param {string} note - Optional note about the roll
+   * @param {boolean} showInQuickDisplay - Whether to show this roll in the quick dice display
    */
-  const rollDice = (diceCount, skillName, note = '') => {
+  const rollDice = (diceCount, skillName, note = '', showInQuickDisplay = true) => {
     // Apply coin stat bonuses based on skill type
     const coinStatBonus = getCoinStatBonus(skillName);
     let finalDiceCount = Math.max(1, diceCount + coinStatBonus.dice);
@@ -658,21 +661,77 @@ const CharacterSheet = () => {
       coinStatBonus: coinStatBonus.dice,
       coinStatEffects: coinStatBonus.effects,
       note: enhancedNote,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      showInQuickDisplay
     };
     
-    setGameState(prev => ({ ...prev, lastRoll: rollResult }));
-    
-    // Auto-show dice roller if it's hidden to display the result
-    if (!gameState.showDiceRoller) {
-      setGameState(prev => ({ ...prev, showDiceRoller: true }));
+    // Only show in dice roller quick display if showInQuickDisplay is true
+    if (showInQuickDisplay) {
+      setGameState(prev => ({ ...prev, lastRoll: rollResult }));
+      
+      // Auto-show dice roller if it's hidden to display the result
+      if (!gameState.showDiceRoller) {
+        setGameState(prev => ({ ...prev, showDiceRoller: true }));
+      }
     }
     
-    // Clear the roll result after 10 seconds to keep UI clean
+    // Clear the roll result after 10 seconds to keep UI clean (only for quick display rolls)
+    if (showInQuickDisplay) {
+      setTimeout(() => {
+        setGameState(prev => {
+          if (prev.lastRoll && prev.lastRoll.timestamp === rollResult.timestamp) {
+            return { ...prev, lastRoll: null };
+          }
+          return prev;
+        });
+      }, 10000);
+    }
+  };
+
+  /**
+   * Roll attribute dice and display results inline next to attribute rating
+   * @param {string} attribute - The attribute being rolled (insight, prowess, resolve)
+   */
+  const rollAttribute = (attribute) => {
+    const diceCount = getAttributeRating(attribute);
+    const dice = Array.from({ length: diceCount }, () => Math.floor(Math.random() * 6) + 1);
+    const highest = Math.max(...dice);
+    
+    let result, resultColor;
+    if (highest === 6) {
+      const sixes = dice.filter(d => d === 6).length;
+      if (sixes >= 2) {
+        result = 'Critical Success!';
+        resultColor = '#10b981';
+      } else {
+        result = 'Full Success';
+        resultColor = '#10b981';
+      }
+    } else if (highest >= 4) {
+      result = 'Partial Success';
+      resultColor = '#fbbf24';
+    } else {
+      result = 'Bad Outcome';
+      resultColor = '#ef4444';
+    }
+    
+    setGameState(prev => ({
+      ...prev,
+      lastAttributeRoll: {
+        attribute,
+        dice,
+        highest,
+        result,
+        resultColor,
+        timestamp: Date.now()
+      }
+    }));
+    
+    // Clear after 10 seconds
     setTimeout(() => {
       setGameState(prev => {
-        if (prev.lastRoll && prev.lastRoll.timestamp === rollResult.timestamp) {
-          return { ...prev, lastRoll: null };
+        if (prev.lastAttributeRoll && prev.lastAttributeRoll.timestamp === Date.now()) {
+          return { ...prev, lastAttributeRoll: null };
         }
         return prev;
       });
@@ -859,7 +918,7 @@ const CharacterSheet = () => {
               setTimeout(() => {
                 button.style.transform = 'scale(1)';
               }, 100);
-              rollDice(Math.max(value, 0), skill);
+              rollDice(Math.max(value, 0), skill, '', false); // Don't show action rolls in quick display
             }}
             style={{
               fontSize: '9px',
@@ -2222,20 +2281,34 @@ const CharacterSheet = () => {
                 alignItems: 'center'
               }}>
                 <span>INSIGHT ({getAttributeRating('insight')}d)</span>
-                <button
-                  onClick={() => rollDice(getAttributeRating('insight'), 'Insight Attribute Roll')}
-                  style={{
-                    backgroundColor: '#000',
-                    color: '#10b981',
-                    border: '1px solid #10b981',
-                    padding: '2px 6px',
-                    fontSize: '9px',
-                    cursor: 'pointer',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  Roll
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {gameState.lastAttributeRoll && gameState.lastAttributeRoll.attribute === 'insight' && (
+                    <div style={{ 
+                      fontSize: '8px', 
+                      color: gameState.lastAttributeRoll.resultColor, 
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      [{gameState.lastAttributeRoll.dice.join(', ')}] → {gameState.lastAttributeRoll.result}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => rollAttribute('insight')}
+                    style={{
+                      backgroundColor: '#000',
+                      color: '#10b981',
+                      border: '1px solid #10b981',
+                      padding: '2px 6px',
+                      fontSize: '9px',
+                      cursor: 'pointer',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    Roll
+                  </button>
+                </div>
               </div>
               <div style={{ border: '1px solid #10b981', padding: '8px' }}>
                 {Object.entries((character.skills || {}).insight || {}).map(([skill, rating]) => (
@@ -2258,20 +2331,34 @@ const CharacterSheet = () => {
                 alignItems: 'center'
               }}>
                 <span>PROWESS ({getAttributeRating('prowess')}d)</span>
-                <button
-                  onClick={() => rollDice(getAttributeRating('prowess'), 'Prowess Attribute Roll')}
-                  style={{
-                    backgroundColor: '#000',
-                    color: '#10b981',
-                    border: '1px solid #10b981',
-                    padding: '2px 6px',
-                    fontSize: '9px',
-                    cursor: 'pointer',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  Roll
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {gameState.lastAttributeRoll && gameState.lastAttributeRoll.attribute === 'prowess' && (
+                    <div style={{ 
+                      fontSize: '8px', 
+                      color: gameState.lastAttributeRoll.resultColor, 
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      [{gameState.lastAttributeRoll.dice.join(', ')}] → {gameState.lastAttributeRoll.result}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => rollAttribute('prowess')}
+                    style={{
+                      backgroundColor: '#000',
+                      color: '#10b981',
+                      border: '1px solid #10b981',
+                      padding: '2px 6px',
+                      fontSize: '9px',
+                      cursor: 'pointer',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    Roll
+                  </button>
+                </div>
               </div>
               <div style={{ border: '1px solid #10b981', padding: '8px' }}>
                 {Object.entries((character.skills || {}).prowess || {}).map(([skill, rating]) => (
@@ -2294,20 +2381,34 @@ const CharacterSheet = () => {
                 alignItems: 'center'
               }}>
                 <span>RESOLVE ({getAttributeRating('resolve')}d)</span>
-                <button
-                  onClick={() => rollDice(getAttributeRating('resolve'), 'Resolve Attribute Roll')}
-                  style={{
-                    backgroundColor: '#000',
-                    color: '#10b981',
-                    border: '1px solid #10b981',
-                    padding: '2px 6px',
-                    fontSize: '9px',
-                    cursor: 'pointer',
-                    fontWeight: 'bold'
-                  }}
-                >
-                  Roll
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {gameState.lastAttributeRoll && gameState.lastAttributeRoll.attribute === 'resolve' && (
+                    <div style={{ 
+                      fontSize: '8px', 
+                      color: gameState.lastAttributeRoll.resultColor, 
+                      fontWeight: 'bold',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}>
+                      [{gameState.lastAttributeRoll.dice.join(', ')}] → {gameState.lastAttributeRoll.result}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => rollAttribute('resolve')}
+                    style={{
+                      backgroundColor: '#000',
+                      color: '#10b981',
+                      border: '1px solid #10b981',
+                      padding: '2px 6px',
+                      fontSize: '9px',
+                      cursor: 'pointer',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    Roll
+                  </button>
+                </div>
               </div>
               <div style={{ border: '1px solid #10b981', padding: '8px' }}>
                 {Object.entries((character.skills || {}).resolve || {}).map(([skill, rating]) => (
