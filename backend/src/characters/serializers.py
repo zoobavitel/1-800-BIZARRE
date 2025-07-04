@@ -57,12 +57,16 @@ class StandSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class CrewSerializer(serializers.ModelSerializer):
+    proposed_by = serializers.PrimaryKeyRelatedField(read_only=True)
+    approved_by = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+
     class Meta:
         model = Crew
         fields = [
             'id', 'name', 'campaign', 'description',
             'tier', 'hold', 'rep', 'wanted_level',
-            'coin', 'stash', 'claims', 'upgrades'
+            'coin', 'stash', 'claims', 'upgrades',
+            'proposed_name', 'proposed_by', 'approved_by'
         ]
 
 class CharacterSerializer(serializers.ModelSerializer):
@@ -303,10 +307,22 @@ class CampaignSerializer(serializers.ModelSerializer):
         model  = Campaign
         fields = ['id','name','gm','players','description','wanted_stars']
 
+
 class NPCSerializer(serializers.ModelSerializer):
+    creator = serializers.PrimaryKeyRelatedField(read_only=True, default=serializers.CurrentUserDefault())
+    harm_clock_max = serializers.IntegerField(read_only=True)
+    special_armor_charges = serializers.IntegerField(read_only=True)
+    vulnerability_clock_max = serializers.IntegerField(read_only=True)
+
     class Meta:
-        model  = NPC
-        fields = '__all__'
+        model = NPC
+        fields = ['id', 'name', 'level', 'appearance', 'role', 'weakness', 'need', 'desire', 'rumour', 'secret', 'passion', 'description', 'stand_coin_stats', 'heritage', 'playbook', 'custom_abilities', 'relationships', 'harm_clock_current', 'vulnerability_clock_current', 'armor_charges', 'creator', 'campaign', 'stand_description', 'stand_appearance', 'stand_manifestation', 'special_traits', 'harm_clock_max', 'special_armor_charges', 'vulnerability_clock_max', 'purveyor', 'notes', 'items', 'contacts', 'faction_status', 'inventory']
+
+    def create(self, validated_data):
+        # Set the creator to the current user if not explicitly provided
+        if 'creator' not in validated_data:
+            validated_data['creator'] = self.context['request'].user
+        return super().create(validated_data)
 
 class TraumaSerializer(serializers.ModelSerializer):
     class Meta:

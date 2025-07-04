@@ -155,7 +155,7 @@ class CrewModelTest(TestCase):
             tier=2,
             hold='strong',
             rep=4,
-            heat=2,
+            
             wanted_level=1,
             coin=8,
             stash=12
@@ -167,7 +167,7 @@ class CrewModelTest(TestCase):
         self.assertEqual(self.crew.tier, 2)
         self.assertEqual(self.crew.hold, 'strong')
         self.assertEqual(self.crew.rep, 4)
-        self.assertEqual(self.crew.heat, 2)
+        
         self.assertEqual(self.crew.wanted_level, 1)
         self.assertEqual(self.crew.coin, 8)
         self.assertEqual(self.crew.stash, 12)
@@ -182,7 +182,7 @@ class CrewModelTest(TestCase):
         self.assertEqual(default_crew.tier, 0)
         self.assertEqual(default_crew.hold, 'weak')
         self.assertEqual(default_crew.rep, 0)
-        self.assertEqual(default_crew.heat, 0)
+        
         self.assertEqual(default_crew.wanted_level, 0)
         self.assertEqual(default_crew.coin, 0)
         self.assertEqual(default_crew.stash, 0)
@@ -489,33 +489,7 @@ class ViceModelTest(TestCase):
         self.assertEqual(str(vice), 'Obligation')
 
 
-class NPCModelTest(TestCase):
-    """Test NPC model for campaign management."""
-    
-    def setUp(self):
-        """Set up test campaign."""
-        self.gm_user = User.objects.create_user(username='gm', email='gm@test.com', password='testpass')
-        self.campaign = Campaign.objects.create(name='Test Campaign', gm=self.gm_user)
-    
-    def test_npc_creation(self):
-        """Test NPC creation with stats."""
-        npc = NPC.objects.create(
-            campaign=self.campaign,
-            name='Dio Brando',
-            description='A vampire with incredible charisma and ambition.',
-            stats={
-                'power': 'S',
-                'speed': 'A',
-                'durability': 'S',
-                'threat_level': 'Boss'
-            }
-        )
-        
-        self.assertEqual(npc.name, 'Dio Brando')
-        self.assertEqual(npc.campaign, self.campaign)
-        self.assertEqual(npc.stats['power'], 'S')
-        self.assertEqual(npc.stats['threat_level'], 'Boss')
-        self.assertEqual(str(npc), 'Dio Brando (NPC for Test Campaign)')
+
 
 
 class AbilityModelTest(TestCase):

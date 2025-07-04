@@ -63,10 +63,39 @@ class CharacterAdmin(admin.ModelAdmin):
         }),
     )
 
+@admin.register(NPC)
+class NPCAdmin(admin.ModelAdmin):
+    list_display = ('name', 'campaign', 'creator', 'playbook', 'level', 'harm_clock_current', 'vulnerability_clock_current', 'armor_charges')
+    list_filter = ('playbook', 'campaign', 'creator', 'level')
+    search_fields = ('name', 'description', 'stand_description')
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'level', 'creator', 'campaign')
+        }),
+        ('Appearance & Role', {
+            'fields': ('appearance', 'role', 'description')
+        }),
+        ('Narrative Elements', {
+            'fields': ('weakness', 'need', 'desire', 'rumour', 'secret', 'passion')
+        }),
+        ('Game Mechanics', {
+            'fields': ('heritage', 'playbook', 'stand_coin_stats', 'custom_abilities', 'relationships')
+        }),
+        ('Clocks & Armor', {
+            'fields': ('harm_clock_current', 'vulnerability_clock_current', 'armor_charges')
+        }),
+        ('Stand Description', {
+            'fields': ('stand_description', 'stand_appearance', 'stand_manifestation', 'special_traits')
+        }),
+        ('Additional Details', {
+            'fields': ('purveyor', 'notes', 'items', 'contacts', 'faction_status', 'inventory')
+        }),
+    )
+
+
 # Register other models
 admin.site.register(Vice)
 admin.site.register(Ability)
 admin.site.register(Stand)
 admin.site.register(Campaign)
 admin.site.register(Crew)
-admin.site.register(NPC)

@@ -19,6 +19,11 @@ class Crew(models.Model):
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='crews')
     description = models.TextField(blank=True)
 
+    # Fields for name change consensus
+    proposed_name = models.CharField(max_length=100, blank=True, null=True)
+    proposed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='proposed_crew_names')
+    approved_by = models.ManyToManyField(User, blank=True, related_name='approved_crew_names')
+
     tier = models.IntegerField(default=0)
     hold = models.CharField(max_length=10, choices=[('weak', 'Weak'), ('strong', 'Strong')], default='weak')
 
@@ -74,10 +79,81 @@ class Trauma(models.Model):
 
 
 class NPC(models.Model):
-    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='npcs')
+    PLAYBOOK_CHOICES = [
+        ('STAND','Stand'),
+        ('HAMON','Hamon'),
+        ('SPIN','Spin'),
+    ]
+    
+
     name = models.CharField(max_length=100)
+    level = models.IntegerField(default=1)
+    appearance = models.TextField(blank=True)
+    role = models.CharField(max_length=100, blank=True)
+    weakness = models.TextField(blank=True)
+    need = models.TextField(blank=True)
+    desire = models.TextField(blank=True)
+    rumour = models.TextField(blank=True)
+    secret = models.TextField(blank=True)
+    passion = models.TextField(blank=True)
     description = models.TextField(blank=True)
-    stats = models.JSONField(default=dict)
+    stand_coin_stats = models.JSONField(default=dict)
+    heritage = models.ForeignKey(Heritage, on_delete=models.SET_NULL, null=True, blank=True)
+    playbook = models.CharField(max_length=20, choices=PLAYBOOK_CHOICES, default='STAND')
+    custom_abilities = models.TextField(blank=True)
+    relationships = models.JSONField(default=dict)
+    harm_clock_current = models.IntegerField(default=0)
+    vulnerability_clock_current = models.IntegerField(default=0)
+    armor_charges = models.IntegerField(default=0)
+    creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_npcs')
+    campaign = models.ForeignKey(Campaign, on_delete=models.SET_NULL, null=True, blank=True, related_name='npcs')
+
+    # Stand Description Fields
+    stand_description = models.TextField(blank=True)
+    stand_appearance = models.TextField(blank=True)
+    stand_manifestation = models.TextField(blank=True)
+    special_traits = models.TextField(blank=True)
+    stand_name = models.CharField(max_length=100, blank=True, null=True)
+
+    # New fields for Alonzo Fortuna
+    purveyor = models.CharField(max_length=100, blank=True)
+    notes = models.TextField(blank=True)
+    items = models.JSONField(default=list, blank=True)
+    contacts = models.JSONField(default=list, blank=True)
+    faction_status = models.JSONField(default=dict, blank=True)
+    inventory = models.JSONField(default=list, blank=True)
+
+    @property
+    def harm_clock_max(self):
+        durability_grade = self.stand_coin_stats.get('DURABILITY', 'F')
+        if durability_grade == 'S':
+            return 15
+        elif durability_grade == 'A':
+            return 10
+        elif durability_grade == 'B':
+            return 8
+        elif durability_grade == 'C':
+            return 6
+        elif durability_grade == 'D':
+            return 4
+        elif durability_grade == 'F':
+            return 2
+        return 0
+
+    @property
+    def special_armor_charges(self):
+        durability_grade = self.stand_coin_stats.get('DURABILITY', 'F')
+        if durability_grade in ['S', 'A', 'B']:
+            return 3
+        elif durability_grade in ['C', 'D']:
+            return 2
+        elif durability_grade == 'F':
+            return 0
+        return 0
+
+    @property
+    def vulnerability_clock_max(self):
+        return 4
 
     def __str__(self):
         return f"{self.name} (NPC for {self.campaign.name})"
@@ -97,6 +173,15 @@ class Character(models.Model):
     true_name = models.CharField(max_length=100)
     alias = models.CharField(max_length=100, blank=True, null=True)
     appearance = models.TextField(blank=True, null=True)
+
+    @property
+    def level(self):
+        return 1 + (self.total_xp_spent // 10)
+
+    @property
+    def level(self):
+        return 1 + (self.total_xp_spent // 10)
+    level = models.IntegerField(default=1)
 
     heritage = models.ForeignKey(Heritage, on_delete=models.SET_NULL, null=True)
     selected_benefits = models.ManyToManyField(Benefit, blank=True, related_name='characters')
@@ -149,6 +234,203 @@ class Character(models.Model):
     harm_level4_name = models.CharField(max_length=100, blank=True, null=True)
 
     xp_clocks = models.JSONField(default=dict)
+    total_xp_spent = models.IntegerField(default=0)
+    heritage_points_gained = models.IntegerField(default=0)
+    stand_coin_points_gained = models.IntegerField(default=0)
+    action_dice_gained = models.IntegerField(default=0)
+
+    ACTION_CATEGORIES = {
+        'insight': ['hunt', 'study', 'survey', 'tinker'],
+        'prowess': ['finesse', 'prowl', 'skirmish', 'wreck'],
+        'resolve': ['attune', 'command', 'consort', 'sway'],
+    }
+
+    def _calculate_attribute_rating(self, actions):
+        rating = 0
+        for action in actions:
+            if self.action_dots.get(action, 0) > 0:
+                rating += 1
+        return rating
+
+    @property
+    def insight_attribute_rating(self):
+        return self._calculate_attribute_rating(self.ACTION_CATEGORIES['insight'])
+
+    @property
+    def prowess_attribute_rating(self):
+        return self._calculate_attribute_rating(self.ACTION_CATEGORIES['prowess'])
+
+    @property
+    def resolve_attribute_rating(self):
+        return self._calculate_attribute_rating(self.ACTION_CATEGORIES['resolve'])
+
+    @property
+    def total_abilities_count(self):
+        count = self.standard_abilities.count()
+        if self.custom_ability_description:
+            count += 1
+        # Assuming hamon_abilities and spin_abilities are related managers
+        count += self.hamon_abilities.count()
+        count += self.spin_abilities.count()
+        return count
+
+    def clean(self):
+        super().clean()
+        self._validate_initial_abilities_count()
+        self._validate_xp_advancements()
+
+        # Validate A-rank abilities if a Stand exists
+        if hasattr(self, 'stand'):
+            self._validate_a_rank_abilities()
+
+    def _validate_level_1_creation(self):
+        self._validate_action_dots_distribution()
+        self._validate_stand_coin_stats()
+        self._validate_stress_based_on_durability()
+        self._validate_standard_abilities_count()
+
+    def _validate_action_dots_distribution(self):
+        total_dots = sum(self.action_dots.values())
+        if total_dots != 7:
+            raise ValidationError(
+                {'action_dots': 'A new character at level 1 must have exactly 7 action dots.'}
+            )
+        for action, dots in self.action_dots.items():
+            if self.level == 1 and dots > 2:  # Max 2 dots per action at level 1
+                raise ValidationError(
+                    {'action_dots': f'Action "{action}" cannot have more than 2 dots at level 1.'}
+                )
+            elif self.level > 1 and dots > 4: # Max 4 dots per action after level 1
+                raise ValidationError(
+                    {'action_dots': f'Action "{action}" cannot have more than 4 dots.'}
+                )
+
+    def _validate_stand_coin_stats(self):
+        grade_points = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1, 'F': 0}
+        total_stand_coin_points = 0
+        
+        # Ensure stand exists and has coin_stats
+        if not hasattr(self, 'stand') or not self.stand.coin_stats:
+            raise ValidationError(
+                {'stand': 'A level 1 character must have a Stand with coin stats defined.'}
+            )
+
+        for stat, grade in self.stand.coin_stats.items():
+            if grade not in grade_points:
+                raise ValidationError(
+                    {'stand_coin_stats': f'Invalid grade "{grade}" for stat "{stat}". Must be S, A, B, C, D, or F.'}
+                )
+            total_stand_coin_points += grade_points[grade]
+
+        if total_stand_coin_points != 10:
+            raise ValidationError(
+                {'stand_coin_stats': f'A new character at level 1 must have exactly 10 Stand Coin points. Current total: {total_stand_coin_points}.'}
+            )
+
+    def _validate_stress_based_on_durability(self):
+        expected_stress = 9
+        if hasattr(self, 'stand') and self.stand.coin_stats.get('DURABILITY') == 'F':
+            expected_stress = 8
+        
+        if self.stress != expected_stress:
+            raise ValidationError(
+                {'stress': f'Stress must be {expected_stress} for a level 1 character with current Stand Durability.'}
+            )
+
+    def _validate_initial_abilities_count(self):
+        if self.total_abilities_count != 3:
+            raise ValidationError(
+                {'standard_abilities': 'A new character at level 1 must have exactly 3 abilities (standard, custom, or playbook).', 'total_abilities_count': self.total_abilities_count}
+            )
+
+    def _validate_a_rank_abilities(self):
+        if not hasattr(self, 'stand') or not self.stand.coin_stats:
+            return # No stand, no A-rank ability validation
+
+        a_rank_count = 0
+        for grade in self.stand.coin_stats.values():
+            if grade == 'A':
+                a_rank_count += 1
+
+        expected_abilities_from_a_ranks = a_rank_count * 2
+        # This assumes initial 3 abilities are already accounted for in total_abilities_count
+        # and that A-ranks grant *additional* abilities.
+        # The total abilities should be 3 (initial) + expected_abilities_from_a_ranks
+        expected_total_abilities = 3 + expected_abilities_from_a_ranks
+
+        if self.total_abilities_count != expected_total_abilities:
+            raise ValidationError(
+                {'total_abilities_count': f'Total abilities ({self.total_abilities_count}) does not match expected abilities ({expected_total_abilities}) based on A-rank Stand stats.'}
+            )
+
+    def _validate_xp_advancements(self):
+        # Ensure total_xp_spent is a multiple of 10
+        if self.total_xp_spent % 10 != 0:
+            raise ValidationError(
+                {'total_xp_spent': 'Total XP spent must be a multiple of 10 for advancements.'}
+            )
+
+        # Calculate expected total XP from advancements
+        expected_xp_from_advancements = (
+            self.heritage_points_gained * 5 +  # 5 XP per heritage point
+            self.stand_coin_points_gained * 10 + # 10 XP per stand coin point
+            self.action_dice_gained * 5  # 5 XP per action die
+        )
+
+        if self.total_xp_spent != expected_xp_from_advancements:
+            raise ValidationError(
+                {'total_xp_spent': f'Total XP spent ({self.total_xp_spent}) does not match XP calculated from advancements ({expected_xp_from_advancements}).'}
+            )
+
+        # Ensure gained values are non-negative
+        if self.action_dice_gained < 0:
+            raise ValidationError(
+                {'action_dice_gained': 'Action dice gained cannot be negative.'}
+            )
+        if self.stand_coin_points_gained < 0:
+            raise ValidationError(
+                {'stand_coin_points_gained': 'Stand coin points gained cannot be negative.'}
+            )
+        if self.heritage_points_gained < 0:
+            raise ValidationError(
+                {'heritage_points_gained': 'Heritage points gained cannot be negative.'}
+            )
+
+    def gain_xp(self, xp_amount, xp_type):
+        if xp_type not in self.xp_clocks:
+            self.xp_clocks[xp_type] = 0
+        self.xp_clocks[xp_type] += xp_amount
+        self.save()
+
+    def spend_xp_for_action_dice(self, xp_type, num_dice):
+        xp_cost = num_dice * 5
+        if self.xp_clocks.get(xp_type, 0) < xp_cost:
+            raise ValidationError(f'Not enough XP in {xp_type} to gain {num_dice} action dice.')
+        
+        self.xp_clocks[xp_type] -= xp_cost
+        self.total_xp_spent += xp_cost
+        self.action_dice_gained += num_dice
+        self.save()
+
+    def spend_xp_for_stand_coin(self, xp_type, num_points):
+        xp_cost = num_points * 10
+        if self.xp_clocks.get(xp_type, 0) < xp_cost:
+            raise ValidationError(f'Not enough XP in {xp_type} to gain {num_points} Stand Coin points.')
+        
+        self.xp_clocks[xp_type] -= xp_cost
+        self.total_xp_spent += xp_cost
+        self.stand_coin_points_gained += num_points
+        self.save()
+
+    def spend_xp_for_heritage_point(self, xp_type, num_points):
+        xp_cost = num_points * 5
+        if self.xp_clocks.get(xp_type, 0) < xp_cost:
+            raise ValidationError(f'Not enough XP in {xp_type} to gain {num_points} Heritage points.')
+        
+        self.xp_clocks[xp_type] -= xp_cost
+        self.total_xp_spent += xp_cost
+        self.heritage_points_gained += num_points
+        self.save()
 
     # Custom Ability Description (editable by GM and user)
     custom_ability_description = models.TextField(blank=True, null=True)
