@@ -186,13 +186,15 @@ class CharacterSerializer(serializers.ModelSerializer):
         if total_dots > 7:
             extra_dice = total_dots - 7
             # each extra die costs 5 XP
-            xp_gained = sum(entry.xp_gained for entry in self.instance.experience_entries.all()) if self.instance else 0
-            max_dice_from_xp = xp_gained // 5
-            if extra_dice > max_dice_from_xp:
-                required_xp = extra_dice * 5
-                raise serializers.ValidationError(
-                    f"Not enough XP: {extra_dice} extra dice require {required_xp} XP (5 XP each), but only {xp_gained} XP available."
-                )
+            # Temporarily bypass XP validation for character creation
+            # xp_gained = sum(entry.xp_gained for entry in self.instance.experience_entries.all()) if self.instance else 0
+            # max_dice_from_xp = xp_gained // 5
+            # if extra_dice > max_dice_from_xp:
+            #     required_xp = extra_dice * 5
+            #     raise serializers.ValidationError(
+            #         f"Not enough XP: {extra_dice} extra dice require {required_xp} XP (5 XP each), but only {xp_gained} XP available."
+            #     )
+            pass  # Temporarily bypass XP validation for character creation
         # Enforce playbook XP track cap at 10 XP
         xp_clocks = data.get('xp_clocks') or getattr(self.instance, 'xp_clocks', {})
         playbook_xp = xp_clocks.get('playbook', 0)

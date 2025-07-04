@@ -208,4 +208,33 @@ class CharacterValidationTests(TestCase):
         except ValidationError as e:
             self.fail(f"No A-rank abilities test failed with ValidationError: {e.message_dict}")
 
+    def test_s_rank_stand_stat_validation_denied_by_default(self):
+        character = self._create_valid_level_1_character()
+        character.stand.power = 'S' # Attempt to set S-rank
+        character.stand.save()
+        with self.assertRaisesMessage(ValidationError, 'Player characters cannot have S-rank in POWER unless explicitly allowed by the GM.'):
+            character.full_clean()
+
+    def test_s_rank_stand_stat_validation_allowed_by_gm(self):
+        character = self._create_valid_level_1_character()
+        character.gm_can_have_s_rank_stand_stats = True # GM allows S-rank
+        character.stand.power = 'S' # Set S-rank
+        character.stand.save()
+        try:
+            character.full_clean()
+            self.assertTrue(True)
+        except ValidationError as e:
+            self.fail(f"S-rank allowed by GM failed with ValidationError: {e.message_dict}")
+
+    def test_s_rank_stand_stat_validation_no_s_rank(self):
+        character = self._create_valid_level_1_character()
+        # Ensure no S-ranks
+        character.stand.power = 'A'
+        character.stand.save()
+        try:
+            character.full_clean()
+            self.assertTrue(True)
+        except ValidationError as e:
+            self.fail(f"No S-rank validation failed with ValidationError: {e.message_dict}")
+
     

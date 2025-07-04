@@ -1,3 +1,11 @@
+import os
+import sys
+import django
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'app.settings')
+django.setup()
+
 from django.contrib.auth.models import User
 from characters.models import Character, Stand, Heritage, Ability, Campaign, NPC
 
@@ -19,6 +27,7 @@ pc_mf_doom = Character.objects.create(
     user=user_zoob,
     true_name='MF DOOM (PC)',
     heritage=heritage_human,
+    playbook='SPIN', # PC is a Spin user
     action_dots={
         'hunt': 2, 'study': 1, 'survey': 1, 'tinker': 1,
         'finesse': 1, 'prowl': 1, 'skirmish': 0, 'wreck': 0,
@@ -32,22 +41,9 @@ pc_mf_doom = Character.objects.create(
 )
 pc_mf_doom.standard_abilities.add(ability1, ability2, ability3)
 
-stand_pc_mf_doom = Stand.objects.create(
-    character=pc_mf_doom,
-    name='The Villain's Stand (PC)',
-    type='FIGHTING',
-    form='Humanoid',
-    consciousness_level='C',
-    power='C',
-    speed='D',
-    range='D',
-    durability='C',
-    precision='C',
-    potential='C'
-)
+# No Stand creation for PC as they are a Spin user
 
 print(f"Created PC: {pc_mf_doom.true_name} (Level {pc_mf_doom.level})")
-print(f"PC Stand: {stand_pc_mf_doom.name} (Power: {stand_pc_mf_doom.power}, Speed: {stand_pc_mf_doom.speed}, Durability: {stand_pc_mf_doom.durability}, Precision: {stand_pc_mf_doom.precision}, Range: {stand_pc_mf_doom.range}, Potential: {stand_pc_mf_doom.potential})")
 
 # Create a default campaign for NPC if it doesn't exist
 campaign_npc, created_campaign = Campaign.objects.get_or_create(name='NPC Default Campaign', defaults={'gm': user_zoob})

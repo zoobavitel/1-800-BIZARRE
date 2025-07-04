@@ -1,74 +1,34 @@
-# Getting Started with Create React App
+# frontend/
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This directory contains the React-based frontend application for the Jojo TTRPG Platform. It is responsible for providing the user interface, interacting with the backend API, and presenting game data to the users.
 
-## Available Scripts
+## Purpose
 
-In the project directory, you can run:
+The primary purpose of this directory is to:
+*   **Render the User Interface**: Display character sheets, campaign information, game mechanics, and other interactive elements.
+*   **Consume Backend APIs**: Make requests to the backend to fetch and update game data.
+*   **Manage User Interaction**: Handle user input, navigation, and real-time updates to the character sheets and game state.
+*   **Provide a Rich User Experience**: Offer an intuitive and engaging interface for players and Game Masters.
 
-### `npm start`
+## Key Contents
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+*   `public/`: Contains static assets like `index.html`, `favicon.ico`, and other public resources.
+*   `src/`: The core React application source code, including components, styles, and application logic.
+*   `package.json`, `package-lock.json`: Node.js project metadata and dependency management for the frontend.
+*   `vite.config.js`: Configuration for Vite, a fast build tool for modern web projects.
+*   `.env.production`: Environment variables specific to the production build of the frontend application.
+*   `nginx.conf`: Nginx configuration file, likely used for serving the frontend application in a production environment.
+*   `README.md`: This file, providing an overview of the frontend.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Code Quality and Structure
 
-### `npm test`
+The frontend follows a standard React project structure, promoting:
+*   **Component-Based Architecture**: UI is broken down into reusable components, enhancing modularity and maintainability.
+*   **Clear Separation of Concerns**: UI logic is distinct from API interaction and state management.
+*   **Modern Development Practices**: Utilizes Vite for fast development and optimized builds.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## Logic Behind Decisions
 
-### `npm run build`
+The decision to use React for the frontend is based on its popularity, robust ecosystem, and efficiency in building dynamic and interactive user interfaces. Vite was chosen as the build tool for its speed and modern features, which significantly improve the development experience. The component-based architecture aligns with best practices for building scalable and maintainable single-page applications.
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-## Documentation
-
-*   [SRD Integration](../../docs/SRD_INTEGRATION.md): Details how the Standard Reference Document (SRD) is integrated into the platform, covering data loading, backend validation, and test coverage.
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+**Note on "Logic Behind Decisions"**: The explanations regarding decision logic primarily reflect discussions from the current chat session and general software engineering best practices. This document does not have access to the full history of all previous, unlogged interactions or design discussions that may have influenced the project's evolution.

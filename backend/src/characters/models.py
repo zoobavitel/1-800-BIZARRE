@@ -320,6 +320,10 @@ class Character(models.Model):
                 raise ValidationError(
                     {'stand_coin_stats': f'Invalid grade "{grade}" for stat "{stat}". Must be S, A, B, C, D, or F.'}
                 )
+            if grade == 'S' and not self.gm_can_have_s_rank_stand_stats:
+                raise ValidationError(
+                    {'stand_coin_stats': f'Player characters cannot have S-rank in {stat} unless explicitly allowed by the GM.'}
+                )
             total_stand_coin_points += grade_points[grade]
 
         if total_stand_coin_points != 10:
@@ -458,6 +462,7 @@ class Character(models.Model):
     # GM settings for character creation locking
     gm_character_locked = models.BooleanField(default=False)
     gm_allowed_edit_fields = models.JSONField(default=dict, blank=True, null=True)
+    gm_can_have_s_rank_stand_stats = models.BooleanField(default=False)
 
 
 

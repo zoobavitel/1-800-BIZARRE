@@ -1,0 +1,104 @@
+{
+  "user": 9,
+  "true_name": "Slick Rick",
+  "alias": "Payson",
+  "appearance": "Washed Out Former Disco Star",
+  "heritage": 1,
+  "selected_benefits": [],
+  "selected_detriments": [],
+  "bonus_hp_from_xp": 0,
+  "background_note": "Washed Out Former Disco Star",
+  "action_dots": {
+    "insight": {
+      "hunt": 0,
+      "study": 0,
+      "survey": 1,
+      "tinker": 0
+    },
+    "prowess": {
+      "finesse": 2,
+      "prowl": 0,
+      "skirmish": 1,
+      "wreck": 0
+    },
+    "resolve": {
+      "bizarre": 1,
+      "command": 0,
+      "consort": 1,
+      "sway": 2
+    }
+  },
+  "playbook": "STAND",
+  "stand_type": "TOOLBOUND",
+  "stand_name": "GULP",
+  "stand_form": "Glass bottle with ornate brass studding.",
+  "stand_conscious": true,
+  "coin_stats": {
+    "power": "C",
+    "speed": "B",
+    "range": "C",
+    "durability": "C",
+    "precision": "B",
+    "development": "B"
+  },
+  "armor_type": "HEAVY",
+  "close_friend": "Quan Millz",
+  "rival": "",
+  "custom_vice": "Loves dancing",
+  "vice_details": "Loves dancing",
+  "loadout": 1,
+  "stress": 3,
+  "trauma": [
+    201
+  ],
+  "healing_clock_segments": 4,
+  "healing_clock_filled": 0,
+  "light_armor_used": false,
+  "medium_armor_used": false,
+  "heavy_armor_used": false,
+  "harm_level1_used": true,
+  "harm_level1_name": "Slash on torso",
+  "harm_level2_used": true,
+  "harm_level2_name": "Stab in chest 'P'",
+  "harm_level3_used": false,
+  "harm_level3_name": null,
+  "harm_level4_used": false,
+  "harm_level4_name": null,
+  "xp_clocks": {
+    "insight": 0,
+    "prowess": 0,
+    "resolve": 0,
+    "heritage": 0,
+    "playbook": 0
+  },
+  "total_xp_spent": 55,
+  "heritage_points_gained": 0,
+  "stand_coin_points_gained": 5,
+  "action_dice_gained": 1,
+  "custom_ability_description": "Diddy Juice: Use 1: Whatever surface the oil is covering becomes extremely slippery. There is no way to get traction on the oily surface so long as you are in contact with it. \nUse 2: The slippery oil can be placed onto a person's shoes to make it possible for them to increase movement speed upwards of +15ft. \nUse 3: User can transmute oil's shape to a limited degree. The most complex shape GULP can form is a humanoid hand. The quality and durability of objects formed from GULP are based on a durability check.",
+  "custom_ability_type": "three_separate_uses",
+  "standard_abilities": [],
+  "extra_custom_abilities": [],
+  "faction_reputation": [],
+  "gm_character_locked": false,
+  "gm_allowed_edit_fields": {},
+  "contacts": [
+    {
+      "name": "Quan Millz",
+      "role": "Police contact"
+    },
+    {
+      "name": "Tinky",
+      "role": "Intel"
+    },
+    {
+      "name": "Dj Creamy Leavings",
+      "role": "Retarded savant, can predict the future but struggles to articulate his predictions"
+    }
+  ],
+  "inventory": [],
+  "stand_description": "GULP is a 32oz glass bottle that has the word GULP painted in gold on the side. By pouring the oil from the bottle, the stand is activated. This ability works [range and scope based on stand coin]. When dispensed, the viscous oil can change it's viscosity and density, becoming solidified, liquified, or vaporized. The state of matter that GULP appears in is manipulated by a dial on the bottle. However, if Slick Rick is not in possession of the bottle, all of the oil will return to the source. The ability can be used to reduce friction between objects, increase friction between objects, as an adhesive, as a putty, or even as an extra hand if Slick Rick passes a precision check.",
+  "stand_appearance": "Glass bottle with ornate brass studding.",
+  "stand_manifestation": "Fluid, Solid, or Gaseous State",
+  "special_traits": "Tool stand (Can be utilized by other stand users if they are in slick Rick's proximity)"
+} 
