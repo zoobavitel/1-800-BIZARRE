@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.db import models
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -14,16 +14,19 @@ from django.db.models import Q
 from rest_framework.decorators import api_view, permission_classes, action
 import json
 from django.db import transaction
+from django.core.exceptions import PermissionDenied
 
 from .models import (
     Heritage, Vice, Ability, Character, Stand,
-    Campaign, NPC, Crew, StandAbility, HamonAbility, SpinAbility, Trauma, Benefit, Detriment
+    Campaign, NPC, Crew, StandAbility, HamonAbility, SpinAbility, Trauma, Benefit, Detriment,
+    CharacterHistory, ExperienceTracker, Session
 )
 from .serializers import (
     HeritageSerializer, ViceSerializer, AbilitySerializer,
     CharacterSerializer, StandSerializer,
     CampaignSerializer, NPCSerializer, CrewSerializer, StandAbilitySerializer,
-    HamonAbilitySerializer, SpinAbilitySerializer, TraumaSerializer
+    HamonAbilitySerializer, SpinAbilitySerializer, TraumaSerializer,
+    CharacterHistorySerializer, ExperienceTrackerSerializer, SessionSerializer
 )
 
 # Optional root view
@@ -86,6 +89,106 @@ class TraumaViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Trauma.objects.all()
     serializer_class = TraumaSerializer
+
+class IsGMAorReadOnly(permissions.BasePermission):
+    """
+    Custom permission to only allow GMs of a campaign to edit an object.
+    """
+    def has_object_permission(self, request, view, obj):
+        # Read permissions are allowed to any request,
+        # so we'll always allow GET, HEAD or OPTIONS requests.
+        if request.method in permissions.SAFE_METHODS:
+            return True
+
+        # Write permissions are only allowed to the GM of the campaign.
+        if isinstance(obj, ExperienceTracker):
+            return obj.character.campaign.gm == request.user
+        return False
+
+class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+    permission_classes = [IsAuthenticated]
+    serializer_class = CharacterHistorySerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return CharacterHistory.objects.all()
+        
+        # GMs can see history for any character in their campaigns
+        if Campaign.objects.filter(gm=user).exists():
+            return CharacterHistory.objects.filter(character__campaign__gm=user)
+            
+        # Players can only see their own character's history
+        return CharacterHistory.objects.filter(character__user=user)
+
+class ExperienceTrackerViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated, IsGMAorReadOnly]
+    serializer_class = ExperienceTrackerSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return ExperienceTracker.objects.all()
+        
+        # GMs can see all XP entries in their campaigns
+        if Campaign.objects.filter(gm=user).exists():
+            return ExperienceTracker.objects.filter(character__campaign__gm=user)
+
+        # Players can see their own XP entries
+        return ExperienceTracker.objects.filter(character__user=user)
+
+    def perform_create(self, serializer):
+        character = serializer.validated_data['character']
+        if character.campaign.gm != self.request.user:
+            raise PermissionDenied("You are not the GM of this campaign and cannot assign XP.")
+        serializer.save()
+
+class IsCampaignGMOrReadOnly(permissions.BasePermission):
+    """
+    Custom permission to only allow GMs of a campaign to edit sessions.
+    """
+    def has_permission(self, request, view):
+        # Allow read-only access for any authenticated user
+        if request.method in permissions.SAFE_METHODS:
+            return request.user and request.user.is_authenticated
+        # Write permissions are only allowed to GMs
+        return request.user and request.user.is_authenticated and Campaign.objects.filter(gm=request.user).exists()
+
+    def has_object_permission(self, request, view, obj):
+        # Read permissions are allowed to any request
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        # Write permissions are only allowed to the GM of the campaign
+        return obj.campaign.gm == request.user
+
+
+class SessionViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated, IsCampaignGMOrReadOnly]
+    serializer_class = SessionSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return Session.objects.all()
+        
+        # GMs can see all sessions in their campaigns
+        if Campaign.objects.filter(gm=user).exists():
+            return Session.objects.filter(campaign__gm=user)
+            
+        # Players can see sessions in campaigns they are part of
+        return Session.objects.filter(campaign__players=user).distinct()
+
+    def perform_create(self, serializer):
+        campaign = serializer.validated_data.get('campaign')
+        if not campaign or campaign.gm != self.request.user:
+            raise PermissionDenied("You are not the GM of this campaign and cannot create sessions for it.")
+        serializer.save()
+
+    def perform_update(self, serializer):
+        campaign = serializer.validated_data.get('campaign', serializer.instance.campaign)
+        if campaign.gm != self.request.user:
+            raise PermissionDenied("You are not the GM of this campaign and cannot edit sessions for it.")
+        serializer.save()
 
 class CharacterViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]

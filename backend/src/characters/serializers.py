@@ -4,9 +4,37 @@ from .models import (
     Heritage, Vice, Ability, Character, Stand,
     Campaign, NPC, Crew, Detriment, Benefit, StandAbility,
     HamonAbility, SpinAbility, Trauma
-    , CharacterHamonAbility, CharacterSpinAbility
+    , CharacterHamonAbility, CharacterSpinAbility,
+    CharacterHistory, ExperienceTracker, Session
 )
 import re
+
+class SessionSerializer(serializers.ModelSerializer):
+    npcs_involved = serializers.PrimaryKeyRelatedField(many=True, queryset=NPC.objects.all(), required=False)
+    characters_involved = serializers.PrimaryKeyRelatedField(many=True, queryset=Character.objects.all(), required=False)
+
+    class Meta:
+        model = Session
+        fields = '__all__'
+        read_only_fields = ['session_date']
+
+class CharacterHistorySerializer(serializers.ModelSerializer):
+    editor = serializers.StringRelatedField()
+
+    class Meta:
+        model = CharacterHistory
+        fields = ['id', 'character', 'editor', 'timestamp', 'changed_fields']
+
+
+class ExperienceTrackerSerializer(serializers.ModelSerializer):
+    character = serializers.PrimaryKeyRelatedField(queryset=Character.objects.all())
+    trigger_display = serializers.CharField(source='get_trigger_display', read_only=True)
+
+    class Meta:
+        model = ExperienceTracker
+        fields = ['id', 'character', 'session_date', 'trigger', 'trigger_display', 'description', 'xp_gained']
+        read_only_fields = ['session_date']
+
 
 class BenefitSerializer(serializers.ModelSerializer):
     class Meta:
@@ -66,7 +94,9 @@ class CrewSerializer(serializers.ModelSerializer):
             'id', 'name', 'campaign', 'description',
             'tier', 'hold', 'rep', 'wanted_level',
             'coin', 'stash', 'claims', 'upgrades',
-            'proposed_name', 'proposed_by', 'approved_by'
+            'proposed_name', 'proposed_by', 'approved_by',
+            'xp_trigger', 'personalization_questions', 'starting_upgrades',
+            'favored_operations', 'contacts', 'crew_upgrades', 'special_abilities'
         ]
 
 class CharacterSerializer(serializers.ModelSerializer):
@@ -111,6 +141,8 @@ class CharacterSerializer(serializers.ModelSerializer):
     faction_reputation = serializers.JSONField(required=False)
     gm_character_locked = serializers.BooleanField(required=False)
     gm_allowed_edit_fields = serializers.JSONField(required=False)
+    inventory = serializers.JSONField(required=False)
+    reputation_status = serializers.JSONField(required=False)
 
     class Meta:
         model = Character
@@ -307,7 +339,7 @@ class CampaignSerializer(serializers.ModelSerializer):
     wanted_stars = serializers.IntegerField()
     class Meta:
         model  = Campaign
-        fields = ['id','name','gm','players','description','wanted_stars']
+        fields = ['id','name','gm','players','description','wanted_stars','factions']
 
 
 class NPCSerializer(serializers.ModelSerializer):

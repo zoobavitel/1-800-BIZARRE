@@ -1,9 +1,8 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ArrowRight, Users, Zap, Shield, Star, Play, BookOpen, Dice6, Plus, X, Settings } from 'lucide-react';
 
 // Full Character Sheet Component (preserving ALL original functionality)
-const CharacterSheetWrapper = ({ character, onClose, onSave }) => {
+const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwitchCharacter, allCharacters = [] }) => {
   const [activeMode, setActiveMode] = useState('CHARACTER MODE');
   const [navOpen, setNavOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState({
@@ -15,6 +14,86 @@ const CharacterSheetWrapper = ({ character, onClose, onSave }) => {
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [selectedAbilities, setSelectedAbilities] = useState(character?.abilities || []);
+  
+  // Update component state when character prop changes
+  useEffect(() => {
+    if (character) {
+      setCharacterData({
+        name: character.name || '',
+        standName: character.standName || '',
+        heritage: character.heritage || 'Human',
+        background: character.background || '',
+        look: character.look || '',
+        vice: character.vice || '',
+        crew: character.crew || ''
+      });
+      setStressBoxes(character.stress || Array(9).fill(false));
+      setTraumaChecks(character.trauma || {
+        COLD: false, HAUNTED: false, OBSESSED: false, PARANOID: false,
+        RECKLESS: false, SOFT: false, UNSTABLE: false, VICIOUS: false
+      });
+      setArmorUses(character.armor || { armor: false, heavy: false, special: false });
+      setHarmEntries(character.harmEntries || {
+        level3: [''],
+        level2: ['', ''],
+        level1: ['', '']
+      });
+      setCoinBoxes(character.coin || Array(4).fill(false));
+      setStashBoxes(character.stash || Array(40).fill(false));
+      setHealingClock(character.healingClock || 0);
+      setActionRatings(character.actionRatings || {
+        HUNT: 0, STUDY: 0, SURVEY: 0, TINKER: 0,
+        FINESSE: 0, PROWL: 0, SKIRMISH: 0, WRECK: 0,
+        BIZARRE: 0, COMMAND: 0, CONSORT: 0, SWAY: 0
+      });
+      setStandStats(character.standStats || {
+        power: 1, speed: 1, range: 1, durability: 1, precision: 1, development: 1
+      });
+      setXpTracks(character.xp || {
+        insight: 0, prowess: 0, resolve: 0, heritage: 0, playbook: 0
+      });
+      setSelectedAbilities(character.abilities || []);
+      setCustomClocks(character.clocks || []);
+    } else {
+      // Reset to default values for new character
+      setCharacterData({
+        name: '',
+        standName: '',
+        heritage: 'Human',
+        background: '',
+        look: '',
+        vice: '',
+        crew: ''
+      });
+      setStressBoxes(Array(9).fill(false));
+      setTraumaChecks({
+        COLD: false, HAUNTED: false, OBSESSED: false, PARANOID: false,
+        RECKLESS: false, SOFT: false, UNSTABLE: false, VICIOUS: false
+      });
+      setArmorUses({ armor: false, heavy: false, special: false });
+      setHarmEntries({
+        level3: [''],
+        level2: ['', ''],
+        level1: ['', '']
+      });
+      setCoinBoxes(Array(4).fill(false));
+      setStashBoxes(Array(40).fill(false));
+      setHealingClock(0);
+      setActionRatings({
+        HUNT: 0, STUDY: 0, SURVEY: 0, TINKER: 0,
+        FINESSE: 0, PROWL: 0, SKIRMISH: 0, WRECK: 0,
+        BIZARRE: 0, COMMAND: 0, CONSORT: 0, SWAY: 0
+      });
+      setStandStats({
+        power: 1, speed: 1, range: 1, durability: 1, precision: 1, development: 1
+      });
+      setXpTracks({
+        insight: 0, prowess: 0, resolve: 0, heritage: 0, playbook: 0
+      });
+      setSelectedAbilities([]);
+      setCustomClocks([]);
+    }
+  }, [character]);
   
   // Interactive state - initialize with character data if provided
   const [characterData, setCharacterData] = useState({
@@ -54,6 +133,52 @@ const CharacterSheetWrapper = ({ character, onClose, onSave }) => {
   
   const [diceResult, setDiceResult] = useState(null);
   const [customClocks, setCustomClocks] = useState(character?.clocks || []);
+  
+  // Crew state
+  const [crewData, setCrewData] = useState({
+    name: '',
+    reputation: '',
+    wardBossTitle: 'Ward Boss',
+    rep: 0,
+    turf: 0,
+    hold: 'strong', // 'weak' or 'strong'
+    tier: 0,
+    wanted: 0,
+    coin: 0,
+    vaults: 0, // 0, 4, or 12 (0 + 4 + 8)
+    description: '',
+    specialAbilities: [],
+    upgrades: {
+      lair: {
+        carriage: false,
+        boat: false,
+        hidden: false,
+        quarters: false,
+        secure: false,
+        vault: false,
+        workshop: false
+      },
+      quality: {
+        documents: 0,
+        gear: 0,
+        implements: 0,
+        supplies: 0,
+        tools: 0,
+        weapons: 0
+      },
+      training: {
+        insight: false,
+        prowess: false,
+        resolve: false,
+        personal: false,
+        mastery: false
+      }
+    },
+    cohorts: [],
+    contacts: [],
+    huntingGrounds: '',
+    notes: ''
+  });
   
   // XP tracking
   const [xpTracks, setXpTracks] = useState(character?.xp || {
@@ -250,6 +375,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave }) => {
     }));
   };
 
+  const updateCrewData = (field, value) => {
+    setCrewData(prev => ({ ...prev, [field]: value }));
+  };
+
   // Header logic (simplified without router)
   const performSearch = async (query) => {
     if (!query.trim() || !isAuthenticated) {
@@ -417,25 +546,37 @@ const CharacterSheetWrapper = ({ character, onClose, onSave }) => {
   };
 
   const handleSave = () => {
-    const updatedCharacter = {
-      ...characterData,
-      actionRatings,
-      standStats,
-      stress: stressBoxes,
-      trauma: traumaChecks,
-      armor: armorUses,
-      harmEntries,
-      coin: coinBoxes,
-      stash: stashBoxes,
-      healingClock,
-      xp: xpTracks,
-      abilities: selectedAbilities,
-      clocks: customClocks,
-      id: character?.id || Date.now(),
-      lastModified: new Date().toISOString()
-    };
-    
-    onSave(updatedCharacter);
+    if (activeMode === 'CHARACTER MODE') {
+      const updatedCharacter = {
+        ...characterData,
+        actionRatings,
+        standStats,
+        stress: stressBoxes,
+        trauma: traumaChecks,
+        armor: armorUses,
+        harmEntries,
+        coin: coinBoxes,
+        stash: stashBoxes,
+        healingClock,
+        xp: xpTracks,
+        abilities: selectedAbilities,
+        clocks: customClocks,
+        id: character?.id || Date.now(),
+        lastModified: new Date().toISOString()
+      };
+      
+      onSave(updatedCharacter);
+    } else if (activeMode === 'CREW MODE') {
+      // Save crew data - you might want to pass this to a different handler
+      const updatedCrew = {
+        ...crewData,
+        id: Date.now(),
+        lastModified: new Date().toISOString()
+      };
+      
+      // For now, just log it - you'd want to implement crew saving
+      console.log('Saving crew:', updatedCrew);
+    }
   };
 
   return (
@@ -443,7 +584,9 @@ const CharacterSheetWrapper = ({ character, onClose, onSave }) => {
       <div className="bg-black text-white font-mono text-sm max-w-7xl w-full">
         {/* Header */}
         <header className="bg-gray-800 px-4 py-2 flex items-center justify-between border-b border-gray-600 sticky top-0 z-10">
-          <div className="text-xl font-bold text-white cursor-pointer">1(800)BIZARRE</div>
+          <div className="text-xl font-bold text-white cursor-pointer">
+            1(800)BIZARRE - {activeMode}
+          </div>
           <div className="flex items-center space-x-4">
             {isAuthenticated && (
               <div className="search-container desktop-search" ref={searchRef}>
@@ -515,7 +658,60 @@ const CharacterSheetWrapper = ({ character, onClose, onSave }) => {
         </header>
 
         <div className="p-4">
-          {/* Character Info Section */}
+          {activeMode === 'CHARACTER MODE' && (
+            <>
+              {/* Character Selector/Creator */}
+              <div className="mb-4 bg-gray-800 border border-gray-600 rounded p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="text-xs text-gray-400 font-bold">CURRENT CHARACTER</div>
+                    <div className="text-white font-bold">
+                      {characterData.name || 'Unnamed Character'}
+                    </div>
+                    {characterData.standName && (
+                      <div className="text-purple-400 text-sm">
+                        「{characterData.standName}」
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    {/* Character Switcher Dropdown */}
+                    {allCharacters.length > 0 && (
+                      <select 
+                        className="bg-gray-700 text-white border border-gray-600 px-3 py-1 text-xs rounded"
+                        value={character?.id || ''}
+                        onChange={(e) => {
+                          const selectedChar = allCharacters.find(c => c.id === parseInt(e.target.value));
+                          if (selectedChar && onSwitchCharacter) {
+                            onSwitchCharacter(selectedChar);
+                          }
+                        }}
+                      >
+                        <option value="">Switch Character...</option>
+                        {allCharacters.map(char => (
+                          <option key={char.id} value={char.id}>
+                            {char.name || 'Unnamed'} {char.standName ? `- 「${char.standName}」` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    
+                    {/* Create New Character Button */}
+                    <button 
+                      onClick={() => onCreateNew && onCreateNew()}
+                      className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-xs font-bold text-white transition-colors"
+                      title="Create New Character"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>New Character</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Character Sheet Content */}
+              {/* Character Info Section */}
           <div className="grid grid-cols-2 gap-8 mb-6">
             {/* Left Side */}
             <div className="space-y-4">
@@ -1386,10 +1582,395 @@ const CharacterSheetWrapper = ({ character, onClose, onSave }) => {
               </div>
             </div>
           </div>
+            </>
+          )}
+          
+          {activeMode === 'CREW MODE' && (
+            <div className="crew-sheet">
+              {/* Header */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center space-x-4">
+                    <div className="text-xs text-gray-400 font-bold">NAME</div>
+                    <input 
+                      type="text" 
+                      value={crewData.name}
+                      onChange={(e) => setCrewData(prev => ({ ...prev, name: e.target.value }))}
+                      className="bg-transparent text-white font-bold text-lg border-b border-gray-600 pb-1" 
+                      placeholder="Crew Name"
+                    />
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <div className="text-xs text-gray-400 font-bold">REPUTATION</div>
+                    <input 
+                      type="text" 
+                      value={crewData.reputation}
+                      onChange={(e) => setCrewData(prev => ({ ...prev, reputation: e.target.value }))}
+                      className="bg-transparent text-white border-b border-gray-600 pb-1" 
+                      placeholder="Crew Reputation"
+                    />
+                  </div>
+                </div>
+
+                {/* Ward Boss Section */}
+                <div className="bg-gray-800 border border-gray-600 p-3 mb-4">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <input 
+                      type="text" 
+                      value={crewData.wardBossTitle}
+                      onChange={(e) => setCrewData(prev => ({ ...prev, wardBossTitle: e.target.value }))}
+                      className="bg-gray-700 text-white border border-gray-600 px-2 py-1 text-xs font-bold" 
+                      placeholder="Ward Boss"
+                    />
+                    <span className="text-gray-400 text-xs">(editable title)</span>
+                  </div>
+                </div>
+
+                {/* Stats Row */}
+                <div className="grid grid-cols-5 gap-4 mb-4">
+                  {/* REP */}
+                  <div>
+                    <div className="text-red-400 text-xs font-bold mb-1">REP</div>
+                    <div className="flex space-x-1">
+                      {Array.from({ length: 6 }, (_, i) => (
+                        <div 
+                          key={i} 
+                          className={`w-4 h-4 border border-gray-600 cursor-pointer hover:bg-gray-600 ${
+                            i < crewData.rep ? 'bg-green-600' : 'bg-gray-800'
+                          }`}
+                          onClick={() => setCrewData(prev => ({ ...prev, rep: i < crewData.rep ? i : i + 1 }))}
+                        ></div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* TURF */}
+                  <div>
+                    <div className="text-red-400 text-xs font-bold mb-1">TURF</div>
+                    <div className="flex space-x-1">
+                      {Array.from({ length: 6 }, (_, i) => (
+                        <div 
+                          key={i} 
+                          className={`w-4 h-4 border border-gray-600 cursor-pointer hover:bg-gray-600 ${
+                            i < crewData.turf ? 'bg-blue-600' : 'bg-gray-800'
+                          }`}
+                          onClick={() => setCrewData(prev => ({ ...prev, turf: i < crewData.turf ? i : i + 1 }))}
+                        ></div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* HOLD */}
+                  <div>
+                    <div className="text-red-400 text-xs font-bold mb-1">HOLD</div>
+                    <div className="flex space-x-2">
+                      <label className="flex items-center space-x-1 cursor-pointer">
+                        <input 
+                          type="radio" 
+                          name="hold"
+                          value="weak"
+                          checked={crewData.hold === 'weak'}
+                          onChange={(e) => setCrewData(prev => ({ ...prev, hold: e.target.value }))}
+                          className="w-3 h-3" 
+                        />
+                        <span className="text-xs">WEAK</span>
+                      </label>
+                      <label className="flex items-center space-x-1 cursor-pointer">
+                        <input 
+                          type="radio" 
+                          name="hold"
+                          value="strong"
+                          checked={crewData.hold === 'strong'}
+                          onChange={(e) => setCrewData(prev => ({ ...prev, hold: e.target.value }))}
+                          className="w-3 h-3" 
+                        />
+                        <span className="text-xs">STRONG</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* TIER */}
+                  <div>
+                    <div className="text-red-400 text-xs font-bold mb-1">TIER</div>
+                    <div className="flex space-x-1">
+                      {Array.from({ length: 4 }, (_, i) => (
+                        <div 
+                          key={i} 
+                          className={`w-6 h-6 rounded-full border border-gray-600 cursor-pointer hover:bg-gray-600 flex items-center justify-center text-xs ${
+                            i < crewData.tier ? 'bg-purple-600 text-white' : 'bg-gray-800 text-gray-400'
+                          }`}
+                          onClick={() => setCrewData(prev => ({ ...prev, tier: i < crewData.tier ? i : i + 1 }))}
+                        >
+                          {i + 1}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* WANTED */}
+                  <div>
+                    <div className="text-red-400 text-xs font-bold mb-1">WANTED</div>
+                    <div className="flex space-x-1">
+                      {Array.from({ length: 5 }, (_, i) => (
+                        <div 
+                          key={i} 
+                          className={`w-4 h-4 cursor-pointer hover:text-yellow-400 text-center ${
+                            i < crewData.wanted ? 'text-yellow-400' : 'text-gray-600'
+                          }`}
+                          onClick={() => setCrewData(prev => ({ ...prev, wanted: i < crewData.wanted ? i : i + 1 }))}
+                        >
+                          ★
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Coin & Vaults */}
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <div className="text-red-400 text-xs font-bold mb-1">COIN (ON HAND)</div>
+                    <div className="flex space-x-1">
+                      {Array.from({ length: 4 }, (_, i) => (
+                        <div 
+                          key={i} 
+                          className={`w-6 h-6 border border-gray-600 cursor-pointer hover:bg-gray-600 ${
+                            i < crewData.coin ? 'bg-yellow-600' : 'bg-gray-800'
+                          }`}
+                          onClick={() => setCrewData(prev => ({ ...prev, coin: i < crewData.coin ? i : i + 1 }))}
+                        ></div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-red-400 text-xs font-bold mb-1">VAULTS</div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs text-gray-400">Storage: {crewData.vaults}</span>
+                      <button 
+                        onClick={() => setCrewData(prev => ({ 
+                          ...prev, 
+                          vaults: prev.vaults === 0 ? 4 : prev.vaults === 4 ? 12 : 0 
+                        }))}
+                        className="bg-gray-600 px-2 py-1 text-xs border border-gray-500"
+                      >
+                        {crewData.vaults === 0 ? 'Buy +4' : crewData.vaults === 4 ? 'Upgrade +8' : 'Reset'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Main Content Grid */}
+              <div className="grid grid-cols-3 gap-6">
+                {/* Left Column */}
+                <div className="space-y-6">
+                  {/* Special Abilities */}
+                  <div>
+                    <div className="text-red-400 text-xs font-bold mb-2">SPECIAL ABILITIES</div>
+                    <div className="bg-gray-800 border border-gray-600 p-3 min-h-24">
+                      {crewData.specialAbilities.length > 0 ? (
+                        <div className="space-y-2">
+                          {crewData.specialAbilities.map((ability, i) => (
+                            <div key={i} className="text-xs">
+                              <span className="font-bold">{ability.name}</span>
+                              <div className="text-gray-400">{ability.description}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-gray-500 text-xs">No special abilities yet</div>
+                      )}
+                      <button 
+                        onClick={() => {
+                          const name = prompt('Ability name:');
+                          const description = prompt('Ability description:');
+                          if (name && description) {
+                            setCrewData(prev => ({
+                              ...prev,
+                              specialAbilities: [...prev.specialAbilities, { name, description }]
+                            }));
+                          }
+                        }}
+                        className="mt-2 bg-blue-600 px-2 py-1 text-xs rounded"
+                      >
+                        + Add Ability
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Crew Advancement */}
+                  <div>
+                    <div className="text-red-400 text-xs font-bold mb-2">CREW ADVANCEMENT</div>
+                    <div className="bg-gray-800 border border-gray-600 p-3 text-xs text-gray-300">
+                      <div className="space-y-1">
+                        <div>🔷 Contend with challenges above your current station</div>
+                        <div>🔷 Bolster your crew's reputation or develop a new one</div>
+                        <div>🔷 Express the goals, drives, inner conflict, or essential nature of the crew</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="space-y-2">
+                    <button className="w-full bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded text-sm">
+                      Roll Engagement
+                    </button>
+                    <button className="w-full bg-gray-600 hover:bg-gray-700 px-3 py-2 rounded text-sm">
+                      Roll Fortune
+                    </button>
+                  </div>
+                </div>
+
+                {/* Center Column - Lair Map */}
+                <div>
+                  <div className="text-red-400 text-xs font-bold mb-2">LAIR</div>
+                  <div className="bg-gray-800 border border-gray-600 p-4 h-96">
+                    <div className="text-center text-gray-500 mt-20">
+                      <div className="text-4xl mb-2">🏰</div>
+                      <div className="text-sm">Lair Map</div>
+                      <div className="text-xs text-gray-400 mt-2">
+                        Visual representation of crew's base of operations
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column */}
+                <div className="space-y-6">
+                  {/* Crew Description */}
+                  <div>
+                    <div className="text-red-400 text-xs font-bold mb-2">CREW</div>
+                    <div className="bg-gray-800 border border-gray-600 p-3">
+                      <textarea 
+                        value={crewData.description}
+                        onChange={(e) => setCrewData(prev => ({ ...prev, description: e.target.value }))}
+                        placeholder="A short crew description..."
+                        className="w-full h-16 bg-transparent text-xs text-white resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Crew Upgrades */}
+                  <div>
+                    <div className="text-red-400 text-xs font-bold mb-2">CREW UPGRADES</div>
+                    <div className="bg-gray-800 border border-gray-600 p-3 space-y-3">
+                      {/* Lair */}
+                      <div>
+                        <div className="text-xs font-bold mb-1">LAIR</div>
+                        <div className="grid grid-cols-2 gap-1 text-xs">
+                          {Object.entries(crewData.upgrades.lair).map(([key, value]) => (
+                            <label key={key} className="flex items-center space-x-1 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                className="w-3 h-3" 
+                                checked={value}
+                                onChange={(e) => setCrewData(prev => ({
+                                  ...prev,
+                                  upgrades: {
+                                    ...prev.upgrades,
+                                    lair: { ...prev.upgrades.lair, [key]: e.target.checked }
+                                  }
+                                }))}
+                              />
+                              <span className="capitalize">{key}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Quality */}
+                      <div>
+                        <div className="text-xs font-bold mb-1">QUALITY</div>
+                        <div className="space-y-1">
+                          {Object.entries(crewData.upgrades.quality).map(([key, value]) => (
+                            <div key={key} className="flex items-center justify-between text-xs">
+                              <span className="capitalize">{key}</span>
+                              <div className="flex space-x-1">
+                                {[1, 2, 3, 4].map((level) => (
+                                  <div 
+                                    key={level}
+                                    className={`w-3 h-3 border border-gray-500 cursor-pointer ${
+                                      level <= value ? 'bg-green-600' : 'bg-gray-700'
+                                    }`}
+                                    onClick={() => setCrewData(prev => ({
+                                      ...prev,
+                                      upgrades: {
+                                        ...prev.upgrades,
+                                        quality: { 
+                                          ...prev.upgrades.quality, 
+                                          [key]: level <= value ? level - 1 : level 
+                                        }
+                                      }
+                                    }))}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Training */}
+                      <div>
+                        <div className="text-xs font-bold mb-1">TRAINING</div>
+                        <div className="space-y-1 text-xs">
+                          {Object.entries(crewData.upgrades.training).map(([key, value]) => (
+                            <label key={key} className="flex items-center space-x-1 cursor-pointer">
+                              <input 
+                                type="checkbox" 
+                                className="w-3 h-3" 
+                                checked={value}
+                                onChange={(e) => setCrewData(prev => ({
+                                  ...prev,
+                                  upgrades: {
+                                    ...prev.upgrades,
+                                    training: { ...prev.upgrades.training, [key]: e.target.checked }
+                                  }
+                                }))}
+                              />
+                              <span className="capitalize">{key}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Contacts */}
+                  <div>
+                    <div className="text-red-400 text-xs font-bold mb-2">CONTACTS</div>
+                    <div className="bg-gray-800 border border-gray-600 p-3 h-20">
+                      <div className="text-xs text-gray-500">Contact management</div>
+                    </div>
+                  </div>
+
+                  {/* Clocks */}
+                  <div>
+                    <div className="text-red-400 text-xs font-bold mb-2">CLOCKS</div>
+                    <div className="bg-gray-800 border border-gray-600 p-3 h-32">
+                      <div className="text-xs text-gray-500">Progress clocks</div>
+                    </div>
+                  </div>
+
+                  {/* Notes */}
+                  <div>
+                    <div className="text-red-400 text-xs font-bold mb-2">NOTES</div>
+                    <div className="bg-gray-800 border border-gray-600 p-2 h-24">
+                      <textarea 
+                        value={crewData.notes}
+                        onChange={(e) => setCrewData(prev => ({ ...prev, notes: e.target.value }))}
+                        placeholder="Notes..."
+                        className="w-full h-full bg-transparent text-xs text-white resize-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 };
-
-

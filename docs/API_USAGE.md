@@ -102,7 +102,7 @@ curl -X PATCH \
   http://127.0.0.1:8000/api/characters/1/update-field/
 ```
 
-**Example Request (using curl to update `coin_stats`):**
+**Example Request (using curl to update `coin_stats`):
 ```bash
 curl -X PATCH \
   -H "Content-Type: application/json" \
@@ -110,6 +110,8 @@ curl -X PATCH \
   -d '{"field": "coin_stats", "value": {"power": "A", "speed": "C", "range": "C", "durability": "D", "precision": "D", "development": "F"}}' \
   http://127.0.0.1:8000/api/characters/1/update-field/
 ```
+**Note:** The `development` stat grants an XP bonus at the end of each session, and an 'A' rank can grant a temporary ability.
+
 
 **Expected Response (on success):**
 ```json

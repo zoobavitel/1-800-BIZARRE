@@ -241,7 +241,7 @@ describe('Ability Management', () => {
    - Filter by type, cost, frequency
    - Favorites system
 
-3. **Enhanced Visuals**:
+3. **Enhanced Visuals**: 
    - Ability icons and artwork
    - Animation transitions
    - Sound effects for selection
@@ -250,6 +250,7 @@ describe('Ability Management', () => {
    - Ability recommendations based on build
    - Combination suggestions
    - Export ability lists
+   - Integration of temporary abilities from 'A' rank Development Potential into the UI.
 
 #### Extension Points:
 

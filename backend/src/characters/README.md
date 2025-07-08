@@ -15,7 +15,7 @@ The primary purpose of this application is to:
 ## Key Contents
 
 *   `models.py`: Defines the Django models for `Character`, `Stand`, `Campaign`, `Crew`, `NPC`, `Heritage`, `Ability`, `Vice`, `Trauma`, and related junction tables. This is where the core data structure of the game is established.
-*   `serializers.py`: Contains Django REST Framework serializers for converting complex data types (Django models) into native Python datatypes that can be easily rendered into JSON, and vice-versa. This is also where much of the data validation logic resides.
+*   `serializers.py`: Defines how complex data types (like Django model instances) are converted to and from Python native datatypes, which can then be easily rendered into JSON, XML, or other content types. This is crucial for API interactions with the frontend, and also where much of the data validation logic resides.
 *   `views.py`: Defines the logic for handling HTTP requests and returning HTTP responses. These views would typically expose the API endpoints for character management, and may include custom actions like character creation guides, action rolls, and crew name consensus.
 *   `admin.py`: Registers the models with the Django admin interface, allowing for easy management of game data through a web-based GUI.
 *   `apps.py`: Django application configuration.

@@ -7,7 +7,7 @@ from characters.views import (
     HeritageViewSet, ViceViewSet, AbilityViewSet,
     StandViewSet, CharacterViewSet,
     CampaignViewSet, NPCViewSet, CrewViewSet,
-    TraumaViewSet,
+    TraumaViewSet, CharacterHistoryViewSet, ExperienceTrackerViewSet, SessionViewSet,
     home, RegisterView, StandAbilityViewSet, LoginView,
     HamonAbilityViewSet, SpinAbilityViewSet, global_search,
     get_available_playbook_abilities, api_documentation,
@@ -23,6 +23,9 @@ router.register(r'stand-abilities', StandAbilityViewSet)
 router.register(r'hamon-abilities', HamonAbilityViewSet)
 router.register(r'spin-abilities', SpinAbilityViewSet)
 router.register(r'characters', CharacterViewSet, basename='characters')
+router.register(r'character-history', CharacterHistoryViewSet, basename='character-history')
+router.register(r'experience-tracker', ExperienceTrackerViewSet, basename='experience-tracker')
+router.register(r'sessions', SessionViewSet, basename='sessions')
 router.register(r'campaigns', CampaignViewSet)
 router.register(r'npcs', NPCViewSet)
 router.register(r'crews', CrewViewSet)

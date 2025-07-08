@@ -27,6 +27,11 @@ Organizing documentation in a dedicated `docs/` directory is a standard practice
 
 ## Logic Behind Decisions
 
-The decision to centralize documentation in the `docs/` directory is driven by the need for clear communication and knowledge sharing within the project. Given the complexity of a TTRPG system, comprehensive documentation is essential for developers to understand the game rules and backend logic. Directly including SRD PDFs and detailed markdown files ensures that all team members have access to the necessary information to build and maintain the platform effectively.
+The decision to maintain a dedicated `docs/` directory stems from the understanding that a complex project like a TTRPG platform requires a robust knowledge base. This centralization ensures:
+
+*   **Single Source of Truth:** Prevents information silos and ensures everyone refers to the same, authoritative documentation.
+*   **Onboarding New Contributors:** New team members can quickly get up to speed by consulting the development guides and system overviews.
+*   **Game Rule Consistency:** Detailed rule documents ensure that game mechanics are consistently understood and implemented across the platform.
+*   **API Discoverability:** Clear API documentation is vital for seamless integration between the frontend and backend, and for any third-party applications that might interact with the platform.
 
 **Note on "Logic Behind Decisions"**: The explanations regarding decision logic primarily reflect discussions from the current chat session and general software engineering best practices. This document does not have access to the full history of all previous, unlogged interactions or design discussions that may have influenced the project's evolution.

@@ -78,7 +78,7 @@ The `Character` model itself contains a `clean()` method that triggers several v
 *   **`_validate_level_1_creation()`**: A master validation method called during initial character creation. It orchestrates the following checks:
     *   **`_validate_action_dots_distribution()`**: Ensures the total number of action dots is exactly 7 for a new level 1 character, with a maximum of 2 dots per action. For characters above level 1, the maximum dots per action is 4.
     *   **`_validate_stand_coin_stats()`**: Verifies that a level 1 character has a Stand with defined coin stats, and that the total Stand Coin points sum to exactly 10. It also validates that each stat's grade is one of 'S', 'A', 'B', 'C', 'D', or 'F'.
-    *   **`_validate_stress_based_on_durability()`**: Calculates the expected stress value based on the Stand's Durability grade (9 for most, 8 for 'F' durability) and ensures the character's stress matches this expectation.
+    *   **`_validate_stress_based_on_durability()`**: Calculates the expected stress value based on the Stand's Durability grade (from 8 for 'F' to 13 for 'S') and ensures the character's stress matches this expectation.
     *   **`_validate_initial_abilities_count()`**: Confirms that a new level 1 character has exactly 3 abilities (standard, custom, or playbook).
 
 *   **`_validate_a_rank_abilities()`**: If a Stand exists, this method validates that the total number of abilities a character possesses aligns with the number of 'A' ratings in their Stand's coin stats. Each 'A' rank grants 2 additional abilities beyond the initial 3.
@@ -89,6 +89,14 @@ The `Character` model itself contains a `clean()` method that triggers several v
 
 *   **Action Dots**: Stored in a `JSONField`, `action_dots` represent a character's proficiency in various actions (e.g., hunt, study, finesse). These are grouped into `insight`, `prowess`, and `resolve` attributes, with calculated ratings based on the number of actions with dots.
 *   **Abilities**: Characters can have `standard_abilities` (many-to-many relationship with `Ability`), a `custom_ability_description`, and specific `hamon_abilities` or `spin_abilities` (through junction tables `CharacterHamonAbility` and `CharacterSpinAbility`). The `total_abilities_count` property aggregates all these.
+
+### 2.5. Development Potential
+
+The `Character` model includes special handling for the 'Development Potential' Stand stat, which affects XP gain and can grant temporary abilities.
+
+*   **`development_xp_bonus`**: This read-only property on the `Character` model calculates an XP bonus based on the `development` grade of the character's `Stand`. The bonus ranges from +0 for 'F' to +5 for 'S' rank. This value is intended to be used at the end of a session to award bonus XP.
+
+*   **`development_temporary_ability`**: This `JSONField` on the `Character` model is used to store a temporary ability. If a character's Stand has an 'A' rank in Development, they can spend 2 stress to adopt a new unique or standard ability until the end of the session, at the GM's discretion. This field provides a place to record that temporary ability.
 
 This rigorous validation process, spanning both the serializer and the model's `clean()` method, ensures that all newly created and updated characters conform to the intricate rules of the Jojo TTRPG system.
 
@@ -159,7 +167,7 @@ The `NPC` model contains fields tailored for GM utility and narrative purposes:
 *   **Personality & Narrative Hooks**: `weakness`, `need`, `desire`, `rumour`, `secret`, `passion`, `description`.
 *   **Relationships**: `relationships` (a `JSONField` for flexible tracking of connections to other entities).
 *   **Simplified Combat Tracking**: `harm_clock_current`, `vulnerability_clock_current`, `armor_charges`. These are simpler than the detailed harm levels of PCs.
-*   **Calculated Properties**: `harm_clock_max`, `special_armor_charges`, and `vulnerability_clock_max` are properties that derive their values based on other NPC attributes (e.g., `stand_coin_stats`).
+*   **Calculated Properties**: `harm_clock_max`, `special_armor_charges`, and `vulnerability_clock_max` are properties that derive their values based on other NPC attributes (e.g., `stand_coin_stats`). The `special_armor_charges` property, for example, grants a number of armor charges based on the Durability grade of the NPC's Stand (from 0 for 'F' to 3 for 'S' and 'A').
 *   **Stand Information**: `stand_coin_stats` (a `JSONField` for flexible Stand stat representation), `stand_description`, `stand_appearance`, `stand_manifestation`, `special_traits`.
 *   **Creator and Campaign Association**: `creator` (the `User` who created the NPC) and `campaign` (the `Campaign` the NPC belongs to).
 *   **Playbook**: A simple `CharField` (`playbook`) to indicate their general combat style (STAND, HAMON, SPIN), unlike the detailed ability selection for PCs.

@@ -1,5 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+import json
 
 
 class Campaign(models.Model):
@@ -9,9 +13,32 @@ class Campaign(models.Model):
     description = models.TextField(blank=True)
     # Wanted stars for campaign (only GM may edit)
     wanted_stars = models.IntegerField(default=0)
+    active_session = models.ForeignKey('Session', on_delete=models.SET_NULL, null=True, blank=True, related_name='active_in_campaign')
 
     def __str__(self):
         return self.name
+
+
+class Faction(models.Model):
+    FACTION_TYPE_CHOICES = [
+        ('CRIMINAL', 'Criminal'),
+        ('NOBLE', 'Noble'),
+        ('MERCHANT', 'Merchant'),
+        ('POLITICAL', 'Political'),
+        ('RELIGIOUS', 'Religious'),
+        ('OTHER', 'Other'),
+    ]
+
+    name = models.CharField(max_length=100)
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='factions')
+    faction_type = models.CharField(max_length=20, choices=FACTION_TYPE_CHOICES, default='OTHER')
+    notes = models.TextField(blank=True)
+    hold = models.CharField(max_length=10, choices=[('weak', 'Weak'), ('strong', 'Strong')], default='weak')
+    reputation = models.IntegerField(default=0)
+
+    def __str__(self):
+        return f"{self.name} ({self.get_faction_type_display()}) - {self.campaign.name}"
+
 
 
 class Crew(models.Model):
@@ -35,6 +62,15 @@ class Crew(models.Model):
 
     claims = models.JSONField(default=dict)
     upgrades = models.JSONField(default=list)
+
+    # Crew Playbook Fields
+    xp_trigger = models.TextField(blank=True, help_text="XP trigger for the crew")
+    personalization_questions = models.JSONField(default=list, blank=True, help_text="Questions to personalize the crew")
+    starting_upgrades = models.JSONField(default=list, blank=True, help_text="Starting upgrades for the crew")
+    favored_operations = models.JSONField(default=list, blank=True, help_text="List of favored operation types")
+    contacts = models.JSONField(default=list, blank=True, help_text="List of contacts with their details")
+    crew_upgrades = models.JSONField(default=list, blank=True, help_text="List of crew-specific upgrades")
+    special_abilities = models.JSONField(default=list, blank=True, help_text="List of crew special abilities")
 
     def __str__(self):
         return self.name
@@ -143,13 +179,14 @@ class NPC(models.Model):
     @property
     def special_armor_charges(self):
         durability_grade = self.stand_coin_stats.get('DURABILITY', 'F')
-        if durability_grade in ['S', 'A', 'B']:
+        if durability_grade in ['S', 'A']:
             return 3
-        elif durability_grade in ['C', 'D']:
+        elif durability_grade == 'B':
             return 2
-        elif durability_grade == 'F':
+        elif durability_grade in ['C', 'D']:
+            return 1
+        else: # F
             return 0
-        return 0
 
     @property
     def vulnerability_clock_max(self):
@@ -173,6 +210,25 @@ class Character(models.Model):
     true_name = models.CharField(max_length=100)
     alias = models.CharField(max_length=100, blank=True, null=True)
     appearance = models.TextField(blank=True, null=True)
+
+    @property
+    def development_xp_bonus(self):
+        if not hasattr(self, 'stand'):
+            return 0  # Or handle as an error, depending on game rules for non-Stand users
+
+        dev_grade = self.stand.development
+        if dev_grade == 'S':
+            return 5
+        elif dev_grade == 'A':
+            return 4
+        elif dev_grade == 'B':
+            return 3
+        elif dev_grade == 'C':
+            return 2
+        elif dev_grade == 'D':
+            return 1
+        else:  # F or other
+            return 0
 
     @property
     def level(self):
@@ -238,6 +294,8 @@ class Character(models.Model):
     heritage_points_gained = models.IntegerField(default=0)
     stand_coin_points_gained = models.IntegerField(default=0)
     action_dice_gained = models.IntegerField(default=0)
+    inventory = models.JSONField(default=list, blank=True, help_text="List of items the character possesses")
+    reputation_status = models.JSONField(default=dict, blank=True, help_text="Tracks character's reputation with allies, rivals, and factions (e.g., {'Faction Name': 2, 'NPC Name': -1})")
 
     ACTION_CATEGORIES = {
         'insight': ['hunt', 'study', 'survey', 'tinker'],
@@ -333,12 +391,24 @@ class Character(models.Model):
 
     def _validate_stress_based_on_durability(self):
         expected_stress = 9
-        if hasattr(self, 'stand') and self.stand.coin_stats.get('DURABILITY') == 'F':
+        durability_grade = self.stand.coin_stats.get('DURABILITY') if hasattr(self, 'stand') else None
+
+        if durability_grade == 'S':
+            expected_stress = 13
+        elif durability_grade == 'A':
+            expected_stress = 12
+        elif durability_grade == 'B':
+            expected_stress = 11
+        elif durability_grade == 'C':
+            expected_stress = 10
+        elif durability_grade == 'D':
+            expected_stress = 9
+        elif durability_grade == 'F':
             expected_stress = 8
         
         if self.stress != expected_stress:
             raise ValidationError(
-                {'stress': f'Stress must be {expected_stress} for a level 1 character with current Stand Durability.'}
+                {'stress': f'Stress must be {expected_stress} for a level 1 character with {durability_grade} Stand Durability.'}
             )
 
     def _validate_initial_abilities_count(self):
@@ -455,6 +525,7 @@ class Character(models.Model):
 
     # JSON field to store additional abilities based on "A" grade logic
     extra_custom_abilities = models.JSONField(default=list, blank=True, null=True)
+    development_temporary_ability = models.JSONField(default=None, null=True, blank=True, help_text="Temporary ability gained from A-rank Development Potential until the end of the session")
     
     # Faction reputation tracking - list of {name: str, rep: int} objects
     faction_reputation = models.JSONField(default=list, blank=True, null=True)
@@ -463,6 +534,46 @@ class Character(models.Model):
     gm_character_locked = models.BooleanField(default=False)
     gm_allowed_edit_fields = models.JSONField(default=dict, blank=True, null=True)
     gm_can_have_s_rank_stand_stats = models.BooleanField(default=False)
+
+
+class CharacterHistory(models.Model):
+    character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='history_entries')
+    editor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    changed_fields = models.JSONField()
+    
+    def __str__(self):
+        return f"Changes for {self.character.true_name} at {self.timestamp}"
+
+@receiver(post_save, sender=Character)
+def log_character_changes(sender, instance, created, **kwargs):
+    if created:
+        # Don't log creation as a change
+        return
+
+    try:
+        latest_history = CharacterHistory.objects.filter(character=instance).latest('timestamp')
+        old_data = latest_history.changed_fields
+    except CharacterHistory.DoesNotExist:
+        old_data = {}
+
+    new_data = {}
+    for field in instance._meta.fields:
+        new_data[field.name] = str(getattr(instance, field.name))
+
+    changed_fields = {}
+    for field_name, new_value in new_data.items():
+        if old_data.get(field_name) != new_value:
+            changed_fields[field_name] = {
+                'old': old_data.get(field_name),
+                'new': new_value
+            }
+
+    if changed_fields:
+        CharacterHistory.objects.create(
+            character=instance,
+            changed_fields=changed_fields
+        )
 
 
 
@@ -599,6 +710,7 @@ class ProgressClock(models.Model):
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
     crew = models.ForeignKey(Crew, on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
     character = models.ForeignKey('Character', on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
+    faction = models.ForeignKey(Faction, on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
     
     created_at = models.DateTimeField(auto_now_add=True)
     completed = models.BooleanField(default=False)
@@ -622,6 +734,7 @@ class ExperienceTracker(models.Model):
     ]
     
     character = models.ForeignKey('Character', on_delete=models.CASCADE, related_name='experience_entries')
+    session = models.ForeignKey('Session', on_delete=models.SET_NULL, null=True, blank=True, related_name='xp_entries')
     session_date = models.DateTimeField(auto_now_add=True)
     trigger = models.CharField(max_length=20, choices=XP_TRIGGER_CHOICES)
     description = models.TextField(help_text="What did the character do to earn this XP?")
@@ -641,6 +754,7 @@ class DowntimeActivity(models.Model):
         ('REDUCE_HEAT', 'Reduce Heat'),
         ('TRAIN', 'Train'),
         ('INDULGE_VICE', 'Indulge Vice'),
+        ('REDUCE_WANTED_LEVEL', 'Reduce Wanted Level'),
     ]
     
     character = models.ForeignKey('Character', on_delete=models.CASCADE, related_name='downtime_activities')
@@ -688,4 +802,49 @@ class Score(models.Model):
     
     def __str__(self):
         return f"{self.crew.name} - {self.name}"
+
+
+class Session(models.Model):
+    """Tracks individual game sessions or episodes within a campaign."""
+    STATUS_CHOICES = [
+        ('PLANNED', 'Planned'),
+        ('ACTIVE', 'Active'),
+        ('COMPLETED', 'Completed'),
+    ]
+
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='sessions')
+    name = models.CharField(max_length=200, help_text="Title or name of the session/episode")
+    session_date = models.DateTimeField(auto_now_add=True)
+    description = models.TextField(blank=True, help_text="Overall plot or story summary for the session")
+    objective = models.TextField(blank=True, help_text="The main goal for this session")
+    planned_for_next_session = models.TextField(blank=True, help_text="Notes for the next session")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PLANNED')
+    npcs_involved = models.ManyToManyField(NPC, blank=True, related_name='sessions_involved')
+    characters_involved = models.ManyToManyField(Character, blank=True, related_name='sessions_involved')
+    factions_involved = models.ManyToManyField(Faction, blank=True, related_name='sessions_involved')
+
+    def __str__(self):
+        return f"{self.campaign.name} - {self.name} ({self.get_status_display()}) - {self.session_date.strftime('%Y-%m-%d')}"
+
+
+class SessionEvent(models.Model):
+    EVENT_TYPE_CHOICES = [
+        ('DICE_ROLL', 'Dice Roll'),
+        ('STRESS_CHANGE', 'Stress Change'),
+        ('HARM_APPLIED', 'Harm Applied'),
+        ('ITEM_ACQUIRED', 'Item Acquired'),
+        ('DEVILS_BARGAIN', 'Devil\'s Bargain'),
+        ('LOCATION_CHANGE', 'Location Change'),
+        ('OTHER', 'Other'),
+    ]
+
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='events')
+    character = models.ForeignKey(Character, on_delete=models.CASCADE, null=True, blank=True, related_name='session_events')
+    npc = models.ForeignKey(NPC, on_delete=models.CASCADE, null=True, blank=True, related_name='session_events')
+    event_type = models.CharField(max_length=20, choices=EVENT_TYPE_CHOICES)
+    details = models.JSONField(default=dict)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.session.name} - {self.get_event_type_display()} at {self.timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
 

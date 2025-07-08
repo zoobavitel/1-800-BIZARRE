@@ -29,6 +29,6 @@ The frontend follows a standard React project structure, promoting:
 
 ## Logic Behind Decisions
 
-The decision to use React for the frontend is based on its popularity, robust ecosystem, and efficiency in building dynamic and interactive user interfaces. Vite was chosen as the build tool for its speed and modern features, which significantly improve the development experience. The component-based architecture aligns with best practices for building scalable and maintainable single-page applications.
+The decision to use React for the frontend is based on its popularity, robust ecosystem, and efficiency in building dynamic and interactive user interfaces. Vite was chosen as the build tool for its speed and modern features, which significantly improve the development experience. Tailwind CSS was selected for its utility-first approach, enabling rapid UI development and consistent styling.
 
 **Note on "Logic Behind Decisions"**: The explanations regarding decision logic primarily reflect discussions from the current chat session and general software engineering best practices. This document does not have access to the full history of all previous, unlogged interactions or design discussions that may have influenced the project's evolution.
