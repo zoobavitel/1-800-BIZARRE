@@ -20,16 +20,12 @@
     "install:all": "npm install && cd frontend && npm install",
     "clean": "rm -rf node_modules frontend/node_modules frontend/build backend/src/db.sqlite3"
   },
-  "dependencies": {
-    "@craco/craco": "^7.1.0",
-    "lucide-react": "^0.525.0",
-    "react-router-dom": "^7.6.0"
-  },
   "devDependencies": {
-    "autoprefixer": "^9.8.8",
+    "autoprefixer": "^10.4.21",
     "concurrently": "^8.2.2",
-    "postcss": "^7.0.39",
-    "tailwindcss": "npm:@tailwindcss/postcss7-compat@^2.2.17"
+    "postcss": "^8.5.6",
+    "postcss-flexbugs-fixes": "^5.0.2",
+    "postcss-preset-env": "^10.2.4"
   },
   "engines": {
     "node": ">=18.0.0",
