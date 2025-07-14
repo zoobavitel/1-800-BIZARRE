@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
-import Home from './page/Home.jsx';
-import ResponsiveTest from './ResponsiveTest.jsx';
+import Home from './pages/Home.jsx';
+import ResponsiveTest from './pages/ResponsiveTest.jsx';
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState('home');
