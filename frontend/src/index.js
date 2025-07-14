@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import Home from './pages/Home.jsx';
 import ResponsiveTest from './pages/ResponsiveTest.jsx';
+import { AuthProvider } from './features/auth';
+import ProtectedRoute from './components/ProtectedRoute';
 
 const App = () => {
   const [currentPage, setCurrentPage] = useState('home');
@@ -20,40 +22,44 @@ const App = () => {
   };
 
   return (
-    <div>
-      {/* Simple navigation */}
-      <div className="fixed top-4 left-4 z-50 flex gap-2">
-        <button 
-          onClick={() => handlePageChange('home')}
-          className={`px-3 py-1 rounded text-sm font-bold transition-colors ${
-            currentPage === 'home' 
-              ? 'bg-purple-600 text-white' 
-              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-          }`}
-        >
-          Home
-        </button>
-        <button 
-          onClick={() => handlePageChange('test')}
-          className={`px-3 py-1 rounded text-sm font-bold transition-colors ${
-            currentPage === 'test' 
-              ? 'bg-purple-600 text-white' 
-              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-          }`}
-        >
-          Responsive Test
-        </button>
-      </div>
+    <ProtectedRoute>
+      <div>
+        {/* Simple navigation */}
+        <div className="fixed top-4 left-4 z-50 flex gap-2">
+          <button 
+            onClick={() => handlePageChange('home')}
+            className={`px-3 py-1 rounded text-sm font-bold transition-colors ${
+              currentPage === 'home' 
+                ? 'bg-purple-600 text-white' 
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            Home
+          </button>
+          <button 
+            onClick={() => handlePageChange('test')}
+            className={`px-3 py-1 rounded text-sm font-bold transition-colors ${
+              currentPage === 'test' 
+                ? 'bg-purple-600 text-white' 
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
+          >
+            Responsive Test
+          </button>
+        </div>
 
-      {/* Render current page */}
-      {currentPage === 'home' ? <Home /> : <ResponsiveTest />}
-    </div>
+        {/* Render current page */}
+        {currentPage === 'home' ? <Home /> : <ResponsiveTest />}
+      </div>
+    </ProtectedRoute>
   );
 };
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <React.StrictMode>
-    <App />
+    <AuthProvider>
+      <App />
+    </AuthProvider>
   </React.StrictMode>
 );
