@@ -29,6 +29,32 @@ The `Faction` model holds all the information about a specific faction within a 
 
 The `ProgressClock` model now has a `faction` field (a ForeignKey to `Faction`). This allows you to create progress clocks for specific faction objectives.
 
+### Faction Relationships
+
+To track the relationships between different factions, and between crews and factions, two new models have been introduced: `FactionRelationship` and `CrewFactionRelationship`.
+
+#### The `FactionRelationship` Model
+
+This model tracks the reputation and interactions between two distinct factions.
+
+**Fields:**
+
+*   `source_faction` (ForeignKey to `Faction`): The originating faction in the relationship.
+*   `target_faction` (ForeignKey to `Faction`): The faction with which the source faction has a relationship.
+*   `reputation_value` (IntegerField): The numerical value representing the reputation between the two factions (e.g., positive for allies, negative for enemies).
+*   `notes` (TextField): Any additional notes or details about the relationship.
+
+#### The `CrewFactionRelationship` Model
+
+This model tracks the reputation and standing of a specific crew with a particular faction.
+
+**Fields:**
+
+*   `crew` (ForeignKey to `Crew`): The crew involved in the relationship.
+*   `faction` (ForeignKey to `Faction`): The faction with which the crew has a relationship.
+*   `reputation_value` (IntegerField): The numerical value representing the crew's reputation with the faction.
+*   `notes` (TextField): Any additional notes or details about the crew's relationship with the faction.
+
 ## Session Management
 
 The session management system has been significantly enhanced to allow GMs to plan and run their games more effectively.

@@ -1,22 +1,119 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import (
-    Heritage, Vice, Ability, Character, Stand,
+    UserProfile, Heritage, Vice, Ability, Character, Stand,
     Campaign, NPC, Crew, Detriment, Benefit, StandAbility,
-    HamonAbility, SpinAbility, Trauma
-    , CharacterHamonAbility, CharacterSpinAbility,
-    CharacterHistory, ExperienceTracker, Session
+    HamonAbility, SpinAbility, Trauma,
+    CharacterHamonAbility, CharacterSpinAbility,
+    CharacterHistory, ExperienceTracker, Session, SessionEvent,
+    Claim, CrewPlaybook, CrewSpecialAbility, CrewUpgrade, XPHistory, StressHistory, ChatMessage,
+    Faction
 )
 import re
+
+class ClaimSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Claim
+        fields = '__all__'
+
+class CrewSpecialAbilitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CrewSpecialAbility
+        fields = '__all__'
+
+class CrewPlaybookSerializer(serializers.ModelSerializer):
+    claims = ClaimSerializer(many=True, read_only=True)
+    special_abilities = CrewSpecialAbilitySerializer(many=True, read_only=True)
+
+    class Meta:
+        model = CrewPlaybook
+        fields = '__all__'
+
+class CrewUpgradeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CrewUpgrade
+        fields = '__all__'
+
+class CrewSerializer(serializers.ModelSerializer):
+    playbook = CrewPlaybookSerializer(read_only=True)
+    claims = ClaimSerializer(many=True, read_only=True)
+    special_abilities = CrewSpecialAbilitySerializer(many=True, read_only=True)
+    proposed_by = serializers.PrimaryKeyRelatedField(read_only=True)
+    approved_by = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    image = serializers.ImageField(required=False)
+
+    class Meta:
+        model = Crew
+        fields = [
+            'id', 'name', 'campaign', 'playbook', 'description', 'image',
+            'xp', 'xp_track_size', 'advancement_points',
+            'level', 'hold', 'rep', 'wanted_level',
+            'coin', 'stash', 'claims', 'upgrade_progress', 'special_abilities',
+            'proposed_name', 'proposed_by', 'approved_by'
+        ]
+
+
+class UserProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserProfile
+        fields = ['avatar']
+
+class UserSerializer(serializers.ModelSerializer):
+    profile = UserProfileSerializer()
+
+    class Meta:
+        model = User
+        fields = ['id', 'username', 'profile']
+
+    def update(self, instance, validated_data):
+        profile_data = validated_data.pop('profile', {})
+        profile = instance.profile
+
+        instance.username = validated_data.get('username', instance.username)
+        instance.save()
+
+        profile.avatar = profile_data.get('avatar', profile.avatar)
+        profile.save()
+
+        return instance
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True)
 
 class SessionSerializer(serializers.ModelSerializer):
     npcs_involved = serializers.PrimaryKeyRelatedField(many=True, queryset=NPC.objects.all(), required=False)
     characters_involved = serializers.PrimaryKeyRelatedField(many=True, queryset=Character.objects.all(), required=False)
+    proposed_by = UserSerializer(read_only=True)
+    votes = UserSerializer(many=True, read_only=True)
 
     class Meta:
         model = Session
         fields = '__all__'
         read_only_fields = ['session_date']
+
+class XPHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = XPHistory
+        fields = '__all__'
+
+class StressHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StressHistory
+        fields = '__all__'
+
+class ChatMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChatMessage
+        fields = '__all__'
+
+class SessionEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SessionEvent
+        fields = '__all__'
+        read_only_fields = ['timestamp']
+
+
 
 class CharacterHistorySerializer(serializers.ModelSerializer):
     editor = serializers.StringRelatedField()
@@ -84,22 +181,10 @@ class StandSerializer(serializers.ModelSerializer):
         model = Stand
         fields = '__all__'
 
-class CrewSerializer(serializers.ModelSerializer):
-    proposed_by = serializers.PrimaryKeyRelatedField(read_only=True)
-    approved_by = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
 
-    class Meta:
-        model = Crew
-        fields = [
-            'id', 'name', 'campaign', 'description',
-            'tier', 'hold', 'rep', 'wanted_level',
-            'coin', 'stash', 'claims', 'upgrades',
-            'proposed_name', 'proposed_by', 'approved_by',
-            'xp_trigger', 'personalization_questions', 'starting_upgrades',
-            'favored_operations', 'contacts', 'crew_upgrades', 'special_abilities'
-        ]
 
 class CharacterSerializer(serializers.ModelSerializer):
+    image = serializers.ImageField(required=False)
     # display current campaign's wanted stars
     wanted_stars = serializers.IntegerField(source='campaign.wanted_stars', read_only=True)
     stand = StandSerializer(read_only=True)
@@ -332,9 +417,13 @@ class RegisterSerializer(serializers.ModelSerializer):
         fields = ['username','password']
 
     def create(self, validated_data):
-        return User.objects.create_user(**validated_data)
+        user = User.objects.create_user(**validated_data)
+        UserProfile.objects.create(user=user)
+        return user
 
 class CampaignSerializer(serializers.ModelSerializer):
+    gm = UserSerializer(read_only=True)
+    players = UserSerializer(many=True, read_only=True)
     # wanted stars may be set by GM
     wanted_stars = serializers.IntegerField()
     class Meta:
@@ -362,3 +451,8 @@ class TraumaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Trauma
         fields = ['id', 'name', 'description']
+
+class FactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Faction
+        fields = ['id', 'name', 'campaign', 'faction_type', 'notes', 'level', 'hold', 'reputation']

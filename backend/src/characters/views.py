@@ -5,7 +5,7 @@ from rest_framework import viewsets, status, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from .serializers import RegisterSerializer
+from .serializers import RegisterSerializer, UserProfileSerializer, UserSerializer, ChangePasswordSerializer
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
 from django.contrib.auth import authenticate
@@ -15,26 +15,83 @@ from rest_framework.decorators import api_view, permission_classes, action
 import json
 from django.db import transaction
 from django.core.exceptions import PermissionDenied
+from rest_framework.parsers import MultiPartParser, FormParser
+
 
 from .models import (
-    Heritage, Vice, Ability, Character, Stand,
+    UserProfile, Heritage, Vice, Ability, Character, Stand,
     Campaign, NPC, Crew, StandAbility, HamonAbility, SpinAbility, Trauma, Benefit, Detriment,
-    CharacterHistory, ExperienceTracker, Session
+    CharacterHistory, ExperienceTracker, Session, SessionEvent,
+    Claim, CrewPlaybook, CrewSpecialAbility, CrewUpgrade, XPHistory, StressHistory, ChatMessage
 )
 from .serializers import (
     HeritageSerializer, ViceSerializer, AbilitySerializer,
     CharacterSerializer, StandSerializer,
     CampaignSerializer, NPCSerializer, CrewSerializer, StandAbilitySerializer,
     HamonAbilitySerializer, SpinAbilitySerializer, TraumaSerializer,
-    CharacterHistorySerializer, ExperienceTrackerSerializer, SessionSerializer
+    CharacterHistorySerializer, ExperienceTrackerSerializer, SessionSerializer,
+    SessionEventSerializer,
+    ClaimSerializer, CrewPlaybookSerializer, CrewSpecialAbilitySerializer, CrewUpgradeSerializer,
+    XPHistorySerializer, StressHistorySerializer, ChatMessageSerializer
 )
+
+class ClaimViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = Claim.objects.all()
+    serializer_class = ClaimSerializer
+
+class CrewSpecialAbilityViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = CrewSpecialAbility.objects.all()
+    serializer_class = CrewSpecialAbilitySerializer
+
+class CrewPlaybookViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = CrewPlaybook.objects.all()
+    serializer_class = CrewPlaybookSerializer
+
+class ClaimViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = Claim.objects.all()
+    serializer_class = ClaimSerializer
+
+class CrewSpecialAbilityViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = CrewSpecialAbility.objects.all()
+    serializer_class = CrewSpecialAbilitySerializer
+
+class CrewPlaybookViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = CrewPlaybook.objects.all()
+    serializer_class = CrewPlaybookSerializer
+
+class CrewUpgradeViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = CrewUpgrade.objects.all()
+    serializer_class = CrewUpgradeSerializer
+
+class XPHistoryViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = XPHistory.objects.all()
+    serializer_class = XPHistorySerializer
+
+class StressHistoryViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = StressHistory.objects.all()
+    serializer_class = StressHistorySerializer
+
+class ChatMessageViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = ChatMessage.objects.all()
+    serializer_class = ChatMessageSerializer
+
 
 # Optional root view
 def home(request):
     return JsonResponse({"message": "Welcome to the 1(800)Bizarre API!"})
 
 class RegisterView(APIView):
-    permission_classes = [AllowAny]  # <-- ADD THIS LINE
+    permission_classes = [AllowAny]
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -46,6 +103,40 @@ class RegisterView(APIView):
 
 
 # === ViewSets ===
+
+class UserProfileViewSet(viewsets.ModelViewSet):
+    queryset = UserProfile.objects.all()
+    serializer_class = UserProfileSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return UserProfile.objects.filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @action(detail=False, methods=['put'], url_path='update')
+    def update_profile(self, request):
+        user = request.user
+        serializer = UserSerializer(user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], url_path='change-password')
+    def change_password(self, request):
+        user = request.user
+        serializer = ChangePasswordSerializer(data=request.data)
+        if serializer.is_valid():
+            old_password = serializer.validated_data['old_password']
+            if not user.check_password(old_password):
+                return Response({'old_password': ['Wrong password.']}, status=status.HTTP_400_BAD_REQUEST)
+            user.set_password(serializer.validated_data['new_password'])
+            user.save()
+            return Response({'status': 'password set'})
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class HeritageViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -190,10 +281,95 @@ class SessionViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You are not the GM of this campaign and cannot edit sessions for it.")
         serializer.save()
 
+    @action(detail=True, methods=['post'], url_path='propose-score')
+    def propose_score(self, request, pk=None):
+        session = self.get_object()
+        user = request.user
+        proposed_score_target = request.data.get('proposed_score_target')
+        proposed_score_description = request.data.get('proposed_score_description', '')
+
+        if not proposed_score_target:
+            return Response({'error': 'Proposed score target is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Only players in the campaign can propose scores
+        if not session.campaign.players.filter(id=user.id).exists() and session.campaign.gm != user:
+            return Response({'error': 'You must be a player or GM in this campaign to propose a score.'}, status=status.HTTP_403_FORBIDDEN)
+
+        session.proposed_score_target = proposed_score_target
+        session.proposed_score_description = proposed_score_description
+        session.proposed_by = user
+        session.votes.clear()  # Clear previous votes
+        session.votes.add(user) # Proposer automatically votes for their proposal
+        session.save()
+
+        return Response({
+            'message': f'Score "{proposed_score_target}" proposed.',
+            'proposed_score_target': session.proposed_score_target,
+            'proposed_by': session.proposed_by.username,
+            'votes': [u.username for u in session.votes.all()]
+        }, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], url_path='vote-for-score')
+    def vote_for_score(self, request, pk=None):
+        session = self.get_object()
+        user = request.user
+
+        if not session.proposed_score_target:
+            return Response({'error': 'No score proposal is active.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Only players in the campaign can vote
+        if not session.campaign.players.filter(id=user.id).exists() and session.campaign.gm != user:
+            return Response({'error': 'You must be a player or GM in this campaign to vote.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if user not in session.votes.all():
+            session.votes.add(user)
+            session.save()
+
+        return Response({
+            'message': f'You voted for "{session.proposed_score_target}".',
+            'proposed_score_target': session.proposed_score_target,
+            'proposed_by': session.proposed_by.username,
+            'votes': [u.username for u in session.votes.all()]
+        }, status=status.HTTP_200_OK)
+
+
+
+class SessionEventViewSet(viewsets.ModelViewSet):
+    queryset = SessionEvent.objects.all() # Add this line
+    permission_classes = [IsAuthenticated]
+    serializer_class = SessionEventSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return SessionEvent.objects.all()
+        # GMs can see all session events in their campaigns
+        if Campaign.objects.filter(gm=user).exists():
+            return SessionEvent.objects.filter(session__campaign__gm=user)
+        # Players can see session events in campaigns they are part of
+        return SessionEvent.objects.filter(session__campaign__players=user).distinct()
+
+    def perform_create(self, serializer):
+        session = serializer.validated_data.get('session')
+        if not session:
+            raise ValidationError("Session is required for a SessionEvent.")
+        # Only GM of the session's campaign can create session events
+        if session.campaign.gm != self.request.user:
+            raise PermissionDenied("You are not the GM of this campaign and cannot create session events for it.")
+        serializer.save()
+
+
+
+
+
+
+
 class CharacterViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = CharacterSerializer
     queryset = Character.objects.all()
+    parser_classes = (MultiPartParser, FormParser)
+
 
     def get_queryset(self):
         user = self.request.user
@@ -334,38 +510,62 @@ class CharacterViewSet(viewsets.ModelViewSet):
             character = self.get_object()
         except Character.DoesNotExist:
             return Response({'error': 'Character not found'}, status=status.HTTP_404_NOT_FOUND)
-        
+
         action_name = request.data.get('action')
         position = request.data.get('position', 'controlled')  # controlled, risky, desperate
         effect = request.data.get('effect', 'standard')  # limited, standard, great
-        
-        if not action_name:
-            return Response({'error': 'Action name is required'}, status=status.HTTP_400_BAD_REQUEST)
-        
+        roll_type = request.data.get('roll_type', 'ACTION') # ACTION, RESISTANCE, FORTUNE, CLEAR_STRESS, OTHER
+        action_type = request.data.get('action_type', 'SOLO') # SOLO, GROUP, ASSISTED
+        group_leader_id = request.data.get('group_leader_id')
+        assisted_by_id = request.data.get('assisted_by_id')
+        session_id = request.data.get('session_id') # Session is required for a Roll
+
+        if not action_name or not session_id:
+            return Response({'error': 'action, and session_id are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            session = Session.objects.get(id=session_id)
+        except Session.DoesNotExist:
+            return Response({'error': 'Session not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        group_leader = None
+        if group_leader_id:
+            try:
+                group_leader = Character.objects.get(id=group_leader_id)
+            except Character.DoesNotExist:
+                return Response({'error': 'Group leader not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        assisted_by = None
+        if assisted_by_id:
+            try:
+                assisted_by = Character.objects.get(id=assisted_by_id)
+            except Character.DoesNotExist:
+                return Response({'error': 'Assisted by character not found'}, status=status.HTTP_404_NOT_FOUND)
+
         # Get action rating
         action_dots = character.action_dots or {}
         action_rating = 0
-        
+
         for group in action_dots.values():
             if action_name.lower() in group:
                 action_rating = group[action_name.lower()]
                 break
-        
+
         # Calculate dice pool
         dice_pool = action_rating
-        
+
         # Add attribute dice (each action with at least 1 die contributes 1 to the attribute)
         attribute_actions = []
         for group_name, actions in action_dots.items():
             for action, dots in actions.items():
                 if dots > 0:
                     attribute_actions.append(action)
-        
+
         # Determine which attribute this action belongs to
         insight_actions = ['hunt', 'study', 'survey', 'tinker']
         prowess_actions = ['finesse', 'prowl', 'skirmish', 'wreck']
         resolve_actions = ['bizarre', 'command', 'consort', 'sway']
-        
+
         if action_name.lower() in insight_actions:
             attribute_dice = len([a for a in insight_actions if any(a in group.values() for group in action_dots.values())])
         elif action_name.lower() in prowess_actions:
@@ -374,38 +574,58 @@ class CharacterViewSet(viewsets.ModelViewSet):
             attribute_dice = len([a for a in resolve_actions if any(a in group.values() for group in action_dots.values())])
         else:
             attribute_dice = 0
-        
+
         dice_pool += attribute_dice
-        
+
         # Simulate dice roll (in a real implementation, you might want to use a proper dice rolling library)
         import random
         dice_results = [random.randint(1, 6) for _ in range(dice_pool)] if dice_pool > 0 else [0]
-        
+
         # Determine outcome
         max_result = max(dice_results) if dice_results else 0
-        
+
         if max_result == 6:
-            outcome = 'critical_success'
+            outcome = 'CRITICAL_SUCCESS'
         elif max_result >= 4:
-            outcome = 'success'
+            outcome = 'FULL_SUCCESS'
         elif max_result >= 1:
-            outcome = 'partial_success'
+            outcome = 'PARTIAL_SUCCESS'
         else:
-            outcome = 'failure'
-        
+            outcome = 'FAILURE'
+
+        # Create Roll object
+        roll = Roll.objects.create(
+            character=character,
+            session=session,
+            roll_type=roll_type,
+            action_type=action_type,
+            group_leader=group_leader,
+            assisted_by=assisted_by,
+            dice_pool=dice_pool,
+            results=dice_results,
+            outcome=outcome,
+            description=f"{action_name} roll ({action_type})"
+        )
+
+        # Create RollHistory entry
+        RollHistory.objects.create(
+            campaign=session.campaign,
+            roll=roll
+        )
+
         # Position and effect modifiers
         position_modifiers = {
             'controlled': {'description': 'Safe, minimal risk'},
             'risky': {'description': 'Dangerous, significant risk'},
             'desperate': {'description': 'Extreme danger, high risk'}
         }
-        
+
         effect_modifiers = {
             'limited': {'description': 'Minimal effect'},
             'standard': {'description': 'Normal effect'},
             'great': {'description': 'Powerful effect'}
         }
-        
+
         return Response({
             'action': action_name,
             'action_rating': action_rating,
@@ -418,7 +638,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
             'position_info': position_modifiers.get(position, {}),
             'effect': effect,
             'effect_info': effect_modifiers.get(effect, {}),
-            'character_id': character.id
+            'character_id': character.id,
+            'roll_id': roll.id,
+            'action_type': action_type
         })
 
     @action(detail=True, methods=['post'], url_path='indulge-vice')
@@ -555,6 +777,50 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 'error': 'Failed to heal harm',
                 'errors': serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'], url_path='log-armor-expenditure')
+    def log_armor_expenditure(self, request, pk=None):
+        """
+        Logs the expenditure of armor for a character.
+        """
+        try:
+            character = self.get_object()
+        except Character.DoesNotExist:
+            return Response({'error': 'Character not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        session_id = request.data.get('session_id')
+        armor_type = request.data.get('armor_type') # 'light', 'medium', 'heavy'
+
+        if not session_id or not armor_type:
+            return Response({'error': 'session_id and armor_type are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            session = Session.objects.get(id=session_id)
+        except Session.DoesNotExist:
+            return Response({'error': 'Session not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Check if the user is the GM of the campaign or the character's owner
+        if session.campaign.gm != request.user and character.user != request.user:
+            raise PermissionDenied("You do not have permission to log armor expenditure for this character/session.")
+
+        # Log the armor expenditure as a SessionEvent
+        SessionEvent.objects.create(
+            session=session,
+            character=character,
+            event_type='ARMOR_EXPENDITURE',
+            details={'armor_type': armor_type}
+        )
+
+        # Update the character's armor used status
+        if armor_type == 'light':
+            character.light_armor_used = True
+        elif armor_type == 'medium':
+            character.medium_armor_used = True
+        elif armor_type == 'heavy':
+            character.heavy_armor_used = True
+        character.save()
+
+        return Response({'message': f'{armor_type} armor expenditure logged for {character.true_name}'}, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['post'], url_path='add-xp')
     def add_xp(self, request, pk=None):
@@ -822,6 +1088,8 @@ class CrewViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Crew.objects.all()
     serializer_class = CrewSerializer
+    parser_classes = (MultiPartParser, FormParser)
+
 
     def get_queryset(self):
         user = self.request.user
@@ -1319,7 +1587,12 @@ def api_documentation(request):
                     'data': {
                         'action': 'string (action name)',
                         'position': 'controlled|risky|desperate (optional)',
-                        'effect': 'limited|standard|great (optional)'
+                        'effect': 'limited|standard|great (optional)',
+                        'roll_type': 'ACTION|RESISTANCE|FORTUNE|CLEAR_STRESS|OTHER (optional, default: ACTION)',
+                        'action_type': 'SOLO|GROUP|ASSISTED (optional, default: SOLO)',
+                        'group_leader_id': 'number (required if action_type is GROUP)',
+                        'assisted_by_id': 'number (required if action_type is ASSISTED)',
+                        'session_id': 'number (required)'
                     },
                     'response': {
                         'action': 'string',
@@ -1330,7 +1603,19 @@ def api_documentation(request):
                         'max_result': 'number',
                         'outcome': 'critical_success|success|partial_success|failure',
                         'position': 'string',
-                        'effect': 'string'
+                        'effect': 'string',
+                        'character_id': 'number',
+                        'roll_id': 'number',
+                        'action_type': 'string'
+                    }
+                },
+                'log_armor_expenditure': {
+                    'url': '/api/characters/{id}/log-armor-expenditure/',
+                    'method': 'POST',
+                    'description': 'Logs the expenditure of armor for a character.',
+                    'data': {
+                        'session_id': 'number (required)',
+                        'armor_type': 'light|medium|heavy (required)'
                     }
                 },
                 'indulge_vice': {
@@ -1458,6 +1743,21 @@ def api_documentation(request):
                     'url': '/api/npcs/',
                     'method': 'GET|POST|PUT|DELETE',
                     'description': 'Manage NPCs'
+                },
+                'sessions': {
+                    'url': '/api/sessions/',
+                    'method': 'GET|POST|PUT|DELETE',
+                    'description': 'Manage game sessions'
+                },
+                'session_events': {
+                    'url': '/api/session-events/',
+                    'method': 'GET|POST|PUT|DELETE',
+                    'description': 'Log and retrieve in-session events (e.g., stress changes, armor expenditure)'
+                },
+                'campaign_roll_history': {
+                    'url': '/api/campaigns/{campaign_pk}/roll_history/',
+                    'method': 'GET',
+                    'description': 'Retrieve historical log of all dice rolls for a campaign'
                 }
             }
         },
@@ -1544,6 +1844,23 @@ def api_documentation(request):
                     'standard_abilities': 'array (Ability IDs)',
                     'hamon_ability_details': 'array (HamonAbility objects)',
                     'spin_ability_details': 'array (SpinAbility objects)'
+                }
+            },
+            'roll': {
+                'description': 'Dice roll data structure',
+                'fields': {
+                    'id': 'number',
+                    'character': 'number (Character ID)',
+                    'session': 'number (Session ID)',
+                    'roll_type': 'ACTION|RESISTANCE|FORTUNE|CLEAR_STRESS|OTHER',
+                    'action_type': 'SOLO|GROUP|ASSISTED',
+                    'group_leader': 'number (Character ID, optional)',
+                    'assisted_by': 'number (Character ID, optional)',
+                    'dice_pool': 'number',
+                    'results': 'array (list of dice results)',
+                    'outcome': 'CRITICAL_SUCCESS|FULL_SUCCESS|PARTIAL_SUCCESS|FAILURE|BOTCH',
+                    'description': 'string',
+                    'timestamp': 'datetime'
                 }
             },
             'action_dots': {

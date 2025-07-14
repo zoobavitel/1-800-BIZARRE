@@ -33,6 +33,7 @@ class Faction(models.Model):
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='factions')
     faction_type = models.CharField(max_length=20, choices=FACTION_TYPE_CHOICES, default='OTHER')
     notes = models.TextField(blank=True)
+    level = models.IntegerField(default=0)
     hold = models.CharField(max_length=10, choices=[('weak', 'Weak'), ('strong', 'Strong')], default='weak')
     reputation = models.IntegerField(default=0)
 
@@ -41,17 +42,63 @@ class Faction(models.Model):
 
 
 
+
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+
+    def __str__(self):
+        return self.user.username
+
+class Claim(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField()
+
+    def __str__(self):
+        return self.name
+
+class CrewSpecialAbility(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField()
+
+    def __str__(self):
+        return self.name
+
+class CrewPlaybook(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField()
+    claims = models.ManyToManyField(Claim, related_name='playbooks')
+    special_abilities = models.ManyToManyField(CrewSpecialAbility, related_name='playbooks')
+
+    def __str__(self):
+        return self.name
+
+class CrewUpgrade(models.Model):
+    name = models.CharField(max_length=100)
+    description = models.TextField()
+    total_boxes = models.IntegerField(default=1)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    is_default = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"{self.name} ({self.total_boxes} boxes)"
+
 class Crew(models.Model):
     name = models.CharField(max_length=100)
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='crews')
+    playbook = models.ForeignKey(CrewPlaybook, on_delete=models.SET_NULL, null=True, blank=True)
     description = models.TextField(blank=True)
+    image = models.ImageField(upload_to='crew_images/', blank=True, null=True)
+    xp = models.IntegerField(default=0)
+    xp_track_size = models.IntegerField(default=8)
+    advancement_points = models.IntegerField(default=0)
 
     # Fields for name change consensus
     proposed_name = models.CharField(max_length=100, blank=True, null=True)
     proposed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='proposed_crew_names')
     approved_by = models.ManyToManyField(User, blank=True, related_name='approved_crew_names')
 
-    tier = models.IntegerField(default=0)
+    level = models.IntegerField(default=0)
     hold = models.CharField(max_length=10, choices=[('weak', 'Weak'), ('strong', 'Strong')], default='weak')
 
     rep = models.IntegerField(default=0)
@@ -60,17 +107,9 @@ class Crew(models.Model):
     coin = models.IntegerField(default=0)
     stash = models.IntegerField(default=0)
 
-    claims = models.JSONField(default=dict)
-    upgrades = models.JSONField(default=list)
-
-    # Crew Playbook Fields
-    xp_trigger = models.TextField(blank=True, help_text="XP trigger for the crew")
-    personalization_questions = models.JSONField(default=list, blank=True, help_text="Questions to personalize the crew")
-    starting_upgrades = models.JSONField(default=list, blank=True, help_text="Starting upgrades for the crew")
-    favored_operations = models.JSONField(default=list, blank=True, help_text="List of favored operation types")
-    contacts = models.JSONField(default=list, blank=True, help_text="List of contacts with their details")
-    crew_upgrades = models.JSONField(default=list, blank=True, help_text="List of crew-specific upgrades")
-    special_abilities = models.JSONField(default=list, blank=True, help_text="List of crew special abilities")
+    claims = models.ManyToManyField(Claim, related_name='crews', blank=True)
+    upgrade_progress = models.JSONField(default=dict, help_text="Progress on crew upgrades, e.g., {'Smuggling Tunnels': 2}")
+    special_abilities = models.ManyToManyField(CrewSpecialAbility, related_name='crews', blank=True)
 
     def __str__(self):
         return self.name
@@ -142,7 +181,7 @@ class NPC(models.Model):
     vulnerability_clock_current = models.IntegerField(default=0)
     armor_charges = models.IntegerField(default=0)
     creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_npcs')
-    campaign = models.ForeignKey(Campaign, on_delete=models.SET_NULL, null=True, blank=True, related_name='npcs')
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, null=True, blank=True, related_name='npcs')
 
     # Stand Description Fields
     stand_description = models.TextField(blank=True)
@@ -203,13 +242,24 @@ class Ability(models.Model):
 
 
 class Character(models.Model):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._original_data = {field.name: getattr(self, field.name) for field in self._meta.fields}
+
+    def save(self, *args, **kwargs):
+        if self.pk:  # Only enforce for existing objects (not on creation)
+            for field_name in self.gm_locked_fields:
+                if field_name in self._original_data and getattr(self, field_name) != self._original_data[field_name]:
+                    raise ValidationError(f'Field \'{field_name}\' is locked by the GM and cannot be changed.')
+        super().save(*args, **kwargs)
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    campaign = models.ForeignKey(Campaign, on_delete=models.SET_NULL, null=True, blank=True, related_name='characters')
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, null=True, blank=True, related_name='characters')
     crew = models.ForeignKey(Crew, on_delete=models.SET_NULL, null=True, blank=True, related_name='members')
 
     true_name = models.CharField(max_length=100)
     alias = models.CharField(max_length=100, blank=True, null=True)
     appearance = models.TextField(blank=True, null=True)
+    image = models.ImageField(upload_to='character_images/', blank=True, null=True)
 
     @property
     def development_xp_bonus(self):
@@ -229,10 +279,6 @@ class Character(models.Model):
             return 1
         else:  # F or other
             return 0
-
-    @property
-    def level(self):
-        return 1 + (self.total_xp_spent // 10)
 
     @property
     def level(self):
@@ -534,6 +580,7 @@ class Character(models.Model):
     gm_character_locked = models.BooleanField(default=False)
     gm_allowed_edit_fields = models.JSONField(default=dict, blank=True, null=True)
     gm_can_have_s_rank_stand_stats = models.BooleanField(default=False)
+    gm_locked_fields = models.JSONField(default=list, blank=True, help_text="List of fields locked by the GM (e.g., ['level', 'action_dots'])")
 
 
 class CharacterHistory(models.Model):
@@ -823,8 +870,39 @@ class Session(models.Model):
     characters_involved = models.ManyToManyField(Character, blank=True, related_name='sessions_involved')
     factions_involved = models.ManyToManyField(Faction, blank=True, related_name='sessions_involved')
 
+    # Score proposal fields
+    proposed_score_target = models.CharField(max_length=200, blank=True, null=True)
+    proposed_score_description = models.TextField(blank=True, null=True)
+    proposed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='proposed_scores')
+    votes = models.ManyToManyField(User, blank=True, related_name='voted_scores')
+
     def __str__(self):
         return f"{self.campaign.name} - {self.name} ({self.get_status_display()}) - {self.session_date.strftime('%Y-%m-%d')}"
+
+
+class FactionRelationship(models.Model):
+    source_faction = models.ForeignKey(Faction, on_delete=models.CASCADE, related_name='outgoing_relationships')
+    target_faction = models.ForeignKey(Faction, on_delete=models.CASCADE, related_name='incoming_relationships')
+    reputation_value = models.IntegerField(default=0)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ('source_faction', 'target_faction')
+
+    def __str__(self):
+        return f"{self.source_faction.name} -> {self.target_faction.name}: {self.reputation_value}"
+
+class CrewFactionRelationship(models.Model):
+    crew = models.ForeignKey(Crew, on_delete=models.CASCADE, related_name='faction_relationships')
+    faction = models.ForeignKey(Faction, on_delete=models.CASCADE, related_name='crew_relationships')
+    reputation_value = models.IntegerField(default=0)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ('crew', 'faction')
+
+    def __str__(self):
+        return f"{self.crew.name} -> {self.faction.name}: {self.reputation_value}"
 
 
 class SessionEvent(models.Model):
@@ -835,6 +913,7 @@ class SessionEvent(models.Model):
         ('ITEM_ACQUIRED', 'Item Acquired'),
         ('DEVILS_BARGAIN', 'Devil\'s Bargain'),
         ('LOCATION_CHANGE', 'Location Change'),
+        ('ARMOR_EXPENDITURE', 'Armor Expenditure'), # New choice
         ('OTHER', 'Other'),
     ]
 
@@ -847,4 +926,35 @@ class SessionEvent(models.Model):
 
     def __str__(self):
         return f"{self.session.name} - {self.get_event_type_display()} at {self.timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
+
+
+class XPHistory(models.Model):
+    character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='xp_history')
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='session_xp_history', null=True, blank=True)
+    amount = models.IntegerField()
+    reason = models.TextField(blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.character.true_name} gained {self.amount} XP ({self.reason}) on {self.timestamp.strftime('%Y-%m-%d')}"
+
+class StressHistory(models.Model):
+    character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='stress_history')
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='session_stress_history', null=True, blank=True)
+    amount = models.IntegerField(help_text="Change in stress (positive for gain, negative for relief)")
+    reason = models.TextField(blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.character.true_name} stress changed by {self.amount} ({self.reason}) on {self.timestamp.strftime('%Y-%m-%d')}"
+
+class ChatMessage(models.Model):
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='chat_messages')
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='session_chat_messages', null=True, blank=True)
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
+    message = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"[{self.timestamp.strftime('%H:%M')}] {self.sender.username}: {self.message[:50]}..."
 
