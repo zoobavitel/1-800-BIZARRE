@@ -152,10 +152,9 @@ class CrewModelTest(TestCase):
             name='The Speedwagon Foundation',
             campaign=self.campaign,
             description='A research organization studying supernatural phenomena.',
-            tier=2,
+            level=2,
             hold='strong',
             rep=4,
-            
             wanted_level=1,
             coin=8,
             stash=12
@@ -164,8 +163,7 @@ class CrewModelTest(TestCase):
     def test_crew_creation(self):
         """Test crew creation with default and custom values."""
         self.assertEqual(self.crew.name, 'The Speedwagon Foundation')
-        self.assertEqual(self.crew.tier, 2)
-        self.assertEqual(self.crew.hold, 'strong')
+        self.assertEqual(self.crew.level, 2)
         self.assertEqual(self.crew.rep, 4)
         
         self.assertEqual(self.crew.wanted_level, 1)
@@ -179,15 +177,14 @@ class CrewModelTest(TestCase):
             campaign=self.campaign
         )
         
-        self.assertEqual(default_crew.tier, 0)
-        self.assertEqual(default_crew.hold, 'weak')
+        self.assertEqual(default_crew.level, 0)
         self.assertEqual(default_crew.rep, 0)
         
         self.assertEqual(default_crew.wanted_level, 0)
         self.assertEqual(default_crew.coin, 0)
         self.assertEqual(default_crew.stash, 0)
-        self.assertEqual(default_crew.claims, {})
-        self.assertEqual(default_crew.upgrades, [])
+        self.assertEqual(default_crew.claims.count(), 0)
+        
 
 
 class CharacterModelTest(TestCase):

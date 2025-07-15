@@ -202,17 +202,17 @@ class NPC(models.Model):
     def harm_clock_max(self):
         durability_grade = self.stand_coin_stats.get('DURABILITY', 'F')
         if durability_grade == 'S':
-            return 15
+            return 0  # Indicates a special condition; cannot be defeated by normal harm.
         elif durability_grade == 'A':
-            return 10
+            return 12
         elif durability_grade == 'B':
-            return 8
+            return 10
         elif durability_grade == 'C':
-            return 6
+            return 8
         elif durability_grade == 'D':
-            return 4
+            return 6
         elif durability_grade == 'F':
-            return 2
+            return 4
         return 0
 
     @property
@@ -230,6 +230,23 @@ class NPC(models.Model):
     @property
     def vulnerability_clock_max(self):
         return 4
+
+    @property
+    def movement_speed(self):
+        speed_grade = self.stand_coin_stats.get('SPEED', 'F')
+        if speed_grade == 'S':
+            return 200
+        elif speed_grade == 'A':
+            return 60
+        elif speed_grade == 'B':
+            return 40
+        elif speed_grade == 'C':
+            return 35
+        elif speed_grade == 'D':
+            return 30
+        elif speed_grade == 'F':
+            return 25
+        return 0
 
     def __str__(self):
         return f"{self.name} (NPC for {self.campaign.name})"
