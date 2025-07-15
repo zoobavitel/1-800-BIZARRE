@@ -15,6 +15,7 @@ class Command(BaseCommand):
         parser.add_argument('--durability', type=str, default='D', help='Stand Durability rating (S, A, B, C, D, F).')
         parser.add_argument('--precision', type=str, default='F', help='Stand Precision rating (S, A, B, C, D, F).')
         parser.add_argument('--development', type=str, default='F', help='Stand Development Potential rating (S, A, B, C, D, F).')
+        parser.add_argument('--harm_clock_max', type=int, default=4, help='The maximum segments for the NPC's Harm Clock.')
 
 
     def handle(self, *args, **options):
@@ -28,6 +29,7 @@ class Command(BaseCommand):
         durability = options['durability'].upper()
         precision = options['precision'].upper()
         development = options['development'].upper()
+        harm_clock_max = options['harm_clock_max']
 
         try:
             campaign = Campaign.objects.get(pk=campaign_id)
@@ -54,7 +56,7 @@ class Command(BaseCommand):
         
         total_points = sum(grade_points.get(grade, 0) for grade in stand_coin_stats.values())
         
-        level = 1 + ((total_points -10) // 5) if total_points > 10 else 1
+        level = 1 + (total_points - 10) if total_points > 10 else 1
 
         npc = NPC.objects.create(
             name=name,
@@ -62,7 +64,7 @@ class Command(BaseCommand):
             creator=creator,
             level=level,
             stand_coin_stats=stand_coin_stats,
+            harm_clock_max=harm_clock_max,
         )
 
         self.stdout.write(self.style.SUCCESS(f'Successfully created NPC "{npc.name}" with ID {npc.id} at level {npc.level}.'))
-        self.stdout.write(self.style.SUCCESS(f'Harm Clock Max: {npc.harm_clock_max}'))

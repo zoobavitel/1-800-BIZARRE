@@ -198,22 +198,7 @@ class NPC(models.Model):
     faction_status = models.JSONField(default=dict, blank=True)
     inventory = models.JSONField(default=list, blank=True)
 
-    @property
-    def harm_clock_max(self):
-        durability_grade = self.stand_coin_stats.get('DURABILITY', 'F')
-        if durability_grade == 'S':
-            return 0  # Indicates a special condition; cannot be defeated by normal harm.
-        elif durability_grade == 'A':
-            return 12
-        elif durability_grade == 'B':
-            return 10
-        elif durability_grade == 'C':
-            return 8
-        elif durability_grade == 'D':
-            return 6
-        elif durability_grade == 'F':
-            return 4
-        return 0
+    harm_clock_max = models.IntegerField(default=4)
 
     @property
     def special_armor_charges(self):
@@ -229,7 +214,20 @@ class NPC(models.Model):
 
     @property
     def vulnerability_clock_max(self):
-        return 4
+        durability_grade = self.stand_coin_stats.get('DURABILITY', 'F')
+        if durability_grade == 'S':
+            return 0  # Indicates a special condition; cannot be defeated by normal harm.
+        elif durability_grade == 'A':
+            return 12
+        elif durability_grade == 'B':
+            return 10
+        elif durability_grade == 'C':
+            return 8
+        elif durability_grade == 'D':
+            return 6
+        elif durability_grade == 'F':
+            return 4
+        return 0
 
     @property
     def movement_speed(self):

@@ -1,29 +1,20 @@
-# NPC Creation and Rules
-
-This document outlines the specific rules and guidelines for creating and utilizing Non-Player Characters (NPCs) within the game system, emphasizing their distinct mechanics compared to Player Characters (PCs).
+Non-Player Characters (NPCs)
+Non-Player Characters (NPCs) provide flexible, streamlined foes and allies for the GM, using a subset of PC mechanics optimized for rapid play.
 
 ## 1. Key Differences from Player Characters
 
-NPCs are designed to be simpler and more flexible for the Game Master (GM) to run. They do not utilize the full suite of PC mechanics.
-
-*   **No Stress:** NPCs do not have a Stress track.
-*   **No Action Ratings/Attributes:** NPCs do not have action dots or attribute ratings (Insight, Prowess, Resolve). Their effectiveness in the fiction is determined by their narrative role, level, and Stand Coin stats.
-*   **No XP/Advancement:** NPCs do not gain or spend XP in the same way PCs do. Their level is determined at creation based on their Stand Coin points.
-*   **No "Push Yourself" Mechanics:** Mechanics tied to "pushing yourself" (which typically involve Stress) do not apply to NPCs.
-*   **Simplified Harm:** NPCs use a simplified Harm Clock system instead of the multi-level Harm track of PCs.
-*   **Vulnerability Clock:** NPCs have a fixed 4-segment Vulnerability Clock.
+*   **No Stress or Trauma:** NPCs do not track Stress or Trauma.
+*   **No Action Ratings or Attributes:** NPCs have no action dots (skills) or attributes (Insight, Prowess, Resolve). Their capabilities derive solely from Stand Coin stats and narrative context.
+*   **No XP or Advancement:** NPCs do not earn or spend XP. Their level is fixed at creation based on Stand Coin points.
+*   **No Push Yourself:** Mechanics that spend Stress to push for extra dice or effect do not apply.
+*   **Configurable Harm Clock:** NPCs have a Harm Clock that defaults to 4 segments but can be configured by the GM.
+*   **Durability-Based Vulnerability Clock:** All NPCs have a Vulnerability Clock whose size is determined by their Durability stat.
 
 ## 2. NPC Stand Coin Stats
 
-NPCs possess Stand Coin stats, but their mechanical interpretation differs significantly from PCs. Only Power, Speed, Range, and Durability have direct mechanical implications for NPCs. Precision and Development are primarily narrative descriptors.
+NPCs still possess Stand Coin stats, but only four have direct mechanical impact; the others serve as narrative descriptors:
 
-*   **Power:** Determines the harm level and impact of the NPC's attacks.
-    *   S: Level 4 harm, can force position to be lowered by one (desperate to risky, risky to controlled)
-    *   A: Level 4 harm
-    *   B: Level 3 harm
-    *   C: Level 2 harm
-    *   D: Level 1 harm
-    *   F: No significant harm
+*   **Power:** Determines harm level inflicted: S/A → Level 4, B → 3, C → 2, D → 1, F → 0.
 
 *   **Speed (Movement):** Translates directly into the NPC's movement speed.
     *   S: 200 ft
@@ -32,7 +23,7 @@ NPCs possess Stand Coin stats, but their mechanical interpretation differs signi
     *   C: 35 ft
     *   D: 30 ft
     *   F: 25 ft
-    *   *Note: The "acts before" rules are GM judgment calls and not tied to the NPC object itself. NPCs do not roll for initiative.*
+    *   *Note: Initiative and action order are GM’s call—no rolls.*
 
 *   **Range:** Defines the operational distance of the NPC's Stand and its abilities. This is primarily a narrative guideline for the GM.
     *   S: Unlimited range, no range penalties
@@ -42,9 +33,9 @@ NPCs possess Stand Coin stats, but their mechanical interpretation differs signi
     *   D: 20 ft
     *   F: 10 ft
 
-*   **Durability:** Affects the NPC's Harm Clock size and Armor Charges.
-    *   **Harm Clock Conversion:**
-        *   **S:** 0-segment clock (Special Durability - cannot be defeated by direct damage; requires alternative win condition)
+*   **Durability:** Determines the Vulnerability Clock size and Armor charges.
+    *   **Vulnerability Clock Conversion:**
+        *   **S:** 0-segment clock (Special Durability - cannot be defeated by normal harm; requires alternative win condition)
         *   **A:** 12-segment clock
         *   **B:** 10-segment clock
         *   **C:** 8-segment clock
@@ -57,23 +48,15 @@ NPCs possess Stand Coin stats, but their mechanical interpretation differs signi
         *   **F:** 0 Armor charges
 
 *   **Precision:** For NPCs, Precision is a narrative descriptor of their accuracy and control. It does not have mechanical implications as NPCs do not make action rolls.
-*   **Development Potential:** For NPCs, Development Potential is a narrative descriptor of their growth potential. It does not have mechanical implications as NPCs do not gain XP.
+*   **Development:** For NPCs, Development Potential is a narrative descriptor of their growth potential. It does not have mechanical implications as NPCs do not gain XP.
 
 ## 3. NPC Level
 
-An NPC's level is directly derived from the total points distributed among their six Stand Coin stats (Power, Speed, Range, Durability, Precision, Development).
+Calculate an NPC’s level from its total Stand Coin points (S = 5, A = 4, B = 3, C = 2, D = 1, F = 0):
 
-*   **Point Values:**
-    *   S: 5 points
-    *   A: 4 points
-    *   B: 3 points
-    *   C: 2 points
-    *   D: 1 point
-    *   F: 0 points
-*   **Level Calculation:**
-    *   A Level 1 NPC has exactly 10 Stand Coin points.
-    *   For every 5 points above 10, the NPC gains one level.
-    *   Formula: `level = 1 + floor((total_points - 10) / 5)` (if total_points > 10, otherwise 1)
+`level = 1 + max(0, total_points - 10)`
+
+(An NPC with 10 points is level 1; each point above 10 adds +1 level.)
 
 ## 4. Creating NPCs (Using the CLI Tool)
 
@@ -94,13 +77,14 @@ A management command `create_npc` is available to facilitate NPC creation.
 *   `--durability <grade>`: Stand Durability rating (S, A, B, C, D, F). Default: D
 *   `--precision <grade>`: Stand Precision rating (S, A, B, C, D, F). Default: F (Narrative only for NPCs)
 *   `--development <grade>`: Stand Development Potential rating (S, A, B, C, D, F). Default: F (Narrative only for NPCs)
+*   `--harm_clock_max <segments>`: The maximum segments for the NPC's Harm Clock. Default: 4
 
 **Example Usage:**
 ```bash
 source ~/.virtualenvs/jojo/bin/activate
-python backend/src/manage.py create_npc "The Shadow Broker" 1 1 --power A --speed B --durability C --range B
+python backend/src/manage.py create_npc "The Shadow Broker" 1 1 --power A --speed B --durability C --range B --harm_clock_max 6
 ```
-This will create an NPC named "The Shadow Broker" in campaign 1, created by user 1, with the specified Stand Coin stats. Its level and harm clock will be automatically calculated.
+This will create an NPC named "The Shadow Broker" in campaign 1, created by user 1, with the specified Stand Coin stats and a 6-segment Harm Clock. Its level and vulnerability clock will be automatically calculated.
 
 ## 5. GMing NPCs
 
@@ -108,6 +92,6 @@ When running NPCs, the GM should prioritize narrative and dramatic effect over s
 
 *   **Focus on Narrative:** Use the NPC's stats to inform your descriptions of their actions and capabilities.
 *   **GM Judgment:** Decide when an NPC acts, how effectively they use their abilities, and what consequences arise, based on the fiction and the desired dramatic tension.
-*   **Clocks for Conflict:** Utilize Harm Clocks and Vulnerability Clocks to track progress in conflicts with NPCs, promoting urgency and clear outcomes.
+*   **Clocks for Conflict:** Utilize Harm Clocks and Vulnerability Clocks to track progress in conflicts with NPCs, promoting urgency and clear outcomes. All clocks are configured by the GM and are intended to be displayed as indicators to the player characters.
 *   **Special Durability (S-Rank):** For NPCs with S-rank Durability, remember they cannot be defeated by direct damage. Instead, create clocks for alternative win conditions (e.g., "Expose the User," "Discover Weakness," "Break Will").
 *   **User as Target:** Consider having a separate, smaller clock for the NPC's user if they are vulnerable, offering players a strategic choice.
