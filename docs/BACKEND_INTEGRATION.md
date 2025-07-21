@@ -461,4 +461,4 @@ console.log('API Response:', response.data);
 // Use React Developer Tools for component state
 ```
 
-This integration provides a robust, scalable foundation for your JoJo TTRPG character sheet application with real-time synchronization, proper error handling, and optimal user experience. 
+This integration provides a robust, scalable foundation for your 1-800-BIZARRE character sheet application with real-time synchronization, proper error handling, and optimal user experience. 

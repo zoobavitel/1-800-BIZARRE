@@ -1,6 +1,6 @@
-# Jojo TTRPG Platform
+# 1-800-BIZARRE
 
-This is the root directory of the Jojo TTRPG Platform project. It serves as the central hub for both the frontend and backend applications, along with shared configurations, documentation, and scripts.
+This is the root directory of the 1-800-BIZARRE project. It serves as the central hub for both the frontend and backend applications, along with shared configurations, documentation, and scripts.
 
 ## Purpose
 

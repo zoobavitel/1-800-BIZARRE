@@ -13,7 +13,7 @@
 1. **Clone and install dependencies**
    ```bash
    git clone <repo-url>
-   cd jojo-ttrpg-platform
+   cd 1-800-BIZARRE
    npm run install:all
    ```
 

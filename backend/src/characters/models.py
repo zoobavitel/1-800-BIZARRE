@@ -20,18 +20,9 @@ class Campaign(models.Model):
 
 
 class Faction(models.Model):
-    FACTION_TYPE_CHOICES = [
-        ('CRIMINAL', 'Criminal'),
-        ('NOBLE', 'Noble'),
-        ('MERCHANT', 'Merchant'),
-        ('POLITICAL', 'Political'),
-        ('RELIGIOUS', 'Religious'),
-        ('OTHER', 'Other'),
-    ]
-
     name = models.CharField(max_length=100)
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='factions')
-    faction_type = models.CharField(max_length=20, choices=FACTION_TYPE_CHOICES, default='OTHER')
+    faction_type = models.CharField(max_length=100, blank=True, help_text="A user-defined type for the faction (e.g., 'Criminal Syndicate', 'Ancient Order', 'Merchant Guild').")
     notes = models.TextField(blank=True)
     level = models.IntegerField(default=0)
     hold = models.CharField(max_length=10, choices=[('weak', 'Weak'), ('strong', 'Strong')], default='weak')
@@ -201,7 +192,25 @@ class NPC(models.Model):
     harm_clock_max = models.IntegerField(default=4)
 
     @property
+    def regular_armor_charges(self):
+        """Regular armor charges based on durability grade."""
+        durability_grade = self.stand_coin_stats.get('DURABILITY', 'F')
+        if durability_grade == 'S':
+            return 5
+        elif durability_grade == 'A':
+            return 4
+        elif durability_grade == 'B':
+            return 4
+        elif durability_grade == 'C':
+            return 3
+        elif durability_grade == 'D':
+            return 2
+        else: # F
+            return 1
+
+    @property
     def special_armor_charges(self):
+        """Special armor charges that completely negate harm/consequences."""
         durability_grade = self.stand_coin_stats.get('DURABILITY', 'F')
         if durability_grade in ['S', 'A']:
             return 3
@@ -428,22 +437,26 @@ class Character(models.Model):
         grade_points = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1, 'F': 0}
         total_stand_coin_points = 0
         
-        # Ensure stand exists and has coin_stats
-        if not hasattr(self, 'stand') or not self.stand.coin_stats:
+        # Ensure stand exists
+        if not hasattr(self, 'stand'):
             raise ValidationError(
-                {'stand': 'A level 1 character must have a Stand with coin stats defined.'}
+                {'stand': 'A level 1 character must have a Stand with stats defined.'}
             )
 
-        for stat, grade in self.stand.coin_stats.items():
-            if grade not in grade_points:
-                raise ValidationError(
-                    {'stand_coin_stats': f'Invalid grade "{grade}" for stat "{stat}". Must be S, A, B, C, D, or F.'}
-                )
-            if grade == 'S' and not self.gm_can_have_s_rank_stand_stats:
-                raise ValidationError(
-                    {'stand_coin_stats': f'Player characters cannot have S-rank in {stat} unless explicitly allowed by the GM.'}
-                )
-            total_stand_coin_points += grade_points[grade]
+        # Check individual Stand fields
+        stand_fields = ['power', 'speed', 'range', 'durability', 'precision', 'development']
+        for field in stand_fields:
+            if hasattr(self.stand, field):
+                grade = getattr(self.stand, field)
+                if grade not in grade_points:
+                    raise ValidationError(
+                        {'stand_coin_stats': f'Invalid grade "{grade}" for stat "{field}". Must be S, A, B, C, D, or F.'}
+                    )
+                if grade == 'S' and not self.gm_can_have_s_rank_stand_stats:
+                    raise ValidationError(
+                        {'stand_coin_stats': f'Player characters cannot have S-rank in {field} unless explicitly allowed by the GM.'}
+                    )
+                total_stand_coin_points += grade_points[grade]
 
         if total_stand_coin_points != 10:
             raise ValidationError(
@@ -452,7 +465,10 @@ class Character(models.Model):
 
     def _validate_stress_based_on_durability(self):
         expected_stress = 9
-        durability_grade = self.stand.coin_stats.get('DURABILITY') if hasattr(self, 'stand') else None
+        durability_grade = None
+        
+        if hasattr(self, 'stand') and hasattr(self.stand, 'durability'):
+            durability_grade = self.stand.durability
 
         if durability_grade == 'S':
             expected_stress = 13
@@ -479,12 +495,14 @@ class Character(models.Model):
             )
 
     def _validate_a_rank_abilities(self):
-        if not hasattr(self, 'stand') or not self.stand.coin_stats:
+        if not hasattr(self, 'stand'):
             return # No stand, no A-rank ability validation
 
         a_rank_count = 0
-        for grade in self.stand.coin_stats.values():
-            if grade == 'A':
+        # Check individual Stand fields for A-rank stats
+        stand_fields = ['power', 'speed', 'range', 'durability', 'precision', 'development']
+        for field in stand_fields:
+            if hasattr(self.stand, field) and getattr(self.stand, field) == 'A':
                 a_rank_count += 1
 
         expected_abilities_from_a_ranks = a_rank_count * 2

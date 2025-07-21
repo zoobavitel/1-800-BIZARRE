@@ -1,6 +1,6 @@
 # SRD Integration
 
-This document outlines how the Standard Reference Document (SRD) is integrated into the Jojo TTRPG Platform, covering data loading, backend validation, and test coverage.
+This document outlines how the Standard Reference Document (SRD) is integrated into the 1-800-BIZARRE platform, covering data loading, backend validation, and test coverage.
 
 ## SRD Data (Fixtures)
 
@@ -46,6 +46,6 @@ These tests directly reflect the rules outlined in the SRD, providing a programm
 
 ## Standard Reference Documents (PDFs)
 
-The PDF files located directly within the `docs/` directory (e.g., `Character Creation.pdf`, `Combat & Initiative.pdf`, `Hamon Playbook.pdf`) are the official SRD documents. These documents detail the complete ruleset, lore, and mechanics of the Jojo TTRPG. The backend logic, data fixtures, and test suite are all designed to implement and enforce the rules described in these comprehensive documents.
+The PDF files located directly within the `docs/` directory (e.g., `Character Creation.pdf`, `Combat & Initiative.pdf`, `Hamon Playbook.pdf`) are the official SRD documents. These documents detail the complete ruleset, lore, and mechanics of the 1-800-BIZARRE game. The backend logic, data fixtures, and test suite are all designed to implement and enforce the rules described in these comprehensive documents.
 
 Developers should consult these PDF documents for the definitive source of game rules when implementing new features or modifying existing ones.

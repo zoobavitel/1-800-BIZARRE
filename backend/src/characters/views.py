@@ -1497,7 +1497,7 @@ def api_documentation(request):
     Comprehensive API documentation for the character management system.
     """
     documentation = {
-        'title': 'JoJo TTRPG Character Management API',
+        'title': '1-800-BIZARRE Character Management API',
         'description': 'Complete API for managing characters, abilities, and game mechanics',
         'version': '1.0.0',
         'base_url': '/api/',

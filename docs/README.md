@@ -16,7 +16,7 @@ The primary purpose of this directory is to:
 *   `SRD_INTEGRATION.md`: Details how the Standard Reference Document (SRD) is integrated into the platform, covering data loading, backend validation, and test coverage.
 *   `INTERACTION_SUMMARY.md`: A log of the interactions and tasks performed during the current chat session, serving as a historical record of development decisions and progress.
 *   `API_USAGE.md`, `BACKEND_INTEGRATION.md`, `development.md`: Other technical documentation files covering API usage, backend integration details, and development guidelines.
-*   PDF files (e.g., `Character Creation.pdf`, `Combat & Initiative.pdf`, `Hamon Playbook.pdf`): These are the official SRD documents, detailing the complete ruleset, lore, and mechanics of the Jojo TTRPG. They are the definitive source for game rules.
+*   PDF files (e.g., `Character Creation.pdf`, `Combat & Initiative.pdf`, `Hamon Playbook.pdf`): These are the official SRD documents, detailing the complete ruleset, lore, and mechanics of the 1-800-BIZARRE game. They are the definitive source for game rules.
 
 ## Code Quality and Structure
 

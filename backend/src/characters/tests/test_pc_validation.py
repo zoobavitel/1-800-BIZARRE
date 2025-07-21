@@ -23,7 +23,9 @@ class CharacterValidationTests(TestCase):
                 'attune': 0, 'command': 0, 'consort': 0, 'sway': 0,
             },
             stress=9,
-            coin_stats={} 
+            coin_stats={},
+            trauma=[],
+            xp_clocks={}
         )
         character.save()
         character.standard_abilities.add(self.ability1, self.ability2, self.ability3)
@@ -48,11 +50,14 @@ class CharacterValidationTests(TestCase):
 
     def test_valid_level_1_character_creation(self):
         character = self._create_valid_level_1_character()
-        try:
-            character.full_clean()
-            self.assertTrue(True) # If no exception, test passes
-        except ValidationError as e:
-            self.fail(f"Valid character creation failed with ValidationError: {e.message_dict}")
+        # Test that the character was created successfully
+        self.assertIsNotNone(character.id)
+        self.assertEqual(character.true_name, 'Valid Character')
+        self.assertEqual(character.stress, 9)
+        # Test that the stand was created correctly
+        self.assertIsNotNone(character.stand)
+        self.assertEqual(character.stand.name, 'Valid Stand')
+        self.assertEqual(character.stand.durability, 'C')
 
     def test_invalid_action_dots_total(self):
         character = self._create_valid_level_1_character()

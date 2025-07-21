@@ -1,8 +1,8 @@
-# JoJo TTRPG - Dynamic Ability Management System
+# 1-800-BIZARRE - Dynamic Ability Management System
 ## Implementation Complete ✅
 
 ### 📋 Overview
-The dynamic ability management system has been successfully implemented, allowing users to manage different types of abilities based on their selected playbook. This provides a seamless way to switch between Standard, Hamon, and Spin abilities through a unified interface.
+The dynamic ability management system for the 1-800-BIZARRE character sheet platform has been successfully implemented, allowing users to manage different types of abilities based on their selected playbook. This provides a seamless way to switch between Standard, Hamon, and Spin abilities through a unified interface.
 
 ### 🎯 Key Features Implemented
 

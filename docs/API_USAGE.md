@@ -1,6 +1,6 @@
 # API Usage Guide
 
-This document provides a quick guide on how to interact with the JoJo TTRPG backend API.
+This document provides a quick guide on how to interact with the 1-800-BIZARRE backend API.
 
 ## 1. Creating an Account
 

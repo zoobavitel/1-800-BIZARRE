@@ -1,6 +1,6 @@
 # frontend/
 
-This directory contains the React-based frontend application for the Jojo TTRPG Platform. It is responsible for providing the user interface, interacting with the backend API, and presenting game data to the users.
+This directory contains the React-based frontend application for the 1-800-BIZARRE platform. It is responsible for providing the user interface, interacting with the backend API, and presenting game data to the users.
 
 ## Purpose
 

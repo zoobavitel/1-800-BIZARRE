@@ -1,6 +1,6 @@
 # backend/
 
-This directory contains the Django-based backend application for the Jojo TTRPG Platform. It is responsible for managing all game data, business logic, and providing a RESTful API for the frontend application.
+This directory contains the Django-based backend application for the 1-800-BIZARRE platform. It is responsible for managing all game data, business logic, and providing a RESTful API for the frontend application.
 
 ## Purpose
 

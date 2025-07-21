@@ -1,4 +1,4 @@
-# JoJo TTRPG - Dynamic Ability Management System
+# 1-800-BIZARRE - Dynamic Ability Management System
 ## Developer Documentation
 
 ### 🎯 System Overview
@@ -295,4 +295,4 @@ The Dynamic Ability Management System successfully achieves:
 - ✅ **Extensibility**: Easy to add new ability types
 - ✅ **Visual Design**: Clear, intuitive interface with proper feedback
 
-This system significantly enhances the JoJo TTRPG experience by providing players with authentic, playbook-specific abilities while maintaining the simplicity and elegance of the original interface.
+This system significantly enhances the 1-800-BIZARRE experience by providing players with authentic, playbook-specific abilities while maintaining the simplicity and elegance of the original interface.

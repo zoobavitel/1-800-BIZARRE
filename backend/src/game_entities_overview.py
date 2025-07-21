@@ -1,9 +1,9 @@
 """
-COMPREHENSIVE OVERVIEW OF JOJO TTRPG GAME ENTITIES AND QUALITIES
+COMPREHENSIVE OVERVIEW OF 1-800-BIZARRE GAME ENTITIES AND QUALITIES
 ================================================================
 
 This document provides a complete breakdown of all game entities, their properties,
-and how they interact within the JoJo TTRPG system.
+and how they interact within the 1-800-BIZARRE system.
 """
 
 # ============================================================================
@@ -151,8 +151,8 @@ COMBAT & RESISTANCE:
 - harm_clock_max: Maximum harm capacity (calculated from Durability)
 - vulnerability_clock_current: Current vulnerability
 - vulnerability_clock_max: Maximum vulnerability (calculated from Precision)
-- armor_charges: Available armor charges
-- special_armor_charges: Special armor (calculated from Durability)
+- regular_armor_charges: Regular armor charges (calculated from Durability)
+- special_armor_charges: Special armor charges (calculated from Durability)
 
 CAMPAIGN INTEGRATION:
 - creator: GM who created the NPC
@@ -400,8 +400,8 @@ ARMOR TYPES:
 - heavy_armor_used: Heavy armor active
 
 ARMOR CHARGES:
-- armor_charges: Available charges
-- special_armor_charges: Special armor (calculated from Durability)
+- regular_armor_charges: Regular armor charges (calculated from Durability)
+- special_armor_charges: Special armor charges (calculated from Durability)
 
 USAGE:
 - Spend charges to reduce harm

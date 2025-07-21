@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Script to create test user accounts for the JOJO TTRPG platform
+Script to create test user accounts for the 1-800-BIZARRE platform
 """
 
 from django.contrib.auth.models import User

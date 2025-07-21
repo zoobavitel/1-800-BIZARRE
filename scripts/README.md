@@ -1,6 +1,6 @@
 # scripts/
 
-This directory contains various shell scripts used for automating common development, deployment, and setup tasks for the Jojo TTRPG Platform. These scripts are designed to streamline workflows and ensure consistency across different environments.
+This directory contains various shell scripts used for automating common development, deployment, and setup tasks for the 1-800-BIZARRE platform. These scripts are designed to streamline workflows and ensure consistency across different environments.
 
 ## Purpose
 

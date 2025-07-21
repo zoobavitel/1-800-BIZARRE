@@ -41,11 +41,19 @@ NPCs still possess Stand Coin stats, but only four have direct mechanical impact
         *   **C:** 8-segment clock
         *   **D:** 6-segment clock
         *   **F:** 4-segment clock
-    *   **Armor Charges:**
-        *   **S, A:** 3 Armor charges
-        *   **B:** 2 Armor charges
-        *   **C, D:** 1 Armor charge
-        *   **F:** 0 Armor charges
+    *   **Armor System:**
+        *   **Regular Armor Charges** (reduce harm/consequences by 1):
+            *   **S:** 5 charges
+            *   **A:** 4 charges
+            *   **B:** 4 charges
+            *   **C:** 3 charges
+            *   **D:** 2 charges
+            *   **F:** 1 charge
+        *   **Special Armor Charges** (completely negate harm/consequences):
+            *   **S, A:** 3 charges
+            *   **B:** 2 charges
+            *   **C, D:** 1 charge
+            *   **F:** 0 charges
 
 *   **Precision:** For NPCs, Precision is a narrative descriptor of their accuracy and control. It does not have mechanical implications as NPCs do not make action rolls.
 *   **Development:** For NPCs, Development Potential is a narrative descriptor of their growth potential. It does not have mechanical implications as NPCs do not gain XP.
