@@ -22,12 +22,12 @@ export const AuthProvider = ({ children }) => {
     const checkAuth = async () => {
       if (token) {
         try {
-          // Verify token is still valid by making a test request
           const userData = await authAPI.getCurrentUser();
           setUser(userData);
         } catch (err) {
-          // Token is invalid, clear it
-          logout();
+          setToken(null);
+          setUser(null);
+          localStorage.removeItem('authToken');
         }
       }
       setLoading(false);
@@ -42,7 +42,13 @@ export const AuthProvider = ({ children }) => {
     
     try {
       const response = await authAPI.login(credentials);
-      const { token: newToken, user: userData } = response;
+      const newToken = response.token;
+      // Backend returns { token, user: { id, username, email } }; support legacy flat shape too
+      const userData = response.user ?? {
+        id: response.user_id,
+        username: response.username,
+        email: response.email ?? '',
+      };
       
       setToken(newToken);
       setUser(userData);
@@ -63,7 +69,12 @@ export const AuthProvider = ({ children }) => {
     
     try {
       const response = await authAPI.signup(userData);
-      const { token: newToken, user: userInfo } = response;
+      const newToken = response.token;
+      const userInfo = response.user ?? {
+        id: response.user_id,
+        username: response.username,
+        email: response.email ?? '',
+      };
       
       setToken(newToken);
       setUser(userInfo);

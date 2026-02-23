@@ -6,6 +6,7 @@ export {
   getTotalXP, 
   createDefaultCharacter, 
   viceOptions, 
-  standardAbilities 
+  standardAbilities,
+  traumaObjectToIds
 } from './utils/characterUtils';
 export * from './services/api'; 

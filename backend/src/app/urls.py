@@ -12,7 +12,7 @@ from characters.views import (
     StandViewSet, CharacterViewSet,
     CampaignViewSet, FactionViewSet, NPCViewSet, CrewViewSet,
     TraumaViewSet, CharacterHistoryViewSet, ExperienceTrackerViewSet, SessionViewSet, SessionEventViewSet,
-    home, RegisterView, StandAbilityViewSet, LoginView,
+    home, RegisterView, StandAbilityViewSet, LoginView, CurrentUserView,
     HamonAbilityViewSet, SpinAbilityViewSet, global_search,
     get_available_playbook_abilities, api_documentation,
     XPHistoryViewSet, StressHistoryViewSet, ChatMessageViewSet,
@@ -62,4 +62,5 @@ urlpatterns = [
     # Use your custom LoginView instead of obtain_auth_token
     path('api/accounts/login/', LoginView.as_view(), name='login'),
     path('api/accounts/signup/', RegisterView.as_view(), name='signup'),
+    path('api/accounts/me/', CurrentUserView.as_view(), name='current_user'),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

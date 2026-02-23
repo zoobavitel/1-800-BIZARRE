@@ -1,5 +1,7 @@
 // API service for character sheet backend integration
 
+import { gradeToIndex, indexToGrade, DUR_TABLE, DEFAULT_TRAUMA } from '../constants/srd';
+
 const API_BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:8000/api').replace(/\/+$/, '');
 
 // Helper function for API requests
@@ -204,6 +206,24 @@ export const crewAPI = {
   }),
 };
 
+// NPC API functions (GM / campaign NPCs)
+export const npcAPI = {
+  getNPCs: (campaignId) =>
+    campaignId
+      ? apiRequest(`/npcs/?campaign=${campaignId}`)
+      : apiRequest('/npcs/'),
+  getNPC: (id) => apiRequest(`/npcs/${id}/`),
+  createNPC: (data) => apiRequest('/npcs/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  updateNPC: (id, data) => apiRequest(`/npcs/${id}/`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+  deleteNPC: (id) => apiRequest(`/npcs/${id}/`, { method: 'DELETE' }),
+};
+
 // Session API functions
 export const sessionAPI = {
   // Get sessions for campaign
@@ -283,32 +303,62 @@ export const transformBackendToFrontend = (backendCharacter) => {
       SWAY: backendCharacter.action_dots?.sway || 0,
     },
     
-    // Stand stats (convert from coin_stats)
+    // Stand stats: backend uses grade letters (F–A/S), frontend uses index 0–4
     standStats: {
-      power: backendCharacter.stand?.power || 1,
-      speed: backendCharacter.stand?.speed || 1,
-      range: backendCharacter.stand?.range || 1,
-      durability: backendCharacter.stand?.durability || 1,
-      precision: backendCharacter.stand?.precision || 1,
-      development: backendCharacter.stand?.development || 1,
+      power: gradeToIndex(backendCharacter.stand?.power),
+      speed: gradeToIndex(backendCharacter.stand?.speed),
+      range: gradeToIndex(backendCharacter.stand?.range),
+      durability: gradeToIndex(backendCharacter.stand?.durability),
+      precision: gradeToIndex(backendCharacter.stand?.precision),
+      development: gradeToIndex(backendCharacter.stand?.development),
     },
     
-    // Stress and trauma
-    stress: Array(backendCharacter.stress || 9).fill(false),
-    trauma: backendCharacter.trauma || [],
+    // Stress: backend integer; frontend uses filled count + array for compatibility
+    stressFilled: Math.max(0, backendCharacter.stress ?? 0),
+    stress: (() => {
+      const dur = gradeToIndex(backendCharacter.stand?.durability);
+      const maxStress = 9 + (DUR_TABLE[dur]?.stressBonus ?? 0);
+      const filled = Math.min(backendCharacter.stress ?? 0, maxStress);
+      return Array(maxStress).fill(false).map((_, i) => i < filled);
+    })(),
+    // Trauma: backend list of IDs; build checkbox object from trauma_details
+    trauma: (() => {
+      const details = backendCharacter.trauma_details || [];
+      const names = details.map((t) => (t.name || '').toUpperCase());
+      return { ...DEFAULT_TRAUMA, ...Object.fromEntries(names.map((n) => [n, true])) };
+    })(),
     
     // Armor
+    regularArmorUsed: 0, // derived from light_armor_used + heavy_armor_used if needed
+    specialArmorUsed: false,
     armor: {
       armor: backendCharacter.light_armor_used || false,
       heavy: backendCharacter.heavy_armor_used || false,
-      special: false, // Not in backend model
+      special: false,
     },
     
-    // Harm entries
+    // Harm: backend has level1/2/3_used + _name (single); frontend uses arrays
+    harm: {
+      level3: [backendCharacter.harm_level3_used ? (backendCharacter.harm_level3_name || '') : ''],
+      level2: [
+        backendCharacter.harm_level2_used ? (backendCharacter.harm_level2_name || '') : '',
+        '',
+      ],
+      level1: [
+        backendCharacter.harm_level1_used ? (backendCharacter.harm_level1_name || '') : '',
+        '',
+      ],
+    },
     harmEntries: {
-      level3: backendCharacter.harm_level3_used ? [backendCharacter.harm_level3_name || ''] : [''],
-      level2: backendCharacter.harm_level2_used ? [backendCharacter.harm_level2_name || ''] : [''],
-      level1: backendCharacter.harm_level1_used ? [backendCharacter.harm_level1_name || ''] : [''],
+      level3: [backendCharacter.harm_level3_used ? (backendCharacter.harm_level3_name || '') : ''],
+      level2: [
+        backendCharacter.harm_level2_used ? (backendCharacter.harm_level2_name || '') : '',
+        '',
+      ],
+      level1: [
+        backendCharacter.harm_level1_used ? (backendCharacter.harm_level1_name || '') : '',
+        '',
+      ],
     },
     
     // Coin and stash
@@ -370,21 +420,32 @@ export const transformFrontendToBackend = (frontendCharacter) => {
       sway: frontendCharacter.actionRatings.SWAY,
     },
     
-    // Stand data
+    // Stand: backend may use coin_stats (JSON) and/or nested stand; send grade letters (F–A)
+    coin_stats: {
+      power: indexToGrade(frontendCharacter.standStats?.power),
+      speed: indexToGrade(frontendCharacter.standStats?.speed),
+      range: indexToGrade(frontendCharacter.standStats?.range),
+      durability: indexToGrade(frontendCharacter.standStats?.durability),
+      precision: indexToGrade(frontendCharacter.standStats?.precision),
+      development: indexToGrade(frontendCharacter.standStats?.development),
+    },
     stand: {
       name: frontendCharacter.standName,
-      power: frontendCharacter.standStats.power,
-      speed: frontendCharacter.standStats.speed,
-      range: frontendCharacter.standStats.range,
-      durability: frontendCharacter.standStats.durability,
-      precision: frontendCharacter.standStats.precision,
-      development: frontendCharacter.standStats.development,
+      power: indexToGrade(frontendCharacter.standStats?.power),
+      speed: indexToGrade(frontendCharacter.standStats?.speed),
+      range: indexToGrade(frontendCharacter.standStats?.range),
+      durability: indexToGrade(frontendCharacter.standStats?.durability),
+      precision: indexToGrade(frontendCharacter.standStats?.precision),
+      development: indexToGrade(frontendCharacter.standStats?.development),
     },
     
-    // Stress and trauma (backend expects trauma as list of IDs; frontend uses object for checkboxes)
-    stress: Array.isArray(frontendCharacter.stress)
-      ? frontendCharacter.stress.filter(Boolean).length
-      : (frontendCharacter.stress || 0),
+    // Stress: backend integer; accept stressFilled or array length
+    stress: typeof frontendCharacter.stressFilled === 'number'
+      ? frontendCharacter.stressFilled
+      : Array.isArray(frontendCharacter.stress)
+        ? frontendCharacter.stress.filter(Boolean).length
+        : (frontendCharacter.stress || 0),
+    // Trauma: backend expects list of Trauma IDs (caller should resolve object keys to IDs via reference)
     trauma: Array.isArray(frontendCharacter.trauma)
       ? frontendCharacter.trauma
       : [],
@@ -393,13 +454,13 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     light_armor_used: frontendCharacter.armor.armor,
     heavy_armor_used: frontendCharacter.armor.heavy,
     
-    // Harm
-    harm_level3_used: frontendCharacter.harmEntries.level3[0] !== '',
-    harm_level3_name: frontendCharacter.harmEntries.level3[0] || '',
-    harm_level2_used: frontendCharacter.harmEntries.level2[0] !== '',
-    harm_level2_name: frontendCharacter.harmEntries.level2[0] || '',
-    harm_level1_used: frontendCharacter.harmEntries.level1[0] !== '',
-    harm_level1_name: frontendCharacter.harmEntries.level1[0] || '',
+    // Harm (first slot per level; backend has single name per level)
+    harm_level3_used: (frontendCharacter.harmEntries?.level3?.[0] ?? frontendCharacter.harm?.level3?.[0] ?? '') !== '',
+    harm_level3_name: (frontendCharacter.harmEntries?.level3?.[0] ?? frontendCharacter.harm?.level3?.[0] ?? '') || '',
+    harm_level2_used: (frontendCharacter.harmEntries?.level2?.[0] ?? frontendCharacter.harm?.level2?.[0] ?? '') !== '',
+    harm_level2_name: (frontendCharacter.harmEntries?.level2?.[0] ?? frontendCharacter.harm?.level2?.[0] ?? '') || '',
+    harm_level1_used: (frontendCharacter.harmEntries?.level1?.[0] ?? frontendCharacter.harm?.level1?.[0] ?? '') !== '',
+    harm_level1_name: (frontendCharacter.harmEntries?.level1?.[0] ?? frontendCharacter.harm?.level1?.[0] ?? '') || '',
     
     // XP clocks
     xp_clocks: frontendCharacter.xp,

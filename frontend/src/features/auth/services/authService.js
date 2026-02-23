@@ -54,8 +54,8 @@ export const authAPI = {
     body: JSON.stringify(userData),
   }),
   
-  // Get current user info (for token validation)
-  getCurrentUser: () => apiRequest('/characters/'), // Use characters endpoint as a test
+  // Get current user info (for token validation and display)
+  getCurrentUser: () => apiRequest('/accounts/me/'),
   
   // Logout (clear token)
   logout: () => {

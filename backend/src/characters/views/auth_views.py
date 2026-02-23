@@ -24,9 +24,11 @@ class RegisterView(APIView):
             token, created = Token.objects.get_or_create(user=user)
             return Response({
                 'token': token.key,
-                'user_id': user.pk,
-                'username': user.username,
-                'email': user.email
+                'user': {
+                    'id': user.pk,
+                    'username': user.username,
+                    'email': getattr(user, 'email', '') or '',
+                },
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -40,11 +42,26 @@ class LoginView(ObtainAuthToken):
             token, created = Token.objects.get_or_create(user=user)
             return Response({
                 'token': token.key,
-                'user_id': user.pk,
-                'username': user.username,
-                'email': user.email
+                'user': {
+                    'id': user.pk,
+                    'username': user.username,
+                    'email': getattr(user, 'email', '') or '',
+                },
             })
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CurrentUserView(APIView):
+    """Return the current authenticated user (for token validation and display)."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        return Response({
+            'id': user.pk,
+            'username': user.username,
+            'email': getattr(user, 'email', '') or '',
+        })
 
 
 class UserProfileViewSet(viewsets.ModelViewSet):

@@ -28,7 +28,18 @@
    python manage.py loaddata characters/fixtures/*.json
    ```
 
-3. **Start development servers**
+3. **Optional: Create test account and SRD playbook characters**
+
+   To get five pre-built Stand example characters (Colony, Automatic, Tool-Bound, Fighting Spirit, Phenomena) with action ratings and Stand stats under a test account:
+
+   ```bash
+   cd backend/src
+   python manage.py create_stand_playbook_test_characters
+   ```
+
+   Default login: `testuser` / `testpass123`. Use `--username` and `--password` to override; use `--clear` to replace existing characters for that user.
+
+4. **Start development servers**
    ```bash
    # From root directory
    npm run dev

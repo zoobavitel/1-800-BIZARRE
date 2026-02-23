@@ -58,4 +58,21 @@ export const standardAbilities = [
   'Physicker', 'Saboteur', 'Leader', 'Vigorous', 'Bodyguard', 'Savage',
   'Tough as Nails', 'Sharpshooter', 'Steady Barrage', 'Reflexes',
   'Bizarre Improvisation', 'Stand Evolution', 'Stand Fusion', 'Stand Recall'
-]; 
+];
+
+/**
+ * Convert sheet trauma checkbox object to list of Trauma IDs for backend.
+ * @param {Record<string, boolean>} traumaObj - e.g. { COLD: true, HAUNTED: false, ... }
+ * @param {Array<{ id: number, name: string }>} traumasList - from referenceAPI.getTraumas()
+ * @returns {number[]} List of trauma IDs to send to API
+ */
+export function traumaObjectToIds(traumaObj, traumasList = []) {
+  if (!traumaObj || typeof traumaObj !== 'object') return [];
+  const nameToId = Object.fromEntries(
+    (traumasList || []).map((t) => [(t.name || '').toUpperCase(), t.id])
+  );
+  return Object.entries(traumaObj)
+    .filter(([, checked]) => checked)
+    .map(([name]) => nameToId[name.toUpperCase()])
+    .filter((id) => id != null);
+} 

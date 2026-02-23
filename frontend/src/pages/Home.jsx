@@ -1,99 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, ArrowRight, Zap, Users, Dice6, BookOpen, Settings, LogOut } from 'lucide-react';
 import '../styles/Home.css';
-import { useCharacterSheet, characterAPI, campaignAPI, transformBackendToFrontend } from '../features/character-sheet';
+import { characterAPI, campaignAPI, transformBackendToFrontend } from '../features/character-sheet';
 import { useAuth } from '../features/auth';
 
-// Main Home Page Component
-const HomePage = () => {
+// Main Home Page Component — character create/edit goes to Character page
+const HomePage = ({ onNavigateToCharacter }) => {
   const { user, logout } = useAuth();
-  const [showCharacterSheet, setShowCharacterSheet] = useState(false);
   const [characters, setCharacters] = useState([]);
-  const [selectedCharacter, setSelectedCharacter] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
-  // Define handleSaveCharacter before using it in the hook
-  const handleSaveCharacter = async (characterData) => {
-    try {
-      if (selectedCharacter) {
-        // Edit existing character
-        await characterAPI.updateCharacter(selectedCharacter.id, characterData);
-        setCharacters(characters.map(char => 
-          char.id === selectedCharacter.id ? characterData : char
-        ));
-      } else {
-        // Create new character
-        const newCharacter = await characterAPI.createCharacter(characterData);
-        setCharacters([...characters, newCharacter]);
-      }
-      setShowCharacterSheet(false);
-      setSelectedCharacter(null);
-    } catch (err) {
-      console.error('Failed to save character:', err);
-      // Fallback to local state update if backend fails
-      if (selectedCharacter) {
-        setCharacters(characters.map(char => 
-          char.id === selectedCharacter.id ? characterData : char
-        ));
-      } else {
-        setCharacters([...characters, { ...characterData, id: Date.now() }]);
-      }
-      setShowCharacterSheet(false);
-      setSelectedCharacter(null);
-    }
-  };
-  
-  // Character sheet hooks - only destructure what this page uses
-  const {
-    characterData,
-    setCharacterData,
-    stressBoxes,
-    setStressBoxes,
-    traumaChecks,
-    setTraumaChecks,
-    actionRatings,
-    setActionRatings,
-    standStats,
-    setStandStats,
-    setXpTracks,
-    setSelectedAbilities,
-    setCustomClocks,
-    loading: sheetLoading,
-    saving,
-    error: sheetError,
-    handleSave,
-  } = useCharacterSheet(selectedCharacter?.id, handleSaveCharacter);
-
-  // Load character data when selectedCharacter changes
-  useEffect(() => {
-    if (selectedCharacter && showCharacterSheet) {
-      setCharacterData({
-        name: selectedCharacter.name || '',
-        standName: selectedCharacter.standName || '',
-        heritage: selectedCharacter.heritage || 'Human',
-        background: selectedCharacter.background || '',
-        look: selectedCharacter.look || '',
-        vice: selectedCharacter.vice || '',
-        crew: selectedCharacter.crew || ''
-      });
-      setActionRatings(selectedCharacter.actionRatings || {
-        HUNT: 0, STUDY: 0, SURVEY: 0, TINKER: 0,
-        FINESSE: 0, PROWL: 0, SKIRMISH: 0, WRECK: 0,
-        BIZARRE: 0, COMMAND: 0, CONSORT: 0, SWAY: 0
-      });
-      setStandStats(selectedCharacter.standStats || {
-        power: 1, speed: 1, range: 1, durability: 1, precision: 1, development: 1
-      });
-      setXpTracks(selectedCharacter.xp || {
-        insight: 0, prowess: 0, resolve: 0, heritage: 0, playbook: 0
-      });
-      setSelectedAbilities(selectedCharacter.abilities || []);
-      setCustomClocks(selectedCharacter.clocks || []);
-    }
-  // Intentionally omit setState functions (stable) to avoid unnecessary effect runs
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCharacter, showCharacterSheet]);
 
   // Load characters and campaigns from backend on component mount
   useEffect(() => {
@@ -133,33 +49,14 @@ const HomePage = () => {
   const loadCharacters = async () => {
     setLoading(true);
     setError(null);
-    
     try {
       const backendCharacters = await characterAPI.getCharacters();
-      const frontendCharacters = backendCharacters.map(transformBackendToFrontend);
+      const frontendCharacters = (backendCharacters || []).map(transformBackendToFrontend);
       setCharacters(frontendCharacters);
     } catch (err) {
       console.error('Failed to load characters:', err);
       setError(err.message);
-      // Fallback to example characters if backend fails
-      setCharacters([
-    {
-      id: 1,
-      name: 'METAL FINGERS',
-      standName: 'MADVILLAINY',
-      heritage: 'Cyborg',
-      background: 'Underground Rapper',
-      look: 'Terminator Robot with a TV static look',
-      vice: 'Art',
-      crew: 'DOOM SQUAD',
-      actionRatings: {
-        HUNT: 2, STUDY: 1, SURVEY: 1, TINKER: 3,
-        FINESSE: 2, PROWL: 1, SKIRMISH: 2, WRECK: 1,
-        BIZARRE: 1, COMMAND: 2, CONSORT: 1, SWAY: 2
-      },
-      standStats: { power: 3, speed: 2, range: 1, durability: 2, precision: 1, development: 1 }
-    }
-  ]);
+      setCharacters([]);
     } finally {
       setLoading(false);
     }
@@ -168,19 +65,13 @@ const HomePage = () => {
   const [campaigns, setCampaigns] = useState([]);
   const [campaignsLoading, setCampaignsLoading] = useState(true);
 
+  // Navigate to Character page: new sheet (create) or edit existing (load from account)
   const handleCreateCharacter = () => {
-    setSelectedCharacter(null);
-    setShowCharacterSheet(true);
+    if (typeof onNavigateToCharacter === 'function') onNavigateToCharacter(null);
   };
 
   const handleEditCharacter = (character) => {
-    setSelectedCharacter(character);
-    setShowCharacterSheet(true);
-  };
-
-  const handleCloseSheet = () => {
-    setShowCharacterSheet(false);
-    setSelectedCharacter(null);
+    if (typeof onNavigateToCharacter === 'function' && character?.id) onNavigateToCharacter(character.id);
   };
 
   const handleDeleteCharacter = async (characterId) => {
@@ -207,330 +98,6 @@ const HomePage = () => {
   const handleManageCampaign = (campaignId) => {
     // Logic for managing a campaign (GM view)
     console.log('Managing campaign:', campaignId);
-  };
-
-  // Character Sheet Component using the new feature system
-  const CharacterSheetModal = () => {
-    if (!showCharacterSheet) return null;
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-90 flex items-start justify-center z-50 p-4 overflow-y-auto">
-        <div className="bg-black text-white font-mono text-sm max-w-7xl w-full">
-          {/* Header */}
-          <header className="bg-gray-800 px-4 py-2 flex items-center justify-between border-b border-gray-600 sticky top-0 z-10">
-            <div className="text-xl font-bold text-white">
-              1(800)BIZARRE - CHARACTER SHEET
-            </div>
-            <div className="flex items-center space-x-4">
-              {sheetError && (
-                <div className="text-red-400 text-xs">
-                  Error: {sheetError}
-                </div>
-              )}
-              <button 
-                onClick={handleSave}
-                disabled={saving}
-                className="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-xs font-bold disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save'}
-              </button>
-              <button 
-                onClick={handleCloseSheet}
-                className="text-gray-400 hover:text-white"
-              >
-                ✕
-              </button>
-            </div>
-          </header>
-
-          <div className="p-4">
-            {sheetLoading ? (
-              <div className="text-center py-8">
-                <div className="text-gray-400">Loading character...</div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-8 mb-6">
-                {/* Left Side - Character Info */}
-                <div className="space-y-4">
-                  {/* Name and Details */}
-                  <div className="space-y-2">
-                    <div className="flex items-center space-x-4">
-                      <div className="flex-1">
-                        <div className="text-red-400 text-xs font-bold">NAME</div>
-                        <div className="border-b border-gray-600 pb-1">
-                          <input 
-                            id="sheet-character-name"
-                            name="characterName"
-                            type="text" 
-                            value={characterData.name}
-                            onChange={(e) => setCharacterData(prev => ({ ...prev, name: e.target.value }))}
-                            className="bg-transparent w-full text-white font-bold" 
-                            placeholder="Character Name"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <div className="text-red-400 text-xs font-bold">CREW</div>
-                        <div className="border-b border-gray-600 pb-1">
-                          <input 
-                            id="sheet-crew"
-                            name="crew"
-                            type="text" 
-                            value={characterData.crew}
-                            onChange={(e) => setCharacterData(prev => ({ ...prev, crew: e.target.value }))}
-                            className="bg-transparent w-full text-white" 
-                            placeholder="Crew Name"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-4">
-                      <div className="flex-1">
-                        <div className="text-red-400 text-xs font-bold">STAND NAME</div>
-                        <div className="border-b border-gray-600 pb-1">
-                          <input 
-                            id="sheet-stand-name"
-                            name="standName"
-                            type="text" 
-                            value={characterData.standName}
-                            onChange={(e) => setCharacterData(prev => ({ ...prev, standName: e.target.value }))}
-                            className="bg-transparent w-full text-white" 
-                            placeholder="「Stand Name」"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="text-red-400 text-xs font-bold">LOOK</div>
-                      <div className="border-b border-gray-600 pb-1">
-                        <input 
-                          id="sheet-look"
-                          name="look"
-                          type="text" 
-                          value={characterData.look}
-                          onChange={(e) => setCharacterData(prev => ({ ...prev, look: e.target.value }))}
-                          className="bg-transparent w-full text-white" 
-                          placeholder="Character appearance and style"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-4">
-                      <div className="flex-1">
-                        <div className="text-red-400 text-xs font-bold">HERITAGE</div>
-                        <div className="border-b border-gray-600 pb-1">
-                          <input 
-                            id="sheet-heritage"
-                            name="heritage"
-                            type="text" 
-                            value={characterData.heritage}
-                            onChange={(e) => setCharacterData(prev => ({ ...prev, heritage: e.target.value }))}
-                            className="bg-transparent w-full text-white" 
-                            placeholder="Heritage"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex-1">
-                        <div className="text-red-400 text-xs font-bold">BACKGROUND</div>
-                        <div className="border-b border-gray-600 pb-1">
-                          <input 
-                            id="sheet-background"
-                            name="background"
-                            type="text" 
-                            value={characterData.background}
-                            onChange={(e) => setCharacterData(prev => ({ ...prev, background: e.target.value }))}
-                            className="bg-transparent w-full text-white" 
-                            placeholder="Background"
-                          />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="text-red-400 text-xs font-bold">VICE</div>
-                      <div className="border-b border-gray-600 pb-1">
-                        <input 
-                          id="sheet-vice"
-                          name="vice"
-                          type="text" 
-                          value={characterData.vice}
-                          onChange={(e) => setCharacterData(prev => ({ ...prev, vice: e.target.value }))}
-                          className="bg-transparent w-full text-white" 
-                          placeholder="Vice"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Stress & Trauma */}
-                  <div className="space-y-4">
-                    <div>
-                      <div className="text-red-400 text-xs font-bold mb-1">STRESS</div>
-                      <div className="flex space-x-1">
-                        {stressBoxes.map((filled, i) => (
-                          <div 
-                            key={i} 
-                            className={`w-6 h-6 border border-gray-600 cursor-pointer hover:bg-gray-600 ${
-                              filled ? 'bg-red-600' : 'bg-gray-800'
-                            }`}
-                            onClick={() => {
-                              const newStress = [...stressBoxes];
-                              newStress[i] = !newStress[i];
-                              setStressBoxes(newStress);
-                            }}
-                          ></div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="text-red-400 text-xs font-bold mb-1">TRAUMA</div>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                        {Object.entries(traumaChecks).map(([trauma, checked]) => (
-                          <label key={trauma} htmlFor={`sheet-trauma-${trauma}`} className="flex items-center space-x-1 cursor-pointer">
-                            <input 
-                              id={`sheet-trauma-${trauma}`}
-                              name={`trauma-${trauma}`}
-                              type="checkbox" 
-                              className="w-3 h-3" 
-                              checked={checked}
-                              onChange={() => setTraumaChecks(prev => ({ ...prev, [trauma]: !checked }))}
-                            />
-                            <span>{trauma}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Right Side - Stand Stats & Actions */}
-                <div className="bg-gray-800 p-4 border border-gray-600">
-                  <h2 className="text-xl font-bold text-gray-400 mb-4">STAND COIN STATS</h2>
-                  
-                  {/* Stand Coin Stats */}
-                  <div className="mb-6">
-                    <div className="space-y-2">
-                      {Object.entries(standStats).map(([stat, value]) => (
-                        <div key={stat} className="flex items-center justify-between text-xs">
-                          <span className="text-gray-300 capitalize font-semibold w-20">{stat.toUpperCase()}</span>
-                          <div className="flex items-center space-x-2">
-                            <button
-                              onClick={() => setStandStats(prev => ({ ...prev, [stat]: Math.max(0, value - 1) }))}
-                              className="w-5 h-5 bg-red-600 hover:bg-red-700 rounded text-white text-xs font-bold"
-                              disabled={value === 0}
-                            >
-                              -
-                            </button>
-                            <span className="w-8 text-center text-white font-bold">{value}</span>
-                            <button
-                              onClick={() => setStandStats(prev => ({ ...prev, [stat]: Math.min(4, value + 1) }))}
-                              className="w-5 h-5 bg-green-600 hover:bg-green-700 rounded text-white text-xs font-bold"
-                              disabled={value === 4}
-                            >
-                              +
-                            </button>
-                            <span className="text-gray-400 text-xs ml-2">
-                              {value === 0 ? 'F' : value === 1 ? 'D' : value === 2 ? 'C' : value === 3 ? 'B' : 'A'}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-2 text-xs text-gray-400">
-                      Total: {Object.values(standStats).reduce((sum, val) => sum + val, 0)}/6 points
-                    </div>
-                  </div>
-
-                  {/* Action Ratings */}
-                  <div className="grid grid-cols-3 gap-6">
-                    {/* Insight */}
-                    <div>
-                      <div className="text-xs font-bold mb-2">INSIGHT</div>
-                      <div className="space-y-1">
-                        {['HUNT', 'STUDY', 'SURVEY', 'TINKER'].map((action) => (
-                          <div key={action} className="flex items-center justify-between">
-                            <span className="text-xs">{action}</span>
-                            <div className="flex space-x-1">
-                              {[1, 2, 3, 4].map((dot) => (
-                                <div 
-                                  key={dot} 
-                                  className={`w-3 h-3 rounded-full border border-gray-500 cursor-pointer hover:bg-purple-400 ${
-                                    dot <= actionRatings[action] ? 'bg-purple-600' : 'bg-gray-700'
-                                  }`}
-                                  onClick={() => setActionRatings(prev => ({ 
-                                    ...prev, 
-                                    [action]: dot <= actionRatings[action] ? dot - 1 : dot 
-                                  }))}
-                                ></div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Prowess */}
-                    <div>
-                      <div className="text-xs font-bold mb-2">PROWESS</div>
-                      <div className="space-y-1">
-                        {['FINESSE', 'PROWL', 'SKIRMISH', 'WRECK'].map((action) => (
-                          <div key={action} className="flex items-center justify-between">
-                            <span className="text-xs">{action}</span>
-                            <div className="flex space-x-1">
-                              {[1, 2, 3, 4].map((dot) => (
-                                <div 
-                                  key={dot} 
-                                  className={`w-3 h-3 rounded-full border border-gray-500 cursor-pointer hover:bg-purple-400 ${
-                                    dot <= actionRatings[action] ? 'bg-purple-600' : 'bg-gray-700'
-                                  }`}
-                                  onClick={() => setActionRatings(prev => ({ 
-                                    ...prev, 
-                                    [action]: dot <= actionRatings[action] ? dot - 1 : dot 
-                                  }))}
-                                ></div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Resolve */}
-                    <div>
-                      <div className="text-xs font-bold mb-2">RESOLVE</div>
-                      <div className="space-y-1">
-                        {['BIZARRE', 'COMMAND', 'CONSORT', 'SWAY'].map((action) => (
-                          <div key={action} className="flex items-center justify-between">
-                            <span className="text-xs">{action}</span>
-                            <div className="flex space-x-1">
-                              {[1, 2, 3, 4].map((dot) => (
-                                <div 
-                                  key={dot} 
-                                  className={`w-3 h-3 rounded-full border border-gray-500 cursor-pointer hover:bg-purple-400 ${
-                                    dot <= actionRatings[action] ? 'bg-purple-600' : 'bg-gray-700'
-                                  }`}
-                                  onClick={() => setActionRatings(prev => ({ 
-                                    ...prev, 
-                                    [action]: dot <= actionRatings[action] ? dot - 1 : dot 
-                                  }))}
-                                ></div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -838,9 +405,6 @@ const HomePage = () => {
         </section>
 
       </div>
-
-      {/* Character Sheet Modal */}
-      <CharacterSheetModal />
     </div>
   );
 };
