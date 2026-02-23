@@ -15,24 +15,27 @@ const apiRequest = async (endpoint, options = {}) => {
     ...options,
   };
 
-  const fullUrl = `${API_BASE_URL}${endpoint}`;
-  console.log('DEBUG: API_BASE_URL:', API_BASE_URL);
-  console.log('DEBUG: endpoint:', endpoint);
-  console.log('DEBUG: fullUrl:', fullUrl);
+  const base = API_BASE_URL.replace(/\/+$/, '');
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const fullUrl = `${base}${path}`;
 
   try {
     const response = await fetch(fullUrl, config);
     
     if (!response.ok) {
-      console.error('Auth API response not OK:', response);
       const errorData = await response.json().catch(() => ({}));
-      console.error('Auth API error data:', errorData);
-      throw new Error(errorData.detail || errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      const message =
+        (Array.isArray(errorData.non_field_errors) && errorData.non_field_errors[0]) ||
+        errorData.detail ||
+        errorData.error ||
+        (typeof errorData.username === 'string' ? errorData.username : errorData.username?.[0]) ||
+        (typeof errorData.password === 'string' ? errorData.password : errorData.password?.[0]) ||
+        `HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(message);
     }
     
     return await response.json();
   } catch (error) {
-    console.error('Auth API request failed:', error);
     throw error;
   }
 };

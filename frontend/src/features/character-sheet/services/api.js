@@ -1,6 +1,6 @@
 // API service for character sheet backend integration
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+const API_BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:8000/api').replace(/\/+$/, '');
 
 // Helper function for API requests
 const apiRequest = async (endpoint, options = {}) => {
@@ -15,12 +15,19 @@ const apiRequest = async (endpoint, options = {}) => {
     ...options,
   };
 
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${API_BASE_URL}${path}`;
+
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+    const response = await fetch(url, config);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      const message = (Array.isArray(errorData.non_field_errors) && errorData.non_field_errors[0])
+        || errorData.detail
+        || errorData.error
+        || `HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(message);
     }
     
     return await response.json();
@@ -320,13 +327,15 @@ export const transformBackendToFrontend = (backendCharacter) => {
 };
 
 export const transformFrontendToBackend = (frontendCharacter) => {
+  const viceVal = frontendCharacter.vice;
+  const isViceName = typeof viceVal === 'string' && viceVal.trim() !== '';
   return {
     true_name: frontendCharacter.name,
     stand_name: frontendCharacter.standName,
     heritage: frontendCharacter.heritage,
     background_note: frontendCharacter.background,
     appearance: frontendCharacter.look,
-    vice: frontendCharacter.vice,
+    ...(isViceName ? { custom_vice: viceVal } : { vice: viceVal }),
     
     // Action dots
     action_dots: {
@@ -355,9 +364,13 @@ export const transformFrontendToBackend = (frontendCharacter) => {
       development: frontendCharacter.standStats.development,
     },
     
-    // Stress and trauma
-    stress: frontendCharacter.stress.filter(Boolean).length,
-    trauma: frontendCharacter.trauma,
+    // Stress and trauma (backend expects trauma as list of IDs; frontend uses object for checkboxes)
+    stress: Array.isArray(frontendCharacter.stress)
+      ? frontendCharacter.stress.filter(Boolean).length
+      : (frontendCharacter.stress || 0),
+    trauma: Array.isArray(frontendCharacter.trauma)
+      ? frontendCharacter.trauma
+      : [],
     
     // Armor
     light_armor_used: frontendCharacter.armor.armor,
@@ -377,8 +390,8 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     // Progress clocks
     progress_clocks: frontendCharacter.clocks,
     
-    // Additional fields
-    inventory: frontendCharacter.inventory,
-    reputation_status: frontendCharacter.reputation_status,
+    // Additional fields (safe defaults for new character)
+    inventory: frontendCharacter.inventory ?? [],
+    reputation_status: frontendCharacter.reputation_status ?? {},
   };
 }; 

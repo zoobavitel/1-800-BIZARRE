@@ -436,6 +436,9 @@ class NPCSerializer(serializers.ModelSerializer):
     harm_clock_max = serializers.IntegerField(read_only=True)
     special_armor_charges = serializers.IntegerField(read_only=True)
     vulnerability_clock_max = serializers.IntegerField(read_only=True)
+    # Clocks are GM-only: only the apply-effect API can update them (players cannot deal harm to NPCs)
+    harm_clock_current = serializers.IntegerField(read_only=True)
+    vulnerability_clock_current = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = NPC

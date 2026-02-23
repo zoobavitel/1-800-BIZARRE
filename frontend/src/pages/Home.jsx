@@ -459,7 +459,7 @@ const HomePage = () => {
                       ))}
                     </div>
                     <div className="mt-2 text-xs text-gray-400">
-                      Total: {Object.values(standStats).reduce((sum, val) => sum + val, 0)}/10 points
+                      Total: {Object.values(standStats).reduce((sum, val) => sum + val, 0)}/6 points
                     </div>
                   </div>
 

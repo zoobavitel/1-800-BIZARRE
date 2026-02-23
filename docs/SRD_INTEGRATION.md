@@ -1,6 +1,13 @@
 # SRD Integration
 
-This document outlines how the Standard Reference Document (SRD) is integrated into the 1-800-BIZARRE platform, covering data loading, backend validation, and test coverage.
+This document outlines how the Standard Reference Document (SRD) is integrated into the 1-800-BIZARRE platform, covering the canonical rules source, data loading, backend validation, and test coverage.
+
+## Canonical SRD and Rules Reference
+
+* **Official SRD (full text):** `docs/1(800)-Bizarre SRD.txt` — The complete 1(800)Bizarre Game Rules SRD. Use this for full wording, examples, heritage tables, playbook abilities, entanglements, and every rule in detail.
+* **Structured rules reference:** `docs/GAME_RULES.md` — A concise, scannable rules reference derived from the SRD. Use this for quick lookup during development or at the table; it points back to the SRD for extended content.
+
+All game mechanics implemented in the backend, fixtures, and tests should align with the SRD and can be cross-checked against `GAME_RULES.md`.
 
 ## SRD Data (Fixtures)
 
@@ -44,8 +51,12 @@ Key test files include:
 
 These tests directly reflect the rules outlined in the SRD, providing a programmatic guarantee that the application's logic aligns with the game's design.
 
-## Standard Reference Documents (PDFs)
+## Where to Find the Rules
 
-The PDF files located directly within the `docs/` directory (e.g., `Character Creation.pdf`, `Combat & Initiative.pdf`, `Hamon Playbook.pdf`) are the official SRD documents. These documents detail the complete ruleset, lore, and mechanics of the 1-800-BIZARRE game. The backend logic, data fixtures, and test suite are all designed to implement and enforce the rules described in these comprehensive documents.
+The **definitive source** of game rules is the text SRD:
 
-Developers should consult these PDF documents for the definitive source of game rules when implementing new features or modifying existing ones.
+* **`docs/1(800)-Bizarre SRD.txt`** — Full ruleset, lore, and mechanics for 1(800)Bizarre (core system, skills, Stand Coin, stress/trauma, skill checks, position & effect, consequences, resistance, flashbacks, clocks, fortune, gathering information, coin & stash, reputation, advancement, combat, teamwork, claims, downtime, payoff, wanted level, entanglements, downtime activities, vice, character creation, heritages, Stand/Spin/Hamon playbooks, and resources).
+
+For quick reference and implementation checks, use **`docs/GAME_RULES.md`**, which summarizes these rules and links back to the SRD for detail.
+
+The backend logic, data fixtures, and test suite are designed to implement and enforce the rules described in the SRD. When implementing new features or changing mechanics, consult the SRD (and optionally `GAME_RULES.md`) as the authoritative source.

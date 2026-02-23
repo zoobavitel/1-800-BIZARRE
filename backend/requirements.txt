@@ -4,6 +4,7 @@ click==8.1.8
 Django==5.2
 django-cors-headers==4.7.0
 djangorestframework==3.16.0
+drf-nested-routers>=0.95.0
 Faker==37.4.0
 greenlet==3.2.1
 iniconfig==2.1.0

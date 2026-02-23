@@ -200,7 +200,7 @@ class NPC(models.Model):
         elif durability_grade == 'A':
             return 4
         elif durability_grade == 'B':
-            return 4
+            return 3
         elif durability_grade == 'C':
             return 3
         elif durability_grade == 'D':
@@ -324,7 +324,7 @@ class Character(models.Model):
     stand_name = models.CharField(max_length=100, blank=True, null=True)
     stand_form = models.TextField(blank=True, null=True)
     stand_conscious = models.BooleanField(default=True)
-    coin_stats = models.JSONField(default=dict)
+    coin_stats = models.JSONField(default=dict, blank=True)
 
     armor_type = models.CharField(
         max_length=20,
@@ -336,13 +336,13 @@ class Character(models.Model):
     close_friend = models.CharField(max_length=100, blank=True)
     rival = models.CharField(max_length=100, blank=True)
 
-    vice = models.ForeignKey(Vice, on_delete=models.SET_NULL, null=True)
+    vice = models.ForeignKey(Vice, on_delete=models.SET_NULL, null=True, blank=True)
     vice_details = models.TextField(blank=True, null=True)
 
     loadout = models.IntegerField(default=1)
 
     stress = models.IntegerField(default=0)
-    trauma = models.JSONField(default=list)
+    trauma = models.JSONField(default=list, blank=True)
     healing_clock_segments = models.IntegerField(default=4)
     healing_clock_filled = models.IntegerField(default=0)
 
@@ -359,7 +359,7 @@ class Character(models.Model):
     harm_level4_used = models.BooleanField(default=False)
     harm_level4_name = models.CharField(max_length=100, blank=True, null=True)
 
-    xp_clocks = models.JSONField(default=dict)
+    xp_clocks = models.JSONField(default=dict, blank=True)
     total_xp_spent = models.IntegerField(default=0)
     heritage_points_gained = models.IntegerField(default=0)
     stand_coin_points_gained = models.IntegerField(default=0)
@@ -370,7 +370,7 @@ class Character(models.Model):
     ACTION_CATEGORIES = {
         'insight': ['hunt', 'study', 'survey', 'tinker'],
         'prowess': ['finesse', 'prowl', 'skirmish', 'wreck'],
-        'resolve': ['attune', 'command', 'consort', 'sway'],
+        'resolve': ['bizarre', 'command', 'consort', 'sway'],
     }
 
     def _calculate_attribute_rating(self, actions):
@@ -404,10 +404,12 @@ class Character(models.Model):
 
     def clean(self):
         super().clean()
+        if self.level == 1:
+            self._validate_action_dots_distribution()
+            self._validate_stand_coin_stats()
+            self._validate_stress_based_on_durability()
         self._validate_initial_abilities_count()
         self._validate_xp_advancements()
-
-        # Validate A-rank abilities if a Stand exists
         if hasattr(self, 'stand'):
             self._validate_a_rank_abilities()
 
@@ -415,7 +417,7 @@ class Character(models.Model):
         self._validate_action_dots_distribution()
         self._validate_stand_coin_stats()
         self._validate_stress_based_on_durability()
-        self._validate_standard_abilities_count()
+        self._validate_initial_abilities_count()
 
     def _validate_action_dots_distribution(self):
         total_dots = sum(self.action_dots.values())
@@ -458,18 +460,17 @@ class Character(models.Model):
                     )
                 total_stand_coin_points += grade_points[grade]
 
-        if total_stand_coin_points != 10:
+        if total_stand_coin_points != 6:
             raise ValidationError(
-                {'stand_coin_stats': f'A new character at level 1 must have exactly 10 Stand Coin points. Current total: {total_stand_coin_points}.'}
+                {'stand_coin_stats': f'A new character at level 1 must have exactly 6 Stand Coin points. Current total: {total_stand_coin_points}.'}
             )
 
     def _validate_stress_based_on_durability(self):
+        # SRD: Durability sets stress capacity. Base 9; S +4, A +3, B +2, C +1, D 0, F -1.
         expected_stress = 9
         durability_grade = None
-        
         if hasattr(self, 'stand') and hasattr(self.stand, 'durability'):
             durability_grade = self.stand.durability
-
         if durability_grade == 'S':
             expected_stress = 13
         elif durability_grade == 'A':
@@ -482,39 +483,30 @@ class Character(models.Model):
             expected_stress = 9
         elif durability_grade == 'F':
             expected_stress = 8
-        
-        if self.stress != expected_stress:
+        if self.level == 1 and self.stress != expected_stress:
             raise ValidationError(
                 {'stress': f'Stress must be {expected_stress} for a level 1 character with {durability_grade} Stand Durability.'}
             )
 
     def _validate_initial_abilities_count(self):
-        if self.total_abilities_count != 3:
+        # SRD: At start choose 3 abilities; each A-rank in Stand Coin unlocks 2 more.
+        if self.level != 1:
+            return
+        a_rank_count = 0
+        if hasattr(self, 'stand'):
+            stand_fields = ['power', 'speed', 'range', 'durability', 'precision', 'development']
+            for field in stand_fields:
+                if hasattr(self.stand, field) and getattr(self.stand, field) == 'A':
+                    a_rank_count += 1
+        expected_total_abilities = 3 + (a_rank_count * 2)
+        if self.total_abilities_count != expected_total_abilities:
             raise ValidationError(
-                {'standard_abilities': 'A new character at level 1 must have exactly 3 abilities (standard, custom, or playbook).', 'total_abilities_count': self.total_abilities_count}
+                {'standard_abilities': f'A level 1 character must have exactly {expected_total_abilities} abilities (3 base + 2 per A-rank in Stand Coin).', 'total_abilities_count': self.total_abilities_count}
             )
 
     def _validate_a_rank_abilities(self):
-        if not hasattr(self, 'stand'):
-            return # No stand, no A-rank ability validation
-
-        a_rank_count = 0
-        # Check individual Stand fields for A-rank stats
-        stand_fields = ['power', 'speed', 'range', 'durability', 'precision', 'development']
-        for field in stand_fields:
-            if hasattr(self.stand, field) and getattr(self.stand, field) == 'A':
-                a_rank_count += 1
-
-        expected_abilities_from_a_ranks = a_rank_count * 2
-        # This assumes initial 3 abilities are already accounted for in total_abilities_count
-        # and that A-ranks grant *additional* abilities.
-        # The total abilities should be 3 (initial) + expected_abilities_from_a_ranks
-        expected_total_abilities = 3 + expected_abilities_from_a_ranks
-
-        if self.total_abilities_count != expected_total_abilities:
-            raise ValidationError(
-                {'total_abilities_count': f'Total abilities ({self.total_abilities_count}) does not match expected abilities ({expected_total_abilities}) based on A-rank Stand stats.'}
-            )
+        # A-rank ability count is validated in _validate_initial_abilities_count for level 1.
+        pass
 
     def _validate_xp_advancements(self):
         # Ensure total_xp_spent is a multiple of 10

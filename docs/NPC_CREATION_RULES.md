@@ -45,8 +45,8 @@ NPCs still possess Stand Coin stats, but only four have direct mechanical impact
         *   **Regular Armor Charges** (reduce harm/consequences by 1):
             *   **S:** 5 charges
             *   **A:** 4 charges
-            *   **B:** 4 charges
-            *   **C:** 3 charges
+            *   **B:** 3 charges
+            *   **C:** 2 charges
             *   **D:** 2 charges
             *   **F:** 1 charge
         *   **Special Armor Charges** (completely negate harm/consequences):
@@ -94,7 +94,27 @@ python backend/src/manage.py create_npc "The Shadow Broker" 1 1 --power A --spee
 ```
 This will create an NPC named "The Shadow Broker" in campaign 1, created by user 1, with the specified Stand Coin stats and a 6-segment Harm Clock. Its level and vulnerability clock will be automatically calculated.
 
-## 5. GMing NPCs
+## 5. Harm and Clocks: GM-Only
+
+**Harm direction:**
+- **NPCs can deal harm to players.** The GM applies harm to player characters using the character **take-harm** API when an NPC inflicts harm in the fiction (e.g. after a consequence or NPC attack).
+- **Players cannot deal harm to NPCs.** There is no player-facing API to deal harm to NPCs. Player success is represented by the **effect** of their roll filling an NPC’s clock; only the GM ticks NPC clocks.
+
+**Effect → clock ticks (GM applies after a roll):**  
+When the GM resolves a player action against an NPC, the roll’s **effect** adds ticks to the chosen NPC clock:
+
+| Effect   | Ticks added |
+|----------|-------------|
+| Limited  | 1           |
+| Standard | 2          |
+| Great / Greater | 3   |
+| Extreme  | 4           |
+
+Use the **apply-effect** endpoint: `POST /api/npcs/{id}/apply-effect/` with body `{ "effect": "limited"|"standard"|"greater"|"great"|"extreme", "clock_type": "vulnerability"|"harm" }`. Only the campaign GM (or NPC creator) can call this; players cannot.
+
+**Clocks:** Per the SRD, NPCs are defeated by filling their **Vulnerability Clock**. The **Harm Clock** can be used for narrative tracking (e.g. pressure, time to activate an ability, or other stakes). Only the GM updates an NPC’s `vulnerability_clock_current`, `harm_clock_current`, or armor usage; these fields are read-only in the API except via the apply-effect action.
+
+## 6. GMing NPCs
 
 When running NPCs, the GM should prioritize narrative and dramatic effect over strict adherence to numerical values, especially for stats like Speed and Range.
 

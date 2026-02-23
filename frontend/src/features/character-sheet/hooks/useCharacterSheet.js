@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createDefaultCharacter } from '../utils/characterUtils';
-import { characterAPI, transformBackendToFrontend, transformFrontendToBackend } from '../services/api';
+import { characterAPI, referenceAPI, transformBackendToFrontend, transformFrontendToBackend } from '../services/api';
 
 export const useCharacterSheet = (characterId, onSave) => {
   const [characterData, setCharacterData] = useState(createDefaultCharacter());
@@ -80,7 +80,7 @@ export const useCharacterSheet = (characterId, onSave) => {
     }
   };
 
-  // Load character when characterId changes
+  // Load character when characterId changes, or reset to defaults for new character
   useEffect(() => {
     if (characterId) {
       loadCharacter(characterId);
@@ -88,18 +88,22 @@ export const useCharacterSheet = (characterId, onSave) => {
       // Reset to default values for new character
       const defaultChar = createDefaultCharacter();
       setCharacterData(defaultChar);
-      setStressBoxes(defaultChar.stress);
-      setTraumaChecks(defaultChar.trauma);
-      setArmorUses(defaultChar.armor);
-      setHarmEntries(defaultChar.harmEntries);
-      setCoinBoxes(defaultChar.coin);
-      setStashBoxes(defaultChar.stash);
-      setHealingClock(defaultChar.healingClock);
-      setActionRatings(defaultChar.actionRatings);
-      setStandStats(defaultChar.standStats);
-      setXpTracks(defaultChar.xp);
-      setSelectedAbilities(defaultChar.abilities);
-      setCustomClocks(defaultChar.clocks);
+      setStressBoxes(defaultChar.stress || Array(9).fill(false));
+      setTraumaChecks(defaultChar.trauma || {
+        COLD: false, HAUNTED: false, OBSESSED: false, PARANOID: false,
+        RECKLESS: false, SOFT: false, UNSTABLE: false, VICIOUS: false
+      });
+      setArmorUses(defaultChar.armor || { armor: false, heavy: false, special: false });
+      setHarmEntries(defaultChar.harmEntries || { level3: [''], level2: ['', ''], level1: ['', ''] });
+      setCoinBoxes(defaultChar.coin || Array(4).fill(false));
+      setStashBoxes(defaultChar.stash || Array(40).fill(false));
+      setHealingClock(defaultChar.healingClock ?? 0);
+      setActionRatings(defaultChar.actionRatings || {});
+      setStandStats(defaultChar.standStats || {});
+      setXpTracks(defaultChar.xp || { insight: 0, prowess: 0, resolve: 0, heritage: 0, playbook: 0 });
+      setSelectedAbilities(defaultChar.abilities || []);
+      setCustomClocks(defaultChar.clocks || []);
+      setError(null);
     }
   }, [characterId]);
 
@@ -127,22 +131,32 @@ export const useCharacterSheet = (characterId, onSave) => {
         lastModified: new Date().toISOString()
       };
       
-      const backendCharacter = transformFrontendToBackend(frontendCharacter);
+      // Resolve heritage name to id for create (backend expects FK id)
+      let payloadCharacter = frontendCharacter;
+      if (typeof frontendCharacter.heritage === 'string') {
+        try {
+          const heritages = await referenceAPI.getHeritages();
+          const match = (heritages || []).find(
+            (h) => (h.name || '').toLowerCase() === (frontendCharacter.heritage || '').toLowerCase()
+          );
+          if (match) {
+            payloadCharacter = { ...frontendCharacter, heritage: match.id };
+          }
+        } catch (_) {
+          // Keep string if lookup fails; backend will validate
+        }
+      }
+      
+      const backendCharacter = transformFrontendToBackend(payloadCharacter);
       
       if (characterId) {
         // Update existing character
         await characterAPI.updateCharacter(characterId, backendCharacter);
+        if (onSave) onSave(frontendCharacter);
       } else {
         // Create new character
         const newCharacter = await characterAPI.createCharacter(backendCharacter);
-        // Update the characterId so future saves will update instead of create
-        if (onSave) {
-          onSave(newCharacter);
-        }
-      }
-      
-      if (onSave) {
-        onSave(frontendCharacter);
+        if (onSave) onSave(transformBackendToFrontend(newCharacter));
       }
       
     } catch (err) {

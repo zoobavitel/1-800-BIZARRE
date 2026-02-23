@@ -1,6 +1,8 @@
 from django.test import TestCase
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from rest_framework.test import APIClient
+from rest_framework import status
 from characters.models import Campaign, NPC, Heritage
 
 
@@ -270,6 +272,16 @@ class NPCVulnerabilityClockTest(TestCase):
         
         self.assertEqual(npc.vulnerability_clock_max, 4)
 
+    def test_regular_armor_charges_b_rank(self):
+        """SRD: B-rank Durability gives 3 regular armor charges (clock segments ÷ 3)."""
+        npc = NPC.objects.create(
+            name='B-Durability NPC',
+            creator=self.gm_user,
+            campaign=self.campaign,
+            stand_coin_stats={'DURABILITY': 'B'}
+        )
+        self.assertEqual(npc.regular_armor_charges, 3)
+
 
 class NPCMovementSpeedTest(TestCase):
     """Test NPC movement speed calculations."""
@@ -442,3 +454,72 @@ class NPCJSONFieldsTest(TestCase):
         
         self.assertEqual(npc.inventory, inventory)
         self.assertIn('Item 1', npc.inventory)
+
+
+class NPCApplyEffectTest(TestCase):
+    """Test GM-only apply-effect: effect fills NPC clocks; players cannot deal harm to NPCs."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.gm_user = User.objects.create_user(username='gm', email='gm@test.com', password='testpass')
+        self.player_user = User.objects.create_user(username='player', email='player@test.com', password='testpass')
+        self.campaign = Campaign.objects.create(name='Test Campaign', gm=self.gm_user)
+        self.npc = NPC.objects.create(
+            name='Villain',
+            creator=self.gm_user,
+            campaign=self.campaign,
+            stand_coin_stats={'DURABILITY': 'D'},
+            harm_clock_max=4,
+            vulnerability_clock_current=0,
+            harm_clock_current=0,
+        )
+
+    def _auth_client(self, user):
+        c = APIClient()
+        c.force_authenticate(user=user)
+        return c
+
+    def test_gm_can_apply_effect_vulnerability_limited(self):
+        """Limited effect adds 1 tick to vulnerability clock."""
+        resp = self._auth_client(self.gm_user).post(
+            f'/api/npcs/{self.npc.id}/apply-effect/',
+            {'effect': 'limited', 'clock_type': 'vulnerability'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data['ticks_applied'], 1)
+        self.assertEqual(resp.data['previous'], 0)
+        self.assertEqual(resp.data['current'], 1)
+        self.npc.refresh_from_db()
+        self.assertEqual(self.npc.vulnerability_clock_current, 1)
+
+    def test_gm_can_apply_effect_standard_and_greater(self):
+        """Standard = 2 ticks, greater = 3 ticks."""
+        client = self._auth_client(self.gm_user)
+        r1 = client.post(f'/api/npcs/{self.npc.id}/apply-effect/', {'effect': 'standard', 'clock_type': 'harm'}, format='json')
+        self.assertEqual(r1.status_code, 200)
+        self.assertEqual(r1.data['ticks_applied'], 2)
+        self.assertEqual(r1.data['current'], 2)
+        r2 = client.post(f'/api/npcs/{self.npc.id}/apply-effect/', {'effect': 'greater', 'clock_type': 'harm'}, format='json')
+        self.assertEqual(r2.status_code, 200)
+        self.assertEqual(r2.data['ticks_applied'], 3)
+        self.assertEqual(r2.data['current'], 4)  # 2 + 3 capped at harm_clock_max=4
+        self.npc.refresh_from_db()
+        self.assertEqual(self.npc.harm_clock_current, 4)
+
+    def test_player_cannot_apply_effect(self):
+        """Players cannot deal harm to NPCs; only GM can apply effect (player gets 404 - no access to NPC)."""
+        resp = self._auth_client(self.player_user).post(
+            f'/api/npcs/{self.npc.id}/apply-effect/',
+            {'effect': 'standard', 'clock_type': 'vulnerability'},
+            format='json',
+        )
+        self.assertIn(resp.status_code, (403, 404), 'Player must not be able to apply effect to NPC')
+
+    def test_invalid_effect_returns_400(self):
+        resp = self._auth_client(self.gm_user).post(
+            f'/api/npcs/{self.npc.id}/apply-effect/',
+            {'effect': 'invalid', 'clock_type': 'vulnerability'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 400)

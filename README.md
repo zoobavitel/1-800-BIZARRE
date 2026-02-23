@@ -34,5 +34,3 @@ The monorepo structure promotes:
 ## Logic Behind Decisions
 
 The decision to use a monorepo structure is driven by the desire to manage related but distinct services (frontend and backend) within a single repository. This approach simplifies dependency management, facilitates code sharing (though minimal in this specific structure), and streamlines CI/CD pipelines. Project-wide configuration files ensure that coding standards and build processes are consistently applied across both applications.
-
-**Note on "Logic Behind Decisions"**: The explanations regarding decision logic primarily reflect discussions from the current chat session and general software engineering best practices. This document does not have access to the full history of all previous, unlogged interactions or design discussions that may have influenced the project's evolution.

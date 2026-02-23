@@ -22,7 +22,7 @@
     "pk": 3,
     "fields": {
       "name": "Vampire",
-      "base_hp": 3,
+      "base_hp": 2,
       "description": "Immortal predators vulnerable to sunlight and Hamon."
     }
   },
@@ -40,7 +40,7 @@
     "pk": 5,
     "fields": {
       "name": "Gray Matter",
-      "base_hp": 1,
+      "base_hp": 2,
       "description": "Extraterrestrials adept at mimicry and shapeshifting."
     }
   },
@@ -49,7 +49,7 @@
     "pk": 6,
     "fields": {
       "name": "Haunting",
-      "base_hp": 1,
+      "base_hp": 2,
       "description": "Partially spectral entities existing between life and death."
     }
   },
@@ -58,7 +58,7 @@
     "pk": 7,
     "fields": {
       "name": "Cyborg",
-      "base_hp": 3,
+      "base_hp": 2,
       "description": "Humans enhanced with advanced cybernetics."
     }
   },
@@ -67,7 +67,7 @@
     "pk": 8,
     "fields": {
       "name": "Oracle",
-      "base_hp": 1,
+      "base_hp": 3,
       "description": "Seers attuned deeply to the supernatural."
     }
   }

@@ -29,7 +29,7 @@
       "name": "Tactical Awareness",
       "hp_cost": 1,
       "required": false,
-      "description": "+1d to all reaction-based rolls in combat."
+      "description": "Use an extra +1d for any roll once per combat."
     }
   },
   {

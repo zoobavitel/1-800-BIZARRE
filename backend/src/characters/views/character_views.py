@@ -60,7 +60,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 {"name": "Range", "description": "Distance the Stand can operate from the user"},
                 {"name": "Durability", "description": "Resistance to damage and ability to endure"},
                 {"name": "Precision", "description": "Accuracy and fine control"},
-                {"name": "Potential", "description": "Growth and development capability"},
+                {"name": "Development", "description": "Growth potential and development capability"},
             ]
         }
         return Response(guide)

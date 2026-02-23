@@ -12,4 +12,12 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS('User Accounts:'))
         for user in users:
-            self.stdout.write(f'- {user.username}')
+            flags = []
+            if user.is_superuser:
+                flags.append('superuser')
+            if user.is_staff:
+                flags.append('staff')
+            suffix = f'  ({", ".join(flags)})' if flags else ''
+            self.stdout.write(f'  {user.username}{suffix}')
+        self.stdout.write('')
+        self.stdout.write('To reset a password: python manage.py set_user_password <username> <new_password>')
