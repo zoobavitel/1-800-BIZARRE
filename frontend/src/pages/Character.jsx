@@ -1,5 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Plus } from 'lucide-react';
+import { campaignAPI, factionAPI } from '../features/character-sheet/services/api';
+
+// ─── SRD constants (1(800)Bizarre SRD: stress/armor by Durability grade) ─────
+const DUR_TABLE = [
+  { stressBonus: -1, armorCharges: 0 }, // F(0)
+  { stressBonus: 0, armorCharges: 1 },   // D(1)
+  { stressBonus: 1, armorCharges: 1 },  // C(2)
+  { stressBonus: 2, armorCharges: 2 },  // B(3)
+  { stressBonus: 3, armorCharges: 3 },  // A(4)
+];
+const MAX_CREATION_DOTS = 7;
+const MAX_DOTS_PER_ACTION_CREATION = 2;
 
 // Full Character Sheet Component (preserving ALL original functionality)
 const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwitchCharacter, allCharacters = [] }) => {
@@ -27,12 +39,19 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
         vice: character.vice || '',
         crew: character.crew || ''
       });
-      setStressBoxes(character.stress || Array(9).fill(false));
+      const durVal = Math.min(4, Math.max(0, character.standStats?.durability ?? 1));
+      const maxSt = 9 + DUR_TABLE[durVal].stressBonus;
+      const filled = character.stress ? (Array.isArray(character.stress) ? character.stress.filter(Boolean).length : 0) : 0;
+      setStressBoxes(Array(maxSt).fill(false).map((_, i) => i < filled));
       setTraumaChecks(character.trauma || {
         COLD: false, HAUNTED: false, OBSESSED: false, PARANOID: false,
         RECKLESS: false, SOFT: false, UNSTABLE: false, VICIOUS: false
       });
       setArmorUses(character.armor || { armor: false, heavy: false, special: false });
+      const arm = character.armor;
+      const regUsed = typeof character.regularArmorUsed === 'number' ? character.regularArmorUsed : (arm?.armor ? 1 : 0) + (arm?.heavy ? 1 : 0);
+      setRegularArmorUsed(Math.min(regUsed, DUR_TABLE[durVal].armorCharges));
+      setSpecialArmorUsed(arm?.special ?? false);
       setHarmEntries(character.harmEntries || {
         level3: [''],
         level2: ['', ''],
@@ -71,6 +90,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
         RECKLESS: false, SOFT: false, UNSTABLE: false, VICIOUS: false
       });
       setArmorUses({ armor: false, heavy: false, special: false });
+      setRegularArmorUsed(0);
+      setSpecialArmorUsed(false);
       setHarmEntries({
         level3: [''],
         level2: ['', ''],
@@ -112,6 +133,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     RECKLESS: false, SOFT: false, UNSTABLE: false, VICIOUS: false
   });
   const [armorUses, setArmorUses] = useState(character?.armor || { armor: false, heavy: false, special: false });
+  const [regularArmorUsed, setRegularArmorUsed] = useState(
+    typeof character?.regularArmorUsed === 'number' ? character.regularArmorUsed : (character?.armor?.armor ? 1 : 0) + (character?.armor?.heavy ? 1 : 0)
+  );
+  const [specialArmorUsed, setSpecialArmorUsed] = useState(character?.armor?.special ?? false);
   const [harmEntries, setHarmEntries] = useState(character?.harmEntries || {
     level3: [''],
     level2: ['', ''],
@@ -130,6 +155,20 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const [standStats, setStandStats] = useState(character?.standStats || {
     power: 1, speed: 1, range: 1, durability: 1, precision: 1, development: 1
   });
+
+  // SRD: Stress and armor max from Durability grade (F=0..A=4)
+  const durVal = Math.min(4, Math.max(0, standStats?.durability ?? 1));
+  const maxStress = 9 + DUR_TABLE[durVal].stressBonus;
+  const maxArmorCharges = DUR_TABLE[durVal].armorCharges;
+
+  useEffect(() => {
+    setStressBoxes(prev => {
+      const filled = prev.filter(Boolean).length;
+      const newMax = 9 + DUR_TABLE[Math.min(4, Math.max(0, standStats?.durability ?? 1))].stressBonus;
+      return Array(newMax).fill(false).map((_, i) => i < Math.min(filled, newMax));
+    });
+    setRegularArmorUsed(prev => Math.min(prev, DUR_TABLE[Math.min(4, Math.max(0, standStats?.durability ?? 1))].armorCharges));
+  }, [standStats?.durability]);
   
   const [diceResult, setDiceResult] = useState(null);
   const [customClocks, setCustomClocks] = useState(character?.clocks || []);
@@ -180,58 +219,51 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     notes: ''
   });
 
-  // Faction state
+  // Faction state — populated from API when GM creates campaigns and factions
   const [factionData, setFactionData] = useState({
-    isGM: true, // Toggle for GM vs Player view
-    campaignName: 'Diamond is Unbreakable',
-    factions: [
-      {
-        id: 1,
-        name: 'Speedwagon Foundation',
-        type: 'MERCHANT',
-        hold: 'strong',
-        reputation: 3,
-        notes: 'International organization funding bizarre research'
-      },
-      {
-        id: 2,
-        name: 'Morioh Police',
-        type: 'POLITICAL',
-        hold: 'weak',
-        reputation: 1,
-        notes: 'Local law enforcement, unaware of Stand users'
-      },
-      {
-        id: 3,
-        name: 'Angelo Gang',
-        type: 'CRIMINAL',
-        hold: 'weak',
-        reputation: -2,
-        notes: 'Small-time criminals with supernatural connections'
-      },
-      {
-        id: 4,
-        name: 'Higashikata Family',
-        type: 'NOBLE',
-        hold: 'strong',
-        reputation: 2,
-        notes: 'Wealthy family with hidden Stand heritage'
-      }
-    ],
-    relationships: [
-      { sourceId: 1, targetId: 2, value: 1, notes: 'Cooperative relationship' },
-      { sourceId: 1, targetId: 3, value: -3, notes: 'Actively opposing' },
-      { sourceId: 2, targetId: 3, value: -2, notes: 'Criminal investigation' },
-      { sourceId: 4, targetId: 1, value: 2, notes: 'Financial support' }
-    ],
-    crewRelationships: [
-      { factionId: 1, value: 2, notes: 'Aided in investigation' },
-      { factionId: 2, value: 0, notes: 'Neutral standing' },
-      { factionId: 3, value: -1, notes: 'Disrupted operations' },
-      { factionId: 4, value: 1, notes: 'Family connections' }
-    ]
+    isGM: true,
+    campaignName: '',
+    factions: [],
+    relationships: [],
+    crewRelationships: [],
   });
-  
+  const [campaigns, setCampaigns] = useState([]);
+  const [selectedCampaignId, setSelectedCampaignId] = useState(null);
+  const [factionsLoading, setFactionsLoading] = useState(false);
+
+  useEffect(() => {
+    campaignAPI.getCampaigns()
+      .then((list) => {
+        setCampaigns(list || []);
+        if (list?.length === 1 && !selectedCampaignId) setSelectedCampaignId(list[0].id);
+      })
+      .catch(() => setCampaigns([]));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedCampaignId) {
+      setFactionData((prev) => ({ ...prev, campaignName: '', factions: [] }));
+      return;
+    }
+    const campaign = campaigns.find((c) => c.id === selectedCampaignId);
+    setFactionData((prev) => ({ ...prev, campaignName: campaign?.name || '' }));
+    setFactionsLoading(true);
+    factionAPI.getFactions(selectedCampaignId)
+      .then((list) => {
+        const factions = (list || []).map((f) => ({
+          id: f.id,
+          name: f.name || '',
+          type: (f.faction_type || 'OTHER').toUpperCase().replace(/\s+/g, '_'),
+          hold: f.hold || 'weak',
+          reputation: typeof f.reputation === 'number' ? f.reputation : 0,
+          notes: f.notes || '',
+        }));
+        setFactionData((prev) => ({ ...prev, factions }));
+      })
+      .catch(() => setFactionData((prev) => ({ ...prev, factions: [] })))
+      .finally(() => setFactionsLoading(false));
+  }, [selectedCampaignId, campaigns]);
+
   // XP tracking
   const [xpTracks, setXpTracks] = useState(character?.xp || {
     insight: 0, prowess: 0, resolve: 0, heritage: 0, playbook: 0
@@ -315,12 +347,15 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
         isResistance: isResistanceRoll,
         stressCost: isResistanceRoll ? 6 - result : null,
         zeroDice: true,
-        isDesperateAction: isDesperateAction
+        isDesperateAction: isDesperateAction,
+        isCritical: false
       });
     } else {
       const dice = Array.from({ length: diceCount }, () => Math.floor(Math.random() * 6) + 1);
       const highest = Math.max(...dice);
       const sixes = dice.filter(d => d === 6).length;
+      const isCritical = sixes >= 2;
+      const stressCost = isResistanceRoll ? (isCritical ? -1 : Math.max(0, 6 - highest)) : null;
       
       let outcome = 'Failure';
       if (highest >= 6) {
@@ -336,9 +371,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
         outcome: outcome,
         special: sixes > 1 ? `Critical! (${sixes} sixes)` : '',
         isResistance: isResistanceRoll,
-        stressCost: isResistanceRoll ? 6 - highest : null,
+        stressCost,
         zeroDice: false,
-        isDesperateAction: isDesperateAction
+        isDesperateAction: isDesperateAction,
+        isCritical
       });
     }
 
@@ -413,6 +449,11 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   };
 
   const updateActionRating = (action, value) => {
+    const current = actionRatings[action] ?? 0;
+    const otherTotal = Object.entries(actionRatings).reduce((s, [k, v]) => s + (k === action ? 0 : v), 0);
+    if (value > MAX_DOTS_PER_ACTION_CREATION) {
+      if (otherTotal + current < MAX_CREATION_DOTS || value > 4) return;
+    } else if (otherTotal + value > MAX_CREATION_DOTS) return;
     setActionRatings({ ...actionRatings, [action]: value });
   };
 
@@ -609,7 +650,9 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
         standStats,
         stress: stressBoxes,
         trauma: traumaChecks,
-        armor: armorUses,
+        armor: { armor: regularArmorUsed > 0, heavy: regularArmorUsed > 1, special: specialArmorUsed },
+        regularArmorUsed,
+        specialArmorUsed,
         harmEntries,
         coin: coinBoxes,
         stash: stashBoxes,
@@ -656,6 +699,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
               <div className="search-container desktop-search" ref={searchRef}>
                 <div className="flex items-center">
                   <input 
+                    id="header-search"
+                    name="search"
                     type="text" 
                     className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-1 text-sm" 
                     placeholder="Search characters, campaigns, abilities..." 
@@ -791,6 +836,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     <div className="text-red-400 text-xs font-bold">NAME</div>
                     <div className="border-b border-gray-600 pb-1">
                       <input 
+                        id="character-name"
+                        name="characterName"
                         type="text" 
                         value={characterData.name}
                         onChange={(e) => updateCharacterData('name', e.target.value)}
@@ -803,6 +850,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     <div className="text-red-400 text-xs font-bold">CREW</div>
                     <div className="border-b border-gray-600 pb-1">
                       <input 
+                        id="character-crew"
+                        name="crew"
                         type="text" 
                         value={characterData.crew}
                         onChange={(e) => updateCharacterData('crew', e.target.value)}
@@ -818,6 +867,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     <div className="text-red-400 text-xs font-bold">STAND NAME</div>
                     <div className="border-b border-gray-600 pb-1">
                       <input 
+                        id="character-stand-name"
+                        name="standName"
                         type="text" 
                         value={characterData.standName}
                         onChange={(e) => updateCharacterData('standName', e.target.value)}
@@ -832,6 +883,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                   <div className="text-red-400 text-xs font-bold">LOOK</div>
                   <div className="border-b border-gray-600 pb-1">
                     <input 
+                      id="character-look"
+                      name="look"
                       type="text" 
                       value={characterData.look}
                       onChange={(e) => updateCharacterData('look', e.target.value)}
@@ -846,6 +899,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     <div className="text-red-400 text-xs font-bold">HERITAGE</div>
                     <div className="border-b border-gray-600 pb-1">
                       <input 
+                        id="character-heritage"
+                        name="heritage"
                         type="text" 
                         value={characterData.heritage}
                         onChange={(e) => updateCharacterData('heritage', e.target.value)}
@@ -858,6 +913,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     <div className="text-red-400 text-xs font-bold">BACKGROUND</div>
                     <div className="border-b border-gray-600 pb-1">
                       <input 
+                        id="character-background"
+                        name="background"
                         type="text" 
                         value={characterData.background}
                         onChange={(e) => updateCharacterData('background', e.target.value)}
@@ -873,6 +930,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                   <div className="border-b border-gray-600 pb-1 flex items-center justify-between">
                     <div className="flex items-center space-x-2 flex-1">
                       <select 
+                        id="character-vice"
+                        name="vice"
                         value={characterData.vice}
                         onChange={(e) => updateCharacterData('vice', e.target.value)}
                         className="bg-gray-700 text-white border border-gray-600 px-2 py-1 text-xs"
@@ -882,27 +941,35 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                           <option key={vice} value={vice}>{vice}</option>
                         ))}
                       </select>
-                      <input type="text" placeholder="Purveyor name/details" className="bg-transparent flex-1 text-white text-xs" />
+                      <input id="character-purveyor" name="purveyor" type="text" placeholder="Purveyor name/details" className="bg-transparent flex-1 text-white text-xs" />
                     </div>
                     <button className="bg-gray-600 px-2 py-1 text-xs border border-gray-500 ml-2">Indulge Vice</button>
                   </div>
                 </div>
               </div>
 
-              {/* Stress & Trauma */}
+              {/* Stress & Trauma — SRD: max from Durability */}
               <div className="space-y-4">
                 <div>
-                  <div className="text-red-400 text-xs font-bold mb-1">STRESS</div>
-                  <div className="flex space-x-1">
-                    {stressBoxes.map((filled, i) => (
-                      <div 
-                        key={i} 
-                        className={`w-6 h-6 border border-gray-600 cursor-pointer hover:bg-gray-600 ${
-                          filled ? 'bg-red-600' : 'bg-gray-800'
-                        }`}
-                        onClick={() => toggleStress(i)}
-                      ></div>
-                    ))}
+                  <div className="text-red-400 text-xs font-bold mb-1 flex justify-between items-center">
+                    <span>STRESS</span>
+                    <span className="text-gray-400 font-normal">{stressBoxes.filter(Boolean).length}/{maxStress}</span>
+                  </div>
+                  <div className="flex space-x-1 flex-wrap">
+                    {Array.from({ length: maxStress }, (_, i) => {
+                      const filledCount = stressBoxes.filter(Boolean).length;
+                      const filled = i < filledCount;
+                      return (
+                        <div
+                          key={i}
+                          className={`w-6 h-6 border border-gray-600 cursor-pointer hover:bg-gray-600 ${filled ? 'bg-red-600' : 'bg-gray-800'}`}
+                          onClick={() => {
+                            const newFilled = i < filledCount ? i : i + 1;
+                            setStressBoxes(Array(maxStress).fill(false).map((_, j) => j < newFilled));
+                          }}
+                        />
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -910,8 +977,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                   <div className="text-red-400 text-xs font-bold mb-1">TRAUMA</div>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
                     {Object.entries(traumaChecks).map(([trauma, checked]) => (
-                      <label key={trauma} className="flex items-center space-x-1 cursor-pointer">
+                      <label key={trauma} htmlFor={`trauma-${trauma}`} className="flex items-center space-x-1 cursor-pointer">
                         <input 
+                          id={`trauma-${trauma}`}
+                          name={`trauma-${trauma}`}
                           type="checkbox" 
                           className="w-3 h-3" 
                           checked={checked}
@@ -933,6 +1002,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                       <span className="text-xs text-gray-400 w-16">NEED HELP</span>
                       <div className="flex-1 border border-gray-600 h-6 bg-gray-800">
                         <input 
+                          id="harm-level3-0"
+                          name="harmLevel3_0"
                           type="text" 
                           className="bg-transparent w-full h-full px-2 text-white text-xs" 
                           placeholder="Level 3 harm" 
@@ -945,6 +1016,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                       <span className="text-xs text-gray-400 w-16">-1D</span>
                       <div className="flex-1 border border-gray-600 h-6 bg-gray-800">
                         <input 
+                          id="harm-level2-0"
+                          name="harmLevel2_0"
                           type="text" 
                           className="bg-transparent w-full h-full px-2 text-white text-xs" 
                           placeholder="Level 2 harm" 
@@ -957,6 +1030,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                       <span className="text-xs text-gray-400 w-16">-1D</span>
                       <div className="flex-1 border border-gray-600 h-6 bg-gray-800">
                         <input 
+                          id="harm-level2-1"
+                          name="harmLevel2_1"
                           type="text" 
                           className="bg-transparent w-full h-full px-2 text-white text-xs" 
                           placeholder="Level 2 harm" 
@@ -969,6 +1044,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                       <span className="text-xs text-gray-400 w-16">LESS EFFECT</span>
                       <div className="flex-1 border border-gray-600 h-6 bg-gray-800">
                         <input 
+                          id="harm-level1-0"
+                          name="harmLevel1_0"
                           type="text" 
                           className="bg-transparent w-full h-full px-2 text-white text-xs" 
                           placeholder="Level 1 harm" 
@@ -981,6 +1058,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                       <span className="text-xs text-gray-400 w-16">LESS EFFECT</span>
                       <div className="flex-1 border border-gray-600 h-6 bg-gray-800">
                         <input 
+                          id="harm-level1-1"
+                          name="harmLevel1_1"
                           type="text" 
                           className="bg-transparent w-full h-full px-2 text-white text-xs" 
                           placeholder="Level 1 harm" 
@@ -1002,36 +1081,25 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     <div className="text-xs text-gray-400 mt-1">HEALING</div>
                   </div>
                   <div className="space-y-2">
-                    <div className="text-xs text-gray-400">ARMOR USES</div>
-                    <div className="space-y-1">
-                      <div className="flex items-center space-x-2">
-                        <input 
-                          type="checkbox" 
-                          className="w-3 h-3" 
-                          checked={armorUses.armor}
-                          onChange={() => toggleArmor('armor')}
-                        />
-                        <span className="text-xs">ARMOR</span>
+                    <div className="text-xs text-gray-400">ARMOR (SRD: {maxArmorCharges} chg from DUR)</div>
+                    {maxArmorCharges > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {Array.from({ length: maxArmorCharges }, (_, i) => (
+                          <div
+                            key={i}
+                            className={`w-5 h-5 border border-gray-600 cursor-pointer ${i < regularArmorUsed ? 'bg-amber-600' : 'bg-gray-800'}`}
+                            title={i < regularArmorUsed ? 'Used — click to restore' : 'Click to spend'}
+                            onClick={() => setRegularArmorUsed(i < regularArmorUsed ? i : i + 1)}
+                          />
+                        ))}
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <input 
-                          type="checkbox" 
-                          className="w-3 h-3" 
-                          checked={armorUses.heavy}
-                          onChange={() => toggleArmor('heavy')}
-                        />
-                        <span className="text-xs">+HEAVY</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <input 
-                          type="checkbox" 
-                          className="w-3 h-3" 
-                          checked={armorUses.special}
-                          onChange={() => toggleArmor('special')}
-                        />
-                        <span className="text-xs">SPECIAL</span>
-                      </div>
-                    </div>
+                    ) : (
+                      <div className="text-xs text-gray-500">F-DUR: no armor</div>
+                    )}
+                    <label className="flex items-center space-x-2 cursor-pointer text-xs">
+                      <input type="checkbox" className="w-3 h-3" checked={specialArmorUsed} onChange={e => setSpecialArmorUsed(e.target.checked)} />
+                      <span>SPECIAL (negates harm)</span>
+                    </label>
                   </div>
                 </div>
               </div>
@@ -1340,14 +1408,23 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                   
                   {diceResult.isResistance && (
                     <div className="bg-gray-800 p-2 rounded text-xs">
-                      <div className="text-yellow-400 font-bold mb-1">Resistance Roll - Stress Cost: {diceResult.stressCost}</div>
-                      <div className="text-gray-300 space-y-1">
-                        <div>• Pay {diceResult.stressCost} stress to reduce harm by one level</div>
-                        <div>• Level 3 → Level 2 (only if Level 2 slot is open)</div>
-                        <div>• Level 2 → Level 1 (only if Level 1 slot is open)</div>
-                        <div>• Level 1 → Removed completely</div>
-                        <div className="text-yellow-300 mt-1">⚠ Must clear lower-level harm first if slots are full!</div>
-                      </div>
+                      {diceResult.stressCost === -1 ? (
+                        <>
+                          <div className="text-yellow-400 font-bold mb-1">✦ CRITICAL — 0 Stress cost + Clear 1 stress</div>
+                          <div className="text-gray-300">Pay no stress AND remove one previously filled stress box.</div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="text-yellow-400 font-bold mb-1">Resistance Roll — Stress Cost: {diceResult.stressCost}</div>
+                          <div className="text-gray-300 space-y-1">
+                            <div>• Pay {diceResult.stressCost} stress to reduce harm by one level</div>
+                            <div>• Level 3 → Level 2 (only if Level 2 slot is open)</div>
+                            <div>• Level 2 → Level 1 (only if Level 1 slot is open)</div>
+                            <div>• Level 1 → Removed completely</div>
+                            <div className="text-yellow-300 mt-1">⚠ Must clear lower-level harm first if slots are full!</div>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
                   
@@ -1599,6 +1676,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     <div key={clock.id} className="bg-gray-700 p-2 rounded">
                       <div className="flex items-center justify-between mb-2">
                         <input 
+                          id={`clock-name-${clock.id}`}
+                          name={`clockName-${clock.id}`}
                           type="text" 
                           value={clock.name}
                           onChange={(e) => {
@@ -1643,6 +1722,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                   <div className="text-red-400 text-xs font-bold mb-2">NOTES</div>
                   <div className="border border-gray-600 bg-gray-800 p-2 h-20">
                     <textarea 
+                      id="character-notes"
+                      name="characterNotes"
                       placeholder="Notes..." 
                       className="w-full h-full bg-transparent text-xs text-white resize-none"
                     />
@@ -1662,6 +1743,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                   <div className="flex items-center space-x-4">
                     <div className="text-xs text-gray-400 font-bold">NAME</div>
                     <input 
+                      id="crew-name"
+                      name="crewName"
                       type="text" 
                       value={crewData.name}
                       onChange={(e) => setCrewData(prev => ({ ...prev, name: e.target.value }))}
@@ -1672,6 +1755,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                   <div className="flex items-center space-x-4">
                     <div className="text-xs text-gray-400 font-bold">REPUTATION</div>
                     <input 
+                      id="crew-reputation"
+                      name="crewReputation"
                       type="text" 
                       value={crewData.reputation}
                       onChange={(e) => setCrewData(prev => ({ ...prev, reputation: e.target.value }))}
@@ -1685,6 +1770,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                 <div className="bg-gray-800 border border-gray-600 p-3 mb-4">
                   <div className="flex items-center space-x-2 mb-2">
                     <input 
+                      id="crew-ward-boss"
+                      name="wardBossTitle"
                       type="text" 
                       value={crewData.wardBossTitle}
                       onChange={(e) => setCrewData(prev => ({ ...prev, wardBossTitle: e.target.value }))}
@@ -1733,8 +1820,9 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                   <div>
                     <div className="text-red-400 text-xs font-bold mb-1">HOLD</div>
                     <div className="flex space-x-2">
-                      <label className="flex items-center space-x-1 cursor-pointer">
+                      <label htmlFor="hold-weak" className="flex items-center space-x-1 cursor-pointer">
                         <input 
+                          id="hold-weak"
                           type="radio" 
                           name="hold"
                           value="weak"
@@ -1744,8 +1832,9 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                         />
                         <span className="text-xs">WEAK</span>
                       </label>
-                      <label className="flex items-center space-x-1 cursor-pointer">
+                      <label htmlFor="hold-strong" className="flex items-center space-x-1 cursor-pointer">
                         <input 
+                          id="hold-strong"
                           type="radio" 
                           name="hold"
                           value="strong"
@@ -1912,6 +2001,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     <div className="text-red-400 text-xs font-bold mb-2">CREW</div>
                     <div className="bg-gray-800 border border-gray-600 p-3">
                       <textarea 
+                        id="crew-description"
+                        name="crewDescription"
                         value={crewData.description}
                         onChange={(e) => setCrewData(prev => ({ ...prev, description: e.target.value }))}
                         placeholder="A short crew description..."
@@ -1929,8 +2020,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                         <div className="text-xs font-bold mb-1">LAIR</div>
                         <div className="grid grid-cols-2 gap-1 text-xs">
                           {Object.entries(crewData.upgrades.lair).map(([key, value]) => (
-                            <label key={key} className="flex items-center space-x-1 cursor-pointer">
+                            <label key={key} htmlFor={`upgrade-lair-${key}`} className="flex items-center space-x-1 cursor-pointer">
                               <input 
+                                id={`upgrade-lair-${key}`}
+                                name={`upgradeLair-${key}`}
                                 type="checkbox" 
                                 className="w-3 h-3" 
                                 checked={value}

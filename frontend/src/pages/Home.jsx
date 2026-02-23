@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, ArrowRight, Zap, Users, Dice6, BookOpen, Settings, LogOut } from 'lucide-react';
 import '../styles/Home.css';
-import { useCharacterSheet, useReferenceData, characterAPI, transformBackendToFrontend } from '../features/character-sheet';
+import { useCharacterSheet, characterAPI, campaignAPI, transformBackendToFrontend } from '../features/character-sheet';
 import { useAuth } from '../features/auth';
 
 // Main Home Page Component
@@ -44,7 +44,7 @@ const HomePage = () => {
     }
   };
   
-  // Character sheet hooks - moved to top level to avoid conditional hook calls
+  // Character sheet hooks - only destructure what this page uses
   const {
     characterData,
     setCharacterData,
@@ -52,39 +52,17 @@ const HomePage = () => {
     setStressBoxes,
     traumaChecks,
     setTraumaChecks,
-    armorUses,
-    setArmorUses,
-    harmEntries,
-    setHarmEntries,
-    coinBoxes,
-    setCoinBoxes,
-    stashBoxes,
-    setStashBoxes,
-    healingClock,
-    setHealingClock,
     actionRatings,
     setActionRatings,
     standStats,
     setStandStats,
-    xpTracks,
     setXpTracks,
-    selectedAbilities,
     setSelectedAbilities,
-    customClocks,
     setCustomClocks,
     loading: sheetLoading,
     saving,
     error: sheetError,
     handleSave,
-    rollAction,
-    addXP,
-    takeHarm,
-    healHarm,
-    indulgeVice,
-    logArmorExpenditure,
-    addProgressClock,
-    updateProgressClock,
-    loadCharacter
   } = useCharacterSheet(selectedCharacter?.id, handleSaveCharacter);
 
   // Load character data when selectedCharacter changes
@@ -113,12 +91,44 @@ const HomePage = () => {
       setSelectedAbilities(selectedCharacter.abilities || []);
       setCustomClocks(selectedCharacter.clocks || []);
     }
+  // Intentionally omit setState functions (stable) to avoid unnecessary effect runs
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCharacter, showCharacterSheet]);
-  
-  // Load characters from backend on component mount
+
+  // Load characters and campaigns from backend on component mount
   useEffect(() => {
     loadCharacters();
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setCampaigns([]);
+      setCampaignsLoading(false);
+      return;
+    }
+    setCampaignsLoading(true);
+    campaignAPI.getCampaigns()
+      .then((list) => {
+        const mapped = (list || []).map((c) => ({
+          id: c.id,
+          name: c.name || '',
+          description: c.description || '',
+          role: c.gm?.id === user?.id ? 'GM' : 'Player',
+          gmName: c.gm?.username || '',
+          playerCount: Array.isArray(c.players) ? c.players.length : 0,
+          maxPlayers: null,
+          nextSession: null,
+          status: 'Active',
+          characterName: null,
+        }));
+        setCampaigns(mapped);
+      })
+      .catch((err) => {
+        console.error('Failed to load campaigns:', err);
+        setCampaigns([]);
+      })
+      .finally(() => setCampaignsLoading(false));
+  }, [user]);
 
   const loadCharacters = async () => {
     setLoading(true);
@@ -155,57 +165,12 @@ const HomePage = () => {
     }
   };
 
-  const [campaigns] = useState([
-    // Example campaigns
-    {
-      id: 1,
-      name: 'Diamond is Unbreakable',
-      role: 'Player',
-      gmName: 'Hirohiko Araki',
-      playerCount: 4,
-      maxPlayers: 5,
-      nextSession: '2024-01-15 19:00',
-      description: 'A bizarre murder mystery in the town of Morioh',
-      status: 'Active',
-      characterName: 'METAL FINGERS'
-    },
-    {
-      id: 2,
-      name: 'Steel Ball Run',
-      role: 'GM',
-      playerCount: 3,
-      maxPlayers: 4,
-      nextSession: '2024-01-18 20:00',
-      description: 'Cross-country race across America with supernatural powers',
-      status: 'Active'
-    },
-    {
-      id: 3,
-      name: 'Stone Ocean Chronicles',
-      role: 'Player',
-      gmName: 'DIO Brando',
-      playerCount: 2,
-      maxPlayers: 6,
-      nextSession: 'TBD',
-      description: 'Prison break adventure with cosmic stakes',
-      status: 'Recruiting',
-      characterName: null
-    }
-  ]);
+  const [campaigns, setCampaigns] = useState([]);
+  const [campaignsLoading, setCampaignsLoading] = useState(true);
 
   const handleCreateCharacter = () => {
     setSelectedCharacter(null);
     setShowCharacterSheet(true);
-  };
-
-  const handleCreateNewFromSheet = () => {
-    // Save current character first if there are changes
-    setSelectedCharacter(null);
-    // Keep the sheet open but clear the character data for a new one
-  };
-
-  const handleSwitchCharacter = (character) => {
-    setSelectedCharacter(character);
   };
 
   const handleEditCharacter = (character) => {
@@ -294,6 +259,8 @@ const HomePage = () => {
                         <div className="text-red-400 text-xs font-bold">NAME</div>
                         <div className="border-b border-gray-600 pb-1">
                           <input 
+                            id="sheet-character-name"
+                            name="characterName"
                             type="text" 
                             value={characterData.name}
                             onChange={(e) => setCharacterData(prev => ({ ...prev, name: e.target.value }))}
@@ -306,6 +273,8 @@ const HomePage = () => {
                         <div className="text-red-400 text-xs font-bold">CREW</div>
                         <div className="border-b border-gray-600 pb-1">
                           <input 
+                            id="sheet-crew"
+                            name="crew"
                             type="text" 
                             value={characterData.crew}
                             onChange={(e) => setCharacterData(prev => ({ ...prev, crew: e.target.value }))}
@@ -321,6 +290,8 @@ const HomePage = () => {
                         <div className="text-red-400 text-xs font-bold">STAND NAME</div>
                         <div className="border-b border-gray-600 pb-1">
                           <input 
+                            id="sheet-stand-name"
+                            name="standName"
                             type="text" 
                             value={characterData.standName}
                             onChange={(e) => setCharacterData(prev => ({ ...prev, standName: e.target.value }))}
@@ -335,6 +306,8 @@ const HomePage = () => {
                       <div className="text-red-400 text-xs font-bold">LOOK</div>
                       <div className="border-b border-gray-600 pb-1">
                         <input 
+                          id="sheet-look"
+                          name="look"
                           type="text" 
                           value={characterData.look}
                           onChange={(e) => setCharacterData(prev => ({ ...prev, look: e.target.value }))}
@@ -349,6 +322,8 @@ const HomePage = () => {
                         <div className="text-red-400 text-xs font-bold">HERITAGE</div>
                         <div className="border-b border-gray-600 pb-1">
                           <input 
+                            id="sheet-heritage"
+                            name="heritage"
                             type="text" 
                             value={characterData.heritage}
                             onChange={(e) => setCharacterData(prev => ({ ...prev, heritage: e.target.value }))}
@@ -361,6 +336,8 @@ const HomePage = () => {
                         <div className="text-red-400 text-xs font-bold">BACKGROUND</div>
                         <div className="border-b border-gray-600 pb-1">
                           <input 
+                            id="sheet-background"
+                            name="background"
                             type="text" 
                             value={characterData.background}
                             onChange={(e) => setCharacterData(prev => ({ ...prev, background: e.target.value }))}
@@ -375,6 +352,8 @@ const HomePage = () => {
                       <div className="text-red-400 text-xs font-bold">VICE</div>
                       <div className="border-b border-gray-600 pb-1">
                         <input 
+                          id="sheet-vice"
+                          name="vice"
                           type="text" 
                           value={characterData.vice}
                           onChange={(e) => setCharacterData(prev => ({ ...prev, vice: e.target.value }))}
@@ -410,8 +389,10 @@ const HomePage = () => {
                       <div className="text-red-400 text-xs font-bold mb-1">TRAUMA</div>
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
                         {Object.entries(traumaChecks).map(([trauma, checked]) => (
-                          <label key={trauma} className="flex items-center space-x-1 cursor-pointer">
+                          <label key={trauma} htmlFor={`sheet-trauma-${trauma}`} className="flex items-center space-x-1 cursor-pointer">
                             <input 
+                              id={`sheet-trauma-${trauma}`}
+                              name={`trauma-${trauma}`}
                               type="checkbox" 
                               className="w-3 h-3" 
                               checked={checked}
@@ -691,10 +672,16 @@ const HomePage = () => {
             </div>
           )}
 
-          {/* Campaign Gallery */}
-          {campaigns.length > 0 && (
-            <div className="campaign-section">
-              <h3 className="section-title">Your Campaigns</h3>
+          {/* Campaign Gallery - populated when GM creates campaigns */}
+          <div className="campaign-section">
+            <h3 className="section-title">Your Campaigns</h3>
+            {campaignsLoading ? (
+              <div className="text-center py-8 text-gray-400">Loading campaigns...</div>
+            ) : campaigns.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                No campaigns yet. Create one as GM or wait to be invited.
+              </div>
+            ) : (
               <div className="campaign-grid">
                 {campaigns.map((campaign) => (
                   <div key={campaign.id} className="campaign-card">
@@ -709,8 +696,7 @@ const HomePage = () => {
                           {campaign.status}
                         </span>
                       </div>
-                      <p className="campaign-description">{campaign.description}</p>
-                      
+                      <p className="campaign-description">{campaign.description || '—'}</p>
                       <div className="campaign-details">
                         <div className="detail-row">
                           <span>Role:</span>
@@ -724,7 +710,7 @@ const HomePage = () => {
                         )}
                         <div className="detail-row">
                           <span>Players:</span>
-                          <span>{campaign.playerCount}/{campaign.maxPlayers}</span>
+                          <span>{campaign.playerCount}{campaign.maxPlayers != null ? `/${campaign.maxPlayers}` : ''}</span>
                         </div>
                         {campaign.characterName && (
                           <div className="detail-row">
@@ -732,13 +718,14 @@ const HomePage = () => {
                             <span className="detail-character">{campaign.characterName}</span>
                           </div>
                         )}
-                        <div className="detail-row">
-                          <span>Next Session:</span>
-                          <span>{campaign.nextSession}</span>
-                        </div>
+                        {campaign.nextSession && (
+                          <div className="detail-row">
+                            <span>Next Session:</span>
+                            <span>{campaign.nextSession}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
-                    
                     <div className="campaign-actions">
                       <button 
                         onClick={() => campaign.role === 'GM' ? handleManageCampaign(campaign.id) : handleJoinCampaign(campaign.id)}
@@ -753,8 +740,8 @@ const HomePage = () => {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
         </section>
 

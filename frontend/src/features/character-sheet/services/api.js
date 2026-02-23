@@ -165,6 +165,24 @@ export const campaignAPI = {
   }),
 };
 
+// Faction API functions (factions are per-campaign, created by GM)
+export const factionAPI = {
+  getFactions: (campaignId) =>
+    campaignId
+      ? apiRequest(`/factions/?campaign=${campaignId}`)
+      : apiRequest('/factions/'),
+  getFaction: (id) => apiRequest(`/factions/${id}/`),
+  createFaction: (data) => apiRequest('/factions/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  updateFaction: (id, data) => apiRequest(`/factions/${id}/`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  }),
+  deleteFaction: (id) => apiRequest(`/factions/${id}/`, { method: 'DELETE' }),
+};
+
 // Crew API functions
 export const crewAPI = {
   // Get all crews
@@ -317,7 +335,6 @@ export const transformBackendToFrontend = (backendCharacter) => {
     
     // Additional backend fields
     campaign: backendCharacter.campaign,
-    crew: backendCharacter.crew,
     playbook: backendCharacter.playbook,
     level: backendCharacter.level,
     loadout: backendCharacter.loadout,

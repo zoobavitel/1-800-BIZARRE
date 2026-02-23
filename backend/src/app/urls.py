@@ -10,7 +10,7 @@ from django.conf.urls.static import static
 from characters.views import (
     UserProfileViewSet, HeritageViewSet, ViceViewSet, AbilityViewSet,
     StandViewSet, CharacterViewSet,
-    CampaignViewSet, NPCViewSet, CrewViewSet,
+    CampaignViewSet, FactionViewSet, NPCViewSet, CrewViewSet,
     TraumaViewSet, CharacterHistoryViewSet, ExperienceTrackerViewSet, SessionViewSet, SessionEventViewSet,
     home, RegisterView, StandAbilityViewSet, LoginView,
     HamonAbilityViewSet, SpinAbilityViewSet, global_search,
@@ -35,6 +35,7 @@ router.register(r'experience-tracker', ExperienceTrackerViewSet, basename='exper
 router.register(r'sessions', SessionViewSet, basename='sessions')
 router.register(r'session-events', SessionEventViewSet)
 router.register(r'campaigns', CampaignViewSet)
+router.register(r'factions', FactionViewSet)
 router.register(r'npcs', NPCViewSet)
 router.register(r'crews', CrewViewSet)
 router.register(r'traumas', TraumaViewSet)

@@ -1,8 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Plus } from 'lucide-react';
+import { campaignAPI, factionAPI } from '../features/character-sheet/services/api';
+
+const emptyFactionData = {
+  isGM: true,
+  campaignName: '',
+  factions: [],
+  relationships: [],
+  crewRelationships: [],
+};
+
+const mapApiFactionToUi = (f) => ({
+  id: f.id,
+  name: f.name || '',
+  type: (f.faction_type || 'OTHER').toUpperCase().replace(/\s+/g, '_'),
+  hold: f.hold || 'weak',
+  reputation: typeof f.reputation === 'number' ? f.reputation : 0,
+  notes: f.notes || '',
+});
 
 const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwitchCharacter, allCharacters = [] }) => {
-  const [activeMode, setActiveMode] = useState('FACTION MODE'); // Start in faction mode
+  const [activeMode, setActiveMode] = useState('FACTION MODE');
   const [navOpen, setNavOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState({
     gameRules: false,
@@ -13,74 +31,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [selectedAbilities, setSelectedAbilities] = useState(character?.abilities || []);
-  
-  // Faction state with demo data
-  const [factionData, setFactionData] = useState({
-    isGM: true, // Toggle for GM vs Player view
-    campaignName: 'Diamond is Unbreakable',
-    factions: [
-      {
-        id: 1,
-        name: 'Speedwagon Foundation',
-        type: 'MERCHANT',
-        hold: 'strong',
-        reputation: 3,
-        notes: 'International organization funding bizarre research'
-      },
-      {
-        id: 2,
-        name: 'Morioh Police',
-        type: 'POLITICAL',
-        hold: 'weak',
-        reputation: 1,
-        notes: 'Local law enforcement, unaware of Stand users'
-      },
-      {
-        id: 3,
-        name: 'Angelo Gang',
-        type: 'CRIMINAL',
-        hold: 'weak',
-        reputation: 2,
-        notes: 'Small-time criminals with supernatural connections'
-      },
-      {
-        id: 4,
-        name: 'Higashikata Family',
-        type: 'NOBLE',
-        hold: 'strong',
-        reputation: 4,
-        notes: 'Wealthy family with hidden Stand heritage'
-      },
-      {
-        id: 5,
-        name: 'Kira Industries',
-        type: 'MERCHANT',
-        hold: 'strong',
-        reputation: 3,
-        notes: 'Corporate front for Stand user activities'
-      },
-      {
-        id: 6,
-        name: 'Red Hot Chili Pepper Cult',
-        type: 'CRIMINAL',
-        hold: 'weak',
-        reputation: 1,
-        notes: 'Electric Stand user fanatics'
-      }
-    ],
-    relationships: [
-      { sourceId: 1, targetId: 2, value: 1, notes: 'Cooperative relationship' },
-      { sourceId: 1, targetId: 3, value: -3, notes: 'Actively opposing' },
-      { sourceId: 2, targetId: 3, value: -2, notes: 'Criminal investigation' },
-      { sourceId: 4, targetId: 1, value: 2, notes: 'Financial support' }
-    ],
-    crewRelationships: [
-      { factionId: 1, value: 2, notes: 'Aided in investigation' },
-      { factionId: 2, value: 0, notes: 'Neutral standing' },
-      { factionId: 3, value: -1, notes: 'Disrupted operations' },
-      { factionId: 4, value: 1, notes: 'Family connections' }
-    ]
-  });
+  const [factionData, setFactionData] = useState(emptyFactionData);
+  const [campaigns, setCampaigns] = useState([]);
+  const [selectedCampaignId, setSelectedCampaignId] = useState(null);
+  const [factionsLoading, setFactionsLoading] = useState(false);
   
   const searchRef = useRef(null);
   const searchTimeoutRef = useRef(null);
@@ -157,6 +111,32 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     };
   }, []);
 
+  useEffect(() => {
+    campaignAPI.getCampaigns()
+      .then((list) => {
+        setCampaigns(list || []);
+        if (list?.length === 1 && !selectedCampaignId) setSelectedCampaignId(list[0].id);
+      })
+      .catch(() => setCampaigns([]));
+  }, []);
+
+  useEffect(() => {
+    if (!selectedCampaignId) {
+      setFactionData((prev) => ({ ...prev, campaignName: '', factions: [] }));
+      return;
+    }
+    const campaign = campaigns.find((c) => c.id === selectedCampaignId);
+    setFactionData((prev) => ({ ...prev, campaignName: campaign?.name || '' }));
+    setFactionsLoading(true);
+    factionAPI.getFactions(selectedCampaignId)
+      .then((list) => {
+        const factions = (list || []).map(mapApiFactionToUi);
+        setFactionData((prev) => ({ ...prev, factions }));
+      })
+      .catch(() => setFactionData((prev) => ({ ...prev, factions: [] })))
+      .finally(() => setFactionsLoading(false));
+  }, [selectedCampaignId, campaigns]);
+
   const handleSave = () => {
     if (activeMode === 'FACTION MODE') {
       // Save faction data
@@ -183,6 +163,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
               <div className="search-container desktop-search" ref={searchRef}>
                 <div className="flex items-center">
                   <input 
+                    id="faction-header-search"
+                    name="search"
                     type="text" 
                     className="bg-gray-700 text-white border border-gray-600 rounded px-3 py-1 text-sm" 
                     placeholder="Search characters, campaigns, abilities..." 
@@ -225,6 +207,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
               </div>
             )}
             <select 
+              id="faction-active-mode"
+              name="activeMode"
               value={activeMode}
               onChange={(e) => setActiveMode(e.target.value)}
               className="bg-gray-600 text-white border border-gray-500 px-2 py-1 text-xs"
@@ -272,9 +256,23 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
             <div className="faction-sheet">
               {/* Header */}
               <div className="mb-4">
-                <div className="flex items-center justify-between">
-                  <div className="text-white font-bold text-lg tracking-wider">
-                    FACTIONS OF {factionData.campaignName.toUpperCase() || 'CAMPAIGN'}
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-white font-bold text-lg tracking-wider">
+                      FACTIONS{factionData.campaignName ? ` OF ${factionData.campaignName.toUpperCase()}` : ' — Select a campaign'}
+                    </span>
+                    {campaigns.length > 0 && (
+                      <select
+                        value={selectedCampaignId || ''}
+                        onChange={(e) => setSelectedCampaignId(e.target.value ? Number(e.target.value) : null)}
+                        className="bg-gray-700 text-white border border-gray-600 px-2 py-1 text-sm"
+                      >
+                        <option value="">— Select campaign —</option>
+                        {campaigns.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   <div className="flex items-center space-x-4">
                     <button 
@@ -293,8 +291,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     >
                       Roll Fortune
                     </button>
-                    <label className="flex items-center space-x-2 cursor-pointer">
+                    <label htmlFor="faction-gm-mode" className="flex items-center space-x-2 cursor-pointer">
                       <input 
+                        id="faction-gm-mode"
+                        name="factionGmMode"
                         type="checkbox" 
                         checked={factionData.isGM}
                         onChange={(e) => setFactionData(prev => ({ ...prev, isGM: e.target.checked }))}
@@ -321,7 +321,18 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                 </div>
               </div>
 
+              {!selectedCampaignId && campaigns.length > 0 && (
+                <div className="text-center py-6 text-gray-400 text-sm">Select a campaign above to view its factions.</div>
+              )}
+              {selectedCampaignId && !factionsLoading && factionData.factions.length === 0 && (
+                <div className="text-center py-6 text-gray-400 text-sm">No factions yet. The GM can add factions for this campaign.</div>
+              )}
+              {factionsLoading && (
+                <div className="text-center py-6 text-gray-400 text-sm">Loading factions…</div>
+              )}
+
               {/* Main Faction Grid */}
+              {!factionsLoading && factionData.factions.length > 0 && (
               <div className="grid grid-cols-4 gap-4 mb-6">
                 {/* Stand Users & Bizarre Forces */}
                 <div>
@@ -743,6 +754,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                   </div>
                 </div>
               </div>
+              )}
 
               {/* Bottom Section */}
               <div className="grid grid-cols-3 gap-6">
