@@ -5,19 +5,19 @@ import { getApiBaseUrl } from '../../../config/apiConfig';
 // Helper function for API requests
 const apiRequest = async (endpoint, options = {}) => {
   const token = localStorage.getItem('authToken');
-  
+  const base = getApiBaseUrl();
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const fullUrl = `${base}${path}`;
+
   const config = {
     headers: {
       'Content-Type': 'application/json',
       ...(token && { 'Authorization': `Token ${token}` }),
+      ...(fullUrl.includes('ngrok') && { 'ngrok-skip-browser-warning': '1' }),
       ...options.headers,
     },
     ...options,
   };
-
-  const base = getApiBaseUrl();
-  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  const fullUrl = `${base}${path}`;
 
   try {
     const response = await fetch(fullUrl, config);

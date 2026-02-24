@@ -4,7 +4,8 @@ import { getApiBaseUrl } from '../config/apiConfig';
 const getCampaigns = async () => {
   try {
     const base = getApiBaseUrl();
-    const response = await axios.get(`${base}/campaigns/`);
+    const headers = base.includes('ngrok') ? { 'ngrok-skip-browser-warning': '1' } : {};
+    const response = await axios.get(`${base}/campaigns/`, { headers });
     return response.data;
   } catch (error) {
     console.error('Error fetching campaigns:', error);

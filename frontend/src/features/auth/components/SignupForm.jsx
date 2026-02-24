@@ -13,9 +13,13 @@ const SignupForm = ({ onSwitchToLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
 
+  const isLiveSite = typeof window !== 'undefined' && window.location.origin.includes('github.io');
+
   useEffect(() => {
-    setServerUrl(getStoredApiBaseUrl());
-  }, []);
+    const stored = getStoredApiBaseUrl();
+    setServerUrl(stored);
+    if (isLiveSite && !stored) setShowServerUrl(true);
+  }, [isLiveSite]);
 
   const { signup, error, clearError } = useAuth();
 
@@ -93,6 +97,11 @@ const SignupForm = ({ onSwitchToLogin }) => {
         </div>
         
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          {isLiveSite && !serverUrl && (
+            <div className="bg-amber-900/50 border border-amber-600 text-amber-200 px-4 py-2 rounded text-sm">
+              Using the live site — set the Game server URL below (your host’s backend, e.g. ngrok URL + <code className="text-amber-100">/api</code>).
+            </div>
+          )}
           {error && (
             <div className="bg-red-900 border border-red-600 text-red-200 px-4 py-3 rounded">
               {error}
