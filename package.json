@@ -1,7 +1,7 @@
 {
   "name": "jojo-ttrpg-platform",
   "version": "1.0.0",
-  "homepage": "https://zbavitelc.github.io/jojo-ttrpg-platform",
+  "homepage": "https://zoobavitel.github.io/jojo-ttrpg-platform",
   "description": "A comprehensive web platform for the JoJo's Bizarre Adventure TTRPG",
   "private": true,
   "workspaces": [
@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d frontend/build",
+    "deploy": "gh-pages -d frontend/build --force",
     "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "cd frontend && npm start",
     "dev:backend": "cd backend && source venv/bin/activate && cd src && python manage.py runserver",
