@@ -4,7 +4,6 @@
  * and navigation chrome.  Delegates rendering to CharacterSheet.jsx.
  */
 import React, { useState, useEffect, useCallback } from 'react';
-import { Menu } from 'lucide-react';
 import {
   characterAPI,
   npcAPI,
@@ -19,21 +18,19 @@ import { NPCSheet } from './NPCSheet';
 
 const MODES = { CHARACTER: 'character', NPC: 'npc' };
 
-// Match CharacterSheet.jsx page/chrome styles so the experience is consistent
 const PAGE_STYLES = {
   page: { fontFamily: 'monospace', fontSize: '13px', background: '#000', color: '#fff', minHeight: '100vh' },
-  topBar: {
-    background: '#1f2937',
-    padding: '8px 16px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderBottom: '1px solid #4b5563',
-    position: 'sticky',
-    top: 0,
-    zIndex: 20,
-  },
   content: { padding: '16px', maxWidth: '1400px', margin: '0 auto' },
+  modeBar: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '8px 16px', borderBottom: '1px solid #374151',
+  },
+  modeBtn: (active) => ({
+    padding: '6px 12px', border: '1px solid #4b5563', borderRadius: '4px',
+    background: active ? '#374151' : 'transparent',
+    color: active ? '#fff' : '#9ca3af',
+    cursor: 'pointer', fontFamily: 'monospace', fontSize: '12px',
+  }),
 };
 
 /** Normalize save payload from CharacterSheet to the shape expected by transformFrontendToBackend */
@@ -78,7 +75,7 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
   };
 }
 
-export default function CharacterPage({ initialCharacterId = null, onBack, onHamburgerClick }) {
+export default function CharacterPage({ initialCharacterId = null }) {
   const [mode, setMode] = useState(MODES.CHARACTER);
   const [characters, setCharacters] = useState([]);
   const [selectedCharacterId, setSelectedCharacterId] = useState(initialCharacterId ?? null);
@@ -240,70 +237,22 @@ export default function CharacterPage({ initialCharacterId = null, onBack, onHam
 
   return (
     <div style={PAGE_STYLES.page}>
-      {/* Top bar: same style as CharacterSheet header — Back, 1(800)BIZARRE, mode tabs, errors */}
-      <header style={PAGE_STYLES.topBar}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          {typeof onHamburgerClick === 'function' && (
-            <button
-              type="button"
-              onClick={onHamburgerClick}
-              aria-label="Open menu"
-              style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                width: '36px', height: '36px', border: 'none', borderRadius: '4px',
-                background: '#374151', color: '#9ca3af', cursor: 'pointer',
-              }}
-            >
-              <Menu style={{ width: 20, height: 20 }} />
-            </button>
-          )}
-          {typeof onBack === 'function' && (
-            <button
-              type="button"
-              onClick={onBack}
-              style={{
-                padding: '6px 12px', border: '1px solid #4b5563', borderRadius: '4px',
-                background: 'transparent', color: '#9ca3af', cursor: 'pointer', fontFamily: 'monospace', fontSize: '12px',
-              }}
-            >
-              ← Back to Home
-            </button>
-          )}
-          <span style={{ fontSize: '18px', fontWeight: 'bold' }}>1(800) BIZARRE</span>
-          <span style={{ color: '#6b7280' }}>—</span>
-          <nav style={{ display: 'flex', gap: '4px' }}>
-            <button
-              type="button"
-              onClick={() => setMode(MODES.CHARACTER)}
-              style={{
-                padding: '6px 12px', border: '1px solid #4b5563', borderRadius: '4px',
-                background: mode === MODES.CHARACTER ? '#374151' : 'transparent',
-                color: mode === MODES.CHARACTER ? '#fff' : '#9ca3af',
-                cursor: 'pointer', fontFamily: 'monospace', fontSize: '12px',
-              }}
-            >
-              CHARACTERS
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode(MODES.NPC)}
-              style={{
-                padding: '6px 12px', border: '1px solid #4b5563', borderRadius: '4px',
-                background: mode === MODES.NPC ? '#374151' : 'transparent',
-                color: mode === MODES.NPC ? '#fff' : '#9ca3af',
-                cursor: 'pointer', fontFamily: 'monospace', fontSize: '12px',
-              }}
-            >
-              NPCs
-            </button>
-          </nav>
-        </div>
+      {/* Mode tabs */}
+      <div style={PAGE_STYLES.modeBar}>
+        <nav style={{ display: 'flex', gap: '4px' }}>
+          <button type="button" onClick={() => setMode(MODES.CHARACTER)} style={PAGE_STYLES.modeBtn(mode === MODES.CHARACTER)}>
+            CHARACTERS
+          </button>
+          <button type="button" onClick={() => setMode(MODES.NPC)} style={PAGE_STYLES.modeBtn(mode === MODES.NPC)}>
+            NPCs
+          </button>
+        </nav>
         {charactersError && (
           <span style={{ fontSize: '12px', color: '#fca5a5' }}>{charactersError}</span>
         )}
-      </header>
+      </div>
 
-      {/* Character mode: sheet has its own full layout (header + content) like CharacterSheet.jsx */}
+      {/* Character mode */}
       {mode === MODES.CHARACTER && (
         charactersLoading ? (
           <div style={{ ...PAGE_STYLES.content, padding: '24px', textAlign: 'center', color: '#9ca3af' }}>

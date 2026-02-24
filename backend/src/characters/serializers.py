@@ -431,8 +431,8 @@ class RegisterSerializer(serializers.ModelSerializer):
 class CampaignSerializer(serializers.ModelSerializer):
     gm = UserSerializer(read_only=True)
     players = UserSerializer(many=True, read_only=True)
-    # wanted stars may be set by GM
-    wanted_stars = serializers.IntegerField()
+    wanted_stars = serializers.IntegerField(required=False, default=0)
+    factions = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
     class Meta:
         model  = Campaign
         fields = ['id','name','gm','players','description','wanted_stars','factions']

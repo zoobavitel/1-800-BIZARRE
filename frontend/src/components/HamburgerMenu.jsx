@@ -200,7 +200,8 @@ export default function HamburgerMenu({
   onSelectCharacter,
   onNewCharacter,
   hideBuiltInButton = false,
-  isAuthenticated = true,
+  isAuthenticated = false,
+  onLogin,
   onLogout,
   appVersion = '104',
   disabledRulebooksCount = 166,
@@ -268,11 +269,16 @@ export default function HamburgerMenu({
         {/* ── Scrollable body ── */}
         <div style={styles.scrollBody}>
 
-          <Section title="Signin">
-            {isAuthenticated && typeof onLogout === 'function' ? (
-              <MenuItem label="Logout" onClick={onLogout} />
+          <Section title="Account">
+            {isAuthenticated ? (
+              <>
+                <MenuItem label="Signed in" disabled />
+                {typeof onLogout === 'function' && (
+                  <MenuItem label="Sign Out" onClick={() => { onLogout(); onClose?.(); }} />
+                )}
+              </>
             ) : (
-              <MenuItem label="Login and Upgrade App" onClick={() => handleNav('home')} />
+              <MenuItem label="Login" onClick={() => { onLogin?.(); onClose?.(); }} />
             )}
           </Section>
 
@@ -324,8 +330,8 @@ export default function HamburgerMenu({
 
           <Section title="Data">
             <MenuItem label="Backup/Restore" onClick={() => handleNav('backup')} />
-            <MenuItem label="Campaign Management" onClick={() => handleNav('home')} />
-            <MenuItem label="Feat Browser" onClick={() => handleNav('feat-browser')} />
+            <MenuItem label="Campaign Management" active={currentPage === 'campaigns'} onClick={() => handleNav('campaigns')} />
+            <MenuItem label="Ability Browser" active={currentPage === 'abilities'} onClick={() => handleNav('abilities')} />
             <MenuItem label="Remaster Information" onClick={() => handleNav('remaster')} />
           </Section>
 
