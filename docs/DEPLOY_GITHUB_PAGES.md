@@ -61,6 +61,29 @@ Wait 1–2 minutes, then open **https://zoobavitel.github.io/jojo-ttrpg-platform
 
 ---
 
+## Remote play: connecting the live site to your backend (ngrok)
+
+When players open the app from **https://zoobavitel.github.io/jojo-ttrpg-platform/** they must point it at a running game server. The host runs the backend and exposes it with ngrok.
+
+**Host (you):**
+
+1. Start the backend: from repo root, `npm run dev:backend` (or `cd backend && source venv/bin/activate && cd src && python manage.py runserver`). Backend runs at **http://127.0.0.1:8000/**.
+2. Expose it with ngrok — **use port 8000** (not 80):
+   ```bash
+   ngrok http 8000
+   ```
+3. Share the **https** URL ngrok shows (e.g. `https://example.ngrok-free.dev`).
+
+**Players (or you on the live site):**
+
+1. Open **https://zoobavitel.github.io/jojo-ttrpg-platform/**.
+2. On the sign-in page, expand **Game server (optional)** and set **Game server URL** to the host's ngrok URL + `/api`, e.g. `https://example.ngrok-free.dev/api`. Use **https** to avoid `SSL_ERROR_RX_RECORD_TOO_LONG`.
+3. Sign in or create an account.
+
+If you see **"Could not reach game server"**, check: backend is running, ngrok is running with `ngrok http 8000`, and the Game server URL is exactly `https://...ngrok-free.app/api` (or your ngrok host + `/api`).
+
+---
+
 ## Authentication: "Password authentication is not supported"
 
 GitHub no longer accepts account passwords for Git. Use one of these:

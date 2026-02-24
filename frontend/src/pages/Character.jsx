@@ -4,6 +4,7 @@
  * but updated: API-driven data, shared SRD constants, no hardcoded content.
  */
 import React, { useState, useEffect, useCallback } from 'react';
+import { Menu } from 'lucide-react';
 import {
   characterAPI,
   npcAPI,
@@ -77,11 +78,12 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
   };
 }
 
-export default function CharacterPage({ initialCharacterId = null, onBack }) {
+export default function CharacterPage({ initialCharacterId = null, onBack, onHamburgerClick }) {
   const [mode, setMode] = useState(MODES.CHARACTER);
   const [characters, setCharacters] = useState([]);
   const [selectedCharacterId, setSelectedCharacterId] = useState(initialCharacterId ?? null);
   const [selectedCharacter, setSelectedCharacter] = useState(null);
+  const [draftNewCharacter, setDraftNewCharacter] = useState(null);
   const [charactersLoading, setCharactersLoading] = useState(true);
   const [charactersError, setCharactersError] = useState(null);
 
@@ -139,12 +141,9 @@ export default function CharacterPage({ initialCharacterId = null, onBack }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   }, []);
 
-  // When selected character id changes, load full character
+  // When selected character id changes, load full character (don't overwrite when switching to "new" — handlers set selectedCharacter)
   useEffect(() => {
-    if (selectedCharacterId == null) {
-      setSelectedCharacter(createDefaultCharacter());
-      return;
-    }
+    if (selectedCharacterId == null) return;
     let cancelled = false;
     characterAPI.getCharacter(selectedCharacterId).then((raw) => {
       if (!cancelled) setSelectedCharacter(transformBackendToFrontend(raw));
@@ -193,15 +192,22 @@ export default function CharacterPage({ initialCharacterId = null, onBack }) {
 
   const handleCreateNewCharacter = useCallback(() => {
     setSelectedCharacterId(null);
-    setSelectedCharacter(createDefaultCharacter());
-  }, []);
+    setSelectedCharacter(draftNewCharacter ?? createDefaultCharacter());
+  }, [draftNewCharacter]);
 
   const handleSwitchCharacter = useCallback((character) => {
+    const current = selectedCharacter ?? createDefaultCharacter();
+    if (character == null) {
+      setSelectedCharacterId(null);
+      setSelectedCharacter(draftNewCharacter ?? createDefaultCharacter());
+      return;
+    }
     if (character?.id) {
+      if (!current.id) setDraftNewCharacter(current);
       setSelectedCharacterId(character.id);
       setSelectedCharacter(character);
     }
-  }, []);
+  }, [draftNewCharacter, selectedCharacter]);
 
   const handleSaveNpc = useCallback(async (npcData) => {
     try {
@@ -237,6 +243,20 @@ export default function CharacterPage({ initialCharacterId = null, onBack }) {
       {/* Top bar: same style as CharacterSheet header — Back, 1(800)BIZARRE, mode tabs, errors */}
       <header style={PAGE_STYLES.topBar}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+          {typeof onHamburgerClick === 'function' && (
+            <button
+              type="button"
+              onClick={onHamburgerClick}
+              aria-label="Open menu"
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                width: '36px', height: '36px', border: 'none', borderRadius: '4px',
+                background: '#374151', color: '#9ca3af', cursor: 'pointer',
+              }}
+            >
+              <Menu style={{ width: 20, height: 20 }} />
+            </button>
+          )}
           {typeof onBack === 'function' && (
             <button
               type="button"

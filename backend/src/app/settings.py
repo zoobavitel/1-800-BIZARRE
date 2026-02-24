@@ -10,7 +10,13 @@ SECRET_KEY = 'django-insecure-z*vp)!q(k+c-$#(vy8ws-h4=+d$r)q89x)ru(o_3yhr=+8lo3)
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0',
+    '.ngrok-free.app',   # ngrok free tier (e.g. xxx.ngrok-free.app)
+    '.ngrok-free.dev',   # ngrok free tier (e.g. xxx.ngrok-free.dev)
+]
 
 # Application definition
 INSTALLED_APPS = [
@@ -124,12 +130,14 @@ LOGGING = {
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://192.168.1.X:3000",  # Add your real LAN IP here if needed
+    "https://zoobavitel.github.io",  # GitHub Pages frontend
 ]
 
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOW_HEADERS = list(default_headers) + [
     'authorization',
+    'ngrok-skip-browser-warning',  # required for ngrok free tier API calls
 ]
 
 # Dev-only: allow all origins (optional fallback, comment out in production)

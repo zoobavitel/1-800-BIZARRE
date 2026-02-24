@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, ArrowRight, Zap, Users, Dice6, BookOpen, Settings, LogOut } from 'lucide-react';
+import { Plus, ArrowRight, Zap, Users, Dice6, BookOpen, Settings, LogOut, Menu } from 'lucide-react';
 import '../styles/Home.css';
 import { characterAPI, campaignAPI, transformBackendToFrontend } from '../features/character-sheet';
 import { useAuth } from '../features/auth';
 
 // Main Home Page Component — character create/edit goes to Character page
-const HomePage = ({ onNavigateToCharacter }) => {
+const HomePage = ({ onNavigateToCharacter, onHamburgerClick }) => {
   const { user, logout } = useAuth();
   const [characters, setCharacters] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -104,12 +104,41 @@ const HomePage = ({ onNavigateToCharacter }) => {
     <div className="home-container">
       {/* Header */}
       <header className="header">
-        <div className="header-title">
-          1(800)BIZARRE - HOME
+        <div className="flex items-center gap-3">
+          {typeof onHamburgerClick === 'function' && (
+            <button
+              type="button"
+              onClick={onHamburgerClick}
+              aria-label="Open menu"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+          )}
+          <div className="header-title">
+            1(800)BIZARRE - HOME
+          </div>
         </div>
         <div className="header-actions">
           <div className="flex items-center space-x-4">
             <span className="text-gray-300 text-sm">Welcome, {user?.username}</span>
+            {characters.length > 0 && (
+              <select
+                className="bg-gray-700 border border-gray-600 text-gray-200 rounded px-3 py-1.5 text-sm cursor-pointer focus:outline-none focus:ring-1 focus:ring-purple-500"
+                value=""
+                onChange={(e) => {
+                  const id = e.target.value ? parseInt(e.target.value, 10) : null;
+                  if (id != null) handleEditCharacter({ id });
+                  e.target.value = '';
+                }}
+                aria-label="Open character"
+              >
+                <option value="">Open character…</option>
+                {characters.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name || 'Unnamed'}</option>
+                ))}
+              </select>
+            )}
           <button 
             onClick={handleCreateCharacter}
             className="btn-primary"

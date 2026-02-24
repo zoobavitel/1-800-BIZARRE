@@ -16,7 +16,8 @@ const LoginForm = ({ onSwitchToSignup }) => {
   useEffect(() => {
     const stored = getStoredApiBaseUrl();
     setServerUrl(stored);
-    if (isLiveSite && !stored) setShowServerUrl(true);
+    // On live site (GitHub Pages), always show Game server URL so host's ngrok URL can be set
+    if (isLiveSite) setShowServerUrl(true);
   }, [isLiveSite]);
 
   const { login, error, clearError } = useAuth();
@@ -62,12 +63,17 @@ const LoginForm = ({ onSwitchToSignup }) => {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {isLiveSite && !serverUrl && (
             <div className="bg-amber-900/50 border border-amber-600 text-amber-200 px-4 py-2 rounded text-sm">
-              Using the live site — set the Game server URL below (your host’s backend, e.g. ngrok URL + <code className="text-amber-100">/api</code>).
+              Using the live site — set the Game server URL below (your host’s backend, e.g. <code className="text-amber-100">https://xxx.ngrok-free.app/api</code>). Host runs <code className="text-amber-100">ngrok http 8000</code> and shares that URL.
             </div>
           )}
           {error && (
             <div className="bg-red-900 border border-red-600 text-red-200 px-4 py-3 rounded">
               {error}
+              {error.includes('Could not reach game server') && isLiveSite && (
+                <p className="mt-2 text-sm text-red-100">
+                  Enter the host’s URL above: <strong>https://</strong>their-ngrok-url<strong>/api</strong> (host runs <code>ngrok http 8000</code>).
+                </p>
+              )}
             </div>
           )}
           
@@ -86,7 +92,7 @@ const LoginForm = ({ onSwitchToSignup }) => {
                     type="url"
                     value={serverUrl}
                     onChange={handleServerUrlChange}
-                    placeholder="http://localhost:8000/api or host's URL (e.g. https://abc.ngrok.io/api)"
+                    placeholder="https://xxx.ngrok-free.app/api  (host runs: ngrok http 8000)"
                     className="mt-1 block w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
                   />
                   <p className="mt-1 text-xs text-gray-500">

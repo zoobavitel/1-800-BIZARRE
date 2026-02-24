@@ -336,12 +336,21 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                   </div>
                   <div style={{ fontSize:'9px', color:'#4b5563', marginTop:'1px' }}>{totalSpentXP} XP spent</div>
                 </div>
-                {allCharacters.length > 1 && (
-                  <select style={S.sel} onChange={e => {
-                    const c = allCharacters.find(ch => ch.id === parseInt(e.target.value));
-                    if (c && onSwitchCharacter) onSwitchCharacter(c);
-                  }}>
-                    <option value="">Switch character…</option>
+                {(allCharacters.length >= 1 || charData?.id == null) && (
+                  <select
+                    style={S.sel}
+                    value={charData?.id != null ? charData.id : 'new'}
+                    onChange={e => {
+                      const val = e.target.value;
+                      if (val === 'new' && onSwitchCharacter) {
+                        onSwitchCharacter(null);
+                    return;
+                      }
+                      const c = allCharacters.find(ch => ch.id === parseInt(val, 10));
+                      if (c && onSwitchCharacter) onSwitchCharacter(c);
+                    }}
+                  >
+                    <option value="new">— New character —</option>
                     {allCharacters.map(c => <option key={c.id} value={c.id}>{c.name || 'Unnamed'}</option>)}
                   </select>
                 )}

@@ -7,10 +7,20 @@
 const STORAGE_KEY = 'apiBaseUrl';
 const DEFAULT_BASE = (process.env.REACT_APP_API_URL || 'http://localhost:8000/api').replace(/\/+$/, '');
 
+/** Force https for ngrok (avoids SSL_ERROR_RX_RECORD_TOO_LONG from http://). */
+function ensureHttpsForNgrok(url) {
+  const lower = url.toLowerCase();
+  if ((lower.includes('ngrok') || lower.includes('ngrok-free')) && lower.startsWith('http://')) {
+    return 'https://' + url.slice(7);
+  }
+  return url;
+}
+
 /** Ensure base URL ends with /api so paths like /accounts/login/ resolve correctly. */
 function normalizeBaseUrl(url) {
-  const trimmed = url.trim().replace(/\/+$/, '');
+  let trimmed = url.trim().replace(/\/+$/, '');
   if (!trimmed) return trimmed;
+  trimmed = ensureHttpsForNgrok(trimmed);
   const lower = trimmed.toLowerCase();
   if (lower === 'http://localhost:8000/api' || lower.endsWith('/api')) return trimmed;
   return trimmed + '/api';
