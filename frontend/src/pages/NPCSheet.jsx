@@ -8,7 +8,6 @@ const LEVEL_OFFSET = 9;
 
 const GRADES = ['F', 'D', 'C', 'B', 'A', 'S'];
 const GRADE_PTS = { F: 0, D: 1, C: 2, B: 3, A: 4, S: 5 };
-const GRADE_IDX = { F: 0, D: 1, C: 2, B: 3, A: 4, S: 5 };
 
 // Durability → Vulnerability Clock segments
 const DUR_VULN_CLOCK = { F: 4, D: 6, C: 8, B: 10, A: 12, S: 0 };

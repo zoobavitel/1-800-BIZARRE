@@ -94,7 +94,7 @@ export default function CharacterPage({ initialCharacterId = null, onBack }) {
   const [selectedNpcId, setSelectedNpcId] = useState(null);
   const [selectedNpc, setSelectedNpc] = useState(null);
   const [npcsLoading, setNpcsLoading] = useState(false);
-  const [campaignId, setCampaignId] = useState(null);
+  const [campaignId] = useState(null); // setCampaignId reserved for future campaign filter
 
   const [traumas, setTraumas] = useState([]);
   const [heritages, setHeritages] = useState([]);
@@ -136,6 +136,7 @@ export default function CharacterPage({ initialCharacterId = null, onBack }) {
 
   useEffect(() => {
     loadCharacters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   }, []);
 
   // When selected character id changes, load full character

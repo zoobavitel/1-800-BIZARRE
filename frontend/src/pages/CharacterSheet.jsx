@@ -261,11 +261,20 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   };
 
   const handleSave = () => {
+    // Only send a backend id when we have one (integer from API). New characters must have id null
+    // so the parent calls createCharacter (POST) instead of updateCharacter (PUT).
+    const backendId =
+      character?.id != null &&
+      Number.isInteger(Number(character.id)) &&
+      Number(character.id) > 0 &&
+      Number(character.id) < 1e10
+        ? character.id
+        : null;
     if (onSave) onSave({
       ...charData, standStats, actionRatings, stressFilled,
       trauma, regularArmorUsed, specialArmorUsed, harm, healingClock,
       coinFilled, stash: stashBoxes, xp, abilities, clocks, playbook,
-      id: character?.id || Date.now(), lastModified: new Date().toISOString(),
+      id: backendId, lastModified: new Date().toISOString(),
     });
   };
 

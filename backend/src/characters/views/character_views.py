@@ -4,7 +4,7 @@ from rest_framework import viewsets, status, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from django.db import transaction
 from django.core.exceptions import PermissionDenied
 import json
@@ -17,7 +17,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = CharacterSerializer
     queryset = Character.objects.all()
-    parser_classes = (MultiPartParser, FormParser)
+    parser_classes = (JSONParser, MultiPartParser, FormParser)
 
     def get_queryset(self):
         # Filter characters based on user permissions

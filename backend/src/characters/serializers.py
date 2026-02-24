@@ -298,8 +298,15 @@ class CharacterSerializer(serializers.ModelSerializer):
             )
         # Validate action dice advancement: extra dots beyond 7 must be covered by XP
         action_dots = data.get('action_dots') or getattr(self.instance, 'action_dots', {})
-        # sum all dot values
-        total_dots = sum(val for group in action_dots.values() for val in group.values())
+        # Support both flat {hunt: 1, study: 0, ...} and nested {insight: {hunt: 1, ...}, ...} formats
+        def _total_action_dots(ad):
+            if not ad:
+                return 0
+            first = next(iter(ad.values()), None)
+            if isinstance(first, dict):
+                return sum(v for group in ad.values() for v in group.values())
+            return sum(v for v in ad.values() if isinstance(v, (int, float)))
+        total_dots = _total_action_dots(action_dots)
         if total_dots > 7:
             extra_dice = total_dots - 7
             # each extra die costs 5 XP
