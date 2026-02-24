@@ -7,10 +7,19 @@
 const STORAGE_KEY = 'apiBaseUrl';
 const DEFAULT_BASE = (process.env.REACT_APP_API_URL || 'http://localhost:8000/api').replace(/\/+$/, '');
 
+/** Ensure base URL ends with /api so paths like /accounts/login/ resolve correctly. */
+function normalizeBaseUrl(url) {
+  const trimmed = url.trim().replace(/\/+$/, '');
+  if (!trimmed) return trimmed;
+  const lower = trimmed.toLowerCase();
+  if (lower === 'http://localhost:8000/api' || lower.endsWith('/api')) return trimmed;
+  return trimmed + '/api';
+}
+
 export function getApiBaseUrl() {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (stored && stored.trim() !== '') {
-    return stored.trim().replace(/\/+$/, '');
+    return normalizeBaseUrl(stored);
   }
   return DEFAULT_BASE;
 }
