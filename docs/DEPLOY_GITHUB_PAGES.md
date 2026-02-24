@@ -6,28 +6,36 @@ Same idea as the [react-gh-pages](https://github.com/gitname/react-gh-pages) tut
 
 ## If the site shows the README instead of the app
 
-Two things must be true:
+**Cause:** GitHub Pages is serving your **default branch** (main/master). That branch has no `index.html` at the repo root, so GitHub shows the README.
 
-1. The **gh-pages** branch has the build (index.html + static files).
-2. GitHub **Pages** is set to deploy from **gh-pages**, not from main/master.
+**Fix:** Serve from the **gh-pages** branch (which contains only the built app).
 
-### Step 1: Check what’s on gh-pages
+### Step 1: Deploy the build to gh-pages
+
+From the **repo root**:
+
+```bash
+npm run deploy
+```
+
+- This runs `predeploy` → builds the frontend into `frontend/build`.
+- Then pushes the **contents** of `frontend/build` to the **gh-pages** branch.
+
+If you see auth errors, see [Authentication](#authentication-password-authentication-is-not-supported) below.
+
+### Step 2: Confirm gh-pages has the app
 
 Open: **https://github.com/zoobavitel/jojo-ttrpg-platform/tree/gh-pages**
 
-- **If you see `index.html`, `static/`, etc.**  
-  The build is there. Go to Step 2 (fix Pages settings).
+You should see:
 
-- **If you see README / source code, or the branch is missing**  
-  Deploy the build first (from repo root):
+- `index.html`
+- `static/` (with `js/`, `css/`)
+- `favicon.ico`, `manifest.json`, etc.
 
-  ```bash
-  npm run deploy
-  ```
+If you see README / source code or the branch is missing, Step 1 didn’t work; fix auth and run `npm run deploy` again.
 
-  Then open the link again and confirm `index.html` and `static/` are on **gh-pages**.
-
-### Step 2: Configure GitHub Pages (required)
+### Step 3: Set GitHub Pages to use gh-pages (required)
 
 GitHub must serve the **gh-pages** branch, not the default branch:
 
@@ -44,6 +52,15 @@ Wait 1–2 minutes, then open **https://zoobavitel.github.io/jojo-ttrpg-platform
 
 ---
 
+## Checklist (Create React App deployment)
+
+- [x] **homepage** in **frontend/package.json**: `"https://zoobavitel.github.io/jojo-ttrpg-platform"` (no trailing slash) — so the build uses correct asset paths.
+- [x] **Root package.json**: `predeploy` and `deploy` scripts; `deploy` uses `gh-pages -d frontend/build`.
+- [ ] **You ran** `npm run deploy` from repo root at least once.
+- [ ] **GitHub Settings → Pages**: Source = “Deploy from a branch”, Branch = **gh-pages**, Folder = **/ (root)**.
+
+---
+
 ## Authentication: "Password authentication is not supported"
 
 GitHub no longer accepts account passwords for Git. Use one of these:
@@ -52,12 +69,12 @@ GitHub no longer accepts account passwords for Git. Use one of these:
 
 1. GitHub → **Settings** (your profile) → **Developer settings** → **Personal access tokens** → **Tokens (classic)**.
 2. **Generate new token (classic)**. Name it e.g. `jojo-deploy`. Enable scope **repo**.
-3. Copy the token (you won’t see it again).
+3. Copy the token (you won't see it again).
 4. When you run `npm run deploy`, at the prompt:
    - **Username:** your GitHub username (e.g. `zoobavitel`).
    - **Password:** paste the **token**, not your account password.
 
-To avoid typing it every time, use the Git credential helper or store the remote with the token (keep the token secret, don’t commit it):
+To avoid typing it every time, use the Git credential helper or store the remote with the token (keep the token secret, don't commit it):
 
 ```bash
 # One-time: cache credentials in memory (e.g. 1 hour)
@@ -67,7 +84,7 @@ git config --global credential.helper 'cache --timeout=3600'
 
 ### Option B: SSH (no password prompt)
 
-1. [Add an SSH key to your GitHub account](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account) if you haven’t.
+1. [Add an SSH key to your GitHub account](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/adding-a-new-ssh-key-to-your-github-account) if you haven't.
 2. Use the SSH remote for this repo:
 
 ```bash
@@ -80,7 +97,7 @@ Then `npm run deploy` will use SSH and your SSH key (no username/password).
 
 ## "A branch named 'gh-pages' already exists"
 
-The deploy script includes `--force` so the existing `gh-pages` branch is overwritten. If you still see this error, ensure the root `package.json` has:
+The deploy script can be updated to overwrite the existing branch. In root `package.json`:
 
 ```json
 "deploy": "gh-pages -d frontend/build --force"
@@ -99,4 +116,4 @@ npm run deploy
 - Runs `predeploy` (builds the frontend into `frontend/build`).
 - Pushes the **contents** of `frontend/build` to the **gh-pages** branch.
 
-The **homepage** in the root `package.json` must match your Pages URL (e.g. `https://zoobavitel.github.io/jojo-ttrpg-platform`).
+The **homepage** in **frontend/package.json** must match your Pages URL (e.g. `https://zoobavitel.github.io/jojo-ttrpg-platform`).

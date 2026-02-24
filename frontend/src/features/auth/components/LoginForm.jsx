@@ -1,14 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { getStoredApiBaseUrl, setApiBaseUrl } from '../../../config/apiConfig';
 
 const LoginForm = ({ onSwitchToSignup }) => {
   const [credentials, setCredentials] = useState({
     username: '',
     password: ''
   });
+  const [serverUrl, setServerUrl] = useState('');
+  const [showServerUrl, setShowServerUrl] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  
+
+  useEffect(() => {
+    setServerUrl(getStoredApiBaseUrl());
+  }, []);
+
   const { login, error, clearError } = useAuth();
+
+  const handleServerUrlChange = (e) => {
+    const value = e.target.value.trim();
+    setServerUrl(e.target.value);
+    setApiBaseUrl(value || null);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -50,6 +63,29 @@ const LoginForm = ({ onSwitchToSignup }) => {
           )}
           
           <div className="space-y-4">
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowServerUrl((s) => !s)}
+                className="text-sm text-gray-400 hover:text-gray-300"
+              >
+                {showServerUrl ? '▼' : '▶'} Game server (optional)
+              </button>
+              {showServerUrl && (
+                <div className="mt-2">
+                  <input
+                    type="url"
+                    value={serverUrl}
+                    onChange={handleServerUrlChange}
+                    placeholder="http://localhost:8000/api or host's URL (e.g. https://abc.ngrok.io/api)"
+                    className="mt-1 block w-full px-3 py-2 bg-gray-800 border border-gray-600 rounded-md text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Leave blank for localhost. When playing remotely, the host runs the backend and shares their URL.
+                  </p>
+                </div>
+              )}
+            </div>
             <div>
               <label htmlFor="username" className="block text-sm font-medium text-gray-300">
                 Username

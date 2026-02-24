@@ -1,8 +1,7 @@
 // API service for character sheet backend integration
 
 import { gradeToIndex, indexToGrade, DUR_TABLE, DEFAULT_TRAUMA } from '../constants/srd';
-
-const API_BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:8000/api').replace(/\/+$/, '');
+import { getApiBaseUrl } from '../../../config/apiConfig';
 
 // Helper function for API requests
 const apiRequest = async (endpoint, options = {}) => {
@@ -17,8 +16,9 @@ const apiRequest = async (endpoint, options = {}) => {
     ...options,
   };
 
+  const base = getApiBaseUrl();
   const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  const url = `${API_BASE_URL}${path}`;
+  const url = `${base}${path}`;
 
   try {
     const response = await fetch(url, config);

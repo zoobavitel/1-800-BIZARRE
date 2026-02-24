@@ -1,10 +1,10 @@
 import axios from 'axios';
-
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+import { getApiBaseUrl } from '../config/apiConfig';
 
 const getCampaigns = async () => {
   try {
-    const response = await axios.get(`${API_URL}/campaigns/`);
+    const base = getApiBaseUrl();
+    const response = await axios.get(`${base}/campaigns/`);
     return response.data;
   } catch (error) {
     console.error('Error fetching campaigns:', error);

@@ -1,6 +1,6 @@
 // Authentication service for user management
 
-const API_BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:8000/api').replace(/\/+$/, '');
+import { getApiBaseUrl } from '../../../config/apiConfig';
 
 // Helper function for API requests
 const apiRequest = async (endpoint, options = {}) => {
@@ -15,7 +15,7 @@ const apiRequest = async (endpoint, options = {}) => {
     ...options,
   };
 
-  const base = API_BASE_URL.replace(/\/+$/, '');
+  const base = getApiBaseUrl();
   const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const fullUrl = `${base}${path}`;
 
@@ -36,6 +36,9 @@ const apiRequest = async (endpoint, options = {}) => {
     
     return await response.json();
   } catch (error) {
+    if (error.name === 'TypeError' && error.message.includes('fetch')) {
+      throw new Error('Could not reach game server. Check the Game server URL, ensure the host\'s backend is running, and try disabling ad blockers for this site.');
+    }
     throw error;
   }
 };
