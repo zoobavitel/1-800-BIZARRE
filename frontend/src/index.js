@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import Home from './pages/Home.jsx';
-import CharacterPage from './pages/Character.jsx';
+import CharacterPage from './pages/CharacterPage.jsx';
 import ResponsiveTest from './pages/ResponsiveTest.jsx';
 import NPCSheetPage from './pages/NPCSheet.jsx';
 import { AuthProvider } from './features/auth';

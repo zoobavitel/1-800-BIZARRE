@@ -1,7 +1,7 @@
 /**
- * Character page: learns from CharacterSheet.jsx layout and behavior.
- * Same structure (CHARACTER MODE / CREW MODE, current character bar, two-column sheet),
- * but updated: API-driven data, shared SRD constants, no hardcoded content.
+ * CharacterPage — page-level orchestration for the character sheet.
+ * Handles API calls, data transformation, mode switching (Character / NPC),
+ * and navigation chrome.  Delegates rendering to CharacterSheet.jsx.
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { Menu } from 'lucide-react';
