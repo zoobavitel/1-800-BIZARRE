@@ -1,7 +1,7 @@
 [
   {
     "model": "characters.heritage",
-    "pk": 1,
+    "pk": 2,
     "fields": {
       "name": "Human",
       "base_hp": 0,
@@ -10,7 +10,7 @@
   },
   {
     "model": "characters.heritage",
-    "pk": 2,
+    "pk": 3,
     "fields": {
       "name": "Rock Human",
       "base_hp": 2,
@@ -19,7 +19,7 @@
   },
   {
     "model": "characters.heritage",
-    "pk": 3,
+    "pk": 4,
     "fields": {
       "name": "Vampire",
       "base_hp": 2,
@@ -28,7 +28,7 @@
   },
   {
     "model": "characters.heritage",
-    "pk": 4,
+    "pk": 5,
     "fields": {
       "name": "Pillar Man",
       "base_hp": 1,
@@ -37,7 +37,7 @@
   },
   {
     "model": "characters.heritage",
-    "pk": 5,
+    "pk": 6,
     "fields": {
       "name": "Gray Matter",
       "base_hp": 2,
@@ -46,7 +46,7 @@
   },
   {
     "model": "characters.heritage",
-    "pk": 6,
+    "pk": 7,
     "fields": {
       "name": "Haunting",
       "base_hp": 2,
@@ -55,7 +55,7 @@
   },
   {
     "model": "characters.heritage",
-    "pk": 7,
+    "pk": 8,
     "fields": {
       "name": "Cyborg",
       "base_hp": 2,
@@ -64,7 +64,7 @@
   },
   {
     "model": "characters.heritage",
-    "pk": 8,
+    "pk": 9,
     "fields": {
       "name": "Oracle",
       "base_hp": 3,

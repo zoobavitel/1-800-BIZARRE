@@ -3,7 +3,7 @@
     "model": "characters.benefit",
     "pk": 1,
     "fields": {
-      "heritage": 1,
+      "heritage": 2,
       "name": "Skilled From Birth",
       "hp_cost": 1,
       "required": false,
@@ -14,7 +14,7 @@
     "model": "characters.benefit",
     "pk": 2,
     "fields": {
-      "heritage": 1,
+      "heritage": 2,
       "name": "Sheer Grit",
       "hp_cost": 2,
       "required": false,
@@ -25,7 +25,7 @@
     "model": "characters.benefit",
     "pk": 3,
     "fields": {
-      "heritage": 1,
+      "heritage": 2,
       "name": "Tactical Awareness",
       "hp_cost": 1,
       "required": false,
@@ -36,7 +36,7 @@
     "model": "characters.benefit",
     "pk": 4,
     "fields": {
-      "heritage": 1,
+      "heritage": 2,
       "name": "Resourceful",
       "hp_cost": 2,
       "required": false,
@@ -47,7 +47,7 @@
     "model": "characters.benefit",
     "pk": 5,
     "fields": {
-      "heritage": 2,
+      "heritage": 3,
       "name": "Sediment Body",
       "hp_cost": 0,
       "required": true,
@@ -58,7 +58,7 @@
     "model": "characters.benefit",
     "pk": 6,
     "fields": {
-      "heritage": 2,
+      "heritage": 3,
       "name": "Hardened Physique",
       "hp_cost": 2,
       "required": false,
@@ -69,7 +69,7 @@
     "model": "characters.benefit",
     "pk": 7,
     "fields": {
-      "heritage": 2,
+      "heritage": 3,
       "name": "Rock Punches",
       "hp_cost": 1,
       "required": false,
@@ -80,7 +80,7 @@
     "model": "characters.benefit",
     "pk": 8,
     "fields": {
-      "heritage": 2,
+      "heritage": 3,
       "name": "Camouflage",
       "hp_cost": 1,
       "required": false,
@@ -91,7 +91,7 @@
     "model": "characters.benefit",
     "pk": 9,
     "fields": {
-      "heritage": 2,
+      "heritage": 3,
       "name": "Mudshot",
       "hp_cost": 2,
       "required": false,
@@ -102,7 +102,7 @@
     "model": "characters.benefit",
     "pk": 10,
     "fields": {
-      "heritage": 2,
+      "heritage": 3,
       "name": "Tolerance",
       "hp_cost": 2,
       "required": false,
@@ -113,7 +113,7 @@
     "model": "characters.benefit",
     "pk": 11,
     "fields": {
-      "heritage": 3,
+      "heritage": 4,
       "name": "Bloodthirst",
       "hp_cost": 0,
       "required": true,
@@ -124,7 +124,7 @@
     "model": "characters.benefit",
     "pk": 12,
     "fields": {
-      "heritage": 3,
+      "heritage": 4,
       "name": "Flight",
       "hp_cost": 0,
       "required": true,
@@ -135,7 +135,7 @@
     "model": "characters.benefit",
     "pk": 13,
     "fields": {
-      "heritage": 3,
+      "heritage": 4,
       "name": "Nocturnal",
       "hp_cost": 0,
       "required": true,
@@ -146,7 +146,7 @@
     "model": "characters.benefit",
     "pk": 14,
     "fields": {
-      "heritage": 3,
+      "heritage": 4,
       "name": "Blood Puppeteer",
       "hp_cost": 3,
       "required": false,
@@ -157,7 +157,7 @@
     "model": "characters.benefit",
     "pk": 15,
     "fields": {
-      "heritage": 3,
+      "heritage": 4,
       "name": "Sunlight Immunity",
       "hp_cost": 2,
       "required": false,
@@ -168,7 +168,7 @@
     "model": "characters.benefit",
     "pk": 16,
     "fields": {
-      "heritage": 3,
+      "heritage": 4,
       "name": "Mist Form",
       "hp_cost": 2,
       "required": false,
@@ -179,7 +179,7 @@
     "model": "characters.benefit",
     "pk": 17,
     "fields": {
-      "heritage": 3,
+      "heritage": 4,
       "name": "Regeneration",
       "hp_cost": 2,
       "required": false,
@@ -190,7 +190,7 @@
     "model": "characters.benefit",
     "pk": 18,
     "fields": {
-      "heritage": 3,
+      "heritage": 4,
       "name": "Bat Form",
       "hp_cost": 3,
       "required": false,
@@ -201,7 +201,7 @@
     "model": "characters.benefit",
     "pk": 19,
     "fields": {
-      "heritage": 3,
+      "heritage": 4,
       "name": "Staying Power",
       "hp_cost": 3,
       "required": false,
@@ -212,7 +212,7 @@
     "model": "characters.benefit",
     "pk": 20,
     "fields": {
-      "heritage": 4,
+      "heritage": 5,
       "name": "Hyper-Intelligence",
       "hp_cost": 1,
       "required": true,
@@ -223,7 +223,7 @@
     "model": "characters.benefit",
     "pk": 21,
     "fields": {
-      "heritage": 4,
+      "heritage": 5,
       "name": "Superior Physiology",
       "hp_cost": 1,
       "required": true,
@@ -234,7 +234,7 @@
     "model": "characters.benefit",
     "pk": 22,
     "fields": {
-      "heritage": 4,
+      "heritage": 5,
       "name": "Chainsaw Arm",
       "hp_cost": 2,
       "required": false,
@@ -245,7 +245,7 @@
     "model": "characters.benefit",
     "pk": 23,
     "fields": {
-      "heritage": 4,
+      "heritage": 5,
       "name": "Weighted Feathers",
       "hp_cost": 1,
       "required": false,
@@ -256,7 +256,7 @@
     "model": "characters.benefit",
     "pk": 24,
     "fields": {
-      "heritage": 4,
+      "heritage": 5,
       "name": "Life Absorption",
       "hp_cost": 2,
       "required": false,
@@ -267,7 +267,7 @@
     "model": "characters.benefit",
     "pk": 25,
     "fields": {
-      "heritage": 4,
+      "heritage": 5,
       "name": "Body Modification",
       "hp_cost": 2,
       "required": false,
@@ -278,7 +278,7 @@
     "model": "characters.benefit",
     "pk": 26,
     "fields": {
-      "heritage": 4,
+      "heritage": 5,
       "name": "Perfect Organism",
       "hp_cost": 2,
       "required": false,
@@ -289,7 +289,7 @@
     "model": "characters.benefit",
     "pk": 27,
     "fields": {
-      "heritage": 5,
+      "heritage": 6,
       "name": "Shapechange",
       "hp_cost": 0,
       "required": true,
@@ -300,18 +300,18 @@
     "model": "characters.benefit",
     "pk": 28,
     "fields": {
-      "heritage": 5,
+      "heritage": 6,
       "name": "Enhanced Senses",
       "hp_cost": 0,
       "required": true,
-      "description": "Can detect movement in 360° around you. Gain +1 effect towards a related roll."
+      "description": "Can detect movement in 360\u00b0 around you. Gain +1 effect towards a related roll."
     }
   },
   {
     "model": "characters.benefit",
     "pk": 29,
     "fields": {
-      "heritage": 5,
+      "heritage": 6,
       "name": "Perfect Mimicry",
       "hp_cost": 2,
       "required": false,
@@ -322,7 +322,7 @@
     "model": "characters.benefit",
     "pk": 30,
     "fields": {
-      "heritage": 5,
+      "heritage": 6,
       "name": "Blindsight",
       "hp_cost": 1,
       "required": false,
@@ -333,7 +333,7 @@
     "model": "characters.benefit",
     "pk": 31,
     "fields": {
-      "heritage": 5,
+      "heritage": 6,
       "name": "Reflex Overclock",
       "hp_cost": 1,
       "required": false,
@@ -344,7 +344,7 @@
     "model": "characters.benefit",
     "pk": 32,
     "fields": {
-      "heritage": 5,
+      "heritage": 6,
       "name": "No Vital Signs",
       "hp_cost": 2,
       "required": false,
@@ -355,7 +355,7 @@
     "model": "characters.benefit",
     "pk": 33,
     "fields": {
-      "heritage": 6,
+      "heritage": 7,
       "name": "Ghostly Aura",
       "hp_cost": 0,
       "required": true,
@@ -366,7 +366,7 @@
     "model": "characters.benefit",
     "pk": 34,
     "fields": {
-      "heritage": 6,
+      "heritage": 7,
       "name": "Ethereal Nature",
       "hp_cost": 0,
       "required": true,
@@ -377,7 +377,7 @@
     "model": "characters.benefit",
     "pk": 35,
     "fields": {
-      "heritage": 6,
+      "heritage": 7,
       "name": "Phase Through Objects",
       "hp_cost": 2,
       "required": false,
@@ -388,7 +388,7 @@
     "model": "characters.benefit",
     "pk": 36,
     "fields": {
-      "heritage": 6,
+      "heritage": 7,
       "name": "Poltergeist",
       "hp_cost": 1,
       "required": false,
@@ -399,7 +399,7 @@
     "model": "characters.benefit",
     "pk": 37,
     "fields": {
-      "heritage": 6,
+      "heritage": 7,
       "name": "Fear Aura",
       "hp_cost": 2,
       "required": false,
@@ -410,7 +410,7 @@
     "model": "characters.benefit",
     "pk": 38,
     "fields": {
-      "heritage": 6,
+      "heritage": 7,
       "name": "Resurrection",
       "hp_cost": 3,
       "required": false,
@@ -421,7 +421,7 @@
     "model": "characters.benefit",
     "pk": 39,
     "fields": {
-      "heritage": 7,
+      "heritage": 8,
       "name": "Mechanical Tool",
       "hp_cost": 0,
       "required": true,
@@ -432,7 +432,7 @@
     "model": "characters.benefit",
     "pk": 40,
     "fields": {
-      "heritage": 7,
+      "heritage": 8,
       "name": "Mechanical Limb",
       "hp_cost": 0,
       "required": true,
@@ -443,7 +443,7 @@
     "model": "characters.benefit",
     "pk": 41,
     "fields": {
-      "heritage": 7,
+      "heritage": 8,
       "name": "Hidden Arsenal",
       "hp_cost": 2,
       "required": false,
@@ -454,7 +454,7 @@
     "model": "characters.benefit",
     "pk": 42,
     "fields": {
-      "heritage": 7,
+      "heritage": 8,
       "name": "Enhanced Reflexes",
       "hp_cost": 2,
       "required": false,
@@ -465,7 +465,7 @@
     "model": "characters.benefit",
     "pk": 43,
     "fields": {
-      "heritage": 7,
+      "heritage": 8,
       "name": "Optic Targeting",
       "hp_cost": 1,
       "required": false,
@@ -476,7 +476,7 @@
     "model": "characters.benefit",
     "pk": 44,
     "fields": {
-      "heritage": 7,
+      "heritage": 8,
       "name": "Integrated Tools",
       "hp_cost": 1,
       "required": false,
@@ -487,7 +487,7 @@
     "model": "characters.benefit",
     "pk": 45,
     "fields": {
-      "heritage": 8,
+      "heritage": 9,
       "name": "Precognitive Instinct",
       "hp_cost": 0,
       "required": true,
@@ -498,7 +498,7 @@
     "model": "characters.benefit",
     "pk": 46,
     "fields": {
-      "heritage": 8,
+      "heritage": 9,
       "name": "Spiritual Awareness",
       "hp_cost": 0,
       "required": true,
@@ -509,7 +509,7 @@
     "model": "characters.benefit",
     "pk": 47,
     "fields": {
-      "heritage": 8,
+      "heritage": 9,
       "name": "Danger Sense",
       "hp_cost": 2,
       "required": false,
@@ -520,7 +520,7 @@
     "model": "characters.benefit",
     "pk": 48,
     "fields": {
-      "heritage": 8,
+      "heritage": 9,
       "name": "Divination",
       "hp_cost": 2,
       "required": false,
@@ -531,7 +531,7 @@
     "model": "characters.benefit",
     "pk": 49,
     "fields": {
-      "heritage": 8,
+      "heritage": 9,
       "name": "Supernatural Resistance",
       "hp_cost": 2,
       "required": false,
@@ -542,7 +542,7 @@
     "model": "characters.benefit",
     "pk": 50,
     "fields": {
-      "heritage": 8,
+      "heritage": 9,
       "name": "Manifest Destiny",
       "hp_cost": 3,
       "required": false,
