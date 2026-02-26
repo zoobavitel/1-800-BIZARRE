@@ -149,23 +149,33 @@ export const referenceAPI = {
 
 // Campaign API functions
 export const campaignAPI = {
-  // Get all campaigns for current user
   getCampaigns: () => apiRequest('/campaigns/'),
-  
-  // Get single campaign
   getCampaign: (id) => apiRequest(`/campaigns/${id}/`),
-  
-  // Create campaign
   createCampaign: (campaignData) => apiRequest('/campaigns/', {
     method: 'POST',
     body: JSON.stringify(campaignData),
   }),
-  
-  // Update campaign
   updateCampaign: (id, campaignData) => apiRequest(`/campaigns/${id}/`, {
     method: 'PUT',
     body: JSON.stringify(campaignData),
   }),
+  invitePlayer: (id, username) => apiRequest(`/campaigns/${id}/invite/`, {
+    method: 'POST',
+    body: JSON.stringify({ username }),
+  }),
+  deactivateCampaign: (id) => apiRequest(`/campaigns/${id}/deactivate/`, { method: 'POST' }),
+  activateCampaign: (id) => apiRequest(`/campaigns/${id}/activate/`, { method: 'POST' }),
+  assignCharacter: (id, characterId) => apiRequest(`/campaigns/${id}/assign-character/`, {
+    method: 'POST',
+    body: JSON.stringify({ character_id: characterId }),
+  }),
+  unassignCharacter: (id, characterId) => apiRequest(`/campaigns/${id}/unassign-character/`, {
+    method: 'POST',
+    body: JSON.stringify({ character_id: characterId }),
+  }),
+  getInvitations: () => apiRequest('/campaign-invitations/'),
+  acceptInvitation: (id) => apiRequest(`/campaign-invitations/${id}/accept/`, { method: 'POST' }),
+  declineInvitation: (id) => apiRequest(`/campaign-invitations/${id}/decline/`, { method: 'POST' }),
 };
 
 // Faction API functions (factions are per-campaign, created by GM)
@@ -257,6 +267,10 @@ export const npcAPI = {
     if (multipart) return apiRequestMultipart(`/npcs/${id}/`, body, 'PUT');
     return apiRequest(`/npcs/${id}/`, { method: 'PUT', body });
   },
+  patchNPC: (id, data) => apiRequest(`/npcs/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }),
   deleteNPC: (id) => apiRequest(`/npcs/${id}/`, { method: 'DELETE' }),
 };
 
