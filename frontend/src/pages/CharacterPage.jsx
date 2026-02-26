@@ -228,16 +228,9 @@ export default function CharacterPage({ initialCharacterId = null }) {
   }, []);
 
   const handleCreateNewCharacterTab = useCallback(() => {
-    setCharTabs((prev) => {
-      const existingBlank = prev.find((t) => !t.characterId);
-      if (existingBlank) {
-        setActiveCharTabId(existingBlank.tabId);
-        return prev;
-      }
-      const tab = { tabId: nextTabId++, characterId: null, character: createDefaultCharacter() };
-      setActiveCharTabId(tab.tabId);
-      return [tab, ...prev];
-    });
+    const tab = { tabId: nextTabId++, characterId: null, character: createDefaultCharacter() };
+    setCharTabs((prev) => sortCharTabs([tab, ...prev]));
+    setActiveCharTabId(tab.tabId);
   }, []);
 
   const handleCloseCharTab = useCallback((tabId) => {
