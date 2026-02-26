@@ -48,17 +48,17 @@ export const characterAPI = {
   // Get single character by ID
   getCharacter: (id) => apiRequest(`/characters/${id}/`),
   
-  // Create new character
-  createCharacter: (characterData) => apiRequest('/characters/', {
-    method: 'POST',
-    body: JSON.stringify(characterData),
-  }),
-  
-  // Update character
-  updateCharacter: (id, characterData) => apiRequest(`/characters/${id}/`, {
-    method: 'PUT',
-    body: JSON.stringify(characterData),
-  }),
+  createCharacter: (data) => {
+    const { multipart, body } = buildMultipartOrJson(data);
+    if (multipart) return apiRequestMultipart('/characters/', body, 'POST');
+    return apiRequest('/characters/', { method: 'POST', body });
+  },
+
+  updateCharacter: (id, data) => {
+    const { multipart, body } = buildMultipartOrJson(data);
+    if (multipart) return apiRequestMultipart(`/characters/${id}/`, body, 'PUT');
+    return apiRequest(`/characters/${id}/`, { method: 'PUT', body });
+  },
   
   // Partial update character
   patchCharacter: (id, characterData) => apiRequest(`/characters/${id}/`, {
@@ -207,6 +207,39 @@ export const crewAPI = {
   }),
 };
 
+// Multipart request helper (for file uploads)
+const apiRequestMultipart = async (endpoint, formData, method = 'POST') => {
+  const token = localStorage.getItem('authToken');
+  const base = getApiBaseUrl();
+  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const url = `${base}${path}`;
+  const headers = {};
+  if (token) headers['Authorization'] = `Token ${token}`;
+  if (url.includes('ngrok')) headers['ngrok-skip-browser-warning'] = '1';
+  const response = await fetch(url, { method, headers, body: formData });
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.detail || errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+    throw new Error(message);
+  }
+  return await response.json();
+};
+
+function buildMultipartOrJson(data) {
+  const hasFile = data.imageFile instanceof File;
+  if (hasFile) {
+    const fd = new FormData();
+    for (const [k, v] of Object.entries(data)) {
+      if (k === 'imageFile') { fd.append('image', v); continue; }
+      if (v == null) continue;
+      fd.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
+    }
+    return { multipart: true, body: fd };
+  }
+  const { imageFile, ...rest } = data;
+  return { multipart: false, body: JSON.stringify(rest) };
+}
+
 // NPC API functions (GM / campaign NPCs)
 export const npcAPI = {
   getNPCs: (campaignId) =>
@@ -214,14 +247,16 @@ export const npcAPI = {
       ? apiRequest(`/npcs/?campaign=${campaignId}`)
       : apiRequest('/npcs/'),
   getNPC: (id) => apiRequest(`/npcs/${id}/`),
-  createNPC: (data) => apiRequest('/npcs/', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  }),
-  updateNPC: (id, data) => apiRequest(`/npcs/${id}/`, {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  }),
+  createNPC: (data) => {
+    const { multipart, body } = buildMultipartOrJson(data);
+    if (multipart) return apiRequestMultipart('/npcs/', body, 'POST');
+    return apiRequest('/npcs/', { method: 'POST', body });
+  },
+  updateNPC: (id, data) => {
+    const { multipart, body } = buildMultipartOrJson(data);
+    if (multipart) return apiRequestMultipart(`/npcs/${id}/`, body, 'PUT');
+    return apiRequest(`/npcs/${id}/`, { method: 'PUT', body });
+  },
   deleteNPC: (id) => apiRequest(`/npcs/${id}/`, { method: 'DELETE' }),
 };
 

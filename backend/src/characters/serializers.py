@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import (
     UserProfile, Heritage, Vice, Ability, Character, Stand,
-    Campaign, NPC, Crew, Detriment, Benefit, StandAbility,
+    Campaign, CampaignInvitation, NPC, Crew, Detriment, Benefit, StandAbility,
     HamonAbility, SpinAbility, Trauma,
     CharacterHamonAbility, CharacterSpinAbility,
     CharacterHistory, ExperienceTracker, Session, SessionEvent,
@@ -159,7 +159,7 @@ class ViceSerializer(serializers.ModelSerializer):
 class AbilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = Ability
-        fields = ['id', 'name', 'description', 'type']
+        fields = ['id', 'name', 'description', 'type', 'category']
 
 class StandAbilitySerializer(serializers.ModelSerializer):
     class Meta:
@@ -428,14 +428,64 @@ class RegisterSerializer(serializers.ModelSerializer):
         UserProfile.objects.create(user=user)
         return user
 
+class FactionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Faction
+        fields = ['id', 'name', 'campaign', 'faction_type', 'notes', 'level', 'hold', 'reputation']
+
+
+class CharacterSummarySerializer(serializers.ModelSerializer):
+    heritage_name = serializers.CharField(source='heritage.name', read_only=True, default=None)
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
+    username = serializers.CharField(source='user.username', read_only=True)
+
+    class Meta:
+        model = Character
+        fields = ['id', 'true_name', 'alias', 'stand_name', 'playbook', 'heritage_name', 'user_id', 'username']
+
+
+class NPCSummarySerializer(serializers.ModelSerializer):
+    heritage_name = serializers.CharField(source='heritage.name', read_only=True, default=None)
+
+    class Meta:
+        model = NPC
+        fields = ['id', 'name', 'level', 'stand_name', 'playbook', 'heritage_name']
+
+
+class CampaignInvitationSerializer(serializers.ModelSerializer):
+    invited_user = UserSerializer(read_only=True)
+    invited_by = UserSerializer(read_only=True)
+    campaign_name = serializers.CharField(source='campaign.name', read_only=True)
+    campaign_id = serializers.IntegerField(source='campaign.id', read_only=True)
+
+    class Meta:
+        model = CampaignInvitation
+        fields = ['id', 'campaign_id', 'campaign_name', 'invited_user', 'invited_by', 'status', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
 class CampaignSerializer(serializers.ModelSerializer):
     gm = UserSerializer(read_only=True)
     players = UserSerializer(many=True, read_only=True)
     wanted_stars = serializers.IntegerField(required=False, default=0)
-    factions = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
+    factions = FactionSerializer(many=True, read_only=True)
+    campaign_characters = CharacterSummarySerializer(source='characters', many=True, read_only=True)
+    campaign_npcs = NPCSummarySerializer(source='npcs', many=True, read_only=True)
+    pending_invitations = serializers.SerializerMethodField()
+    is_active = serializers.BooleanField(required=False, default=True)
+    created_at = serializers.DateTimeField(read_only=True)
+
     class Meta:
-        model  = Campaign
-        fields = ['id','name','gm','players','description','wanted_stars','factions']
+        model = Campaign
+        fields = [
+            'id', 'name', 'gm', 'players', 'description', 'wanted_stars',
+            'is_active', 'created_at', 'factions', 'campaign_characters',
+            'campaign_npcs', 'pending_invitations',
+        ]
+
+    def get_pending_invitations(self, obj):
+        invitations = obj.invitations.filter(status='pending')
+        return CampaignInvitationSerializer(invitations, many=True).data
 
 
 class NPCSerializer(serializers.ModelSerializer):
@@ -443,13 +493,13 @@ class NPCSerializer(serializers.ModelSerializer):
     harm_clock_max = serializers.IntegerField(read_only=True)
     special_armor_charges = serializers.IntegerField(read_only=True)
     vulnerability_clock_max = serializers.IntegerField(read_only=True)
-    # Clocks are GM-only: only the apply-effect API can update them (players cannot deal harm to NPCs)
     harm_clock_current = serializers.IntegerField(read_only=True)
     vulnerability_clock_current = serializers.IntegerField(read_only=True)
+    image = serializers.ImageField(required=False, allow_null=True)
 
     class Meta:
         model = NPC
-        fields = ['id', 'name', 'level', 'appearance', 'role', 'weakness', 'need', 'desire', 'rumour', 'secret', 'passion', 'description', 'stand_coin_stats', 'heritage', 'playbook', 'custom_abilities', 'relationships', 'harm_clock_current', 'vulnerability_clock_current', 'armor_charges', 'creator', 'campaign', 'stand_description', 'stand_appearance', 'stand_manifestation', 'special_traits', 'harm_clock_max', 'special_armor_charges', 'vulnerability_clock_max', 'purveyor', 'notes', 'items', 'contacts', 'faction_status', 'inventory']
+        fields = ['id', 'name', 'level', 'appearance', 'role', 'weakness', 'need', 'desire', 'rumour', 'secret', 'passion', 'description', 'stand_coin_stats', 'heritage', 'playbook', 'custom_abilities', 'relationships', 'harm_clock_current', 'vulnerability_clock_current', 'armor_charges', 'creator', 'campaign', 'image', 'image_url', 'stand_description', 'stand_appearance', 'stand_manifestation', 'special_traits', 'harm_clock_max', 'special_armor_charges', 'vulnerability_clock_max', 'purveyor', 'notes', 'items', 'contacts', 'faction_status', 'inventory']
 
     def create(self, validated_data):
         # Set the creator to the current user if not explicitly provided
@@ -461,8 +511,3 @@ class TraumaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Trauma
         fields = ['id', 'name', 'description']
-
-class FactionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Faction
-        fields = ['id', 'name', 'campaign', 'faction_type', 'notes', 'level', 'hold', 'reputation']

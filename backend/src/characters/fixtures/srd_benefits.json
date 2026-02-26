@@ -47,6 +47,72 @@
     "model": "characters.benefit",
     "pk": 5,
     "fields": {
+      "heritage": 2,
+      "name": "Sediment Body",
+      "hp_cost": 0,
+      "required": true,
+      "description": "Can reshape into stone or pebbles, allowing stealth and terrain merging. Gain +1 effect regarding related rolls."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 6,
+    "fields": {
+      "heritage": 2,
+      "name": "Hardened Physique",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Gain 1 extra Stand Armor charge per scene."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 7,
+    "fields": {
+      "heritage": 2,
+      "name": "Rock Punches",
+      "hp_cost": 1,
+      "required": false,
+      "description": "Unarmed attacks now deal Level 2 Harm."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 8,
+    "fields": {
+      "heritage": 2,
+      "name": "Camouflage",
+      "hp_cost": 1,
+      "required": false,
+      "description": "If stationary, you can merge and move through stone."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 9,
+    "fields": {
+      "heritage": 2,
+      "name": "Mudshot",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Can fire hardened mud that immobilizes targets. Create a 3 tick clock."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 10,
+    "fields": {
+      "heritage": 2,
+      "name": "Tolerance",
+      "hp_cost": 2,
+      "required": false,
+      "description": "The detrimental effects of larpintas are reduced."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 11,
+    "fields": {
       "heritage": 3,
       "name": "Bloodthirst",
       "hp_cost": 0,
@@ -56,7 +122,7 @@
   },
   {
     "model": "characters.benefit",
-    "pk": 6,
+    "pk": 12,
     "fields": {
       "heritage": 3,
       "name": "Flight",
@@ -67,7 +133,7 @@
   },
   {
     "model": "characters.benefit",
-    "pk": 7,
+    "pk": 13,
     "fields": {
       "heritage": 3,
       "name": "Nocturnal",
@@ -78,24 +144,409 @@
   },
   {
     "model": "characters.benefit",
-    "pk": 8,
+    "pk": 14,
+    "fields": {
+      "heritage": 3,
+      "name": "Blood Puppeteer",
+      "hp_cost": 3,
+      "required": false,
+      "description": "If you drink a person's blood, you can command them for 1 scene."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 15,
+    "fields": {
+      "heritage": 3,
+      "name": "Sunlight Immunity",
+      "hp_cost": 2,
+      "required": false,
+      "description": "You are capable of surviving in sunlight."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 16,
+    "fields": {
+      "heritage": 3,
+      "name": "Mist Form",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Can turn into mist for the duration of the scene but cannot attack while in mist."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 17,
+    "fields": {
+      "heritage": 3,
+      "name": "Regeneration",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Can spend 1 stress to heal 1 segment of harm."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 18,
+    "fields": {
+      "heritage": 3,
+      "name": "Bat Form",
+      "hp_cost": 3,
+      "required": false,
+      "description": "Can fly but must use 1 stress per scene to maintain it."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 19,
+    "fields": {
+      "heritage": 3,
+      "name": "Staying Power",
+      "hp_cost": 3,
+      "required": false,
+      "description": "If you are overwhelmed with harm, a hit that will KO can be avoided by losing a limb. Your character can survive with separated limbs; you can control your detached limbs, but any damage done to them will destroy them, and any damage dealt to your head will KO you."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 20,
     "fields": {
       "heritage": 4,
       "name": "Hyper-Intelligence",
       "hp_cost": 1,
       "required": true,
-      "description": "Gain +2d on Insight-based actions once per scene."
+      "description": "Gain +1 effect on Insight-based actions once per scene."
     }
   },
   {
     "model": "characters.benefit",
-    "pk": 9,
+    "pk": 21,
     "fields": {
       "heritage": 4,
       "name": "Superior Physiology",
       "hp_cost": 1,
       "required": true,
       "description": "+1d to resisting physical harm."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 22,
+    "fields": {
+      "heritage": 4,
+      "name": "Chainsaw Arm",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Gain a retractable bone chainsaw that deals Level 2 Harm."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 23,
+    "fields": {
+      "heritage": 4,
+      "name": "Weighted Feathers",
+      "hp_cost": 1,
+      "required": false,
+      "description": "Gain a long-range attack dealing Level 2 Harm at 60ft."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 24,
+    "fields": {
+      "heritage": 4,
+      "name": "Life Absorption",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Can drain enemies to regain health."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 25,
+    "fields": {
+      "heritage": 4,
+      "name": "Body Modification",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Can reshape body mid-combat to escape grapples, squeeze through small spaces, or extend limbs."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 26,
+    "fields": {
+      "heritage": 4,
+      "name": "Perfect Organism",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Can create organic organisms through stress expenditure (1 for small entities, 3 for medium, 5 for large, 10 for huge)."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 27,
+    "fields": {
+      "heritage": 5,
+      "name": "Shapechange",
+      "hp_cost": 0,
+      "required": true,
+      "description": "Can morph into either organic or inanimate forms."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 28,
+    "fields": {
+      "heritage": 5,
+      "name": "Enhanced Senses",
+      "hp_cost": 0,
+      "required": true,
+      "description": "Can detect movement in 360° around you. Gain +1 effect towards a related roll."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 29,
+    "fields": {
+      "heritage": 5,
+      "name": "Perfect Mimicry",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Can copy a person's voice and physical appearance."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 30,
+    "fields": {
+      "heritage": 5,
+      "name": "Blindsight",
+      "hp_cost": 1,
+      "required": false,
+      "description": "Can sense movement even in total darkness."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 31,
+    "fields": {
+      "heritage": 5,
+      "name": "Reflex Overclock",
+      "hp_cost": 1,
+      "required": false,
+      "description": "+1d to dodging attacks."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 32,
+    "fields": {
+      "heritage": 5,
+      "name": "No Vital Signs",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Immune to poison, disease, and biological scanners."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 33,
+    "fields": {
+      "heritage": 6,
+      "name": "Ghostly Aura",
+      "hp_cost": 0,
+      "required": true,
+      "description": "You are harder to detect when in dim light or darkness. Gain +1 effect to a related roll."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 34,
+    "fields": {
+      "heritage": 6,
+      "name": "Ethereal Nature",
+      "hp_cost": 0,
+      "required": true,
+      "description": "+1d when resisting mental attacks."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 35,
+    "fields": {
+      "heritage": 6,
+      "name": "Phase Through Objects",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Can pass through solid barriers for 1 scene."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 36,
+    "fields": {
+      "heritage": 6,
+      "name": "Poltergeist",
+      "hp_cost": 1,
+      "required": false,
+      "description": "Can move small objects telekinetically."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 37,
+    "fields": {
+      "heritage": 6,
+      "name": "Fear Aura",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Enemies within 5ft must roll Resolve or hesitate."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 38,
+    "fields": {
+      "heritage": 6,
+      "name": "Resurrection",
+      "hp_cost": 3,
+      "required": false,
+      "description": "Once per campaign, if killed, return as a more powerful entity."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 39,
+    "fields": {
+      "heritage": 7,
+      "name": "Mechanical Tool",
+      "hp_cost": 0,
+      "required": true,
+      "description": "A mechanical weapon or utility item (binoculars, hammer, writing utensil, water filter, etc.) can be collapsed and built into your frame (close or long range); gain +1 effect towards any stealth related roll."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 40,
+    "fields": {
+      "heritage": 7,
+      "name": "Mechanical Limb",
+      "hp_cost": 0,
+      "required": true,
+      "description": "A mechanical limb has been attached to your body, adding +1 effect to any athletics or attack based roll."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 41,
+    "fields": {
+      "heritage": 7,
+      "name": "Hidden Arsenal",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Gain a built-in weapon (e.g., energy blast, retractable blade) that deals Level 2 Harm."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 42,
+    "fields": {
+      "heritage": 7,
+      "name": "Enhanced Reflexes",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Once per scene, instantly dodge an attack."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 43,
+    "fields": {
+      "heritage": 7,
+      "name": "Optic Targeting",
+      "hp_cost": 1,
+      "required": false,
+      "description": "+1d to all ranged attacks."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 44,
+    "fields": {
+      "heritage": 7,
+      "name": "Integrated Tools",
+      "hp_cost": 1,
+      "required": false,
+      "description": "Built-in tools (lockpicks, scanners, welding torch) give +1d to Tinker actions."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 45,
+    "fields": {
+      "heritage": 8,
+      "name": "Precognitive Instinct",
+      "hp_cost": 0,
+      "required": true,
+      "description": "Once per scene, ask the GM a yes/no question about the immediate future."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 46,
+    "fields": {
+      "heritage": 8,
+      "name": "Spiritual Awareness",
+      "hp_cost": 0,
+      "required": true,
+      "description": "+1d when detecting supernatural forces (Stands, Hamon, bizarre entities)."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 47,
+    "fields": {
+      "heritage": 8,
+      "name": "Danger Sense",
+      "hp_cost": 2,
+      "required": false,
+      "description": "You always act first in combat."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 48,
+    "fields": {
+      "heritage": 8,
+      "name": "Divination",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Can \"read\" an object's past by touching it (GM discretion)."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 49,
+    "fields": {
+      "heritage": 8,
+      "name": "Supernatural Resistance",
+      "hp_cost": 2,
+      "required": false,
+      "description": "Once per scene, ignore a consequence from a supernatural source."
+    }
+  },
+  {
+    "model": "characters.benefit",
+    "pk": 50,
+    "fields": {
+      "heritage": 8,
+      "name": "Manifest Destiny",
+      "hp_cost": 3,
+      "required": false,
+      "description": "Once per session, force a reroll on any fate-related check."
     }
   }
 ]

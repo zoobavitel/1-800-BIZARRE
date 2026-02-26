@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 // ─── SRD Data Tables ──────────────────────────────────────────────────────────
 
@@ -158,30 +158,63 @@ const GradeSelector = ({ value, onChange, label, infoLine }) => (
 
 // ─── NPCSheet ─────────────────────────────────────────────────────────────────
 
-const NPCSheet = ({ npc, onSave, onClose, onCreateNew, allNPCs = [], onSwitchNPC }) => {
+const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
+  const [activeMode, setActiveMode] = useState('NPC');
+
   const [name,      setName]      = useState(npc?.name      || '');
   const [standName, setStandName] = useState(npc?.standName || '');
   const [role,      setRole]      = useState(npc?.role      || '');
   const [notes,     setNotes]     = useState(npc?.notes     || '');
+  const [campaign,  setCampaign]  = useState(npc?.campaign  || '');
+
+  // Crew / faction management fields
+  const [contacts,     setContacts]     = useState(npc?.contacts     || []);
+  const [factionStatus, setFactionStatus] = useState(npc?.faction_status || npc?.factionStatus || {});
+  const [inventory,    setInventory]    = useState(npc?.inventory    || []);
 
   const [stats, setStats] = useState(npc?.stats || {
     power: 'D', speed: 'D', range: 'D', durability: 'D', precision: 'D', development: 'D',
   });
 
-  // Conflict clocks — GM-named, arbitrary segments
   const [conflictClocks, setConflictClocks] = useState(npc?.conflictClocks || [
     { id: 1, name: 'Defeat', segments: 8, filled: 0 },
   ]);
 
-  // Alternative win condition clocks (for S-Durability NPCs)
   const [altClocks, setAltClocks] = useState(npc?.altClocks || []);
 
-  // Armor tracking
   const [regularUsed, setRegularUsed] = useState(npc?.regularUsed || 0);
   const [specialUsed, setSpecialUsed] = useState(npc?.specialUsed || 0);
 
-  // Stand abilities (narrative only — no mechanical dots)
   const [abilities, setAbilities] = useState(npc?.abilities || []);
+
+  // Portrait state
+  const [imageFile, setImageFile]       = useState(null);
+  const [imageUrl, setImageUrl]         = useState(npc?.image_url || '');
+  const [imagePreview, setImagePreview] = useState(npc?.image || npc?.image_url || '');
+  const fileInputRef = useRef(null);
+
+  // Auto-save state
+  const [saveStatus, setSaveStatus] = useState(null);
+  const debounceRef = useRef(null);
+  const mountedRef  = useRef(false);
+  const npcIdRef    = useRef(npc?.id || null);
+  const savingRef   = useRef(false);
+
+  const handleFileSelect = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  }, []);
+
+  const handleImageUrlPrompt = useCallback(() => {
+    const url = prompt('Paste image URL:');
+    if (url) {
+      setImageUrl(url);
+      setImagePreview(url);
+      setImageFile(null);
+    }
+  }, []);
 
   // ── Derived ──────────────────────────────────────────────────────────────────
 
@@ -230,14 +263,39 @@ const NPCSheet = ({ npc, onSave, onClose, onCreateNew, allNPCs = [], onSwitchNPC
   const deleteAltClock = (id) =>
     setAltClocks(p => p.filter(c => c.id !== id));
 
-  const handleSave = () => {
-    if (onSave) onSave({
-      id: npc?.id || Date.now(),
-      name, standName, role, notes, stats,
-      conflictClocks, altClocks,
-      regularUsed, specialUsed, abilities,
-    });
-  };
+  const buildPayload = useCallback(() => ({
+    ...(npcIdRef.current ? { id: npcIdRef.current } : {}),
+    name, standName, role, notes, stats,
+    conflictClocks, altClocks,
+    regularUsed, specialUsed, abilities,
+    campaign: campaign || null,
+    image_url: imageUrl,
+    contacts, faction_status: factionStatus, inventory,
+    ...(imageFile ? { imageFile } : {}),
+  }), [name, standName, role, notes, stats, conflictClocks, altClocks, regularUsed, specialUsed, abilities, campaign, imageUrl, imageFile, contacts, factionStatus, inventory]);
+
+  // Debounced auto-save
+  useEffect(() => {
+    if (!mountedRef.current) { mountedRef.current = true; return; }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      if (savingRef.current || !onSave) return;
+      savingRef.current = true;
+      setSaveStatus('saving');
+      try {
+        const result = await onSave(buildPayload());
+        if (result?.id && !npcIdRef.current) npcIdRef.current = result.id;
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus((s) => s === 'saved' ? null : s), 2000);
+      } catch {
+        setSaveStatus('error');
+      } finally {
+        savingRef.current = false;
+      }
+    }, 1500);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, standName, role, notes, stats, conflictClocks, altClocks, regularUsed, specialUsed, abilities, campaign, imageUrl, imageFile]);
 
   // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -271,50 +329,85 @@ const NPCSheet = ({ npc, onSave, onClose, onCreateNew, allNPCs = [], onSwitchNPC
           {standName && <span style={{ color: '#a78bfa' }}>「{standName}」</span>}
         </div>
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {allNPCs.length > 1 && (
-            <select style={S.sel} onChange={e => {
-              const n = allNPCs.find(x => x.id === parseInt(e.target.value));
-              if (n && onSwitchNPC) onSwitchNPC(n);
-            }}>
-              <option value="">Switch NPC…</option>
-              {allNPCs.map(n => <option key={n.id} value={n.id}>{n.name || 'Unnamed'}</option>)}
-            </select>
-          )}
-          {onCreateNew && (
-            <button onClick={onCreateNew} style={{ ...S.btn, background: '#4c1d95', color: '#e9d5ff' }}>+ New NPC</button>
-          )}
-          <button onClick={handleSave} style={{ ...S.btn, background: '#16a34a', color: '#fff' }}>Save</button>
+          {saveStatus === 'saving' && <span style={{ fontSize: '11px', color: '#fbbf24' }}>Saving...</span>}
+          {saveStatus === 'saved'  && <span style={{ fontSize: '11px', color: '#34d399' }}>Saved</span>}
+          {saveStatus === 'error'  && <span style={{ fontSize: '11px', color: '#f87171' }}>Error saving</span>}
           {onClose && <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '18px' }}>✕</button>}
         </div>
       </div>
 
+      {/* ── Mode Toggle ── */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: '0', background: '#0d0d1a', borderBottom: '1px solid #2d1f52', padding: '6px 0' }}>
+        {['NPC', 'CREW'].map(mode => (
+          <button key={mode} onClick={() => setActiveMode(mode)}
+            style={{
+              padding: '6px 24px', fontSize: '12px', fontFamily: 'monospace', fontWeight: 'bold',
+              border: '1px solid #4b2d8f', cursor: 'pointer', letterSpacing: '0.08em',
+              background: activeMode === mode ? '#7c3aed' : '#1a0533',
+              color: activeMode === mode ? '#fff' : '#9ca3af',
+              borderRadius: mode === 'NPC' ? '4px 0 0 4px' : '0 4px 4px 0',
+            }}>
+            {mode === 'NPC' ? 'NPC MODE' : 'CREW MODE'}
+          </button>
+        ))}
+      </div>
+
       <div style={{ padding: '16px', maxWidth: '1400px', margin: '0 auto' }}>
 
+        {activeMode === 'NPC' && (<>
         {/* ── Identity Bar ── */}
         <div style={{ ...S.card, borderColor: '#4c1d95' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr auto', gap: '16px', alignItems: 'end' }}>
-            <div>
-              <span style={S.lbl}>NPC Name / User Name</span>
-              <input style={S.inp} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Yoshikage Kira" />
-            </div>
-            <div>
-              <span style={S.lbl}>Stand Name</span>
-              <input style={S.inp} value={standName} onChange={e => setStandName(e.target.value)} placeholder="e.g. 「Killer Queen」" />
-            </div>
-            <div>
-              <span style={S.lbl}>Role / Type</span>
-              <input style={S.inp} value={role} onChange={e => setRole(e.target.value)} placeholder="Boss / Ally / Minion" />
-            </div>
-            <div style={{ textAlign: 'center', minWidth: '100px' }}>
-              <span style={S.lbl}>NPC LEVEL</span>
-              <div style={{ fontSize: '28px', fontWeight: 'bold', color: level >= 7 ? '#f87171' : level >= 4 ? '#fbbf24' : '#34d399', lineHeight: 1 }}>
-                {level}
+          <div style={{ display: 'flex', gap: '16px', alignItems: 'end' }}>
+            {/* Portrait */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+              <div style={{
+                width: '80px', height: '80px', borderRadius: '50%', border: '2px solid #4b2d8f',
+                background: '#1f1035', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {imagePreview
+                  ? <img src={imagePreview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : <span style={{ color: '#4b5563', fontSize: '28px' }}>?</span>}
               </div>
-              <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '2px' }}>
-                {totalPoints} pts × 10
+              <div style={{ display: 'flex', gap: '4px' }}>
+                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} style={{ display: 'none' }} />
+                <button onClick={() => fileInputRef.current?.click()}
+                  style={{ ...S.btn, fontSize: '9px', padding: '2px 6px', background: '#1f1035', color: '#a78bfa' }}>Upload</button>
+                <button onClick={handleImageUrlPrompt}
+                  style={{ ...S.btn, fontSize: '9px', padding: '2px 6px', background: '#1f1035', color: '#a78bfa' }}>URL</button>
               </div>
-              <div style={{ fontSize: '10px', color: '#4c1d95', marginTop: '1px' }}>
-                = {totalSpentXP} XP spent
+            </div>
+            {/* Fields */}
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr auto', gap: '16px', alignItems: 'end', flex: 1 }}>
+              <div>
+                <span style={S.lbl}>NPC Name / User Name</span>
+                <input style={S.inp} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Yoshikage Kira" />
+              </div>
+              <div>
+                <span style={S.lbl}>Stand Name</span>
+                <input style={S.inp} value={standName} onChange={e => setStandName(e.target.value)} placeholder="e.g. 「Killer Queen」" />
+              </div>
+              <div>
+                <span style={S.lbl}>Role / Type</span>
+                <input style={S.inp} value={role} onChange={e => setRole(e.target.value)} placeholder="Boss / Ally / Minion" />
+              </div>
+              <div>
+                <span style={S.lbl}>Campaign</span>
+                <select style={{ ...S.sel, width: '100%' }} value={campaign} onChange={e => setCampaign(e.target.value)}>
+                  <option value="">No Campaign</option>
+                  {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div style={{ textAlign: 'center', minWidth: '100px' }}>
+                <span style={S.lbl}>NPC LEVEL</span>
+                <div style={{ fontSize: '28px', fontWeight: 'bold', color: level >= 7 ? '#f87171' : level >= 4 ? '#fbbf24' : '#34d399', lineHeight: 1 }}>
+                  {level}
+                </div>
+                <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '2px' }}>
+                  {totalPoints} pts × 10
+                </div>
+                <div style={{ fontSize: '10px', color: '#4c1d95', marginTop: '1px' }}>
+                  = {totalSpentXP} XP spent
+                </div>
               </div>
             </div>
           </div>
@@ -660,6 +753,123 @@ const NPCSheet = ({ npc, onSave, onClose, onCreateNew, allNPCs = [], onSwitchNPC
 
           </div>
         </div>
+        </>)}
+
+        {/* ══════════════════════════════════ CREW MODE ══════════════════════════════════ */}
+        {activeMode === 'CREW' && (
+          <div>
+            {/* Crew Header */}
+            <div style={S.card}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+                <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#c4b5fd' }}>
+                  {name || 'Unnamed NPC'} — Crew Management
+                </span>
+                {role && <span style={{ background: '#4c1d95', padding: '2px 10px', borderRadius: '4px', fontSize: '11px', color: '#e9d5ff' }}>{role}</span>}
+              </div>
+            </div>
+
+            <div style={S.g2}>
+              {/* Contacts */}
+              <div style={S.card}>
+                <span style={S.lbl}>CONTACTS / ASSOCIATES</span>
+                <div style={{ marginBottom: '8px' }}>
+                  {contacts.map((c, i) => (
+                    <div key={i} style={{ display: 'flex', gap: '6px', marginBottom: '6px', alignItems: 'center' }}>
+                      <input value={c.name} placeholder="Name"
+                        onChange={e => setContacts(p => p.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+                        style={{ ...S.inp, flex: 1 }} />
+                      <input value={c.role || ''} placeholder="Role / relation"
+                        onChange={e => setContacts(p => p.map((x, j) => j === i ? { ...x, role: e.target.value } : x))}
+                        style={{ ...S.inp, flex: 1 }} />
+                      <select value={c.disposition || 'neutral'}
+                        onChange={e => setContacts(p => p.map((x, j) => j === i ? { ...x, disposition: e.target.value } : x))}
+                        style={{ ...S.sel, fontSize: '11px', padding: '2px 4px' }}>
+                        <option value="allied">Allied</option>
+                        <option value="friendly">Friendly</option>
+                        <option value="neutral">Neutral</option>
+                        <option value="suspicious">Suspicious</option>
+                        <option value="hostile">Hostile</option>
+                      </select>
+                      <button onClick={() => setContacts(p => p.filter((_, j) => j !== i))}
+                        style={{ color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', flexShrink: 0 }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => setContacts(p => [...p, { name: '', role: '', disposition: 'neutral' }])}
+                  style={{ ...S.btn, border: '2px dashed #374151', background: 'transparent', color: '#6b7280', width: '100%', padding: '6px' }}>
+                  + Add Contact
+                </button>
+              </div>
+
+              {/* Faction Status */}
+              <div style={S.card}>
+                <span style={S.lbl}>FACTION STATUS</span>
+                <div style={{ marginBottom: '8px' }}>
+                  {Object.entries(factionStatus).map(([faction, value]) => (
+                    <div key={faction} style={{ display: 'flex', gap: '6px', marginBottom: '6px', alignItems: 'center' }}>
+                      <span style={{ flex: 1, fontSize: '12px', color: '#d1d5db' }}>{faction}</span>
+                      <div style={{ display: 'flex', gap: '2px', alignItems: 'center' }}>
+                        <button onClick={() => setFactionStatus(p => ({ ...p, [faction]: Math.max(-3, (p[faction] || 0) - 1) }))}
+                          style={{ ...S.btn, padding: '1px 6px', background: '#7f1d1d', color: '#fca5a5', fontSize: '11px' }}>−</button>
+                        <span style={{
+                          display: 'inline-block', width: '28px', textAlign: 'center', fontWeight: 'bold', fontSize: '13px',
+                          color: value > 0 ? '#34d399' : value < 0 ? '#f87171' : '#9ca3af',
+                        }}>{value > 0 ? `+${value}` : value}</span>
+                        <button onClick={() => setFactionStatus(p => ({ ...p, [faction]: Math.min(3, (p[faction] || 0) + 1) }))}
+                          style={{ ...S.btn, padding: '1px 6px', background: '#14532d', color: '#86efac', fontSize: '11px' }}>+</button>
+                      </div>
+                      <button onClick={() => setFactionStatus(p => { const n = { ...p }; delete n[faction]; return n; })}
+                        style={{ color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', flexShrink: 0 }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => {
+                  const n = prompt('Faction name:');
+                  if (n && !factionStatus[n]) setFactionStatus(p => ({ ...p, [n]: 0 }));
+                }}
+                  style={{ ...S.btn, border: '2px dashed #374151', background: 'transparent', color: '#6b7280', width: '100%', padding: '6px' }}>
+                  + Add Faction
+                </button>
+                <div style={{ marginTop: '10px', fontSize: '10px', color: '#6b7280' }}>
+                  −3 War · −2 Hostile · −1 Interfering · 0 Neutral · +1 Helpful · +2 Friendly · +3 Allied
+                </div>
+              </div>
+            </div>
+
+            {/* Inventory */}
+            <div style={S.card}>
+              <span style={S.lbl}>INVENTORY / ASSETS</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                {inventory.map((item, i) => (
+                  <div key={i} style={{ display: 'flex', gap: '4px', alignItems: 'center', background: '#1f1035', padding: '4px 8px', borderRadius: '4px', border: '1px solid #2d1f52' }}>
+                    <input value={item.name} placeholder="Item"
+                      onChange={e => setInventory(p => p.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+                      style={{ ...S.inp, width: '120px', borderBottom: 'none', fontSize: '12px' }} />
+                    <input value={item.qty != null ? item.qty : ''} placeholder="#" type="number" min="0"
+                      onChange={e => setInventory(p => p.map((x, j) => j === i ? { ...x, qty: e.target.value === '' ? null : Number(e.target.value) } : x))}
+                      style={{ ...S.inp, width: '36px', borderBottom: 'none', fontSize: '12px', textAlign: 'center' }} />
+                    <button onClick={() => setInventory(p => p.filter((_, j) => j !== i))}
+                      style={{ color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px' }}>✕</button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => setInventory(p => [...p, { name: '', qty: 1 }])}
+                style={{ ...S.btn, border: '2px dashed #374151', background: 'transparent', color: '#6b7280', width: '100%', padding: '6px' }}>
+                + Add Item
+              </button>
+            </div>
+
+            {/* Crew Notes */}
+            <div style={S.card}>
+              <span style={S.lbl}>CREW NOTES</span>
+              <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Crew connections, territory control, gang resources, operations notes…"
+                style={{ width: '100%', height: '140px', background: '#0a0a14', color: '#d1d5db', border: '1px solid #2d1f52', padding: '8px', fontFamily: 'monospace', fontSize: '12px', resize: 'vertical', boxSizing: 'border-box', outline: 'none' }}
+              />
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );
@@ -670,14 +880,13 @@ export { NPCSheet };
 // ─── App Wrapper (standalone demo) ─────────────────────────────────────────────
 
 export default function App() {
-  const [npcs, setNPCs] = useState([{
+  const [current] = useState({
     id: 1,
     name: 'Yoshikage Kira',
     standName: 'Killer Queen',
     role: 'Boss',
     notes: 'Obsessive, methodical. Wants a quiet life. Will reset scenario if cornered.',
     stats: { power: 'A', speed: 'B', range: 'C', durability: 'B', precision: 'A', development: 'C' },
-    // Total: 4+3+2+3+4+2 = 18 pts → Level 9
     conflictClocks: [
       { id: 1, name: 'Defeat Kira', segments: 12, filled: 0 },
       { id: 2, name: 'Expose Identity', segments: 6, filled: 0 },
@@ -686,36 +895,21 @@ export default function App() {
     regularUsed: 0,
     specialUsed: 0,
     abilities: [
-      { id: 1, name: 'Sheer Heart Attack', type: 'unique', description: 'Heat-seeking autonomous bomb. Once deployed, pursues the nearest heat source until detonation. Cannot be called back.' },
-      { id: 2, name: 'Bites the Dust', type: 'unique', description: 'Reversal bomb implanted in a host. Triggers on discovery — rewinds time by 1 hour, killing the investigator. GM activates when identity is learned.' },
+      { id: 1, name: 'Sheer Heart Attack', type: 'unique', description: 'Heat-seeking autonomous bomb.' },
+      { id: 2, name: 'Bites the Dust', type: 'unique', description: 'Reversal bomb implanted in a host.' },
     ],
-  }]);
+  });
 
-  const [current, setCurrent] = useState(npcs[0]);
-
-  const handleSave = (updated) => {
-    setNPCs(p => p.some(n => n.id === updated.id) ? p.map(n => n.id === updated.id ? updated : n) : [...p, updated]);
-    setCurrent(updated);
-  };
-
-  const handleCreateNew = () => {
-    const n = {
-      id: Date.now(), name: '', standName: '', role: '', notes: '',
-      stats: { power: 'D', speed: 'D', range: 'D', durability: 'D', precision: 'D', development: 'D' },
-      conflictClocks: [{ id: Date.now(), name: 'Defeat', segments: 8, filled: 0 }],
-      altClocks: [], regularUsed: 0, specialUsed: 0, abilities: [],
-    };
-    setNPCs(p => [...p, n]);
-    setCurrent(n);
+  const handleSave = async (data) => {
+    console.log('Demo save:', data);
+    return data;
   };
 
   return (
     <NPCSheet
       npc={current}
-      allNPCs={npcs}
       onSave={handleSave}
-      onCreateNew={handleCreateNew}
-      onSwitchNPC={c => setCurrent(npcs.find(n => n.id === c.id) || c)}
+      campaigns={[]}
     />
   );
 }

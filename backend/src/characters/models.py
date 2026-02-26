@@ -3,20 +3,42 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils import timezone
 import json
 
 
 class Campaign(models.Model):
     name = models.CharField(max_length=100)
     gm = models.ForeignKey(User, on_delete=models.CASCADE, related_name='campaigns_led')
-    players = models.ManyToManyField(User, related_name='campaigns_joined')
+    players = models.ManyToManyField(User, related_name='campaigns_joined', blank=True)
     description = models.TextField(blank=True)
-    # Wanted stars for campaign (only GM may edit)
     wanted_stars = models.IntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
     active_session = models.ForeignKey('Session', on_delete=models.SET_NULL, null=True, blank=True, related_name='active_in_campaign')
 
     def __str__(self):
         return self.name
+
+
+class CampaignInvitation(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('declined', 'Declined'),
+    ]
+
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='invitations')
+    invited_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='campaign_invitations')
+    invited_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_invitations')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('campaign', 'invited_user')
+
+    def __str__(self):
+        return f"{self.invited_user.username} invited to {self.campaign.name} ({self.status})"
 
 
 class Faction(models.Model):
@@ -173,6 +195,8 @@ class NPC(models.Model):
     armor_charges = models.IntegerField(default=0)
     creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_npcs')
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, null=True, blank=True, related_name='npcs')
+    image = models.ImageField(upload_to='npc_images/', null=True, blank=True)
+    image_url = models.URLField(max_length=500, blank=True, default='')
 
     # Stand Description Fields
     stand_description = models.TextField(blank=True)
@@ -202,7 +226,7 @@ class NPC(models.Model):
         elif durability_grade == 'B':
             return 3
         elif durability_grade == 'C':
-            return 3
+            return 2
         elif durability_grade == 'D':
             return 2
         else: # F
@@ -260,9 +284,21 @@ class NPC(models.Model):
 
 
 class Ability(models.Model):
+    CATEGORY_CHOICES = [
+        ("aggression", "Aggression"),
+        ("endurance", "Endurance"),
+        ("cunning", "Cunning"),
+        ("awareness", "Awareness"),
+        ("presence", "Presence"),
+        ("teamwork", "Teamwork"),
+        ("adaptability", "Adaptability"),
+        ("stand_nature", "Stand Nature"),
+    ]
+
     name = models.CharField(max_length=100)
     type = models.CharField(max_length=50, choices=[("standard", "Standard"), ("other", "Other")])
     description = models.TextField()
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default="aggression")
 
 
 class Character(models.Model):
@@ -284,6 +320,7 @@ class Character(models.Model):
     alias = models.CharField(max_length=100, blank=True, null=True)
     appearance = models.TextField(blank=True, null=True)
     image = models.ImageField(upload_to='character_images/', blank=True, null=True)
+    image_url = models.URLField(max_length=500, blank=True, default='')
 
     @property
     def development_xp_bonus(self):
@@ -656,6 +693,7 @@ class Stand(models.Model):
         ('PHENOMENA', 'Phenomena'),
         ('AUTOMATIC', 'Automatic'),
         ('FIGHTING', 'Fighting Spirit'),
+        ('SHARED', 'Shared'),
     ]
 
     FORM_CHOICES = [
@@ -704,16 +742,24 @@ class HamonAbility(models.Model):
     """Hamon abilities for Hamon playbook users based on SRD."""
     
     HAMON_TYPE_CHOICES = [
-        ('FOUNDATION', 'Foundation Hamon'),
+        ('FOUNDATION', 'Foundations of Hamon'),
         ('TRADITIONALIST', 'Traditionalist (Zeppeli Style)'),
-        ('MEDICAL', 'Medical Hamon'),
-        ('MARTIAL', 'Martial Hamon'),
-        ('INVESTIGATIVE', 'Investigative Hamon'),
+        ('ADAPTIVE_FLOW', 'Adaptive Flow (Joseph/Caesar Style)'),
+        ('CYBER_HAMONIST', 'Cyber-Hamonist'),
+        ('DARK_RESONANCE', 'Dark Resonance'),
+        ('BIO_HARMONICS', 'Bio-Harmonics'),
     ]
+
+    HERITAGE_REQUIREMENTS = {
+        'CYBER_HAMONIST': 'Cyborg',
+        'DARK_RESONANCE': 'Vampire',
+        'BIO_HARMONICS': 'Pillar Man',
+    }
     
     name = models.CharField(max_length=100)
     hamon_type = models.CharField(max_length=20, choices=HAMON_TYPE_CHOICES)
     description = models.TextField()
+    required_a_count = models.IntegerField(default=0, help_text="Minimum number of A-rank Coin stats required (0 for Foundation abilities)")
     stress_cost = models.IntegerField(default=0, help_text="Stress cost to use this ability")
     frequency = models.CharField(max_length=50, blank=True, help_text="Usage frequency (e.g., 'Once per score')")
     
@@ -725,16 +771,17 @@ class SpinAbility(models.Model):
     """Spin abilities for Spin playbook users based on SRD."""
     
     SPIN_TYPE_CHOICES = [
-        ('FOUNDATION', 'Spin Foundation'),
+        ('FOUNDATION', 'Spin Foundations'),
         ('CAVALIER', 'Cavalier'),
-        ('ARCHITECT', 'Architect'),
-        ('GUNSLINGER', 'Gunslinger'),
-        ('TUSK', 'Tusk'),
+        ('EXECUTIONER', 'Executioner'),
+        ('MEDICO', 'Medico'),
+        ('BALLBREAKER', 'Ballbreaker'),
     ]
     
     name = models.CharField(max_length=100)
     spin_type = models.CharField(max_length=20, choices=SPIN_TYPE_CHOICES)
     description = models.TextField()
+    required_a_count = models.IntegerField(default=0, help_text="Minimum number of A-rank Coin stats required (0 for Foundation abilities)")
     stress_cost = models.IntegerField(default=0, help_text="Stress cost to use this ability")
     frequency = models.CharField(max_length=50, blank=True, help_text="Usage frequency (e.g., 'Once per scene')")
     

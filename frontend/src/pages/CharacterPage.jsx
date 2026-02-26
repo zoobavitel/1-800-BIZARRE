@@ -2,12 +2,16 @@
  * CharacterPage — page-level orchestration for the character sheet.
  * Handles API calls, data transformation, mode switching (Character / NPC),
  * and navigation chrome.  Delegates rendering to CharacterSheet.jsx.
+ *
+ * CHARACTER TABS: each open character gets a named tab in the top bar,
+ * sorted alphabetically (unsaved "New Character" tabs always sort first).
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   characterAPI,
   npcAPI,
   referenceAPI,
+  campaignAPI,
   transformBackendToFrontend,
   transformFrontendToBackend,
   createDefaultCharacter,
@@ -24,6 +28,7 @@ const PAGE_STYLES = {
   modeBar: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '8px 16px', borderBottom: '1px solid #374151',
+    flexWrap: 'wrap', gap: '6px',
   },
   modeBtn: (active) => ({
     padding: '6px 12px', border: '1px solid #4b5563', borderRadius: '4px',
@@ -33,7 +38,53 @@ const PAGE_STYLES = {
   }),
 };
 
-/** Normalize save payload from CharacterSheet to the shape expected by transformFrontendToBackend */
+const TAB_STYLES = {
+  tab: (active) => ({
+    display: 'flex', alignItems: 'center', gap: '6px',
+    padding: '4px 10px', borderRadius: '4px',
+    background: active ? '#4b5563' : '#374151',
+    color: active ? '#fff' : '#9ca3af',
+    cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px',
+    border: 'none', whiteSpace: 'nowrap',
+  }),
+  close: {
+    background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer',
+    fontSize: '13px', padding: '0 2px', lineHeight: 1, fontFamily: 'monospace',
+  },
+  divider: {
+    width: '1px', height: '20px', background: '#4b5563', margin: '0 4px', flexShrink: 0,
+  },
+  addBtn: {
+    padding: '4px 8px', borderRadius: '4px', fontSize: '11px',
+    background: '#1f2937', color: '#9ca3af', border: '1px dashed #4b5563',
+    cursor: 'pointer', fontFamily: 'monospace', whiteSpace: 'nowrap',
+  },
+};
+
+let nextTabId = 1;
+
+// ---------------------------------------------------------------------------
+// Character tab helpers
+// ---------------------------------------------------------------------------
+
+function charTabLabel(tab) {
+  const name = tab.character?.name?.trim();
+  return name || 'New Character';
+}
+
+function sortCharTabs(tabs) {
+  return [...tabs].sort((a, b) => {
+    const aNew = !a.characterId;
+    const bNew = !b.characterId;
+    if (aNew !== bNew) return aNew ? -1 : 1;
+    return charTabLabel(a).localeCompare(charTabLabel(b));
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Payload normalizer
+// ---------------------------------------------------------------------------
+
 function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
   const traumaIds = traumaObjectToIds(payload.trauma || {}, traumasList);
   const harm = payload.harm || {
@@ -75,45 +126,53 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export default function CharacterPage({ initialCharacterId = null }) {
   const [mode, setMode] = useState(MODES.CHARACTER);
+
+  // ── Character list (used by the "Open character…" dropdown) ─────────────
   const [characters, setCharacters] = useState([]);
-  const [selectedCharacterId, setSelectedCharacterId] = useState(initialCharacterId ?? null);
-  const [selectedCharacter, setSelectedCharacter] = useState(null);
-  const [draftNewCharacter, setDraftNewCharacter] = useState(null);
   const [charactersLoading, setCharactersLoading] = useState(true);
   const [charactersError, setCharactersError] = useState(null);
 
-  // When navigating from Home (create vs edit), sync selected id
-  useEffect(() => {
-    setSelectedCharacterId(initialCharacterId ?? null);
-  }, [initialCharacterId]);
+  // ── Character tab state ──────────────────────────────────────────────────
+  const [charTabs, setCharTabs] = useState([]);
+  const [activeCharTabId, setActiveCharTabId] = useState(null);
+  const charTabsInitialized = useRef(false);
 
+  // ── NPC state ───────────────────────────────────────────────────────────
   const [npcs, setNpcs] = useState([]);
-  const [selectedNpcId, setSelectedNpcId] = useState(null);
-  const [selectedNpc, setSelectedNpc] = useState(null);
   const [npcsLoading, setNpcsLoading] = useState(false);
-  const [campaignId] = useState(null); // setCampaignId reserved for future campaign filter
+  const [campaignId] = useState(null);
+  const [npcTabs, setNpcTabs] = useState([]);
+  const [activeNpcTabId, setActiveNpcTabId] = useState(null);
+  const npcTabsInitialized = useRef(false);
 
+  const [campaigns, setCampaigns] = useState([]);
   const [traumas, setTraumas] = useState([]);
   const [heritages, setHeritages] = useState([]);
 
-  // Load reference data (traumas for save, heritages for create)
+  // ── Reference data ───────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     Promise.all([
       referenceAPI.getTraumas().catch(() => []),
       referenceAPI.getHeritages().catch(() => []),
-    ]).then(([t, h]) => {
+      campaignAPI.getCampaigns().catch(() => []),
+    ]).then(([t, h, c]) => {
       if (!cancelled) {
         setTraumas(t || []);
         setHeritages(h || []);
+        setCampaigns(c || []);
       }
     });
     return () => { cancelled = true; };
   }, []);
 
-  // Load character list
+  // ── Load character list ──────────────────────────────────────────────────
   const loadCharacters = useCallback(async () => {
     setCharactersLoading(true);
     setCharactersError(null);
@@ -121,48 +180,93 @@ export default function CharacterPage({ initialCharacterId = null }) {
       const list = await characterAPI.getCharacters();
       const front = (list || []).map(transformBackendToFrontend);
       setCharacters(front);
-      if (selectedCharacterId && !front.some((c) => c.id === selectedCharacterId)) {
-        setSelectedCharacterId(null);
-        setSelectedCharacter(null);
-      }
+      return front;
     } catch (err) {
       setCharactersError(err.message || 'Failed to load characters');
       setCharacters([]);
+      return [];
     } finally {
       setCharactersLoading(false);
     }
-  }, [selectedCharacterId]);
-
-  useEffect(() => {
-    loadCharacters();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   }, []);
 
-  // When selected character id changes, load full character (don't overwrite when switching to "new" — handlers set selectedCharacter)
   useEffect(() => {
-    if (selectedCharacterId == null) return;
-    let cancelled = false;
-    characterAPI.getCharacter(selectedCharacterId).then((raw) => {
-      if (!cancelled) setSelectedCharacter(transformBackendToFrontend(raw));
-    }).catch(() => {
-      if (!cancelled) setSelectedCharacter(null);
-    });
-    return () => { cancelled = true; };
-  }, [selectedCharacterId]);
+    loadCharacters().then((front) => {
+      if (charTabsInitialized.current) return;
+      charTabsInitialized.current = true;
 
-  // Load NPCs when in NPC mode (optionally filter by campaign)
-  useEffect(() => {
-    if (mode !== MODES.NPC) return;
-    setNpcsLoading(true);
-    npcAPI.getNPCs(campaignId).then((list) => {
-      setNpcs(list || []);
-      if (selectedNpcId && !(list || []).some((n) => n.id === selectedNpcId)) {
-        setSelectedNpcId(null);
-        setSelectedNpc(null);
+      if (initialCharacterId) {
+        const found = front.find((c) => c.id === initialCharacterId);
+        if (found) {
+          const tab = { tabId: nextTabId++, characterId: found.id, character: found };
+          setCharTabs([tab]);
+          setActiveCharTabId(tab.tabId);
+          return;
+        }
       }
-    }).catch(() => setNpcs([])).finally(() => setNpcsLoading(false));
-  }, [mode, campaignId, selectedNpcId]);
+      const blank = { tabId: nextTabId++, characterId: null, character: createDefaultCharacter() };
+      setCharTabs([blank]);
+      setActiveCharTabId(blank.tabId);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // ── Character tab handlers ───────────────────────────────────────────────
+
+  const openCharacterInTab = useCallback((character) => {
+    setCharTabs((prev) => {
+      const existing = prev.find((t) => t.characterId === character.id);
+      if (existing) {
+        setActiveCharTabId(existing.tabId);
+        return prev;
+      }
+      const tab = { tabId: nextTabId++, characterId: character.id, character };
+      const sorted = sortCharTabs([...prev, tab]);
+      setActiveCharTabId(tab.tabId);
+      return sorted;
+    });
+  }, []);
+
+  const handleCreateNewCharacterTab = useCallback(() => {
+    setCharTabs((prev) => {
+      const existingBlank = prev.find((t) => !t.characterId);
+      if (existingBlank) {
+        setActiveCharTabId(existingBlank.tabId);
+        return prev;
+      }
+      const tab = { tabId: nextTabId++, characterId: null, character: createDefaultCharacter() };
+      setActiveCharTabId(tab.tabId);
+      return [tab, ...prev];
+    });
+  }, []);
+
+  const handleCloseCharTab = useCallback((tabId) => {
+    setCharTabs((prev) => {
+      const filtered = prev.filter((t) => t.tabId !== tabId);
+      if (filtered.length === 0) {
+        const blank = { tabId: nextTabId++, characterId: null, character: createDefaultCharacter() };
+        setActiveCharTabId(blank.tabId);
+        return [blank];
+      }
+      if (activeCharTabId === tabId) {
+        setActiveCharTabId(filtered[filtered.length - 1].tabId);
+      }
+      return filtered;
+    });
+  }, [activeCharTabId]);
+
+  const updateActiveCharTab = useCallback((characterId, character) => {
+    setCharTabs((prev) => {
+      const updated = prev.map((t) =>
+        t.tabId === activeCharTabId
+          ? { ...t, characterId, character }
+          : t
+      );
+      return sortCharTabs(updated);
+    });
+  }, [activeCharTabId]);
+
+  // ── Save character ───────────────────────────────────────────────────────
   const handleSaveCharacter = useCallback(async (payload) => {
     const frontend = normalizeSheetPayloadToFrontend(payload, traumas);
     let heritageValue = frontend.heritage;
@@ -172,122 +276,253 @@ export default function CharacterPage({ initialCharacterId = null }) {
     }
     const toSend = transformFrontendToBackend({ ...frontend, heritage: heritageValue });
     try {
+      let saved;
       if (payload.id) {
-        await characterAPI.updateCharacter(payload.id, toSend);
+        saved = await characterAPI.updateCharacter(payload.id, toSend);
       } else {
-        const created = await characterAPI.createCharacter(toSend);
-        setSelectedCharacterId(created.id);
-        setSelectedCharacter(transformBackendToFrontend(created));
-        if (created.id && typeof window !== 'undefined') window.location.hash = `character/${created.id}`;
+        saved = await characterAPI.createCharacter(toSend);
+        if (saved.id && typeof window !== 'undefined') window.location.hash = `character/${saved.id}`;
       }
+      const savedFrontend = transformBackendToFrontend(saved);
+      updateActiveCharTab(savedFrontend.id, savedFrontend);
       await loadCharacters();
     } catch (err) {
       console.error('Save character failed:', err);
       throw err;
     }
-  }, [traumas, heritages, loadCharacters]);
-
-  const handleCreateNewCharacter = useCallback(() => {
-    setSelectedCharacterId(null);
-    setSelectedCharacter(draftNewCharacter ?? createDefaultCharacter());
-  }, [draftNewCharacter]);
+  }, [traumas, heritages, loadCharacters, updateActiveCharTab]);
 
   const handleSwitchCharacter = useCallback((character) => {
-    const current = selectedCharacter ?? createDefaultCharacter();
-    if (character == null) {
-      setSelectedCharacterId(null);
-      setSelectedCharacter(draftNewCharacter ?? createDefaultCharacter());
+    if (!character) {
+      handleCreateNewCharacterTab();
       return;
     }
-    if (character?.id) {
-      if (!current.id) setDraftNewCharacter(current);
-      setSelectedCharacterId(character.id);
-      setSelectedCharacter(character);
-    }
-  }, [draftNewCharacter, selectedCharacter]);
+    openCharacterInTab(character);
+  }, [handleCreateNewCharacterTab, openCharacterInTab]);
+
+  // ── NPC logic ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (mode !== MODES.NPC) return;
+    setNpcsLoading(true);
+    npcAPI.getNPCs(campaignId).then((list) => {
+      const npcList = list || [];
+      setNpcs(npcList);
+      if (!npcTabsInitialized.current) {
+        npcTabsInitialized.current = true;
+        if (npcList.length > 0) {
+          const tab = { tabId: nextTabId++, npcId: npcList[0].id, npc: npcList[0], label: npcList[0].name || 'Unnamed' };
+          setNpcTabs([tab]);
+          setActiveNpcTabId(tab.tabId);
+        } else {
+          const tab = { tabId: nextTabId++, npcId: null, npc: null, label: 'New NPC' };
+          setNpcTabs([tab]);
+          setActiveNpcTabId(tab.tabId);
+        }
+      }
+    }).catch(() => setNpcs([])).finally(() => setNpcsLoading(false));
+  }, [mode, campaignId]);
 
   const handleSaveNpc = useCallback(async (npcData) => {
     try {
+      let result;
       if (npcData.id) {
-        await npcAPI.updateNPC(npcData.id, npcData);
+        result = await npcAPI.updateNPC(npcData.id, npcData);
       } else {
-        const created = await npcAPI.createNPC(npcData);
-        setSelectedNpcId(created.id);
-        setSelectedNpc(created);
+        result = await npcAPI.createNPC(npcData);
       }
+      setNpcTabs(prev => prev.map(t =>
+        t.tabId === activeNpcTabId
+          ? { ...t, npcId: result.id, npc: result, label: result.name || 'Unnamed' }
+          : t
+      ));
       const list = await npcAPI.getNPCs(campaignId);
       setNpcs(list || []);
+      return result;
     } catch (err) {
       console.error('Save NPC failed:', err);
       throw err;
     }
-  }, [campaignId]);
+  }, [campaignId, activeNpcTabId]);
 
-  const handleCreateNewNpc = useCallback(() => {
-    setSelectedNpcId(null);
-    setSelectedNpc(null);
+  const handleCreateNewNpcTab = useCallback(() => {
+    const tab = { tabId: nextTabId++, npcId: null, npc: null, label: 'New NPC' };
+    setNpcTabs(prev => [...prev, tab]);
+    setActiveNpcTabId(tab.tabId);
   }, []);
 
-  const handleSwitchNpc = useCallback((npc) => {
-    setSelectedNpcId(npc?.id ?? null);
-    setSelectedNpc(npc ?? null);
-  }, []);
+  const handleCloseNpcTab = useCallback((tabId) => {
+    setNpcTabs(prev => {
+      if (prev.length <= 1) return prev;
+      const filtered = prev.filter(t => t.tabId !== tabId);
+      if (activeNpcTabId === tabId) {
+        setActiveNpcTabId(filtered[filtered.length - 1].tabId);
+      }
+      return filtered;
+    });
+  }, [activeNpcTabId]);
 
-  const sheetCharacter = selectedCharacter ?? createDefaultCharacter();
+  const handleOpenExistingNpc = useCallback((npc) => {
+    const existing = npcTabs.find(t => t.npcId === npc.id);
+    if (existing) {
+      setActiveNpcTabId(existing.tabId);
+      return;
+    }
+    const tab = { tabId: nextTabId++, npcId: npc.id, npc, label: npc.name || 'Unnamed' };
+    setNpcTabs(prev => [...prev, tab]);
+    setActiveNpcTabId(tab.tabId);
+  }, [npcTabs]);
 
+  // ── Derived values ───────────────────────────────────────────────────────
+  const activeCharTab = charTabs.find((t) => t.tabId === activeCharTabId);
+  const sheetCharacter = activeCharTab?.character ?? createDefaultCharacter();
+  const activeNpcTab = npcTabs.find(t => t.tabId === activeNpcTabId);
+
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={PAGE_STYLES.page}>
-      {/* Mode tabs */}
+
+      {/* ── Top bar ── */}
       <div style={PAGE_STYLES.modeBar}>
-        <nav style={{ display: 'flex', gap: '4px' }}>
+        <nav style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
+
           <button type="button" onClick={() => setMode(MODES.CHARACTER)} style={PAGE_STYLES.modeBtn(mode === MODES.CHARACTER)}>
             CHARACTERS
           </button>
           <button type="button" onClick={() => setMode(MODES.NPC)} style={PAGE_STYLES.modeBtn(mode === MODES.NPC)}>
             NPCs
           </button>
+
+          {/* ── Character tabs ── */}
+          {mode === MODES.CHARACTER && charTabs.length > 0 && (
+            <>
+              <div style={TAB_STYLES.divider} />
+              {charTabs.map((tab) => (
+                <button
+                  key={tab.tabId}
+                  type="button"
+                  onClick={() => setActiveCharTabId(tab.tabId)}
+                  style={TAB_STYLES.tab(tab.tabId === activeCharTabId)}
+                >
+                  <span>{charTabLabel(tab)}</span>
+                  <span
+                    style={TAB_STYLES.close}
+                    title="Close tab"
+                    onClick={(e) => { e.stopPropagation(); handleCloseCharTab(tab.tabId); }}
+                  >
+                    ×
+                  </span>
+                </button>
+              ))}
+              <button type="button" onClick={handleCreateNewCharacterTab} style={TAB_STYLES.addBtn}>
+                + New Character
+              </button>
+            </>
+          )}
+
+          {/* ── NPC tabs ── */}
+          {mode === MODES.NPC && npcTabs.length > 0 && (
+            <>
+              <div style={TAB_STYLES.divider} />
+              {npcTabs.map(tab => (
+                <button key={tab.tabId} type="button"
+                  onClick={() => setActiveNpcTabId(tab.tabId)}
+                  style={TAB_STYLES.tab(tab.tabId === activeNpcTabId)}>
+                  <span>{tab.label}</span>
+                  {npcTabs.length > 1 && (
+                    <span style={TAB_STYLES.close}
+                      onClick={e => { e.stopPropagation(); handleCloseNpcTab(tab.tabId); }}>
+                      ×
+                    </span>
+                  )}
+                </button>
+              ))}
+              <button type="button" onClick={handleCreateNewNpcTab} style={TAB_STYLES.addBtn}>
+                + New NPC
+              </button>
+            </>
+          )}
         </nav>
-        {charactersError && (
-          <span style={{ fontSize: '12px', color: '#fca5a5' }}>{charactersError}</span>
-        )}
+
+        {/* Right side: error banner + "Open…" dropdowns */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {charactersError && (
+            <span style={{ fontSize: '12px', color: '#fca5a5' }}>{charactersError}</span>
+          )}
+
+          {mode === MODES.CHARACTER && characters.length > 0 && (
+            <select
+              style={{ background: '#1f2937', color: '#9ca3af', border: '1px solid #4b5563', padding: '4px 8px', fontSize: '11px', fontFamily: 'monospace', borderRadius: '4px' }}
+              value=""
+              onChange={(e) => {
+                const char = characters.find((c) => String(c.id) === e.target.value);
+                if (char) openCharacterInTab(char);
+              }}
+            >
+              <option value="">Open character...</option>
+              {[...characters]
+                .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                .map((c) => (
+                  <option key={c.id} value={String(c.id)}>{c.name || 'Unnamed'}</option>
+                ))}
+            </select>
+          )}
+
+          {mode === MODES.NPC && npcs.length > 0 && (
+            <select
+              style={{ background: '#1f2937', color: '#9ca3af', border: '1px solid #4b5563', padding: '4px 8px', fontSize: '11px', fontFamily: 'monospace', borderRadius: '4px' }}
+              value=""
+              onChange={e => {
+                const npc = npcs.find(n => n.id === parseInt(e.target.value));
+                if (npc) handleOpenExistingNpc(npc);
+              }}>
+              <option value="">Open NPC...</option>
+              {npcs.map(n => <option key={n.id} value={n.id}>{n.name || 'Unnamed'}</option>)}
+            </select>
+          )}
+        </div>
       </div>
 
-      {/* Character mode */}
+      {/* ── Character mode ── */}
       {mode === MODES.CHARACTER && (
-        charactersLoading ? (
+        charactersLoading && charTabs.length === 0 ? (
           <div style={{ ...PAGE_STYLES.content, padding: '24px', textAlign: 'center', color: '#9ca3af' }}>
-            Loading characters…
+            Loading characters...
           </div>
         ) : (
           <CharacterSheetWrapper
-            key={sheetCharacter?.id ?? 'new'}
+            key={activeCharTab?.tabId ?? 'new'}
             character={sheetCharacter}
             allCharacters={characters}
+            campaigns={campaigns}
             onSave={handleSaveCharacter}
-            onCreateNew={handleCreateNewCharacter}
+            onCreateNew={handleCreateNewCharacterTab}
             onSwitchCharacter={handleSwitchCharacter}
           />
         )
       )}
 
-      {/* NPC mode: same content wrapper as CharacterSheet uses */}
+      {/* ── NPC mode ── */}
       {mode === MODES.NPC && (
         <div style={PAGE_STYLES.content}>
           {npcsLoading ? (
             <div style={{ padding: '24px', textAlign: 'center', color: '#9ca3af' }}>
-              Loading NPCs…
+              Loading NPCs...
             </div>
-          ) : (
+          ) : activeNpcTab ? (
             <NPCSheet
-              npc={selectedNpc ?? undefined}
-              allNPCs={npcs}
+              key={activeNpcTab.tabId}
+              npc={activeNpcTab.npc ?? undefined}
               onSave={handleSaveNpc}
-              onCreateNew={handleCreateNewNpc}
-              onSwitchNPC={handleSwitchNpc}
+              campaigns={campaigns}
             />
+          ) : (
+            <div style={{ padding: '24px', textAlign: 'center', color: '#9ca3af' }}>
+              Click "+ New NPC" to create one.
+            </div>
           )}
         </div>
       )}
+
     </div>
   );
 }

@@ -6,6 +6,7 @@
       "name": "Ripple Breathing",
       "hamon_type": "FOUNDATION",
       "description": "+1d to resist poison, fatigue, or fear. Once per score, push yourself with no stress cost.",
+      "required_a_count": 0,
       "stress_cost": 0,
       "frequency": "Once per score"
     }
@@ -14,9 +15,10 @@
     "model": "characters.hamonability",
     "pk": 2,
     "fields": {
-      "name": "Overdrive",
+      "name": "Ripple Infusion",
       "hamon_type": "FOUNDATION",
-      "description": "Spend 1 stress to charge a strike. +1 effect and +1 harm vs bizarre, undead, or inorganic targets.",
+      "description": "Spend 1 stress to imbue an object with Ripple energy for the scene. Gains +1 effect vs vampires and pillarmen.",
+      "required_a_count": 0,
       "stress_cost": 1,
       "frequency": ""
     }
@@ -25,10 +27,11 @@
     "model": "characters.hamonability",
     "pk": 3,
     "fields": {
-      "name": "Ripple Infusion",
+      "name": "Scarlet Overdrive",
       "hamon_type": "FOUNDATION",
-      "description": "Spend 1 stress to imbue an object with Ripple energy for the scene. Gains +1 effect vs bizarre enemies.",
-      "stress_cost": 1,
+      "description": "Ignite a weapon or limb. Inflicts a fire-based secondary effect. Foes must resist or catch fire.",
+      "required_a_count": 0,
+      "stress_cost": 0,
       "frequency": ""
     }
   },
@@ -36,9 +39,10 @@
     "model": "characters.hamonability",
     "pk": 4,
     "fields": {
-      "name": "Scarlet Overdrive",
+      "name": "Zoom Punch",
       "hamon_type": "FOUNDATION",
-      "description": "Ignite a weapon or limb. +1 harm and inflicts fire-based secondary effects. Foes must resist or catch fire.",
+      "description": "Make a melee strike at one Range grade beyond your Stand\u2019s operational Range. +1d when attacking from unexpected angles or cover.",
+      "required_a_count": 0,
       "stress_cost": 0,
       "frequency": ""
     }
@@ -47,9 +51,10 @@
     "model": "characters.hamonability",
     "pk": 5,
     "fields": {
-      "name": "Ripple Detector",
-      "hamon_type": "FOUNDATION",
-      "description": "+1 effect to Study or Survey when using liquid, mist, or blood as a conduit.",
+      "name": "Send\u014d Overdrive",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Strike bizarre targets through walls or barriers within your operational Range. On a 6, begin a \"Contact Clock\" (4 ticks) to bypass cover entirely.",
+      "required_a_count": 1,
       "stress_cost": 0,
       "frequency": ""
     }
@@ -58,9 +63,10 @@
     "model": "characters.hamonability",
     "pk": 6,
     "fields": {
-      "name": "Zoom Punch",
-      "hamon_type": "FOUNDATION",
-      "description": "Make a melee strike at +1 zone distance. +1d when attacking from unexpected angles or cover.",
+      "name": "Metal Silver Overdrive",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Ripple conducts through metallic weapons. +1 effect when using chains, blades, or wire tools.",
+      "required_a_count": 1,
       "stress_cost": 0,
       "frequency": ""
     }
@@ -69,9 +75,10 @@
     "model": "characters.hamonability",
     "pk": 7,
     "fields": {
-      "name": "Forced Ripple Breathing",
-      "hamon_type": "FOUNDATION",
-      "description": "Once per score, stabilize a dying ally or let them make a Hamon action even while unconscious.",
+      "name": "Ripple Hypnosis",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Once per score, with skin contact, suggest a command or surface a forgotten memory. Target resists with Resolve.",
+      "required_a_count": 1,
       "stress_cost": 0,
       "frequency": "Once per score"
     }
@@ -80,9 +87,10 @@
     "model": "characters.hamonability",
     "pk": 8,
     "fields": {
-      "name": "Ripple Cutter",
-      "hamon_type": "FOUNDATION",
-      "description": "Spit or project fluid charged with Ripple. Ranged, armor-piercing. On a 6, start a 4-tick \"Slice\" clock.",
+      "name": "Ripple Chain",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Imbue rope or chain. Functions as a melee weapon or restraint tool. +1d when entangling.",
+      "required_a_count": 2,
       "stress_cost": 0,
       "frequency": ""
     }
@@ -91,21 +99,23 @@
     "model": "characters.hamonability",
     "pk": 9,
     "fields": {
-      "name": "Sendō Overdrive",
+      "name": "Age Resistance",
       "hamon_type": "TRADITIONALIST",
-      "description": "Strike bizarre targets through walls or barriers. On a 6, begin a \"Contact Clock\" (4 ticks) to bypass cover.",
+      "description": "Once per session, ignore 1 fatigue, aging, or time-based consequence.",
+      "required_a_count": 2,
       "stress_cost": 0,
-      "frequency": ""
+      "frequency": "Once per session"
     }
   },
   {
     "model": "characters.hamonability",
     "pk": 10,
     "fields": {
-      "name": "Metal Silver Overdrive",
+      "name": "Life Magnetism Overdrive",
       "hamon_type": "TRADITIONALIST",
-      "description": "Ripple conducts through metallic weapons. +1 effect when using chains, blades, or wire tools.",
-      "stress_cost": 0,
+      "description": "Spend 1 stress to shape plant matter into a glider, cloak, or shield. +1 effect on movement or defense.",
+      "required_a_count": 2,
+      "stress_cost": 1,
       "frequency": ""
     }
   },
@@ -113,21 +123,1511 @@
     "model": "characters.hamonability",
     "pk": 11,
     "fields": {
-      "name": "Ripple Hypnosis",
+      "name": "Scarlet Shield",
       "hamon_type": "TRADITIONALIST",
-      "description": "Once per score, with skin contact, suggest a command or surface a forgotten memory. Target resists with Resolve.",
+      "description": "Expend your Stand armor. Enemies who make physical contact with you take Level 1 Harm unless they resist.",
+      "required_a_count": 2,
       "stress_cost": 0,
-      "frequency": "Once per score"
+      "frequency": ""
     }
   },
   {
     "model": "characters.hamonability",
     "pk": 12,
     "fields": {
-      "name": "Sunlight Yellow Overdrive",
+      "name": "Stand on Water",
       "hamon_type": "TRADITIONALIST",
-      "description": "Spend 1 stress to unleash a radiant barrage. +1 harm and +1 effect vs undead or constructs.",
+      "description": "Gain stable footing over liquid, mist, or unstable surfaces for 1 scene. +1 position in terrain-based actions.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 13,
+    "fields": {
+      "name": "Tornado Overdrive",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Perform a high-speed rotational dive. Break through cover or brittle surfaces. +1d when clearing minions or performing crowd control actions.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 14,
+    "fields": {
+      "name": "Ripple Sentinel",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Always aware of undead or bizarre presence within your immediate presence. Doesn\u2019t require an action.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 15,
+    "fields": {
+      "name": "Wall Pulse",
+      "hamon_type": "TRADITIONALIST",
+      "description": "You can run across vertical surfaces. +1d on movement rolls when climbing or jumping.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 16,
+    "fields": {
+      "name": "Vital Transfer",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Once per score, lower 1 Harm level from an ally. On a crit, lower 2 Harm levels.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 17,
+    "fields": {
+      "name": "Dispel Harmonics",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Once per score, cancel one magical, bizarre, or spiritual effect in your zone.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 18,
+    "fields": {
+      "name": "Aura Lock",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Spend 1 stress to suppress ability activation within your operational Range until the target pushes themselves or the fiction shifts. Targets resist with Resolve.",
+      "required_a_count": 3,
       "stress_cost": 1,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 19,
+    "fields": {
+      "name": "Guided Overdrive",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Ripple arcs from your primary target to a second target within your operational Range. The second target takes splash damage.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 20,
+    "fields": {
+      "name": "Hamon Blade",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Ripple weapons ignore 1 armor or resistance.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 21,
+    "fields": {
+      "name": "Deep Pass Overdrive",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Sacrifice all remaining stress to fully heal an ally. This cannot be interrupted.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 22,
+    "fields": {
+      "name": "Solar Infusion",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Spend 2 stress to supercharge an object or weapon. +2 effect on the next action using that object.",
+      "required_a_count": 4,
+      "stress_cost": 2,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 23,
+    "fields": {
+      "name": "Scarlet Wreath",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Expend your Stand armor to gain 2 extra armor for 1 scene. Glows visibly.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 24,
+    "fields": {
+      "name": "Solar Rejection",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Reflect radiant or flame-based attacks back toward their source. +1 effect on the redirect.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 25,
+    "fields": {
+      "name": "Pulse Detonation",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Channel stored Ripple into an AoE knockdown within your operational Range. Fill a 4-tick \"Crowd Disruption\" clock.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 26,
+    "fields": {
+      "name": "Final Flame",
+      "hamon_type": "TRADITIONALIST",
+      "description": "When you would be taken out, you may spend 2 stress to take one final action with +2 effect. You fall unconscious immediately after.",
+      "required_a_count": 4,
+      "stress_cost": 2,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 27,
+    "fields": {
+      "name": "Heavenly Discipline",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Ignore all fatigue-based consequences. Your breathing is flawless.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 28,
+    "fields": {
+      "name": "Solar Gate",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Once per campaign, completely disintegrate a construct or undead within your immediate presence.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": "Once per campaign"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 29,
+    "fields": {
+      "name": "Sacred Overdrive",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Once per score, spend 2 stress to make one Hamon strike that bypasses all resistances and defenses.",
+      "required_a_count": 4,
+      "stress_cost": 2,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 30,
+    "fields": {
+      "name": "Hamon Messiah",
+      "hamon_type": "TRADITIONALIST",
+      "description": "Once per score, allow an ally to channel their Hamon through your body or weapons.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 31,
+    "fields": {
+      "name": "Pulse Domination",
+      "hamon_type": "TRADITIONALIST",
+      "description": "When you land a successful Hamon strike, the target must push themselves or make a resistance roll before they can activate their next special ability.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 32,
+    "fields": {
+      "name": "Bubble Launcher",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Spend 1 stress to fire a barrage of Hamon-charged bubbles within your operational Range. You may detonate them at will.",
+      "required_a_count": 1,
+      "stress_cost": 1,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 33,
+    "fields": {
+      "name": "Ripple Hair Attack",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Harden hair or fabric to deflect projectiles. Once per scene, reduce incoming Harm by 1 level. Your armor is the hardened material itself \u2014 expend it to negate rather than reduce if needed.",
+      "required_a_count": 1,
+      "stress_cost": 0,
+      "frequency": "Once per scene"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 34,
+    "fields": {
+      "name": "Scarf Sensor",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Your scarf vibrates with ambient changes. +1d to resist surprise, ambush, or sudden environmental effects.",
+      "required_a_count": 1,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 35,
+    "fields": {
+      "name": "Bubble Cutter",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Spinning bubbles with razor edges. Ignore 1 armor on thrown attacks. +1 effect on \"Slice\" or disarm clocks.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 36,
+    "fields": {
+      "name": "Bubble Barrier",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Create one large bubble barrier within your immediate presence. Absorbs 1 attack (up to Level 2 Harm). Begins a 4-tick \"Containment\" clock if attacked.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 37,
+    "fields": {
+      "name": "Bubble Lenses",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Bubbles can magnify or reflect light within your operational Range. Begin a 4-tick \"Blinded\" clock if shined into a target\u2019s eyes.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 38,
+    "fields": {
+      "name": "Sound-Reactive Ripple",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "+1d to attacks synchronized to rhythm, speech, or music. Once per scene, cause a \"Beat Drop\" (3-tick distraction clock).",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": "Once per scene"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 39,
+    "fields": {
+      "name": "Aerial Float",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Use a scarf or bubble glider to slow a fall or drift over unstable terrain. +1 position on movement rolls while airborne.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 40,
+    "fields": {
+      "name": "Bubble Cutter Gliding",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Launch homing slicer bubbles. Track a target up to your operational Range away.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 41,
+    "fields": {
+      "name": "Chain Ambush",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Use a Ripple-infused scarf to grapple or disarm from hiding. +1d to stealth-based attacks or reactions.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 42,
+    "fields": {
+      "name": "Elastic Rebound",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Once per scene, bounce off terrain or enemies to reposition. Gain +1 effect on your next action.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": "Once per scene"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 43,
+    "fields": {
+      "name": "Echo Feint",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Leave behind a reflective bubble afterimage within your immediate presence. The next attack against you targets the illusion instead.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 44,
+    "fields": {
+      "name": "Elemental Shift",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "+1 effect when fighting in terrain dominated by a specific element (fog, water, fire, ice). Ripple adapts to the environment.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 45,
+    "fields": {
+      "name": "Trapwork",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Create a tripwire or cage trap using Ripple-infused tools within your operational Range. Fill a 4-tick \"Ensnare\" clock on setup.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 46,
+    "fields": {
+      "name": "Bubble Tracker",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Tag a target with a glowing bubble. You always know their location within A-rank Range (100ft) until the bubble is destroyed or they push themselves to remove it.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 47,
+    "fields": {
+      "name": "Smoke Spiral",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Spin a small object into a smoke cloud within your immediate presence. Starts a 3-tick \"Choke or Cover\" clock.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 48,
+    "fields": {
+      "name": "Ripple Magnet",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Once per scene, call a small Ripple-infused object to your hand from within your line of sight.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": "Once per scene"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 49,
+    "fields": {
+      "name": "Bubble Laser Grid",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Set up a refracted beam field within your operational Range. Targets caught unaware take Level 3 Harm. +1d on setup rolls.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 50,
+    "fields": {
+      "name": "Hamon Mirage",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Use bubble refraction to hide your location or identity until you attack, take Harm, or the fiction exposes you. Attacks against you have -1d. On a crit, gain +1 effect on your next misdirected action.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 51,
+    "fields": {
+      "name": "Overclocked Pop",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Spend 1 stress to burst multiple bubbles simultaneously. Affects all targets within your immediate presence.",
+      "required_a_count": 4,
+      "stress_cost": 1,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 52,
+    "fields": {
+      "name": "Vacuum Cage",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Trap a foe inside a sealed bubble within your operational Range. Begins a 4-tick \"Suffocation\" clock. Target may resist to break free.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 53,
+    "fields": {
+      "name": "Reflection Pulse",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Bounce an attack or ability through three or more bubble surfaces. +1 effect or redirect the trajectory. Requires pre-positioned surfaces.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 54,
+    "fields": {
+      "name": "Tactile Map",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Use bubbles to physically map a space or reveal unseen terrain within your operational Range. +1 effect on navigation, escape, or hidden object rolls.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 55,
+    "fields": {
+      "name": "Hamon Kite",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Fly or coast across open space or falling terrain. +1 position on chase or fall rolls.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 56,
+    "fields": {
+      "name": "Trick Bubble",
+      "hamon_type": "ADAPTIVE_FLOW",
+      "description": "Store an attack or effect in a bubble. Declare a condition now \u2014 the effect triggers when that condition is met.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 57,
+    "fields": {
+      "name": "Pulse Core",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "You do not breathe \u2014 generate Ripple internally. +1 effect in gas, underwater, or vacuum environments.",
+      "required_a_count": 1,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 58,
+    "fields": {
+      "name": "Auto-Filter",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Immune to airborne toxins, diseases, or choking hazards. Always succeed at resisting chemical or suffocation effects.",
+      "required_a_count": 1,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 59,
+    "fields": {
+      "name": "Shockline",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Ripple discharges as electricity. +1 effect against mechanical targets and armored enemies. On a crit, start a 4-tick \"System Disruption\" clock.",
+      "required_a_count": 1,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 60,
+    "fields": {
+      "name": "Neural Sync",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Spend 1 stress to seize control or short out a nearby machine within your immediate presence. Roll Tinker or Command to determine precision.",
+      "required_a_count": 2,
+      "stress_cost": 1,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 61,
+    "fields": {
+      "name": "Static Field",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "When struck in melee, you may expend your Stand armor to deal Level 1 Harm to the attacker.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 62,
+    "fields": {
+      "name": "Magnetic Grapple",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Attract or repel metal objects or cybernetic foes within C-rank Range (40ft). +1d to mobility or disarming actions.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 63,
+    "fields": {
+      "name": "Cybernetic Conduction",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Ripple transmits through any conductive material. You may target enemies through circuitry, pipelines, or speaker systems anywhere within your operational Range.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 64,
+    "fields": {
+      "name": "Pulse Feedback",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "After taking Harm, gain +1 effect on your next physical action. Once per scene.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": "Once per scene"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 65,
+    "fields": {
+      "name": "Emergency Coil",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Deploy internal coils to gain 1 temporary armor for the scene. Costs 1 stress if used reactively after a consequence is declared.",
+      "required_a_count": 2,
+      "stress_cost": 1,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 66,
+    "fields": {
+      "name": "Phantom Pulse",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Activate a device or strike a target through walls using ambient Ripple within your operational Range. Roll Tinker or Finesse.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 67,
+    "fields": {
+      "name": "Overclocked Ripple",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Spend 3 stress to increase the potency of your next Hamon ability. On a crit, apply a 4-tick \"Residual Heat\" or \"Feedback Burn\" clock to the target.",
+      "required_a_count": 3,
+      "stress_cost": 3,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 68,
+    "fields": {
+      "name": "EMP Burst",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Once per score, disable all tech within your immediate presence. Starts a 5-tick \"Blackout\" clock. You are immune to this effect.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 69,
+    "fields": {
+      "name": "Spin-Ripple Bridge",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Interface with a Spin-infused device or Stand projection using your internal circuitry. Treat as Consort or Tinker.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 70,
+    "fields": {
+      "name": "Charged Leap",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Use magnetic propulsion to leap up to your operational Range or crash through obstacles. +1 effect on mobility or forced entry actions.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 71,
+    "fields": {
+      "name": "Chain Pulse",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Ripple arcs through 2\u20133 conductive targets within your operational Range.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 72,
+    "fields": {
+      "name": "Synthetic Aura",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Generate a false supernatural aura. +1d to pass as undead, bizarre, or magical. Once per scene.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": "Once per scene"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 73,
+    "fields": {
+      "name": "Circuit Burn",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Disable an enemy\u2019s gear or weapon until they push themselves to reactivate it. Costs 2 stress if the target is high-tech or Relic-class.",
+      "required_a_count": 3,
+      "stress_cost": 2,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 74,
+    "fields": {
+      "name": "Reactive Musculature",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Once per scene, reroll a failed Prowess roll. On a crit, gain +1 effect.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": "Once per scene"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 75,
+    "fields": {
+      "name": "Pulse Mirror",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Record a minor visual or sound signal. Replay it once per score as a distraction or forgery.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 76,
+    "fields": {
+      "name": "Breathless Overdrive",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Your Ripple ignores environmental limits. For one scene, all your Hamon abilities gain +1 effect and cannot be suppressed.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 77,
+    "fields": {
+      "name": "Electric Soul",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Transfer Ripple energy into a Stand or ally within C-rank Range (40ft). They gain +1d on their next action. Costs 1 stress.",
+      "required_a_count": 4,
+      "stress_cost": 1,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 78,
+    "fields": {
+      "name": "Thermal Control",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Superheat or supercool any surface within your immediate presence. +1 effect when breaching, disabling, or damaging tech.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 79,
+    "fields": {
+      "name": "Wave Recorder",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Store one ability or Stand signature you\u2019ve witnessed. Replay it once, narratively or tactically.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 80,
+    "fields": {
+      "name": "Dark Drive",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Spend 1 stress to let an ally reroll their next failed roll.",
+      "required_a_count": 4,
+      "stress_cost": 1,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 81,
+    "fields": {
+      "name": "Power Sink",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Interrupt a magical or tech ability mid-use within your operational Range. Target must resist or lose the effect entirely.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 82,
+    "fields": {
+      "name": "Pulse Chainstorm",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Strike up to 5 tech-tagged enemies within your operational Range with Level 1 Harm. Costs 2 stress.",
+      "required_a_count": 4,
+      "stress_cost": 2,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 83,
+    "fields": {
+      "name": "Synthetic Savior",
+      "hamon_type": "CYBER_HAMONIST",
+      "description": "Spend 3 stress to stabilize a dying ally within your immediate presence immediately. Clears 1 Level 3 Harm. Once per score.",
+      "required_a_count": 4,
+      "stress_cost": 3,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 84,
+    "fields": {
+      "name": "Blood Freeze",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Touch attack slows blood flow. Target cannot move without pushing themselves. On a crit, start a 4-tick \"Crystallization\" clock \u2014 on completion, they are fully immobilized until someone spends a downtime action to treat them or a clock is cleared to break them free.",
+      "required_a_count": 1,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 85,
+    "fields": {
+      "name": "Breathless Shell",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "You no longer breathe. Immune to smoke, gas, drowning, or vacuum. +1 effect in cold environments.",
+      "required_a_count": 1,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 86,
+    "fields": {
+      "name": "Shadow Pulse",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Emit an aura that snuffs light and distorts senses. +1d to Prowl in dim or dark areas.",
+      "required_a_count": 1,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 87,
+    "fields": {
+      "name": "Frozen Grip",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Spend 1 stress to freeze a limb on contact. Target must resist or lose use of it \u2014 they must push themselves to use that limb until they clear a 4-tick \"Thaw\" clock.",
+      "required_a_count": 2,
+      "stress_cost": 1,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 88,
+    "fields": {
+      "name": "Crystallize Aura",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Expend your Stand armor to encase yourself in frost. Gain 1 additional armor for one scene.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 89,
+    "fields": {
+      "name": "Chillwave",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Once per score, emit a cold burst within your immediate presence. All enemies present must resist or take -1d to their next action.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 90,
+    "fields": {
+      "name": "Aura Extinguish",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Spend 3 stress to suppress all auras (Stands, Spin, Hamon) within your immediate presence until the targets push themselves or the fiction shifts. Targets may resist individually.",
+      "required_a_count": 2,
+      "stress_cost": 3,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 91,
+    "fields": {
+      "name": "Dark Mirror",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Once per score, reflect a light or energy-based attack back toward its source. Roll Finesse or Resolve.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 92,
+    "fields": {
+      "name": "Grave Pulse",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Touch a corpse or undead to reanimate it briefly. It acts for one action under your direction, then crumbles.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 93,
+    "fields": {
+      "name": "Frost Magnetism",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Pull blood-bearing targets within C-rank Range (40ft) toward you. Costs 1 stress.",
+      "required_a_count": 3,
+      "stress_cost": 1,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 94,
+    "fields": {
+      "name": "Frostbite Lash",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Your unarmed attacks deal +1 Harm and start a 2-tick \"Frozen Wound\" clock. Once per scene.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": "Once per scene"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 95,
+    "fields": {
+      "name": "Ebon Mist",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Melt into vapor for 1 scene. Travel through vents, bars, or cracks. Cannot attack in this form.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 96,
+    "fields": {
+      "name": "Cracking Silence",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Mute all sound within your immediate presence. +1d to stealth or escape actions.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 97,
+    "fields": {
+      "name": "Soul Leech",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "When you take out a foe with Dark Resonance, regain 2 stress. Once per score.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 98,
+    "fields": {
+      "name": "Frozen Veil",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Gain a temporary frost armor that absorbs Level 1 Harm. Breaks after use.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 99,
+    "fields": {
+      "name": "Shadow Chain",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Bind two targets within your immediate presence together. They share stress or Harm until they resist or physically separate.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 100,
+    "fields": {
+      "name": "Absolute Zero Overdrive",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Spend 3 stress to freeze all enemies within your immediate presence. Creates a 6-tick \"Escape the Ice\" clock. Cannot be used again until next downtime.",
+      "required_a_count": 4,
+      "stress_cost": 3,
+      "frequency": "Once per downtime"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 101,
+    "fields": {
+      "name": "Curse Pulse",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Nullify all healing or regeneration effects on one target within your immediate presence until they push themselves to recover. Requires physical contact.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 102,
+    "fields": {
+      "name": "Tombstorm",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Unleash a cold black fog that obscures vision across the entire scene. Costs 2 stress.",
+      "required_a_count": 4,
+      "stress_cost": 2,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 103,
+    "fields": {
+      "name": "Deathless Core",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "When you would be taken out, spend 2 stress to remain standing for one final action. You fall unconscious after.",
+      "required_a_count": 4,
+      "stress_cost": 2,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 104,
+    "fields": {
+      "name": "Void Echo",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Erase one short-term memory from a target within your immediate presence. They forget a scene or fact of your choice.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 105,
+    "fields": {
+      "name": "Frost Frame",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Encapsulate a Stand or projection within your immediate presence in ice. Target must resist or push themselves before they can act.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 106,
+    "fields": {
+      "name": "Winter Monologue",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "While monologuing, enemies within your immediate presence must push themselves to interrupt or act against you.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 107,
+    "fields": {
+      "name": "Black Ripple Ascension",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "Become fully undead for one scene. Immune to radiant and light-based effects.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 108,
+    "fields": {
+      "name": "Frozen Fate",
+      "hamon_type": "DARK_RESONANCE",
+      "description": "When you would take fatal Harm, encase yourself in ice instead. Avoid all damage. Once per score.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": "Once per score"
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 109,
+    "fields": {
+      "name": "Vital Bloom",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Touch a plant to trigger massive, unnatural growth. Creates cover, distraction, or difficult terrain within your immediate presence.",
+      "required_a_count": 1,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 110,
+    "fields": {
+      "name": "Beast Pulse",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "+1d to Consort or Command with beasts.",
+      "required_a_count": 1,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 111,
+    "fields": {
+      "name": "Floral Barrier",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Expend your Stand armor to grow a plant shield that absorbs up to 2 Harm. Breaks on use.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 112,
+    "fields": {
+      "name": "Ripple Pollination",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Mark enemies or zones within your operational Range with scented pollen. Tracked for 1 scene. +1d to find or ambush tagged targets.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 113,
+    "fields": {
+      "name": "Amphibious Overdrive",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "+1 effect on rolls made in aquatic, swamp, or humid environments.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 114,
+    "fields": {
+      "name": "Root Snare",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Create an entangling trap within your operational Range. On a hit, starts a 4-tick \"Escape the Vines\" clock.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 115,
+    "fields": {
+      "name": "Natural Camouflage",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Blend into organic terrain. +1d to Prowl. On a crit, become undetectable by bizarre means until you act or the fiction exposes you.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 116,
+    "fields": {
+      "name": "Thermal Resonance",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Detect heat, heartbeat, or intent within your immediate presence. +1 effect to Survey or Study actions.",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 117,
+    "fields": {
+      "name": "Photosynthetic Boost",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "In direct sunlight, gain +1 effect to Skirmish, Finesse, and Wreck actions.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 118,
+    "fields": {
+      "name": "Beast Sync",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Link senses with a creature. Share hearing, sight, or scent for 1 scene.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 119,
+    "fields": {
+      "name": "Ripple Burrow",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Travel underground or through soft terrain up to your operational Range. Push yourself to extend beyond that.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 120,
+    "fields": {
+      "name": "Toxin Pulse",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Your next attack delivers a paralytic. Starts a 4-tick \"Poisoned\" clock unless resisted.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 121,
+    "fields": {
+      "name": "Echo Howl",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Release a primal scream. Nearby animals within your operational Range either rally as temporary allies or flee \u2014 GM decides based on the fiction.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 122,
+    "fields": {
+      "name": "Floral Smokescreen",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Emit pollen, petals, or spores. Obscures a zone within your operational Range until the wind shifts or the scene moves on.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 123,
+    "fields": {
+      "name": "Chameleon Skin",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Become invisible in natural terrain. Breaks when you attack or take Harm.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 124,
+    "fields": {
+      "name": "Sap from the Past",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Touch a tree or coral. Replay ambient sound or emotion from earlier that day.",
+      "required_a_count": 3,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 125,
+    "fields": {
+      "name": "Symbiotic Revival",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Spend 2 stress to stabilize and revive a dying ally within your immediate presence. They return with Level 1 Harm cleared.",
+      "required_a_count": 4,
+      "stress_cost": 2,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 126,
+    "fields": {
+      "name": "Photosynthetic Armor",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "In sunlight, recover 1 stress or gain 1 armor at the end of each of your actions.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 127,
+    "fields": {
+      "name": "Tremor Sense",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Feel all movement within your operational Range through terrain. +1d to detect stealth or vibration-based triggers.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 128,
+    "fields": {
+      "name": "Mycelial Whisper",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Speak silently to allies via roots, spores, or currents. Distance is no barrier as long as you share connected terrain.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 129,
+    "fields": {
+      "name": "Animal Swarm",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Summon dozens of small creatures within your operational Range. Targets must resist or be distracted or disarmed.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 130,
+    "fields": {
+      "name": "Seed Pulse",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Plant a Ripple-charged seed within your operational Range. If an enemy triggers it, they become entangled \u2014 they must push themselves or clear a 4-tick \"Root Grip\" clock to move.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 131,
+    "fields": {
+      "name": "Pulse Graft",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Temporarily merge a natural trait (bark, toxin, root system) into an object or ally for 1 scene. +1 effect on the next relevant use.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 132,
+    "fields": {
+      "name": "Rewild",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Take over a massive plant or animal within your operational Range for 1 scene. It acts as a Tier 2+ minion (6-segment clock).",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 133,
+    "fields": {
+      "name": "Natural Archive",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Ask one question about the past from the terrain you\u2019re touching. The GM must answer truthfully.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 134,
+    "fields": {
+      "name": "Adaptive Bloom",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Your Ripple takes on elemental traits (ice, acid, flame) for one scene. This effect is more potent against opponents vulnerable to those traits.",
+      "required_a_count": 4,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 135,
+    "fields": {
+      "name": "Nature\u2019s Cloak",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "An ally within your immediate presence becomes undetectable by bizarre or machine senses until they act or the fiction exposes them. Costs 1 stress.",
+      "required_a_count": 4,
+      "stress_cost": 1,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.hamonability",
+    "pk": 136,
+    "fields": {
+      "name": "Harmonic Overrun",
+      "hamon_type": "BIO_HARMONICS",
+      "description": "Spend 3 stress to animate all natural terrain in the scene as Tier 3+ allies (8-segment clock). Lasts until the clock fills or the scene moves on.",
+      "required_a_count": 4,
+      "stress_cost": 3,
       "frequency": ""
     }
   }

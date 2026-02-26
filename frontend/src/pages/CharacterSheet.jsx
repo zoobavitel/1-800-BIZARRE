@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   GRADE,
   MAX_CREATION_DOTS,
@@ -39,7 +39,7 @@ const ProgressClock = ({ size = 80, segments = 4, filled = 0, onClick = null, in
 
 // ─── CharacterSheetWrapper ────────────────────────────────────────────────────
 
-const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwitchCharacter, allCharacters = [] }) => {
+const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwitchCharacter, allCharacters = [], campaigns = [] }) => {
   const [activeMode, setActiveMode] = useState('CHARACTER MODE');
 
   // Identity
@@ -48,6 +48,37 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     heritage: character?.heritage || 'Human', background: character?.background || '',
     look: character?.look || '', vice: character?.vice || '', crew: character?.crew || '',
   });
+
+  // Campaign assignment
+  const [campaignId, setCampaignId] = useState(character?.campaign || '');
+
+  // Portrait state
+  const [imageFile, setImageFile]       = useState(null);
+  const [imageUrl, setImageUrl]         = useState(character?.image_url || '');
+  const [imagePreview, setImagePreview] = useState(character?.image || character?.image_url || '');
+  const fileInputRef = useRef(null);
+
+  // Auto-save state
+  const [saveStatus, setSaveStatus] = useState(null);
+  const debounceRef = useRef(null);
+  const mountedRef  = useRef(false);
+  const savingRef   = useRef(false);
+
+  const handleFileSelect = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  }, []);
+
+  const handleImageUrlPrompt = useCallback(() => {
+    const url = prompt('Paste image URL:');
+    if (url) {
+      setImageUrl(url);
+      setImagePreview(url);
+      setImageFile(null);
+    }
+  }, []);
 
   // FIX 2+3: Stand Coin Stats — F(0)..A(4); S is GM-only
   const [standStats, setStandStats] = useState(character?.standStats || {
@@ -260,9 +291,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
       setClocks(p => [...p, { id: Date.now(), name, segments: segs, filled: 0 }]);
   };
 
-  const handleSave = () => {
-    // Only send a backend id when we have one (integer from API). New characters must have id null
-    // so the parent calls createCharacter (POST) instead of updateCharacter (PUT).
+  const buildPayload = useCallback(() => {
     const backendId =
       character?.id != null &&
       Number.isInteger(Number(character.id)) &&
@@ -270,13 +299,38 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
       Number(character.id) < 1e10
         ? character.id
         : null;
-    if (onSave) onSave({
+    return {
       ...charData, standStats, actionRatings, stressFilled,
       trauma, regularArmorUsed, specialArmorUsed, harm, healingClock,
       coinFilled, stash: stashBoxes, xp, abilities, clocks, playbook,
+      campaign: campaignId || null,
+      image_url: imageUrl,
+      ...(imageFile ? { imageFile } : {}),
       id: backendId, lastModified: new Date().toISOString(),
-    });
-  };
+    };
+  }, [charData, standStats, actionRatings, stressFilled, trauma, regularArmorUsed, specialArmorUsed, harm, healingClock, coinFilled, stashBoxes, xp, abilities, clocks, playbook, campaignId, imageUrl, imageFile, character?.id]);
+
+  // Debounced auto-save
+  useEffect(() => {
+    if (!mountedRef.current) { mountedRef.current = true; return; }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      if (savingRef.current || !onSave) return;
+      savingRef.current = true;
+      setSaveStatus('saving');
+      try {
+        await onSave(buildPayload());
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus((s) => s === 'saved' ? null : s), 2000);
+      } catch {
+        setSaveStatus('error');
+      } finally {
+        savingRef.current = false;
+      }
+    }, 1500);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [charData, standStats, actionRatings, stressFilled, trauma, regularArmorUsed, specialArmorUsed, harm, healingClock, coinFilled, stashBoxes, xp, abilities, clocks, playbook, campaignId, imageUrl, imageFile]);
 
   // ─── Styles ──────────────────────────────────────────────────────────────────
 
@@ -311,7 +365,9 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
             <option>CHARACTER MODE</option>
             <option>CREW MODE</option>
           </select>
-          <button onClick={handleSave} style={{ ...S.btn, background:'#16a34a', color:'#fff' }}>Save</button>
+          {saveStatus === 'saving' && <span style={{ fontSize:'11px', color:'#fbbf24' }}>Saving...</span>}
+          {saveStatus === 'saved'  && <span style={{ fontSize:'11px', color:'#34d399' }}>Saved</span>}
+          {saveStatus === 'error'  && <span style={{ fontSize:'11px', color:'#f87171' }}>Error saving</span>}
           {onClose && <button onClick={onClose} style={{ background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:'18px' }}>✕</button>}
         </div>
       </div>
@@ -367,30 +423,60 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
 
                 {/* Identity */}
                 <div style={S.card}>
-                  <div style={S.g2}>
-                    <div><span style={S.lbl}>NAME</span><input style={S.inp} value={charData.name} onChange={e => setCharData(p => ({ ...p, name: e.target.value }))} placeholder="Character Name" /></div>
-                    <div><span style={S.lbl}>CREW</span><input style={S.inp} value={charData.crew} onChange={e => setCharData(p => ({ ...p, crew: e.target.value }))} placeholder="Crew Name" /></div>
-                  </div>
-                  <div style={{ marginTop:'8px' }}>
-                    <span style={S.lbl}>STAND NAME</span>
-                    <input style={S.inp} value={charData.standName} onChange={e => setCharData(p => ({ ...p, standName: e.target.value }))} placeholder="「Stand Name」" />
-                  </div>
-                  <div style={{ marginTop:'8px' }}>
-                    <span style={S.lbl}>LOOK</span>
-                    <input style={S.inp} value={charData.look} onChange={e => setCharData(p => ({ ...p, look: e.target.value }))} placeholder="Appearance and style" />
-                  </div>
-                  <div style={{ ...S.g2, marginTop:'8px' }}>
-                    <div><span style={S.lbl}>HERITAGE</span><input style={S.inp} value={charData.heritage} onChange={e => setCharData(p => ({ ...p, heritage: e.target.value }))} placeholder="Heritage" /></div>
-                    <div><span style={S.lbl}>BACKGROUND</span><input style={S.inp} value={charData.background} onChange={e => setCharData(p => ({ ...p, background: e.target.value }))} placeholder="Background" /></div>
-                  </div>
-                  <div style={{ marginTop:'8px' }}>
-                    <span style={S.lbl}>VICE / PURVEYOR</span>
-                    <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
-                      <select value={charData.vice} onChange={e => setCharData(p => ({ ...p, vice: e.target.value }))} style={S.sel}>
-                        <option value="">Select Vice</option>
-                        {VICE_OPTIONS.map(v => <option key={v}>{v}</option>)}
-                      </select>
-                      <input style={{ ...S.inp, flex:1 }} placeholder="Purveyor details" />
+                  <div style={{ display:'flex', gap:'16px', alignItems:'start' }}>
+                    {/* Portrait */}
+                    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:'4px', flexShrink:0 }}>
+                      <div style={{
+                        width:'80px', height:'80px', borderRadius:'50%', border:'2px solid #4b5563',
+                        background:'#1f2937', overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center',
+                      }}>
+                        {imagePreview
+                          ? <img src={imagePreview} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                          : <span style={{ color:'#4b5563', fontSize:'28px' }}>?</span>}
+                      </div>
+                      <div style={{ display:'flex', gap:'4px' }}>
+                        <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} style={{ display:'none' }} />
+                        <button onClick={() => fileInputRef.current?.click()}
+                          style={{ ...S.btn, fontSize:'9px', padding:'2px 6px', background:'#1f2937', color:'#9ca3af' }}>Upload</button>
+                        <button onClick={handleImageUrlPrompt}
+                          style={{ ...S.btn, fontSize:'9px', padding:'2px 6px', background:'#1f2937', color:'#9ca3af' }}>URL</button>
+                      </div>
+                    </div>
+                    {/* Identity fields */}
+                    <div style={{ flex:1 }}>
+                      <div style={S.g2}>
+                        <div><span style={S.lbl}>NAME</span><input style={S.inp} value={charData.name} onChange={e => setCharData(p => ({ ...p, name: e.target.value }))} placeholder="Character Name" /></div>
+                        <div><span style={S.lbl}>CREW</span><input style={S.inp} value={charData.crew} onChange={e => setCharData(p => ({ ...p, crew: e.target.value }))} placeholder="Crew Name" /></div>
+                      </div>
+                      <div style={{ marginTop:'8px' }}>
+                        <span style={S.lbl}>STAND NAME</span>
+                        <input style={S.inp} value={charData.standName} onChange={e => setCharData(p => ({ ...p, standName: e.target.value }))} placeholder="「Stand Name」" />
+                      </div>
+                      <div style={{ marginTop:'8px' }}>
+                        <span style={S.lbl}>LOOK</span>
+                        <input style={S.inp} value={charData.look} onChange={e => setCharData(p => ({ ...p, look: e.target.value }))} placeholder="Appearance and style" />
+                      </div>
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px', marginTop:'8px' }}>
+                        <div><span style={S.lbl}>HERITAGE</span><input style={S.inp} value={charData.heritage} onChange={e => setCharData(p => ({ ...p, heritage: e.target.value }))} placeholder="Heritage" /></div>
+                        <div><span style={S.lbl}>BACKGROUND</span><input style={S.inp} value={charData.background} onChange={e => setCharData(p => ({ ...p, background: e.target.value }))} placeholder="Background" /></div>
+                        <div>
+                          <span style={S.lbl}>CAMPAIGN</span>
+                          <select style={{ ...S.sel, width:'100%' }} value={campaignId} onChange={e => setCampaignId(e.target.value)}>
+                            <option value="">No Campaign</option>
+                            {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <div style={{ marginTop:'8px' }}>
+                        <span style={S.lbl}>VICE / PURVEYOR</span>
+                        <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+                          <select value={charData.vice} onChange={e => setCharData(p => ({ ...p, vice: e.target.value }))} style={S.sel}>
+                            <option value="">Select Vice</option>
+                            {VICE_OPTIONS.map(v => <option key={v}>{v}</option>)}
+                          </select>
+                          <input style={{ ...S.inp, flex:1 }} placeholder="Purveyor details" />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1078,7 +1164,7 @@ export { CharacterSheetWrapper };
 // ─── App Wrapper (standalone demo) ────────────────────────────────────────────
 
 export default function App() {
-  const [characters, setCharacters] = useState([{
+  const [current] = useState({
     id: 1,
     name: 'Josuke Higashikata',
     standName: 'Crazy Diamond',
@@ -1087,33 +1173,20 @@ export default function App() {
     vice: 'Obsession',
     crew: 'Morioh Crew',
     standStats: { power: 2, speed: 2, range: 0, durability: 1, precision: 1, development: 0 },
-    // 7 dots exactly: TINKER:2, SKIRMISH:2, SURVEY:1, HUNT:1, COMMAND:1 = 7 ✓
     actionRatings: { HUNT:1, STUDY:0, SURVEY:1, TINKER:2, FINESSE:0, PROWL:0, SKIRMISH:2, WRECK:0, BIZARRE:0, COMMAND:1, CONSORT:0, SWAY:0 },
-  }]);
-  const [current, setCurrent] = useState(characters[0]);
+  });
 
-  const handleSave = (updated) => {
-    setCharacters(p => p.some(c => c.id === updated.id) ? p.map(c => c.id === updated.id ? updated : c) : [...p, updated]);
-    setCurrent(updated);
-  };
-
-  const handleCreateNew = () => {
-    const n = {
-      id: Date.now(), name: '', standName: '',
-      standStats: { power: 0, speed: 0, range: 0, durability: 1, precision: 0, development: 0 },
-      actionRatings: { HUNT:0,STUDY:0,SURVEY:0,TINKER:0,FINESSE:0,PROWL:0,SKIRMISH:0,WRECK:0,BIZARRE:0,COMMAND:0,CONSORT:0,SWAY:0 },
-    };
-    setCharacters(p => [...p, n]);
-    setCurrent(n);
+  const handleSave = async (data) => {
+    console.log('Demo save:', data);
+    return data;
   };
 
   return (
     <CharacterSheetWrapper
       character={current}
-      allCharacters={characters}
+      allCharacters={[current]}
+      campaigns={[]}
       onSave={handleSave}
-      onCreateNew={handleCreateNew}
-      onSwitchCharacter={setCurrent}
     />
   );
 }

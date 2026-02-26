@@ -236,8 +236,7 @@ export default function HamburgerMenu({
         {/* ── App Switcher ── */}
         <div style={styles.appSwitcher}>
           {[
-            { id: 'pathbuilder', label: 'Pathbuilder\n2E', short: 'PB' },
-            { id: 'starbuilder',  label: 'Starbuilder\n2E',  short: 'SB' },
+            { id: 'pathbuilder', label: '1-800-Bizarre', short: '' },
           ].map(({ id, label, short }) => (
             <button
               key={id}

@@ -1,3 +1,4 @@
+import './styles/global.css';
 import React, { useState, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import { Menu } from 'lucide-react';

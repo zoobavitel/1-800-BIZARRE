@@ -1,6 +1,6 @@
 # Import all view classes for backward compatibility
 from .character_views import CharacterViewSet
-from .campaign_views import CampaignViewSet
+from .campaign_views import CampaignViewSet, CampaignInvitationViewSet
 from .faction_views import FactionViewSet
 from .npc_views import NPCViewSet
 from .crew_views import CrewViewSet
@@ -22,7 +22,7 @@ from .utility_views import (
 )
 
 __all__ = [
-    'CharacterViewSet', 'CampaignViewSet', 'FactionViewSet', 'NPCViewSet', 'CrewViewSet',
+    'CharacterViewSet', 'CampaignViewSet', 'CampaignInvitationViewSet', 'FactionViewSet', 'NPCViewSet', 'CrewViewSet',
     'SessionViewSet', 'SessionEventViewSet', 'RegisterView', 'LoginView', 'CurrentUserView',
     'UserProfileViewSet', 'ClaimViewSet', 'CrewSpecialAbilityViewSet',
     'CrewPlaybookViewSet', 'CrewUpgradeViewSet', 'XPHistoryViewSet',

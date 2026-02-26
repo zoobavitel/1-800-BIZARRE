@@ -50,12 +50,19 @@ export const factionData = {
 };
 
 export const standardAbilities = [
-  'Shadow', 'Iron Will', 'Functioning Vice', 'Foresight', 'Calculating',
-  'Like Looking into a Mirror', 'Trust in Me', 'Subterfuge', 'Cloak & Dagger',
-  'Artificer', 'Analyst', 'Fortitude', 'Venomous', 'Bizarre Ward',
-  'Physicker', 'Saboteur', 'Leader', 'Vigorous', 'Bodyguard', 'Savage',
-  'Tough as Nails', 'Sharpshooter', 'Steady Barrage', 'Reflexes',
-  'Bizarre Improvisation', 'Stand Evolution', 'Stand Fusion', 'Stand Recall'
+  'Ambush', 'Cascade Effect', 'Final Barrage', 'Parry and Break',
+  'Phantom Pain', 'Savage', 'Spin-Boosted Blow', 'Steady Barrage',
+  'Invigorated', 'Legendary Guard', 'Battleborn', 'Swan Song',
+  'Iron Will', 'Tough as Nails', 'Fortitude', 'Overdrive',
+  'Masochist', 'Undying Will', 'Rule of Cool',
+  'Bizarre Step', 'Cloak & Dagger', 'Mesmeriser', 'Saboteur', 'Shadow', 'Subterfuge',
+  'Bizarre Intuition', 'Focused', 'Like Looking into a Mirror',
+  'Mastermind', 'Neural Lace', 'Scout', 'Shared Vision',
+  'Aura of Confidence', 'Notorious', 'Scoundrel', 'Trust in Me',
+  'Foresight', 'Bodyguard', 'Guardian', 'Functioning Vice',
+  'Stand Proud', 'Analyst', 'Expertise', 'Calculating',
+  'The Devil\'s Footsteps', 'Superhero Landing', 'Daredevil', 'Bizarre Improvisation',
+  'Automatic Trigger', 'Weapon Recall', 'Stand Evolution', 'Channel Force', 'Requiem'
 ];
 
 export const viceOptions = [
