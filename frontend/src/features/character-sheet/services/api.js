@@ -44,6 +44,9 @@ const apiRequest = async (endpoint, options = {}) => {
 export const characterAPI = {
   // Get all characters for current user
   getCharacters: () => apiRequest('/characters/'),
+
+  // Get character creation guide with rules and options
+  getCreationGuide: () => apiRequest('/characters/creation-guide/'),
   
   // Get single character by ID
   getCharacter: (id) => apiRequest(`/characters/${id}/`),

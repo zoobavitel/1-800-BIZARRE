@@ -5,7 +5,7 @@ import { characterAPI, campaignAPI, transformBackendToFrontend } from '../featur
 import { useAuth } from '../features/auth';
 
 // Main Home Page Component — character create/edit goes to Character page
-const HomePage = ({ onNavigateToCharacter, onNavigateToCampaign, onHamburgerClick }) => {
+const HomePage = ({ onNavigateToCharacter, onNavigateToCharacterOptions, onNavigateToCampaign, onHamburgerClick }) => {
   const { user, logout } = useAuth();
   const [characters, setCharacters] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -124,7 +124,7 @@ const HomePage = ({ onNavigateToCharacter, onNavigateToCampaign, onHamburgerClic
         <div className="header-actions">
           <div className="flex items-center space-x-4">
             <button
-              onClick={() => typeof onNavigateToCharacter === 'function' && onNavigateToCharacter(null)}
+              onClick={() => typeof onNavigateToCharacterOptions === 'function' ? onNavigateToCharacterOptions() : (typeof onNavigateToCharacter === 'function' && onNavigateToCharacter(null))}
               className="btn-secondary"
             >
               Character Options

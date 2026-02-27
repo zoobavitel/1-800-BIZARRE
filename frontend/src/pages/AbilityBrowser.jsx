@@ -45,12 +45,12 @@ const CATEGORY_LABELS = {
   stand_nature: 'Stand Nature',
 };
 
-export default function AbilityBrowser() {
+export default function AbilityBrowser({ initialFilter }) {
   const [abilities, setAbilities] = useState([]);
   const [heritages, setHeritages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState(initialFilter && ['standard', 'hamon', 'spin', 'heritage'].includes(initialFilter) ? initialFilter : 'all');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
 

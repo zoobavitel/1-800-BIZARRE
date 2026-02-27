@@ -423,6 +423,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
             }
         }
         
+        from .data.stand_reference import STAND_TYPES, STAND_EXAMPLE_BUILDS
+
         return Response({
             'creation_rules': creation_rules,
             'available_options': {
@@ -431,7 +433,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 'hamon_abilities': HamonAbilitySerializer(hamon_abilities, many=True).data,
                 'spin_abilities': SpinAbilitySerializer(spin_abilities, many=True).data,
                 'vices': ViceSerializer(vices, many=True).data,
-            }
+            },
+            'stand_types': STAND_TYPES,
+            'stand_example_builds': STAND_EXAMPLE_BUILDS,
         })
 
     @action(detail=True, methods=['patch'], url_path='update-field')

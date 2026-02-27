@@ -8,17 +8,19 @@ import ResponsiveTest from './pages/ResponsiveTest.jsx';
 import NPCSheetPage from './pages/NPCSheet.jsx';
 import CampaignManagement from './pages/CampaignManagement.jsx';
 import AbilityBrowser from './pages/AbilityBrowser.jsx';
+import CharacterOptionsPage from './pages/CharacterOptionsPage.jsx';
 import { AuthProvider, useAuth } from './features/auth';
 import ProtectedRoute from './components/ProtectedRoute';
 import HamburgerMenu from './components/HamburgerMenu.jsx';
 import { characterAPI, transformBackendToFrontend } from './features/character-sheet';
 
 const PAGE_TITLES = {
-  character:  'CHARACTERS',
-  campaigns:  'CAMPAIGN MANAGEMENT',
-  abilities:  'ABILITY BROWSER',
-  npcs:       'GM — NPCs',
-  test:       'RESPONSIVE TEST',
+  character:        'CHARACTERS',
+  'character-options': 'CHARACTER OPTIONS',
+  campaigns:         'CAMPAIGN MANAGEMENT',
+  abilities:         'ABILITY BROWSER',
+  npcs:              'GM — NPCs',
+  test:              'RESPONSIVE TEST',
 };
 
 const barStyles = {
@@ -67,6 +69,7 @@ const App = () => {
   const [currentPage, setCurrentPage] = useState('home');
   const [characterPageId, setCharacterPageId] = useState(null);
   const [campaignPageId, setCampaignPageId] = useState(null);
+  const [abilityFilter, setAbilityFilter] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuCharacters, setMenuCharacters] = useState([]);
 
@@ -74,12 +77,17 @@ const App = () => {
     const hash = window.location.hash.substring(1);
     if (hash === 'test') setCurrentPage('test');
     else if (hash === 'npcs') setCurrentPage('npcs');
+    else if (hash === 'character-options') setCurrentPage('character-options');
     else if (hash === 'campaigns' || hash.startsWith('campaigns/')) {
       setCurrentPage('campaigns');
       const idPart = hash.replace(/^campaigns\/?/, '');
       setCampaignPageId(idPart ? parseInt(idPart, 10) : null);
     }
-    else if (hash === 'abilities') setCurrentPage('abilities');
+    else if (hash === 'abilities' || hash.startsWith('abilities-')) {
+      setCurrentPage('abilities');
+      const filterPart = hash.replace(/^abilities-?/, '');
+      setAbilityFilter(filterPart || null);
+    }
     else if (hash === 'character' || hash.startsWith('character/')) {
       setCurrentPage('character');
       const idPart = hash.replace(/^character\/?/, '');
@@ -92,14 +100,28 @@ const App = () => {
     if (page === 'character') {
       setCharacterPageId(payload?.characterId ?? null);
       setCampaignPageId(null);
+      setAbilityFilter(null);
       window.location.hash = payload?.characterId != null ? `character/${payload.characterId}` : 'character';
     } else if (page === 'campaigns') {
       setCampaignPageId(payload?.campaignId ?? null);
       setCharacterPageId(null);
+      setAbilityFilter(null);
       window.location.hash = payload?.campaignId != null ? `campaigns/${payload.campaignId}` : 'campaigns';
+    } else if (page === 'abilities') {
+      setCharacterPageId(null);
+      setCampaignPageId(null);
+      const filter = payload?.filter || null;
+      setAbilityFilter(filter);
+      window.location.hash = filter ? `abilities-${filter}` : 'abilities';
+    } else if (page === 'character-options') {
+      setCharacterPageId(null);
+      setCampaignPageId(null);
+      setAbilityFilter(null);
+      window.location.hash = 'character-options';
     } else {
       setCharacterPageId(null);
       setCampaignPageId(null);
+      setAbilityFilter(null);
       window.location.hash = page === 'home' ? '' : page;
     }
   };
@@ -108,6 +130,7 @@ const App = () => {
     setCurrentPage('home');
     setCharacterPageId(null);
     setCampaignPageId(null);
+    setAbilityFilter(null);
     window.location.hash = '';
   };
 
@@ -168,6 +191,7 @@ const App = () => {
         {currentPage === 'home' && (
           <Home
             onNavigateToCharacter={(characterId) => handlePageChange('character', { characterId })}
+            onNavigateToCharacterOptions={() => handlePageChange('character-options')}
             onNavigateToCampaign={(campaignId) => handlePageChange('campaigns', { campaignId })}
             onHamburgerClick={toggleMenu}
           />
@@ -175,9 +199,14 @@ const App = () => {
         {currentPage === 'character' && (
           <CharacterPage initialCharacterId={characterPageId} />
         )}
+        {currentPage === 'character-options' && (
+          <CharacterOptionsPage
+            onNavigateToAbilities={(filter) => handlePageChange('abilities', { filter })}
+          />
+        )}
         {currentPage === 'npcs' && <NPCSheetPage />}
         {currentPage === 'campaigns' && <CampaignManagement initialCampaignId={campaignPageId} />}
-        {currentPage === 'abilities' && <AbilityBrowser />}
+        {currentPage === 'abilities' && <AbilityBrowser initialFilter={abilityFilter} />}
         {currentPage === 'test' && <ResponsiveTest />}
       </div>
     </ProtectedRoute>
