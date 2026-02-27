@@ -5,7 +5,7 @@ import { characterAPI, campaignAPI, transformBackendToFrontend } from '../featur
 import { useAuth } from '../features/auth';
 
 // Main Home Page Component — character create/edit goes to Character page
-const HomePage = ({ onNavigateToCharacter, onHamburgerClick }) => {
+const HomePage = ({ onNavigateToCharacter, onNavigateToCampaign, onHamburgerClick }) => {
   const { user, logout } = useAuth();
   const [characters, setCharacters] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -96,8 +96,7 @@ const HomePage = ({ onNavigateToCharacter, onHamburgerClick }) => {
   };
 
   const handleManageCampaign = (campaignId) => {
-    // Logic for managing a campaign (GM view)
-    console.log('Managing campaign:', campaignId);
+    if (typeof onNavigateToCampaign === 'function') onNavigateToCampaign(campaignId);
   };
 
   return (

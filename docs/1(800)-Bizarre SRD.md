@@ -2143,19 +2143,19 @@ Your Stand is a shared hallucination—a child’s recurring nightmare with meta
 
 ---
 
-### [**🎷**](https://emojipedia.org/saxophone) **BADBADNOTGOOD (Shared)**
+### [**🎷**](https://emojipedia.org/saxophone) **Home is Where the Hatred is (Shared)**
 
-Your stand embodies a saxophone ensemble and a dance floor. Opponents who step out of tune are disintegrated. 
+Your stand is capable of regenerating your limbs, organs, and any of your organic matter. This feature is shared amongst those you choose. 
 
 **Stand Coin:**
 
-* **Power: A**
+* **Power: F**
 
 * **Speed: F**
 
 * **Range: D**
 
-* **Durability: F** 
+* **Durability: A** 
 
 * **Precision: D**
 
@@ -2163,11 +2163,21 @@ Your stand embodies a saxophone ensemble and a dance floor. Opponents who step o
 
 **Unique Abilities:**
 
-* 
+* **iii:** The stand is capable of regenerating the user’s limbs at an alarmingly rapid rate. 
+
+* **Copycat:** You can create sentient clones; you may share this stand amongst sentient clones of yourself.
 
 **Recommended Standard Abilities:**
 
-* 
+* **Cascade Effect:** If you roll a 6 from your resistance roll to resist a physical or bizarre consequence, the attacker suffers a mirrored backlash.
+
+* **Bizarre Step:** Push (2 stress) to instantly reposition within your stand’s range. Nearby observers must resist or lose track of you.
+
+* **The Devil’s Footsteps:** When you **push yourself**, choose one of the following additional benefits:
+
+  * Perform a feat of athletics that verges past superhuman for 1 scene.
+
+  * Maneuver to confuse your enemies so they mistakenly attack each other.
 
 ---
 

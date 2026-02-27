@@ -66,6 +66,7 @@ const App = () => {
   const { isAuthenticated, logout } = useAuth();
   const [currentPage, setCurrentPage] = useState('home');
   const [characterPageId, setCharacterPageId] = useState(null);
+  const [campaignPageId, setCampaignPageId] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuCharacters, setMenuCharacters] = useState([]);
 
@@ -73,7 +74,11 @@ const App = () => {
     const hash = window.location.hash.substring(1);
     if (hash === 'test') setCurrentPage('test');
     else if (hash === 'npcs') setCurrentPage('npcs');
-    else if (hash === 'campaigns') setCurrentPage('campaigns');
+    else if (hash === 'campaigns' || hash.startsWith('campaigns/')) {
+      setCurrentPage('campaigns');
+      const idPart = hash.replace(/^campaigns\/?/, '');
+      setCampaignPageId(idPart ? parseInt(idPart, 10) : null);
+    }
     else if (hash === 'abilities') setCurrentPage('abilities');
     else if (hash === 'character' || hash.startsWith('character/')) {
       setCurrentPage('character');
@@ -86,9 +91,15 @@ const App = () => {
     setCurrentPage(page);
     if (page === 'character') {
       setCharacterPageId(payload?.characterId ?? null);
+      setCampaignPageId(null);
       window.location.hash = payload?.characterId != null ? `character/${payload.characterId}` : 'character';
+    } else if (page === 'campaigns') {
+      setCampaignPageId(payload?.campaignId ?? null);
+      setCharacterPageId(null);
+      window.location.hash = payload?.campaignId != null ? `campaigns/${payload.campaignId}` : 'campaigns';
     } else {
       setCharacterPageId(null);
+      setCampaignPageId(null);
       window.location.hash = page === 'home' ? '' : page;
     }
   };
@@ -96,6 +107,7 @@ const App = () => {
   const handleBack = () => {
     setCurrentPage('home');
     setCharacterPageId(null);
+    setCampaignPageId(null);
     window.location.hash = '';
   };
 
@@ -156,6 +168,7 @@ const App = () => {
         {currentPage === 'home' && (
           <Home
             onNavigateToCharacter={(characterId) => handlePageChange('character', { characterId })}
+            onNavigateToCampaign={(campaignId) => handlePageChange('campaigns', { campaignId })}
             onHamburgerClick={toggleMenu}
           />
         )}
@@ -163,7 +176,7 @@ const App = () => {
           <CharacterPage initialCharacterId={characterPageId} />
         )}
         {currentPage === 'npcs' && <NPCSheetPage />}
-        {currentPage === 'campaigns' && <CampaignManagement />}
+        {currentPage === 'campaigns' && <CampaignManagement initialCampaignId={campaignPageId} />}
         {currentPage === 'abilities' && <AbilityBrowser />}
         {currentPage === 'test' && <ResponsiveTest />}
       </div>

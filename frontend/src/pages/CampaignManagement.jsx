@@ -496,7 +496,7 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh }) {
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
-export default function CampaignManagement() {
+export default function CampaignManagement({ initialCampaignId = null }) {
   const { user } = useAuth();
   const [campaigns, setCampaigns] = useState([]);
   const [invitations, setInvitations] = useState([]);
@@ -504,7 +504,7 @@ export default function CampaignManagement() {
   const [error, setError] = useState(null);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: '', description: '' });
-  const [selectedCampaignId, setSelectedCampaignId] = useState(null);
+  const [selectedCampaignId, setSelectedCampaignId] = useState(initialCampaignId);
 
   const loadCampaigns = useCallback(async () => {
     setLoading(true);
@@ -525,6 +525,12 @@ export default function CampaignManagement() {
   }, []);
 
   useEffect(() => { loadCampaigns(); }, [loadCampaigns]);
+
+  useEffect(() => {
+    if (initialCampaignId != null && campaigns.length > 0 && campaigns.some((c) => c.id === initialCampaignId)) {
+      setSelectedCampaignId(initialCampaignId);
+    }
+  }, [initialCampaignId, campaigns]);
 
   const startCreate = () => {
     setEditing('new');
