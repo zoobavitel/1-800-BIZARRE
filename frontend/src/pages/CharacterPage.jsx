@@ -124,6 +124,8 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
     id: payload.id,
     inventory: payload.inventory ?? [],
     reputation_status: payload.reputation_status ?? {},
+    selected_benefits: payload.selected_benefits ?? [],
+    selected_detriments: payload.selected_detriments ?? [],
   };
 }
 

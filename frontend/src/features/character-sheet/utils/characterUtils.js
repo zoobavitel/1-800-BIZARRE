@@ -42,7 +42,9 @@ export const createDefaultCharacter = () => ({
     insight: 0, prowess: 0, resolve: 0, heritage: 0, playbook: 0
   },
   abilities: [],
-  clocks: []
+  clocks: [],
+  selected_benefits: [],
+  selected_detriments: [],
 });
 
 export const viceOptions = [

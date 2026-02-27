@@ -489,6 +489,10 @@ export const transformBackendToFrontend = (backendCharacter) => {
     loadout: backendCharacter.loadout,
     inventory: backendCharacter.inventory || [],
     reputation_status: backendCharacter.reputation_status || {},
+
+    // Heritage benefits and detriments (arrays of IDs)
+    selected_benefits: Array.isArray(backendCharacter.selected_benefits) ? backendCharacter.selected_benefits : [],
+    selected_detriments: Array.isArray(backendCharacter.selected_detriments) ? backendCharacter.selected_detriments : [],
   };
 };
 
@@ -570,5 +574,9 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     // Additional fields (safe defaults for new character)
     inventory: frontendCharacter.inventory ?? [],
     reputation_status: frontendCharacter.reputation_status ?? {},
+
+    // Heritage benefits and detriments (arrays of IDs)
+    selected_benefits: Array.isArray(frontendCharacter.selected_benefits) ? frontendCharacter.selected_benefits : [],
+    selected_detriments: Array.isArray(frontendCharacter.selected_detriments) ? frontendCharacter.selected_detriments : [],
   };
 }; 

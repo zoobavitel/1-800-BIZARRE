@@ -103,6 +103,31 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     }
   }, [heritages, character?.heritage]);
 
+  // Sync selected benefits/detriments when character changes (e.g. switching tabs)
+  useEffect(() => {
+    setSelectedBenefits(Array.isArray(character?.selected_benefits) ? character.selected_benefits : []);
+    setSelectedDetriments(Array.isArray(character?.selected_detriments) ? character.selected_detriments : []);
+  }, [character?.id, character?.selected_benefits, character?.selected_detriments]);
+
+  // When heritage changes, reset to required benefits/detriments for the new heritage
+  useEffect(() => {
+    if (!charData.heritage || !heritages?.length) return;
+    const h = heritages.find((x) => x.id === charData.heritage);
+    if (!h?.benefits || !h?.detriments) return;
+    const reqBenIds = (h.benefits || []).filter((b) => b.required).map((b) => b.id);
+    const reqDetIds = (h.detriments || []).filter((d) => d.required).map((d) => d.id);
+    setSelectedBenefits((prev) => {
+      const valid = prev.filter((id) => (h.benefits || []).some((b) => b.id === id));
+      const merged = [...new Set([...reqBenIds, ...valid])];
+      return merged.length ? merged : prev;
+    });
+    setSelectedDetriments((prev) => {
+      const valid = prev.filter((id) => (h.detriments || []).some((d) => d.id === id));
+      const merged = [...new Set([...reqDetIds, ...valid])];
+      return merged.length ? merged : prev;
+    });
+  }, [charData.heritage, heritages]);
+
   // FIX 2+3: Stand Coin Stats — F(0)..A(4); S is GM-only
   const [standStats, setStandStats] = useState(character?.standStats || {
     power: 1, speed: 1, range: 1, durability: 1, precision: 1, development: 1,
@@ -147,6 +172,14 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const [xp, setXp] = useState(character?.xp || {
     insight: 0, prowess: 0, resolve: 0, heritage: 0, playbook: 0,
   });
+
+  // Heritage benefits and detriments (arrays of IDs)
+  const [selectedBenefits, setSelectedBenefits] = useState(
+    Array.isArray(character?.selected_benefits) ? character.selected_benefits : []
+  );
+  const [selectedDetriments, setSelectedDetriments] = useState(
+    Array.isArray(character?.selected_detriments) ? character.selected_detriments : []
+  );
 
   // FIX 6: Level-up modal state
   const [showLevelUp, setShowLevelUp] = useState(false);
@@ -388,8 +421,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
       image_url: imageUrl,
       ...(imageFile ? { imageFile } : {}),
       id: backendId, lastModified: new Date().toISOString(),
+      selected_benefits: selectedBenefits,
+      selected_detriments: selectedDetriments,
     };
-  }, [charData, standStats, actionRatings, stressFilled, trauma, regularArmorUsed, specialArmorUsed, harm, healingClock, coinFilled, stashBoxes, xp, abilities, clocks, playbook, campaignId, imageUrl, imageFile, character?.id]);
+  }, [charData, standStats, actionRatings, stressFilled, trauma, regularArmorUsed, specialArmorUsed, harm, healingClock, coinFilled, stashBoxes, xp, abilities, clocks, playbook, campaignId, imageUrl, imageFile, character?.id, selectedBenefits, selectedDetriments]);
 
   // Debounced auto-save
   useEffect(() => {
@@ -411,7 +446,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     }, 1500);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [charData, standStats, actionRatings, stressFilled, trauma, regularArmorUsed, specialArmorUsed, harm, healingClock, coinFilled, stashBoxes, xp, abilities, clocks, playbook, campaignId, imageUrl, imageFile]);
+  }, [charData, standStats, actionRatings, stressFilled, trauma, regularArmorUsed, specialArmorUsed, harm, healingClock, coinFilled, stashBoxes, xp, abilities, clocks, playbook, campaignId, imageUrl, imageFile, selectedBenefits, selectedDetriments]);
 
   // ─── Styles ──────────────────────────────────────────────────────────────────
 
@@ -527,7 +562,20 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                             value={charData.heritage ?? ''}
                             onChange={e => {
                               const val = e.target.value;
-                              setCharData(p => ({ ...p, heritage: val ? parseInt(val, 10) : null }));
+                              const newHeritageId = val ? parseInt(val, 10) : null;
+                              setCharData(p => ({ ...p, heritage: newHeritageId }));
+                              if (newHeritageId && heritages.length) {
+                                const h = heritages.find((x) => x.id === newHeritageId);
+                                if (h) {
+                                  const reqB = (h.benefits || []).filter((b) => b.required).map((b) => b.id);
+                                  const reqD = (h.detriments || []).filter((d) => d.required).map((d) => d.id);
+                                  setSelectedBenefits(reqB);
+                                  setSelectedDetriments(reqD);
+                                }
+                              } else {
+                                setSelectedBenefits([]);
+                                setSelectedDetriments([]);
+                              }
                             }}
                           >
                             {heritages.length === 0 ? (
@@ -770,6 +818,81 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                       <option>Stand</option><option>Hamon</option><option>Spin</option>
                     </select>
                   </div>
+
+                  {/* Heritage Benefits & Detriments — above Stand Coin Stats */}
+                  {charData.heritage && heritages.length > 0 && (() => {
+                    const currentHeritage = heritages.find((h) => h.id === charData.heritage);
+                    if (!currentHeritage?.benefits && !currentHeritage?.detriments) return null;
+                    const benefits = currentHeritage.benefits || [];
+                    const detriments = currentHeritage.detriments || [];
+                    const baseHp = currentHeritage.base_hp ?? 0;
+                    const benefitCost = benefits.filter((b) => selectedBenefits.includes(b.id)).reduce((s, b) => s + (b.hp_cost || 0), 0);
+                    const detrimentGain = detriments.filter((d) => selectedDetriments.includes(d.id)).reduce((s, d) => s + (d.hp_value || 0), 0);
+                    const hpRemaining = baseHp + detrimentGain - benefitCost;
+                    const toggleBenefit = (id) => {
+                      const b = benefits.find((x) => x.id === id);
+                      if (b?.required) return;
+                      setSelectedBenefits((prev) =>
+                        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+                      );
+                    };
+                    const toggleDetriment = (id) => {
+                      const d = detriments.find((x) => x.id === id);
+                      if (d?.required) return;
+                      setSelectedDetriments((prev) =>
+                        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+                      );
+                    };
+                    return (
+                      <div style={{ marginBottom:'16px', paddingBottom:'16px', borderBottom:'1px solid #374151' }}>
+                        <span style={S.lbl}>HERITAGE BENEFITS & DETRIMENTS</span>
+                        <div style={{ marginBottom:'8px', fontSize:'11px', color: hpRemaining >= 0 ? '#86efac' : '#fca5a5' }}>
+                          HP budget: {baseHp} base + {detrimentGain} (detriments) − {benefitCost} (benefits) = {hpRemaining} remaining
+                        </div>
+                        {hpRemaining < 0 && (
+                          <div style={{ ...S.warn, marginBottom:'8px' }}>HP budget exceeded. Add detriments or remove benefits.</div>
+                        )}
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+                          <div>
+                            <span style={{ fontSize:'10px', color:'#9ca3af', display:'block', marginBottom:'4px' }}>Benefits</span>
+                            {(benefits.length === 0 ? [] : benefits).map((b) => (
+                              <label key={b.id} style={{ display:'flex', alignItems:'flex-start', gap:'6px', marginBottom:'4px', cursor: b.required ? 'default' : 'pointer', fontSize:'11px' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedBenefits.includes(b.id)}
+                                  onChange={() => toggleBenefit(b.id)}
+                                  disabled={b.required}
+                                />
+                                <span>
+                                  {b.name}
+                                  {b.hp_cost != null && b.hp_cost > 0 && <span style={{ color:'#f59e0b' }}> ({b.hp_cost} HP)</span>}
+                                  {b.required && <span style={{ color:'#6b7280' }}> (required)</span>}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                          <div>
+                            <span style={{ fontSize:'10px', color:'#9ca3af', display:'block', marginBottom:'4px' }}>Detriments</span>
+                            {(detriments.length === 0 ? [] : detriments).map((d) => (
+                              <label key={d.id} style={{ display:'flex', alignItems:'flex-start', gap:'6px', marginBottom:'4px', cursor: d.required ? 'default' : 'pointer', fontSize:'11px' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={selectedDetriments.includes(d.id)}
+                                  onChange={() => toggleDetriment(d.id)}
+                                  disabled={d.required}
+                                />
+                                <span>
+                                  {d.name}
+                                  {d.hp_value != null && d.hp_value > 0 && <span style={{ color:'#34d399' }}> (+{d.hp_value} HP)</span>}
+                                  {d.required && <span style={{ color:'#6b7280' }}> (required)</span>}
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Stand Coin Stats — FIX 2 + 3 + 4 + 5 */}
                   <div style={{ marginBottom:'16px' }}>
