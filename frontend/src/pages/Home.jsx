@@ -104,7 +104,7 @@ const HomePage = ({ onNavigateToCharacter, onHamburgerClick }) => {
     <div className="home-container">
       {/* Header */}
       <header className="header">
-        <div className="flex items-center gap-3">
+        <div className="header-left flex items-center gap-3">
           {typeof onHamburgerClick === 'function' && (
             <button
               type="button"
@@ -119,9 +119,11 @@ const HomePage = ({ onNavigateToCharacter, onHamburgerClick }) => {
             1(800)BIZARRE - HOME
           </div>
         </div>
+        <div className="header-center">
+          <span className="text-gray-300 text-sm">Welcome, {user?.username}</span>
+        </div>
         <div className="header-actions">
           <div className="flex items-center space-x-4">
-            <span className="text-gray-300 text-sm">Welcome, {user?.username}</span>
             <button
               onClick={() => typeof onNavigateToCharacter === 'function' && onNavigateToCharacter(null)}
               className="btn-secondary"
