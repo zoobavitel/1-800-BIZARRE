@@ -25,6 +25,13 @@ export const ACTION_ATTR = {
   BIZARRE: 'resolve', COMMAND: 'resolve', CONSORT: 'resolve', SWAY: 'resolve',
 };
 
+// Resistance attribute tooltips (SRD: which consequence type each resists)
+export const RESISTANCE_ATTR_DESC = {
+  INSIGHT: 'Resistance (deception/understanding)',
+  PROWESS: 'Resistance (physical harm)',
+  RESOLVE: 'Resistance (mental strain)',
+};
+
 // Vice options (SRD / playbook)
 export const VICE_OPTIONS = [
   'Gambling', 'Obsession', 'Violence', 'Pleasure', 'Stupor', 'Weird',

@@ -102,10 +102,7 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
     }
   }, [isGM]);
 
-  const unassignedChars = myCharacters.filter((ch) => !ch.campaign || ch.campaign === campaign.id);
-  const myAssigned = (campaign.campaign_characters || []).filter((ch) => ch.user_id === user?.id);
   const availableToAssign = myCharacters.filter((ch) => !ch.campaign && ch.id);
-  const unassignedNPCs = allNPCs.filter((n) => !n.campaign || n.campaign === campaign.id);
   const npcsThatCanBeAdded = allNPCs.filter((n) => !n.campaign);
 
   const handleInvite = async () => {
@@ -494,6 +491,50 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
   );
 }
 
+function DiceHistoryRow({ roll, showPositionEffect, onPatch }) {
+  const [editing, setEditing] = useState(false);
+  const [pos, setPos] = useState(roll.position || 'risky');
+  const [eff, setEff] = useState(roll.effect || 'standard');
+  const handleSave = () => {
+    onPatch(roll.id, { position: pos, effect: eff });
+    setEditing(false);
+  };
+  return (
+    <div style={{ padding: '6px 0', borderBottom: '1px solid #1f2937', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+      <span style={{ fontWeight: 'bold' }}>{roll.character_name || roll.character}</span>
+      <span>·</span>
+      <span>{roll.action_name}</span>
+      <span>·</span>
+      <span>{[].concat(roll.results || []).join(', ')}</span>
+      <span>→</span>
+      <span>{roll.outcome}</span>
+      {showPositionEffect && (
+        editing ? (
+          <>
+            <select style={S.select} value={pos} onChange={(e) => setPos(e.target.value)}>
+              <option value="controlled">Controlled</option>
+              <option value="risky">Risky</option>
+              <option value="desperate">Desperate</option>
+            </select>
+            <select style={S.select} value={eff} onChange={(e) => setEff(e.target.value)}>
+              <option value="limited">Limited</option>
+              <option value="standard">Standard</option>
+              <option value="greater">Greater</option>
+            </select>
+            <button onClick={handleSave} style={{ ...S.btn, fontSize: '10px', padding: '2px 6px' }}>Save</button>
+            <button onClick={() => setEditing(false)} style={{ ...S.btn, fontSize: '10px', padding: '2px 6px' }}>Cancel</button>
+          </>
+        ) : (
+          <span style={{ color: '#9ca3af', marginLeft: '8px' }}>
+            ({roll.position || '—'}, {roll.effect || '—'})
+            <button onClick={() => setEditing(true)} style={{ marginLeft: '4px', background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '10px' }}>Edit</button>
+          </span>
+        )
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Session Records Modal (view session history: goals, rolls, events)
 // ---------------------------------------------------------------------------
@@ -660,6 +701,7 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
     characterAPI.getCharacters().then((list) => setCharacters(list?.filter((c) => c.campaign === campaign.id) || [])).catch(() => setCharacters([]));
     npcAPI.getNPCs(campaign.id).then(setCampaignNPCs).catch(() => setCampaignNPCs([]));
     setWantedStars(campaign?.wanted_stars ?? 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id, campaign?.id, campaign?.wanted_stars]);
 
   const campaignChars = campaign?.campaign_characters || characters.map((c) => ({ id: c.id, true_name: c.true_name, ...c }));
@@ -721,7 +763,7 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
       return;
     }
     try {
-      const res = await characterAPI.rollAction(firstChar.id, {
+      await characterAPI.rollAction(firstChar.id, {
         roll_type: 'FORTUNE',
         action: 'Fortune',
         session_id: session.id,
@@ -898,14 +940,7 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
           <div style={{ color: '#6b7280' }}>No rolls for this session.</div>
         ) : (
           rolls.map((r) => (
-            <div key={r.id} style={{ padding: '6px 0', borderBottom: '1px solid #1f2937', fontSize: '12px' }}>
-              <span style={{ fontWeight: 'bold' }}>{r.character_name || r.character}</span> · {r.action_name} · {r.results?.join(', ')} → {r.outcome}
-              {showPositionEffect && (
-                <span style={{ color: '#9ca3af', marginLeft: '8px' }}>
-                  ({r.position}, {r.effect})
-                </span>
-              )}
-            </div>
+            <DiceHistoryRow key={r.id} roll={r} showPositionEffect={showPositionEffect} onPatch={handlePatchRoll} />
           ))
         )}
       </div>
@@ -921,6 +956,7 @@ function GoalsEditor({ sessionData, onSave }) {
       proposed_score_target: sessionData?.proposed_score_target || '',
       proposed_score_description: sessionData?.proposed_score_description || '',
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionData?.id]);
   return (
     <div style={S.card}>
@@ -964,6 +1000,7 @@ function HarmEditor({ character, onSave }) {
       harm_level4_used: character.harm_level4_used ?? false,
       harm_level4_name: character.harm_level4_name || '',
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [character.id]);
   const save = () => onSave(harm);
   return (

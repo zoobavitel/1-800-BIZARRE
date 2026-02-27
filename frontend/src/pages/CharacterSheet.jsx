@@ -7,6 +7,7 @@ import {
   DUR_TABLE,
   DEV_SESSION_XP,
   ACTION_ATTR,
+  RESISTANCE_ATTR_DESC,
   VICE_OPTIONS,
   DEFAULT_TRAUMA,
 } from '../features/character-sheet/constants/srd';
@@ -904,10 +905,13 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                         { attr:'RESOLVE', actions:['BIZARRE','COMMAND','CONSORT','SWAY'] },
                       ].map(({ attr, actions }) => (
                         <div key={attr}>
-                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
-                            <span onClick={() => rollDice(attr, getAttributeDice(actions), true)}
-                              style={{ fontSize:'11px', fontWeight:'bold', cursor:'pointer', color:'#e5e7eb' }}
-                              title="Click for Resistance Roll">
+                          <div
+                            onClick={() => rollDice(attr, getAttributeDice(actions), true)}
+                            style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px', cursor:'pointer' }}
+                            title={RESISTANCE_ATTR_DESC[attr] || 'Click for Resistance Roll'}
+                          >
+                            <span style={{ fontSize:'11px', fontWeight:'bold', color:'#e5e7eb', display:'flex', alignItems:'center', gap:'4px' }}>
+                              <span style={{ fontSize:'10px', opacity:0.9 }}>🎲</span>
                               {attr}
                             </span>
                             <div style={{ display:'flex', gap:'2px' }}>
@@ -920,19 +924,24 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                           {actions.map(action => {
                             const rating = actionRatings[action];
                             return (
-                              <div key={action} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
-                                <span onClick={() => rollDice(action, rating)}
-                                  style={{ fontSize:'11px', cursor:'pointer', color:'#d1d5db' }}
-                                  title={`Click to roll ${rating}d`}>
+                              <div
+                                key={action}
+                                onClick={(e) => { if (!e.target.closest('[data-dot-edit]')) rollDice(action, rating); }}
+                                style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px', cursor:'pointer' }}
+                                title={`Click to roll ${rating}d`}
+                              >
+                                <span style={{ fontSize:'11px', color:'#d1d5db', display:'flex', alignItems:'center', gap:'4px' }}>
+                                  <span style={{ fontSize:'10px', opacity:0.9 }}>🎲</span>
                                   {action}
                                 </span>
-                                <div style={{ display:'flex', gap:'2px' }}>
+                                <div style={{ display:'flex', gap:'2px' }} data-dot-edit>
                                   {[1,2,3,4].map(d => {
                                     const filled    = d <= rating;
                                     const isAdvDot  = d > MAX_DOTS_PER_ACTION_CREATION; // dots 3-4 require advancement
                                     return (
                                       <div key={d}
-                                        onClick={() => {
+                                        onClick={(e) => {
+                                          e.stopPropagation();
                                           if (isAdvDot) return; // not clickable during creation
                                           updateActionRating(action, d <= rating ? d - 1 : d);
                                         }}
@@ -1007,9 +1016,18 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                               <div style={{ color:'#eab308', fontWeight:'bold', marginBottom:'2px' }}>
                                 Stress Cost: {diceResult.stressCost}
                               </div>
-                              <div style={{ color:'#d1d5db', fontSize:'11px' }}>
+                              <div style={{ color:'#d1d5db', fontSize:'11px', marginBottom:'6px' }}>
                                 Consequence reduced by 1 level (or fully negated at GM discretion).
                               </div>
+                              <button
+                                onClick={() => {
+                                  const cost = diceResult.stressCost ?? 0;
+                                  setStressFilled((prev) => Math.min(maxStress, prev + cost));
+                                }}
+                                style={{ ...S.btn, background:'#b45309', color:'#fff', fontSize:'11px' }}
+                              >
+                                Apply {diceResult.stressCost} stress
+                              </button>
                             </>
                           )}
                         </div>
