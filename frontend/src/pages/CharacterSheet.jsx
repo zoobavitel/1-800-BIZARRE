@@ -10,7 +10,7 @@ import {
   VICE_OPTIONS,
   DEFAULT_TRAUMA,
 } from '../features/character-sheet/constants/srd';
-import { characterAPI } from '../features/character-sheet';
+import { characterAPI, rollAPI } from '../features/character-sheet';
 
 // ─── ProgressClock ────────────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ const ProgressClock = ({ size = 80, segments = 4, filled = 0, onClick = null, in
 
 // ─── CharacterSheetWrapper ────────────────────────────────────────────────────
 
-const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwitchCharacter, allCharacters = [], campaigns = [], heritages = [] }) => {
+const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwitchCharacter, allCharacters = [], campaigns = [], heritages = [], isGM = false }) => {
   const [activeMode, setActiveMode] = useState('CHARACTER MODE');
   const charCampaign = campaigns?.find((c) => c.id === character?.campaign);
   const activeSessionId = charCampaign?.active_session ?? (typeof charCampaign?.active_session === 'object' ? charCampaign?.active_session?.id : null);
@@ -274,7 +274,17 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const [rollPending, setRollPending] = useState(null);
   const [rollModal, setRollModal] = useState({ position: 'risky', effect: 'standard', push_effect: false, push_dice: false });
   const [rollApiError, setRollApiError] = useState(null);
+  const [sessionRolls, setSessionRolls] = useState([]);
+  const [showPositionEffect, setShowPositionEffect] = useState(false);
   const harmLevel3Used = ((harm?.level3?.[0] ?? '')?.toString?.()?.trim?.() ?? '') !== '';
+
+  useEffect(() => {
+    if (activeSessionId && characterId) {
+      rollAPI.getRolls({ session: activeSessionId, character: characterId }).then(setSessionRolls).catch(() => setSessionRolls([]));
+    } else {
+      setSessionRolls([]);
+    }
+  }, [activeSessionId, characterId]);
 
   const handleRollWithSession = async () => {
     if (!rollPending || !characterId || !activeSessionId) return;
@@ -306,6 +316,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
       }
       if (res.stress_spent) setStressFilled((p) => Math.max(0, (p ?? 0) - res.stress_spent));
       setRollPending(null);
+      rollAPI.getRolls({ session: activeSessionId, character: characterId }).then(setSessionRolls).catch(() => {});
     } catch (e) {
       setRollApiError(e.message);
     }
@@ -817,6 +828,60 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                       <span style={{ color: pcLevel >= 4 ? '#fbbf24' : '#34d399', fontWeight:'bold' }}>Lv {pcLevel}</span>
                     </div>
                   </div>
+
+                  {/* Campaign session context (wanted, NPCs, clocks, dice history) */}
+                  {charCampaign && activeSessionId && (
+                    <div style={{ ...S.card, marginBottom:'14px', borderColor:'#4b5563' }}>
+                      <span style={S.lbl}>CAMPAIGN SESSION</span>
+                      <div style={{ display:'flex', gap:'12px', alignItems:'center', marginBottom:'8px' }}>
+                        <span style={{ fontSize:'11px', color:'#9ca3af' }}>Wanted:</span>
+                        <div style={{ display:'flex', gap:'2px' }}>
+                          {[1,2,3,4,5].map((n) => (
+                            <span key={n} style={{ color: n <= (charCampaign.wanted_stars ?? 0) ? '#fbbf24' : '#4b5563' }}>★</span>
+                          ))}
+                        </div>
+                      </div>
+                      {(charCampaign.showcased_npcs || []).length > 0 && (
+                        <div style={{ marginBottom:'8px' }}>
+                          <span style={{ fontSize:'11px', color:'#9ca3af' }}>Showcased NPCs: </span>
+                          {(charCampaign.showcased_npcs || []).map((n) => (
+                            <span key={n.id} style={{ ...S.tag, background:'#374151', marginRight:'4px' }}>{n.name || n.true_name || 'NPC'}</span>
+                          ))}
+                        </div>
+                      )}
+                      {(charCampaign.progress_clocks || []).length > 0 && (
+                        <div style={{ marginBottom:'8px' }}>
+                          <span style={{ fontSize:'11px', color:'#9ca3af' }}>Clocks: </span>
+                          {(charCampaign.progress_clocks || []).map((clk) => (
+                            <span key={clk.id} style={{ marginRight:'8px', fontSize:'12px' }}>{clk.name} ({clk.filled_segments}/{clk.max_segments})</span>
+                          ))}
+                        </div>
+                      )}
+                      <div>
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'4px' }}>
+                          <span style={{ fontSize:'11px', color:'#9ca3af' }}>Dice history</span>
+                          {isGM && (
+                            <label style={{ fontSize:'11px', cursor:'pointer' }}>
+                              <input type="checkbox" checked={showPositionEffect} onChange={(e) => setShowPositionEffect(e.target.checked)} />
+                              {' '}Position & effect
+                            </label>
+                          )}
+                        </div>
+                        {sessionRolls.length === 0 ? (
+                          <div style={{ fontSize:'11px', color:'#6b7280' }}>No rolls this session.</div>
+                        ) : (
+                          sessionRolls.slice(0, 10).map((r) => (
+                            <div key={r.id} style={{ fontSize:'11px', padding:'4px 0', borderBottom:'1px solid #1f2937' }}>
+                              {r.action_name} · {[].concat(r.results || []).join(', ')} → {r.outcome || ''}
+                              {showPositionEffect && (r.position || r.effect) && (
+                                <span style={{ color:'#6b7280', marginLeft:'6px' }}>{`(${r.position || ''}, ${r.effect || ''})`}</span>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* FIX 1: Action Ratings — creation dot budget */}
                   <div style={{ marginBottom:'14px' }}>

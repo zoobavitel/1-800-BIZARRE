@@ -495,6 +495,80 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
 }
 
 // ---------------------------------------------------------------------------
+// Session Records Modal (view session history: goals, rolls, events)
+// ---------------------------------------------------------------------------
+function SessionRecordsModal({ sessionId, sessionName, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [showPositionEffect, setShowPositionEffect] = useState(false);
+  useEffect(() => {
+    if (!sessionId) return;
+    setLoading(true);
+    sessionAPI.getSession(sessionId).then(setData).catch(() => setData(null)).finally(() => setLoading(false));
+  }, [sessionId]);
+  if (!sessionId) return null;
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={onClose}>
+      <div style={{ background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '20px', maxWidth: '500px', maxHeight: '80vh', overflow: 'auto', width: '90%' }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+          <span style={{ fontWeight: 'bold', color: '#a78bfa' }}>Session: {sessionName || data?.name || 'Records'}</span>
+          <button onClick={onClose} style={{ ...S.btn, background: '#374151', color: '#9ca3af' }}>✕</button>
+        </div>
+        {loading ? (
+          <div style={{ color: '#6b7280' }}>Loading...</div>
+        ) : !data ? (
+          <div style={{ color: '#f87171' }}>Failed to load session records.</div>
+        ) : (
+          <>
+            {data.objective && (
+              <div style={{ marginBottom: '12px' }}>
+                <span style={S.lbl}>Objective</span>
+                <div style={{ fontSize: '12px', color: '#d1d5db' }}>{data.objective}</div>
+              </div>
+            )}
+            {data.proposed_score_target && (
+              <div style={{ marginBottom: '12px' }}>
+                <span style={S.lbl}>Proposed score</span>
+                <div style={{ fontSize: '12px', color: '#d1d5db' }}>{data.proposed_score_target}: {data.proposed_score_description || ''}</div>
+              </div>
+            )}
+            <div style={{ marginBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={S.lbl}>Dice rolls</span>
+                <label style={{ fontSize: '11px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={showPositionEffect} onChange={(e) => setShowPositionEffect(e.target.checked)} />
+                  {' '}Position & effect
+                </label>
+              </div>
+              {(data.rolls || []).length === 0 ? (
+                <div style={{ fontSize: '11px', color: '#6b7280' }}>No rolls.</div>
+              ) : (
+                (data.rolls || []).slice(0, 20).map((r) => (
+                  <div key={r.id} style={{ fontSize: '11px', padding: '4px 0', borderBottom: '1px solid #1f2937' }}>
+                    {r.character_name || r.character} · {r.action_name} · {[].concat(r.results || []).join(', ')} → {r.outcome || ''}
+                    {showPositionEffect && (r.position || r.effect) && (
+                      <span style={{ color: '#6b7280', marginLeft: '6px' }}>{`(${r.position || ''}, ${r.effect || ''})`}</span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+            {(data.events || []).length > 0 && (
+              <div style={{ marginBottom: '10px' }}>
+                <span style={S.lbl}>Events</span>
+                {(data.events || []).length > 0 && (data.events || []).map((e) => (
+                  <div key={e.id} style={{ fontSize: '11px', padding: '4px 0', borderBottom: '1px solid #1f2937' }}>{e.event_type}</div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Session List View
 // ---------------------------------------------------------------------------
 function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
@@ -502,6 +576,7 @@ function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [recordsModalSession, setRecordsModalSession] = useState(null);
 
   useEffect(() => {
     sessionAPI.getSessions(campaign.id).then(setSessions).catch((e) => { setError(e.message); setSessions([]); }).finally(() => setLoading(false));
@@ -537,18 +612,22 @@ function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
             {sessions.map((s) => (
               <div
                 key={s.id}
-                style={{ ...S.card, cursor: 'pointer', marginBottom: '8px' }}
-                onClick={() => onSelectSession(s)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && onSelectSession(s)}
+                style={{ ...S.card, marginBottom: '8px' }}
               >
-                <div style={{ fontWeight: 'bold' }}>{s.name || `Session ${s.id}`}</div>
-                <div style={{ fontSize: '11px', color: '#9ca3af' }}>
-                  {s.session_date ? new Date(s.session_date).toLocaleDateString() : 'N/A'} · {s.status || 'PLANNED'}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1, cursor: 'pointer' }} onClick={() => onSelectSession(s)} role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && onSelectSession(s)}>
+                    <div style={{ fontWeight: 'bold' }}>{s.name || `Session ${s.id}`}</div>
+                    <div style={{ fontSize: '11px', color: '#9ca3af' }}>
+                      {s.session_date ? new Date(s.session_date).toLocaleDateString() : 'N/A'} · {s.status || 'PLANNED'}
+                    </div>
+                  </div>
+                  <button onClick={(e) => { e.stopPropagation(); setRecordsModalSession(s); }} style={{ ...S.btn, fontSize: '10px', padding: '4px 8px' }}>View records</button>
                 </div>
               </div>
             ))}
+          {recordsModalSession && (
+            <SessionRecordsModal sessionId={recordsModalSession.id} sessionName={recordsModalSession.name} onClose={() => setRecordsModalSession(null)} />
+          )}
           </div>
         )}
       </div>

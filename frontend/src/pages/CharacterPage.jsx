@@ -17,6 +17,7 @@ import {
   createDefaultCharacter,
   traumaObjectToIds,
 } from '../features/character-sheet';
+import { useAuth } from '../features/auth';
 import { CharacterSheetWrapper } from './CharacterSheet';
 import { NPCSheet } from './NPCSheet';
 
@@ -131,6 +132,7 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
 // ---------------------------------------------------------------------------
 
 export default function CharacterPage({ initialCharacterId = null }) {
+  const { user } = useAuth();
   const [mode, setMode] = useState(MODES.CHARACTER);
 
   // ── Character list (used by the "Open character…" dropdown) ─────────────
@@ -473,6 +475,7 @@ export default function CharacterPage({ initialCharacterId = null }) {
             heritages={heritages}
             allCharacters={characters}
             campaigns={campaigns}
+            isGM={campaigns?.find((c) => c.id === sheetCharacter?.campaign)?.gm?.id === user?.id}
             onSave={handleSaveCharacter}
             onCreateNew={handleCreateNewCharacterTab}
             onSwitchCharacter={handleSwitchCharacter}
