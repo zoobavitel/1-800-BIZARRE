@@ -287,10 +287,13 @@ export default function CharacterPage({ initialCharacterId = null }) {
         if (saved.id && typeof window !== 'undefined') window.location.hash = `character/${saved.id}`;
       }
       const savedFrontend = transformBackendToFrontend(saved);
+      // Preserve crew from payload: backend has crew as read_only FK, so it returns '' when we send a string.
+      // Without this merge, character.crew becomes '' after save, causing a perceived "change" and save loop.
+      const merged = { ...savedFrontend, crew: payload.crew ?? savedFrontend.crew };
       // #region agent log
-      fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterPage.jsx:287',message:'updateActiveCharTab after save',data:{savedId:savedFrontend?.id},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterPage.jsx:287',message:'updateActiveCharTab after save',data:{savedId:merged?.id,mergedCrew:merged?.crew,savedCrew:savedFrontend?.crew},timestamp:Date.now(),hypothesisId:'crew'})}).catch(()=>{});
       // #endregion
-      updateActiveCharTab(savedFrontend.id, savedFrontend);
+      updateActiveCharTab(merged.id, merged);
       await loadCharacters();
     } catch (err) {
       console.error('Save character failed:', err);

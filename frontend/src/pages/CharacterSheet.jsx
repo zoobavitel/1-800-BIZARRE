@@ -76,6 +76,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const debounceRef = useRef(null);
   const mountedRef  = useRef(false);
   const savingRef   = useRef(false);
+  const lastSavedPayloadRef = useRef(null);
 
   const handleFileSelect = useCallback((e) => {
     const file = e.target.files?.[0];
@@ -104,12 +105,17 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   }, [heritages, character?.heritage]);
 
   // Sync selected benefits/detriments when character changes (e.g. switching tabs)
+  // Only update when content differs to avoid save loop: updateActiveCharTab passes new array refs
+  // after each save; without value comparison we'd trigger setState → auto-save → save → loop.
   useEffect(() => {
     // #region agent log
-    fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterSheet.jsx:106',message:'Character sync effect ran',data:{charId:character?.id,benefitsRef:!!character?.selected_benefits,detrimentsRef:!!character?.selected_detriments},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterSheet.jsx:106',message:'Character sync effect ran',data:{charId:character?.id,benefitsRef:!!character?.selected_benefits,detrimentsRef:!!character?.selected_detriments},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
     // #endregion
-    setSelectedBenefits(Array.isArray(character?.selected_benefits) ? character.selected_benefits : []);
-    setSelectedDetriments(Array.isArray(character?.selected_detriments) ? character.selected_detriments : []);
+    const newBenefits = Array.isArray(character?.selected_benefits) ? character.selected_benefits : [];
+    const newDetriments = Array.isArray(character?.selected_detriments) ? character.selected_detriments : [];
+    const arrEqual = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => v === b[i]);
+    setSelectedBenefits((prev) => (arrEqual(prev, newBenefits) ? prev : newBenefits));
+    setSelectedDetriments((prev) => (arrEqual(prev, newDetriments) ? prev : newDetriments));
   }, [character?.id, character?.selected_benefits, character?.selected_detriments]);
 
   // When heritage changes, reset to required benefits/detriments for the new heritage
@@ -186,6 +192,23 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const [selectedDetriments, setSelectedDetriments] = useState(
     Array.isArray(character?.selected_detriments) ? character.selected_detriments : []
   );
+
+  // Tooltip for benefit/detriment description: { type, id, name, description } or null
+  const [descTooltip, setDescTooltip] = useState(null);
+  const [descTooltipPinned, setDescTooltipPinned] = useState(false); // true when opened by click
+
+  // Close pinned tooltip when clicking outside
+  useEffect(() => {
+    if (!descTooltipPinned || !descTooltip) return;
+    const handleClick = (e) => {
+      if (!e.target.closest('[data-desc-tooltip-trigger]')) {
+        setDescTooltip(null);
+        setDescTooltipPinned(false);
+      }
+    };
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [descTooltipPinned, descTooltip]);
 
   // FIX 6: Level-up modal state
   const [showLevelUp, setShowLevelUp] = useState(false);
@@ -441,13 +464,21 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       if (savingRef.current || !onSave) return;
+      const payload = buildPayload();
+      // Skip save if payload matches last saved (prevents loop from server response overwriting fields)
+      const { lastModified, imageFile: _img, ...rest } = payload;
+      const payloadKey = JSON.stringify(rest);
+      if (lastSavedPayloadRef.current === payloadKey) {
+        return;
+      }
       savingRef.current = true;
       setSaveStatus('saving');
       // #region agent log
-      fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterSheet.jsx:437',message:'onSave invoked (debounce fired)',data:{charId:character?.id},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterSheet.jsx:437',message:'onSave invoked (debounce fired)',data:{charId:character?.id,payloadCrew:payload?.crew,charCrew:character?.crew,skipped:false},timestamp:Date.now(),hypothesisId:'crew'})}).catch(()=>{});
       // #endregion
       try {
-        await onSave(buildPayload());
+        await onSave(payload);
+        lastSavedPayloadRef.current = payloadKey;
         setSaveStatus('saved');
         setTimeout(() => setSaveStatus((s) => s === 'saved' ? null : s), 2000);
       } catch {
@@ -875,10 +906,38 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                                   onChange={() => toggleBenefit(b.id)}
                                   disabled={b.required}
                                 />
-                                <span>
-                                  {b.name}
+                                <span style={{ flex: 1, position: 'relative' }}>
+                                  <span
+                                    data-desc-tooltip-trigger
+                                    style={{ textDecoration: (b.description || '').trim() ? 'underline' : 'none', textDecorationStyle: 'dotted', cursor: (b.description || '').trim() ? 'help' : 'default' }}
+                                    onMouseEnter={() => {
+                                      if ((b.description || '').trim() && !descTooltipPinned) setDescTooltip({ type: 'benefit', id: b.id, name: b.name, description: b.description || '' });
+                                    }}
+                                    onMouseLeave={() => { if (!descTooltipPinned) setDescTooltip(null); }}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      if ((b.description || '').trim()) {
+                                        const isOpen = descTooltip?.type === 'benefit' && descTooltip?.id === b.id;
+                                        setDescTooltip(isOpen ? null : { type: 'benefit', id: b.id, name: b.name, description: b.description || '' });
+                                        setDescTooltipPinned(!isOpen);
+                                      }
+                                    }}
+                                  >
+                                    {b.name}
+                                  </span>
                                   {b.hp_cost != null && b.hp_cost > 0 && <span style={{ color:'#f59e0b' }}> ({b.hp_cost} HP)</span>}
                                   {b.required && <span style={{ color:'#6b7280' }}> (required)</span>}
+                                  {descTooltip?.type === 'benefit' && descTooltip?.id === b.id && (
+                                    <div
+                                      data-desc-tooltip-trigger
+                                      style={{
+                                        position: 'absolute', zIndex: 100, marginTop: '4px', padding: '8px 10px', background: '#1f2937', border: '1px solid #4b5563', borderRadius: '4px', fontSize: '11px', color: '#d1d5db', maxWidth: '280px', lineHeight: 1.4, boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                                      }}
+                                    >
+                                      {descTooltip.description}
+                                    </div>
+                                  )}
                                 </span>
                               </label>
                             ))}
@@ -893,10 +952,38 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                                   onChange={() => toggleDetriment(d.id)}
                                   disabled={d.required}
                                 />
-                                <span>
-                                  {d.name}
+                                <span style={{ flex: 1, position: 'relative' }}>
+                                  <span
+                                    data-desc-tooltip-trigger
+                                    style={{ textDecoration: (d.description || '').trim() ? 'underline' : 'none', textDecorationStyle: 'dotted', cursor: (d.description || '').trim() ? 'help' : 'default' }}
+                                    onMouseEnter={() => {
+                                      if ((d.description || '').trim() && !descTooltipPinned) setDescTooltip({ type: 'detriment', id: d.id, name: d.name, description: d.description || '' });
+                                    }}
+                                    onMouseLeave={() => { if (!descTooltipPinned) setDescTooltip(null); }}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      if ((d.description || '').trim()) {
+                                        const isOpen = descTooltip?.type === 'detriment' && descTooltip?.id === d.id;
+                                        setDescTooltip(isOpen ? null : { type: 'detriment', id: d.id, name: d.name, description: d.description || '' });
+                                        setDescTooltipPinned(!isOpen);
+                                      }
+                                    }}
+                                  >
+                                    {d.name}
+                                  </span>
                                   {d.hp_value != null && d.hp_value > 0 && <span style={{ color:'#34d399' }}> (+{d.hp_value} HP)</span>}
                                   {d.required && <span style={{ color:'#6b7280' }}> (required)</span>}
+                                  {descTooltip?.type === 'detriment' && descTooltip?.id === d.id && (
+                                    <div
+                                      data-desc-tooltip-trigger
+                                      style={{
+                                        position: 'absolute', zIndex: 100, marginTop: '4px', padding: '8px 10px', background: '#1f2937', border: '1px solid #4b5563', borderRadius: '4px', fontSize: '11px', color: '#d1d5db', maxWidth: '280px', lineHeight: 1.4, boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                                      }}
+                                    >
+                                      {descTooltip.description}
+                                    </div>
+                                  )}
                                 </span>
                               </label>
                             ))}

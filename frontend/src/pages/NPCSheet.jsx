@@ -166,6 +166,13 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
   const [role,      setRole]      = useState(npc?.role      || '');
   const [notes,     setNotes]     = useState(npc?.notes     || '');
   const [campaign,  setCampaign]  = useState(npc?.campaign  || '');
+  const [faction,   setFaction]   = useState(npc?.faction ?? npc?.faction_id ?? '');
+
+  useEffect(() => {
+    setFaction(npc?.faction ?? npc?.faction_id ?? '');
+  }, [npc?.id, npc?.faction, npc?.faction_id]);
+
+  const campaignFactions = (campaign && campaigns?.find((c) => c.id == campaign || c.id === campaign?.id))?.factions || [];
 
   // Crew / faction management fields
   const [contacts,     setContacts]     = useState(npc?.contacts     || []);
@@ -269,10 +276,11 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
     conflictClocks, altClocks,
     regularUsed, specialUsed, abilities,
     campaign: campaign || null,
+    faction: faction || null,
     image_url: imageUrl,
     contacts, faction_status: factionStatus, inventory,
     ...(imageFile ? { imageFile } : {}),
-  }), [name, standName, role, notes, stats, conflictClocks, altClocks, regularUsed, specialUsed, abilities, campaign, imageUrl, imageFile, contacts, factionStatus, inventory]);
+  }), [name, standName, role, notes, stats, conflictClocks, altClocks, regularUsed, specialUsed, abilities, campaign, faction, imageUrl, imageFile, contacts, factionStatus, inventory]);
 
   // Debounced auto-save
   useEffect(() => {
@@ -377,7 +385,7 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
               </div>
             </div>
             {/* Fields */}
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr auto', gap: '16px', alignItems: 'end', flex: 1 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr 1fr auto', gap: '16px', alignItems: 'end', flex: 1 }}>
               <div>
                 <span style={S.lbl}>NPC Name / User Name</span>
                 <input style={S.inp} value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Yoshikage Kira" />
@@ -395,6 +403,15 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                 <select style={{ ...S.sel, width: '100%' }} value={campaign} onChange={e => setCampaign(e.target.value)}>
                   <option value="">No Campaign</option>
                   {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <span style={S.lbl}>Crew / Faction</span>
+                <select style={{ ...S.sel, width: '100%' }} value={faction || ''} onChange={e => setFaction(e.target.value ? parseInt(e.target.value, 10) : '')}>
+                  <option value="">— None —</option>
+                  {campaignFactions.map((f) => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
                 </select>
               </div>
               <div style={{ textAlign: 'center', minWidth: '100px' }}>
@@ -765,6 +782,22 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                   {name || 'Unnamed NPC'} — Crew Management
                 </span>
                 {role && <span style={{ background: '#4c1d95', padding: '2px 10px', borderRadius: '4px', fontSize: '11px', color: '#e9d5ff' }}>{role}</span>}
+              </div>
+              <div style={{ marginTop: '8px' }}>
+                <span style={S.lbl}>CREW / FACTION</span>
+                <select
+                  style={S.sel}
+                  value={faction || ''}
+                  onChange={(e) => setFaction(e.target.value ? parseInt(e.target.value, 10) : '')}
+                >
+                  <option value="">— None —</option>
+                  {campaignFactions.map((f) => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
+                <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>
+                  Faction this NPC belongs to (also manageable in campaign management)
+                </div>
               </div>
             </div>
 

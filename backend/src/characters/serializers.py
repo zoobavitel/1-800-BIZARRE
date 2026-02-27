@@ -462,12 +462,6 @@ class RegisterSerializer(serializers.ModelSerializer):
         UserProfile.objects.create(user=user)
         return user
 
-class FactionSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Faction
-        fields = ['id', 'name', 'campaign', 'faction_type', 'notes', 'level', 'hold', 'reputation']
-
-
 class CharacterSummarySerializer(serializers.ModelSerializer):
     heritage_name = serializers.CharField(source='heritage.name', read_only=True, default=None)
     user_id = serializers.IntegerField(source='user.id', read_only=True)
@@ -484,6 +478,14 @@ class NPCSummarySerializer(serializers.ModelSerializer):
     class Meta:
         model = NPC
         fields = ['id', 'name', 'level', 'stand_name', 'playbook', 'heritage_name']
+
+
+class FactionSerializer(serializers.ModelSerializer):
+    npcs = NPCSummarySerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Faction
+        fields = ['id', 'name', 'campaign', 'faction_type', 'notes', 'level', 'hold', 'reputation', 'npcs']
 
 
 class ShowcasedNPCSerializer(serializers.ModelSerializer):
@@ -604,7 +606,7 @@ class NPCSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = NPC
-        fields = ['id', 'name', 'level', 'appearance', 'role', 'weakness', 'need', 'desire', 'rumour', 'secret', 'passion', 'description', 'stand_coin_stats', 'heritage', 'playbook', 'custom_abilities', 'relationships', 'harm_clock_current', 'vulnerability_clock_current', 'armor_charges', 'creator', 'campaign', 'image', 'image_url', 'stand_description', 'stand_appearance', 'stand_manifestation', 'special_traits', 'harm_clock_max', 'special_armor_charges', 'vulnerability_clock_max', 'purveyor', 'notes', 'items', 'contacts', 'faction_status', 'inventory']
+        fields = ['id', 'name', 'level', 'appearance', 'role', 'weakness', 'need', 'desire', 'rumour', 'secret', 'passion', 'description', 'stand_coin_stats', 'heritage', 'playbook', 'custom_abilities', 'relationships', 'harm_clock_current', 'vulnerability_clock_current', 'armor_charges', 'creator', 'campaign', 'faction', 'image', 'image_url', 'stand_description', 'stand_appearance', 'stand_manifestation', 'special_traits', 'harm_clock_max', 'special_armor_charges', 'vulnerability_clock_max', 'purveyor', 'notes', 'items', 'contacts', 'faction_status', 'inventory']
 
     def create(self, validated_data):
         # Set the creator to the current user if not explicitly provided

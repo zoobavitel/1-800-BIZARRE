@@ -202,6 +202,7 @@ class NPC(models.Model):
     armor_charges = models.IntegerField(default=0)
     creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_npcs')
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, null=True, blank=True, related_name='npcs')
+    faction = models.ForeignKey(Faction, on_delete=models.SET_NULL, null=True, blank=True, related_name='npcs')
     image = models.ImageField(upload_to='npc_images/', null=True, blank=True)
     image_url = models.URLField(max_length=500, blank=True, default='')
 

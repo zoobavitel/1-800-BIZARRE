@@ -104,6 +104,7 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
 
   const availableToAssign = myCharacters.filter((ch) => !ch.campaign && ch.id);
   const npcsThatCanBeAdded = allNPCs.filter((n) => !n.campaign);
+  const campaignNPCs = allNPCs.filter((n) => n.campaign === campaign?.id || n.campaign?.id === campaign?.id);
 
   const handleInvite = async () => {
     setInviteError(null);
@@ -176,7 +177,33 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
   };
 
   const startFactionCreate = () => setFactionForm({ name: '', faction_type: '', level: 0, hold: 'weak', reputation: 0, notes: '' });
-  const startFactionEdit = (f) => setFactionForm({ id: f.id, name: f.name, faction_type: f.faction_type || '', level: f.level, hold: f.hold, reputation: f.reputation, notes: f.notes || '' });
+  const startFactionEdit = (f) => setFactionForm({ id: f.id, name: f.name, faction_type: f.faction_type || '', level: f.level, hold: f.hold, reputation: f.reputation, notes: f.notes || '', npcs: f.npcs || [] });
+
+  const [factionAddNpcId, setFactionAddNpcId] = useState('');
+  const handleAddNpcToFaction = async () => {
+    if (!factionAddNpcId || !factionForm?.id) return;
+    setFactionError(null);
+    const npcId = parseInt(factionAddNpcId, 10);
+    const npc = campaignNPCs.find((n) => n.id === npcId);
+    try {
+      await npcAPI.patchNPC(factionAddNpcId, { faction: factionForm.id });
+      setFactionAddNpcId('');
+      setFactionForm((p) => ({ ...p, npcs: [...(p.npcs || []), npc || { id: npcId, name: 'NPC' }].filter((n, i, a) => a.findIndex((x) => x.id === n.id) === i) }));
+      onRefresh();
+    } catch (err) {
+      setFactionError(err.message);
+    }
+  };
+  const handleRemoveNpcFromFaction = async (npcId) => {
+    setFactionError(null);
+    try {
+      await npcAPI.patchNPC(npcId, { faction: null });
+      setFactionForm((p) => ({ ...p, npcs: (p.npcs || []).filter((n) => n.id !== npcId) }));
+      onRefresh();
+    } catch (err) {
+      setFactionError(err.message);
+    }
+  };
 
   const handleFactionSave = async () => {
     setFactionError(null);
@@ -434,6 +461,11 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
                 <span>Hold: {f.hold === 'strong' ? 'Strong' : 'Weak'}</span>
                 <span>Rep: {f.reputation}</span>
               </div>
+              {(f.npcs || []).length > 0 && (
+                <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
+                  NPCs: {(f.npcs || []).map((n) => n.name || n.stand_name || `#${n.id}`).join(', ')}
+                </div>
+              )}
               {f.notes && <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>{f.notes}</div>}
             </div>
           ))}
@@ -476,9 +508,31 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
                   onChange={(e) => setFactionForm((p) => ({ ...p, notes: e.target.value }))}
                 />
               </div>
+              {factionForm.id && (
+                <div style={{ marginBottom: '12px', padding: '8px', background: '#0d1117', borderRadius: '4px', border: '1px solid #374151' }}>
+                  <span style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '6px' }}>NPCs in this faction</span>
+                  {(factionForm.npcs || []).map((n) => (
+                    <div key={n.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', fontSize: '12px' }}>
+                      <span>{n.name || n.stand_name || `NPC ${n.id}`}</span>
+                      <button onClick={() => handleRemoveNpcFromFaction(n.id)} style={{ ...S.btn, fontSize: '10px', padding: '2px 6px', background: '#7f1d1d', color: '#fca5a5' }}>Remove</button>
+                    </div>
+                  ))}
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px', alignItems: 'center' }}>
+                    <select style={{ ...S.select, flex: 1 }} value={factionAddNpcId} onChange={(e) => setFactionAddNpcId(e.target.value)}>
+                      <option value="">Add an NPC...</option>
+                      {campaignNPCs
+                        .filter((n) => !(factionForm.npcs || []).some((fn) => fn.id === n.id))
+                        .map((n) => (
+                          <option key={n.id} value={n.id}>{n.name || n.stand_name || `NPC ${n.id}`}</option>
+                        ))}
+                    </select>
+                    <button onClick={handleAddNpcToFaction} style={S.btnPrimary} disabled={!factionAddNpcId}>Add</button>
+                  </div>
+                </div>
+              )}
               <div style={S.row}>
                 <button onClick={handleFactionSave} style={S.btnPrimary}>Save</button>
-                <button onClick={() => { setFactionForm(null); setFactionError(null); }} style={S.btnGhost}>Cancel</button>
+                <button onClick={() => { setFactionForm(null); setFactionError(null); setFactionAddNpcId(''); }} style={S.btnGhost}>Cancel</button>
               </div>
             </div>
           )}

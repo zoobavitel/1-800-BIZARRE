@@ -18,9 +18,11 @@ class NPCViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff:
-            return NPC.objects.all()
-        return NPC.objects.filter(Q(creator=user) | Q(campaign__gm=user)).distinct()
+        qs = NPC.objects.all() if user.is_staff else NPC.objects.filter(Q(creator=user) | Q(campaign__gm=user)).distinct()
+        campaign_id = self.request.query_params.get('campaign')
+        if campaign_id:
+            qs = qs.filter(campaign_id=campaign_id)
+        return qs
 
     def _user_can_edit_npc_clocks(self, request, npc):
         """Only GM (campaign GM or NPC creator) can tick NPC clocks. Players cannot deal harm to NPCs."""
