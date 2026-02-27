@@ -364,7 +364,6 @@ export default function HamburgerMenu({
 
         {/* ── Footer ── */}
         <div style={styles.footer}>
-          {disabledRulebooksCount} disabled rulebook(s)
         </div>
       </div>
     </>

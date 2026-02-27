@@ -122,29 +122,18 @@ const HomePage = ({ onNavigateToCharacter, onHamburgerClick }) => {
         <div className="header-actions">
           <div className="flex items-center space-x-4">
             <span className="text-gray-300 text-sm">Welcome, {user?.username}</span>
-            {characters.length > 0 && (
-              <select
-                className="bg-gray-700 border border-gray-600 text-gray-200 rounded px-3 py-1.5 text-sm cursor-pointer focus:outline-none focus:ring-1 focus:ring-purple-500"
-                value=""
-                onChange={(e) => {
-                  const id = e.target.value ? parseInt(e.target.value, 10) : null;
-                  if (id != null) handleEditCharacter({ id });
-                  e.target.value = '';
-                }}
-                aria-label="Open character"
-              >
-                <option value="">Open character…</option>
-                {characters.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name || 'Unnamed'}</option>
-                ))}
-              </select>
-            )}
-          <button 
-            onClick={handleCreateCharacter}
-            className="btn-primary"
-          >
-            Create Character
-          </button>
+            <button
+              onClick={() => typeof onNavigateToCharacter === 'function' && onNavigateToCharacter(null)}
+              className="btn-secondary"
+            >
+              Character Options
+            </button>
+            <button 
+              onClick={handleCreateCharacter}
+              className="btn-primary"
+            >
+              Create Character
+            </button>
           <button className="btn-secondary">
             <Settings className="icon" />
           </button>

@@ -26,6 +26,7 @@ const TYPE_COLORS = {
   standard: '#1d4ed8',
   hamon:    '#b45309',
   spin:     '#7c3aed',
+  heritage: '#059669',
 };
 
 const CATEGORY_ORDER = [
@@ -46,6 +47,7 @@ const CATEGORY_LABELS = {
 
 export default function AbilityBrowser() {
   const [abilities, setAbilities] = useState([]);
+  const [heritages, setHeritages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
@@ -61,7 +63,8 @@ export default function AbilityBrowser() {
       referenceAPI.getAbilities().catch(() => []),
       referenceAPI.getHamonAbilities().catch(() => []),
       referenceAPI.getSpinAbilities().catch(() => []),
-    ]).then(([standard, hamon, spin]) => {
+      referenceAPI.getHeritages().catch(() => []),
+    ]).then(([standard, hamon, spin, heritagesData]) => {
       if (cancelled) return;
       const tagged = [
         ...(standard || []).map((a) => ({ ...a, type: a.type || 'standard' })),
@@ -69,6 +72,7 @@ export default function AbilityBrowser() {
         ...(spin || []).map((a) => ({ ...a, type: 'spin' })),
       ];
       setAbilities(tagged);
+      setHeritages(heritagesData || []);
       setLoading(false);
     }).catch((err) => {
       if (!cancelled) {
@@ -81,7 +85,8 @@ export default function AbilityBrowser() {
   }, []);
 
   const filtered = abilities.filter((a) => {
-    if (filter !== 'all' && a.type !== filter) return false;
+    if (filter !== 'all' && filter !== 'heritage' && a.type !== filter) return false;
+    if (filter === 'heritage') return false;
     if (categoryFilter !== 'all' && (a.category || '') !== categoryFilter) return false;
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -92,11 +97,30 @@ export default function AbilityBrowser() {
     return true;
   });
 
+  const filteredHeritages = useMemo(() => {
+    if (filter !== 'heritage') return [];
+    const list = heritages || [];
+    if (!search.trim()) return list;
+    const q = search.toLowerCase();
+    return list.filter((h) => {
+      const name = (h.name || '').toLowerCase();
+      const desc = (h.description || '').toLowerCase();
+      const benefitMatch = (h.benefits || []).some(
+        (b) => (b.name || '').toLowerCase().includes(q) || (b.description || '').toLowerCase().includes(q)
+      );
+      const detrimentMatch = (h.detriments || []).some(
+        (d) => (d.name || '').toLowerCase().includes(q) || (d.description || '').toLowerCase().includes(q)
+      );
+      return name.includes(q) || desc.includes(q) || benefitMatch || detrimentMatch;
+    });
+  }, [heritages, filter, search]);
+
   const counts = {
     all: abilities.length,
     standard: abilities.filter((a) => a.type === 'standard').length,
     hamon: abilities.filter((a) => a.type === 'hamon').length,
     spin: abilities.filter((a) => a.type === 'spin').length,
+    heritage: heritages.length,
   };
 
   const showCategories = filter === 'all' || filter === 'standard';
@@ -139,6 +163,51 @@ export default function AbilityBrowser() {
     </div>
   );
 
+  const renderHeritageCard = (h) => (
+    <div key={`heritage-${h.id}`} style={S.card}>
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
+        <span style={{ fontWeight: 'bold', fontSize: '13px' }}>{h.name}</span>
+        <span style={S.tag(TYPE_COLORS.heritage)}>Heritage</span>
+        <span style={{ fontSize: '11px', color: '#6b7280', marginLeft: '8px' }}>
+          {h.base_hp ?? 0} HP base
+        </span>
+      </div>
+      {h.description && (
+        <div style={{ fontSize: '12px', color: '#9ca3af', lineHeight: '1.5', marginBottom: '10px' }}>{h.description}</div>
+      )}
+      {(h.benefits || []).length > 0 && (
+        <div style={{ marginBottom: '8px' }}>
+          <div style={S.categoryHeader}>Benefits</div>
+          {(h.benefits || []).map((b) => (
+            <div key={b.id} style={{ marginBottom: '6px', paddingLeft: '8px', borderLeft: '2px solid #059669' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                <span style={{ fontWeight: '600', fontSize: '12px' }}>{b.name}</span>
+                <span style={{ fontSize: '10px', color: '#059669' }}>-{b.hp_cost} HP</span>
+                {b.required && <span style={S.tag('#dc2626')}>Required</span>}
+              </div>
+              {b.description && <div style={{ fontSize: '11px', color: '#9ca3af', lineHeight: '1.4' }}>{b.description}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+      {(h.detriments || []).length > 0 && (
+        <div>
+          <div style={S.categoryHeader}>Detriments</div>
+          {(h.detriments || []).map((d) => (
+            <div key={d.id} style={{ marginBottom: '6px', paddingLeft: '8px', borderLeft: '2px solid #7c3aed' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                <span style={{ fontWeight: '600', fontSize: '12px' }}>{d.name}</span>
+                <span style={{ fontSize: '10px', color: '#7c3aed' }}>+{d.hp_value} HP</span>
+                {d.required && <span style={S.tag('#dc2626')}>Required</span>}
+              </div>
+              {d.description && <div style={{ fontSize: '11px', color: '#9ca3af', lineHeight: '1.4' }}>{d.description}</div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div style={S.page}>
       <div style={S.content}>
@@ -146,12 +215,12 @@ export default function AbilityBrowser() {
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '14px' }}>
           <input
             style={S.searchInput}
-            placeholder="Search abilities\u2026"
+            placeholder={filter === 'heritage' ? 'Search heritages…' : 'Search abilities…'}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
           <nav style={{ display: 'flex', gap: '4px' }}>
-            {['all', 'standard', 'hamon', 'spin'].map((t) => (
+            {['all', 'standard', 'hamon', 'spin', 'heritage'].map((t) => (
               <button
                 key={t}
                 onClick={() => { setFilter(t); if (t !== 'all' && t !== 'standard') setCategoryFilter('all'); }}
@@ -208,6 +277,14 @@ export default function AbilityBrowser() {
 
         {loading ? (
           <div style={S.emptyState}>Loading abilities\u2026</div>
+        ) : filter === 'heritage' ? (
+          filteredHeritages.length === 0 ? (
+            <div style={S.emptyState}>
+              {search.trim() ? `No heritages matching "${search}"` : 'No heritages found'}
+            </div>
+          ) : (
+            filteredHeritages.map(renderHeritageCard)
+          )
         ) : filtered.length === 0 ? (
           <div style={S.emptyState}>
             {search.trim() ? `No abilities matching "${search}"` : 'No abilities found'}
@@ -231,7 +308,9 @@ export default function AbilityBrowser() {
         )}
 
         <div style={{ fontSize: '11px', color: '#4b5563', textAlign: 'center', marginTop: '16px' }}>
-          Showing {filtered.length} of {abilities.length} abilities
+          {filter === 'heritage'
+            ? `Showing ${filteredHeritages.length} of ${heritages.length} heritages`
+            : `Showing ${filtered.length} of ${abilities.length} abilities`}
         </div>
       </div>
     </div>
