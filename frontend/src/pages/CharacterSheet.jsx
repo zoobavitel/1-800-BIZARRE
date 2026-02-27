@@ -105,12 +105,18 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
 
   // Sync selected benefits/detriments when character changes (e.g. switching tabs)
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterSheet.jsx:106',message:'Character sync effect ran',data:{charId:character?.id,benefitsRef:!!character?.selected_benefits,detrimentsRef:!!character?.selected_detriments},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     setSelectedBenefits(Array.isArray(character?.selected_benefits) ? character.selected_benefits : []);
     setSelectedDetriments(Array.isArray(character?.selected_detriments) ? character.selected_detriments : []);
   }, [character?.id, character?.selected_benefits, character?.selected_detriments]);
 
   // When heritage changes, reset to required benefits/detriments for the new heritage
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterSheet.jsx:112',message:'Heritage benefits effect ran',data:{heritage:charData.heritage,heritagesLen:heritages?.length},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     if (!charData.heritage || !heritages?.length) return;
     const h = heritages.find((x) => x.id === charData.heritage);
     if (!h?.benefits || !h?.detriments) return;
@@ -428,12 +434,18 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
 
   // Debounced auto-save
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterSheet.jsx:429',message:'Auto-save effect deps changed, scheduling save',data:{mounted:mountedRef.current,charId:character?.id},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     if (!mountedRef.current) { mountedRef.current = true; return; }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       if (savingRef.current || !onSave) return;
       savingRef.current = true;
       setSaveStatus('saving');
+      // #region agent log
+      fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterSheet.jsx:437',message:'onSave invoked (debounce fired)',data:{charId:character?.id},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       try {
         await onSave(buildPayload());
         setSaveStatus('saved');

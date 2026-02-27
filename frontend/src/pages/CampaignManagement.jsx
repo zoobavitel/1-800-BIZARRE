@@ -491,6 +491,99 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
   );
 }
 
+const CLOCK_SEGMENT_OPTIONS = [4, 6, 8, 10, 12];
+const CLOCK_TYPE_OPTIONS = [
+  { value: 'CUSTOM', label: 'Custom' },
+  { value: 'DANGER', label: 'Danger' },
+  { value: 'MISSION', label: 'Mission' },
+  { value: 'RACING', label: 'Racing' },
+  { value: 'LINKED', label: 'Linked' },
+  { value: 'TUG_OF_WAR', label: 'Tug-of-War' },
+  { value: 'PROJECT', label: 'Long-term Project' },
+  { value: 'HEALING', label: 'Healing' },
+  { value: 'NPC_OPPONENT', label: 'NPC Opponent' },
+  { value: 'COUNTDOWN', label: 'Countdown' },
+];
+
+function ClockManager({ clocks, setClocks, campaignId, sessionId, setError }) {
+  const [showCreate, setShowCreate] = useState(false);
+  const [createName, setCreateName] = useState('');
+  const [createSegments, setCreateSegments] = useState(4);
+  const [createType, setCreateType] = useState('CUSTOM');
+  const [creating, setCreating] = useState(false);
+
+  const handleCreate = async () => {
+    setCreating(true);
+    setError(null);
+    try {
+      await progressClockAPI.createProgressClock({
+        campaign: campaignId,
+        session: sessionId,
+        name: createName.trim() || 'New Clock',
+        clock_type: createType,
+        max_segments: createSegments,
+      });
+      const list = await progressClockAPI.getProgressClocks({ campaign: campaignId, session: sessionId });
+      setClocks(list || []);
+      setCreateName('');
+      setCreateSegments(4);
+      setCreateType('CUSTOM');
+      setShowCreate(false);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div style={S.card}>
+      <span style={S.sectionLbl}>Clocks</span>
+      <div style={{ marginBottom: '8px' }}>
+        {!showCreate ? (
+          <button onClick={() => setShowCreate(true)} style={S.btnPrimary}>+ New Clock</button>
+        ) : (
+          <div style={{ background: '#0d1117', padding: '12px', borderRadius: '4px', border: '1px solid #374151' }}>
+            <div style={{ marginBottom: '8px' }}>
+              <span style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Name</span>
+              <input style={S.inp} value={createName} onChange={(e) => setCreateName(e.target.value)} placeholder="Clock name" />
+            </div>
+            <div style={{ marginBottom: '8px' }}>
+              <span style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Segments</span>
+              <select style={S.select} value={createSegments} onChange={(e) => setCreateSegments(parseInt(e.target.value, 10))}>
+                {CLOCK_SEGMENT_OPTIONS.map((n) => (
+                  <option key={n} value={n}>{n} segments</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ marginBottom: '8px' }}>
+              <span style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Type</span>
+              <select style={S.select} value={createType} onChange={(e) => setCreateType(e.target.value)}>
+                {CLOCK_TYPE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button onClick={handleCreate} style={S.btnPrimary} disabled={creating}>{creating ? 'Creating...' : 'Create'}</button>
+              <button onClick={() => { setShowCreate(false); setCreateName(''); }} style={S.btnGhost}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
+      {clocks.map((clk) => (
+        <div key={clk.id} style={{ padding: '8px 0', borderBottom: '1px solid #1f2937', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>{clk.name} ({clk.filled_segments}/{clk.max_segments})</span>
+          <label style={{ fontSize: '11px' }}>
+            <input type="checkbox" checked={clk.visible_to_players} onChange={(e) => progressClockAPI.updateProgressClock(clk.id, { visible_to_players: e.target.checked }).then(() => setClocks((p) => p.map((c) => c.id === clk.id ? { ...c, visible_to_players: e.target.checked } : c)))} />
+            Visible to players
+          </label>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function DiceHistoryRow({ roll, showPositionEffect, onPatch }) {
   const [editing, setEditing] = useState(false);
   const [pos, setPos] = useState(roll.position || 'risky');
@@ -913,21 +1006,7 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
       </div>
 
       {/* Clocks */}
-      <div style={S.card}>
-        <span style={S.sectionLbl}>Clocks</span>
-        <div style={{ marginBottom: '8px' }}>
-          <button onClick={async () => { try { await progressClockAPI.createProgressClock({ campaign: campaign.id, session: session.id, name: 'New Clock', clock_type: 'CUSTOM', max_segments: 4 }); const list = await progressClockAPI.getProgressClocks({ session: session.id }); setClocks(list || []); } catch (e) { setError(e.message); } }} style={S.btnPrimary}>+ New Clock</button>
-        </div>
-        {clocks.map((clk) => (
-          <div key={clk.id} style={{ padding: '8px 0', borderBottom: '1px solid #1f2937', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>{clk.name} ({clk.filled_segments}/{clk.max_segments})</span>
-            <label style={{ fontSize: '11px' }}>
-              <input type="checkbox" checked={clk.visible_to_players} onChange={(e) => progressClockAPI.updateProgressClock(clk.id, { visible_to_players: e.target.checked }).then(() => setClocks((p) => p.map((c) => c.id === clk.id ? { ...c, visible_to_players: e.target.checked } : c)))} />
-              Visible to players
-            </label>
-          </div>
-        ))}
-      </div>
+      <ClockManager clocks={clocks} setClocks={setClocks} campaignId={campaign.id} sessionId={session.id} setError={setError} />
 
       {/* Dice history */}
       <div style={S.card}>

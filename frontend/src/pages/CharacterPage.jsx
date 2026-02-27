@@ -265,6 +265,9 @@ export default function CharacterPage({ initialCharacterId = null }) {
 
   // ── Save character ───────────────────────────────────────────────────────
   const handleSaveCharacter = useCallback(async (payload) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterPage.jsx:267',message:'handleSaveCharacter called',data:{payloadId:payload?.id},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     const frontend = normalizeSheetPayloadToFrontend(payload, traumas);
     let heritageValue = frontend.heritage;
     if (typeof heritageValue === 'string' && heritages.length) {
@@ -284,6 +287,9 @@ export default function CharacterPage({ initialCharacterId = null }) {
         if (saved.id && typeof window !== 'undefined') window.location.hash = `character/${saved.id}`;
       }
       const savedFrontend = transformBackendToFrontend(saved);
+      // #region agent log
+      fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterPage.jsx:287',message:'updateActiveCharTab after save',data:{savedId:savedFrontend?.id},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       updateActiveCharTab(savedFrontend.id, savedFrontend);
       await loadCharacters();
     } catch (err) {
