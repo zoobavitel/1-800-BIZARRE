@@ -153,11 +153,7 @@ const App = () => {
   }, []);
 
   const handleMenuNewCharacter = useCallback(() => {
-    const base = typeof window !== 'undefined'
-      ? `${window.location.origin}${window.location.pathname}`.replace(/\/?$/, '')
-      : '';
-    const url = base ? `${base}#character` : '#character';
-    if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener,noreferrer');
+    handlePageChange('character', { characterId: null });
   }, []);
 
   const toggleMenu = () => setMenuOpen((o) => !o);

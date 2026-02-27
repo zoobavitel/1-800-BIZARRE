@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 
 from ..models import Session, SessionEvent
-from ..serializers import SessionSerializer, SessionEventSerializer
+from ..serializers import SessionSerializer, SessionEventSerializer, SessionRecordsSerializer
 
 
 class IsCampaignGMOrReadOnly(permissions.BasePermission):
@@ -31,6 +31,11 @@ class SessionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsCampaignGMOrReadOnly]
     serializer_class = SessionSerializer
 
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return SessionRecordsSerializer
+        return SessionSerializer
+
     def get_queryset(self):
         # Filter sessions based on user permissions
         user = self.request.user
@@ -42,8 +47,7 @@ class SessionViewSet(viewsets.ModelViewSet):
         ).distinct()
 
     def perform_create(self, serializer):
-        # Set the creator as the current user
-        serializer.save(created_by=self.request.user)
+        serializer.save()
 
     def perform_update(self, serializer):
         # Ensure only the GM can update the session
@@ -111,5 +115,4 @@ class SessionEventViewSet(viewsets.ModelViewSet):
         ).distinct()
 
     def perform_create(self, serializer):
-        # Set the creator as the current user
-        serializer.save(created_by=self.request.user) 
+        serializer.save()

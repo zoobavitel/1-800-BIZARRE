@@ -7,7 +7,7 @@ from .models import (
     CharacterHamonAbility, CharacterSpinAbility,
     CharacterHistory, ExperienceTracker, Session, SessionEvent,
     Claim, CrewPlaybook, CrewSpecialAbility, CrewUpgrade, XPHistory, StressHistory, ChatMessage,
-    Faction
+    Faction, ShowcasedNPC, ProgressClock
 )
 import re
 
@@ -92,6 +92,7 @@ class SessionSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['session_date']
 
+
 class XPHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = XPHistory
@@ -114,15 +115,6 @@ class SessionEventSerializer(serializers.ModelSerializer):
         read_only_fields = ['timestamp']
 
 
-
-class CharacterHistorySerializer(serializers.ModelSerializer):
-    editor = serializers.StringRelatedField()
-
-    class Meta:
-        model = CharacterHistory
-        fields = ['id', 'character', 'editor', 'timestamp', 'changed_fields']
-
-
 class ExperienceTrackerSerializer(serializers.ModelSerializer):
     character = serializers.PrimaryKeyRelatedField(queryset=Character.objects.all())
     trigger_display = serializers.CharField(source='get_trigger_display', read_only=True)
@@ -131,6 +123,35 @@ class ExperienceTrackerSerializer(serializers.ModelSerializer):
         model = ExperienceTracker
         fields = ['id', 'character', 'session_date', 'trigger', 'trigger_display', 'description', 'xp_gained']
         read_only_fields = ['session_date']
+
+
+class SessionRecordsSerializer(serializers.ModelSerializer):
+    """Extended session serializer with events, xp_history, stress_history for session records view."""
+    npcs_involved = serializers.PrimaryKeyRelatedField(many=True, queryset=NPC.objects.all(), required=False)
+    characters_involved = serializers.PrimaryKeyRelatedField(many=True, queryset=Character.objects.all(), required=False)
+    proposed_by = UserSerializer(read_only=True)
+    votes = UserSerializer(many=True, read_only=True)
+    events = SessionEventSerializer(many=True, read_only=True)
+    xp_history = XPHistorySerializer(source='session_xp_history', many=True, read_only=True)
+    stress_history = StressHistorySerializer(source='session_stress_history', many=True, read_only=True)
+    xp_entries = ExperienceTrackerSerializer(source='xp_entries', many=True, read_only=True)
+
+    class Meta:
+        model = Session
+        fields = [
+            'id', 'campaign', 'name', 'session_date', 'description', 'objective',
+            'planned_for_next_session', 'status', 'npcs_involved', 'characters_involved',
+            'proposed_score_target', 'proposed_score_description', 'proposed_by', 'votes',
+            'events', 'xp_history', 'stress_history', 'xp_entries',
+        ]
+
+
+class CharacterHistorySerializer(serializers.ModelSerializer):
+    editor = serializers.StringRelatedField()
+
+    class Meta:
+        model = CharacterHistory
+        fields = ['id', 'character', 'editor', 'timestamp', 'changed_fields']
 
 
 class BenefitSerializer(serializers.ModelSerializer):
@@ -452,6 +473,47 @@ class NPCSummarySerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'level', 'stand_name', 'playbook', 'heritage_name']
 
 
+class ShowcasedNPCSerializer(serializers.ModelSerializer):
+    npc = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ShowcasedNPC
+        fields = ['id', 'campaign', 'npc', 'reveal_items', 'reveal_stand_stats', 'reveal_faction_status']
+
+    def get_npc(self, obj):
+        data = {
+            'id': obj.npc.id,
+            'name': obj.npc.name,
+            'stand_name': obj.npc.stand_name or '',
+            'harm_clock_current': obj.npc.harm_clock_current,
+            'harm_clock_max': obj.npc.harm_clock_max,
+            'vulnerability_clock_current': obj.npc.vulnerability_clock_current,
+            'vulnerability_clock_max': obj.npc.vulnerability_clock_max,
+        }
+        if obj.reveal_items:
+            data['inventory'] = obj.npc.inventory or []
+            data['items'] = obj.npc.items or []
+        if obj.reveal_stand_stats:
+            data['stand_coin_stats'] = obj.npc.stand_coin_stats or {}
+        if obj.reveal_faction_status:
+            data['faction_status'] = obj.npc.faction_status or {}
+        clocks = list(obj.npc.progress_clocks.all().values('id', 'name', 'clock_type', 'max_segments', 'filled_segments', 'completed'))
+        data['progress_clocks'] = clocks
+        return data
+
+
+class ProgressClockSerializer(serializers.ModelSerializer):
+    clock_type_display = serializers.CharField(source='get_clock_type_display', read_only=True)
+
+    class Meta:
+        model = ProgressClock
+        fields = [
+            'id', 'name', 'clock_type', 'clock_type_display', 'max_segments', 'filled_segments',
+            'description', 'campaign', 'crew', 'character', 'faction', 'session', 'npc',
+            'visible_to_players', 'created_at', 'completed'
+        ]
+
+
 class CampaignInvitationSerializer(serializers.ModelSerializer):
     invited_user = UserSerializer(read_only=True)
     invited_by = UserSerializer(read_only=True)
@@ -474,6 +536,12 @@ class CampaignSerializer(serializers.ModelSerializer):
     pending_invitations = serializers.SerializerMethodField()
     is_active = serializers.BooleanField(required=False, default=True)
     created_at = serializers.DateTimeField(read_only=True)
+    active_session = serializers.PrimaryKeyRelatedField(queryset=Session.objects.all(), required=False, allow_null=True)
+    active_session_detail = serializers.SerializerMethodField()
+    sessions = serializers.SerializerMethodField()
+    showcased_npcs = ShowcasedNPCSerializer(many=True, read_only=True)
+    current_scene_type = serializers.ChoiceField(choices=Campaign.SCENE_TYPE_CHOICES, required=False, default='NONE')
+    progress_clocks = serializers.SerializerMethodField()
 
     class Meta:
         model = Campaign
@@ -481,11 +549,35 @@ class CampaignSerializer(serializers.ModelSerializer):
             'id', 'name', 'gm', 'players', 'description', 'wanted_stars',
             'is_active', 'created_at', 'factions', 'campaign_characters',
             'campaign_npcs', 'pending_invitations',
+            'active_session', 'active_session_detail', 'sessions',
+            'showcased_npcs', 'current_scene_type', 'progress_clocks',
         ]
 
     def get_pending_invitations(self, obj):
         invitations = obj.invitations.filter(status='pending')
         return CampaignInvitationSerializer(invitations, many=True).data
+
+    def get_active_session_detail(self, obj):
+        if not obj.active_session_id:
+            return None
+        return {
+            'id': obj.active_session.id,
+            'name': obj.active_session.name,
+            'description': obj.active_session.description,
+            'objective': obj.active_session.objective,
+        }
+
+    def get_sessions(self, obj):
+        sessions = obj.sessions.all().order_by('-session_date')[:50]
+        return [{'id': s.id, 'name': s.name, 'session_date': s.session_date} for s in sessions]
+
+    def get_progress_clocks(self, obj):
+        request = self.context.get('request')
+        is_gm = request and obj.gm_id == request.user.id
+        clocks = obj.progress_clocks.all()
+        if not is_gm and not (request and request.user.is_staff):
+            clocks = clocks.filter(visible_to_players=True)
+        return ProgressClockSerializer(clocks, many=True).data
 
 
 class NPCSerializer(serializers.ModelSerializer):

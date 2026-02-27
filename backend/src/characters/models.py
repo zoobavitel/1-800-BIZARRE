@@ -17,6 +17,13 @@ class Campaign(models.Model):
     created_at = models.DateTimeField(default=timezone.now)
     active_session = models.ForeignKey('Session', on_delete=models.SET_NULL, null=True, blank=True, related_name='active_in_campaign')
 
+    SCENE_TYPE_CHOICES = [
+        ('NONE', 'None'),
+        ('ENTANGLEMENT', 'Entanglement'),
+        ('ALL_OUT_BRAWL', 'All-Out-Brawl'),
+    ]
+    current_scene_type = models.CharField(max_length=20, choices=SCENE_TYPE_CHOICES, default='NONE')
+
     def __str__(self):
         return self.name
 
@@ -281,6 +288,21 @@ class NPC(models.Model):
 
     def __str__(self):
         return f"{self.name} (NPC for {self.campaign.name})"
+
+
+class ShowcasedNPC(models.Model):
+    """NPC showcased as opposition in Entanglement or All-Out-Brawl. GM controls what info players see."""
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='showcased_npcs')
+    npc = models.ForeignKey(NPC, on_delete=models.CASCADE, related_name='showcased_in')
+    reveal_items = models.BooleanField(default=False)
+    reveal_stand_stats = models.BooleanField(default=False)
+    reveal_faction_status = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ('campaign', 'npc')
+
+    def __str__(self):
+        return f"{self.npc.name} in {self.campaign.name}"
 
 
 class Ability(models.Model):
@@ -813,24 +835,33 @@ class ProgressClock(models.Model):
     """Progress clocks for tracking ongoing activities based on SRD."""
     
     CLOCK_TYPE_CHOICES = [
+        ('DANGER', 'Danger'),
+        ('MISSION', 'Mission'),
+        ('RACING', 'Racing'),
+        ('LINKED', 'Linked'),
+        ('TUG_OF_WAR', 'Tug-of-War'),
         ('PROJECT', 'Long-term Project'),
         ('HEALING', 'Healing Clock'),
+        ('NPC_OPPONENT', 'NPC Opponent'),
         ('COUNTDOWN', 'Countdown Clock'),
         ('CUSTOM', 'Custom Clock'),
     ]
     
     name = models.CharField(max_length=100)
     clock_type = models.CharField(max_length=20, choices=CLOCK_TYPE_CHOICES)
-    max_segments = models.IntegerField(default=4, help_text="Total number of segments (4, 6, or 8)")
+    max_segments = models.IntegerField(default=4, help_text="Total number of segments (4, 6, 8, 10, or 12)")
     filled_segments = models.IntegerField(default=0, help_text="Currently filled segments")
     description = models.TextField(blank=True)
     
-    # Can be associated with campaigns, crews, or characters
+    # Can be associated with campaigns, crews, characters, sessions, or NPCs
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
     crew = models.ForeignKey(Crew, on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
     character = models.ForeignKey('Character', on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
     faction = models.ForeignKey(Faction, on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
+    session = models.ForeignKey('Session', on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
+    npc = models.ForeignKey(NPC, on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
     
+    visible_to_players = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     completed = models.BooleanField(default=False)
     

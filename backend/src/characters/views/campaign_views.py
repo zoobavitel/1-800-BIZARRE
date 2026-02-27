@@ -5,8 +5,8 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from ..models import Campaign, CampaignInvitation, Character
-from ..serializers import CampaignSerializer, CampaignInvitationSerializer
+from ..models import Campaign, CampaignInvitation, Character, ShowcasedNPC, NPC
+from ..serializers import CampaignSerializer, CampaignInvitationSerializer, ShowcasedNPCSerializer
 
 
 class CampaignViewSet(viewsets.ModelViewSet):
@@ -132,6 +132,50 @@ class CampaignViewSet(viewsets.ModelViewSet):
         if not remaining and request.user != campaign.gm:
             campaign.players.remove(request.user)
         return Response({'status': f'Character "{character.true_name}" removed from campaign.'})
+
+    @action(detail=True, methods=['post'], url_path='showcase-npc')
+    def showcase_npc(self, request, pk=None):
+        """Add an NPC to the campaign showcase (opposition in Entanglement/All-Out-Brawl)."""
+        campaign = self.get_object()
+        if campaign.gm != request.user and not request.user.is_staff:
+            return Response({'error': 'Only the GM can add NPCs to the showcase.'}, status=status.HTTP_403_FORBIDDEN)
+
+        npc_id = request.data.get('npc_id')
+        if not npc_id:
+            return Response({'error': 'npc_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            npc = NPC.objects.get(id=npc_id, campaign=campaign)
+        except NPC.DoesNotExist:
+            return Response({'error': 'NPC not found or not in this campaign.'}, status=status.HTTP_404_NOT_FOUND)
+
+        showcased, created = ShowcasedNPC.objects.get_or_create(campaign=campaign, npc=npc)
+        return Response(ShowcasedNPCSerializer(showcased).data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+class ShowcasedNPCViewSet(viewsets.ModelViewSet):
+    """CRUD for showcased NPCs - GM can update reveal flags and remove from showcase."""
+    permission_classes = [IsAuthenticated]
+    serializer_class = ShowcasedNPCSerializer
+    http_method_names = ['get', 'patch', 'delete', 'head', 'options']
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff:
+            return ShowcasedNPC.objects.all()
+        return ShowcasedNPC.objects.filter(campaign__gm=user)
+
+    def partial_update(self, request, *args, **kwargs):
+        obj = self.get_object()
+        if obj.campaign.gm != request.user and not request.user.is_staff:
+            return Response({'error': 'Only the GM can update showcased NPCs.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        obj = self.get_object()
+        if obj.campaign.gm != request.user and not request.user.is_staff:
+            return Response({'error': 'Only the GM can remove showcased NPCs.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
 
 
 class CampaignInvitationViewSet(viewsets.GenericViewSet):

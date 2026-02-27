@@ -10,13 +10,15 @@ from django.conf.urls.static import static
 from characters.views import (
     UserProfileViewSet, HeritageViewSet, ViceViewSet, AbilityViewSet,
     StandViewSet, CharacterViewSet,
-    CampaignViewSet, CampaignInvitationViewSet, FactionViewSet, NPCViewSet, CrewViewSet,
+    CampaignViewSet, CampaignInvitationViewSet, ShowcasedNPCViewSet,
+    FactionViewSet, NPCViewSet, CrewViewSet,
     TraumaViewSet, CharacterHistoryViewSet, ExperienceTrackerViewSet, SessionViewSet, SessionEventViewSet,
     home, RegisterView, StandAbilityViewSet, LoginView, CurrentUserView,
     HamonAbilityViewSet, SpinAbilityViewSet, global_search,
     get_available_playbook_abilities, api_documentation,
     XPHistoryViewSet, StressHistoryViewSet, ChatMessageViewSet,
-    ClaimViewSet, CrewPlaybookViewSet, CrewSpecialAbilityViewSet, CrewUpgradeViewSet
+    ClaimViewSet, CrewPlaybookViewSet, CrewSpecialAbilityViewSet, CrewUpgradeViewSet,
+    ProgressClockViewSet
 )
 
 
@@ -36,6 +38,8 @@ router.register(r'sessions', SessionViewSet, basename='sessions')
 router.register(r'session-events', SessionEventViewSet)
 router.register(r'campaigns', CampaignViewSet)
 router.register(r'campaign-invitations', CampaignInvitationViewSet, basename='campaign-invitations')
+router.register(r'showcased-npcs', ShowcasedNPCViewSet, basename='showcased-npcs')
+router.register(r'progress-clocks', ProgressClockViewSet, basename='progress-clocks')
 router.register(r'factions', FactionViewSet)
 router.register(r'npcs', NPCViewSet)
 router.register(r'crews', CrewViewSet)

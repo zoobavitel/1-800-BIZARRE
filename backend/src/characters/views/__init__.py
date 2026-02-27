@@ -1,6 +1,6 @@
 # Import all view classes for backward compatibility
 from .character_views import CharacterViewSet
-from .campaign_views import CampaignViewSet, CampaignInvitationViewSet
+from .campaign_views import CampaignViewSet, CampaignInvitationViewSet, ShowcasedNPCViewSet
 from .faction_views import FactionViewSet
 from .npc_views import NPCViewSet
 from .crew_views import CrewViewSet
@@ -9,7 +9,7 @@ from .auth_views import RegisterView, LoginView, CurrentUserView, UserProfileVie
 from .gameplay_views import (
     ClaimViewSet, CrewSpecialAbilityViewSet, CrewPlaybookViewSet,
     CrewUpgradeViewSet, XPHistoryViewSet, StressHistoryViewSet,
-    ChatMessageViewSet
+    ChatMessageViewSet, ProgressClockViewSet
 )
 from .reference_views import (
     HeritageViewSet, ViceViewSet, AbilityViewSet, StandViewSet,
@@ -22,11 +22,12 @@ from .utility_views import (
 )
 
 __all__ = [
-    'CharacterViewSet', 'CampaignViewSet', 'CampaignInvitationViewSet', 'FactionViewSet', 'NPCViewSet', 'CrewViewSet',
+    'CharacterViewSet', 'CampaignViewSet', 'CampaignInvitationViewSet', 'ShowcasedNPCViewSet',
+    'FactionViewSet', 'NPCViewSet', 'CrewViewSet',
     'SessionViewSet', 'SessionEventViewSet', 'RegisterView', 'LoginView', 'CurrentUserView',
     'UserProfileViewSet', 'ClaimViewSet', 'CrewSpecialAbilityViewSet',
     'CrewPlaybookViewSet', 'CrewUpgradeViewSet', 'XPHistoryViewSet',
-    'StressHistoryViewSet', 'ChatMessageViewSet', 'HeritageViewSet',
+    'StressHistoryViewSet', 'ChatMessageViewSet', 'ProgressClockViewSet', 'HeritageViewSet',
     'ViceViewSet', 'AbilityViewSet', 'StandViewSet', 'StandAbilityViewSet',
     'HamonAbilityViewSet', 'SpinAbilityViewSet', 'TraumaViewSet',
     'CharacterHistoryViewSet', 'ExperienceTrackerViewSet',
