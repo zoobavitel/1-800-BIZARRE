@@ -222,7 +222,7 @@ const HomePage = ({ onNavigateToCharacter, onNavigateToCharacterOptions, onNavig
                     <div className="character-info">
                       <h4 className="character-name">{character.name}</h4>
                       <p className="stand-name">「{character.standName}」</p>
-                      <p className="character-heritage">{character.heritage}</p>
+                      <p className="character-heritage">{character.heritageName ?? character.heritage ?? '—'}</p>
                       <p className="character-background">{character.background}</p>
                     </div>
                     <div className="character-actions">

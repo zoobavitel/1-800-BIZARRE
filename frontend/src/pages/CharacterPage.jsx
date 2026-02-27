@@ -267,6 +267,9 @@ export default function CharacterPage({ initialCharacterId = null }) {
       const match = heritages.find((h) => (h.name || '').toLowerCase() === (heritageValue || '').toLowerCase());
       if (match) heritageValue = match.id;
     }
+    if ((heritageValue == null || heritageValue === '') && heritages.length) {
+      heritageValue = heritages[0].id;
+    }
     const toSend = transformFrontendToBackend({ ...frontend, heritage: heritageValue });
     try {
       let saved;
@@ -442,24 +445,6 @@ export default function CharacterPage({ initialCharacterId = null }) {
             <span style={{ fontSize: '12px', color: '#fca5a5' }}>{charactersError}</span>
           )}
 
-          {mode === MODES.CHARACTER && characters.length > 0 && (
-            <select
-              style={{ background: '#1f2937', color: '#9ca3af', border: '1px solid #4b5563', padding: '4px 8px', fontSize: '11px', fontFamily: 'monospace', borderRadius: '4px' }}
-              value=""
-              onChange={(e) => {
-                const char = characters.find((c) => String(c.id) === e.target.value);
-                if (char) openCharacterInTab(char);
-              }}
-            >
-              <option value="">Open character...</option>
-              {[...characters]
-                .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-                .map((c) => (
-                  <option key={c.id} value={String(c.id)}>{c.name || 'Unnamed'}</option>
-                ))}
-            </select>
-          )}
-
           {mode === MODES.NPC && npcs.length > 0 && (
             <select
               style={{ background: '#1f2937', color: '#9ca3af', border: '1px solid #4b5563', padding: '4px 8px', fontSize: '11px', fontFamily: 'monospace', borderRadius: '4px' }}
@@ -485,6 +470,7 @@ export default function CharacterPage({ initialCharacterId = null }) {
           <CharacterSheetWrapper
             key={activeCharTab?.tabId ?? 'new'}
             character={sheetCharacter}
+            heritages={heritages}
             allCharacters={characters}
             campaigns={campaigns}
             onSave={handleSaveCharacter}

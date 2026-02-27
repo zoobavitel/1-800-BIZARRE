@@ -10,6 +10,7 @@ import {
   VICE_OPTIONS,
   DEFAULT_TRAUMA,
 } from '../features/character-sheet/constants/srd';
+import { characterAPI } from '../features/character-sheet';
 
 // ─── ProgressClock ────────────────────────────────────────────────────────────
 
@@ -39,13 +40,24 @@ const ProgressClock = ({ size = 80, segments = 4, filled = 0, onClick = null, in
 
 // ─── CharacterSheetWrapper ────────────────────────────────────────────────────
 
-const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwitchCharacter, allCharacters = [], campaigns = [] }) => {
+const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwitchCharacter, allCharacters = [], campaigns = [], heritages = [] }) => {
   const [activeMode, setActiveMode] = useState('CHARACTER MODE');
+  const charCampaign = campaigns?.find((c) => c.id === character?.campaign);
+  const activeSessionId = charCampaign?.active_session ?? (typeof charCampaign?.active_session === 'object' ? charCampaign?.active_session?.id : null);
+  const characterId = character?.id;
+
+  // Resolve heritage: backend sends ID; createDefaultCharacter sends 'Human' string
+  const resolveHeritageId = (h) => {
+    if (h == null || h === '') return heritages[0]?.id ?? null;
+    if (typeof h === 'number') return heritages.some(x => x.id === h) ? h : heritages[0]?.id ?? null;
+    const match = heritages.find(x => (x.name || '').toLowerCase() === String(h).toLowerCase());
+    return match?.id ?? heritages[0]?.id ?? null;
+  };
 
   // Identity
   const [charData, setCharData] = useState({
     name: character?.name || '', standName: character?.standName || '',
-    heritage: character?.heritage || 'Human', background: character?.background || '',
+    heritage: resolveHeritageId(character?.heritage), background: character?.background || '',
     look: character?.look || '', vice: character?.vice || '', crew: character?.crew || '',
   });
 
@@ -79,6 +91,16 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
       setImageFile(null);
     }
   }, []);
+
+  // Sync heritage when heritages load (e.g. new char has heritage: 'Human' string)
+  useEffect(() => {
+    if (!heritages?.length) return;
+    if (typeof charData.heritage === 'number') return;
+    const resolved = resolveHeritageId(character?.heritage);
+    if (resolved != null && resolved !== charData.heritage) {
+      setCharData(prev => ({ ...prev, heritage: resolved }));
+    }
+  }, [heritages, character?.heritage]);
 
   // FIX 2+3: Stand Coin Stats — F(0)..A(4); S is GM-only
   const [standStats, setStandStats] = useState(character?.standStats || {
@@ -248,8 +270,55 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     advanceActionDot(minorAdvanceAction);
   };
 
+  // Roll modal for campaign/session context (position, effect, push)
+  const [rollPending, setRollPending] = useState(null);
+  const [rollModal, setRollModal] = useState({ position: 'risky', effect: 'standard', push_effect: false, push_dice: false });
+  const [rollApiError, setRollApiError] = useState(null);
+  const harmLevel3Used = ((harm?.level3?.[0] ?? '')?.toString?.()?.trim?.() ?? '') !== '';
+
+  const handleRollWithSession = async () => {
+    if (!rollPending || !characterId || !activeSessionId) return;
+    setRollApiError(null);
+    try {
+      const res = await characterAPI.rollAction(characterId, {
+        action: rollPending.actionName.toLowerCase(),
+        session_id: activeSessionId,
+        position: rollModal.position,
+        effect: rollModal.effect,
+        push_effect: rollModal.push_effect,
+        push_dice: rollModal.push_dice,
+      });
+      setDiceResult({
+        action: rollPending.actionName,
+        dice: res.dice_results || [],
+        result: res.highest ?? Math.max(...(res.dice_results || [0])),
+        outcome: (res.outcome || '').replace(/_/g, ' '),
+        special: res.dice_results?.filter((d) => d === 6).length >= 2 ? `Critical! (${res.dice_results?.filter((d) => d === 6).length} sixes)` : '',
+        isResistance: false,
+        stressCost: res.stress_spent || null,
+        zeroDice: (res.dice_results || []).length === 0,
+        isDesperateAction: rollPending.isDesperateAction,
+        isCritical: (res.dice_results || []).filter((d) => d === 6).length >= 2,
+      });
+      if (rollPending.isDesperateAction) {
+        const attr = ACTION_ATTR[rollPending.actionName];
+        if (attr) setXp((p) => ({ ...p, [attr]: Math.min((p[attr] || 0) + 1, 5) }));
+      }
+      if (res.stress_spent) setStressFilled((p) => Math.max(0, (p ?? 0) - res.stress_spent));
+      setRollPending(null);
+    } catch (e) {
+      setRollApiError(e.message);
+    }
+  };
+
   // FIX 8: Resistance critical → stressCost = -1 (clear 1 stress, pay none)
   const rollDice = (actionName, diceCount, isResistance = false, isDesperateAction = false) => {
+    if (activeSessionId && characterId && !isResistance) {
+      setRollPending({ actionName, diceCount, isDesperateAction });
+      setRollModal({ position: 'risky', effect: 'standard', push_effect: false, push_dice: false });
+      setRollApiError(null);
+      return;
+    }
     let dice, highest, sixes, isCritical, outcome;
 
     if (diceCount === 0) {
@@ -392,25 +461,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                   </div>
                   <div style={{ fontSize:'9px', color:'#4b5563', marginTop:'1px' }}>{totalSpentXP} XP spent</div>
                 </div>
-                {(allCharacters.length >= 1 || charData?.id == null) && (
-                  <select
-                    style={S.sel}
-                    value={charData?.id != null ? charData.id : 'new'}
-                    onChange={e => {
-                      const val = e.target.value;
-                      if (val === 'new' && onSwitchCharacter) {
-                        onSwitchCharacter(null);
-                    return;
-                      }
-                      const c = allCharacters.find(ch => ch.id === parseInt(val, 10));
-                      if (c && onSwitchCharacter) onSwitchCharacter(c);
-                    }}
-                  >
-                    <option value="new">— New character —</option>
-                    {allCharacters.map(c => <option key={c.id} value={c.id}>{c.name || 'Unnamed'}</option>)}
-                  </select>
-                )}
-                {onCreateNew && (
+                 {onCreateNew && (
                   <button onClick={onCreateNew} style={{ ...S.btn, background:'#16a34a', color:'#fff' }}>+ New Character</button>
                 )}
               </div>
@@ -457,7 +508,25 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                         <input style={S.inp} value={charData.look} onChange={e => setCharData(p => ({ ...p, look: e.target.value }))} placeholder="Appearance and style" />
                       </div>
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px', marginTop:'8px' }}>
-                        <div><span style={S.lbl}>HERITAGE</span><input style={S.inp} value={charData.heritage} onChange={e => setCharData(p => ({ ...p, heritage: e.target.value }))} placeholder="Heritage" /></div>
+                        <div>
+                          <span style={S.lbl}>HERITAGE</span>
+                          <select
+                            style={{ ...S.sel, width:'100%' }}
+                            value={charData.heritage ?? ''}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setCharData(p => ({ ...p, heritage: val ? parseInt(val, 10) : null }));
+                            }}
+                          >
+                            {heritages.length === 0 ? (
+                              <option value="">Loading...</option>
+                            ) : (
+                              heritages.map(h => (
+                                <option key={h.id} value={h.id}>{h.name}</option>
+                              ))
+                            )}
+                          </select>
+                        </div>
                         <div><span style={S.lbl}>BACKGROUND</span><input style={S.inp} value={charData.background} onChange={e => setCharData(p => ({ ...p, background: e.target.value }))} placeholder="Background" /></div>
                         <div>
                           <span style={S.lbl}>CAMPAIGN</span>
@@ -897,6 +966,57 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     </div>
                   )}
 
+                  {/* Roll modal (position/effect/push) when in campaign session */}
+                  {rollPending && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+                      <div style={{ background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '20px', maxWidth: '360px', width: '90%' }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: '12px', color: '#a78bfa' }}>
+                          {rollPending.actionName} — Set Position & Effect
+                        </div>
+                        {harmLevel3Used && !rollModal.push_effect && !rollModal.push_dice && (
+                          <div style={{ background: '#7f1d1d', border: '1px solid #b91c1c', padding: '8px', borderRadius: '4px', marginBottom: '12px', fontSize: '11px', color: '#fca5a5' }}>
+                            Incapacitated (Level 3 harm). You must push yourself to act (2 stress for +1 effect or +1d).
+                          </div>
+                        )}
+                        <div style={{ marginBottom: '10px' }}>
+                          <span style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Position</span>
+                          <select style={S.sel} value={rollModal.position} onChange={(e) => setRollModal((p) => ({ ...p, position: e.target.value }))}>
+                            <option value="controlled">Controlled</option>
+                            <option value="risky">Risky</option>
+                            <option value="desperate">Desperate</option>
+                          </select>
+                        </div>
+                        <div style={{ marginBottom: '10px' }}>
+                          <span style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Effect</span>
+                          <select style={S.sel} value={rollModal.effect} onChange={(e) => setRollModal((p) => ({ ...p, effect: e.target.value }))}>
+                            <option value="limited">Limited (+1 tick)</option>
+                            <option value="standard">Standard (+2 ticks)</option>
+                            <option value="greater">Greater (+3 ticks)</option>
+                          </select>
+                        </div>
+                        <div style={{ marginBottom: '12px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer' }}>
+                            <input type="checkbox" checked={rollModal.push_effect} onChange={(e) => setRollModal((p) => ({ ...p, push_effect: e.target.checked }))} />
+                            Push for +1 effect (2 stress)
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', marginTop: '4px' }}>
+                            <input type="checkbox" checked={rollModal.push_dice} onChange={(e) => setRollModal((p) => ({ ...p, push_dice: e.target.checked }))} />
+                            Push for +1d (2 stress)
+                          </label>
+                        </div>
+                        {rollApiError && <div style={{ color: '#f87171', fontSize: '11px', marginBottom: '8px' }}>{rollApiError}</div>}
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button onClick={handleRollWithSession} disabled={harmLevel3Used && !rollModal.push_effect && !rollModal.push_dice} style={{ ...S.btn, background: '#7c3aed', color: '#fff' }}>
+                            Roll
+                          </button>
+                          <button onClick={() => { setRollPending(null); setRollApiError(null); }} style={S.btn}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Abilities */}
                   <div style={{ marginBottom:'14px' }}>
                     <span style={S.lbl}>ABILITIES</span>
@@ -921,13 +1041,6 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                         style={{ ...S.btn, background:'#16a34a', color:'#fff', fontSize:'11px' }}>
                         + Custom
                       </button>
-                      {playbook !== 'Stand' && (
-                        <button
-                          onClick={() => { const n = prompt(`${playbook} playbook ability name:`); if (n) setAbilities(p => [...p, { id: Date.now(), name: n, type: playbook.toLowerCase() }]); }}
-                          style={{ ...S.btn, background:'#7c3aed', color:'#fff', fontSize:'11px' }}>
-                          + {playbook} Playbook
-                        </button>
-                      )}
                     </div>
                   </div>
 

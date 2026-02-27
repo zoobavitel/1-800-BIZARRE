@@ -162,6 +162,10 @@ export const campaignAPI = {
     method: 'PUT',
     body: JSON.stringify(campaignData),
   }),
+  patchCampaign: (id, campaignData) => apiRequest(`/campaigns/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(campaignData),
+  }),
   invitePlayer: (id, username) => apiRequest(`/campaigns/${id}/invite/`, {
     method: 'POST',
     body: JSON.stringify({ username }),
@@ -216,6 +220,11 @@ export const crewAPI = {
   // Update crew
   updateCrew: (id, crewData) => apiRequest(`/crews/${id}/`, {
     method: 'PUT',
+    body: JSON.stringify(crewData),
+  }),
+  // Partial update crew (e.g. coin only)
+  patchCrew: (id, crewData) => apiRequest(`/crews/${id}/`, {
+    method: 'PATCH',
     body: JSON.stringify(crewData),
   }),
 };
@@ -296,6 +305,42 @@ export const sessionAPI = {
     method: 'PUT',
     body: JSON.stringify(sessionData),
   }),
+  patchSession: (id, sessionData) => apiRequest(`/sessions/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(sessionData),
+  }),
+};
+
+// Progress clock API (GM clocks for campaigns/sessions)
+export const progressClockAPI = {
+  getProgressClocks: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return apiRequest(`/progress-clocks/${qs ? '?' + qs : ''}`);
+  },
+  createProgressClock: (data) => apiRequest('/progress-clocks/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  updateProgressClock: (id, data) => apiRequest(`/progress-clocks/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }),
+  deleteProgressClock: (id) => apiRequest(`/progress-clocks/${id}/`, {
+    method: 'DELETE',
+  }),
+};
+
+// Roll API (dice history; GM can PATCH position/effect)
+export const rollAPI = {
+  getRolls: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return apiRequest(`/rolls/${qs ? '?' + qs : ''}`);
+  },
+  getRoll: (id) => apiRequest(`/rolls/${id}/`),
+  patchRoll: (id, data) => apiRequest(`/rolls/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }),
 };
 
 // Global search
@@ -334,7 +379,8 @@ export const transformBackendToFrontend = (backendCharacter) => {
     id: backendCharacter.id,
     name: backendCharacter.true_name || '',
     standName: backendCharacter.stand_name || '',
-    heritage: backendCharacter.heritage?.name || 'Human',
+    heritage: backendCharacter.heritage ?? null,
+    heritageName: backendCharacter.heritage_details?.name || null,
     background: backendCharacter.background_note || '',
     look: backendCharacter.appearance || '',
     vice: backendCharacter.vice?.name || '',

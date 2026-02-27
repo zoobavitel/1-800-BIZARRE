@@ -1061,3 +1061,55 @@ class ChatMessage(models.Model):
     def __str__(self):
         return f"[{self.timestamp.strftime('%H:%M')}] {self.sender.username}: {self.message[:50]}..."
 
+
+class Roll(models.Model):
+    """Dice roll record with position and effect for session/dice history."""
+    ROLL_TYPE_CHOICES = [
+        ('ACTION', 'Action Roll'),
+        ('RESISTANCE', 'Resistance Roll'),
+        ('FORTUNE', 'Fortune Roll'),
+        ('CLEAR_STRESS', 'Clear Stress Roll'),
+        ('OTHER', 'Other'),
+    ]
+    POSITION_CHOICES = [
+        ('controlled', 'Controlled'),
+        ('risky', 'Risky'),
+        ('desperate', 'Desperate'),
+    ]
+    EFFECT_CHOICES = [
+        ('limited', 'Limited'),
+        ('standard', 'Standard'),
+        ('greater', 'Greater'),
+    ]
+    OUTCOME_CHOICES = [
+        ('CRITICAL_SUCCESS', 'Critical Success'),
+        ('FULL_SUCCESS', 'Full Success'),
+        ('PARTIAL_SUCCESS', 'Partial Success'),
+        ('FAILURE', 'Failure'),
+        ('BOTCH', 'Botch'),
+    ]
+
+    character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='rolls')
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='rolls')
+    roll_type = models.CharField(max_length=20, choices=ROLL_TYPE_CHOICES, default='ACTION')
+    action_name = models.CharField(max_length=50, blank=True)
+    position = models.CharField(max_length=20, choices=POSITION_CHOICES, default='risky')
+    effect = models.CharField(max_length=20, choices=EFFECT_CHOICES, default='standard')
+    dice_pool = models.IntegerField(default=0)
+    results = models.JSONField(default=list, help_text='List of dice results')
+    outcome = models.CharField(max_length=20, choices=OUTCOME_CHOICES)
+    description = models.TextField(blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.character.true_name} - {self.action_name} ({self.outcome})"
+
+
+class RollHistory(models.Model):
+    """Links Roll to Campaign for campaign-level roll history."""
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='roll_history')
+    roll = models.OneToOneField(Roll, on_delete=models.CASCADE, related_name='history_entry')
+
+    class Meta:
+        verbose_name_plural = 'Roll histories'
+

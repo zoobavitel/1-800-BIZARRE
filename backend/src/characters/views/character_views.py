@@ -1,5 +1,6 @@
 from django.shortcuts import render
 from django.http import JsonResponse
+from django.db import models
 from rest_framework import viewsets, status, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -9,7 +10,8 @@ from django.db import transaction
 from django.core.exceptions import PermissionDenied
 import json
 
-from ..models import Character
+import random
+from ..models import Character, Session, Roll, RollHistory
 from ..serializers import CharacterSerializer
 
 
@@ -20,11 +22,13 @@ class CharacterViewSet(viewsets.ModelViewSet):
     parser_classes = (JSONParser, MultiPartParser, FormParser)
 
     def get_queryset(self):
-        # Filter characters based on user permissions
+        # Filter: own characters, or characters in campaigns where user is GM
         user = self.request.user
         if user.is_staff:
             return Character.objects.all()
-        return Character.objects.filter(user=user)
+        return Character.objects.filter(
+            models.Q(user=user) | models.Q(campaign__gm=user)
+        ).distinct()
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -93,49 +97,147 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='roll-action')
     def roll_action(self, request, pk=None):
-        """Roll dice for a character action."""
+        """Roll dice for a character action. Supports position, effect, push (stress), and persists to Roll when session_id provided."""
         character = self.get_object()
         action_name = request.data.get('action')
-        position = request.data.get('position', 'controlled')
-        effect = request.data.get('effect', 'standard')
-        
-        if not action_name:
-            return Response(
-                {'error': 'Action name is required'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Get action rating (simplified - you'd implement actual dice rolling logic)
-        action_rating = getattr(character, action_name.lower(), 0)
-        
-        # Simulate dice roll (replace with actual dice rolling logic)
-        import random
-        dice_results = [random.randint(1, 6) for _ in range(action_rating)]
-        highest_result = max(dice_results) if dice_results else 0
-        
-        # Determine outcome based on position and effect
-        outcome = self._determine_outcome(highest_result, position, effect)
-        
+        position = (request.data.get('position') or 'risky').lower()
+        effect = (request.data.get('effect') or 'standard').lower()
+        session_id = request.data.get('session_id')
+        push_effect = request.data.get('push_effect', False)
+        push_dice = request.data.get('push_dice', False)
+        roll_type = request.data.get('roll_type', 'ACTION')
+
+        # Normalize effect: 'great' -> 'greater'
+        if effect == 'great':
+            effect = 'greater'
+        if position not in ('controlled', 'risky', 'desperate'):
+            position = 'risky'
+        if effect not in ('limited', 'standard', 'greater'):
+            effect = 'standard'
+
+        # Fortune roll: GM sets dice_pool directly; no action/incapacitated/push
+        if roll_type.upper() == 'FORTUNE':
+            action_name = action_name or 'Fortune'
+            dice_pool = max(1, min(6, int(request.data.get('dice_pool', 2))))
+            stress_cost = 0
+            action_rating = 0
+            attribute_dice = 0
+        else:
+            if not action_name:
+                return Response({'error': 'Action name is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Incapacitated (level 3 harm): must push to act
+            incapacitated = getattr(character, 'harm_level3_used', False)
+            if incapacitated and not (push_effect or push_dice):
+                return Response(
+                    {'error': 'Incapacitated (level 3 harm). You must push yourself to take an action (2 stress for +1 effect or +1d).'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Push costs 2 stress each
+            stress_cost = 0
+            if push_effect:
+                stress_cost += 2
+            if push_dice:
+                stress_cost += 2
+            current_stress = getattr(character, 'stress', 0) or 0
+            if stress_cost > current_stress:
+                return Response(
+                    {'error': f'Not enough stress. Push costs {stress_cost} stress, you have {current_stress}.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Apply push: +1 effect tier
+            effect_order = ['limited', 'standard', 'greater']
+            if push_effect and effect in effect_order:
+                idx = effect_order.index(effect)
+                if idx < len(effect_order) - 1:
+                    effect = effect_order[idx + 1]
+
+        # Get action rating from action_dots (flat or nested) - skip for FORTUNE
+        if roll_type.upper() != 'FORTUNE':
+            action_dots = character.action_dots or {}
+            action_rating = 0
+            if isinstance(action_dots.get('insight'), dict):
+                for group in action_dots.values():
+                    if isinstance(group, dict) and action_name.lower() in group:
+                        action_rating = group.get(action_name.lower(), 0) or 0
+                        break
+            else:
+                action_rating = action_dots.get(action_name.lower(), 0) or 0
+
+            # Attribute dice: each action in same attribute with dots > 0 adds 1
+            insight_actions = ['hunt', 'study', 'survey', 'tinker']
+            prowess_actions = ['finesse', 'prowl', 'skirmish', 'wreck']
+            resolve_actions = ['bizarre', 'command', 'consort', 'sway']
+
+            def get_dots(action):
+                if isinstance(action_dots.get('insight'), dict):
+                    for group in action_dots.values():
+                        if isinstance(group, dict) and action in group:
+                            return group.get(action, 0) or 0
+                return action_dots.get(action, 0) or 0
+
+            attr_group = (insight_actions if action_name.lower() in insight_actions else
+                          prowess_actions if action_name.lower() in prowess_actions else resolve_actions)
+            attribute_dice = len([a for a in attr_group if get_dots(a) > 0])
+
+            dice_pool = action_rating + attribute_dice
+            if push_dice:
+                dice_pool += 1
+
+        dice_results = [random.randint(1, 6) for _ in range(max(1, dice_pool))] if dice_pool > 0 else [0]
+        max_result = max(dice_results) if dice_results else 0
+
+        if max_result >= 6:
+            outcome = 'CRITICAL_SUCCESS'
+        elif max_result >= 4:
+            outcome = 'FULL_SUCCESS'
+        elif max_result >= 1:
+            outcome = 'PARTIAL_SUCCESS'
+        else:
+            outcome = 'FAILURE'
+
+        # Deduct stress for push
+        if stress_cost > 0:
+            character.stress = max(0, current_stress - stress_cost)
+            character.save(update_fields=['stress'])
+
+        roll = None
+        if session_id:
+            try:
+                session = Session.objects.get(id=session_id)
+                if character.campaign_id != session.campaign_id:
+                    return Response({'error': 'Session must belong to character\'s campaign.'}, status=status.HTTP_400_BAD_REQUEST)
+                roll = Roll.objects.create(
+                    character=character,
+                    session=session,
+                    roll_type=roll_type,
+                    action_name=action_name,
+                    position=position,
+                    effect=effect,
+                    dice_pool=dice_pool,
+                    results=dice_results,
+                    outcome=outcome,
+                    description=f"{action_name} roll"
+                )
+                RollHistory.objects.create(campaign=session.campaign, roll=roll)
+            except Session.DoesNotExist:
+                pass
+
         return Response({
             'action': action_name,
             'rating': action_rating,
-            'dice': dice_results,
-            'highest': highest_result,
+            'attribute_dice': attribute_dice,
+            'total_dice': dice_pool,
+            'dice_results': dice_results,
+            'highest': max_result,
             'position': position,
             'effect': effect,
-            'outcome': outcome
+            'outcome': outcome.lower().replace('_', ' '),
+            'roll_id': roll.id if roll else None,
+            'stress_spent': stress_cost,
         })
-
-    def _determine_outcome(self, highest_result, position, effect):
-        """Determine the outcome of a dice roll."""
-        if highest_result >= 6:
-            return "critical success"
-        elif highest_result >= 4:
-            return "success"
-        elif highest_result >= 1:
-            return "partial success"
-        else:
-            return "failure"
 
     @action(detail=True, methods=['post'], url_path='indulge-vice')
     def indulge_vice(self, request, pk=None):

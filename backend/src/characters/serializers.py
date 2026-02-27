@@ -7,7 +7,7 @@ from .models import (
     CharacterHamonAbility, CharacterSpinAbility,
     CharacterHistory, ExperienceTracker, Session, SessionEvent,
     Claim, CrewPlaybook, CrewSpecialAbility, CrewUpgrade, XPHistory, StressHistory, ChatMessage,
-    Faction, ShowcasedNPC, ProgressClock
+    Faction, ShowcasedNPC, ProgressClock, Roll
 )
 import re
 
@@ -125,8 +125,20 @@ class ExperienceTrackerSerializer(serializers.ModelSerializer):
         read_only_fields = ['session_date']
 
 
+class RollSerializer(serializers.ModelSerializer):
+    character_name = serializers.CharField(source='character.true_name', read_only=True)
+
+    class Meta:
+        model = Roll
+        fields = [
+            'id', 'character', 'character_name', 'session', 'roll_type', 'action_name',
+            'position', 'effect', 'dice_pool', 'results', 'outcome', 'description', 'timestamp'
+        ]
+        read_only_fields = ['timestamp']
+
+
 class SessionRecordsSerializer(serializers.ModelSerializer):
-    """Extended session serializer with events, xp_history, stress_history for session records view."""
+    """Extended session serializer with events, xp_history, stress_history, rolls for session records view."""
     npcs_involved = serializers.PrimaryKeyRelatedField(many=True, queryset=NPC.objects.all(), required=False)
     characters_involved = serializers.PrimaryKeyRelatedField(many=True, queryset=Character.objects.all(), required=False)
     proposed_by = UserSerializer(read_only=True)
@@ -135,6 +147,7 @@ class SessionRecordsSerializer(serializers.ModelSerializer):
     xp_history = XPHistorySerializer(source='session_xp_history', many=True, read_only=True)
     stress_history = StressHistorySerializer(source='session_stress_history', many=True, read_only=True)
     xp_entries = ExperienceTrackerSerializer(source='xp_entries', many=True, read_only=True)
+    rolls = RollSerializer(many=True, read_only=True)
 
     class Meta:
         model = Session
@@ -142,7 +155,7 @@ class SessionRecordsSerializer(serializers.ModelSerializer):
             'id', 'campaign', 'name', 'session_date', 'description', 'objective',
             'planned_for_next_session', 'status', 'npcs_involved', 'characters_involved',
             'proposed_score_target', 'proposed_score_description', 'proposed_by', 'votes',
-            'events', 'xp_history', 'stress_history', 'xp_entries',
+            'events', 'xp_history', 'stress_history', 'xp_entries', 'rolls',
         ]
 
 

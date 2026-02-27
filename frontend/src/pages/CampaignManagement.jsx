@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { campaignAPI, characterAPI, factionAPI, npcAPI } from '../features/character-sheet';
+import { campaignAPI, characterAPI, factionAPI, npcAPI, sessionAPI, progressClockAPI, rollAPI, crewAPI } from '../features/character-sheet';
 import { useAuth } from '../features/auth';
 
 const S = {
@@ -83,7 +83,7 @@ function PendingInvitations({ invitations, onAccept, onDecline }) {
 // ---------------------------------------------------------------------------
 // Campaign Detail View
 // ---------------------------------------------------------------------------
-function CampaignDetail({ campaign, isGM, user, onBack, onRefresh }) {
+function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessions }) {
   const [inviteUsername, setInviteUsername] = useState('');
   const [inviteError, setInviteError] = useState(null);
   const [inviteSuccess, setInviteSuccess] = useState(null);
@@ -264,6 +264,7 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh }) {
               </div>
               {isGM && (
                 <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                  <button onClick={onManageSessions} style={S.btnPrimary}>Manage Sessions</button>
                   <button onClick={startCampaignEdit} style={S.btnGhost}>Edit</button>
                   <button onClick={handleToggleActive} style={campaign.is_active ? S.btnDanger : S.btnSuccess}>
                     {campaign.is_active ? 'Deactivate' : 'Activate'}
@@ -494,6 +495,413 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh }) {
 }
 
 // ---------------------------------------------------------------------------
+// Session List View
+// ---------------------------------------------------------------------------
+function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    sessionAPI.getSessions(campaign.id).then(setSessions).catch((e) => { setError(e.message); setSessions([]); }).finally(() => setLoading(false));
+  }, [campaign.id]);
+
+  const handleCreateSession = async () => {
+    setCreating(true);
+    setError(null);
+    try {
+      const session = await sessionAPI.createSession({ campaign: campaign.id, name: `Session ${(sessions?.length || 0) + 1}`, status: 'PLANNED' });
+      setSessions((prev) => [session, ...(prev || [])]);
+      onSelectSession(session);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div>
+      <button onClick={onBack} style={{ ...S.btnGhost, marginBottom: '12px' }}>{'< Back to Campaign'}</button>
+      {error && <div style={S.err}>{error}</div>}
+      <div style={{ ...S.card, border: '1px solid #4b5563' }}>
+        <span style={S.sectionLbl}>Sessions</span>
+        <button onClick={handleCreateSession} style={S.btnSuccess} disabled={creating}>{creating ? 'Creating...' : '+ New Session'}</button>
+        {loading ? (
+          <div style={{ color: '#6b7280', padding: '16px' }}>Loading sessions...</div>
+        ) : !sessions?.length ? (
+          <div style={{ color: '#6b7280', padding: '16px' }}>No sessions yet. Create one to get started.</div>
+        ) : (
+          <div style={{ marginTop: '12px' }}>
+            {sessions.map((s) => (
+              <div
+                key={s.id}
+                style={{ ...S.card, cursor: 'pointer', marginBottom: '8px' }}
+                onClick={() => onSelectSession(s)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && onSelectSession(s)}
+              >
+                <div style={{ fontWeight: 'bold' }}>{s.name || `Session ${s.id}`}</div>
+                <div style={{ fontSize: '11px', color: '#9ca3af' }}>
+                  {s.session_date ? new Date(s.session_date).toLocaleDateString() : 'N/A'} · {s.status || 'PLANNED'}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Session Detail View (GM-only)
+// ---------------------------------------------------------------------------
+function SessionDetail({ campaign, session, onBack, onRefresh }) {
+  const [sessionData, setSessionData] = useState(session);
+  const [rolls, setRolls] = useState([]);
+  const [clocks, setClocks] = useState([]);
+  const [crews, setCrews] = useState([]);
+  const [characters, setCharacters] = useState([]);
+  const [campaignNPCs, setCampaignNPCs] = useState([]);
+  const [showPositionEffect, setShowPositionEffect] = useState(false);
+  const [fortuneDice, setFortuneDice] = useState(2);
+  const [fortuneRolling, setFortuneRolling] = useState(false);
+  const [error, setError] = useState(null);
+  const [wantedStars, setWantedStars] = useState(campaign?.wanted_stars ?? 0);
+
+  useEffect(() => {
+    if (!session?.id) return;
+    sessionAPI.getSession(session.id).then(setSessionData).catch(() => setSessionData(session));
+    rollAPI.getRolls({ session: session.id }).then(setRolls).catch(() => setRolls([]));
+    progressClockAPI.getProgressClocks({ campaign: campaign.id, session: session.id }).then(setClocks).catch(() => setClocks([]));
+    crewAPI.getCrews().then((list) => setCrews(list?.filter((c) => c.campaign === campaign.id) || [])).catch(() => setCrews([]));
+    characterAPI.getCharacters().then((list) => setCharacters(list?.filter((c) => c.campaign === campaign.id) || [])).catch(() => setCharacters([]));
+    npcAPI.getNPCs(campaign.id).then(setCampaignNPCs).catch(() => setCampaignNPCs([]));
+    setWantedStars(campaign?.wanted_stars ?? 0);
+  }, [session?.id, campaign?.id, campaign?.wanted_stars]);
+
+  const campaignChars = campaign?.campaign_characters || characters.map((c) => ({ id: c.id, true_name: c.true_name, ...c }));
+
+  const handleWantedStars = async (stars) => {
+    setWantedStars(stars);
+    try {
+      await campaignAPI.patchCampaign(campaign.id, { wanted_stars: stars });
+      onRefresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleSetActiveSession = async () => {
+    try {
+      await campaignAPI.patchCampaign(campaign.id, { active_session: session.id });
+      onRefresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handlePatchCharacterHarm = async (charId, harmData) => {
+    try {
+      await characterAPI.patchCharacter(charId, harmData);
+      onRefresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleUpdateSession = async (data) => {
+    try {
+      const updated = await sessionAPI.patchSession(session.id, data);
+      setSessionData(updated);
+      onRefresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handlePatchRoll = async (rollId, data) => {
+    try {
+      await rollAPI.patchRoll(rollId, data);
+      setRolls((prev) => prev.map((r) => (r.id === rollId ? { ...r, ...data } : r)));
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleFortuneRoll = async () => {
+    setFortuneRolling(true);
+    setError(null);
+    const firstChar = campaignChars[0] || characters[0];
+    if (!firstChar?.id) {
+      setError('No character in campaign to roll fortune.');
+      setFortuneRolling(false);
+      return;
+    }
+    try {
+      const res = await characterAPI.rollAction(firstChar.id, {
+        roll_type: 'FORTUNE',
+        action: 'Fortune',
+        session_id: session.id,
+        dice_pool: fortuneDice,
+      });
+      rollAPI.getRolls({ session: session.id }).then(setRolls).catch(() => {});
+      onRefresh();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setFortuneRolling(false);
+    }
+  };
+
+  const npcsInvolved = sessionData?.npcs_involved || [];
+  const toggleNpcInvolved = async (npcId) => {
+    const next = npcsInvolved.includes(npcId)
+      ? npcsInvolved.filter((id) => id !== npcId)
+      : [...npcsInvolved, npcId];
+    try {
+      const updated = await sessionAPI.patchSession(session.id, { npcs_involved: next });
+      setSessionData(updated);
+      onRefresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const [coinEdits, setCoinEdits] = useState({});
+  const handleCrewCoinChange = async (crewId, coin) => {
+    const val = parseInt(coin, 10) || 0;
+    try {
+      await crewAPI.patchCrew(crewId, { coin: val });
+      setCrews((prev) => prev.map((c) => (c.id === crewId ? { ...c, coin: val } : c)));
+      setCoinEdits((p) => { const n = { ...p }; delete n[crewId]; return n; });
+      onRefresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  return (
+    <div>
+      <button onClick={onBack} style={{ ...S.btnGhost, marginBottom: '12px' }}>{'< Back to Sessions'}</button>
+      {error && <div style={S.err}>{error}</div>}
+
+      <div style={S.card}>
+        <span style={S.sectionLbl}>Session: {sessionData?.name || session?.name || 'Unnamed'}</span>
+        <button onClick={handleSetActiveSession} style={S.btnPrimary}>Set as current session (enable for players)</button>
+      </div>
+
+      {/* Wanted level */}
+      <div style={S.card}>
+        <span style={S.sectionLbl}>Wanted Level</span>
+        <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              onClick={() => handleWantedStars(n)}
+              style={{
+                ...S.btn,
+                background: n <= wantedStars ? '#fbbf24' : '#374151',
+                color: n <= wantedStars ? '#000' : '#9ca3af',
+                width: '28px',
+                height: '28px',
+                padding: 0,
+              }}
+            >
+              ★
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Harm for players */}
+      <div style={S.card}>
+        <span style={S.sectionLbl}>Harm for Players</span>
+        {campaignChars.length === 0 ? (
+          <div style={{ color: '#6b7280' }}>No characters in campaign.</div>
+        ) : (
+          campaignChars.map((ch) => (
+            <HarmEditor key={ch.id} character={ch} onSave={(data) => handlePatchCharacterHarm(ch.id, data)} />
+          ))
+        )}
+      </div>
+
+      {/* Goals */}
+      <GoalsEditor sessionData={sessionData} onSave={handleUpdateSession} />
+
+      {/* NPCs used */}
+      <div style={S.card}>
+        <span style={S.sectionLbl}>NPCs Used</span>
+        {campaignNPCs.length === 0 ? (
+          <div style={{ color: '#6b7280' }}>No NPCs in campaign.</div>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
+            {campaignNPCs.map((npc) => (
+              <label key={npc.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={npcsInvolved.includes(npc.id)}
+                  onChange={() => toggleNpcInvolved(npc.id)}
+                />
+                <span>{npc.name || npc.true_name || `NPC ${npc.id}`}</span>
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Coin (crew-level) */}
+      <div style={S.card}>
+        <span style={S.sectionLbl}>Coin</span>
+        {crews.length === 0 ? (
+          <div style={{ color: '#6b7280' }}>No crews in campaign.</div>
+        ) : (
+          crews.map((crew) => (
+            <div key={crew.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+              <span style={{ minWidth: '120px' }}>{crew.name || `Crew ${crew.id}`}</span>
+              <input
+                type="number"
+                style={{ ...S.inp, width: '60px' }}
+                value={coinEdits[crew.id] !== undefined ? coinEdits[crew.id] : (crew.coin ?? 0)}
+                onChange={(e) => setCoinEdits((p) => ({ ...p, [crew.id]: e.target.value }))}
+                onBlur={(e) => handleCrewCoinChange(crew.id, e.target.value)}
+              />
+              <span style={{ fontSize: '11px', color: '#9ca3af' }}>coin</span>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Fortune rolls */}
+      <div style={S.card}>
+        <span style={S.sectionLbl}>Fortune Rolls</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px' }}>
+          <span style={{ fontSize: '11px' }}>Dice pool:</span>
+          <select style={S.select} value={fortuneDice} onChange={(e) => setFortuneDice(parseInt(e.target.value, 10))}>
+            {[1, 2, 3, 4, 5, 6].map((n) => (
+              <option key={n} value={n}>{n}d</option>
+            ))}
+          </select>
+          <button onClick={handleFortuneRoll} style={S.btnPrimary} disabled={fortuneRolling || !campaignChars?.length}>
+            {fortuneRolling ? 'Rolling...' : 'Roll Fortune'}
+          </button>
+        </div>
+      </div>
+
+      {/* Clocks */}
+      <div style={S.card}>
+        <span style={S.sectionLbl}>Clocks</span>
+        <div style={{ marginBottom: '8px' }}>
+          <button onClick={async () => { try { await progressClockAPI.createProgressClock({ campaign: campaign.id, session: session.id, name: 'New Clock', clock_type: 'CUSTOM', max_segments: 4 }); const list = await progressClockAPI.getProgressClocks({ session: session.id }); setClocks(list || []); } catch (e) { setError(e.message); } }} style={S.btnPrimary}>+ New Clock</button>
+        </div>
+        {clocks.map((clk) => (
+          <div key={clk.id} style={{ padding: '8px 0', borderBottom: '1px solid #1f2937', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>{clk.name} ({clk.filled_segments}/{clk.max_segments})</span>
+            <label style={{ fontSize: '11px' }}>
+              <input type="checkbox" checked={clk.visible_to_players} onChange={(e) => progressClockAPI.updateProgressClock(clk.id, { visible_to_players: e.target.checked }).then(() => setClocks((p) => p.map((c) => c.id === clk.id ? { ...c, visible_to_players: e.target.checked } : c)))} />
+              Visible to players
+            </label>
+          </div>
+        ))}
+      </div>
+
+      {/* Dice history */}
+      <div style={S.card}>
+        <span style={S.sectionLbl}>Dice History</span>
+        <label style={{ fontSize: '11px', marginBottom: '8px', display: 'block' }}>
+          <input type="checkbox" checked={showPositionEffect} onChange={(e) => setShowPositionEffect(e.target.checked)} />
+          Show position & effect
+        </label>
+        {rolls.length === 0 ? (
+          <div style={{ color: '#6b7280' }}>No rolls for this session.</div>
+        ) : (
+          rolls.map((r) => (
+            <div key={r.id} style={{ padding: '6px 0', borderBottom: '1px solid #1f2937', fontSize: '12px' }}>
+              <span style={{ fontWeight: 'bold' }}>{r.character_name || r.character}</span> · {r.action_name} · {r.results?.join(', ')} → {r.outcome}
+              {showPositionEffect && (
+                <span style={{ color: '#9ca3af', marginLeft: '8px' }}>
+                  ({r.position}, {r.effect})
+                </span>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function GoalsEditor({ sessionData, onSave }) {
+  const [form, setForm] = useState({ objective: '', proposed_score_target: '', proposed_score_description: '' });
+  useEffect(() => {
+    setForm({
+      objective: sessionData?.objective || '',
+      proposed_score_target: sessionData?.proposed_score_target || '',
+      proposed_score_description: sessionData?.proposed_score_description || '',
+    });
+  }, [sessionData?.id]);
+  return (
+    <div style={S.card}>
+      <span style={S.sectionLbl}>Goals / Items</span>
+      <div style={{ marginBottom: '8px' }}>
+        <span style={{ fontSize: '11px', color: '#9ca3af' }}>Objective</span>
+        <textarea style={{ ...S.inp, height: '50px', border: '1px solid #374151', padding: '6px' }} value={form.objective} onChange={(e) => setForm((p) => ({ ...p, objective: e.target.value }))} />
+      </div>
+      <div style={{ marginBottom: '8px' }}>
+        <span style={{ fontSize: '11px', color: '#9ca3af' }}>Proposed score target</span>
+        <input style={S.inp} value={form.proposed_score_target} onChange={(e) => setForm((p) => ({ ...p, proposed_score_target: e.target.value }))} />
+      </div>
+      <div style={{ marginBottom: '8px' }}>
+        <span style={{ fontSize: '11px', color: '#9ca3af' }}>Proposed score description</span>
+        <textarea style={{ ...S.inp, height: '40px', border: '1px solid #374151', padding: '6px' }} value={form.proposed_score_description} onChange={(e) => setForm((p) => ({ ...p, proposed_score_description: e.target.value }))} />
+      </div>
+      <button onClick={() => onSave(form)} style={S.btnPrimary}>Save goals</button>
+    </div>
+  );
+}
+
+function HarmEditor({ character, onSave }) {
+  const [harm, setHarm] = useState({
+    harm_level1_used: character.harm_level1_used ?? false,
+    harm_level1_name: character.harm_level1_name || '',
+    harm_level2_used: character.harm_level2_used ?? false,
+    harm_level2_name: character.harm_level2_name || '',
+    harm_level3_used: character.harm_level3_used ?? false,
+    harm_level3_name: character.harm_level3_name || '',
+    harm_level4_used: character.harm_level4_used ?? false,
+    harm_level4_name: character.harm_level4_name || '',
+  });
+  useEffect(() => {
+    setHarm({
+      harm_level1_used: character.harm_level1_used ?? false,
+      harm_level1_name: character.harm_level1_name || '',
+      harm_level2_used: character.harm_level2_used ?? false,
+      harm_level2_name: character.harm_level2_name || '',
+      harm_level3_used: character.harm_level3_used ?? false,
+      harm_level3_name: character.harm_level3_name || '',
+      harm_level4_used: character.harm_level4_used ?? false,
+      harm_level4_name: character.harm_level4_name || '',
+    });
+  }, [character.id]);
+  const save = () => onSave(harm);
+  return (
+    <div style={{ padding: '8px 0', borderBottom: '1px solid #1f2937' }}>
+      <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{character.true_name || character.alias || 'Unnamed'}</div>
+      {[1, 2, 3, 4].map((n) => (
+        <div key={n} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+          <input type="checkbox" checked={harm[`harm_level${n}_used`]} onChange={(e) => setHarm((p) => ({ ...p, [`harm_level${n}_used`]: e.target.checked }))} />
+          <input style={{ ...S.inp, flex: 1, maxWidth: '200px' }} placeholder={`Level ${n} harm`} value={harm[`harm_level${n}_name`]} onChange={(e) => setHarm((p) => ({ ...p, [`harm_level${n}_name`]: e.target.value }))} />
+        </div>
+      ))}
+      <button onClick={save} style={{ ...S.btn, marginTop: '6px', fontSize: '10px' }}>Save harm</button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
 export default function CampaignManagement({ initialCampaignId = null }) {
@@ -505,6 +913,8 @@ export default function CampaignManagement({ initialCampaignId = null }) {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: '', description: '' });
   const [selectedCampaignId, setSelectedCampaignId] = useState(initialCampaignId);
+  const [sessionView, setSessionView] = useState(null); // null | 'list' | 'detail'
+  const [selectedSession, setSelectedSession] = useState(null);
 
   const loadCampaigns = useCallback(async () => {
     setLoading(true);
@@ -585,7 +995,39 @@ export default function CampaignManagement({ initialCampaignId = null }) {
     }
   };
 
-  // ---- Detail view ----
+  // ---- Session detail view ----
+  if (selectedCampaign && sessionView === 'detail' && selectedSession) {
+    return (
+      <div style={S.page}>
+        <div style={S.content}>
+          <SessionDetail
+            campaign={selectedCampaign}
+            session={selectedSession}
+            onBack={() => { setSessionView('list'); setSelectedSession(null); }}
+            onRefresh={refreshSelected}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Session list view ----
+  if (selectedCampaign && sessionView === 'list') {
+    return (
+      <div style={S.page}>
+        <div style={S.content}>
+          <SessionList
+            campaign={selectedCampaign}
+            onBack={() => setSessionView(null)}
+            onSelectSession={(session) => { setSelectedSession(session); setSessionView('detail'); }}
+            onRefresh={refreshSelected}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Campaign detail view ----
   if (selectedCampaign) {
     const isGM = selectedCampaign.gm?.id === user?.id;
     return (
@@ -597,6 +1039,7 @@ export default function CampaignManagement({ initialCampaignId = null }) {
             user={user}
             onBack={() => setSelectedCampaignId(null)}
             onRefresh={refreshSelected}
+            onManageSessions={() => setSessionView('list')}
           />
         </div>
       </div>
