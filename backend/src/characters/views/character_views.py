@@ -219,7 +219,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     dice_pool=dice_pool,
                     results=dice_results,
                     outcome=outcome,
-                    description=f"{action_name} roll"
+                    description=f"{action_name} roll",
+                    rolled_by=request.user
                 )
                 RollHistory.objects.create(campaign=session.campaign, roll=roll)
             except Session.DoesNotExist:

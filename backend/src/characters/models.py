@@ -66,6 +66,15 @@ class Faction(models.Model):
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    signature = models.TextField(blank=True, default='')
+    display_title = models.CharField(max_length=100, blank=True, default='')
+    show_avatars = models.BooleanField(default=True)
+    show_signatures = models.BooleanField(default=True)
+    theme = models.CharField(max_length=20, default='dark', choices=[('dark', 'Dark'), ('light', 'Light')])
+    email_digest = models.BooleanField(default=False)
+    email_digest_days = models.JSONField(default=list, blank=True)
+    receive_all_email = models.BooleanField(default=True)
+    notification_preferences = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
         return self.user.username
@@ -414,6 +423,10 @@ class Character(models.Model):
     harm_level1_name = models.CharField(max_length=100, blank=True, null=True)
     harm_level2_used = models.BooleanField(default=False)
     harm_level2_name = models.CharField(max_length=100, blank=True, null=True)
+    harm_level1_slot2_used = models.BooleanField(default=False)
+    harm_level1_slot2_name = models.CharField(max_length=100, blank=True, null=True)
+    harm_level2_slot2_used = models.BooleanField(default=False)
+    harm_level2_slot2_name = models.CharField(max_length=100, blank=True, null=True)
     harm_level3_used = models.BooleanField(default=False)
     harm_level3_name = models.CharField(max_length=100, blank=True, null=True)
     harm_level4_used = models.BooleanField(default=False)
@@ -863,6 +876,8 @@ class ProgressClock(models.Model):
     npc = models.ForeignKey(NPC, on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
     
     visible_to_players = models.BooleanField(default=False)
+    visible_to_party = models.BooleanField(default=False, help_text='For player clocks: when True, other players in campaign can see it')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_progress_clocks')
     created_at = models.DateTimeField(auto_now_add=True)
     completed = models.BooleanField(default=False)
     
@@ -1100,6 +1115,7 @@ class Roll(models.Model):
     results = models.JSONField(default=list, help_text='List of dice results')
     outcome = models.CharField(max_length=20, choices=OUTCOME_CHOICES)
     description = models.TextField(blank=True)
+    rolled_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='rolls_made')
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):

@@ -53,6 +53,7 @@ const SignupForm = ({ onSwitchToLogin }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     clearError();
+    setValidationErrors({});
     
     if (!validateForm()) {
       return;
@@ -67,6 +68,13 @@ const SignupForm = ({ onSwitchToLogin }) => {
     
     if (!result.success) {
       setIsLoading(false);
+      const isUsernameError = result.error && (
+        /already taken|already exists|username/i.test(result.error)
+      );
+      if (isUsernameError) {
+        setValidationErrors(prev => ({ ...prev, username: result.error }));
+      }
+      return;
     }
     // If successful, the AuthContext will handle the redirect
   };
@@ -77,7 +85,9 @@ const SignupForm = ({ onSwitchToLogin }) => {
       [e.target.name]: e.target.value
     }));
     
-    // Clear validation error when user starts typing
+    if (e.target.name === 'username' && error) {
+      clearError();
+    }
     if (validationErrors[e.target.name]) {
       setValidationErrors(prev => ({
         ...prev,
@@ -156,6 +166,32 @@ const SignupForm = ({ onSwitchToLogin }) => {
           </p>
         </div>
 
+        {/* Error - prominent, above form */}
+        {error && (
+          <div
+            role="alert"
+            style={{
+              marginBottom: 20,
+              padding: '14px 18px',
+              background: token.dangerDim,
+              border: '2px solid rgba(239,68,68,0.6)',
+              borderRadius: 10,
+              fontSize: 14,
+              fontWeight: 600,
+              color: '#fca5a5',
+              lineHeight: 1.5,
+              boxShadow: '0 4px 12px rgba(239,68,68,0.2)',
+            }}
+          >
+            {error}
+            {error.includes('Could not reach game server') && isLiveSite && (
+              <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, fontWeight: 400 }}>
+                Enter the host's URL below: <strong>https://</strong>their-ngrok-url<strong>/api</strong>
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Form */}
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
@@ -173,27 +209,6 @@ const SignupForm = ({ onSwitchToLogin }) => {
               Using the live site — set the Game server URL below (your host's backend, e.g.{' '}
               <code style={{ color: '#fde68a' }}>https://xxx.ngrok-free.app/api</code>).
               Host runs <code style={{ color: '#fde68a' }}>ngrok http 8000</code> and shares that URL.
-            </div>
-          )}
-
-          {/* Error */}
-          {error && (
-            <div style={{
-              padding: '10px 14px',
-              background: token.dangerDim,
-              border: `1px solid rgba(239,68,68,0.4)`,
-              borderRadius: 8,
-              fontSize: 13,
-              color: '#fca5a5',
-              lineHeight: 1.6,
-            }}>
-              {error}
-              {error.includes('Could not reach game server') && isLiveSite && (
-                <p style={{ marginTop: 6, marginBottom: 0, fontSize: 12 }}>
-                  Enter the host's URL above: <strong>https://</strong>their-ngrok-url
-                  <strong>/api</strong> (host runs <code>ngrok http 8000</code>).
-                </p>
-              )}
             </div>
           )}
 

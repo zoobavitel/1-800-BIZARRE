@@ -22,7 +22,8 @@ from .models import (
     UserProfile, Heritage, Vice, Ability, Character, Stand,
     Campaign, NPC, Crew, StandAbility, HamonAbility, SpinAbility, Trauma, Benefit, Detriment,
     CharacterHistory, ExperienceTracker, Session, SessionEvent,
-    Claim, CrewPlaybook, CrewSpecialAbility, CrewUpgrade, XPHistory, StressHistory, ChatMessage
+    Claim, CrewPlaybook, CrewSpecialAbility, CrewUpgrade, XPHistory, StressHistory, ChatMessage,
+    Roll, RollHistory
 )
 from .serializers import (
     HeritageSerializer, ViceSerializer, AbilitySerializer,
@@ -463,6 +464,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
             'stand_name', 'stand_form', 'stand_conscious', 'armor_type',
             'light_armor_used', 'medium_armor_used', 'heavy_armor_used',
             'harm_level1_used', 'harm_level1_name', 'harm_level2_used', 'harm_level2_name',
+            'harm_level1_slot2_used', 'harm_level1_slot2_name', 'harm_level2_slot2_used', 'harm_level2_slot2_name',
             'harm_level3_used', 'harm_level3_name', 'harm_level4_used', 'harm_level4_name',
             'healing_clock_filled', 'xp_clocks', 'custom_ability_description',
             'custom_ability_type', 'extra_custom_abilities', 'faction_reputation',
@@ -602,13 +604,14 @@ class CharacterViewSet(viewsets.ModelViewSet):
             character=character,
             session=session,
             roll_type=roll_type,
-            action_type=action_type,
-            group_leader=group_leader,
-            assisted_by=assisted_by,
+            action_name=action_name,
+            position=position,
+            effect=effect,
             dice_pool=dice_pool,
             results=dice_results,
             outcome=outcome,
-            description=f"{action_name} roll ({action_type})"
+            description=f"{action_name} roll ({action_type})",
+            rolled_by=request.user
         )
 
         # Create RollHistory entry
@@ -1319,19 +1322,20 @@ class SpendCoinAPIView(APIView):
 @permission_classes([IsAuthenticated])
 def global_search(request):
     """
-    Global search endpoint that searches across characters, campaigns, NPCs, abilities, and heritages
+    Global search endpoint that searches across characters, campaigns, NPCs, abilities, heritages,
+    Hamon abilities, Spin abilities, and Stand abilities.
     """
     query = request.GET.get('q', '').strip()
-    
+
     if not query:
         return Response({
             'results': [],
             'message': 'No search query provided'
         })
-    
+
     user = request.user
     results = []
-    
+
     # Search Characters
     character_queryset = Character.objects.filter(
         Q(user=user) | Q(campaign__gm=user)
@@ -1342,7 +1346,7 @@ def global_search(request):
         Q(background_note__icontains=query) |
         Q(heritage__name__icontains=query)
     )[:10]
-    
+
     for char in character_queryset:
         results.append({
             'type': 'character',
@@ -1353,7 +1357,7 @@ def global_search(request):
             'url': f'/characters/{char.id}',
             'campaign': char.campaign.name if char.campaign else None
         })
-    
+
     # Search Campaigns
     campaign_queryset = Campaign.objects.filter(
         Q(gm=user) | Q(players=user)
@@ -1366,13 +1370,13 @@ def global_search(request):
         results.append({
             'type': 'campaign',
             'id': campaign.id,
-            'title': campaign.name,
-            'subtitle': f"Campaign • GM: {campaign.gm.username}",
+            'title': campaign.name or 'Unnamed',
+            'subtitle': f"Campaign • GM: {campaign.gm.username if campaign.gm else '—'}",
             'description': campaign.description or 'No description',
             'url': f'/campaigns',
             'campaign': campaign.name
         })
-    
+
     # Search NPCs (only if user is GM)
     npc_queryset = NPC.objects.filter(
         campaign__gm=user
@@ -1385,30 +1389,98 @@ def global_search(request):
         results.append({
             'type': 'npc',
             'id': npc.id,
-            'title': npc.name,
-            'subtitle': f"NPC • {npc.campaign.name}",
+            'title': npc.name or 'Unnamed',
+            'subtitle': f"NPC • {npc.campaign.name if npc.campaign else '—'}",
             'description': npc.description or 'No description',
             'url': f'/campaigns',
             'campaign': npc.campaign.name
         })
-    
-    # Search Abilities
+
+    # Search Standard Abilities (Ability model)
     ability_queryset = Ability.objects.filter(
         Q(name__icontains=query) |
         Q(description__icontains=query)
     )[:10]
     
     for ability in ability_queryset:
+        desc = ability.description or ''
+        try:
+            cat_label = ability.get_category_display()
+        except (AttributeError, ValueError):
+            cat_label = getattr(ability, 'category', '') or 'Standard'
         results.append({
             'type': 'ability',
             'id': ability.id,
-            'title': ability.name,
-            'subtitle': f"Ability • {ability.type.title()}",
-            'description': ability.description[:100] + '...' if len(ability.description) > 100 else ability.description,
-            'url': f'/rules#abilities',
+            'title': ability.name or 'Unnamed',
+            'subtitle': f"Standard Ability • {cat_label}",
+            'description': desc[:100] + '...' if len(desc) > 100 else desc,
+            'url': f'/abilities-ability',
             'campaign': None
         })
+
+    # Search Hamon Abilities (playbook)
+    hamon_queryset = HamonAbility.objects.filter(
+        Q(name__icontains=query) |
+        Q(description__icontains=query)
+    )[:10]
     
+    for ha in hamon_queryset:
+        desc = ha.description or ''
+        try:
+            type_label = ha.get_hamon_type_display()
+        except (AttributeError, ValueError):
+            type_label = getattr(ha, 'hamon_type', '') or 'Hamon'
+        results.append({
+            'type': 'hamon_ability',
+            'id': ha.id,
+            'title': ha.name or 'Unnamed',
+            'subtitle': f"Hamon • {type_label}",
+            'description': desc[:100] + '...' if len(desc) > 100 else desc,
+            'url': f'/abilities-hamon',
+            'campaign': None
+        })
+
+    # Search Spin Abilities (playbook)
+    spin_queryset = SpinAbility.objects.filter(
+        Q(name__icontains=query) |
+        Q(description__icontains=query)
+    )[:10]
+    
+    for sa in spin_queryset:
+        desc = sa.description or ''
+        try:
+            type_label = sa.get_spin_type_display()
+        except (AttributeError, ValueError):
+            type_label = getattr(sa, 'spin_type', '') or 'Spin'
+        results.append({
+            'type': 'spin_ability',
+            'id': sa.id,
+            'title': sa.name or 'Unnamed',
+            'subtitle': f"Spin • {type_label}",
+            'description': desc[:100] + '...' if len(desc) > 100 else desc,
+            'url': f'/abilities-spin',
+            'campaign': None
+        })
+
+    # Search Stand Abilities (Stand-specific)
+    stand_ability_queryset = StandAbility.objects.filter(
+        Q(name__icontains=query) |
+        Q(description__icontains=query)
+    )[:10]
+    
+    for sta in stand_ability_queryset:
+        desc = sta.description or ''
+        stand_name = sta.stand.name if sta.stand else 'Stand'
+        results.append({
+            'type': 'stand_ability',
+            'id': sta.id,
+            'title': sta.name or 'Unnamed',
+            'subtitle': f"Stand Ability • {stand_name}",
+            'description': desc[:100] + '...' if len(desc) > 100 else desc,
+            'url': f'/abilities-stand',
+            'campaign': None
+        })
+
     # Search Heritages
     heritage_queryset = Heritage.objects.filter(
         Q(name__icontains=query) |
@@ -1422,15 +1494,16 @@ def global_search(request):
             'title': heritage.name,
             'subtitle': f"Heritage • Base HP: {heritage.base_hp}",
             'description': heritage.description or 'No description',
-            'url': f'/rules#heritages',
+            'url': f'/abilities-heritage',
             'campaign': None
         })
-    
+
     return Response({
         'results': results,
         'total': len(results),
         'query': query
     })
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

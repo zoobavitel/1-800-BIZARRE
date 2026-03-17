@@ -345,7 +345,7 @@ export const rollAPI = {
 
 // Global search
 export const searchAPI = {
-  globalSearch: (query) => apiRequest(`/global-search/?q=${encodeURIComponent(query)}`),
+  globalSearch: (query) => apiRequest(`/search/?q=${encodeURIComponent(query)}`),
 };
 
 // Authentication API functions
@@ -385,6 +385,7 @@ export const transformBackendToFrontend = (backendCharacter) => {
     look: backendCharacter.appearance || '',
     vice: backendCharacter.vice?.name || '',
     crew: backendCharacter.crew?.name || '',
+    crewId: backendCharacter.crew?.id ?? null,
     
     // Action ratings (convert from action_dots)
     actionRatings: {

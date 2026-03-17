@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, ArrowRight, Zap, Users, Dice6, BookOpen, Settings, LogOut, Menu } from 'lucide-react';
+import { Plus, ArrowRight, Zap, Users, Dice6, BookOpen, Settings, Search, Menu } from 'lucide-react';
 import '../styles/Home.css';
 import { characterAPI, campaignAPI, transformBackendToFrontend } from '../features/character-sheet';
 import { useAuth } from '../features/auth';
 
 // Main Home Page Component — character create/edit goes to Character page
-const HomePage = ({ onNavigateToCharacter, onNavigateToCharacterOptions, onNavigateToCampaign, onHamburgerClick }) => {
-  const { user, logout } = useAuth();
+const HomePage = ({ onNavigateToCharacter, onNavigateToCharacterOptions, onNavigateToCampaign, onNavigateToSearch, onNavigateToRules, onHamburgerClick, onGearClick }) => {
+  const { user } = useAuth();
   const [characters, setCharacters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -124,26 +124,20 @@ const HomePage = ({ onNavigateToCharacter, onNavigateToCharacterOptions, onNavig
         <div className="header-actions">
           <div className="flex items-center space-x-4">
             <button
-              onClick={() => typeof onNavigateToCharacterOptions === 'function' ? onNavigateToCharacterOptions() : (typeof onNavigateToCharacter === 'function' && onNavigateToCharacter(null))}
+              onClick={() => typeof onNavigateToSearch === 'function' && onNavigateToSearch()}
               className="btn-secondary"
+              aria-label="Search"
+              title="Search"
             >
-              Character Options
+              <Search className="icon" />
             </button>
-            <button 
-              onClick={handleCreateCharacter}
-              className="btn-primary"
+            <button
+              onClick={() => typeof onGearClick === 'function' && onGearClick()}
+              className="btn-secondary"
+              aria-label="User menu"
+              title="User menu"
             >
-              Create Character
-            </button>
-          <button className="btn-secondary">
-            <Settings className="icon" />
-          </button>
-            <button 
-              onClick={logout}
-              className="btn-secondary text-red-400 hover:text-red-300"
-              title="Logout"
-            >
-              <LogOut className="icon" />
+              <Settings className="icon" />
             </button>
           </div>
         </div>
@@ -403,12 +397,15 @@ const HomePage = ({ onNavigateToCharacter, onNavigateToCharacterOptions, onNavig
                 <ArrowRight className="quick-action-arrow" />
               </div>
 
-              <div className="quick-action-card red">
+              <button
+                onClick={() => typeof onNavigateToRules === 'function' && onNavigateToRules()}
+                className="quick-action-card red"
+              >
                 <BookOpen className="quick-action-icon" />
                 <h4 className="quick-action-title">Learn Rules</h4>
                 <p className="quick-action-description">Master the mechanics of Stands, Hamon, and Spin techniques.</p>
                 <ArrowRight className="quick-action-arrow" />
-              </div>
+              </button>
 
               <button 
                 onClick={handleCreateCampaign}

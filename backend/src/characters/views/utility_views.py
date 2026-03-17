@@ -57,92 +57,179 @@ class SpendCoinAPIView(APIView):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def global_search(request):
-    """Global search across all game entities."""
-    query = request.GET.get('q', '')
+    """Global search across characters, campaigns, NPCs, abilities, heritages, Hamon/Spin/Stand abilities."""
+    query = request.GET.get('q', '').strip()
     if not query:
-        return Response({'error': 'Query parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
-    
+        return Response({'results': [], 'message': 'No search query provided'})
+
     user = request.user
-    results = {
-        'characters': [],
-        'campaigns': [],
-        'npcs': [],
-        'crews': [],
-        'heritages': [],
-        'vices': [],
-        'abilities': []
-    }
-    
-    # Search characters
-    if user.is_staff:
-        characters = Character.objects.filter(name__icontains=query)
-    else:
-        characters = Character.objects.filter(
-            Q(name__icontains=query) & Q(user=user)
-        )
-    results['characters'] = [
-        {'id': c.id, 'name': c.name, 'type': 'character'} 
-        for c in characters[:10]
-    ]
-    
-    # Search campaigns
-    if user.is_staff:
-        campaigns = Campaign.objects.filter(name__icontains=query)
-    else:
-        campaigns = Campaign.objects.filter(
-            Q(name__icontains=query) & 
-            (Q(gm=user) | Q(characters__user=user))
-        ).distinct()
-    results['campaigns'] = [
-        {'id': c.id, 'name': c.name, 'type': 'campaign'} 
-        for c in campaigns[:10]
-    ]
-    
-    # Search NPCs
-    if user.is_staff:
-        npcs = NPC.objects.filter(name__icontains=query)
-    else:
-        npcs = NPC.objects.filter(
-            Q(name__icontains=query) & Q(campaign__gm=user)
-        )
-    results['npcs'] = [
-        {'id': n.id, 'name': n.name, 'type': 'npc'} 
-        for n in npcs[:10]
-    ]
-    
-    # Search crews
-    if user.is_staff:
-        crews = Crew.objects.filter(name__icontains=query)
-    else:
-        crews = Crew.objects.filter(
-            Q(name__icontains=query) & 
-            (Q(campaign__gm=user) | Q(campaign__characters__user=user))
-        ).distinct()
-    results['crews'] = [
-        {'id': c.id, 'name': c.name, 'type': 'crew'} 
-        for c in crews[:10]
-    ]
-    
-    # Search reference data
-    heritages = Heritage.objects.filter(name__icontains=query)
-    results['heritages'] = [
-        {'id': h.id, 'name': h.name, 'type': 'heritage'} 
-        for h in heritages[:10]
-    ]
-    
-    vices = Vice.objects.filter(name__icontains=query)
-    results['vices'] = [
-        {'id': v.id, 'name': v.name, 'type': 'vice'} 
-        for v in vices[:10]
-    ]
-    
-    abilities = Ability.objects.filter(name__icontains=query)
-    results['abilities'] = [
-        {'id': a.id, 'name': a.name, 'type': 'ability'} 
-        for a in abilities[:10]
-    ]
-    
-    return Response(results)
+    results = []
+
+    # Search Characters (use true_name, not name)
+    character_queryset = Character.objects.filter(
+        Q(user=user) | Q(campaign__gm=user)
+    ).filter(
+        Q(true_name__icontains=query) |
+        Q(alias__icontains=query) |
+        Q(stand_name__icontains=query) |
+        Q(background_note__icontains=query) |
+        Q(heritage__name__icontains=query)
+    )[:10]
+
+    for char in character_queryset:
+        results.append({
+            'type': 'character',
+            'id': char.id,
+            'title': char.true_name or 'Unnamed Character',
+            'subtitle': f"{char.heritage.name if char.heritage else 'Human'} • {char.playbook or 'STAND'} User",
+            'description': f"Stand: {char.stand_name or 'Unnamed Stand'}",
+            'url': f'/characters/{char.id}',
+            'campaign': char.campaign.name if char.campaign else None
+        })
+
+    # Search Campaigns
+    campaign_queryset = Campaign.objects.filter(
+        Q(gm=user) | Q(players=user)
+    ).filter(
+        Q(name__icontains=query) |
+        Q(description__icontains=query)
+    ).distinct()[:10]
+
+    for campaign in campaign_queryset:
+        results.append({
+            'type': 'campaign',
+            'id': campaign.id,
+            'title': campaign.name or 'Unnamed',
+            'subtitle': f"Campaign • GM: {campaign.gm.username if campaign.gm else '—'}",
+            'description': campaign.description or 'No description',
+            'url': f'/campaigns',
+            'campaign': campaign.name
+        })
+
+    # Search NPCs (only if user is GM)
+    npc_queryset = NPC.objects.filter(campaign__gm=user).filter(
+        Q(name__icontains=query) |
+        Q(description__icontains=query)
+    )[:10]
+
+    for npc in npc_queryset:
+        results.append({
+            'type': 'npc',
+            'id': npc.id,
+            'title': npc.name or 'Unnamed',
+            'subtitle': f"NPC • {npc.campaign.name if npc.campaign else '—'}",
+            'description': npc.description or 'No description',
+            'url': f'/campaigns',
+            'campaign': npc.campaign.name if npc.campaign else None
+        })
+
+    # Search Standard Abilities (Ability model)
+    ability_queryset = Ability.objects.filter(
+        Q(name__icontains=query) |
+        Q(description__icontains=query)
+    )[:10]
+
+    for ability in ability_queryset:
+        desc = ability.description or ''
+        try:
+            cat_label = ability.get_category_display()
+        except (AttributeError, ValueError):
+            cat_label = getattr(ability, 'category', '') or 'Standard'
+        results.append({
+            'type': 'ability',
+            'id': ability.id,
+            'title': ability.name or 'Unnamed',
+            'subtitle': f"Standard Ability • {cat_label}",
+            'description': desc[:100] + '...' if len(desc) > 100 else desc,
+            'url': f'/abilities-ability',
+            'campaign': None
+        })
+
+    # Search Hamon Abilities (playbook)
+    hamon_queryset = HamonAbility.objects.filter(
+        Q(name__icontains=query) |
+        Q(description__icontains=query)
+    )[:10]
+
+    for ha in hamon_queryset:
+        desc = ha.description or ''
+        try:
+            type_label = ha.get_hamon_type_display()
+        except (AttributeError, ValueError):
+            type_label = getattr(ha, 'hamon_type', '') or 'Hamon'
+        results.append({
+            'type': 'hamon_ability',
+            'id': ha.id,
+            'title': ha.name or 'Unnamed',
+            'subtitle': f"Hamon • {type_label}",
+            'description': desc[:100] + '...' if len(desc) > 100 else desc,
+            'url': f'/abilities-hamon',
+            'campaign': None
+        })
+
+    # Search Spin Abilities (playbook)
+    spin_queryset = SpinAbility.objects.filter(
+        Q(name__icontains=query) |
+        Q(description__icontains=query)
+    )[:10]
+
+    for sa in spin_queryset:
+        desc = sa.description or ''
+        try:
+            type_label = sa.get_spin_type_display()
+        except (AttributeError, ValueError):
+            type_label = getattr(sa, 'spin_type', '') or 'Spin'
+        results.append({
+            'type': 'spin_ability',
+            'id': sa.id,
+            'title': sa.name or 'Unnamed',
+            'subtitle': f"Spin • {type_label}",
+            'description': desc[:100] + '...' if len(desc) > 100 else desc,
+            'url': f'/abilities-spin',
+            'campaign': None
+        })
+
+    # Search Stand Abilities (Stand-specific)
+    stand_ability_queryset = StandAbility.objects.filter(
+        Q(name__icontains=query) |
+        Q(description__icontains=query)
+    )[:10]
+
+    for sta in stand_ability_queryset:
+        desc = sta.description or ''
+        stand_name = sta.stand.name if sta.stand else 'Stand'
+        results.append({
+            'type': 'stand_ability',
+            'id': sta.id,
+            'title': sta.name or 'Unnamed',
+            'subtitle': f"Stand Ability • {stand_name}",
+            'description': desc[:100] + '...' if len(desc) > 100 else desc,
+            'url': f'/abilities-stand',
+            'campaign': None
+        })
+
+    # Search Heritages
+    heritage_queryset = Heritage.objects.filter(
+        Q(name__icontains=query) |
+        Q(description__icontains=query)
+    )[:10]
+
+    for heritage in heritage_queryset:
+        results.append({
+            'type': 'heritage',
+            'id': heritage.id,
+            'title': heritage.name,
+            'subtitle': f"Heritage • Base HP: {heritage.base_hp}",
+            'description': heritage.description or 'No description',
+            'url': f'/abilities-heritage',
+            'campaign': None
+        })
+
+    return Response({
+        'results': results,
+        'total': len(results),
+        'query': query
+    })
 
 
 @api_view(['GET'])

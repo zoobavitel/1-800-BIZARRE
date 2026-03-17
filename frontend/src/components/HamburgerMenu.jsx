@@ -356,6 +356,7 @@ export default function HamburgerMenu({
 
           <Section title="Navigation">
             <MenuItem label="Home"       active={currentPage === 'home'}      onClick={() => handleNav('home')} />
+            <MenuItem label="Game Rules" active={currentPage === 'rules'}     onClick={() => handleNav('rules')} />
             <MenuItem label="Characters" active={currentPage === 'character'} onClick={() => handleNav('character')} />
             <MenuItem label="GM — NPCs"  active={currentPage === 'npcs'}      onClick={() => handleNav('npcs')} />
             <MenuItem label="Responsive Test" active={currentPage === 'test'} onClick={() => handleNav('test')} />

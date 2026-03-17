@@ -11,7 +11,8 @@ import {
   VICE_OPTIONS,
   DEFAULT_TRAUMA,
 } from '../features/character-sheet/constants/srd';
-import { characterAPI, rollAPI } from '../features/character-sheet';
+import { characterAPI, crewAPI, rollAPI, progressClockAPI } from '../features/character-sheet';
+import { useAuth } from '../features/auth';
 
 // ─── ProgressClock ────────────────────────────────────────────────────────────
 
@@ -41,11 +42,32 @@ const ProgressClock = ({ size = 80, segments = 4, filled = 0, onClick = null, in
 
 // ─── CharacterSheetWrapper ────────────────────────────────────────────────────
 
-const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwitchCharacter, allCharacters = [], campaigns = [], heritages = [], isGM = false }) => {
+const CLOCK_SEGMENT_OPTIONS = [4, 6, 8, 10, 12];
+const CLOCK_TYPE_OPTIONS = [
+  { value: 'CUSTOM', label: 'Custom' },
+  { value: 'DANGER', label: 'Danger' },
+  { value: 'MISSION', label: 'Mission' },
+  { value: 'RACING', label: 'Racing' },
+  { value: 'LINKED', label: 'Linked' },
+  { value: 'TUG_OF_WAR', label: 'Tug-of-War' },
+  { value: 'PROJECT', label: 'Long-term Project' },
+  { value: 'HEALING', label: 'Healing' },
+  { value: 'NPC_OPPONENT', label: 'NPC Opponent' },
+  { value: 'COUNTDOWN', label: 'Countdown' },
+];
+
+const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwitchCharacter, onCrewNameUpdated, allCharacters = [], campaigns = [], heritages = [], isGM = false, onCampaignRefresh }) => {
+  const { user } = useAuth();
   const [activeMode, setActiveMode] = useState('CHARACTER MODE');
   const charCampaign = campaigns?.find((c) => c.id === character?.campaign);
   const activeSessionId = charCampaign?.active_session ?? (typeof charCampaign?.active_session === 'object' ? charCampaign?.active_session?.id : null);
   const characterId = character?.id;
+  const [showCreateClock, setShowCreateClock] = useState(false);
+  const [createClockName, setCreateClockName] = useState('');
+  const [createClockSegments, setCreateClockSegments] = useState(4);
+  const [createClockType, setCreateClockType] = useState('CUSTOM');
+  const [createClockVisibleToParty, setCreateClockVisibleToParty] = useState(false);
+  const [creatingClock, setCreatingClock] = useState(false);
 
   // Resolve heritage: backend sends ID; createDefaultCharacter sends 'Human' string
   const resolveHeritageId = (h) => {
@@ -60,6 +82,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     name: character?.name || '', standName: character?.standName || '',
     heritage: resolveHeritageId(character?.heritage), background: character?.background || '',
     look: character?.look || '', vice: character?.vice || '', crew: character?.crew || '',
+    crewId: character?.crewId ?? null,
   });
 
   // Campaign assignment
@@ -93,6 +116,17 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
       setImageFile(null);
     }
   }, []);
+
+  // Sync crew/crewId when character changes (e.g. from parent after crew name update)
+  useEffect(() => {
+    const newCrew = character?.crew ?? '';
+    const newCrewId = character?.crewId ?? null;
+    setCharData((prev) =>
+      prev.crew !== newCrew || prev.crewId !== newCrewId
+        ? { ...prev, crew: newCrew, crewId: newCrewId }
+        : prev
+    );
+  }, [character?.crew, character?.crewId]);
 
   // Sync heritage when heritages load (e.g. new char has heritage: 'Human' string)
   useEffect(() => {
@@ -587,7 +621,27 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     <div style={{ flex:1 }}>
                       <div style={S.g2}>
                         <div><span style={S.lbl}>NAME</span><input style={S.inp} value={charData.name} onChange={e => setCharData(p => ({ ...p, name: e.target.value }))} placeholder="Character Name" /></div>
-                        <div><span style={S.lbl}>CREW</span><input style={S.inp} value={charData.crew} onChange={e => setCharData(p => ({ ...p, crew: e.target.value }))} placeholder="Crew Name" /></div>
+                        <div>
+                          <span style={S.lbl}>CREW</span>
+                          <input
+                            style={S.inp}
+                            value={charData.crew}
+                            onChange={e => setCharData(p => ({ ...p, crew: e.target.value }))}
+                            onBlur={async () => {
+                              const crewId = charData.crewId;
+                              const name = (charData.crew || '').trim();
+                              if (!crewId || !name) return;
+                              if (name === (character?.crew || '')) return;
+                              try {
+                                await crewAPI.patchCrew(crewId, { name });
+                                onCrewNameUpdated?.(name, crewId);
+                              } catch (err) {
+                                console.error('Failed to update crew name:', err);
+                              }
+                            }}
+                            placeholder="Crew Name (shared across campaign)"
+                          />
+                        </div>
                       </div>
                       <div style={{ marginTop:'8px' }}>
                         <span style={S.lbl}>STAND NAME</span>
@@ -1072,14 +1126,118 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                           ))}
                         </div>
                       )}
-                      {(charCampaign.progress_clocks || []).length > 0 && (
-                        <div style={{ marginBottom:'8px' }}>
-                          <span style={{ fontSize:'11px', color:'#9ca3af' }}>Clocks: </span>
-                          {(charCampaign.progress_clocks || []).map((clk) => (
-                            <span key={clk.id} style={{ marginRight:'8px', fontSize:'12px' }}>{clk.name} ({clk.filled_segments}/{clk.max_segments})</span>
-                          ))}
-                        </div>
-                      )}
+                      <div style={{ marginBottom:'8px' }}>
+                        <span style={{ fontSize:'11px', color:'#9ca3af' }}>Clocks: </span>
+                        {(charCampaign.progress_clocks || []).length > 0 ? (
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:'12px', alignItems:'center', marginTop:'4px' }}>
+                            {(charCampaign.progress_clocks || []).map((clk) => {
+                              const canEdit = isGM || clk.created_by === user?.id;
+                              return (
+                                <div key={clk.id} style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                                  <div style={{ textAlign:'center' }}>
+                                    <ProgressClock
+                                      size={44}
+                                      segments={clk.max_segments}
+                                      filled={clk.filled_segments}
+                                      interactive={canEdit}
+                                      onClick={canEdit ? (f) => {
+                                        progressClockAPI.updateProgressClock(clk.id, { filled_segments: f })
+                                          .then(() => onCampaignRefresh?.())
+                                          .catch(() => {});
+                                      } : undefined}
+                                    />
+                                    <span style={{ fontSize:'10px', color:'#6b7280', display:'block' }}>{clk.name}</span>
+                                    <span style={{ fontSize:'10px', color:'#9ca3af' }}>{clk.filled_segments}/{clk.max_segments}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <span style={{ fontSize:'12px', color:'#6b7280' }}>None</span>
+                        )}
+                        {!isGM && charCampaign?.id && activeSessionId && (
+                          <div style={{ marginTop:'8px' }}>
+                            {!showCreateClock ? (
+                              <button
+                                onClick={() => setShowCreateClock(true)}
+                                style={{ fontSize:'11px', padding:'4px 8px', background:'#374151', border:'1px solid #4b5563', borderRadius:'4px', color:'#e5e7eb', cursor:'pointer' }}
+                              >
+                                + Create clock
+                              </button>
+                            ) : (
+                              <div style={{ background:'#0d1117', padding:'10px', borderRadius:'4px', border:'1px solid #374151', marginTop:'4px' }}>
+                                <input
+                                  value={createClockName}
+                                  onChange={(e) => setCreateClockName(e.target.value)}
+                                  placeholder="Clock name"
+                                  style={{ ...S.inp, marginBottom:'6px', fontSize:'12px', width:'100%' }}
+                                />
+                                <div style={{ display:'flex', gap:'8px', marginBottom:'6px', flexWrap:'wrap' }}>
+                                  <select
+                                    value={createClockSegments}
+                                    onChange={(e) => setCreateClockSegments(parseInt(e.target.value, 10))}
+                                    style={{ ...S.inp, fontSize:'11px' }}
+                                  >
+                                    {CLOCK_SEGMENT_OPTIONS.map((n) => (
+                                      <option key={n} value={n}>{n} segments</option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    value={createClockType}
+                                    onChange={(e) => setCreateClockType(e.target.value)}
+                                    style={{ ...S.inp, fontSize:'11px' }}
+                                  >
+                                    {CLOCK_TYPE_OPTIONS.map((o) => (
+                                      <option key={o.value} value={o.value}>{o.label}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <label style={{ fontSize:'11px', display:'flex', alignItems:'center', gap:'6px', marginBottom:'8px' }}>
+                                  <input type="checkbox" checked={createClockVisibleToParty} onChange={(e) => setCreateClockVisibleToParty(e.target.checked)} />
+                                  Visible to party
+                                </label>
+                                <div style={{ display:'flex', gap:'8px' }}>
+                                  <button
+                                    onClick={async () => {
+                                      setCreatingClock(true);
+                                      try {
+                                        await progressClockAPI.createProgressClock({
+                                          campaign: charCampaign.id,
+                                          session: activeSessionId,
+                                          character: characterId,
+                                          name: createClockName.trim() || 'New Clock',
+                                          clock_type: createClockType,
+                                          max_segments: createClockSegments,
+                                          visible_to_party: createClockVisibleToParty,
+                                        });
+                                        setCreateClockName('');
+                                        setCreateClockSegments(4);
+                                        setCreateClockType('CUSTOM');
+                                        setCreateClockVisibleToParty(false);
+                                        setShowCreateClock(false);
+                                        onCampaignRefresh?.();
+                                      } finally {
+                                        setCreatingClock(false);
+                                      }
+                                    }}
+                                    disabled={creatingClock}
+                                    style={{ fontSize:'11px', padding:'4px 10px', background:'#4b5563', border:'none', borderRadius:'4px', color:'#fff', cursor: creatingClock ? 'not-allowed' : 'pointer' }}
+                                  >
+                                    {creatingClock ? 'Creating...' : 'Create'}
+                                  </button>
+                                  <button
+                                    onClick={() => { setShowCreateClock(false); setCreateClockName(''); }}
+                                    style={{ fontSize:'11px', padding:'4px 10px', background:'transparent', border:'1px solid #4b5563', borderRadius:'4px', color:'#9ca3af', cursor:'pointer' }}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                       <div>
                         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'4px' }}>
                           <span style={{ fontSize:'11px', color:'#9ca3af' }}>Dice history</span>
