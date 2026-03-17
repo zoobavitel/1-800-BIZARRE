@@ -100,6 +100,7 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
     look: payload.look ?? '',
     vice: payload.vice ?? '',
     crew: payload.crew ?? '',
+    crewId: payload.crewId ?? null,
     actionRatings: payload.actionRatings ?? {},
     standStats: payload.standStats ?? {},
     stressFilled: typeof payload.stressFilled === 'number' ? payload.stressFilled : 0,
@@ -174,6 +175,11 @@ export default function CharacterPage({ initialCharacterId = null }) {
       }
     });
     return () => { cancelled = true; };
+  }, []);
+
+  const refreshCampaigns = useCallback(async () => {
+    const c = await campaignAPI.getCampaigns().catch(() => []);
+    setCampaigns(c || []);
   }, []);
 
   // ── Load character list ──────────────────────────────────────────────────
@@ -263,6 +269,17 @@ export default function CharacterPage({ initialCharacterId = null }) {
     });
   }, [activeCharTabId]);
 
+  const handleCrewNameUpdated = useCallback((crewName, crewId) => {
+    setCharTabs((prev) =>
+      prev.map((t) =>
+        t.character && t.character.crewId === crewId
+          ? { ...t, character: { ...t.character, crew: crewName } }
+          : t
+      )
+    );
+    loadCharacters();
+  }, [loadCharacters]);
+
   // ── Save character ───────────────────────────────────────────────────────
   const handleSaveCharacter = useCallback(async (payload) => {
     // #region agent log
@@ -289,7 +306,7 @@ export default function CharacterPage({ initialCharacterId = null }) {
       const savedFrontend = transformBackendToFrontend(saved);
       // Preserve crew from payload: backend has crew as read_only FK, so it returns '' when we send a string.
       // Without this merge, character.crew becomes '' after save, causing a perceived "change" and save loop.
-      const merged = { ...savedFrontend, crew: payload.crew ?? savedFrontend.crew };
+      const merged = { ...savedFrontend, crew: payload.crew ?? savedFrontend.crew, crewId: payload.crewId ?? savedFrontend.crewId };
       // #region agent log
       fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterPage.jsx:287',message:'updateActiveCharTab after save',data:{savedId:merged?.id,mergedCrew:merged?.crew,savedCrew:savedFrontend?.crew},timestamp:Date.now(),hypothesisId:'crew'})}).catch(()=>{});
       // #endregion
@@ -490,6 +507,8 @@ export default function CharacterPage({ initialCharacterId = null }) {
             onSave={handleSaveCharacter}
             onCreateNew={handleCreateNewCharacterTab}
             onSwitchCharacter={handleSwitchCharacter}
+            onCrewNameUpdated={handleCrewNameUpdated}
+            onCampaignRefresh={refreshCampaigns}
           />
         )
       )}

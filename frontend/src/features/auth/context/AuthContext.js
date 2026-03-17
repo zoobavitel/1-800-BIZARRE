@@ -40,8 +40,14 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     setError(null);
     
+    // Trim to avoid "Unable to log in" from accidental spaces
+    const trimmed = {
+      username: (credentials.username || '').trim(),
+      password: (credentials.password || '').trim(),
+    };
+
     try {
-      const response = await authAPI.login(credentials);
+      const response = await authAPI.login(trimmed);
       const newToken = response.token;
       // Backend returns { token, user: { id, username, email } }; support legacy flat shape too
       const userData = response.user ?? {
@@ -67,8 +73,14 @@ export const AuthProvider = ({ children }) => {
     setLoading(true);
     setError(null);
     
+    // Trim to keep signup and login consistent (avoids login failures from accidental spaces)
+    const trimmed = {
+      username: (userData.username || '').trim(),
+      password: (userData.password || '').trim(),
+    };
+
     try {
-      const response = await authAPI.signup(userData);
+      const response = await authAPI.signup(trimmed);
       const newToken = response.token;
       const userInfo = response.user ?? {
         id: response.user_id,

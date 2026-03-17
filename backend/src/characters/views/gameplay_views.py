@@ -56,11 +56,13 @@ class ChatMessageViewSet(viewsets.ModelViewSet):
 
 
 class ProgressClockViewSet(viewsets.ModelViewSet):
-    """CRUD for progress clocks. GM-only create/update/delete; filter by campaign/session."""
+    """CRUD for progress clocks. GM and players can create; visibility filter for non-GM."""
     permission_classes = [IsAuthenticated]
     serializer_class = ProgressClockSerializer
 
     def get_queryset(self):
+        from django.db.models import Q
+        from ..models import Campaign
         qs = ProgressClock.objects.all()
         campaign_id = self.request.query_params.get('campaign')
         session_id = self.request.query_params.get('session')
@@ -75,30 +77,70 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
                 models.Q(campaign__characters__user=user) |
                 models.Q(campaign__players=user)
             ).distinct()
+            if campaign_id:
+                try:
+                    campaign = Campaign.objects.get(id=campaign_id)
+                    if campaign.gm_id != user.id:
+                        showcased_npc_ids = list(campaign.showcased_npcs.values_list('npc_id', flat=True))
+                        campaign_player_ids = list(campaign.players.values_list('id', flat=True)) + list(
+                            campaign.characters.values_list('user_id', flat=True).distinct()
+                        )
+                        qs = qs.filter(
+                            Q(
+                                Q(created_by__isnull=True, visible_to_players=True)
+                                & (Q(npc__isnull=True) | Q(npc_id__in=showcased_npc_ids))
+                            )
+                            | Q(created_by_id=user.id)
+                            | Q(visible_to_party=True, created_by_id__in=campaign_player_ids)
+                        )
+                except Campaign.DoesNotExist:
+                    pass
         return qs
 
     def perform_create(self, serializer):
         campaign = serializer.validated_data.get('campaign')
-        if campaign and campaign.gm != self.request.user and not self.request.user.is_staff:
+        user = self.request.user
+        is_gm = campaign and campaign.gm_id == user.id
+        if not campaign and not user.is_staff:
             from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied('Only the GM can create progress clocks.')
-        serializer.save()
+            raise PermissionDenied('Campaign is required to create progress clocks.')
+        if campaign and not is_gm and not user.is_staff:
+            in_campaign = (
+                campaign.players.filter(id=user.id).exists() or
+                campaign.characters.filter(user_id=user.id).exists()
+            )
+            if not in_campaign:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('Only campaign members can create progress clocks.')
+            serializer.save(created_by=user)
+        else:
+            serializer.save()
 
     def perform_update(self, serializer):
         obj = serializer.instance
-        if obj.campaign and obj.campaign.gm != self.request.user and not self.request.user.is_staff:
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied('Only the GM can update progress clocks.')
-        if not obj.campaign and not self.request.user.is_staff:
+        user = self.request.user
+        is_gm = obj.campaign and obj.campaign.gm_id == user.id
+        if not is_gm and not user.is_staff:
+            if obj.created_by_id != user.id:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('Only the creator or GM can update this clock.')
+            data = serializer.validated_data
+            if 'visible_to_players' in data and data.get('visible_to_players') != obj.visible_to_players:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('Only the GM can change visible_to_players.')
+        if not obj.campaign and not user.is_staff:
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied('Only staff can update clocks without a campaign.')
         serializer.save()
 
     def perform_destroy(self, instance):
-        if instance.campaign and instance.campaign.gm != self.request.user and not self.request.user.is_staff:
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied('Only the GM can delete progress clocks.')
-        if not instance.campaign and not self.request.user.is_staff:
+        user = self.request.user
+        is_gm = instance.campaign and instance.campaign.gm_id == user.id
+        if not is_gm and not user.is_staff:
+            if instance.created_by_id != user.id:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('Only the creator or GM can delete this clock.')
+        if not instance.campaign and not user.is_staff:
             from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied('Only staff can delete clocks without a campaign.')
         instance.delete()

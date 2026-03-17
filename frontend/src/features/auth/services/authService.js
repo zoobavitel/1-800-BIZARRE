@@ -59,7 +59,16 @@ export const authAPI = {
   
   // Get current user info (for token validation and display)
   getCurrentUser: () => apiRequest('/accounts/me/'),
-  
+
+  // Get current user's profile (signature, theme, etc.)
+  getProfile: () => apiRequest('/user-profiles/').then((data) => (Array.isArray(data) ? data[0] : data?.results?.[0] ?? data)),
+
+  // Update current user's profile
+  updateProfile: (profileData) => apiRequest('/user-profiles/update/', {
+    method: 'PUT',
+    body: JSON.stringify(profileData),
+  }),
+
   // Logout (clear token)
   logout: () => {
     localStorage.removeItem('authToken');

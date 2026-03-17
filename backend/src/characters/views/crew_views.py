@@ -83,12 +83,21 @@ class CrewViewSet(viewsets.ModelViewSet):
         })
 
     def perform_update(self, serializer):
-        # Ensure only the GM can update the crew
         crew = self.get_object()
-        if crew.campaign.gm != self.request.user and not self.request.user.is_staff:
-            raise PermissionDenied("Only the GM can update this crew")
-        serializer.save()
+        user = self.request.user
+        # GM and staff can update anything
+        if crew.campaign.gm == user or user.is_staff:
+            serializer.save()
+            return
+        # Crew members can update the crew name (syncs across all character/crew sheets)
+        if self._is_crew_member(user, crew):
+            validated = serializer.validated_data
+            if set(validated.keys()) <= {'name'}:
+                crew.name = validated.get('name', crew.name)
+                crew.save(update_fields=['name'])
+                return
+        raise PermissionDenied("Only the GM or crew members can update this crew")
 
     def _is_crew_member(self, user, crew):
-        """Check if a user is a member of the crew."""
-        return crew.campaign.characters.filter(user=user).exists() 
+        """Check if a user has a character in this crew."""
+        return crew.members.filter(user=user).exists() 

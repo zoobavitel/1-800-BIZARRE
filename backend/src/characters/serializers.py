@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from rest_framework.validators import UniqueValidator
 from django.contrib.auth.models import User
 from .models import (
     UserProfile, Heritage, Vice, Ability, Character, Stand,
@@ -56,7 +57,11 @@ class CrewSerializer(serializers.ModelSerializer):
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
-        fields = ['avatar']
+        fields = [
+            'avatar', 'signature', 'display_title', 'show_avatars', 'show_signatures',
+            'theme', 'email_digest', 'email_digest_days', 'receive_all_email',
+            'notification_preferences',
+        ]
 
 class UserSerializer(serializers.ModelSerializer):
     profile = UserProfileSerializer()
@@ -72,7 +77,11 @@ class UserSerializer(serializers.ModelSerializer):
         instance.username = validated_data.get('username', instance.username)
         instance.save()
 
-        profile.avatar = profile_data.get('avatar', profile.avatar)
+        for field in ['avatar', 'signature', 'display_title', 'show_avatars', 'show_signatures',
+                      'theme', 'email_digest', 'email_digest_days', 'receive_all_email',
+                      'notification_preferences']:
+            if field in profile_data:
+                setattr(profile, field, profile_data[field])
         profile.save()
 
         return instance
@@ -127,12 +136,14 @@ class ExperienceTrackerSerializer(serializers.ModelSerializer):
 
 class RollSerializer(serializers.ModelSerializer):
     character_name = serializers.CharField(source='character.true_name', read_only=True)
+    rolled_by_username = serializers.CharField(source='rolled_by.username', read_only=True)
 
     class Meta:
         model = Roll
         fields = [
             'id', 'character', 'character_name', 'session', 'roll_type', 'action_name',
-            'position', 'effect', 'dice_pool', 'results', 'outcome', 'description', 'timestamp'
+            'position', 'effect', 'dice_pool', 'results', 'outcome', 'description',
+            'rolled_by', 'rolled_by_username', 'timestamp'
         ]
         read_only_fields = ['timestamp']
 
@@ -451,11 +462,19 @@ class CharacterSerializer(serializers.ModelSerializer):
 
 
 class RegisterSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(
+        validators=[
+            UniqueValidator(
+                queryset=User.objects.all(),
+                message="That username is already taken. Try another or sign in.",
+            )
+        ]
+    )
     password = serializers.CharField(write_only=True)
 
     class Meta:
-        model  = User
-        fields = ['username','password']
+        model = User
+        fields = ['username', 'password']
 
     def create(self, validated_data):
         user = User.objects.create_user(**validated_data)
@@ -519,13 +538,14 @@ class ShowcasedNPCSerializer(serializers.ModelSerializer):
 
 class ProgressClockSerializer(serializers.ModelSerializer):
     clock_type_display = serializers.CharField(source='get_clock_type_display', read_only=True)
+    created_by = serializers.PrimaryKeyRelatedField(read_only=True, allow_null=True)
 
     class Meta:
         model = ProgressClock
         fields = [
             'id', 'name', 'clock_type', 'clock_type_display', 'max_segments', 'filled_segments',
             'description', 'campaign', 'crew', 'character', 'faction', 'session', 'npc',
-            'visible_to_players', 'created_at', 'completed'
+            'visible_to_players', 'visible_to_party', 'created_by', 'created_at', 'completed'
         ]
 
 
@@ -587,11 +607,27 @@ class CampaignSerializer(serializers.ModelSerializer):
         return [{'id': s.id, 'name': s.name, 'session_date': s.session_date} for s in sessions]
 
     def get_progress_clocks(self, obj):
+        from django.db.models import Q
         request = self.context.get('request')
-        is_gm = request and obj.gm_id == request.user.id
+        if not request or not request.user:
+            return []
+        is_gm = obj.gm_id == request.user.id
         clocks = obj.progress_clocks.all()
-        if not is_gm and not (request and request.user.is_staff):
-            clocks = clocks.filter(visible_to_players=True)
+        if is_gm or request.user.is_staff:
+            return ProgressClockSerializer(clocks, many=True).data
+        user = request.user
+        showcased_npc_ids = list(obj.showcased_npcs.values_list('npc_id', flat=True))
+        campaign_player_ids = list(obj.players.values_list('id', flat=True)) + list(
+            obj.characters.values_list('user_id', flat=True).distinct()
+        )
+        clocks = clocks.filter(
+            Q(
+                Q(created_by__isnull=True, visible_to_players=True)
+                & (Q(npc__isnull=True) | Q(npc_id__in=showcased_npc_ids))
+            )
+            | Q(created_by_id=user.id)
+            | Q(visible_to_party=True, created_by_id__in=campaign_player_ids)
+        )
         return ProgressClockSerializer(clocks, many=True).data
 
 

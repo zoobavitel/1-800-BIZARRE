@@ -625,15 +625,37 @@ function ClockManager({ clocks, setClocks, campaignId, sessionId, setError }) {
           </div>
         )}
       </div>
-      {clocks.map((clk) => (
-        <div key={clk.id} style={{ padding: '8px 0', borderBottom: '1px solid #1f2937', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>{clk.name} ({clk.filled_segments}/{clk.max_segments})</span>
-          <label style={{ fontSize: '11px' }}>
-            <input type="checkbox" checked={clk.visible_to_players} onChange={(e) => progressClockAPI.updateProgressClock(clk.id, { visible_to_players: e.target.checked }).then(() => setClocks((p) => p.map((c) => c.id === clk.id ? { ...c, visible_to_players: e.target.checked } : c)))} />
-            Visible to players
-          </label>
-        </div>
-      ))}
+      {clocks.map((clk) => {
+        const isGMClock = clk.created_by == null;
+        const updateClock = (patch) => progressClockAPI.updateProgressClock(clk.id, patch).then(() => setClocks((p) => p.map((c) => c.id === clk.id ? { ...c, ...patch } : c)));
+        const tick = (delta) => {
+          const next = Math.max(0, Math.min(clk.max_segments, (clk.filled_segments || 0) + delta));
+          updateClock({ filled_segments: next });
+        };
+        return (
+          <div key={clk.id} style={{ padding: '8px 0', borderBottom: '1px solid #1f2937', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '10px', color: '#6b7280', background: isGMClock ? '#374151' : '#1e3a5f', padding: '2px 6px', borderRadius: '4px' }}>{isGMClock ? 'GM' : 'Player'}</span>
+              <span>{clk.name} ({clk.filled_segments}/{clk.max_segments})</span>
+              <button onClick={() => tick(-1)} style={{ ...S.btnGhost, padding: '2px 6px', fontSize: '11px' }}>-</button>
+              <button onClick={() => tick(1)} style={{ ...S.btnGhost, padding: '2px 6px', fontSize: '11px' }}>+</button>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+              {isGMClock ? (
+                <label style={{ fontSize: '11px' }}>
+                  <input type="checkbox" checked={clk.visible_to_players} onChange={(e) => updateClock({ visible_to_players: e.target.checked })} />
+                  Visible to players
+                </label>
+              ) : (
+                <label style={{ fontSize: '11px' }}>
+                  <input type="checkbox" checked={clk.visible_to_party} onChange={(e) => updateClock({ visible_to_party: e.target.checked })} />
+                  Visible to party
+                </label>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1115,8 +1137,12 @@ function HarmEditor({ character, onSave }) {
   const [harm, setHarm] = useState({
     harm_level1_used: character.harm_level1_used ?? false,
     harm_level1_name: character.harm_level1_name || '',
+    harm_level1_slot2_used: character.harm_level1_slot2_used ?? false,
+    harm_level1_slot2_name: character.harm_level1_slot2_name || '',
     harm_level2_used: character.harm_level2_used ?? false,
     harm_level2_name: character.harm_level2_name || '',
+    harm_level2_slot2_used: character.harm_level2_slot2_used ?? false,
+    harm_level2_slot2_name: character.harm_level2_slot2_name || '',
     harm_level3_used: character.harm_level3_used ?? false,
     harm_level3_name: character.harm_level3_name || '',
     harm_level4_used: character.harm_level4_used ?? false,
@@ -1126,8 +1152,12 @@ function HarmEditor({ character, onSave }) {
     setHarm({
       harm_level1_used: character.harm_level1_used ?? false,
       harm_level1_name: character.harm_level1_name || '',
+      harm_level1_slot2_used: character.harm_level1_slot2_used ?? false,
+      harm_level1_slot2_name: character.harm_level1_slot2_name || '',
       harm_level2_used: character.harm_level2_used ?? false,
       harm_level2_name: character.harm_level2_name || '',
+      harm_level2_slot2_used: character.harm_level2_slot2_used ?? false,
+      harm_level2_slot2_name: character.harm_level2_slot2_name || '',
       harm_level3_used: character.harm_level3_used ?? false,
       harm_level3_name: character.harm_level3_name || '',
       harm_level4_used: character.harm_level4_used ?? false,
@@ -1136,15 +1166,25 @@ function HarmEditor({ character, onSave }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [character.id]);
   const save = () => onSave(harm);
+  const renderSlot = (usedKey, nameKey, levelLabel) => (
+    <div key={usedKey} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+      <input type="checkbox" checked={harm[usedKey]} onChange={(e) => setHarm((p) => ({ ...p, [usedKey]: e.target.checked }))} />
+      <input style={{ ...S.inp, flex: 1, maxWidth: '200px' }} placeholder={levelLabel} value={harm[nameKey]} onChange={(e) => setHarm((p) => ({ ...p, [nameKey]: e.target.value }))} />
+    </div>
+  );
   return (
     <div style={{ padding: '8px 0', borderBottom: '1px solid #1f2937' }}>
       <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{character.true_name || character.alias || 'Unnamed'}</div>
-      {[1, 2, 3, 4].map((n) => (
-        <div key={n} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-          <input type="checkbox" checked={harm[`harm_level${n}_used`]} onChange={(e) => setHarm((p) => ({ ...p, [`harm_level${n}_used`]: e.target.checked }))} />
-          <input style={{ ...S.inp, flex: 1, maxWidth: '200px' }} placeholder={`Level ${n} harm`} value={harm[`harm_level${n}_name`]} onChange={(e) => setHarm((p) => ({ ...p, [`harm_level${n}_name`]: e.target.value }))} />
-        </div>
-      ))}
+      {/* Level 1: 2 slots */}
+      {renderSlot('harm_level1_used', 'harm_level1_name', 'Level 1 harm (slot 1)')}
+      {renderSlot('harm_level1_slot2_used', 'harm_level1_slot2_name', 'Level 1 harm (slot 2)')}
+      {/* Level 2: 2 slots */}
+      {renderSlot('harm_level2_used', 'harm_level2_name', 'Level 2 harm (slot 1)')}
+      {renderSlot('harm_level2_slot2_used', 'harm_level2_slot2_name', 'Level 2 harm (slot 2)')}
+      {/* Level 3: 1 slot */}
+      {renderSlot('harm_level3_used', 'harm_level3_name', 'Level 3 harm')}
+      {/* Level 4: 1 slot */}
+      {renderSlot('harm_level4_used', 'harm_level4_name', 'Level 4 harm')}
       <button onClick={save} style={{ ...S.btn, marginTop: '6px', fontSize: '10px' }}>Save harm</button>
     </div>
   );
