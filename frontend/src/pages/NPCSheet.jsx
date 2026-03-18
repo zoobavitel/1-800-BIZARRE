@@ -19,11 +19,11 @@ const GRADE_PTS = { F: 0, D: 1, C: 2, B: 3, A: 4, S: 5 };
 // Durability → Vulnerability Clock segments
 const DUR_VULN_CLOCK = { F: 4, D: 6, C: 8, B: 10, A: 12, S: 0 };
 
-// Durability → Regular armor charges
-const DUR_REGULAR_ARMOR = { F: 1, D: 2, C: 2, B: 3, A: 4, S: 5 };
+// Durability → Regular armor charges (SRD: F=0, D=1, C=1, B=2, A=3, S=3)
+const DUR_REGULAR_ARMOR = { F: 0, D: 1, C: 1, B: 2, A: 3, S: 3 };
 
-// Durability → Special armor charges
-const DUR_SPECIAL_ARMOR = { F: 0, D: 1, C: 1, B: 2, A: 3, S: 3 };
+// Durability → Special armor charges (Stand Armor effectiveness)
+const DUR_SPECIAL_ARMOR = { F: 0, D: 0, C: 1, B: 1, A: 2, S: 2 };
 
 // Power → base harm level + position note
 const POWER_TABLE = {
@@ -77,33 +77,44 @@ const DEV_TABLE = {
 
 // ─── ProgressClock ────────────────────────────────────────────────────────────
 
+const arrowBtnStyle = { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '16px', padding: '2px 4px', lineHeight: 1 };
 const ProgressClock = ({ size = 80, segments, filled, onClick, label, sublabel, color = '#dc2626' }) => {
   if (segments === 0) return null;
   const r = size / 2 - 4, cx = size / 2, cy = size / 2;
   const sa = 360 / segments;
+  const svg = (
+    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+      {Array.from({ length: segments }, (_, i) => {
+        const a1 = ((i * sa - 90) * Math.PI) / 180;
+        const a2 = (((i + 1) * sa - 90) * Math.PI) / 180;
+        const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+        const x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
+        return (
+          <path key={i}
+            d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${sa > 180 ? 1 : 0} 1 ${x2} ${y2} Z`}
+            fill={i < filled ? color : 'transparent'} stroke="#4b5563" strokeWidth="1.5"
+            style={{ cursor: onClick ? 'pointer' : 'default' }}
+            onClick={onClick ? () => onClick(i < filled ? i : i + 1) : undefined}
+          />
+        );
+      })}
+      <circle cx={cx} cy={cy} r={r} fill="transparent" stroke="#6b7280" strokeWidth="2" />
+      <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle"
+        style={{ fontSize: Math.max(8, size / 6), fill: '#fff', fontFamily: 'monospace', fontWeight: 'bold', transform: `rotate(90deg)`, transformOrigin: `${cx}px ${cy}px` }}>
+        {filled}/{segments}
+      </text>
+    </svg>
+  );
+  const clockContent = onClick ? (
+    <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <button type="button" style={arrowBtnStyle} onClick={() => onClick(Math.max(0, filled - 1))} title="Decrease">−</button>
+      {svg}
+      <button type="button" style={arrowBtnStyle} onClick={() => onClick(Math.min(segments, filled + 1))} title="Increase">+</button>
+    </div>
+  ) : svg;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        {Array.from({ length: segments }, (_, i) => {
-          const a1 = ((i * sa - 90) * Math.PI) / 180;
-          const a2 = (((i + 1) * sa - 90) * Math.PI) / 180;
-          const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
-          const x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
-          return (
-            <path key={i}
-              d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${sa > 180 ? 1 : 0} 1 ${x2} ${y2} Z`}
-              fill={i < filled ? color : 'transparent'} stroke="#4b5563" strokeWidth="1.5"
-              style={{ cursor: onClick ? 'pointer' : 'default' }}
-              onClick={onClick ? () => onClick(i < filled ? i : i + 1) : undefined}
-            />
-          );
-        })}
-        <circle cx={cx} cy={cy} r={r} fill="transparent" stroke="#6b7280" strokeWidth="2" />
-        <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle"
-          style={{ fontSize: Math.max(8, size / 6), fill: '#fff', fontFamily: 'monospace', fontWeight: 'bold', transform: `rotate(90deg)`, transformOrigin: `${cx}px ${cy}px` }}>
-          {filled}/{segments}
-        </text>
-      </svg>
+      {clockContent}
       {label && <div style={{ fontSize: '11px', fontWeight: 'bold', color: '#d1d5db', textAlign: 'center', maxWidth: `${size}px` }}>{label}</div>}
       {sublabel && <div style={{ fontSize: '10px', color: '#6b7280', textAlign: 'center', maxWidth: `${size}px` }}>{sublabel}</div>}
     </div>

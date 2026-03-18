@@ -6,7 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from ..models import Campaign, CampaignInvitation, Character, ShowcasedNPC, NPC
-from ..serializers import CampaignSerializer, CampaignInvitationSerializer, ShowcasedNPCSerializer
+from ..serializers import CampaignSerializer, CampaignInvitationSerializer, ShowcasedNPCSerializer, InvitableUserSerializer
 
 
 class CampaignViewSet(viewsets.ModelViewSet):
@@ -74,6 +74,31 @@ class CampaignViewSet(viewsets.ModelViewSet):
             campaign=campaign, invited_user=invited_user, invited_by=request.user
         )
         return Response(CampaignInvitationSerializer(invitation).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['get'], url_path='invitable-users')
+    def invitable_users(self, request, pk=None):
+        campaign = self.get_object()
+        if campaign.gm != request.user and not request.user.is_staff:
+            return Response({'error': 'Only the GM can view invitable users.'}, status=status.HTTP_403_FORBIDDEN)
+
+        queryset = User.objects.all().order_by('username')
+
+        # Exclude GM
+        queryset = queryset.exclude(id=campaign.gm_id)
+        # Exclude current players
+        queryset = queryset.exclude(id__in=campaign.players.values_list('id', flat=True))
+        # Exclude users with pending invitations
+        pending_user_ids = CampaignInvitation.objects.filter(
+            campaign=campaign, status='pending'
+        ).values_list('invited_user_id', flat=True)
+        queryset = queryset.exclude(id__in=pending_user_ids)
+
+        search = request.query_params.get('search', '').strip()
+        if search:
+            queryset = queryset.filter(username__icontains=search)
+
+        serializer = InvitableUserSerializer(queryset, many=True)
+        return Response(serializer.data)
 
     @action(detail=True, methods=['post'], url_path='deactivate')
     def deactivate(self, request, pk=None):

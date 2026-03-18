@@ -170,6 +170,12 @@ export const campaignAPI = {
     method: 'POST',
     body: JSON.stringify({ username }),
   }),
+  getInvitableUsers: (campaignId, search) =>
+    apiRequest(
+      search
+        ? `/campaigns/${campaignId}/invitable-users/?search=${encodeURIComponent(search)}`
+        : `/campaigns/${campaignId}/invitable-users/`
+    ),
   deactivateCampaign: (id) => apiRequest(`/campaigns/${id}/deactivate/`, { method: 'POST' }),
   activateCampaign: (id) => apiRequest(`/campaigns/${id}/activate/`, { method: 'POST' }),
   assignCharacter: (id, characterId) => apiRequest(`/campaigns/${id}/assign-character/`, {
@@ -396,6 +402,7 @@ export const transformBackendToFrontend = (backendCharacter) => {
     background: backendCharacter.background_note || '',
     look: backendCharacter.appearance || '',
     vice: backendCharacter.vice?.name || '',
+    viceDetails: backendCharacter.vice_details || '',
     crew: backendCharacter.crew?.name || '',
     crewId: backendCharacter.crew?.id ?? null,
     
@@ -533,6 +540,7 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     background_note: frontendCharacter.background,
     appearance: frontendCharacter.look,
     ...(isViceName ? { custom_vice: viceVal } : { vice: viceVal }),
+    vice_details: frontendCharacter.viceDetails ?? frontendCharacter.vice_details ?? '',
     
     // Action dots
     action_dots: {

@@ -19,10 +19,12 @@ import { useAuth } from '../features/auth';
 
 // ─── ProgressClock ────────────────────────────────────────────────────────────
 
+const arrowBtnStyle = { background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '16px', padding: '2px 4px', lineHeight: 1 };
 const ProgressClock = ({ size = 80, segments = 4, filled = 0, onClick = null, interactive = false }) => {
   const r = size / 2 - 4, cx = size / 2, cy = size / 2;
   const sa = 360 / segments;
-  return (
+  const showArrows = interactive && onClick;
+  const svg = (
     <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
       {Array.from({ length: segments }, (_, i) => {
         const a1 = ((i * sa - 90) * Math.PI) / 180;
@@ -41,6 +43,16 @@ const ProgressClock = ({ size = 80, segments = 4, filled = 0, onClick = null, in
       <circle cx={cx} cy={cy} r={r} fill="transparent" stroke="#6b7280" strokeWidth="2" />
     </svg>
   );
+  if (showArrows) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <button type="button" style={arrowBtnStyle} onClick={() => onClick(Math.max(0, filled - 1))} title="Decrease">−</button>
+        {svg}
+        <button type="button" style={arrowBtnStyle} onClick={() => onClick(Math.min(segments, filled + 1))} title="Increase">+</button>
+      </div>
+    );
+  }
+  return svg;
 };
 
 // ─── CharacterSheetWrapper ────────────────────────────────────────────────────
@@ -89,8 +101,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const [charData, setCharData] = useState({
     name: character?.name || '', standName: character?.standName || '',
     heritage: resolveHeritageId(character?.heritage), background: character?.background || '',
-    look: character?.look || '', vice: character?.vice || '', crew: character?.crew || '',
-    crewId: character?.crewId ?? null,
+    look: character?.look || '', vice: character?.vice || '', viceDetails: character?.viceDetails ?? character?.vice_details ?? '',
+    crew: character?.crew || '', crewId: character?.crewId ?? null,
   });
 
   // Campaign assignment (normalize: backend may send campaign as object or ID)
@@ -139,6 +151,17 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     );
   }, [character?.crew, character?.crewId]);
 
+  // Sync vice/viceDetails when character changes (e.g. switching tabs or after load)
+  useEffect(() => {
+    const newVice = character?.vice ?? '';
+    const newViceDetails = character?.viceDetails ?? character?.vice_details ?? '';
+    setCharData((prev) =>
+      prev.vice !== newVice || prev.viceDetails !== newViceDetails
+        ? { ...prev, vice: newVice, viceDetails: newViceDetails }
+        : prev
+    );
+  }, [character?.id, character?.vice, character?.viceDetails, character?.vice_details]);
+
   // Sync heritage when heritages load (e.g. new char has heritage: 'Human' string)
   useEffect(() => {
     if (!heritages?.length) return;
@@ -183,6 +206,18 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const [standStats, setStandStats] = useState(character?.standStats || {
     power: 1, speed: 1, range: 1, durability: 1, precision: 1, development: 1,
   });
+
+  // Sync standStats when character changes (e.g. switching tabs)
+  useEffect(() => {
+    const next = character?.standStats;
+    if (next && typeof next === 'object') {
+      setStandStats((prev) => {
+        const keys = ['power', 'speed', 'range', 'durability', 'precision', 'development'];
+        const changed = keys.some((k) => (prev[k] ?? 1) !== (next[k] ?? 1));
+        return changed ? { ...prev, ...next } : prev;
+      });
+    }
+  }, [character?.id, character?.standStats]);
 
   // FIX 1: Action ratings — creation enforces 7 total / max 2 per action
   const [actionRatings, setActionRatings] = useState(character?.actionRatings || {
@@ -348,8 +383,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
 
   // ─── Derived Values ──────────────────────────────────────────────────────────
 
-  const durVal = Math.min(4, Math.max(0, Number(standStats.durability) || 1));
-  const devVal = Math.min(4, Math.max(0, Number(standStats.development) || 1));
+  const durVal = Math.min(5, Math.max(0, Number(standStats.durability) || 1));
+  const devVal = Math.min(5, Math.max(0, Number(standStats.development) || 1));
   const maxStress       = 9 + (DUR_TABLE[durVal]?.stressBonus ?? 0);
   const maxArmorCharges = DUR_TABLE[durVal]?.armorCharges ?? 1;
   const sessionDevXP    = DEV_SESSION_XP[devVal] ?? 0;
@@ -804,7 +839,12 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                             <option value="">Select Vice</option>
                             {VICE_OPTIONS.map(v => <option key={v}>{v}</option>)}
                           </select>
-                          <input style={{ ...S.inp, flex:1 }} placeholder="Purveyor details" />
+                          <input
+                            style={{ ...S.inp, flex:1 }}
+                            placeholder="Purveyor details"
+                            value={charData.viceDetails ?? ''}
+                            onChange={e => setCharData(p => ({ ...p, viceDetails: e.target.value }))}
+                          />
                         </div>
                       </div>
                     </div>

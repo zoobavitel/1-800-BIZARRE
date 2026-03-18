@@ -56,14 +56,14 @@ const barStyles = {
     background: 'transparent', color: '#9ca3af', cursor: 'pointer',
     fontFamily: 'monospace', fontSize: '12px',
   },
-  rightBtn: {
+  actionBtn: {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     width: '36px', height: '36px', border: 'none', borderRadius: '4px',
     background: '#374151', color: '#9ca3af', cursor: 'pointer',
   },
 };
 
-function AppBar({ onHamburgerClick, onBack, pageTitle, rightActions }) {
+function AppBar({ onHamburgerClick, onBack, pageTitle, rightContent }) {
   return (
     <header style={barStyles.bar}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -81,8 +81,8 @@ function AppBar({ onHamburgerClick, onBack, pageTitle, rightActions }) {
           </>
         )}
       </div>
-      {rightActions && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>{rightActions}</div>
+      {rightContent && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>{rightContent}</div>
       )}
     </header>
   );
@@ -254,14 +254,14 @@ const App = () => {
             onHamburgerClick={toggleMenu}
             onBack={currentPage !== 'home' ? handleBack : undefined}
             pageTitle={PAGE_TITLES[currentPage]}
-            rightActions={currentPage === 'home' ? (
+            rightContent={currentPage === 'home' ? (
               <>
                 <button
                   type="button"
                   onClick={() => handlePageChange('search')}
                   aria-label="Search"
                   title="Search"
-                  style={barStyles.rightBtn}
+                  style={barStyles.actionBtn}
                 >
                   <Search style={{ width: 20, height: 20 }} />
                 </button>
@@ -270,7 +270,7 @@ const App = () => {
                   onClick={() => setUserMenuOpen(true)}
                   aria-label="User menu"
                   title="User menu"
-                  style={barStyles.rightBtn}
+                  style={barStyles.actionBtn}
                 >
                   <Settings style={{ width: 20, height: 20 }} />
                 </button>
@@ -293,7 +293,6 @@ const App = () => {
               onNavigateToCharacter={(characterId) => handlePageChange('character', { characterId })}
               onNavigateToCharacterOptions={() => handlePageChange('character-options')}
               onNavigateToCampaign={(campaignId) => handlePageChange('campaigns', { campaignId })}
-              onNavigateToSearch={() => handlePageChange('search')}
               onNavigateToRules={(section) => handlePageChange('rules', { section })}
             />
           </>
