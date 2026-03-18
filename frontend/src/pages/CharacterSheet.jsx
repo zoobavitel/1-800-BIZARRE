@@ -640,15 +640,32 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
       {/* ── Header ── */}
       <div style={S.hdr}>
         <div style={{ fontSize:'18px', fontWeight:'bold' }}>1(800)BIZARRE — {activeMode}</div>
-        <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
-          <select value={activeMode} onChange={e => setActiveMode(e.target.value)} style={S.sel}>
-            <option>CHARACTER MODE</option>
-            <option>CREW MODE</option>
-          </select>
-          {saveStatus === 'saving' && <span style={{ fontSize:'11px', color:'#fbbf24' }}>Saving...</span>}
-          {saveStatus === 'saved'  && <span style={{ fontSize:'11px', color:'#34d399' }}>Saved</span>}
-          {saveStatus === 'error'  && <span style={{ fontSize:'11px', color:'#f87171' }}>Error saving</span>}
-          {onClose && <button onClick={onClose} style={{ background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:'18px' }}>✕</button>}
+        <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'8px' }}>
+          {allCharacters?.length > 0 && onSwitchCharacter && (
+            <select
+              style={{ background:'#1f2937', color:'#9ca3af', border:'1px solid #4b5563', padding:'4px 8px', fontSize:'11px', fontFamily:'monospace', borderRadius:'4px' }}
+              value=""
+              onChange={e => {
+                const ch = allCharacters.find(c => c.id === parseInt(e.target.value, 10));
+                if (ch) onSwitchCharacter(ch);
+              }}
+            >
+              <option value="">Open Character...</option>
+              {allCharacters.map(c => (
+                <option key={c.id} value={c.id}>{c.name || 'Unnamed'}</option>
+              ))}
+            </select>
+          )}
+          <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+            <select value={activeMode} onChange={e => setActiveMode(e.target.value)} style={S.sel}>
+              <option>CHARACTER MODE</option>
+              <option>CREW MODE</option>
+            </select>
+            {saveStatus === 'saving' && <span style={{ fontSize:'11px', color:'#fbbf24' }}>Saving...</span>}
+            {saveStatus === 'saved'  && <span style={{ fontSize:'11px', color:'#34d399' }}>Saved</span>}
+            {saveStatus === 'error'  && <span style={{ fontSize:'11px', color:'#f87171' }}>Error saving</span>}
+            {onClose && <button onClick={onClose} style={{ background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:'18px' }}>✕</button>}
+          </div>
         </div>
       </div>
 

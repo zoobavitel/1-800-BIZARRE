@@ -3656,3 +3656,4 @@ AssertionError: It is redundant to specify `source='xp_entries'` on field 'ListS
 [WARNING] 2026-03-18 05:37:55,696 django.request - Bad Request: /api/characters/
 [WARNING] 2026-03-18 05:38:01,617 django.request - Bad Request: /api/npcs/
 [WARNING] 2026-03-18 05:38:10,926 django.request - Bad Request: /api/npcs/
+[WARNING] 2026-03-18 05:40:44,065 django.request - Bad Request: /api/characters/
