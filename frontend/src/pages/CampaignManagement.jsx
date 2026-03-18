@@ -83,7 +83,7 @@ function PendingInvitations({ invitations, onAccept, onDecline }) {
 // ---------------------------------------------------------------------------
 // Campaign Detail View
 // ---------------------------------------------------------------------------
-function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessions }) {
+function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessions, onNavigateToCharacter }) {
   const [inviteUsername, setInviteUsername] = useState('');
   const [inviteError, setInviteError] = useState(null);
   const [inviteSuccess, setInviteSuccess] = useState(null);
@@ -102,7 +102,9 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
     }
   }, [isGM]);
 
-  const availableToAssign = myCharacters.filter((ch) => !ch.campaign && ch.id);
+  const availableToAssign = isGM
+    ? myCharacters.filter((ch) => ch.id && (ch.campaign !== campaign?.id && ch.campaign?.id !== campaign?.id))
+    : myCharacters.filter((ch) => !ch.campaign && ch.id);
   const npcsThatCanBeAdded = allNPCs.filter((n) => !n.campaign);
   const campaignNPCs = allNPCs.filter((n) => n.campaign === campaign?.id || n.campaign?.id === campaign?.id);
 
@@ -307,13 +309,35 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
           <div style={{ color: '#6b7280', fontSize: '12px' }}>No players have joined yet.</div>
         ) : (
           <>
-            {/* Show GM */}
-            <div style={{ padding: '6px 0', borderBottom: '1px solid #1f2937' }}>
-              <div style={S.row}>
-                <span style={{ fontWeight: 'bold', color: '#d1d5db' }}>{campaign.gm?.username}</span>
-                <RoleBadge role="GM" />
-              </div>
-            </div>
+            {/* Show GM (and GM's assigned character when they have one) */}
+            {(() => {
+              const gmChars = (campaign.campaign_characters || []).filter((ch) => ch.user_id === campaign.gm?.id);
+              return (
+                <div style={{ padding: '6px 0', borderBottom: '1px solid #1f2937' }}>
+                  <div style={S.row}>
+                    <span style={{ fontWeight: 'bold', color: '#d1d5db' }}>{campaign.gm?.username}</span>
+                    <RoleBadge role="GM" />
+                  </div>
+                  {gmChars.length > 0 && (
+                    gmChars.map((ch) => (
+                      <div key={ch.id} style={{ paddingLeft: '12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
+                        <span style={{ color: '#9ca3af' }}>PC:</span>
+                        <span style={{ color: '#e5e7eb' }}>{ch.true_name || ch.alias || 'Unnamed'}</span>
+                        {ch.stand_name && <span style={{ color: '#9ca3af' }}>Stand: {ch.stand_name}</span>}
+                        <PlaybookTag playbook={ch.playbook} />
+                        {ch.heritage_name && <span style={{ ...S.tag, background: '#374151', color: '#9ca3af' }}>{ch.heritage_name}</span>}
+                        {typeof onNavigateToCharacter === 'function' && (
+                          <button onClick={() => onNavigateToCharacter(ch.id)} style={{ ...S.btn, fontSize: '10px', padding: '2px 6px', background: '#1d4ed8', color: '#93c5fd' }}>View</button>
+                        )}
+                        {user?.id === campaign.gm?.id && (
+                          <button onClick={() => handleUnassignCharacter(ch.id)} style={{ ...S.btn, fontSize: '10px', padding: '2px 6px', background: '#7f1d1d', color: '#fca5a5' }}>Remove</button>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              );
+            })()}
             {/* Group characters by user */}
             {(() => {
               const playerMap = {};
@@ -334,11 +358,14 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
                       <div style={{ fontSize: '11px', color: '#6b7280', paddingLeft: '12px' }}>No character assigned</div>
                     ) : (
                       p.characters.map((ch) => (
-                        <div key={ch.id} style={{ paddingLeft: '12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
+                        <div key={ch.id} style={{ paddingLeft: '12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'wrap' }}>
                           <span style={{ color: '#e5e7eb' }}>{ch.true_name || ch.alias || 'Unnamed'}</span>
                           {ch.stand_name && <span style={{ color: '#9ca3af' }}>Stand: {ch.stand_name}</span>}
                           <PlaybookTag playbook={ch.playbook} />
                           {ch.heritage_name && <span style={{ ...S.tag, background: '#374151', color: '#9ca3af' }}>{ch.heritage_name}</span>}
+                          {typeof onNavigateToCharacter === 'function' && (
+                            <button onClick={() => onNavigateToCharacter(ch.id)} style={{ ...S.btn, fontSize: '10px', padding: '2px 6px', background: '#1d4ed8', color: '#93c5fd' }}>View</button>
+                          )}
                           {p.id === user?.id && (
                             <button onClick={() => handleUnassignCharacter(ch.id)} style={{ ...S.btn, fontSize: '10px', padding: '2px 6px', background: '#7f1d1d', color: '#fca5a5' }}>Remove</button>
                           )}
@@ -384,8 +411,8 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
         </div>
       )}
 
-      {/* Assign Character (Player who is in the campaign) */}
-      {!isGM && campaign.players?.some((p) => p.id === user?.id) && availableToAssign.length > 0 && (
+      {/* Assign Character (GM or player who is in the campaign) */}
+      {(isGM || campaign.players?.some((p) => p.id === user?.id)) && availableToAssign.length > 0 && (
         <div style={S.card}>
           <span style={S.sectionLbl}>Assign a Character</span>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -660,7 +687,7 @@ function ClockManager({ clocks, setClocks, campaignId, sessionId, setError }) {
   );
 }
 
-function DiceHistoryRow({ roll, showPositionEffect, onPatch }) {
+function DiceHistoryRow({ roll, showPositionEffect, onPatch, onGrantXP, isGM }) {
   const [editing, setEditing] = useState(false);
   const [pos, setPos] = useState(roll.position || 'risky');
   const [eff, setEff] = useState(roll.effect || 'standard');
@@ -668,8 +695,25 @@ function DiceHistoryRow({ roll, showPositionEffect, onPatch }) {
     onPatch(roll.id, { position: pos, effect: eff });
     setEditing(false);
   };
+  const isDesperate = roll.position === 'desperate' && roll.roll_type === 'ACTION';
+  const canGrantXP = isGM && isDesperate && !roll.xp_awarded && onGrantXP;
   return (
-    <div style={{ padding: '6px 0', borderBottom: '1px solid #1f2937', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+    <div style={{
+      padding: '6px 0',
+      borderBottom: '1px solid #1f2937',
+      fontSize: '12px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px',
+      flexWrap: 'wrap',
+      ...(isDesperate ? { background: 'rgba(249, 115, 22, 0.08)', margin: '0 -8px', padding: '6px 8px', borderLeft: '3px solid #f97316' } : {}),
+    }}>
+      {isDesperate && (
+        <span style={{ ...S.badge, background: '#f97316', color: '#000' }}>Desperate</span>
+      )}
+      {roll.xp_awarded && (
+        <span style={{ ...S.badge, background: '#16a34a', color: '#fff' }}>+1 XP</span>
+      )}
       <span style={{ fontWeight: 'bold' }}>{roll.character_name || roll.character}</span>
       <span>·</span>
       <span>{roll.action_name}</span>
@@ -699,6 +743,11 @@ function DiceHistoryRow({ roll, showPositionEffect, onPatch }) {
             <button onClick={() => setEditing(true)} style={{ marginLeft: '4px', background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '10px' }}>Edit</button>
           </span>
         )
+      )}
+      {canGrantXP && (
+        <button onClick={() => onGrantXP(roll.id)} style={{ ...S.btnSuccess, fontSize: '10px', padding: '2px 8px', marginLeft: 'auto' }}>
+          Grant XP
+        </button>
       )}
     </div>
   );
@@ -922,6 +971,16 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
     }
   };
 
+  const handleGrantXP = async (rollId) => {
+    try {
+      await rollAPI.grantXP(rollId);
+      setRolls((prev) => prev.map((r) => (r.id === rollId ? { ...r, xp_awarded: true } : r)));
+      onRefresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
   const handleFortuneRoll = async () => {
     setFortuneRolling(true);
     setError(null);
@@ -982,6 +1041,45 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
       <div style={S.card}>
         <span style={S.sectionLbl}>Session: {sessionData?.name || session?.name || 'Unnamed'}</span>
         <button onClick={handleSetActiveSession} style={S.btnPrimary}>Set as current session (enable for players)</button>
+      </div>
+
+      {/* Position & Effect visibility (GM control) */}
+      <div style={S.card}>
+        <span style={S.sectionLbl}>Position & Effect (Player Visibility)</span>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={sessionData?.show_position_effect_to_players !== false}
+            onChange={(e) => handleUpdateSession({ show_position_effect_to_players: e.target.checked })}
+          />
+          <span>Show position & effect to players on their character sheets</span>
+        </label>
+        <div style={{ display: 'flex', gap: '16px', marginTop: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <span style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Default position</span>
+            <select
+              style={S.select}
+              value={sessionData?.default_position || 'risky'}
+              onChange={(e) => handleUpdateSession({ default_position: e.target.value })}
+            >
+              <option value="controlled">Controlled</option>
+              <option value="risky">Risky</option>
+              <option value="desperate">Desperate</option>
+            </select>
+          </div>
+          <div>
+            <span style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Default effect</span>
+            <select
+              style={S.select}
+              value={sessionData?.default_effect || 'standard'}
+              onChange={(e) => handleUpdateSession({ default_effect: e.target.value })}
+            >
+              <option value="limited">Limited</option>
+              <option value="standard">Standard</option>
+              <option value="greater">Greater</option>
+            </select>
+          </div>
+        </div>
       </div>
 
       {/* Wanted level */}
@@ -1095,7 +1193,7 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
           <div style={{ color: '#6b7280' }}>No rolls for this session.</div>
         ) : (
           rolls.map((r) => (
-            <DiceHistoryRow key={r.id} roll={r} showPositionEffect={showPositionEffect} onPatch={handlePatchRoll} />
+            <DiceHistoryRow key={r.id} roll={r} showPositionEffect={showPositionEffect} onPatch={handlePatchRoll} onGrantXP={handleGrantXP} isGM />
           ))
         )}
       </div>
@@ -1193,7 +1291,7 @@ function HarmEditor({ character, onSave }) {
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
-export default function CampaignManagement({ initialCampaignId = null }) {
+export default function CampaignManagement({ initialCampaignId = null, onNavigateToCharacter }) {
   const { user } = useAuth();
   const [campaigns, setCampaigns] = useState([]);
   const [invitations, setInvitations] = useState([]);
@@ -1329,6 +1427,7 @@ export default function CampaignManagement({ initialCampaignId = null }) {
             onBack={() => setSelectedCampaignId(null)}
             onRefresh={refreshSelected}
             onManageSessions={() => setSessionView('list')}
+            onNavigateToCharacter={onNavigateToCharacter}
           />
         </div>
       </div>

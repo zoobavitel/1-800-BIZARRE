@@ -251,7 +251,12 @@ const App = () => {
           />
         )}
         {currentPage === 'npcs' && <NPCSheetPage />}
-        {currentPage === 'campaigns' && <CampaignManagement initialCampaignId={campaignPageId} />}
+        {currentPage === 'campaigns' && (
+          <CampaignManagement
+            initialCampaignId={campaignPageId}
+            onNavigateToCharacter={(id) => handlePageChange('character', { characterId: id })}
+          />
+        )}
         {currentPage === 'abilities' && <AbilityBrowser initialFilter={abilityFilter} />}
         {currentPage === 'search' && (
           <SearchPage

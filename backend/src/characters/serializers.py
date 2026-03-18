@@ -137,15 +137,20 @@ class ExperienceTrackerSerializer(serializers.ModelSerializer):
 class RollSerializer(serializers.ModelSerializer):
     character_name = serializers.CharField(source='character.true_name', read_only=True)
     rolled_by_username = serializers.CharField(source='rolled_by.username', read_only=True)
+    xp_awarded = serializers.SerializerMethodField()
 
     class Meta:
         model = Roll
         fields = [
             'id', 'character', 'character_name', 'session', 'roll_type', 'action_name',
             'position', 'effect', 'dice_pool', 'results', 'outcome', 'description',
-            'rolled_by', 'rolled_by_username', 'timestamp'
+            'rolled_by', 'rolled_by_username', 'timestamp', 'xp_awarded'
         ]
         read_only_fields = ['timestamp']
+
+    def get_xp_awarded(self, obj):
+        from .models import ExperienceTracker
+        return ExperienceTracker.objects.filter(roll=obj).exists()
 
 
 class SessionRecordsSerializer(serializers.ModelSerializer):
@@ -595,11 +600,15 @@ class CampaignSerializer(serializers.ModelSerializer):
     def get_active_session_detail(self, obj):
         if not obj.active_session_id:
             return None
+        s = obj.active_session
         return {
-            'id': obj.active_session.id,
-            'name': obj.active_session.name,
-            'description': obj.active_session.description,
-            'objective': obj.active_session.objective,
+            'id': s.id,
+            'name': s.name,
+            'description': s.description,
+            'objective': s.objective,
+            'show_position_effect_to_players': getattr(s, 'show_position_effect_to_players', True),
+            'default_position': getattr(s, 'default_position', 'risky') or 'risky',
+            'default_effect': getattr(s, 'default_effect', 'standard') or 'standard',
         }
 
     def get_sessions(self, obj):

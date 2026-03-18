@@ -1,3 +1,5 @@
+import logging
+
 from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
@@ -9,9 +11,11 @@ from django.contrib.auth import authenticate
 
 from ..models import UserProfile
 from ..serializers import (
-    RegisterSerializer, UserProfileSerializer, 
-    UserSerializer, ChangePasswordSerializer
+    RegisterSerializer, UserProfileSerializer,
+    UserSerializer, ChangePasswordSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class RegisterView(APIView):
@@ -40,6 +44,8 @@ class LoginView(ObtainAuthToken):
         if serializer.is_valid():
             user = serializer.validated_data['user']
             token, created = Token.objects.get_or_create(user=user)
+            ip = request.META.get('REMOTE_ADDR', '?')
+            logger.info("Login successful: user=%s ip=%s", user.username, ip)
             return Response({
                 'token': token.key,
                 'user': {

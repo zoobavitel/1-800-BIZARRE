@@ -896,13 +896,15 @@ class ExperienceTracker(models.Model):
         ('BELIEFS', 'Express beliefs, drives, heritage, or background'),
         ('STRUGGLE', 'Struggle with issues from vice or trauma'),
         ('DESPERATE', 'Address a challenge with action rating 0'),
+        ('DESPERATE_ROLL', 'Desperate skill check'),
         ('STANDOUT', 'Standout action or leadership'),
     ]
     
     character = models.ForeignKey('Character', on_delete=models.CASCADE, related_name='experience_entries')
     session = models.ForeignKey('Session', on_delete=models.SET_NULL, null=True, blank=True, related_name='xp_entries')
+    roll = models.ForeignKey('Roll', on_delete=models.SET_NULL, null=True, blank=True, related_name='xp_entries')
     session_date = models.DateTimeField(auto_now_add=True)
-    trigger = models.CharField(max_length=20, choices=XP_TRIGGER_CHOICES)
+    trigger = models.CharField(max_length=24, choices=XP_TRIGGER_CHOICES)
     description = models.TextField(help_text="What did the character do to earn this XP?")
     xp_gained = models.IntegerField(default=1)
     
@@ -988,6 +990,11 @@ class Session(models.Model):
     npcs_involved = models.ManyToManyField(NPC, blank=True, related_name='sessions_involved')
     characters_involved = models.ManyToManyField(Character, blank=True, related_name='sessions_involved')
     factions_involved = models.ManyToManyField(Faction, blank=True, related_name='sessions_involved')
+
+    # GM control: show position/effect to players on their sheets
+    show_position_effect_to_players = models.BooleanField(default=True)
+    default_position = models.CharField(max_length=20, default='risky', blank=True)
+    default_effect = models.CharField(max_length=20, default='standard', blank=True)
 
     # Score proposal fields
     proposed_score_target = models.CharField(max_length=200, blank=True, null=True)
