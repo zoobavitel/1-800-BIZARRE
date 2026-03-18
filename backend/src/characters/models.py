@@ -348,12 +348,21 @@ class Ability(models.Model):
 class Character(models.Model):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._original_data = {field.name: getattr(self, field.name) for field in self._meta.fields}
+        # Only store non-relation fields to avoid DB hits during cascade deletes.
+        # gm_locked_fields only contains scalar fields (level, action_dots, etc.).
+        self._original_data = {}
+        for field in self._meta.fields:
+            if not field.is_relation and field.attname in self.__dict__:
+                self._original_data[field.name] = self.__dict__[field.attname]
 
     def save(self, *args, **kwargs):
         if self.pk:  # Only enforce for existing objects (not on creation)
             for field_name in self.gm_locked_fields:
-                if field_name in self._original_data and getattr(self, field_name) != self._original_data[field_name]:
+                if field_name not in self._original_data:
+                    continue
+                field = self._meta.get_field(field_name)
+                current = getattr(self, field.attname, None) if field.is_relation else getattr(self, field_name)
+                if current != self._original_data[field_name]:
                     raise ValidationError(f'Field \'{field_name}\' is locked by the GM and cannot be changed.')
         super().save(*args, **kwargs)
     user = models.ForeignKey(User, on_delete=models.CASCADE)

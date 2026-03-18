@@ -3719,3 +3719,15 @@ AssertionError: It is redundant to specify `source='xp_entries'` on field 'ListS
 [INFO] 2026-03-18 18:57:15,000 django.utils.autoreload - Watching for file changes with StatReloader
 [INFO] 2026-03-18 18:57:33,192 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
 [INFO] 2026-03-18 18:57:33,421 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-18 19:19:02,530 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 19:21:11,586 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-03-18 19:21:45,006 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 19:24:12,685 django.request - Bad Request: /api/accounts/signup/
+[INFO] 2026-03-18 19:29:30,943 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-18 19:29:31,170 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 19:29:36,299 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-18 19:29:36,544 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 19:29:42,681 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-18 19:29:42,954 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-18 19:32:53,954 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 19:32:56,528 django.request - Bad Request: /api/characters/
