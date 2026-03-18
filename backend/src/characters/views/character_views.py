@@ -5,13 +5,14 @@ from rest_framework import viewsets, status, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
+from rest_framework.parsers import JSONParser, FormParser
 from django.db import transaction
 from django.core.exceptions import PermissionDenied
 import json
 
 import random
 from ..models import Character, Session, Roll, RollHistory, ExperienceTracker
+from ..parsers import MultipartJsonParser
 from ..serializers import CharacterSerializer
 
 
@@ -19,7 +20,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = CharacterSerializer
     queryset = Character.objects.all()
-    parser_classes = (JSONParser, MultiPartParser, FormParser)
+    parser_classes = (JSONParser, MultipartJsonParser, FormParser)
 
     def get_queryset(self):
         # Filter: own characters, or characters in campaigns where user is GM

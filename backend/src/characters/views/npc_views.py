@@ -1,10 +1,12 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.parsers import JSONParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import Q
 
 from ..models import NPC
+from ..parsers import MultipartJsonParser
 from ..serializers import NPCSerializer
 
 # Effect level to clock ticks (SRD: Limited=1, Standard=2, Great/Greater=3)
@@ -15,6 +17,7 @@ class NPCViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = NPC.objects.all()
     serializer_class = NPCSerializer
+    parser_classes = (JSONParser, MultipartJsonParser, FormParser)
 
     def get_queryset(self):
         user = self.request.user

@@ -4,6 +4,24 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-03-18",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Update database and log files; enhance character sheet UI"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "Enhance character and session management with XP tracking and new features"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-03-17",
     "version": null,
     "sections": [

@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.utils import timezone
@@ -230,6 +231,16 @@ class NPC(models.Model):
     faction_status = models.JSONField(default=dict, blank=True)
     inventory = models.JSONField(default=list, blank=True)
 
+    # Stand abilities (narrative descriptions; frontend sends array of {id, name, type, description})
+    abilities = models.JSONField(default=list, blank=True)
+    # Conflict clocks: [{id, name, segments, filled}]
+    conflict_clocks = models.JSONField(default=list, blank=True)
+    # Alternative win condition clocks
+    alt_clocks = models.JSONField(default=list, blank=True)
+    # Armor tracking (regular vs special charges used)
+    regular_armor_used = models.IntegerField(default=0)
+    special_armor_used = models.IntegerField(default=0)
+
     harm_clock_max = models.IntegerField(default=4)
 
     @property
@@ -307,6 +318,7 @@ class ShowcasedNPC(models.Model):
     reveal_items = models.BooleanField(default=False)
     reveal_stand_stats = models.BooleanField(default=False)
     reveal_faction_status = models.BooleanField(default=False)
+    show_clocks_to_party = models.BooleanField(default=False, help_text='When True, party can see this NPC\'s clocks')
 
     class Meta:
         unique_together = ('campaign', 'npc')
@@ -863,7 +875,11 @@ class ProgressClock(models.Model):
     
     name = models.CharField(max_length=100)
     clock_type = models.CharField(max_length=20, choices=CLOCK_TYPE_CHOICES)
-    max_segments = models.IntegerField(default=4, help_text="Total number of segments (4, 6, 8, 10, or 12)")
+    max_segments = models.IntegerField(
+        default=4,
+        help_text="Total number of segments (1-12)",
+        validators=[MinValueValidator(1), MaxValueValidator(12)]
+    )
     filled_segments = models.IntegerField(default=0, help_text="Currently filled segments")
     description = models.TextField(blank=True)
     
@@ -987,7 +1003,7 @@ class Session(models.Model):
     objective = models.TextField(blank=True, help_text="The main goal for this session")
     planned_for_next_session = models.TextField(blank=True, help_text="Notes for the next session")
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PLANNED')
-    npcs_involved = models.ManyToManyField(NPC, blank=True, related_name='sessions_involved')
+    npcs_involved = models.ManyToManyField(NPC, blank=True, related_name='sessions_involved', through='SessionNPCInvolvement')
     characters_involved = models.ManyToManyField(Character, blank=True, related_name='sessions_involved')
     factions_involved = models.ManyToManyField(Faction, blank=True, related_name='sessions_involved')
 
@@ -1004,6 +1020,19 @@ class Session(models.Model):
 
     def __str__(self):
         return f"{self.campaign.name} - {self.name} ({self.get_status_display()}) - {self.session_date.strftime('%Y-%m-%d')}"
+
+
+class SessionNPCInvolvement(models.Model):
+    """Through model for Session.npcs_involved; GM controls whether NPC clocks are visible to players."""
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='npc_involvements')
+    npc = models.ForeignKey(NPC, on_delete=models.CASCADE, related_name='session_involvements')
+    show_clocks_to_players = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = ('session', 'npc')
+
+    def __str__(self):
+        return f"{self.npc.name} in {self.session.name} (clocks={'on' if self.show_clocks_to_players else 'off'})"
 
 
 class FactionRelationship(models.Model):

@@ -135,9 +135,11 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function CharacterPage({ initialCharacterId = null }) {
+export default function CharacterPage({ initialCharacterId = null, initialNpcId = null, preferNpcMode = false }) {
   const { user } = useAuth();
-  const [mode, setMode] = useState(MODES.CHARACTER);
+  const [mode, setMode] = useState(
+    preferNpcMode || initialNpcId != null ? MODES.NPC : MODES.CHARACTER
+  );
 
   // ── Character list (used by the "Open character…" dropdown) ─────────────
   const [characters, setCharacters] = useState([]);
@@ -334,9 +336,26 @@ export default function CharacterPage({ initialCharacterId = null }) {
     openCharacterInTab(character);
   }, [handleCreateNewCharacterTab, openCharacterInTab]);
 
-  // ── NPC logic ───────────────────────────────────────────────────────────
+  // ── NPC logic: when initialNpcId is set (e.g. from #npcs/123), fetch and open that NPC
   useEffect(() => {
-    if (mode !== MODES.NPC) return;
+    if (initialNpcId == null || mode !== MODES.NPC) return;
+    setNpcsLoading(true);
+    npcAPI.getNPC(initialNpcId)
+      .then((npc) => {
+        if (!npc) return;
+        npcTabsInitialized.current = true;
+        const tab = { tabId: nextTabId++, npcId: npc.id, npc, label: npc.name || 'Unnamed' };
+        setNpcTabs([tab]);
+        setActiveNpcTabId(tab.tabId);
+        npcAPI.getNPCs(campaignId).then((list) => setNpcs(list || [])).catch(() => setNpcs([]));
+      })
+      .catch(() => setNpcs([]))
+      .finally(() => setNpcsLoading(false));
+  }, [initialNpcId, mode, campaignId]);
+
+  // ── NPC logic: normal load when no initialNpcId
+  useEffect(() => {
+    if (mode !== MODES.NPC || initialNpcId != null) return;
     setNpcsLoading(true);
     npcAPI.getNPCs(campaignId).then((list) => {
       const npcList = list || [];
@@ -354,7 +373,7 @@ export default function CharacterPage({ initialCharacterId = null }) {
         }
       }
     }).catch(() => setNpcs([])).finally(() => setNpcsLoading(false));
-  }, [mode, campaignId]);
+  }, [mode, campaignId, initialNpcId]);
 
   const handleSaveNpc = useCallback(async (npcData) => {
     try {
@@ -419,10 +438,26 @@ export default function CharacterPage({ initialCharacterId = null }) {
       <div style={PAGE_STYLES.modeBar}>
         <nav style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
 
-          <button type="button" onClick={() => setMode(MODES.CHARACTER)} style={PAGE_STYLES.modeBtn(mode === MODES.CHARACTER)}>
+          <button
+            type="button"
+            onClick={() => {
+              setMode(MODES.CHARACTER);
+              const id = activeCharTab?.characterId ?? activeCharTab?.character?.id;
+              if (typeof window !== 'undefined') window.location.hash = id ? `character/${id}` : 'character';
+            }}
+            style={PAGE_STYLES.modeBtn(mode === MODES.CHARACTER)}
+          >
             CHARACTERS
           </button>
-          <button type="button" onClick={() => setMode(MODES.NPC)} style={PAGE_STYLES.modeBtn(mode === MODES.NPC)}>
+          <button
+            type="button"
+            onClick={() => {
+              setMode(MODES.NPC);
+              const id = activeNpcTab?.npcId ?? activeNpcTab?.npc?.id;
+              if (typeof window !== 'undefined') window.location.hash = id ? `npcs/${id}` : 'npcs';
+            }}
+            style={PAGE_STYLES.modeBtn(mode === MODES.NPC)}
+          >
             NPCs
           </button>
 
@@ -483,6 +518,21 @@ export default function CharacterPage({ initialCharacterId = null }) {
             <span style={{ fontSize: '12px', color: '#fca5a5' }}>{charactersError}</span>
           )}
 
+          {mode === MODES.CHARACTER && characters.length > 0 && (
+            <select
+              style={{ background: '#1f2937', color: '#9ca3af', border: '1px solid #4b5563', padding: '4px 8px', fontSize: '11px', fontFamily: 'monospace', borderRadius: '4px' }}
+              value=""
+              onChange={e => {
+                const char = characters.find(c => c.id === parseInt(e.target.value));
+                if (char) openCharacterInTab(char);
+              }}>
+              <option value="">Open character...</option>
+              {characters.map(c => (
+                <option key={c.id} value={c.id}>{c.name || c.standName || 'Unnamed'}</option>
+              ))}
+            </select>
+          )}
+
           {mode === MODES.NPC && npcs.length > 0 && (
             <select
               style={{ background: '#1f2937', color: '#9ca3af', border: '1px solid #4b5563', padding: '4px 8px', fontSize: '11px', fontFamily: 'monospace', borderRadius: '4px' }}
@@ -528,13 +578,19 @@ export default function CharacterPage({ initialCharacterId = null }) {
             <div style={{ padding: '24px', textAlign: 'center', color: '#9ca3af' }}>
               Loading NPCs...
             </div>
-          ) : activeNpcTab ? (
-            <NPCSheet
-              key={activeNpcTab.tabId}
-              npc={activeNpcTab.npc ?? undefined}
-              onSave={handleSaveNpc}
-              campaigns={campaigns}
-            />
+          ) : npcTabs.length > 0 ? (
+            npcTabs.map((tab) => (
+              <div
+                key={tab.tabId}
+                style={{ display: tab.tabId === activeNpcTabId ? 'block' : 'none' }}
+              >
+                <NPCSheet
+                  npc={tab.npc ?? undefined}
+                  onSave={handleSaveNpc}
+                  campaigns={campaigns}
+                />
+              </div>
+            ))
           ) : (
             <div style={{ padding: '24px', textAlign: 'center', color: '#9ca3af' }}>
               Click "+ New NPC" to create one.

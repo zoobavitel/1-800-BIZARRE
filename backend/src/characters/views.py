@@ -907,16 +907,19 @@ class CharacterViewSet(viewsets.ModelViewSet):
         
         name = request.data.get('name')
         clock_type = request.data.get('type', 'CUSTOM')
-        max_segments = request.data.get('max_segments', 4)
+        try:
+            max_segments = int(request.data.get('max_segments', 4))
+        except (TypeError, ValueError):
+            max_segments = 4
         description = request.data.get('description', '')
         
         if not name:
             return Response({'error': 'Clock name is required'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Validate max_segments
-        if max_segments not in [4, 6, 8]:
+        # Validate max_segments (1-12)
+        if max_segments < 1 or max_segments > 12:
             return Response({
-                'error': 'Max segments must be 4, 6, or 8'
+                'error': 'Max segments must be between 1 and 12'
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Create progress clock
