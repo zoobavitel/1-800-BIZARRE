@@ -43,7 +43,7 @@ const ProgressClock = ({ size = 80, segments = 4, filled = 0, onClick = null, in
 
 // ─── CharacterSheetWrapper ────────────────────────────────────────────────────
 
-const CLOCK_SEGMENT_OPTIONS = [4, 6, 8, 10, 12];
+const CLOCK_SEGMENT_OPTIONS = Array.from({ length: 12 }, (_, i) => i + 1);
 const CATEGORY_LABELS = {
   aggression: 'Aggression', endurance: 'Endurance', cunning: 'Cunning',
   awareness: 'Awareness', presence: 'Presence', teamwork: 'Teamwork',
@@ -328,6 +328,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const [standardAbilitySelected, setStandardAbilitySelected] = useState(null);
   const [standardAbilityPickerOpen, setStandardAbilityPickerOpen] = useState(false);
   const standardAbilityPickerRef = useRef(null);
+  const [expandedAbilityId, setExpandedAbilityId] = useState(null);
 
   // Dice result
   const [diceResult, setDiceResult] = useState(null);
@@ -553,8 +554,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
 
   const addClock = () => {
     const name = prompt('Clock name:');
-    const segs = parseInt(prompt('Segments (4, 6, 8):') || '4');
-    if (name && [4, 6, 8].includes(segs))
+    const segs = parseInt(prompt('Segments (1-12):') || '4', 10);
+    if (name && !isNaN(segs) && segs >= 1 && segs <= 12)
       setClocks(p => [...p, { id: Date.now(), name, segments: segs, filled: 0 }]);
   };
 
@@ -640,23 +641,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
       {/* ── Header ── */}
       <div style={S.hdr}>
         <div style={{ fontSize:'18px', fontWeight:'bold' }}>1(800)BIZARRE — {activeMode}</div>
-        <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'8px' }}>
-          {allCharacters?.length > 0 && onSwitchCharacter && (
-            <select
-              style={{ background:'#1f2937', color:'#9ca3af', border:'1px solid #4b5563', padding:'4px 8px', fontSize:'11px', fontFamily:'monospace', borderRadius:'4px' }}
-              value=""
-              onChange={e => {
-                const ch = allCharacters.find(c => c.id === parseInt(e.target.value, 10));
-                if (ch) onSwitchCharacter(ch);
-              }}
-            >
-              <option value="">Open Character...</option>
-              {allCharacters.map(c => (
-                <option key={c.id} value={c.id}>{c.name || 'Unnamed'}</option>
-              ))}
-            </select>
-          )}
-          <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
             <select value={activeMode} onChange={e => setActiveMode(e.target.value)} style={S.sel}>
               <option>CHARACTER MODE</option>
               <option>CREW MODE</option>
@@ -665,7 +650,6 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
             {saveStatus === 'saved'  && <span style={{ fontSize:'11px', color:'#34d399' }}>Saved</span>}
             {saveStatus === 'error'  && <span style={{ fontSize:'11px', color:'#f87171' }}>Error saving</span>}
             {onClose && <button onClick={onClose} style={{ background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:'18px' }}>✕</button>}
-          </div>
         </div>
       </div>
 
@@ -1223,10 +1207,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     </div>
                   </div>
 
-                  {/* Campaign session context (wanted, NPCs, clocks, dice history) */}
+                  {/* GM to Players — consolidated section for GM-revealed info */}
                   {charCampaign && activeSessionId && (
-                    <div style={{ ...S.card, marginBottom:'14px', borderColor:'#4b5563' }}>
-                      <span style={S.lbl}>CAMPAIGN SESSION</span>
+                    <div style={{ ...S.card, marginBottom:'14px', borderColor:'#4b5563', borderLeftWidth:'3px', borderLeftColor:'#7c3aed' }}>
+                      <span style={S.lbl}>GM TO PLAYERS</span>
                       <div style={{ display:'flex', gap:'12px', alignItems:'center', marginBottom:'8px' }}>
                         <span style={{ fontSize:'11px', color:'#9ca3af' }}>Wanted:</span>
                         <div style={{ display:'flex', gap:'2px' }}>
@@ -1235,12 +1219,112 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                           ))}
                         </div>
                       </div>
-                      {(charCampaign.showcased_npcs || []).length > 0 && (
+                      {charCampaign?.active_session_detail?.show_position_effect_to_players !== false && (
                         <div style={{ marginBottom:'8px' }}>
-                          <span style={{ fontSize:'11px', color:'#9ca3af' }}>Showcased NPCs: </span>
-                          {(charCampaign.showcased_npcs || []).map((n) => (
-                            <span key={n.id} style={{ ...S.tag, background:'#374151', marginRight:'4px' }}>{n.name || n.true_name || 'NPC'}</span>
-                          ))}
+                          <span style={{ fontSize:'11px', color:'#9ca3af' }}>Position & Effect: </span>
+                          <div style={{ display:'flex', gap:'8px', marginTop:'4px', flexWrap:'wrap' }}>
+                            <span style={{
+                              padding:'4px 8px', borderRadius:'4px', fontSize:'11px', fontWeight:'bold',
+                              background: (() => {
+                                const p = (charCampaign?.active_session_detail?.default_position || 'risky').toLowerCase();
+                                return p === 'controlled' ? '#166534' : p === 'desperate' ? '#991b1b' : '#854d0e';
+                              })(),
+                              color: '#fff',
+                              border: '1px solid',
+                              borderColor: (() => {
+                                const p = (charCampaign?.active_session_detail?.default_position || 'risky').toLowerCase();
+                                return p === 'controlled' ? '#22c55e' : p === 'desperate' ? '#dc2626' : '#eab308';
+                              })(),
+                            }}>
+                              {(charCampaign?.active_session_detail?.default_position || 'Risky').replace(/^./, (c) => c.toUpperCase())}
+                            </span>
+                            <span style={{ padding:'4px 8px', borderRadius:'4px', fontSize:'11px', background:'#374151', color:'#d1d5db' }}>
+                              {(charCampaign?.active_session_detail?.default_effect || 'Standard').replace(/^./, (c) => c.toUpperCase())} Effect
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                      {(charCampaign?.active_session_detail?.session_npcs_with_clocks || []).length > 0 && (
+                        <div style={{ marginBottom:'8px' }}>
+                          <span style={{ fontSize:'11px', color:'#9ca3af' }}>Session NPC Clocks:</span>
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:'12px', marginTop:'4px' }}>
+                            {(charCampaign?.active_session_detail?.session_npcs_with_clocks || []).map((npc) => (
+                              <div key={npc.id} style={{ background:'#1f2937', padding:'8px', borderRadius:'4px', border:'1px solid #374151', minWidth:'120px' }}>
+                                <div style={{ fontSize:'11px', fontWeight:'bold', color:'#e5e7eb', marginBottom:'4px' }}>{npc.name || 'NPC'}</div>
+                                {npc.stand_name && <div style={{ fontSize:'10px', color:'#9ca3af', marginBottom:'4px' }}>{npc.stand_name}</div>}
+                                {npc.vulnerability_clock_max > 0 && (
+                                  <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
+                                    <ProgressClock size={36} segments={npc.vulnerability_clock_max} filled={npc.vulnerability_clock_current} />
+                                    <span style={{ fontSize:'10px', color:'#9ca3af' }}>Vuln {npc.vulnerability_clock_current}/{npc.vulnerability_clock_max}</span>
+                                  </div>
+                                )}
+                                {npc.harm_clock_max > 0 && (
+                                  <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
+                                    <ProgressClock size={36} segments={npc.harm_clock_max} filled={npc.harm_clock_current} />
+                                    <span style={{ fontSize:'10px', color:'#9ca3af' }}>Harm {npc.harm_clock_current}/{npc.harm_clock_max}</span>
+                                  </div>
+                                )}
+                                {(npc.conflict_clocks || []).map((clk) => (
+                                  <div key={clk.id || clk.name} style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'2px' }}>
+                                    <ProgressClock size={32} segments={clk.segments || 4} filled={clk.filled || 0} />
+                                    <span style={{ fontSize:'10px', color:'#6b7280' }}>{clk.name || 'Conflict'} {clk.filled || 0}/{clk.segments || 4}</span>
+                                  </div>
+                                ))}
+                                {(npc.alt_clocks || []).map((clk) => (
+                                  <div key={clk.id || clk.name} style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'2px' }}>
+                                    <ProgressClock size={32} segments={clk.segments || 4} filled={clk.filled || 0} />
+                                    <span style={{ fontSize:'10px', color:'#6b7280' }}>{clk.name || 'Alt'} {clk.filled || 0}/{clk.segments || 4}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {(charCampaign.showcased_npcs || []).filter((sn) => sn.show_clocks_to_party).length > 0 && (
+                        <div style={{ marginBottom:'8px' }}>
+                          <span style={{ fontSize:'11px', color:'#9ca3af' }}>Showcased NPC Clocks:</span>
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:'12px', marginTop:'4px' }}>
+                            {(charCampaign.showcased_npcs || []).filter((sn) => sn.show_clocks_to_party).map((sn) => {
+                              const npc = sn.npc || {};
+                              return (
+                                <div key={sn.id} style={{ background:'#1f2937', padding:'8px', borderRadius:'4px', border:'1px solid #374151', minWidth:'120px' }}>
+                                  <div style={{ fontSize:'11px', fontWeight:'bold', color:'#e5e7eb', marginBottom:'4px' }}>{npc.name || 'NPC'}</div>
+                                  {npc.stand_name && <div style={{ fontSize:'10px', color:'#9ca3af', marginBottom:'4px' }}>{npc.stand_name}</div>}
+                                  {npc.vulnerability_clock_max > 0 && (
+                                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
+                                      <ProgressClock size={36} segments={npc.vulnerability_clock_max} filled={npc.vulnerability_clock_current || 0} />
+                                      <span style={{ fontSize:'10px', color:'#9ca3af' }}>Vuln {npc.vulnerability_clock_current || 0}/{npc.vulnerability_clock_max}</span>
+                                    </div>
+                                  )}
+                                  {npc.harm_clock_max > 0 && (
+                                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
+                                      <ProgressClock size={36} segments={npc.harm_clock_max} filled={npc.harm_clock_current || 0} />
+                                      <span style={{ fontSize:'10px', color:'#9ca3af' }}>Harm {npc.harm_clock_current || 0}/{npc.harm_clock_max}</span>
+                                    </div>
+                                  )}
+                                  {(npc.conflict_clocks || []).map((clk) => (
+                                    <div key={clk.id || clk.name} style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'2px' }}>
+                                      <ProgressClock size={32} segments={clk.segments || 4} filled={clk.filled || 0} />
+                                      <span style={{ fontSize:'10px', color:'#6b7280' }}>{clk.name || 'Conflict'} {clk.filled || 0}/{clk.segments || 4}</span>
+                                    </div>
+                                  ))}
+                                  {(npc.alt_clocks || []).map((clk) => (
+                                    <div key={clk.id || clk.name} style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'2px' }}>
+                                      <ProgressClock size={32} segments={clk.segments || 4} filled={clk.filled || 0} />
+                                      <span style={{ fontSize:'10px', color:'#6b7280' }}>{clk.name || 'Alt'} {clk.filled || 0}/{clk.segments || 4}</span>
+                                    </div>
+                                  ))}
+                                  {(npc.progress_clocks || []).map((clk) => (
+                                    <div key={clk.id} style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'2px' }}>
+                                      <ProgressClock size={32} segments={clk.max_segments || 4} filled={clk.filled_segments || 0} />
+                                      <span style={{ fontSize:'10px', color:'#6b7280' }}>{clk.name || 'Clock'} {clk.filled_segments || 0}/{clk.max_segments || 4}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                       <div style={{ marginBottom:'8px' }}>
@@ -1293,7 +1377,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                                 <div style={{ display:'flex', gap:'8px', marginBottom:'6px', flexWrap:'wrap' }}>
                                   <select
                                     value={createClockSegments}
-                                    onChange={(e) => setCreateClockSegments(parseInt(e.target.value, 10))}
+                                    onChange={(e) => setCreateClockSegments(Math.min(12, Math.max(1, parseInt(e.target.value, 10) || 4)))}
                                     style={{ ...S.inp, fontSize:'11px' }}
                                   >
                                     {CLOCK_SEGMENT_OPTIONS.map((n) => (
@@ -1612,21 +1696,36 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                   {/* Abilities */}
                   <div style={{ marginBottom:'14px' }}>
                     <span style={S.lbl}>ABILITIES</span>
-                    {abilities.map(ab => (
-                      <div key={ab.id || ab.name} style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', background:'#374151', padding:'5px 8px', borderRadius:'4px', marginBottom:'3px', fontSize:'12px' }}>
-                        <div style={{ flex:1 }}>
-                          <span style={{ fontWeight:'bold' }}>{ab.name}</span>
-                          <span style={{ marginLeft:'6px', padding:'1px 5px', background:'#7c3aed', borderRadius:'10px', fontSize:'10px' }}>{ab.type}</span>
-                          {ab._uses && ab._uses.filter(Boolean).length > 0 && (
-                            <ul style={{ margin:'4px 0 0 16px', padding:0, fontSize:'11px', color:'#d1d5db' }}>
-                              {ab._uses.filter(Boolean).map((u, i) => <li key={i}>{u}</li>)}
-                            </ul>
-                          )}
+                    {abilities.map(ab => {
+                      const abKey = ab.id || ab.name;
+                      const isExpanded = expandedAbilityId === abKey;
+                      const standardRef = ab.type === 'standard' && standardAbilitiesList.find((a) => a.id === ab.id);
+                      const description = standardRef?.description || ab.description;
+                      const hasDescription = !!(description || (ab._uses && ab._uses.filter(Boolean).length > 0));
+                      return (
+                        <div key={abKey} style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', background:'#374151', padding:'5px 8px', borderRadius:'4px', marginBottom:'3px', fontSize:'12px' }}>
+                          <div style={{ flex:1 }}>
+                            <span
+                              style={{ fontWeight:'bold', cursor: hasDescription ? 'pointer' : 'default', textDecoration: hasDescription ? 'underline' : 'none', textUnderlineOffset: '2px' }}
+                              onClick={() => hasDescription && setExpandedAbilityId((prev) => prev === abKey ? null : abKey)}
+                            >
+                              {ab.name}
+                            </span>
+                            <span style={{ marginLeft:'6px', padding:'1px 5px', background:'#7c3aed', borderRadius:'10px', fontSize:'10px' }}>{ab.type}</span>
+                            {isExpanded && description && (
+                              <div style={{ marginTop:'6px', fontSize:'11px', color:'#9ca3af', lineHeight:'1.4' }}>{description}</div>
+                            )}
+                            {isExpanded && ab._uses && ab._uses.filter(Boolean).length > 0 && (
+                              <ul style={{ margin:'4px 0 0 16px', padding:0, fontSize:'11px', color:'#d1d5db' }}>
+                                {ab._uses.filter(Boolean).map((u, i) => <li key={i}>{u}</li>)}
+                              </ul>
+                            )}
+                          </div>
+                          <button onClick={() => setAbilities(p => p.filter(a => (a.id || a.name) !== abKey))}
+                            style={{ color:'#f87171', background:'none', border:'none', cursor:'pointer', fontSize:'15px' }}>×</button>
                         </div>
-                        <button onClick={() => setAbilities(p => p.filter(a => (a.id || a.name) !== (ab.id || ab.name)))}
-                          style={{ color:'#f87171', background:'none', border:'none', cursor:'pointer', fontSize:'15px' }}>×</button>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <div style={{ display:'flex', gap:'5px', marginTop:'6px', flexWrap:'wrap', alignItems:'flex-start' }}>
                       {/* Option A: Searchable dropdown + preview for standard abilities */}
                       <div style={{ position:'relative' }} ref={standardAbilityPickerRef}>
@@ -1844,32 +1943,42 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     </button>
                   </div>
 
-                  {/* Position & Effect display (when GM enables visibility) */}
-                  {charCampaign?.active_session_detail?.show_position_effect_to_players !== false && activeSessionId && (
-                    <div style={{ marginBottom:'12px' }}>
-                      <span style={S.lbl}>POSITION & EFFECT</span>
-                      <div style={{ display:'flex', gap:'8px', marginTop:'4px', flexWrap:'wrap' }}>
-                        <div style={{
-                          padding:'6px 10px', borderRadius:'4px', fontSize:'11px', fontWeight:'bold',
-                          background: (() => {
-                            const p = (charCampaign?.active_session_detail?.default_position || 'risky').toLowerCase();
-                            return p === 'controlled' ? '#166534' : p === 'desperate' ? '#991b1b' : '#854d0e';
-                          })(),
-                          color: '#fff',
-                          border: '1px solid',
-                          borderColor: (() => {
-                            const p = (charCampaign?.active_session_detail?.default_position || 'risky').toLowerCase();
-                            return p === 'controlled' ? '#22c55e' : p === 'desperate' ? '#dc2626' : '#eab308';
-                          })(),
-                        }}>
-                          {(charCampaign?.active_session_detail?.default_position || 'Risky').replace(/^./, (c) => c.toUpperCase())}
-                        </div>
-                        <div style={{ padding:'6px 10px', borderRadius:'4px', fontSize:'11px', background:'#374151', color:'#d1d5db' }}>
-                          {(charCampaign?.active_session_detail?.default_effect || 'Standard').replace(/^./, (c) => c.toUpperCase())} Effect
+                  {/* GM Clocks — visible on player sheets when GM has shared clocks */}
+                  {charCampaign?.progress_clocks?.length > 0 && (() => {
+                    const gmClocks = (charCampaign.progress_clocks || []).filter(
+                      (clk) => clk.created_by == null && clk.visible_to_players
+                    );
+                    if (gmClocks.length === 0) return null;
+                    return (
+                      <div style={{ marginBottom:'14px' }}>
+                        <span style={S.lbl}>GM CLOCKS</span>
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:'10px', marginTop:'6px' }}>
+                          {gmClocks.map((clk) => {
+                            const canEdit = isGM;
+                            return (
+                              <div key={clk.id} style={{ background:'#374151', padding:'8px', borderRadius:'4px', textAlign:'center' }}>
+                                <div style={{ fontSize:'11px', fontWeight:'bold', marginBottom:'4px' }}>{clk.name}</div>
+                                <div style={{ display:'flex', justifyContent:'center' }}>
+                                  <ProgressClock
+                                    size={50}
+                                    segments={clk.max_segments}
+                                    filled={clk.filled_segments}
+                                    interactive={canEdit}
+                                    onClick={canEdit ? (f) => {
+                                      progressClockAPI.updateProgressClock(clk.id, { filled_segments: f })
+                                        .then(() => onCampaignRefresh?.())
+                                        .catch(() => {});
+                                    } : undefined}
+                                  />
+                                </div>
+                                <div style={{ fontSize:'10px', color:'#6b7280' }}>{clk.filled_segments}/{clk.max_segments}</div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Bonus Dice — Push Yourself & Devil's Bargain buttons */}
                   <div style={{ fontSize:'12px', marginBottom:'12px' }}>

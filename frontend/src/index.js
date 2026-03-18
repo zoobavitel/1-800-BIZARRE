@@ -5,7 +5,6 @@ import { Menu } from 'lucide-react';
 import Home from './pages/Home.jsx';
 import CharacterPage from './pages/CharacterPage.jsx';
 import ResponsiveTest from './pages/ResponsiveTest.jsx';
-import NPCSheetPage from './pages/NPCSheet.jsx';
 import CampaignManagement from './pages/CampaignManagement.jsx';
 import AbilityBrowser from './pages/AbilityBrowser.jsx';
 import CharacterOptionsPage from './pages/CharacterOptionsPage.jsx';
@@ -85,43 +84,69 @@ const App = () => {
   const [currentPage, setCurrentPage] = useState('home');
   const [characterPageId, setCharacterPageId] = useState(null);
   const [campaignPageId, setCampaignPageId] = useState(null);
+  const [npcPageId, setNpcPageId] = useState(null);
   const [abilityFilter, setAbilityFilter] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [menuCharacters, setMenuCharacters] = useState([]);
   const [rulesSection, setRulesSection] = useState(null);
 
-  useEffect(() => {
+  const parseHash = useCallback(() => {
     const hash = window.location.hash.substring(1);
-    if (hash === 'test') setCurrentPage('test');
-    else if (hash === 'npcs') setCurrentPage('npcs');
-    else if (hash === 'search') setCurrentPage('search');
-    else if (hash === 'notifications') setCurrentPage('notifications');
-    else if (hash === 'messages') setCurrentPage('messages');
-    else if (hash === 'account-settings') setCurrentPage('account-settings');
-    else if (hash === 'character-options') setCurrentPage('character-options');
-    else if (hash === 'patch-notes') setCurrentPage('patch-notes');
-    else if (hash === 'licenses') setCurrentPage('licenses');
-    else if (hash === 'rules' || hash.startsWith('rules-')) {
+    if (hash === 'test') { setCurrentPage('test'); setNpcPageId(null); return; }
+    if (hash === 'npcs' || hash.startsWith('npcs/')) {
+      setCurrentPage('npcs');
+      const idPart = hash.replace(/^npcs\/?/, '');
+      setNpcPageId(idPart ? parseInt(idPart, 10) : null);
+      return;
+    }
+    if (hash === 'search') { setCurrentPage('search'); setNpcPageId(null); return; }
+    if (hash === 'notifications') { setCurrentPage('notifications'); setNpcPageId(null); return; }
+    if (hash === 'messages') { setCurrentPage('messages'); setNpcPageId(null); return; }
+    if (hash === 'account-settings') { setCurrentPage('account-settings'); setNpcPageId(null); return; }
+    if (hash === 'character-options') { setCurrentPage('character-options'); setNpcPageId(null); return; }
+    if (hash === 'patch-notes') { setCurrentPage('patch-notes'); setNpcPageId(null); return; }
+    if (hash === 'licenses') { setCurrentPage('licenses'); setNpcPageId(null); return; }
+    if (hash === 'rules' || hash.startsWith('rules-')) {
       setCurrentPage('rules');
       setRulesSection(hash === 'rules' ? null : hash.replace(/^rules-/, ''));
+      setNpcPageId(null);
+      return;
     }
-    else if (hash === 'campaigns' || hash.startsWith('campaigns/')) {
+    if (hash === 'campaigns' || hash.startsWith('campaigns/')) {
       setCurrentPage('campaigns');
       const idPart = hash.replace(/^campaigns\/?/, '');
       setCampaignPageId(idPart ? parseInt(idPart, 10) : null);
+      setNpcPageId(null);
+      return;
     }
-    else if (hash === 'abilities' || hash.startsWith('abilities-')) {
+    if (hash === 'abilities' || hash.startsWith('abilities-')) {
       setCurrentPage('abilities');
       const filterPart = hash.replace(/^abilities-?/, '');
       setAbilityFilter(filterPart || null);
+      setNpcPageId(null);
+      return;
     }
-    else if (hash === 'character' || hash.startsWith('character/')) {
+    if (hash === 'character' || hash.startsWith('character/')) {
       setCurrentPage('character');
       const idPart = hash.replace(/^character\/?/, '');
       setCharacterPageId(idPart ? parseInt(idPart, 10) : null);
-    } else if (hash) setCurrentPage('home');
+      setNpcPageId(null);
+      return;
+    }
+    setCurrentPage('home');
+    setNpcPageId(null);
   }, []);
+
+  useEffect(() => {
+    parseHash();
+  }, [parseHash]);
+
+  useEffect(() => {
+    const onHashChange = () => parseHash();
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, [parseHash]);
 
   const handlePageChange = (page, payload) => {
     setCurrentPage(page);
@@ -153,9 +178,16 @@ const App = () => {
       const section = payload?.section || null;
       setRulesSection(section);
       window.location.hash = section ? `rules-${section}` : 'rules';
+    } else if (page === 'npcs') {
+      setCharacterPageId(null);
+      setCampaignPageId(null);
+      const npcId = payload?.npcId ?? null;
+      setNpcPageId(npcId);
+      window.location.hash = npcId != null ? `npcs/${npcId}` : 'npcs';
     } else {
       setCharacterPageId(null);
       setCampaignPageId(null);
+      setNpcPageId(null);
       setAbilityFilter(null);
       setRulesSection(null);
       window.location.hash = page === 'home' ? '' : page;
@@ -163,12 +195,7 @@ const App = () => {
   };
 
   const handleBack = () => {
-    setCurrentPage('home');
-    setCharacterPageId(null);
-    setCampaignPageId(null);
-    setAbilityFilter(null);
-    setRulesSection(null);
-    window.location.hash = '';
+    window.history.back();
   };
 
   const loadMenuCharacters = useCallback(async () => {
@@ -250,11 +277,13 @@ const App = () => {
             onNavigateToAbilities={(filter) => handlePageChange('abilities', { filter })}
           />
         )}
-        {currentPage === 'npcs' && <NPCSheetPage />}
+        {currentPage === 'npcs' && <CharacterPage initialCharacterId={null} initialNpcId={npcPageId} preferNpcMode />}
         {currentPage === 'campaigns' && (
           <CampaignManagement
             initialCampaignId={campaignPageId}
             onNavigateToCharacter={(id) => handlePageChange('character', { characterId: id })}
+            onNavigateToNPC={(id) => handlePageChange('npcs', { npcId: id })}
+            onCampaignSelect={(id) => handlePageChange('campaigns', { campaignId: id })}
           />
         )}
         {currentPage === 'abilities' && <AbilityBrowser initialFilter={abilityFilter} />}

@@ -1,6 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { referenceAPI } from '../features/character-sheet';
 
 // ─── SRD Data Tables ──────────────────────────────────────────────────────────
+
+const CATEGORY_LABELS = {
+  aggression: 'Aggression', endurance: 'Endurance', cunning: 'Cunning',
+  awareness: 'Awareness', presence: 'Presence', teamwork: 'Teamwork',
+  adaptability: 'Adaptability', stand_nature: 'Stand Nature',
+};
 
 // NOTE: SRD has two level formulas — one doc says -9, another says -10.
 // Change this constant to whichever is confirmed correct.
@@ -162,7 +169,7 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
   const [activeMode, setActiveMode] = useState('NPC');
 
   const [name,      setName]      = useState(npc?.name      || '');
-  const [standName, setStandName] = useState(npc?.standName || '');
+  const [standName, setStandName] = useState(npc?.standName ?? npc?.stand_name ?? '');
   const [role,      setRole]      = useState(npc?.role      || '');
   const [notes,     setNotes]     = useState(npc?.notes     || '');
   const [campaign,  setCampaign]  = useState(npc?.campaign  || '');
@@ -179,20 +186,52 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
   const [factionStatus, setFactionStatus] = useState(npc?.faction_status || npc?.factionStatus || {});
   const [inventory,    setInventory]    = useState(npc?.inventory    || []);
 
-  const [stats, setStats] = useState(npc?.stats || {
-    power: 'D', speed: 'D', range: 'D', durability: 'D', precision: 'D', development: 'D',
+  const [stats, setStats] = useState(() => {
+    const scs = npc?.stand_coin_stats ?? npc?.stats;
+    if (scs && typeof scs === 'object') {
+      return {
+        power: scs.POWER ?? scs.power ?? 'D',
+        speed: scs.SPEED ?? scs.speed ?? 'D',
+        range: scs.RANGE ?? scs.range ?? 'D',
+        durability: scs.DURABILITY ?? scs.durability ?? 'D',
+        precision: scs.PRECISION ?? scs.precision ?? 'D',
+        development: scs.DEVELOPMENT ?? scs.development ?? 'D',
+      };
+    }
+    return { power: 'D', speed: 'D', range: 'D', durability: 'D', precision: 'D', development: 'D' };
   });
 
-  const [conflictClocks, setConflictClocks] = useState(npc?.conflictClocks || [
+  const [conflictClocks, setConflictClocks] = useState(npc?.conflict_clocks ?? npc?.conflictClocks ?? [
     { id: 1, name: 'Defeat', segments: 8, filled: 0 },
   ]);
 
-  const [altClocks, setAltClocks] = useState(npc?.altClocks || []);
+  const [altClocks, setAltClocks] = useState(npc?.alt_clocks ?? npc?.altClocks ?? []);
 
-  const [regularUsed, setRegularUsed] = useState(npc?.regularUsed || 0);
-  const [specialUsed, setSpecialUsed] = useState(npc?.specialUsed || 0);
+  const [regularUsed, setRegularUsed] = useState(npc?.regular_armor_used ?? npc?.regularUsed ?? 0);
+  const [specialUsed, setSpecialUsed] = useState(npc?.special_armor_used ?? npc?.specialUsed ?? 0);
 
-  const [abilities, setAbilities] = useState(npc?.abilities || []);
+  const [abilities, setAbilities] = useState(npc?.abilities ?? []);
+  const [standardAbilitiesList, setStandardAbilitiesList] = useState([]);
+
+  useEffect(() => {
+    referenceAPI.getAbilities().then((list) => setStandardAbilitiesList(list || [])).catch(() => setStandardAbilitiesList([]));
+  }, []);
+
+  const [standardPickerAbId, setStandardPickerAbId] = useState(null);
+  const [standardPickerSearch, setStandardPickerSearch] = useState('');
+  const standardPickerRef = useRef(null);
+
+  useEffect(() => {
+    if (!standardPickerAbId) return;
+    const handleClick = (e) => {
+      if (standardPickerRef.current && !standardPickerRef.current.contains(e.target)) {
+        setStandardPickerAbId(null);
+        setStandardPickerSearch('');
+      }
+    };
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, [standardPickerAbId]);
 
   // Portrait state
   const [imageFile, setImageFile]       = useState(null);
@@ -272,13 +311,29 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
 
   const buildPayload = useCallback(() => ({
     ...(npcIdRef.current ? { id: npcIdRef.current } : {}),
-    name, standName, role, notes, stats,
-    conflictClocks, altClocks,
-    regularUsed, specialUsed, abilities,
+    name,
+    stand_name: standName,
+    role,
+    notes,
+    stand_coin_stats: {
+      POWER: stats.power,
+      SPEED: stats.speed,
+      RANGE: stats.range,
+      DURABILITY: stats.durability,
+      PRECISION: stats.precision,
+      DEVELOPMENT: stats.development,
+    },
+    conflict_clocks: conflictClocks,
+    alt_clocks: altClocks,
+    regular_armor_used: regularUsed,
+    special_armor_used: specialUsed,
+    abilities,
     campaign: campaign || null,
     faction: faction || null,
     image_url: imageUrl,
-    contacts, faction_status: factionStatus, inventory,
+    contacts,
+    faction_status: factionStatus,
+    inventory,
     ...(imageFile ? { imageFile } : {}),
   }), [name, standName, role, notes, stats, conflictClocks, altClocks, regularUsed, specialUsed, abilities, campaign, faction, imageUrl, imageFile, contacts, factionStatus, inventory]);
 
@@ -537,35 +592,122 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
               <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '8px' }}>
                 Narrative descriptions only — no mechanical dots
               </div>
-              {abilities.map(ab => (
-                <div key={ab.id} style={{ background: '#1a1030', border: '1px solid #2d1f52', borderRadius: '4px', padding: '8px', marginBottom: '6px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '4px' }}>
-                        <input value={ab.name}
-                          onChange={e => setAbilities(p => p.map(a => a.id === ab.id ? { ...a, name: e.target.value } : a))}
-                          style={{ ...S.inp, fontWeight: 'bold', borderBottom: '1px solid #4b2d8f', fontSize: '12px' }}
-                          placeholder="Ability name"
-                        />
-                        <select value={ab.type}
-                          onChange={e => setAbilities(p => p.map(a => a.id === ab.id ? { ...a, type: e.target.value } : a))}
-                          style={{ ...S.sel, fontSize: '10px', padding: '2px 4px' }}>
-                          <option value="unique">Unique</option>
-                          <option value="standard">Standard</option>
-                          <option value="passive">Passive</option>
-                        </select>
+              {abilities.map(ab => {
+                const standardOptions = standardAbilitiesList.filter((a) => (a.type || '').toLowerCase() === 'standard' || !a.type);
+                const q = (standardPickerAbId === ab.id ? standardPickerSearch : '').trim().toLowerCase();
+                const filteredStandard = q
+                  ? standardOptions.filter((a) =>
+                      (a.name || '').toLowerCase().includes(q) ||
+                      (a.description || '').toLowerCase().includes(q) ||
+                      (CATEGORY_LABELS[a.category] || '').toLowerCase().includes(q))
+                  : standardOptions;
+                const selectedStandard = ab.standardId
+                  ? standardAbilitiesList.find((a) => a.id === ab.standardId)
+                  : standardOptions.find((a) => a.name === ab.name);
+                const isStandard = ab.type === 'standard' || !!ab.standardId || !!selectedStandard;
+                const pickerOpen = standardPickerAbId === ab.id;
+
+                return (
+                  <div key={ab.id} style={{ background: '#1a1030', border: '1px solid #2d1f52', borderRadius: '4px', padding: '8px', marginBottom: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '4px', flexWrap: 'wrap' }}>
+                          {isStandard ? (
+                            <div style={{ position: 'relative', flex: 1, minWidth: '140px' }} ref={pickerOpen ? standardPickerRef : null}>
+                              <input
+                                value={pickerOpen ? standardPickerSearch : (selectedStandard?.name || ab.name || 'Select standard ability...')}
+                                onChange={(e) => {
+                                  setStandardPickerSearch(e.target.value);
+                                  setStandardPickerAbId(ab.id);
+                                }}
+                                onFocus={() => {
+                                  setStandardPickerAbId(ab.id);
+                                  setStandardPickerSearch('');
+                                }}
+                                placeholder="Select standard ability..."
+                                style={{ ...S.inp, fontWeight: 'bold', borderBottom: '1px solid #4b2d8f', fontSize: '12px', border: '1px solid #2d1f52', padding: '4px 8px' }}
+                              />
+                              {pickerOpen && (
+                                <div style={{
+                                  position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '2px',
+                                  background: '#111827', border: '1px solid #374151', borderRadius: '4px',
+                                  maxHeight: '180px', overflowY: 'auto', zIndex: 100, boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                                }}>
+                                  {filteredStandard.length === 0 ? (
+                                    <div style={{ padding: '12px', fontSize: '11px', color: '#6b7280' }}>No matching abilities</div>
+                                  ) : (
+                                    filteredStandard.map((a) => (
+                                      <div
+                                        key={a.id}
+                                        onClick={() => {
+                                          setAbilities((p) => p.map(x => x.id === ab.id
+                                            ? { ...x, name: a.name, description: a.description || '', standardId: a.id, type: 'standard' }
+                                            : x));
+                                          setStandardPickerAbId(null);
+                                          setStandardPickerSearch('');
+                                        }}
+                                        style={{
+                                          padding: '8px 10px', cursor: 'pointer', fontSize: '12px', borderBottom: '1px solid #1f2937',
+                                          background: selectedStandard?.id === a.id ? '#374151' : 'transparent',
+                                        }}
+                                      >
+                                        {a.name}
+                                        {a.category && (
+                                          <span style={{ fontSize: '10px', color: '#6b7280', marginLeft: '6px' }}>
+                                            {CATEGORY_LABELS[a.category] || a.category}
+                                          </span>
+                                        )}
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <input value={ab.name}
+                              onChange={e => setAbilities(p => p.map(a => a.id === ab.id ? { ...a, name: e.target.value } : a))}
+                              style={{ ...S.inp, fontWeight: 'bold', borderBottom: '1px solid #4b2d8f', fontSize: '12px' }}
+                              placeholder="Ability name"
+                            />
+                          )}
+                          <select value={ab.type}
+                            onChange={e => setAbilities(p => p.map(a => a.id === ab.id ? { ...a, type: e.target.value } : a))}
+                            style={{ ...S.sel, fontSize: '10px', padding: '2px 4px' }}>
+                            <option value="unique">Unique</option>
+                            <option value="standard">Standard</option>
+                            <option value="passive">Passive</option>
+                          </select>
+                        </div>
+                        {isStandard && selectedStandard && (
+                          <div style={{
+                            marginBottom: '8px', padding: '8px', background: '#1f2937', borderRadius: '4px', border: '1px solid #374151',
+                            fontSize: '11px',
+                          }}>
+                            <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{selectedStandard.name}</div>
+                            {selectedStandard.category && (
+                              <span style={{ display: 'inline-block', padding: '1px 6px', background: '#374151', borderRadius: '4px', fontSize: '10px', marginBottom: '6px' }}>
+                                {CATEGORY_LABELS[selectedStandard.category] || selectedStandard.category}
+                              </span>
+                            )}
+                            {selectedStandard.description && (
+                              <div style={{ color: '#9ca3af', lineHeight: '1.4', marginTop: '6px' }}>{selectedStandard.description}</div>
+                            )}
+                          </div>
+                        )}
+                        {!isStandard && (
+                          <textarea value={ab.description}
+                            onChange={e => setAbilities(p => p.map(a => a.id === ab.id ? { ...a, description: e.target.value } : a))}
+                            placeholder="What does this ability do narratively?"
+                            style={{ width: '100%', background: 'transparent', color: '#d1d5db', border: 'none', fontFamily: 'monospace', fontSize: '11px', resize: 'vertical', outline: 'none', minHeight: '40px', boxSizing: 'border-box' }}
+                          />
+                        )}
                       </div>
-                      <textarea value={ab.description}
-                        onChange={e => setAbilities(p => p.map(a => a.id === ab.id ? { ...a, description: e.target.value } : a))}
-                        placeholder="What does this ability do narratively?"
-                        style={{ width: '100%', background: 'transparent', color: '#d1d5db', border: 'none', fontFamily: 'monospace', fontSize: '11px', resize: 'vertical', outline: 'none', minHeight: '40px', boxSizing: 'border-box' }}
-                      />
+                      <button onClick={() => setAbilities(p => p.filter(a => a.id !== ab.id))}
+                        style={{ color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px', marginLeft: '6px', flexShrink: 0 }}>×</button>
                     </div>
-                    <button onClick={() => setAbilities(p => p.filter(a => a.id !== ab.id))}
-                      style={{ color: '#f87171', background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px', marginLeft: '6px', flexShrink: 0 }}>×</button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <button onClick={() => setAbilities(p => [...p, { id: Date.now(), name: '', description: '', type: 'unique' }])}
                 style={{ ...S.btn, border: '2px dashed #2d1f52', background: 'transparent', color: '#6b7280', width: '100%', padding: '6px' }}>
                 + Add Ability

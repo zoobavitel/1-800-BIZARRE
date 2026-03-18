@@ -183,6 +183,15 @@ export const campaignAPI = {
   getInvitations: () => apiRequest('/campaign-invitations/'),
   acceptInvitation: (id) => apiRequest(`/campaign-invitations/${id}/accept/`, { method: 'POST' }),
   declineInvitation: (id) => apiRequest(`/campaign-invitations/${id}/decline/`, { method: 'POST' }),
+  showcaseNpc: (campaignId, npcId) => apiRequest(`/campaigns/${campaignId}/showcase-npc/`, {
+    method: 'POST',
+    body: JSON.stringify({ npc_id: npcId }),
+  }),
+  patchShowcasedNpc: (id, data) => apiRequest(`/showcased-npcs/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  }),
+  deleteShowcasedNpc: (id) => apiRequest(`/showcased-npcs/${id}/`, { method: 'DELETE' }),
 };
 
 // Faction API functions (factions are per-campaign, created by GM)

@@ -6,7 +6,7 @@ from .models import (
     Campaign, CampaignInvitation, NPC, Crew, Detriment, Benefit, StandAbility,
     HamonAbility, SpinAbility, Trauma,
     CharacterHamonAbility, CharacterSpinAbility,
-    CharacterHistory, ExperienceTracker, Session, SessionEvent,
+    CharacterHistory, ExperienceTracker, Session, SessionEvent, SessionNPCInvolvement,
     Claim, CrewPlaybook, CrewSpecialAbility, CrewUpgrade, XPHistory, StressHistory, ChatMessage,
     Faction, ShowcasedNPC, ProgressClock, Roll
 )
@@ -90,8 +90,15 @@ class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField(required=True)
     new_password = serializers.CharField(required=True)
 
+class SessionNPCInvolvementWriteSerializer(serializers.Serializer):
+    """For PATCH: {npc: id, show_clocks_to_players: bool}"""
+    npc = serializers.PrimaryKeyRelatedField(queryset=NPC.objects.all())
+    show_clocks_to_players = serializers.BooleanField(default=False)
+
+
 class SessionSerializer(serializers.ModelSerializer):
-    npcs_involved = serializers.PrimaryKeyRelatedField(many=True, queryset=NPC.objects.all(), required=False)
+    npcs_involved = serializers.SerializerMethodField()
+    npc_involvements = serializers.SerializerMethodField()
     characters_involved = serializers.PrimaryKeyRelatedField(many=True, queryset=Character.objects.all(), required=False)
     proposed_by = UserSerializer(read_only=True)
     votes = UserSerializer(many=True, read_only=True)
@@ -100,6 +107,72 @@ class SessionSerializer(serializers.ModelSerializer):
         model = Session
         fields = '__all__'
         read_only_fields = ['session_date']
+
+    def get_npcs_involved(self, obj):
+        """Return list of NPC ids for backward compatibility."""
+        return list(obj.npcs_involved.values_list('id', flat=True))
+
+    def get_npc_involvements(self, obj):
+        """Return [{npc: id, show_clocks_to_players: bool}, ...] for GM controls."""
+        return [
+            {'npc': inv.npc_id, 'show_clocks_to_players': inv.show_clocks_to_players}
+            for inv in obj.npc_involvements.select_related('npc').order_by('npc__name')
+        ]
+
+    def update(self, instance, validated_data):
+        npc_involvements_data = self.initial_data.get('npc_involvements')
+        npcs_involved_data = self.initial_data.get('npcs_involved')
+        validated_data.pop('npcs_involved', None)
+        validated_data.pop('npc_involvements', None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if npc_involvements_data is not None:
+            instance.npc_involvements.all().delete()
+            for item in npc_involvements_data:
+                npc_id = item.get('npc') if isinstance(item, dict) else item
+                show = item.get('show_clocks_to_players', False) if isinstance(item, dict) else False
+                npc = NPC.objects.get(pk=npc_id) if isinstance(npc_id, int) else npc_id
+                SessionNPCInvolvement.objects.create(
+                    session=instance, npc=npc, show_clocks_to_players=show
+                )
+        elif npcs_involved_data is not None:
+            existing = {inv.npc_id: inv for inv in instance.npc_involvements.all()}
+            new_ids = set(npcs_involved_data)
+            for npc_id in new_ids:
+                if npc_id in existing:
+                    continue
+                SessionNPCInvolvement.objects.get_or_create(
+                    session=instance, npc_id=npc_id, defaults={'show_clocks_to_players': False}
+                )
+            for npc_id in list(existing.keys()):
+                if npc_id not in new_ids:
+                    instance.npc_involvements.filter(npc_id=npc_id).delete()
+
+        return instance
+
+    def create(self, validated_data):
+        npc_involvements_data = self.initial_data.get('npc_involvements')
+        npcs_involved_data = self.initial_data.get('npcs_involved')
+        validated_data.pop('npcs_involved', None)
+        validated_data.pop('npc_involvements', None)
+        instance = super().create(validated_data)
+        if npc_involvements_data is not None:
+            for item in npc_involvements_data:
+                npc_id = item.get('npc') if isinstance(item, dict) else item
+                show = item.get('show_clocks_to_players', False) if isinstance(item, dict) else False
+                npc = NPC.objects.get(pk=npc_id) if isinstance(npc_id, int) else npc_id
+                SessionNPCInvolvement.objects.create(
+                    session=instance, npc=npc, show_clocks_to_players=show
+                )
+        elif npcs_involved_data is not None:
+            for npc_id in npcs_involved_data:
+                SessionNPCInvolvement.objects.get_or_create(
+                    session=instance, npc_id=npc_id, defaults={'show_clocks_to_players': False}
+                )
+        return instance
 
 
 class XPHistorySerializer(serializers.ModelSerializer):
@@ -155,7 +228,8 @@ class RollSerializer(serializers.ModelSerializer):
 
 class SessionRecordsSerializer(serializers.ModelSerializer):
     """Extended session serializer with events, xp_history, stress_history, rolls for session records view."""
-    npcs_involved = serializers.PrimaryKeyRelatedField(many=True, queryset=NPC.objects.all(), required=False)
+    npcs_involved = serializers.SerializerMethodField()
+    npc_involvements = serializers.SerializerMethodField()
     characters_involved = serializers.PrimaryKeyRelatedField(many=True, queryset=Character.objects.all(), required=False)
     proposed_by = UserSerializer(read_only=True)
     votes = UserSerializer(many=True, read_only=True)
@@ -169,9 +243,18 @@ class SessionRecordsSerializer(serializers.ModelSerializer):
         model = Session
         fields = [
             'id', 'campaign', 'name', 'session_date', 'description', 'objective',
-            'planned_for_next_session', 'status', 'npcs_involved', 'characters_involved',
+            'planned_for_next_session', 'status', 'npcs_involved', 'npc_involvements', 'characters_involved',
             'proposed_score_target', 'proposed_score_description', 'proposed_by', 'votes',
             'events', 'xp_history', 'stress_history', 'xp_entries', 'rolls',
+        ]
+
+    def get_npcs_involved(self, obj):
+        return list(obj.npcs_involved.values_list('id', flat=True))
+
+    def get_npc_involvements(self, obj):
+        return [
+            {'npc': inv.npc_id, 'show_clocks_to_players': inv.show_clocks_to_players}
+            for inv in obj.npc_involvements.select_related('npc').order_by('npc__name')
         ]
 
 
@@ -517,17 +600,13 @@ class ShowcasedNPCSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ShowcasedNPC
-        fields = ['id', 'campaign', 'npc', 'reveal_items', 'reveal_stand_stats', 'reveal_faction_status']
+        fields = ['id', 'campaign', 'npc', 'reveal_items', 'reveal_stand_stats', 'reveal_faction_status', 'show_clocks_to_party']
 
     def get_npc(self, obj):
         data = {
             'id': obj.npc.id,
             'name': obj.npc.name,
             'stand_name': obj.npc.stand_name or '',
-            'harm_clock_current': obj.npc.harm_clock_current,
-            'harm_clock_max': obj.npc.harm_clock_max,
-            'vulnerability_clock_current': obj.npc.vulnerability_clock_current,
-            'vulnerability_clock_max': obj.npc.vulnerability_clock_max,
         }
         if obj.reveal_items:
             data['inventory'] = obj.npc.inventory or []
@@ -536,14 +615,23 @@ class ShowcasedNPCSerializer(serializers.ModelSerializer):
             data['stand_coin_stats'] = obj.npc.stand_coin_stats or {}
         if obj.reveal_faction_status:
             data['faction_status'] = obj.npc.faction_status or {}
-        clocks = list(obj.npc.progress_clocks.all().values('id', 'name', 'clock_type', 'max_segments', 'filled_segments', 'completed'))
-        data['progress_clocks'] = clocks
+        # Only include clock data when GM has enabled show_clocks_to_party
+        if obj.show_clocks_to_party:
+            data['harm_clock_current'] = obj.npc.harm_clock_current
+            data['harm_clock_max'] = obj.npc.harm_clock_max
+            data['vulnerability_clock_current'] = obj.npc.vulnerability_clock_current
+            data['vulnerability_clock_max'] = obj.npc.vulnerability_clock_max
+            data['conflict_clocks'] = obj.npc.conflict_clocks or []
+            data['alt_clocks'] = obj.npc.alt_clocks or []
+            clocks = list(obj.npc.progress_clocks.all().values('id', 'name', 'clock_type', 'max_segments', 'filled_segments', 'completed'))
+            data['progress_clocks'] = clocks
         return data
 
 
 class ProgressClockSerializer(serializers.ModelSerializer):
     clock_type_display = serializers.CharField(source='get_clock_type_display', read_only=True)
     created_by = serializers.PrimaryKeyRelatedField(read_only=True, allow_null=True)
+    max_segments = serializers.IntegerField(min_value=1, max_value=12, default=4)
 
     class Meta:
         model = ProgressClock
@@ -601,6 +689,23 @@ class CampaignSerializer(serializers.ModelSerializer):
         if not obj.active_session_id:
             return None
         s = obj.active_session
+        involvements = s.npc_involvements.filter(show_clocks_to_players=True).select_related('npc')
+        session_npcs_with_clocks = []
+        for inv in involvements:
+            npc = inv.npc
+            clocks = list(npc.progress_clocks.all().values('id', 'name', 'clock_type', 'max_segments', 'filled_segments', 'completed'))
+            session_npcs_with_clocks.append({
+                'id': npc.id,
+                'name': npc.name,
+                'stand_name': npc.stand_name or '',
+                'harm_clock_current': npc.harm_clock_current,
+                'harm_clock_max': npc.harm_clock_max,
+                'vulnerability_clock_current': npc.vulnerability_clock_current,
+                'vulnerability_clock_max': npc.vulnerability_clock_max,
+                'conflict_clocks': npc.conflict_clocks or [],
+                'alt_clocks': npc.alt_clocks or [],
+                'progress_clocks': clocks,
+            })
         return {
             'id': s.id,
             'name': s.name,
@@ -609,6 +714,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             'show_position_effect_to_players': getattr(s, 'show_position_effect_to_players', True),
             'default_position': getattr(s, 'default_position', 'risky') or 'risky',
             'default_effect': getattr(s, 'default_effect', 'standard') or 'standard',
+            'session_npcs_with_clocks': session_npcs_with_clocks,
         }
 
     def get_sessions(self, obj):
@@ -651,7 +757,7 @@ class NPCSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = NPC
-        fields = ['id', 'name', 'level', 'appearance', 'role', 'weakness', 'need', 'desire', 'rumour', 'secret', 'passion', 'description', 'stand_coin_stats', 'heritage', 'playbook', 'custom_abilities', 'relationships', 'harm_clock_current', 'vulnerability_clock_current', 'armor_charges', 'creator', 'campaign', 'faction', 'image', 'image_url', 'stand_description', 'stand_appearance', 'stand_manifestation', 'special_traits', 'harm_clock_max', 'special_armor_charges', 'vulnerability_clock_max', 'purveyor', 'notes', 'items', 'contacts', 'faction_status', 'inventory']
+        fields = ['id', 'name', 'level', 'appearance', 'role', 'weakness', 'need', 'desire', 'rumour', 'secret', 'passion', 'description', 'stand_coin_stats', 'stand_name', 'heritage', 'playbook', 'custom_abilities', 'abilities', 'relationships', 'harm_clock_current', 'vulnerability_clock_current', 'armor_charges', 'regular_armor_used', 'special_armor_used', 'creator', 'campaign', 'faction', 'image', 'image_url', 'stand_description', 'stand_appearance', 'stand_manifestation', 'special_traits', 'harm_clock_max', 'special_armor_charges', 'vulnerability_clock_max', 'purveyor', 'notes', 'items', 'contacts', 'faction_status', 'inventory', 'conflict_clocks', 'alt_clocks']
 
     def create(self, validated_data):
         # Set the creator to the current user if not explicitly provided

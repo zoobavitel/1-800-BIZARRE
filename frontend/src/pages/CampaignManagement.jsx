@@ -83,7 +83,7 @@ function PendingInvitations({ invitations, onAccept, onDecline }) {
 // ---------------------------------------------------------------------------
 // Campaign Detail View
 // ---------------------------------------------------------------------------
-function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessions, onNavigateToCharacter }) {
+function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessions, onNavigateToCharacter, onNavigateToNPC }) {
   const [inviteUsername, setInviteUsername] = useState('');
   const [inviteError, setInviteError] = useState(null);
   const [inviteSuccess, setInviteSuccess] = useState(null);
@@ -177,6 +177,38 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
       setActionError(err.message);
     }
   };
+
+  const handleShowcaseNpc = async (npcId) => {
+    setActionError(null);
+    try {
+      await campaignAPI.showcaseNpc(campaign.id, npcId);
+      onRefresh();
+    } catch (err) {
+      setActionError(err.message);
+    }
+  };
+
+  const handleToggleShowClocks = async (showcasedId, showClocks) => {
+    setActionError(null);
+    try {
+      await campaignAPI.patchShowcasedNpc(showcasedId, { show_clocks_to_party: showClocks });
+      onRefresh();
+    } catch (err) {
+      setActionError(err.message);
+    }
+  };
+
+  const handleUnshowcaseNpc = async (showcasedId) => {
+    setActionError(null);
+    try {
+      await campaignAPI.deleteShowcasedNpc(showcasedId);
+      onRefresh();
+    } catch (err) {
+      setActionError(err.message);
+    }
+  };
+
+  const showcasedNpcIds = (campaign.showcased_npcs || []).map((s) => s.npc?.id).filter(Boolean);
 
   const startFactionCreate = () => setFactionForm({ name: '', faction_type: '', level: 0, hold: 'weak', reputation: 0, notes: '' });
   const startFactionEdit = (f) => setFactionForm({ id: f.id, name: f.name, faction_type: f.faction_type || '', level: f.level, hold: f.hold, reputation: f.reputation, notes: f.notes || '', npcs: f.npcs || [] });
@@ -439,12 +471,21 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
           ) : (
             (campaign.campaign_npcs || []).map((npc) => (
               <div key={npc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: '1px solid #1f2937' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', flexWrap: 'wrap' }}>
                   <span style={{ color: '#e5e7eb', fontWeight: 'bold' }}>{npc.name}</span>
                   <span style={{ color: '#6b7280' }}>Lv.{npc.level}</span>
                   {npc.stand_name && <span style={{ color: '#9ca3af' }}>Stand: {npc.stand_name}</span>}
                   <PlaybookTag playbook={npc.playbook} />
                   {npc.heritage_name && <span style={{ ...S.tag, background: '#374151', color: '#9ca3af' }}>{npc.heritage_name}</span>}
+                  {typeof onNavigateToNPC === 'function' && (
+                    <>
+                      <button onClick={() => onNavigateToNPC(npc.id)} style={{ ...S.btn, fontSize: '10px', padding: '2px 6px', background: '#1d4ed8', color: '#93c5fd' }}>View</button>
+                      <button onClick={() => { const url = `${window.location.origin}${window.location.pathname}#npcs/${npc.id}`; navigator.clipboard?.writeText(url); alert('Link copied to clipboard'); }} style={{ ...S.btn, fontSize: '10px', padding: '2px 6px', background: '#374151', color: '#9ca3af' }} title="Copy link">Link</button>
+                    </>
+                  )}
+                  {!showcasedNpcIds.includes(npc.id) && (
+                    <button onClick={() => handleShowcaseNpc(npc.id)} style={{ ...S.btn, fontSize: '10px', padding: '2px 6px', background: '#7c3aed', color: '#c4b5fd' }}>Showcase</button>
+                  )}
                 </div>
                 <button onClick={() => handleUnassignNPC(npc.id)} style={{ ...S.btn, fontSize: '10px', padding: '2px 6px', background: '#374151', color: '#9ca3af' }}>Remove</button>
               </div>
@@ -461,6 +502,33 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
               <button onClick={handleAssignNPC} style={S.btnPrimary} disabled={!assignNpcId}>Add</button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Showcased NPCs (GM only) — opposition in Entanglement/All-Out-Brawl; GM can share clocks with party */}
+      {isGM && (campaign.showcased_npcs || []).length > 0 && (
+        <div style={S.card}>
+          <span style={S.sectionLbl}>Showcased NPCs</span>
+          <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>Share NPC clocks with the party when enabled.</div>
+          {(campaign.showcased_npcs || []).map((sn) => (
+            <div key={sn.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #1f2937', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <span style={{ fontWeight: 'bold', color: '#e5e7eb' }}>{sn.npc?.name || 'NPC'}</span>
+                {sn.npc?.stand_name && <span style={{ color: '#9ca3af', marginLeft: '6px' }}>Stand: {sn.npc.stand_name}</span>}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '12px', color: '#9ca3af' }}>
+                  <input
+                    type="checkbox"
+                    checked={sn.show_clocks_to_party || false}
+                    onChange={(e) => handleToggleShowClocks(sn.id, e.target.checked)}
+                  />
+                  <span>Show clocks to party</span>
+                </label>
+                <button onClick={() => handleUnshowcaseNpc(sn.id)} style={{ ...S.btn, fontSize: '10px', padding: '2px 6px', background: '#374151', color: '#9ca3af' }}>Remove from showcase</button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -572,7 +640,7 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
   );
 }
 
-const CLOCK_SEGMENT_OPTIONS = [4, 6, 8, 10, 12];
+const CLOCK_SEGMENT_OPTIONS = Array.from({ length: 12 }, (_, i) => i + 1);
 const CLOCK_TYPE_OPTIONS = [
   { value: 'CUSTOM', label: 'Custom' },
   { value: 'DANGER', label: 'Danger' },
@@ -1006,13 +1074,29 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
     }
   };
 
-  const npcsInvolved = sessionData?.npcs_involved || [];
+  const npcInvolvements = sessionData?.npc_involvements || [];
+  const invByNpc = Object.fromEntries((npcInvolvements || []).map((i) => [i.npc, i]));
   const toggleNpcInvolved = async (npcId) => {
-    const next = npcsInvolved.includes(npcId)
-      ? npcsInvolved.filter((id) => id !== npcId)
-      : [...npcsInvolved, npcId];
+    const inv = invByNpc[npcId];
+    const next = inv
+      ? npcInvolvements.filter((i) => i.npc !== npcId)
+      : [...npcInvolvements, { npc: npcId, show_clocks_to_players: false }];
     try {
-      const updated = await sessionAPI.patchSession(session.id, { npcs_involved: next });
+      const updated = await sessionAPI.patchSession(session.id, { npc_involvements: next });
+      setSessionData(updated);
+      onRefresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+  const toggleShowClocks = async (npcId) => {
+    const inv = invByNpc[npcId];
+    if (!inv) return;
+    const next = npcInvolvements.map((i) =>
+      i.npc === npcId ? { ...i, show_clocks_to_players: !i.show_clocks_to_players } : i
+    );
+    try {
+      const updated = await sessionAPI.patchSession(session.id, { npc_involvements: next });
       setSessionData(updated);
       onRefresh();
     } catch (e) {
@@ -1126,17 +1210,33 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
         {campaignNPCs.length === 0 ? (
           <div style={{ color: '#6b7280' }}>No NPCs in campaign.</div>
         ) : (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '8px' }}>
-            {campaignNPCs.map((npc) => (
-              <label key={npc.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={npcsInvolved.includes(npc.id)}
-                  onChange={() => toggleNpcInvolved(npc.id)}
-                />
-                <span>{npc.name || npc.true_name || `NPC ${npc.id}`}</span>
-              </label>
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+            {campaignNPCs.map((npc) => {
+              const inv = invByNpc[npc.id];
+              const inSession = !!inv;
+              return (
+                <div key={npc.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={inSession}
+                      onChange={() => toggleNpcInvolved(npc.id)}
+                    />
+                    <span>{npc.name || npc.true_name || `NPC ${npc.id}`}</span>
+                  </label>
+                  {inSession && (
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer', fontSize: '12px', color: '#9ca3af' }}>
+                      <input
+                        type="checkbox"
+                        checked={inv.show_clocks_to_players}
+                        onChange={() => toggleShowClocks(npc.id)}
+                      />
+                      <span>Show clocks to players</span>
+                    </label>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -1291,7 +1391,7 @@ function HarmEditor({ character, onSave }) {
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
-export default function CampaignManagement({ initialCampaignId = null, onNavigateToCharacter }) {
+export default function CampaignManagement({ initialCampaignId = null, onNavigateToCharacter, onNavigateToNPC, onCampaignSelect }) {
   const { user } = useAuth();
   const [campaigns, setCampaigns] = useState([]);
   const [invitations, setInvitations] = useState([]);
@@ -1324,7 +1424,9 @@ export default function CampaignManagement({ initialCampaignId = null, onNavigat
   useEffect(() => { loadCampaigns(); }, [loadCampaigns]);
 
   useEffect(() => {
-    if (initialCampaignId != null && campaigns.length > 0 && campaigns.some((c) => c.id === initialCampaignId)) {
+    if (initialCampaignId == null) {
+      setSelectedCampaignId(null);
+    } else if (campaigns.length > 0 && campaigns.some((c) => c.id === initialCampaignId)) {
       setSelectedCampaignId(initialCampaignId);
     }
   }, [initialCampaignId, campaigns]);
@@ -1424,10 +1526,11 @@ export default function CampaignManagement({ initialCampaignId = null, onNavigat
             campaign={selectedCampaign}
             isGM={isGM}
             user={user}
-            onBack={() => setSelectedCampaignId(null)}
+            onBack={() => window.history.back()}
             onRefresh={refreshSelected}
             onManageSessions={() => setSessionView('list')}
             onNavigateToCharacter={onNavigateToCharacter}
+            onNavigateToNPC={onNavigateToNPC}
           />
         </div>
       </div>
@@ -1494,10 +1597,10 @@ export default function CampaignManagement({ initialCampaignId = null, onNavigat
               <div
                 key={c.id}
                 style={{ ...S.card, cursor: 'pointer' }}
-                onClick={() => setSelectedCampaignId(c.id)}
+                onClick={() => { setSelectedCampaignId(c.id); onCampaignSelect?.(c.id); }}
                 role="button"
                 tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && setSelectedCampaignId(c.id)}
+                onKeyDown={(e) => e.key === 'Enter' && (setSelectedCampaignId(c.id), onCampaignSelect?.(c.id))}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>

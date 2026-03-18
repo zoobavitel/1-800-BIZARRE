@@ -3657,3 +3657,65 @@ AssertionError: It is redundant to specify `source='xp_entries'` on field 'ListS
 [WARNING] 2026-03-18 05:38:01,617 django.request - Bad Request: /api/npcs/
 [WARNING] 2026-03-18 05:38:10,926 django.request - Bad Request: /api/npcs/
 [WARNING] 2026-03-18 05:40:44,065 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 06:01:54,900 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 06:04:06,876 django.request - Bad Request: /api/characters/
+[INFO] 2026-03-18 06:07:40,806 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-18 06:07:41,067 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 06:07:42,168 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-18 06:07:42,417 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-18 16:03:47,225 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 16:05:10,325 django.request - Bad Request: /api/characters/
+[INFO] 2026-03-18 16:05:34,110 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/npc_views.py changed, reloading.
+[INFO] 2026-03-18 16:05:34,447 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 16:05:35,565 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/npc_views.py changed, reloading.
+[INFO] 2026-03-18 16:05:35,796 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 16:06:49,314 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-18 16:06:49,554 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 16:09:17,860 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 16:09:22,159 characters.views.auth_views - Login successful: user=zoob ip=127.0.0.1
+[WARNING] 2026-03-18 16:12:45,982 django.request - Bad Request: /api/characters/
+[INFO] 2026-03-18 16:13:05,588 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-18 16:17:24,722 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 16:18:45,734 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 16:19:37,226 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 16:19:39,872 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 16:19:45,332 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 16:19:57,937 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 16:20:04,765 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 16:20:08,924 django.request - Bad Request: /api/characters/
+[INFO] 2026-03-18 16:20:43,305 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 16:28:27,424 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-18 16:31:07,709 django.request - Bad Request: /api/characters/
+[INFO] 2026-03-18 16:32:32,299 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-18 16:47:43,604 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 16:47:51,514 django.request - Bad Request: /api/characters/
+[INFO] 2026-03-18 17:05:32,741 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 18:02:27,520 characters.views.auth_views - Login successful: user=zoob ip=127.0.0.1
+[INFO] 2026-03-18 18:03:03,997 characters.views.auth_views - Login successful: user=zoob ip=127.0.0.1
+[INFO] 2026-03-18 18:23:27,597 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-18 18:23:27,908 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 18:23:29,001 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-18 18:23:29,249 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-18 18:31:30,773 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-03-18 18:32:33,759 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 18:32:46,238 django.request - Bad Request: /api/accounts/signup/
+[WARNING] 2026-03-18 18:33:07,892 django.request - Bad Request: /api/accounts/login/
+[INFO] 2026-03-18 18:43:59,066 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-18 18:43:59,357 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 18:44:07,493 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-18 18:44:07,731 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 18:44:10,855 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-18 18:44:11,090 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 18:44:14,222 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-18 18:44:14,447 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 18:44:17,570 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-18 18:44:17,830 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 18:53:43,734 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 18:56:01,599 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-18 18:56:01,866 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 18:56:08,022 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-18 18:56:08,262 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 18:57:14,696 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-18 18:57:15,000 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 18:57:33,192 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-18 18:57:33,421 django.utils.autoreload - Watching for file changes with StatReloader
