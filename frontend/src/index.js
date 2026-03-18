@@ -1,7 +1,7 @@
 import './styles/global.css';
 import React, { useState, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
-import { Menu } from 'lucide-react';
+import { Menu, Search, Settings } from 'lucide-react';
 import Home from './pages/Home.jsx';
 import CharacterPage from './pages/CharacterPage.jsx';
 import ResponsiveTest from './pages/ResponsiveTest.jsx';
@@ -23,6 +23,7 @@ import HamburgerMenu from './components/HamburgerMenu.jsx';
 import { characterAPI, transformBackendToFrontend } from './features/character-sheet';
 
 const PAGE_TITLES = {
+  home:              'HOME',
   character:        'CHARACTERS',
   'character-options': 'CHARACTER OPTIONS',
   campaigns:         'CAMPAIGN MANAGEMENT',
@@ -55,9 +56,14 @@ const barStyles = {
     background: 'transparent', color: '#9ca3af', cursor: 'pointer',
     fontFamily: 'monospace', fontSize: '12px',
   },
+  rightBtn: {
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    width: '36px', height: '36px', border: 'none', borderRadius: '4px',
+    background: '#374151', color: '#9ca3af', cursor: 'pointer',
+  },
 };
 
-function AppBar({ onHamburgerClick, onBack, pageTitle }) {
+function AppBar({ onHamburgerClick, onBack, pageTitle, rightActions }) {
   return (
     <header style={barStyles.bar}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -75,6 +81,9 @@ function AppBar({ onHamburgerClick, onBack, pageTitle }) {
           </>
         )}
       </div>
+      {rightActions && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>{rightActions}</div>
+      )}
     </header>
   );
 }
@@ -240,11 +249,33 @@ const App = () => {
           onLogout={logout}
         />
 
-        {currentPage !== 'home' && currentPage !== 'search' && currentPage !== 'notifications' && currentPage !== 'messages' && currentPage !== 'account-settings' && currentPage !== 'patch-notes' && currentPage !== 'licenses' && (
+        {currentPage !== 'search' && currentPage !== 'notifications' && currentPage !== 'messages' && currentPage !== 'account-settings' && currentPage !== 'patch-notes' && currentPage !== 'licenses' && (
           <AppBar
             onHamburgerClick={toggleMenu}
-            onBack={handleBack}
+            onBack={currentPage !== 'home' ? handleBack : undefined}
             pageTitle={PAGE_TITLES[currentPage]}
+            rightActions={currentPage === 'home' ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handlePageChange('search')}
+                  aria-label="Search"
+                  title="Search"
+                  style={barStyles.rightBtn}
+                >
+                  <Search style={{ width: 20, height: 20 }} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUserMenuOpen(true)}
+                  aria-label="User menu"
+                  title="User menu"
+                  style={barStyles.rightBtn}
+                >
+                  <Settings style={{ width: 20, height: 20 }} />
+                </button>
+              </>
+            ) : null}
           />
         )}
 
@@ -264,8 +295,6 @@ const App = () => {
               onNavigateToCampaign={(campaignId) => handlePageChange('campaigns', { campaignId })}
               onNavigateToSearch={() => handlePageChange('search')}
               onNavigateToRules={(section) => handlePageChange('rules', { section })}
-              onGearClick={() => setUserMenuOpen((o) => !o)}
-              onHamburgerClick={toggleMenu}
             />
           </>
         )}

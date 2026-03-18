@@ -25,6 +25,33 @@ export const ACTION_ATTR = {
   BIZARRE: 'resolve', COMMAND: 'resolve', CONSORT: 'resolve', SWAY: 'resolve',
 };
 
+// Action descriptions (SRD)
+export const ACTION_DESC = {
+  BIZARRE: 'Open mind to paranormal power; communicate with bizarre entities.',
+  COMMAND: 'Compel swift obedience; intimidate; lead group actions.',
+  CONSORT: 'Socialize with friends/contacts; access resources, information, people, places.',
+  FINESSE: 'Dextrous manipulation; subtle misdirection; pick pockets; duel; drive.',
+  HUNT: 'Track a target; ambush; precision/aimed attack.',
+  PROWL: 'Move skillfully and quietly; sneak; strike from hiding.',
+  SKIRMISH: 'Close combat; brawl; wrestle; hold position.',
+  STUDY: 'Scrutinize details; research; detect lies or true feelings.',
+  SURVEY: 'Observe situation; anticipate outcomes; spot trouble or opportunities.',
+  SWAY: 'Influence with guile, charm, or argument; lie; persuade.',
+  TINKER: 'Fiddle with devices; create/alter gadgets; pick locks; disable alarms.',
+  WRECK: 'Savage force; smash; sabotage; chaos.',
+};
+
+// Devil's Bargain common detriments (SRD) — in exchange for +1 die
+export const DEVILS_BARGAIN_DETRIMENTS = [
+  'Collateral damage, unintended harm',
+  'Sacrifice coin or an item',
+  'Betray a friend or loved one',
+  'Offend or anger a faction',
+  'Start and/or tick a troublesome clock',
+  'Add +2 Wanted Stars to the crew from evidence or witnesses',
+  'Suffer harm',
+];
+
 // Resistance attribute tooltips (SRD: which consequence type each resists)
 export const RESISTANCE_ATTR_DESC = {
   INSIGHT: 'Resistance (deception/understanding)',

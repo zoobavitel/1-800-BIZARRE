@@ -7,10 +7,12 @@ import {
   DUR_TABLE,
   DEV_SESSION_XP,
   ACTION_ATTR,
+  ACTION_DESC,
   RESISTANCE_ATTR_DESC,
   VICE_OPTIONS,
   DEFAULT_TRAUMA,
   TRAUMA_KEYS,
+  DEVILS_BARGAIN_DETRIMENTS,
 } from '../features/character-sheet/constants/srd';
 import { characterAPI, campaignAPI, crewAPI, rollAPI, progressClockAPI, referenceAPI } from '../features/character-sheet';
 import { useAuth } from '../features/auth';
@@ -447,6 +449,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const [pendingPushDice, setPendingPushDice] = useState(false);
   const [showDevilsBargainModal, setShowDevilsBargainModal] = useState(false);
   const [pendingDevilsBargain, setPendingDevilsBargain] = useState(null);
+  const [expandedActionInfo, setExpandedActionInfo] = useState(null);
   const [campaignAssignStatus, setCampaignAssignStatus] = useState(null);
   const [campaignAssignError, setCampaignAssignError] = useState(null);
   const harmLevel3Used = ((harm?.level3?.[0] ?? '')?.toString?.()?.trim?.() ?? '') !== '';
@@ -1484,14 +1487,22 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                         { attr:'RESOLVE', actions:['BIZARRE','COMMAND','CONSORT','SWAY'] },
                       ].map(({ attr, actions }) => (
                         <div key={attr}>
-                          <div
-                            onClick={() => rollDice(attr, getAttributeDice(actions), true)}
-                            style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px', cursor:'pointer' }}
-                            title={RESISTANCE_ATTR_DESC[attr] || 'Click for Resistance Roll'}
-                          >
-                            <span style={{ fontSize:'11px', fontWeight:'bold', color:'#e5e7eb', display:'flex', alignItems:'center', gap:'4px' }}>
-                              <span style={{ fontSize:'10px', opacity:0.9 }}>🎲</span>
-                              {attr}
+                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
+                            <span style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+                              <button
+                                onClick={() => setExpandedActionInfo(expandedActionInfo === attr ? null : attr)}
+                                style={{ fontSize:'11px', fontWeight:'bold', color:'#e5e7eb', background:'none', border:'none', cursor:'pointer', padding:0, textDecoration:'underline', textUnderlineOffset:'2px' }}
+                                title="Show properties"
+                              >
+                                {attr}
+                              </button>
+                              <button
+                                onClick={() => rollDice(attr, getAttributeDice(actions), true)}
+                                style={{ fontSize:'14px', background:'none', border:'none', cursor:'pointer', padding:0, lineHeight:1 }}
+                                title={RESISTANCE_ATTR_DESC[attr] || 'Resistance Roll'}
+                              >
+                                🎲
+                              </button>
                             </span>
                             <div style={{ display:'flex', gap:'2px' }}>
                               {[1,2,3,4].map(d => (
@@ -1500,45 +1511,67 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                               ))}
                             </div>
                           </div>
+                          {expandedActionInfo === attr && (
+                            <div style={{ fontSize:'10px', color:'#9ca3af', marginBottom:'6px', padding:'6px', background:'#1f2937', borderRadius:'4px', border:'1px solid #374151' }}>
+                              {RESISTANCE_ATTR_DESC[attr] || ''}
+                            </div>
+                          )}
                           {actions.map(action => {
                             const rating = actionRatings[action];
                             return (
-                              <div
-                                key={action}
-                                onClick={(e) => { if (!e.target.closest('[data-dot-edit]')) rollDice(action, rating); }}
-                                style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px', cursor:'pointer' }}
-                                title={`Click to roll ${rating}d`}
-                              >
-                                <span style={{ fontSize:'11px', color:'#d1d5db', display:'flex', alignItems:'center', gap:'4px' }}>
-                                  <span style={{ fontSize:'10px', opacity:0.9 }}>🎲</span>
-                                  {action}
-                                </span>
-                                <div style={{ display:'flex', gap:'2px' }} data-dot-edit>
-                                  {[1,2,3,4].map(d => {
-                                    const filled    = d <= rating;
-                                    const isAdvDot  = d > MAX_DOTS_PER_ACTION_CREATION; // dots 3-4 require advancement
-                                    return (
-                                      <div key={d}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          if (isAdvDot) return; // not clickable during creation
-                                          updateActionRating(action, d <= rating ? d - 1 : d);
-                                        }}
-                                        title={isAdvDot
-                                          ? (filled ? `Dot ${d} — gained via advancement` : `Dot ${d} — unlock via advancement`)
-                                          : (dotsRemaining === 0 && !filled ? 'No creation dots remaining' : '')}
-                                        style={{
-                                          width:'12px', height:'12px', borderRadius:'50%',
-                                          border:`1px solid ${isAdvDot ? '#374151' : '#6b7280'}`,
-                                          cursor: isAdvDot ? 'default' : 'pointer',
-                                          background: filled ? (isAdvDot ? '#a78bfa' : '#7c3aed') : '#111827',
-                                          opacity: isAdvDot && !filled ? 0.2 : 1,
-                                        }}
-                                      />
-                                    );
-                                  })}
+                              <React.Fragment key={action}>
+                                <div
+                                  style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}
+                                >
+                                  <span style={{ display:'flex', alignItems:'center', gap:'4px' }}>
+                                    <button
+                                      onClick={() => setExpandedActionInfo(expandedActionInfo === action ? null : action)}
+                                      style={{ fontSize:'11px', color:'#d1d5db', background:'none', border:'none', cursor:'pointer', padding:0, textDecoration:'underline', textUnderlineOffset:'2px' }}
+                                      title="Show properties"
+                                    >
+                                      {action}
+                                    </button>
+                                    <button
+                                      onClick={() => rollDice(action, rating)}
+                                      style={{ fontSize:'14px', background:'none', border:'none', cursor:'pointer', padding:0, lineHeight:1 }}
+                                      title={`Roll ${rating}d`}
+                                    >
+                                      🎲
+                                    </button>
+                                  </span>
+                                  <div style={{ display:'flex', gap:'2px' }} data-dot-edit>
+                                    {[1,2,3,4].map(d => {
+                                      const filled    = d <= rating;
+                                      const isAdvDot  = d > MAX_DOTS_PER_ACTION_CREATION; // dots 3-4 require advancement
+                                      return (
+                                        <div key={d}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            if (isAdvDot) return; // not clickable during creation
+                                            updateActionRating(action, d <= rating ? d - 1 : d);
+                                          }}
+                                          title={isAdvDot
+                                            ? (filled ? `Dot ${d} — gained via advancement` : `Dot ${d} — unlock via advancement`)
+                                            : (dotsRemaining === 0 && !filled ? 'No creation dots remaining' : '')}
+                                          style={{
+                                            width:'12px', height:'12px', borderRadius:'50%',
+                                            border:`1px solid ${isAdvDot ? '#374151' : '#6b7280'}`,
+                                            cursor: isAdvDot ? 'default' : 'pointer',
+                                            background: filled ? (isAdvDot ? '#a78bfa' : '#7c3aed') : '#111827',
+                                            opacity: isAdvDot && !filled ? 0.2 : 1,
+                                          }}
+                                        />
+                                      );
+                                    })}
+                                  </div>
                                 </div>
-                              </div>
+                                {expandedActionInfo === action && (
+                                  <div style={{ fontSize:'10px', color:'#9ca3af', marginBottom:'6px', padding:'6px', background:'#1f2937', borderRadius:'4px', border:'1px solid #374151' }}>
+                                    <div style={{ fontWeight:'bold', color:'#d1d5db', marginBottom:'2px' }}>{ACTION_ATTR[action]?.toUpperCase() || ''}</div>
+                                    {ACTION_DESC[action] || ''}
+                                  </div>
+                                )}
+                              </React.Fragment>
                             );
                           })}
                         </div>
@@ -2020,17 +2053,17 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                   {/* Devil's Bargain modal */}
                   {showDevilsBargainModal && (
                     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 101 }}>
-                      <div style={{ background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '20px', maxWidth: '320px', width: '90%' }}>
-                        <div style={{ fontWeight: 'bold', marginBottom: '12px', color: '#a78bfa' }}>Devil's Bargain — +1d for a consequence</div>
+                      <div style={{ background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '20px', maxWidth: '360px', width: '90%' }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: '12px', color: '#a78bfa' }}>Devil's Bargain — +1d in exchange for a detriment</div>
                         <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '12px' }}>Choose a detriment for +1 die on your next roll:</div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
-                          {TRAUMA_KEYS.map((k) => (
+                          {DEVILS_BARGAIN_DETRIMENTS.map((detriment) => (
                             <button
-                              key={k}
-                              onClick={() => { setPendingDevilsBargain(k); setShowDevilsBargainModal(false); }}
+                              key={detriment}
+                              onClick={() => { setPendingDevilsBargain(detriment); setShowDevilsBargainModal(false); }}
                               style={{ ...S.btn, padding: '6px 10px', fontSize: '11px', background: '#374151' }}
                             >
-                              {k.replace(/_/g, ' ')}
+                              {detriment}
                             </button>
                           ))}
                           <button

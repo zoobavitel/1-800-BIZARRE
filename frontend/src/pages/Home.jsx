@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, ArrowRight, Zap, Users, Dice6, BookOpen, Settings, Search, Menu } from 'lucide-react';
+import { Plus, ArrowRight, Zap, Users, Dice6, BookOpen, Settings } from 'lucide-react';
 import '../styles/Home.css';
 import { characterAPI, campaignAPI, transformBackendToFrontend } from '../features/character-sheet';
 import { useAuth } from '../features/auth';
 
 // Main Home Page Component — character create/edit goes to Character page
-const HomePage = ({ onNavigateToCharacter, onNavigateToCharacterOptions, onNavigateToCampaign, onNavigateToSearch, onNavigateToRules, onHamburgerClick, onGearClick }) => {
+const HomePage = ({ onNavigateToCharacter, onNavigateToCharacterOptions, onNavigateToCampaign, onNavigateToSearch, onNavigateToRules }) => {
   const { user } = useAuth();
   const [characters, setCharacters] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -101,48 +101,6 @@ const HomePage = ({ onNavigateToCharacter, onNavigateToCharacterOptions, onNavig
 
   return (
     <div className="home-container">
-      {/* Header */}
-      <header className="header">
-        <div className="header-left flex items-center gap-3">
-          {typeof onHamburgerClick === 'function' && (
-            <button
-              type="button"
-              onClick={onHamburgerClick}
-              aria-label="Open menu"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white transition-colors"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-          )}
-          <div className="header-title">
-            1(800)BIZARRE - HOME
-          </div>
-        </div>
-        <div className="header-center">
-          <span className="text-gray-300 text-sm">Welcome, {user?.username}</span>
-        </div>
-        <div className="header-actions">
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={() => typeof onNavigateToSearch === 'function' && onNavigateToSearch()}
-              className="btn-secondary"
-              aria-label="Search"
-              title="Search"
-            >
-              <Search className="icon" />
-            </button>
-            <button
-              onClick={() => typeof onGearClick === 'function' && onGearClick()}
-              className="btn-secondary"
-              aria-label="User menu"
-              title="User menu"
-            >
-              <Settings className="icon" />
-            </button>
-          </div>
-        </div>
-      </header>
-
       <div className="main-content">
         {/* Hero Section */}
         <section className="hero-section">
