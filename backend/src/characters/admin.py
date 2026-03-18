@@ -40,7 +40,7 @@ class CharacterAdmin(admin.ModelAdmin):
             'fields': (
                 'playbook',
                 'stand_type', 'stand_name', 'stand_form', 'stand_conscious',
-                'special_ability', 'armor_type'
+                'armor_type'
             )
         }),
         ('Relationships', {

@@ -5,7 +5,7 @@ import { characterAPI, campaignAPI, transformBackendToFrontend } from '../featur
 import { useAuth } from '../features/auth';
 
 // Main Home Page Component — character create/edit goes to Character page
-const HomePage = ({ onNavigateToCharacter, onNavigateToCharacterOptions, onNavigateToCampaign, onNavigateToSearch, onNavigateToRules }) => {
+const HomePage = ({ onNavigateToCharacter, onNavigateToCharacterOptions, onNavigateToCampaign, onNavigateToRules }) => {
   const { user } = useAuth();
   const [characters, setCharacters] = useState([]);
   const [loading, setLoading] = useState(true);

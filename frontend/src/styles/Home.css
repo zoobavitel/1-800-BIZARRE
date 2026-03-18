@@ -7,45 +7,6 @@
   font-size: 0.875rem; /* text-sm */
 }
 
-/* Header */
-.header {
-  background-color: #1f2937; /* bg-gray-800 */
-  padding: 0.5rem 1rem;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 1rem;
-  border-bottom: 1px solid #4b5563; /* border-gray-600 */
-  position: sticky;
-  top: 0;
-  z-index: 50;
-}
-
-.header-left {
-  display: flex;
-  align-items: center;
-}
-
-.header-center {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.header-title {
-  font-size: 1.25rem;
-  font-weight: bold;
-  color: #ffffff;
-  cursor: pointer;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 1rem;
-}
-
 .btn-primary {
   background-color: #059669; /* bg-green-600 */
   color: #ffffff;
@@ -60,19 +21,6 @@
 
 .btn-primary:hover {
   background-color: #047857; /* hover:bg-green-700 */
-}
-
-.btn-secondary {
-  color: #9ca3af; /* text-gray-400 */
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.5rem;
-  transition: color 0.2s;
-}
-
-.btn-secondary:hover {
-  color: #ffffff;
 }
 
 /* Icon styles */

@@ -3,10 +3,10 @@
  * Single source of truth for grades, skills, trauma, vice, and stat tables.
  */
 
-// Stand Coin grades — PC sheet uses index 0–4 (F–A); S is GM-only for PCs
-export const GRADE = ['F', 'D', 'C', 'B', 'A'];
+// Stand Coin grades — PC sheet uses index 0–5 (F–S); S is GM-only for PCs
+export const GRADE = ['F', 'D', 'C', 'B', 'A', 'S'];
 export const GRADE_INDEX = { F: 0, D: 1, C: 2, B: 3, A: 4, S: 5 };
-export const INDEX_TO_GRADE = (i) => (GRADE[i] ?? 'F');
+export const INDEX_TO_GRADE = (i) => (GRADE[Math.min(5, Math.max(0, Math.floor(Number(i) || 0)))] ?? 'F');
 
 // Character creation (SRD: 7 action dots total, max 2 per action at creation)
 export const MAX_CREATION_DOTS = 7;
@@ -76,13 +76,15 @@ export const DEFAULT_TRAUMA = Object.fromEntries(
   TRAUMA_KEYS.map((k) => [k, false])
 );
 
-// Durability → stress max bonus and armor charges (PC sheet; index = stat value 0–4)
+// Durability → stress max bonus and armor charges (PC/NPC sheet; index = stat value 0–5 for F–S)
+// S: +4 stress, 3 armor, resistance can reduce harm by 2 levels | A: +3, 3 | B: +2, 2 | C: +1, 1 | D: 0, 1 | F: -1, 0
 export const DUR_TABLE = [
-  { stressBonus: -1, armorCharges: 0 }, // F(0)
-  { stressBonus: 0, armorCharges: 1 },   // D(1)
-  { stressBonus: 1, armorCharges: 1 },  // C(2)
-  { stressBonus: 2, armorCharges: 2 },  // B(3)
-  { stressBonus: 3, armorCharges: 3 },  // A(4)
+  { stressBonus: -1, armorCharges: 0, resistanceReduceLevels: 1 }, // F(0)
+  { stressBonus: 0, armorCharges: 1, resistanceReduceLevels: 1 },  // D(1)
+  { stressBonus: 1, armorCharges: 1, resistanceReduceLevels: 1 },  // C(2)
+  { stressBonus: 2, armorCharges: 2, resistanceReduceLevels: 1 },  // B(3)
+  { stressBonus: 3, armorCharges: 3, resistanceReduceLevels: 1 },  // A(4)
+  { stressBonus: 4, armorCharges: 3, resistanceReduceLevels: 2 },  // S(5)
 ];
 
 // Development → session XP bonus per grade (index = stat value 0–4)
@@ -117,6 +119,7 @@ export const PC_STAT_DESC = {
     '+1 stress max · 1 armor charge',
     '+2 stress max · 2 armor charges',
     '+3 stress max · 3 armor charges',
+    '+4 stress max · 3 armor charges · Resistance can reduce harm by 2 levels',
   ],
   precision: [
     '1s and double 1s count as critical fail',
@@ -146,15 +149,15 @@ export const ACTION_RATING_KEYS = [
   'BIZARRE', 'COMMAND', 'CONSORT', 'SWAY',
 ];
 
-/** Convert backend grade letter to frontend index (0–4 for PC; S→4 if needed) */
+/** Convert backend grade letter to frontend index (0–5 for F–S) */
 export function gradeToIndex(grade) {
   if (grade == null || grade === '') return 1;
   const g = String(grade).toUpperCase();
   return GRADE_INDEX[g] ?? 1;
 }
 
-/** Convert frontend index (0–4) to backend grade letter */
+/** Convert frontend index (0–5) to backend grade letter */
 export function indexToGrade(i) {
   const idx = typeof i === 'number' ? i : 1;
-  return GRADE[Math.min(4, Math.max(0, idx))] ?? 'D';
+  return GRADE[Math.min(5, Math.max(0, Math.floor(idx)))] ?? 'D';
 }

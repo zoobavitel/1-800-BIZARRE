@@ -63,6 +63,13 @@ class UserProfileSerializer(serializers.ModelSerializer):
             'notification_preferences',
         ]
 
+class InvitableUserSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for invitable users list (id, username only)."""
+    class Meta:
+        model = User
+        fields = ['id', 'username']
+
+
 class UserSerializer(serializers.ModelSerializer):
     profile = UserProfileSerializer()
 
@@ -483,43 +490,96 @@ class CharacterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         custom_vice = validated_data.pop('custom_vice', None)
-        # extract playbook abilities
+        vice_details = validated_data.pop('vice_details', None)
+        stand_data = self.initial_data.get('stand')
+        coin_stats = validated_data.get('coin_stats', {})
         hamon_ids = validated_data.pop('hamon_ability_ids', [])
         spin_ids = validated_data.pop('spin_ability_ids', [])
-        # extract standard abilities
         std_ids = validated_data.pop('standard_abilities', [])
 
         if custom_vice:
-            vice = Vice.objects.create(name=custom_vice, description="Custom vice")
+            vice, _ = Vice.objects.get_or_create(
+                name=custom_vice.strip(),
+                defaults={'description': 'Custom vice'}
+            )
             validated_data['vice'] = vice
+        if vice_details is not None:
+            validated_data['vice_details'] = vice_details
 
         # create character instance and assign m2m
         character = super().create(validated_data)
-        # assign standard abilities
+
+        # Create Stand if we have coin_stats or stand data (required for validation)
+        stats = stand_data or coin_stats
+        if stats and isinstance(stats, dict):
+            Stand.objects.get_or_create(
+                character=character,
+                defaults={
+                    'name': character.stand_name or 'Unnamed Stand',
+                    'type': 'FIGHTING',
+                    'form': 'Humanoid',
+                    'consciousness_level': 'C',
+                    'power': str(stats.get('power', 'D')).upper()[:1],
+                    'speed': str(stats.get('speed', 'D')).upper()[:1],
+                    'range': str(stats.get('range', 'D')).upper()[:1],
+                    'durability': str(stats.get('durability', 'D')).upper()[:1],
+                    'precision': str(stats.get('precision', 'D')).upper()[:1],
+                    'development': str(stats.get('development', 'D')).upper()[:1],
+                    'armor': 0,
+                }
+            )
+
         character.standard_abilities.set(std_ids)
-        # assign hamon abilities
         for ha in hamon_ids:
             CharacterHamonAbility.objects.create(character=character, hamon_ability=ha)
-        # assign spin abilities
         for sa in spin_ids:
             CharacterSpinAbility.objects.create(character=character, spin_ability=sa)
         return character
     
     def update(self, instance, validated_data):
-        # handle custom vice
         custom_vice = validated_data.pop('custom_vice', None)
+        vice_details = validated_data.pop('vice_details', None)
         hamon_ids = validated_data.pop('hamon_ability_ids', None)
         spin_ids = validated_data.pop('spin_ability_ids', None)
-        # extract standard abilities
         std_ids = validated_data.pop('standard_abilities', None)
+        stand_data = self.initial_data.get('stand')
+        coin_stats = validated_data.get('coin_stats') or (stand_data if isinstance(stand_data, dict) else {})
+
         if custom_vice:
-            vice = Vice.objects.create(name=custom_vice, description="Custom vice")
+            vice, _ = Vice.objects.get_or_create(
+                name=custom_vice.strip(),
+                defaults={'description': 'Custom vice'}
+            )
             validated_data['vice'] = vice
+        if vice_details is not None:
+            validated_data['vice_details'] = vice_details
+
         character = super().update(instance, validated_data)
-        # update standard abilities
+
+        # Sync Stand stats when coin_stats or stand data is provided
+        if coin_stats and isinstance(coin_stats, dict):
+            stand, created = Stand.objects.get_or_create(
+                character=character,
+                defaults={
+                    'name': character.stand_name or 'Unnamed Stand',
+                    'type': 'FIGHTING',
+                    'form': 'Humanoid',
+                    'consciousness_level': 'C',
+                    'power': 'D', 'speed': 'D', 'range': 'D',
+                    'durability': 'D', 'precision': 'D', 'development': 'D',
+                    'armor': 0,
+                }
+            )
+            for field in ['power', 'speed', 'range', 'durability', 'precision', 'development']:
+                grade = str(coin_stats.get(field, 'D')).upper()[:1]
+                if grade in ('S', 'A', 'B', 'C', 'D', 'F'):
+                    setattr(stand, field, grade)
+            if stand_data and isinstance(stand_data, dict) and stand_data.get('name'):
+                stand.name = stand_data['name']
+            stand.save()
+
         if std_ids is not None:
             character.standard_abilities.set(std_ids)
-        # update playbook abilities: clear and reassign if provided
         if hamon_ids is not None:
             character.hamon_abilities.all().delete()
             for ha in hamon_ids:

@@ -99,6 +99,7 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
     background: payload.background ?? '',
     look: payload.look ?? '',
     vice: payload.vice ?? '',
+    viceDetails: payload.viceDetails ?? payload.vice_details ?? '',
     crew: payload.crew ?? '',
     crewId: payload.crewId ?? null,
     actionRatings: payload.actionRatings ?? {},

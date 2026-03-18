@@ -87,6 +87,7 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
   const [inviteUsername, setInviteUsername] = useState('');
   const [inviteError, setInviteError] = useState(null);
   const [inviteSuccess, setInviteSuccess] = useState(null);
+  const [invitableUsers, setInvitableUsers] = useState([]);
   const [myCharacters, setMyCharacters] = useState([]);
   const [allNPCs, setAllNPCs] = useState([]);
   const [factionForm, setFactionForm] = useState(null);
@@ -101,6 +102,12 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
       npcAPI.getNPCs().then(setAllNPCs).catch(() => setAllNPCs([]));
     }
   }, [isGM]);
+
+  useEffect(() => {
+    if (isGM && campaign?.id) {
+      campaignAPI.getInvitableUsers(campaign.id).then(setInvitableUsers).catch(() => setInvitableUsers([]));
+    }
+  }, [isGM, campaign?.id]);
 
   const availableToAssign = isGM
     ? myCharacters.filter((ch) => ch.id && (ch.campaign !== campaign?.id && ch.campaign?.id !== campaign?.id))
@@ -117,6 +124,7 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
       setInviteSuccess(`Invitation sent to ${inviteUsername.trim()}`);
       setInviteUsername('');
       onRefresh();
+      campaignAPI.getInvitableUsers(campaign.id).then(setInvitableUsers).catch(() => setInvitableUsers([]));
     } catch (err) {
       setInviteError(err.message);
     }
@@ -440,6 +448,25 @@ function CampaignDetail({ campaign, isGM, user, onBack, onRefresh, onManageSessi
             />
             <button onClick={handleInvite} style={S.btnPrimary}>Invite</button>
           </div>
+          {invitableUsers.length > 0 && (
+            <>
+              <span style={{ fontSize: '11px', color: '#9ca3af', marginTop: '12px', display: 'block' }}>Or select from registered users</span>
+              <select
+                style={{ ...S.select, marginTop: '6px', flex: 1 }}
+                value=""
+                onChange={(e) => {
+                  const u = invitableUsers.find((u) => String(u.id) === e.target.value);
+                  if (u) setInviteUsername(u.username);
+                  e.target.value = '';
+                }}
+              >
+                <option value="" disabled>Select a user to invite...</option>
+                {invitableUsers.map((u) => (
+                  <option key={u.id} value={u.id}>{u.username}</option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
       )}
 
