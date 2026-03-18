@@ -11,7 +11,7 @@ from django.core.exceptions import PermissionDenied
 import json
 
 import random
-from ..models import Character, Session, Roll, RollHistory
+from ..models import Character, Session, Roll, RollHistory, ExperienceTracker
 from ..serializers import CharacterSerializer
 
 
@@ -105,6 +105,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
         session_id = request.data.get('session_id')
         push_effect = request.data.get('push_effect', False)
         push_dice = request.data.get('push_dice', False)
+        devil_bargain_dice = request.data.get('devil_bargain_dice', False)
+        devil_bargain_note = request.data.get('devil_bargain_note', '')
         roll_type = request.data.get('roll_type', 'ACTION')
 
         # Normalize effect: 'great' -> 'greater'
@@ -185,6 +187,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
             dice_pool = action_rating + attribute_dice
             if push_dice:
                 dice_pool += 1
+            if devil_bargain_dice:
+                dice_pool += 1
 
         dice_results = [random.randint(1, 6) for _ in range(max(1, dice_pool))] if dice_pool > 0 else [0]
         max_result = max(dice_results) if dice_results else 0
@@ -204,11 +208,16 @@ class CharacterViewSet(viewsets.ModelViewSet):
             character.save(update_fields=['stress'])
 
         roll = None
+        xp_awarded = 0
+        xp_track = None
         if session_id:
             try:
                 session = Session.objects.get(id=session_id)
                 if character.campaign_id != session.campaign_id:
                     return Response({'error': 'Session must belong to character\'s campaign.'}, status=status.HTTP_400_BAD_REQUEST)
+                desc = f"{action_name} roll"
+                if devil_bargain_note:
+                    desc += f" [Devil's bargain: {devil_bargain_note}]"
                 roll = Roll.objects.create(
                     character=character,
                     session=session,
@@ -219,10 +228,38 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     dice_pool=dice_pool,
                     results=dice_results,
                     outcome=outcome,
-                    description=f"{action_name} roll",
+                    description=desc,
                     rolled_by=request.user
                 )
                 RollHistory.objects.create(campaign=session.campaign, roll=roll)
+
+                # Auto-award 1 XP for desperate action rolls (SRD)
+                if position == 'desperate' and roll_type.upper() == 'ACTION' and action_name:
+                    action_lower = action_name.lower()
+                    track = None
+                    if action_lower in ['hunt', 'study', 'survey', 'tinker']:
+                        track = 'insight'
+                    elif action_lower in ['finesse', 'prowl', 'skirmish', 'wreck']:
+                        track = 'prowess'
+                    elif action_lower in ['bizarre', 'command', 'consort', 'sway']:
+                        track = 'resolve'
+                    if track:
+                        xp_clocks = character.xp_clocks or {}
+                        current = xp_clocks.get(track, 0)
+                        if current < 5:
+                            xp_clocks[track] = current + 1
+                            character.xp_clocks = xp_clocks
+                            character.save(update_fields=['xp_clocks'])
+                            ExperienceTracker.objects.create(
+                                character=character,
+                                session=session,
+                                roll=roll,
+                                trigger='DESPERATE_ROLL',
+                                description=f'Desperate roll: {action_name}',
+                                xp_gained=1
+                            )
+                            xp_awarded = 1
+                            xp_track = track
             except Session.DoesNotExist:
                 pass
 
@@ -238,6 +275,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
             'outcome': outcome.lower().replace('_', ' '),
             'roll_id': roll.id if roll else None,
             'stress_spent': stress_cost,
+            'xp_gained': xp_awarded if session_id else 0,
+            'xp_track': xp_track,
         })
 
     @action(detail=True, methods=['post'], url_path='indulge-vice')

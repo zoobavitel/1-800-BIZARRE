@@ -330,7 +330,7 @@ export const progressClockAPI = {
   }),
 };
 
-// Roll API (dice history; GM can PATCH position/effect)
+// Roll API (dice history; GM can PATCH position/effect, grant XP)
 export const rollAPI = {
   getRolls: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
@@ -340,6 +340,9 @@ export const rollAPI = {
   patchRoll: (id, data) => apiRequest(`/rolls/${id}/`, {
     method: 'PATCH',
     body: JSON.stringify(data),
+  }),
+  grantXP: (id) => apiRequest(`/rolls/${id}/grant-xp/`, {
+    method: 'POST',
   }),
 };
 
@@ -473,11 +476,25 @@ export const transformBackendToFrontend = (backendCharacter) => {
       insight: 0, prowess: 0, resolve: 0, heritage: 0, playbook: 0
     },
     
-    // Abilities
+    // Abilities (standard + hamon + spin + custom from custom_ability fields)
     abilities: [
-      ...(backendCharacter.standard_ability_details || []),
-      ...(backendCharacter.hamon_ability_details || []),
-      ...(backendCharacter.spin_ability_details || []),
+      ...(backendCharacter.standard_ability_details || []).map((a) => ({ ...a, type: a.type || 'standard' })),
+      ...(backendCharacter.hamon_ability_details || []).map((a) => ({ ...a, type: 'hamon' })),
+      ...(backendCharacter.spin_ability_details || []).map((a) => ({ ...a, type: 'spin' })),
+      ...(function () {
+        const type = backendCharacter.custom_ability_type || 'single_with_3_uses';
+        const desc = backendCharacter.custom_ability_description || '';
+        const extra = backendCharacter.extra_custom_abilities || [];
+        if (type === 'three_separate_uses' && extra.length > 0) {
+          return extra.map((a, i) => ({ id: `custom-${i}`, name: a.name || `Custom ${i + 1}`, description: a.description, type: 'custom' }));
+        }
+        if (type === 'single_with_3_uses' && (desc || extra.length > 0)) {
+          const name = (desc || extra[0]?.name || 'Custom Ability').trim() || 'Custom Ability';
+          const uses = extra.length >= 3 ? extra.map((u) => u.description || u) : (desc ? [desc] : ['', '', '']);
+          return [{ id: 'custom-single', name, type: 'custom', _uses: uses.slice(0, 3), _description: desc }];
+        }
+        return [];
+      })(),
     ],
     
     // Progress clocks
@@ -573,8 +590,44 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     progress_clocks: frontendCharacter.clocks,
     
     // Additional fields (safe defaults for new character)
+    campaign: frontendCharacter.campaign != null
+      ? (typeof frontendCharacter.campaign === 'object' ? frontendCharacter.campaign?.id : frontendCharacter.campaign)
+      : null,
     inventory: frontendCharacter.inventory ?? [],
     reputation_status: frontendCharacter.reputation_status ?? {},
+
+    // Standard abilities (array of Ability IDs)
+    standard_abilities: (frontendCharacter.abilities || [])
+      .filter((a) => a.type === 'standard' && (typeof a.id === 'number' || (typeof a.id === 'string' && /^\d+$/.test(a.id))))
+      .map((a) => (typeof a.id === 'number' ? a.id : parseInt(a.id, 10))),
+
+    // Custom abilities (SRD: 3x1 or 1x3)
+    ...(function () {
+      const customs = (frontendCharacter.abilities || []).filter((a) => a.type === 'custom');
+      const single = customs.find((a) => a.id === 'custom-single' || a._uses);
+      if (single && single._uses && single._uses.length >= 3) {
+        return {
+          custom_ability_type: 'single_with_3_uses',
+          custom_ability_description: single.name || '',
+          extra_custom_abilities: single._uses.map((d) => ({ description: d })),
+        };
+      }
+      const three = customs.filter((a) => !a._uses && (String(a.id || '').startsWith('custom-') || a.type === 'custom'));
+      if (three.length >= 1) {
+        const items = three.slice(0, 3).map((a) => ({ name: a.name || '', description: a.description || '' }));
+        while (items.length < 3) items.push({ name: '', description: '' });
+        return {
+          custom_ability_type: 'three_separate_uses',
+          custom_ability_description: '',
+          extra_custom_abilities: items,
+        };
+      }
+      return {
+        custom_ability_type: frontendCharacter.custom_ability_type || 'single_with_3_uses',
+        custom_ability_description: frontendCharacter.custom_ability_description || '',
+        extra_custom_abilities: frontendCharacter.extra_custom_abilities || [],
+      };
+    })(),
 
     // Heritage benefits and detriments (arrays of IDs)
     selected_benefits: Array.isArray(frontendCharacter.selected_benefits) ? frontendCharacter.selected_benefits : [],

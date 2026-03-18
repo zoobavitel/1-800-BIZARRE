@@ -121,6 +121,7 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
     xp: payload.xp ?? { insight: 0, prowess: 0, resolve: 0, heritage: 0, playbook: 0 },
     abilities: Array.isArray(payload.abilities) ? payload.abilities : [],
     clocks: Array.isArray(payload.clocks) ? payload.clocks : [],
+    campaign: payload.campaign ?? null,
     playbook: payload.playbook ?? 'Stand',
     id: payload.id,
     inventory: payload.inventory ?? [],
@@ -178,8 +179,21 @@ export default function CharacterPage({ initialCharacterId = null }) {
   }, []);
 
   const refreshCampaigns = useCallback(async () => {
-    const c = await campaignAPI.getCampaigns().catch(() => []);
+    const [c, chars] = await Promise.all([
+      campaignAPI.getCampaigns().catch(() => []),
+      characterAPI.getCharacters().catch(() => []),
+    ]);
     setCampaigns(c || []);
+    const front = (chars || []).map(transformBackendToFrontend);
+    setCharacters(front);
+    // Update all character tabs with fresh data (e.g. after campaign assign)
+    setCharTabs((prev) =>
+      prev.map((t) => {
+        if (!t.characterId) return t;
+        const updated = front.find((x) => x.id === t.characterId);
+        return updated ? { ...t, character: updated } : t;
+      })
+    );
   }, []);
 
   // ── Load character list ──────────────────────────────────────────────────
@@ -282,9 +296,6 @@ export default function CharacterPage({ initialCharacterId = null }) {
 
   // ── Save character ───────────────────────────────────────────────────────
   const handleSaveCharacter = useCallback(async (payload) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterPage.jsx:267',message:'handleSaveCharacter called',data:{payloadId:payload?.id},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     const frontend = normalizeSheetPayloadToFrontend(payload, traumas);
     let heritageValue = frontend.heritage;
     if (typeof heritageValue === 'string' && heritages.length) {
@@ -294,7 +305,7 @@ export default function CharacterPage({ initialCharacterId = null }) {
     if ((heritageValue == null || heritageValue === '') && heritages.length) {
       heritageValue = heritages[0].id;
     }
-    const toSend = transformFrontendToBackend({ ...frontend, heritage: heritageValue });
+    const toSend = transformFrontendToBackend({ ...frontend, heritage: heritageValue, campaign: payload.campaign ?? frontend.campaign });
     try {
       let saved;
       if (payload.id) {
@@ -307,9 +318,6 @@ export default function CharacterPage({ initialCharacterId = null }) {
       // Preserve crew from payload: backend has crew as read_only FK, so it returns '' when we send a string.
       // Without this merge, character.crew becomes '' after save, causing a perceived "change" and save loop.
       const merged = { ...savedFrontend, crew: payload.crew ?? savedFrontend.crew, crewId: payload.crewId ?? savedFrontend.crewId };
-      // #region agent log
-      fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterPage.jsx:287',message:'updateActiveCharTab after save',data:{savedId:merged?.id,mergedCrew:merged?.crew,savedCrew:savedFrontend?.crew},timestamp:Date.now(),hypothesisId:'crew'})}).catch(()=>{});
-      // #endregion
       updateActiveCharTab(merged.id, merged);
       await loadCharacters();
     } catch (err) {

@@ -3456,3 +3456,203 @@ django.db.utils.OperationalError: no such column: characters_progressclock.visib
 [INFO] 2026-03-17 21:15:56,219 django.utils.autoreload - Watching for file changes with StatReloader
 [INFO] 2026-03-17 21:15:57,317 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
 [INFO] 2026-03-17 21:15:57,517 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-17 21:17:54,100 django.request - Bad Request: /api/characters/
+[ERROR] 2026-03-17 21:27:17,632 django.request - Internal Server Error: /api/sessions/2/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 56, in retrieve
+    return Response(serializer.data)
+                    ^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 573, in data
+    ret = super().data
+          ^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 251, in data
+    self._data = self.to_representation(self.instance)
+                 ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 525, in to_representation
+    for field in fields:
+                 ^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 386, in _readable_fields
+    for field in self.fields.values():
+                 ^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/utils/functional.py", line 47, in __get__
+    res = instance.__dict__[self.name] = self.func(instance)
+                                         ~~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 375, in fields
+    fields[key] = value
+    ~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/utils/serializer_helpers.py", line 167, in __setitem__
+    field.bind(field_name=key, parent=self.serializer)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/fields.py", line 358, in bind
+    assert self.source != field_name, (
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: It is redundant to specify `source='xp_entries'` on field 'ListSerializer' in serializer 'SessionRecordsSerializer', because it is the same as the field name. Remove the `source` keyword argument.
+[WARNING] 2026-03-17 22:07:29,658 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-17 22:07:42,867 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-17 22:10:07,404 django.request - Bad Request: /api/characters/12/
+[WARNING] 2026-03-17 22:26:36,539 django.request - Not Found: /favicon.ico
+[WARNING] 2026-03-17 22:27:37,030 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-03-17 22:28:23,348 django.request - Bad Request: /api/characters/
+[ERROR] 2026-03-17 22:51:09,718 django.request - Internal Server Error: /api/sessions/2/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 56, in retrieve
+    return Response(serializer.data)
+                    ^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 573, in data
+    ret = super().data
+          ^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 251, in data
+    self._data = self.to_representation(self.instance)
+                 ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 525, in to_representation
+    for field in fields:
+                 ^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 386, in _readable_fields
+    for field in self.fields.values():
+                 ^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/utils/functional.py", line 47, in __get__
+    res = instance.__dict__[self.name] = self.func(instance)
+                                         ~~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 375, in fields
+    fields[key] = value
+    ~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/utils/serializer_helpers.py", line 167, in __setitem__
+    field.bind(field_name=key, parent=self.serializer)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/fields.py", line 358, in bind
+    assert self.source != field_name, (
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: It is redundant to specify `source='xp_entries'` on field 'ListSerializer' in serializer 'SessionRecordsSerializer', because it is the same as the field name. Remove the `source` keyword argument.
+[WARNING] 2026-03-17 22:56:36,715 django.request - Bad Request: /api/campaigns/3/invite/
+[INFO] 2026-03-17 22:58:54,769 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-17 22:58:55,017 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-17 22:58:59,122 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-17 22:58:59,354 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-17 22:59:00,463 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-17 22:59:00,711 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-17 22:59:10,857 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-17 22:59:11,105 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-17 22:59:14,230 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-17 22:59:14,483 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-17 22:59:16,590 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-17 22:59:16,849 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-17 22:59:18,965 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-17 22:59:19,192 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-17 22:59:21,290 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-17 22:59:21,544 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-17 22:59:25,655 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/roll_views.py changed, reloading.
+[INFO] 2026-03-17 22:59:25,900 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-17 22:59:27,002 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/roll_views.py changed, reloading.
+[INFO] 2026-03-17 22:59:27,228 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-17 22:59:31,348 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/roll_views.py changed, reloading.
+[INFO] 2026-03-17 22:59:31,600 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-17 22:59:34,703 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-17 22:59:34,970 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-17 23:00:18,264 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-17 23:00:18,508 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-17 23:00:20,613 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-17 23:00:20,857 django.utils.autoreload - Watching for file changes with StatReloader
+[ERROR] 2026-03-17 23:01:09,971 django.request - Internal Server Error: /api/sessions/2/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 56, in retrieve
+    return Response(serializer.data)
+                    ^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 573, in data
+    ret = super().data
+          ^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 251, in data
+    self._data = self.to_representation(self.instance)
+                 ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 525, in to_representation
+    for field in fields:
+                 ^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 386, in _readable_fields
+    for field in self.fields.values():
+                 ^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/utils/functional.py", line 47, in __get__
+    res = instance.__dict__[self.name] = self.func(instance)
+                                         ~~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 375, in fields
+    fields[key] = value
+    ~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/utils/serializer_helpers.py", line 167, in __setitem__
+    field.bind(field_name=key, parent=self.serializer)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/fields.py", line 358, in bind
+    assert self.source != field_name, (
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: It is redundant to specify `source='xp_entries'` on field 'ListSerializer' in serializer 'SessionRecordsSerializer', because it is the same as the field name. Remove the `source` keyword argument.
+[WARNING] 2026-03-17 23:02:04,095 django.request - Bad Request: /api/characters/
+[INFO] 2026-03-17 23:06:01,868 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-17 23:06:02,175 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-17 23:07:16,645 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-17 23:07:16,872 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-17 23:07:17,982 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-17 23:07:18,246 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 03:15:54,212 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/auth_views.py changed, reloading.
+[INFO] 2026-03-18 03:15:54,446 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 03:15:55,540 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/auth_views.py changed, reloading.
+[INFO] 2026-03-18 03:15:55,759 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 03:15:57,865 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/auth_views.py changed, reloading.
+[INFO] 2026-03-18 03:15:58,093 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 03:15:59,189 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/auth_views.py changed, reloading.
+[INFO] 2026-03-18 03:15:59,451 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-18 04:12:26,002 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-18 04:41:40,864 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 05:37:55,696 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-18 05:38:01,617 django.request - Bad Request: /api/npcs/
+[WARNING] 2026-03-18 05:38:10,926 django.request - Bad Request: /api/npcs/

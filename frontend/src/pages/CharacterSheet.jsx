@@ -10,8 +10,9 @@ import {
   RESISTANCE_ATTR_DESC,
   VICE_OPTIONS,
   DEFAULT_TRAUMA,
+  TRAUMA_KEYS,
 } from '../features/character-sheet/constants/srd';
-import { characterAPI, crewAPI, rollAPI, progressClockAPI } from '../features/character-sheet';
+import { characterAPI, campaignAPI, crewAPI, rollAPI, progressClockAPI, referenceAPI } from '../features/character-sheet';
 import { useAuth } from '../features/auth';
 
 // ─── ProgressClock ────────────────────────────────────────────────────────────
@@ -43,6 +44,11 @@ const ProgressClock = ({ size = 80, segments = 4, filled = 0, onClick = null, in
 // ─── CharacterSheetWrapper ────────────────────────────────────────────────────
 
 const CLOCK_SEGMENT_OPTIONS = [4, 6, 8, 10, 12];
+const CATEGORY_LABELS = {
+  aggression: 'Aggression', endurance: 'Endurance', cunning: 'Cunning',
+  awareness: 'Awareness', presence: 'Presence', teamwork: 'Teamwork',
+  adaptability: 'Adaptability', stand_nature: 'Stand Nature',
+};
 const CLOCK_TYPE_OPTIONS = [
   { value: 'CUSTOM', label: 'Custom' },
   { value: 'DANGER', label: 'Danger' },
@@ -85,8 +91,11 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     crewId: character?.crewId ?? null,
   });
 
-  // Campaign assignment
-  const [campaignId, setCampaignId] = useState(character?.campaign || '');
+  // Campaign assignment (normalize: backend may send campaign as object or ID)
+  const [campaignId, setCampaignId] = useState(() => {
+    const c = character?.campaign;
+    return (typeof c === 'object' ? c?.id : c) ?? '';
+  });
 
   // Portrait state
   const [imageFile, setImageFile]       = useState(null);
@@ -142,9 +151,6 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   // Only update when content differs to avoid save loop: updateActiveCharTab passes new array refs
   // after each save; without value comparison we'd trigger setState → auto-save → save → loop.
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterSheet.jsx:106',message:'Character sync effect ran',data:{charId:character?.id,benefitsRef:!!character?.selected_benefits,detrimentsRef:!!character?.selected_detriments},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
-    // #endregion
     const newBenefits = Array.isArray(character?.selected_benefits) ? character.selected_benefits : [];
     const newDetriments = Array.isArray(character?.selected_detriments) ? character.selected_detriments : [];
     const arrEqual = (a, b) => Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => v === b[i]);
@@ -154,9 +160,6 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
 
   // When heritage changes, reset to required benefits/detriments for the new heritage
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterSheet.jsx:112',message:'Heritage benefits effect ran',data:{heritage:charData.heritage,heritagesLen:heritages?.length},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     if (!charData.heritage || !heritages?.length) return;
     const h = heritages.find((x) => x.id === charData.heritage);
     if (!h?.benefits || !h?.detriments) return;
@@ -256,8 +259,75 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
 
   // Abilities & Clocks
   const [abilities, setAbilities] = useState(character?.abilities || []);
+  const [standardAbilitiesList, setStandardAbilitiesList] = useState([]);
+
+  // Fetch standard abilities for dropdown
+  useEffect(() => {
+    referenceAPI.getAbilities().then((list) => setStandardAbilitiesList(list || [])).catch(() => setStandardAbilitiesList([]));
+  }, []);
+
+  // Close standard ability picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (standardAbilityPickerRef.current && !standardAbilityPickerRef.current.contains(e.target)) {
+        setStandardAbilityPickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Sync abilities when character changes (e.g. switching tabs)
+  useEffect(() => {
+    const next = character?.abilities || [];
+    setAbilities((prev) => (prev.length !== next.length || prev.some((p, i) => p?.id !== next[i]?.id || p?.name !== next[i]?.name) ? next : prev));
+  }, [character?.id, character?.abilities]);
+
+  // Sync campaign when character changes
+  useEffect(() => {
+    const c = character?.campaign;
+    const id = (typeof c === 'object' ? c?.id : c) ?? '';
+    setCampaignId((prev) => (String(prev) !== String(id) ? id : prev));
+  }, [character?.id, character?.campaign]);
+
+  // Assign/unassign character to campaign via dedicated API (ensures save for existing characters)
+  const handleCampaignChange = useCallback(async (newCampaignId) => {
+    const currentCampaign = character?.campaign;
+    const currentId = (typeof currentCampaign === 'object' ? currentCampaign?.id : currentCampaign) || null;
+    const prevId = String(campaignId || '');
+    setCampaignId(newCampaignId);
+    setCampaignAssignError(null);
+    if (!characterId) return; // New character: normal save will handle campaign on create
+    setCampaignAssignStatus('saving');
+    try {
+      const cid = newCampaignId ? parseInt(newCampaignId, 10) : null;
+      if (cid) {
+        await campaignAPI.assignCharacter(cid, characterId);
+        setCampaignAssignStatus('saved');
+      } else if (currentId) {
+        await campaignAPI.unassignCharacter(currentId, characterId);
+        setCampaignAssignStatus('saved');
+      }
+      onCampaignRefresh?.();
+    } catch (err) {
+      setCampaignAssignStatus('error');
+      setCampaignAssignError(err?.message || 'Failed to assign campaign');
+      setCampaignId(prevId); // Revert on error
+    }
+    setTimeout(() => {
+      setCampaignAssignStatus(null);
+      setCampaignAssignError(null);
+    }, 5000);
+  }, [characterId, character?.campaign, campaignId, onCampaignRefresh]);
+
   const [clocks, setClocks] = useState(character?.clocks || []);
+  const [customAbilityModal, setCustomAbilityModal] = useState(null); // { type, name, uses, items } or null
   const [playbook, setPlaybook] = useState(character?.playbook || 'Stand');
+  // Standard ability picker (Option A: searchable dropdown + preview)
+  const [standardAbilitySearch, setStandardAbilitySearch] = useState('');
+  const [standardAbilitySelected, setStandardAbilitySelected] = useState(null);
+  const [standardAbilityPickerOpen, setStandardAbilityPickerOpen] = useState(false);
+  const standardAbilityPickerRef = useRef(null);
 
   // Dice result
   const [diceResult, setDiceResult] = useState(null);
@@ -369,10 +439,15 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
 
   // Roll modal for campaign/session context (position, effect, push)
   const [rollPending, setRollPending] = useState(null);
-  const [rollModal, setRollModal] = useState({ position: 'risky', effect: 'standard', push_effect: false, push_dice: false });
+  const [rollModal, setRollModal] = useState({ position: 'risky', effect: 'standard', push_effect: false, push_dice: false, devil_bargain_dice: false, devil_bargain_note: '' });
   const [rollApiError, setRollApiError] = useState(null);
   const [sessionRolls, setSessionRolls] = useState([]);
   const [showPositionEffect, setShowPositionEffect] = useState(false);
+  const [pendingPushDice, setPendingPushDice] = useState(false);
+  const [showDevilsBargainModal, setShowDevilsBargainModal] = useState(false);
+  const [pendingDevilsBargain, setPendingDevilsBargain] = useState(null);
+  const [campaignAssignStatus, setCampaignAssignStatus] = useState(null);
+  const [campaignAssignError, setCampaignAssignError] = useState(null);
   const harmLevel3Used = ((harm?.level3?.[0] ?? '')?.toString?.()?.trim?.() ?? '') !== '';
 
   useEffect(() => {
@@ -394,6 +469,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
         effect: rollModal.effect,
         push_effect: rollModal.push_effect,
         push_dice: rollModal.push_dice,
+        devil_bargain_dice: rollModal.devil_bargain_dice,
+        devil_bargain_note: rollModal.devil_bargain_note || undefined,
       });
       setDiceResult({
         action: rollPending.actionName,
@@ -404,15 +481,20 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
         isResistance: false,
         stressCost: res.stress_spent || null,
         zeroDice: (res.dice_results || []).length === 0,
-        isDesperateAction: rollPending.isDesperateAction,
+        isDesperateAction: rollModal.position === 'desperate',
         isCritical: (res.dice_results || []).filter((d) => d === 6).length >= 2,
+        position: res.position || rollModal.position,
+        effect: res.effect || rollModal.effect,
+        xpGained: res.xp_gained || 0,
       });
-      if (rollPending.isDesperateAction) {
-        const attr = ACTION_ATTR[rollPending.actionName];
-        if (attr) setXp((p) => ({ ...p, [attr]: Math.min((p[attr] || 0) + 1, 5) }));
+      if (res.xp_gained > 0 && res.xp_track) {
+        setXp((p) => ({ ...p, [res.xp_track]: Math.min((p[res.xp_track] || 0) + res.xp_gained, 5) }));
       }
       if (res.stress_spent) setStressFilled((p) => Math.max(0, (p ?? 0) - res.stress_spent));
       setRollPending(null);
+      setPendingPushDice(false);
+      setPendingDevilsBargain(null);
+      setRollModal((p) => ({ ...p, devil_bargain_dice: false, devil_bargain_note: '' }));
       rollAPI.getRolls({ session: activeSessionId, character: characterId }).then(setSessionRolls).catch(() => {});
     } catch (e) {
       setRollApiError(e.message);
@@ -423,7 +505,15 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const rollDice = (actionName, diceCount, isResistance = false, isDesperateAction = false) => {
     if (activeSessionId && characterId && !isResistance) {
       setRollPending({ actionName, diceCount, isDesperateAction });
-      setRollModal({ position: 'risky', effect: 'standard', push_effect: false, push_dice: false });
+      const asd = charCampaign?.active_session_detail;
+      setRollModal({
+        position: asd?.default_position || 'risky',
+        effect: asd?.default_effect || 'standard',
+        push_effect: false,
+        push_dice: pendingPushDice,
+        devil_bargain_dice: !!pendingDevilsBargain,
+        devil_bargain_note: pendingDevilsBargain || '',
+      });
       setRollApiError(null);
       return;
     }
@@ -491,9 +581,6 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
 
   // Debounced auto-save
   useEffect(() => {
-    // #region agent log
-    fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterSheet.jsx:429',message:'Auto-save effect deps changed, scheduling save',data:{mounted:mountedRef.current,charId:character?.id},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     if (!mountedRef.current) { mountedRef.current = true; return; }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
@@ -507,9 +594,6 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
       }
       savingRef.current = true;
       setSaveStatus('saving');
-      // #region agent log
-      fetch('http://127.0.0.1:7800/ingest/42efbd6e-84d4-4f5f-af17-30eb55604bf1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'bbd98c'},body:JSON.stringify({sessionId:'bbd98c',location:'CharacterSheet.jsx:437',message:'onSave invoked (debounce fired)',data:{charId:character?.id,payloadCrew:payload?.crew,charCrew:character?.crew,skipped:false},timestamp:Date.now(),hypothesisId:'crew'})}).catch(()=>{});
-      // #endregion
       try {
         await onSave(payload);
         lastSavedPayloadRef.current = payloadKey;
@@ -534,7 +618,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     lbl:   { color:'#f87171', fontSize:'11px', fontWeight:'bold', marginBottom:'4px', display:'block' },
     inp:   { background:'transparent', color:'#fff', border:'none', borderBottom:'1px solid #4b5563', padding:'2px 4px', width:'100%', fontFamily:'monospace', fontSize:'13px', outline:'none', boxSizing:'border-box' },
     sel:   { background:'#374151', color:'#fff', border:'1px solid #4b5563', padding:'4px 8px', fontSize:'12px', fontFamily:'monospace' },
+    select: { background:'#0d1117', color:'#fff', border:'1px solid #374151', borderRadius:'4px', padding:'4px 8px', fontSize:'12px', fontFamily:'monospace', width:'100%' },
     btn:   { padding:'4px 12px', borderRadius:'4px', fontSize:'12px', cursor:'pointer', border:'none', fontFamily:'monospace' },
+    btnPrimary: { padding:'6px 14px', borderRadius:'4px', fontSize:'12px', cursor:'pointer', border:'none', fontFamily:'monospace', background:'#7c3aed', color:'#fff' },
+    btnGhost: { padding:'6px 14px', borderRadius:'4px', fontSize:'12px', cursor:'pointer', border:'none', fontFamily:'monospace', background:'#374151', color:'#d1d5db' },
     g2:    { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' },
     g3:    { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'16px' },
     warn:  { background:'#7f1d1d', border:'1px solid #b91c1c', borderRadius:'4px', padding:'4px 8px', fontSize:'11px', color:'#fca5a5' },
@@ -687,10 +774,23 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                         <div><span style={S.lbl}>BACKGROUND</span><input style={S.inp} value={charData.background} onChange={e => setCharData(p => ({ ...p, background: e.target.value }))} placeholder="Background" /></div>
                         <div>
                           <span style={S.lbl}>CAMPAIGN</span>
-                          <select style={{ ...S.sel, width:'100%' }} value={campaignId} onChange={e => setCampaignId(e.target.value)}>
-                            <option value="">No Campaign</option>
-                            {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                          </select>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                            <select style={{ ...S.sel, width: '100%', flex: 1, minWidth: 0 }} value={campaignId} onChange={e => handleCampaignChange(e.target.value)}>
+                              <option value="">No Campaign</option>
+                              {campaigns.length === 0 ? (
+                                <option value="" disabled>Create a campaign in Campaign Management first</option>
+                              ) : (
+                                campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)
+                              )}
+                            </select>
+                            {campaignAssignStatus === 'saving' && <span style={{ fontSize: '11px', color: '#fbbf24' }}>Assigning…</span>}
+                            {campaignAssignStatus === 'saved' && <span style={{ fontSize: '11px', color: '#34d399' }}>Assigned</span>}
+                            {campaignAssignStatus === 'error' && (
+                              <span style={{ fontSize: '11px', color: '#f87171' }} title={campaignAssignError}>
+                                {campaignAssignError || 'Failed'}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div style={{ marginTop:'8px' }}>
@@ -1241,12 +1341,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                       <div>
                         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'4px' }}>
                           <span style={{ fontSize:'11px', color:'#9ca3af' }}>Dice history</span>
-                          {isGM && (
-                            <label style={{ fontSize:'11px', cursor:'pointer' }}>
-                              <input type="checkbox" checked={showPositionEffect} onChange={(e) => setShowPositionEffect(e.target.checked)} />
-                              {' '}Position & effect
-                            </label>
-                          )}
+                          <label style={{ fontSize:'11px', cursor:'pointer' }}>
+                            <input type="checkbox" checked={showPositionEffect} onChange={(e) => setShowPositionEffect(e.target.checked)} />
+                            {' '}Position & effect
+                          </label>
                         </div>
                         {sessionRolls.length === 0 ? (
                           <div style={{ fontSize:'11px', color:'#6b7280' }}>No rolls this session.</div>
@@ -1375,6 +1473,14 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                           {diceResult.outcome}
                         </span>
                         {diceResult.special && <span style={{ color:'#fbbf24' }}>{diceResult.special}</span>}
+                        {(diceResult.position || diceResult.effect) && !diceResult.isResistance && (
+                          <span style={{ color:'#6b7280', fontSize:'11px', marginLeft:'8px' }}>
+                            ({diceResult.position || '—'}, {diceResult.effect || '—'})
+                          </span>
+                        )}
+                        {diceResult.xpGained > 0 && (
+                          <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'9999px', fontWeight:'bold', background:'#16a34a', color:'#fff', marginLeft:'8px' }}>+{diceResult.xpGained} XP</span>
+                        )}
                       </div>
 
                       {/* FIX 8: Critical resistance → clear 1 stress */}
@@ -1463,9 +1569,15 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                             Push for +1 effect (2 stress)
                           </label>
                           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', marginTop: '4px' }}>
-                            <input type="checkbox" checked={rollModal.push_dice} onChange={(e) => setRollModal((p) => ({ ...p, push_dice: e.target.checked }))} />
+                            <input type="checkbox" checked={rollModal.push_dice} onChange={(e) => { setRollModal((p) => ({ ...p, push_dice: e.target.checked })); setPendingPushDice(e.target.checked); }} />
                             Push for +1d (2 stress)
                           </label>
+                          {(rollModal.devil_bargain_dice || pendingDevilsBargain) && (
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', marginTop: '4px' }}>
+                              <input type="checkbox" checked={rollModal.devil_bargain_dice} onChange={(e) => { setRollModal((p) => ({ ...p, devil_bargain_dice: e.target.checked, devil_bargain_note: e.target.checked ? (p.devil_bargain_note || pendingDevilsBargain) : '' })); if (!e.target.checked) setPendingDevilsBargain(null); }} />
+                              Devil's bargain +1d {rollModal.devil_bargain_note && `(${rollModal.devil_bargain_note})`}
+                            </label>
+                          )}
                         </div>
                         {rollApiError && <div style={{ color: '#f87171', fontSize: '11px', marginBottom: '8px' }}>{rollApiError}</div>}
                         <div style={{ display: 'flex', gap: '8px' }}>
@@ -1484,26 +1596,209 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                   <div style={{ marginBottom:'14px' }}>
                     <span style={S.lbl}>ABILITIES</span>
                     {abilities.map(ab => (
-                      <div key={ab.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', background:'#374151', padding:'5px 8px', borderRadius:'4px', marginBottom:'3px', fontSize:'12px' }}>
-                        <div>
+                      <div key={ab.id || ab.name} style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', background:'#374151', padding:'5px 8px', borderRadius:'4px', marginBottom:'3px', fontSize:'12px' }}>
+                        <div style={{ flex:1 }}>
                           <span style={{ fontWeight:'bold' }}>{ab.name}</span>
                           <span style={{ marginLeft:'6px', padding:'1px 5px', background:'#7c3aed', borderRadius:'10px', fontSize:'10px' }}>{ab.type}</span>
+                          {ab._uses && ab._uses.filter(Boolean).length > 0 && (
+                            <ul style={{ margin:'4px 0 0 16px', padding:0, fontSize:'11px', color:'#d1d5db' }}>
+                              {ab._uses.filter(Boolean).map((u, i) => <li key={i}>{u}</li>)}
+                            </ul>
+                          )}
                         </div>
-                        <button onClick={() => setAbilities(p => p.filter(a => a.id !== ab.id))}
+                        <button onClick={() => setAbilities(p => p.filter(a => (a.id || a.name) !== (ab.id || ab.name)))}
                           style={{ color:'#f87171', background:'none', border:'none', cursor:'pointer', fontSize:'15px' }}>×</button>
                       </div>
                     ))}
-                    <div style={{ display:'flex', gap:'5px', marginTop:'6px', flexWrap:'wrap' }}>
+                    <div style={{ display:'flex', gap:'5px', marginTop:'6px', flexWrap:'wrap', alignItems:'flex-start' }}>
+                      {/* Option A: Searchable dropdown + preview for standard abilities */}
+                      <div style={{ position:'relative' }} ref={standardAbilityPickerRef}>
+                        <div style={{ display:'flex', flexDirection:'column', gap:'4px', minWidth:'200px' }}>
+                          <input
+                            style={{ ...S.inp, border:'1px solid #374151', padding:'6px 10px', fontSize:'12px' }}
+                            placeholder="+ Standard (search)..."
+                            value={standardAbilitySearch}
+                            onChange={(e) => {
+                              setStandardAbilitySearch(e.target.value);
+                              setStandardAbilityPickerOpen(true);
+                              if (!standardAbilitySelected) setStandardAbilitySelected(null);
+                            }}
+                            onFocus={() => setStandardAbilityPickerOpen(true)}
+                          />
+                          {standardAbilityPickerOpen && (
+                            <div style={{
+                              position:'absolute', top:'100%', left:0, right:0, marginTop:'2px',
+                              background:'#111827', border:'1px solid #374151', borderRadius:'4px',
+                              maxHeight:'180px', overflowY:'auto', zIndex:100, boxShadow:'0 4px 12px rgba(0,0,0,0.5)',
+                            }}>
+                              {(() => {
+                                const available = standardAbilitiesList
+                                  .filter((a) => (a.type || '').toLowerCase() === 'standard' || !a.type)
+                                  .filter((a) => !abilities.some((ab) => ab.type === 'standard' && ab.id === a.id));
+                                const q = standardAbilitySearch.trim().toLowerCase();
+                                const filtered = q
+                                  ? available.filter((a) =>
+                                      (a.name || '').toLowerCase().includes(q) ||
+                                      (a.description || '').toLowerCase().includes(q) ||
+                                      (CATEGORY_LABELS[a.category] || '').toLowerCase().includes(q))
+                                  : available;
+                                return filtered.length === 0 ? (
+                                  <div style={{ padding:'12px', fontSize:'11px', color:'#6b7280' }}>No matching abilities</div>
+                                ) : (
+                                  filtered.map((a) => (
+                                    <div
+                                      key={a.id}
+                                      onClick={() => setStandardAbilitySelected(a)}
+                                      style={{
+                                        padding:'8px 10px', cursor:'pointer', fontSize:'12px', borderBottom:'1px solid #1f2937',
+                                        background: standardAbilitySelected?.id === a.id ? '#374151' : 'transparent',
+                                      }}
+                                    >
+                                      {a.name}
+                                      {a.category && (
+                                        <span style={{ fontSize:'10px', color:'#6b7280', marginLeft:'6px' }}>
+                                          {CATEGORY_LABELS[a.category] || a.category}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                        {standardAbilitySelected && (
+                          <div style={{
+                            marginTop:'8px', padding:'10px', background:'#1f2937', borderRadius:'4px', border:'1px solid #374151',
+                            fontSize:'11px', maxWidth:'280px',
+                          }}>
+                            <div style={{ fontWeight:'bold', marginBottom:'4px' }}>{standardAbilitySelected.name}</div>
+                            {standardAbilitySelected.category && (
+                              <span style={{ display:'inline-block', padding:'1px 6px', background:'#374151', borderRadius:'4px', fontSize:'10px', marginBottom:'6px' }}>
+                                {CATEGORY_LABELS[standardAbilitySelected.category] || standardAbilitySelected.category}
+                              </span>
+                            )}
+                            {standardAbilitySelected.description && (
+                              <div style={{ color:'#9ca3af', lineHeight:'1.4', marginTop:'4px' }}>{standardAbilitySelected.description}</div>
+                            )}
+                            <button
+                              onClick={() => {
+                                if (!abilities.some((a) => a.type === 'standard' && a.id === standardAbilitySelected.id)) {
+                                  setAbilities((p) => [...p, { id: standardAbilitySelected.id, name: standardAbilitySelected.name, type: 'standard' }]);
+                                }
+                                setStandardAbilitySelected(null);
+                                setStandardAbilitySearch('');
+                                setStandardAbilityPickerOpen(false);
+                              }}
+                              style={{ ...S.btn, background:'#16a34a', color:'#fff', fontSize:'11px', marginTop:'8px' }}
+                            >
+                              Add to sheet
+                            </button>
+                          </div>
+                        )}
+                      </div>
                       <button
-                        onClick={() => { const n = prompt('Standard ability name:'); if (n) setAbilities(p => [...p, { id: Date.now(), name: n, type: 'standard' }]); }}
-                        style={{ ...S.btn, background:'#1d4ed8', color:'#fff', fontSize:'11px' }}>
-                        + Standard
-                      </button>
-                      <button
-                        onClick={() => { const n = prompt('Custom ability name:'); if (n) setAbilities(p => [...p, { id: Date.now(), name: n, type: 'custom' }]); }}
+                        onClick={() => {
+                          const customs = abilities.filter(a => a.type === 'custom');
+                          const single = customs.find(a => a.id === 'custom-single' || a._uses);
+                          if (single && single._uses) {
+                            setCustomAbilityModal({ type: 'single_with_3_uses', name: single.name || '', uses: [...(single._uses || []), '', '', ''].slice(0, 3), items: [{ name: '', description: '' }, { name: '', description: '' }, { name: '', description: '' }] });
+                          } else if (customs.length > 0) {
+                            const three = customs.filter(a => !a._uses);
+                            const items = three.length ? three.map(a => ({ name: a.name || '', description: a.description || '' })) : [{ name: '', description: '' }, { name: '', description: '' }, { name: '', description: '' }];
+                            while (items.length < 3) items.push({ name: '', description: '' });
+                            setCustomAbilityModal({ type: 'three_separate_uses', name: '', uses: ['', '', ''], items: items.slice(0, 3) });
+                          } else {
+                            setCustomAbilityModal({ type: 'single_with_3_uses', name: '', uses: ['', '', ''], items: [{ name: '', description: '' }, { name: '', description: '' }, { name: '', description: '' }] });
+                          }
+                        }}
                         style={{ ...S.btn, background:'#16a34a', color:'#fff', fontSize:'11px' }}>
                         + Custom
                       </button>
+                      {customAbilityModal && (
+                        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:200 }} onClick={() => setCustomAbilityModal(null)}>
+                          <div style={{ background:'#111827', border:'1px solid #374151', borderRadius:'8px', padding:'20px', maxWidth:'420px', width:'90%' }} onClick={e => e.stopPropagation()}>
+                            <span style={{ ...S.lbl, display:'block', marginBottom:'12px' }}>Custom Ability (SRD: 3x1 or 1x3)</span>
+                            <div style={{ fontSize:'11px', color:'#9ca3af', marginBottom:'12px' }}>
+                              Give a custom name and list either 3 individual abilities or 1 ability that does 3 things.
+                            </div>
+                            <div style={{ marginBottom:'12px' }}>
+                              <span style={{ fontSize:'11px', color:'#9ca3af' }}>Type</span>
+                              <select style={S.select} value={customAbilityModal.type} onChange={e => setCustomAbilityModal(p => ({ ...p, type: e.target.value }))}>
+                                <option value="single_with_3_uses">1 ability with 3 uses</option>
+                                <option value="three_separate_uses">3 abilities, 1 use each</option>
+                              </select>
+                            </div>
+                            {customAbilityModal.type === 'single_with_3_uses' ? (
+                              <>
+                                <div style={{ marginBottom:'8px' }}>
+                                  <span style={{ fontSize:'11px', color:'#9ca3af' }}>Custom ability name (required)</span>
+                                  <input style={S.inp} value={customAbilityModal.name} onChange={e => setCustomAbilityModal(p => ({ ...p, name: e.target.value }))} placeholder="Ability name" />
+                                </div>
+                                {[0,1,2].map(i => (
+                                  <div key={i} style={{ marginBottom:'8px' }}>
+                                    <span style={{ fontSize:'11px', color:'#9ca3af' }}>Use {i+1} (required)</span>
+                                    <input style={S.inp} value={customAbilityModal.uses?.[i] || ''} onChange={e => {
+                                      const u = [...(customAbilityModal.uses || ['','',''])];
+                                      u[i] = e.target.value;
+                                      setCustomAbilityModal(p => ({ ...p, uses: u }));
+                                    }} placeholder={`Use ${i+1} description`} />
+                                  </div>
+                                ))}
+                              </>
+                            ) : (
+                              <>
+                                <div style={{ marginBottom:'8px' }}>
+                                  <span style={{ fontSize:'11px', color:'#9ca3af' }}>Custom ability set name (optional)</span>
+                                  <input style={S.inp} value={customAbilityModal.groupName || ''} onChange={e => setCustomAbilityModal(p => ({ ...p, groupName: e.target.value }))} placeholder="e.g. My Stand's Tricks" />
+                                </div>
+                                {[0,1,2].map(i => (
+                                  <div key={i} style={{ marginBottom:'12px', padding:'8px', background:'#1f2937', borderRadius:'4px' }}>
+                                    <span style={{ fontSize:'11px', color:'#9ca3af' }}>Ability {i+1} (name + description required)</span>
+                                    <input style={S.inp} value={customAbilityModal.items?.[i]?.name || ''} onChange={e => {
+                                      const it = [...(customAbilityModal.items || [])];
+                                      while (it.length <= i) it.push({ name:'', description:'' });
+                                      it[i] = { ...it[i], name: e.target.value };
+                                      setCustomAbilityModal(p => ({ ...p, items: it }));
+                                    }} placeholder="Name" />
+                                    <input style={{ ...S.inp, marginTop:'4px' }} value={customAbilityModal.items?.[i]?.description || ''} onChange={e => {
+                                      const it = [...(customAbilityModal.items || [])];
+                                      while (it.length <= i) it.push({ name:'', description:'' });
+                                      it[i] = { ...it[i], description: e.target.value };
+                                      setCustomAbilityModal(p => ({ ...p, items: it }));
+                                    }} placeholder="Description" />
+                                  </div>
+                                ))}
+                              </>
+                            )}
+                            {(() => {
+                              const prev = customAbilityModal;
+                              const validSingle = prev.type === 'single_with_3_uses' && (prev.name || '').trim() && (prev.uses || []).every(u => (u || '').trim());
+                              const validThree = prev.type === 'three_separate_uses' && (prev.items || []).every(i => (i?.name || '').trim() && (i?.description || '').trim());
+                              const canSave = prev.type === 'single_with_3_uses' ? validSingle : validThree;
+                              return (
+                            <div style={{ display:'flex', gap:'8px', marginTop:'16px' }}>
+                              <button
+                                onClick={() => {
+                                  if (!canSave) return;
+                                  setAbilities(p => [...p.filter(a => a.type !== 'custom'), ...(prev.type === 'single_with_3_uses'
+                                    ? [{ id:'custom-single', name: (prev.name || '').trim(), type:'custom', _uses: prev.uses || ['','',''] }]
+                                    : prev.items.filter(i => (i?.name || '').trim() && (i?.description || '').trim()).map((it, i) => ({ id:`custom-${i}`, name: (it.name || '').trim(), description: (it.description || '').trim(), type:'custom' }))
+                                  )]);
+                                  setCustomAbilityModal(null);
+                                }}
+                                disabled={!canSave}
+                                style={{ ...S.btnPrimary, opacity: canSave ? 1 : 0.5, cursor: canSave ? 'pointer' : 'not-allowed' }}
+                              >
+                                Save
+                              </button>
+                              <button onClick={() => setCustomAbilityModal(null)} style={S.btnGhost}>Cancel</button>
+                            </div>
+                              );
+                            })()}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1532,12 +1827,97 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     </button>
                   </div>
 
-                  {/* Bonus Dice ref */}
+                  {/* Position & Effect display (when GM enables visibility) */}
+                  {charCampaign?.active_session_detail?.show_position_effect_to_players !== false && activeSessionId && (
+                    <div style={{ marginBottom:'12px' }}>
+                      <span style={S.lbl}>POSITION & EFFECT</span>
+                      <div style={{ display:'flex', gap:'8px', marginTop:'4px', flexWrap:'wrap' }}>
+                        <div style={{
+                          padding:'6px 10px', borderRadius:'4px', fontSize:'11px', fontWeight:'bold',
+                          background: (() => {
+                            const p = (charCampaign?.active_session_detail?.default_position || 'risky').toLowerCase();
+                            return p === 'controlled' ? '#166534' : p === 'desperate' ? '#991b1b' : '#854d0e';
+                          })(),
+                          color: '#fff',
+                          border: '1px solid',
+                          borderColor: (() => {
+                            const p = (charCampaign?.active_session_detail?.default_position || 'risky').toLowerCase();
+                            return p === 'controlled' ? '#22c55e' : p === 'desperate' ? '#dc2626' : '#eab308';
+                          })(),
+                        }}>
+                          {(charCampaign?.active_session_detail?.default_position || 'Risky').replace(/^./, (c) => c.toUpperCase())}
+                        </div>
+                        <div style={{ padding:'6px 10px', borderRadius:'4px', fontSize:'11px', background:'#374151', color:'#d1d5db' }}>
+                          {(charCampaign?.active_session_detail?.default_effect || 'Standard').replace(/^./, (c) => c.toUpperCase())} Effect
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Bonus Dice — Push Yourself & Devil's Bargain buttons */}
                   <div style={{ fontSize:'12px', marginBottom:'12px' }}>
                     <span style={S.lbl}>BONUS DICE</span>
-                    <div><strong>PUSH YOURSELF</strong> (2 Stress) — or — <strong>DEVIL'S BARGAIN</strong></div>
-                    <div style={{ color:'#9ca3af', marginTop:'2px' }}>Assist: +1d to teammate's roll (costs you 1 Stress)</div>
+                    <div style={{ display:'flex', gap:'8px', marginTop:'4px', flexWrap:'wrap', alignItems:'center' }}>
+                      <button
+                        onClick={() => setPendingPushDice((p) => !p)}
+                        style={{
+                          ...S.btn,
+                          padding: '6px 12px',
+                          fontSize: '11px',
+                          background: pendingPushDice ? '#166534' : '#374151',
+                          borderColor: pendingPushDice ? '#22c55e' : '#4b5563',
+                          color: '#fff',
+                        }}
+                        title="2 Stress for +1d on next roll"
+                      >
+                        PUSH YOURSELF {pendingPushDice && '✓'}
+                      </button>
+                      <span style={{ color:'#6b7280', fontSize:'11px' }}>— or —</span>
+                      <button
+                        onClick={() => setShowDevilsBargainModal(true)}
+                        style={{
+                          ...S.btn,
+                          padding: '6px 12px',
+                          fontSize: '11px',
+                          background: pendingDevilsBargain ? '#7c3aed' : '#374151',
+                          borderColor: pendingDevilsBargain ? '#a78bfa' : '#4b5563',
+                          color: '#fff',
+                        }}
+                        title="Choose a detriment for +1d on next roll"
+                      >
+                        DEVIL'S BARGAIN {pendingDevilsBargain ? `(${pendingDevilsBargain})` : ''}
+                      </button>
+                    </div>
+                    <div style={{ color:'#9ca3af', marginTop:'6px', fontSize:'11px' }}>Assist: +1d to teammate's roll (costs you 1 Stress)</div>
                   </div>
+
+                  {/* Devil's Bargain modal */}
+                  {showDevilsBargainModal && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 101 }}>
+                      <div style={{ background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '20px', maxWidth: '320px', width: '90%' }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: '12px', color: '#a78bfa' }}>Devil's Bargain — +1d for a consequence</div>
+                        <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '12px' }}>Choose a detriment for +1 die on your next roll:</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
+                          {TRAUMA_KEYS.map((k) => (
+                            <button
+                              key={k}
+                              onClick={() => { setPendingDevilsBargain(k); setShowDevilsBargainModal(false); }}
+                              style={{ ...S.btn, padding: '6px 10px', fontSize: '11px', background: '#374151' }}
+                            >
+                              {k.replace(/_/g, ' ')}
+                            </button>
+                          ))}
+                          <button
+                            onClick={() => { const c = prompt('Custom detriment:'); if (c?.trim()) { setPendingDevilsBargain(c.trim()); setShowDevilsBargainModal(false); } }}
+                            style={{ ...S.btn, padding: '6px 10px', fontSize: '11px', background: '#4b5563', borderStyle: 'dashed' }}
+                          >
+                            Custom…
+                          </button>
+                        </div>
+                        <button onClick={() => setShowDevilsBargainModal(false)} style={S.btn}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Notes */}
                   <div>
