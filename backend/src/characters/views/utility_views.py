@@ -11,6 +11,7 @@ from ..models import (
     Character, Campaign, NPC, Crew, Heritage, Vice, Ability,
     StandAbility, HamonAbility, SpinAbility
 )
+from .character_views import _character_queryset_for_user
 
 
 # Optional root view
@@ -65,10 +66,8 @@ def global_search(request):
     user = request.user
     results = []
 
-    # Search Characters (use true_name, not name)
-    character_queryset = Character.objects.filter(
-        Q(user=user) | Q(campaign__gm=user)
-    ).filter(
+    # Search Characters (use true_name, not name) — same visibility as CharacterViewSet detail
+    character_queryset = _character_queryset_for_user(user).filter(
         Q(true_name__icontains=query) |
         Q(alias__icontains=query) |
         Q(stand_name__icontains=query) |

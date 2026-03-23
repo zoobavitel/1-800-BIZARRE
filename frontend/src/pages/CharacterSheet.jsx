@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   GRADE,
+  INDEX_TO_GRADE,
   MAX_CREATION_DOTS,
   MAX_DOTS_PER_ACTION_CREATION,
   PC_STAT_DESC,
@@ -119,6 +120,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
 
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState(null);
+  const [saveErrorMessage, setSaveErrorMessage] = useState(null);
   const debounceRef = useRef(null);
   const mountedRef  = useRef(false);
   const savingRef   = useRef(false);
@@ -161,6 +163,13 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
         : prev
     );
   }, [character?.id, character?.vice, character?.viceDetails, character?.vice_details]);
+
+  // Portrait: sync from server/merged character; do not clobber while a file upload is pending
+  useEffect(() => {
+    if (imageFile) return;
+    setImageUrl(character?.image_url || '');
+    setImagePreview(character?.image || character?.image_url || '');
+  }, [character?.id, character?.image, character?.image_url, imageFile]);
 
   // Sync heritage when heritages load (e.g. new char has heritage: 'Human' string)
   useEffect(() => {
@@ -303,15 +312,9 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     referenceAPI.getAbilities().then((list) => setStandardAbilitiesList(list || [])).catch(() => setStandardAbilitiesList([]));
   }, []);
 
-  // Close standard ability picker when clicking outside
+  const [spinAbilitiesList, setSpinAbilitiesList] = useState([]);
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (standardAbilityPickerRef.current && !standardAbilityPickerRef.current.contains(e.target)) {
-        setStandardAbilityPickerOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    referenceAPI.getSpinAbilities().then((list) => setSpinAbilitiesList(list || [])).catch(() => setSpinAbilitiesList([]));
   }, []);
 
   // Sync abilities when character changes (e.g. switching tabs)
@@ -319,6 +322,13 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     const next = character?.abilities || [];
     setAbilities((prev) => (prev.length !== next.length || prev.some((p, i) => p?.id !== next[i]?.id || p?.name !== next[i]?.name) ? next : prev));
   }, [character?.id, character?.abilities]);
+
+  // Sync playbook label when character changes (API uses STAND/HAMON/SPIN; sheet uses Stand/Hamon/Spin)
+  useEffect(() => {
+    if (character?.playbook != null && character.playbook !== '') {
+      setPlaybook(character.playbook);
+    }
+  }, [character?.id, character?.playbook]);
 
   // Sync campaign when character changes
   useEffect(() => {
@@ -365,7 +375,37 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const [standardAbilitySelected, setStandardAbilitySelected] = useState(null);
   const [standardAbilityPickerOpen, setStandardAbilityPickerOpen] = useState(false);
   const standardAbilityPickerRef = useRef(null);
+  const [spinAbilitySearch, setSpinAbilitySearch] = useState('');
+  const [spinAbilitySelected, setSpinAbilitySelected] = useState(null);
+  const [spinAbilityPickerOpen, setSpinAbilityPickerOpen] = useState(false);
+  const spinAbilityPickerRef = useRef(null);
   const [expandedAbilityId, setExpandedAbilityId] = useState(null);
+
+  // Close standard / spin ability pickers when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (standardAbilityPickerRef.current && !standardAbilityPickerRef.current.contains(e.target)) {
+        setStandardAbilityPickerOpen(false);
+        setStandardAbilitySelected(null);
+        setStandardAbilitySearch('');
+      }
+      if (spinAbilityPickerRef.current && !spinAbilityPickerRef.current.contains(e.target)) {
+        setSpinAbilityPickerOpen(false);
+        setSpinAbilitySelected(null);
+        setSpinAbilitySearch('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const prevPlaybookRef = useRef(playbook);
+  useEffect(() => {
+    if (prevPlaybookRef.current === 'Spin' && playbook !== 'Spin') {
+      setAbilities((p) => p.filter((a) => a.type !== 'spin'));
+    }
+    prevPlaybookRef.current = playbook;
+  }, [playbook]);
 
   // Dice result
   const [diceResult, setDiceResult] = useState(null);
@@ -391,6 +431,11 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
 
   const totalActionDots  = Object.values(actionRatings).reduce((s, v) => s + v, 0);
   const totalStandPoints = Object.values(standStats).reduce((s, v) => s + v, 0);
+  const aRankCount = Object.values(standStats).reduce(
+    (n, idx) => n + (INDEX_TO_GRADE(idx) === 'A' ? 1 : 0),
+    0
+  );
+  const isSpinPlaybook = playbook === 'Spin';
   const totalXP          = Object.values(xp).reduce((s, v) => s + v, 0);
   const dotsRemaining    = MAX_CREATION_DOTS - totalActionDots;
 
@@ -636,10 +681,15 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
       try {
         await onSave(payload);
         lastSavedPayloadRef.current = payloadKey;
+        if (payload.imageFile) {
+          setImageFile(null);
+        }
         setSaveStatus('saved');
+        setSaveErrorMessage(null);
         setTimeout(() => setSaveStatus((s) => s === 'saved' ? null : s), 2000);
-      } catch {
+      } catch (err) {
         setSaveStatus('error');
+        setSaveErrorMessage(err?.message || 'Save failed');
       } finally {
         savingRef.current = false;
       }
@@ -686,7 +736,11 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
             </select>
             {saveStatus === 'saving' && <span style={{ fontSize:'11px', color:'#fbbf24' }}>Saving...</span>}
             {saveStatus === 'saved'  && <span style={{ fontSize:'11px', color:'#34d399' }}>Saved</span>}
-            {saveStatus === 'error'  && <span style={{ fontSize:'11px', color:'#f87171' }}>Error saving</span>}
+            {saveStatus === 'error' && (
+              <span style={{ fontSize:'11px', color:'#f87171' }} title={saveErrorMessage}>
+                Error saving{saveErrorMessage ? `: ${saveErrorMessage.slice(0, 60)}${saveErrorMessage.length > 60 ? '…' : ''}` : ''}
+              </span>
+            )}
             {onClose && <button onClick={onClose} style={{ background:'none', border:'none', color:'#9ca3af', cursor:'pointer', fontSize:'18px' }}>✕</button>}
         </div>
       </div>
@@ -1773,7 +1827,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                       const abKey = ab.id || ab.name;
                       const isExpanded = expandedAbilityId === abKey;
                       const standardRef = ab.type === 'standard' && standardAbilitiesList.find((a) => a.id === ab.id);
-                      const description = standardRef?.description || ab.description;
+                      const spinRef = ab.type === 'spin' && spinAbilitiesList.find((a) => a.id === ab.id);
+                      const description = standardRef?.description || spinRef?.description || ab.description;
                       const hasDescription = !!(description || (ab._uses && ab._uses.filter(Boolean).length > 0));
                       return (
                         <div key={abKey} style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', background:'#374151', padding:'5px 8px', borderRadius:'4px', marginBottom:'3px', fontSize:'12px' }}>
@@ -1886,6 +1941,120 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                           </div>
                         )}
                       </div>
+                      {isSpinPlaybook && (
+                        <div style={{ position:'relative' }} ref={spinAbilityPickerRef}>
+                          <div style={{ display:'flex', flexDirection:'column', gap:'4px', minWidth:'200px' }}>
+                            <input
+                              style={{ ...S.inp, border:'1px solid #6d28d9', padding:'6px 10px', fontSize:'12px' }}
+                              placeholder="+ Spin playbook (search)..."
+                              value={spinAbilitySearch}
+                              onChange={(e) => {
+                                setSpinAbilitySearch(e.target.value);
+                                setSpinAbilityPickerOpen(true);
+                                if (!spinAbilitySelected) setSpinAbilitySelected(null);
+                              }}
+                              onFocus={() => setSpinAbilityPickerOpen(true)}
+                            />
+                            {spinAbilityPickerOpen && (
+                              <div style={{
+                                position:'absolute', top:'100%', left:0, right:0, marginTop:'2px',
+                                background:'#111827', border:'1px solid #6d28d9', borderRadius:'4px',
+                                maxHeight:'180px', overflowY:'auto', zIndex:100, boxShadow:'0 4px 12px rgba(0,0,0,0.5)',
+                              }}>
+                                {(() => {
+                                  const need = (a) => (typeof a.required_a_count === 'number' ? a.required_a_count : 0);
+                                  const available = spinAbilitiesList
+                                    .filter((a) => !abilities.some((ab) => ab.type === 'spin' && ab.id === a.id));
+                                  const q = spinAbilitySearch.trim().toLowerCase();
+                                  const filtered = q
+                                    ? available.filter((a) =>
+                                        (a.name || '').toLowerCase().includes(q) ||
+                                        (a.description || '').toLowerCase().includes(q) ||
+                                        (a.spin_type || '').toLowerCase().includes(q))
+                                    : available;
+                                  return filtered.length === 0 ? (
+                                    <div style={{ padding:'12px', fontSize:'11px', color:'#6b7280' }}>No matching abilities</div>
+                                  ) : (
+                                    filtered.map((a) => {
+                                      const req = need(a);
+                                      const met = aRankCount >= req;
+                                      return (
+                                        <div
+                                          key={a.id}
+                                          onClick={() => met && setSpinAbilitySelected(a)}
+                                          style={{
+                                            padding:'8px 10px', fontSize:'12px', borderBottom:'1px solid #1f2937',
+                                            background: spinAbilitySelected?.id === a.id ? '#4c1d95' : 'transparent',
+                                            cursor: met ? 'pointer' : 'not-allowed',
+                                            opacity: met ? 1 : 0.55,
+                                          }}
+                                        >
+                                          {a.name}
+                                          <span style={{ fontSize:'10px', color: met ? '#a78bfa' : '#f87171', marginLeft:'6px' }}>
+                                            {req === 0 ? 'Foundation' : `${req} A-rank coin stat${req === 1 ? '' : 's'} (${aRankCount} have)`}
+                                          </span>
+                                        </div>
+                                      );
+                                    })
+                                  );
+                                })()}
+                              </div>
+                            )}
+                          </div>
+                          {spinAbilitySelected && (
+                            <div style={{
+                              marginTop:'8px', padding:'10px', background:'#1f2937', borderRadius:'4px', border:'1px solid #6d28d9',
+                              fontSize:'11px', maxWidth:'280px',
+                            }}>
+                              <div style={{ fontWeight:'bold', marginBottom:'4px' }}>{spinAbilitySelected.name}</div>
+                              {spinAbilitySelected.spin_type && (
+                                <span style={{ display:'inline-block', padding:'1px 6px', background:'#4c1d95', borderRadius:'4px', fontSize:'10px', marginBottom:'6px' }}>
+                                  {spinAbilitySelected.spin_type.replace(/_/g, ' ')}
+                                </span>
+                              )}
+                              {spinAbilitySelected.description && (
+                                <div style={{ color:'#9ca3af', lineHeight:'1.4', marginTop:'4px' }}>{spinAbilitySelected.description}</div>
+                              )}
+                              {(() => {
+                                const req = typeof spinAbilitySelected.required_a_count === 'number' ? spinAbilitySelected.required_a_count : 0;
+                                const canAdd = aRankCount >= req;
+                                return (
+                                  <>
+                                    {!canAdd && (
+                                      <div style={{ color:'#f87171', marginTop:'8px', fontSize:'11px' }}>
+                                        Needs {req} A-rank coin stat{req === 1 ? '' : 's'} (you have {aRankCount}).
+                                      </div>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (!canAdd) return;
+                                        if (!abilities.some((x) => x.type === 'spin' && x.id === spinAbilitySelected.id)) {
+                                          setAbilities((p) => [...p, {
+                                            id: spinAbilitySelected.id,
+                                            name: spinAbilitySelected.name,
+                                            type: 'spin',
+                                            description: spinAbilitySelected.description,
+                                            spin_type: spinAbilitySelected.spin_type,
+                                            required_a_count: spinAbilitySelected.required_a_count,
+                                          }]);
+                                        }
+                                        setSpinAbilitySelected(null);
+                                        setSpinAbilitySearch('');
+                                        setSpinAbilityPickerOpen(false);
+                                      }}
+                                      disabled={!canAdd}
+                                      style={{ ...S.btn, background: canAdd ? '#7c3aed' : '#374151', color:'#fff', fontSize:'11px', marginTop:'8px', cursor: canAdd ? 'pointer' : 'not-allowed' }}
+                                    >
+                                      Add to sheet
+                                    </button>
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <button
                         onClick={() => {
                           const customs = abilities.filter(a => a.type === 'custom');

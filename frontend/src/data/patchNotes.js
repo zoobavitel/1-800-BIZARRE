@@ -10,12 +10,15 @@ export const PATCH_NOTES = [
       {
         "title": "Other",
         "items": [
+          "Update database and log files; enhance character model and campaign management features",
+          "Update database and log files; enhance character model and UI",
           "Update database and log files; enhance character sheet UI"
         ]
       },
       {
         "title": "Added",
         "items": [
+          "Enhance NPC and session management with new features",
           "Enhance character and session management with XP tracking and new features"
         ]
       }

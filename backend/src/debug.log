@@ -3862,3 +3862,697 @@ django.core.exceptions.FieldError: Unknown field(s) (special_ability) specified 
 [INFO] 2026-03-18 22:05:48,033 django.utils.autoreload - Watching for file changes with StatReloader
 [INFO] 2026-03-18 22:05:49,142 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
 [INFO] 2026-03-18 22:05:49,383 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-19 00:18:27,676 characters.views.auth_views - Login successful: user=dominicvcruz ip=127.0.0.1
+[ERROR] 2026-03-19 00:19:36,921 django.request - Internal Server Error: /api/characters/19/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 68, in update
+    self.perform_update(serializer)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 78, in perform_update
+    serializer.save()
+    ~~~~~~~~~~~~~~~^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 205, in save
+    self.instance = self.update(self.instance, validated_data)
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py", line 549, in update
+    vice, _ = Vice.objects.get_or_create(
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        name=custom_vice.strip(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+        defaults={'description': 'Custom vice'}
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 946, in get_or_create
+    return self.get(**kwargs), False
+           ~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 636, in get
+    raise self.model.MultipleObjectsReturned(
+    ...<5 lines>...
+    )
+characters.models.Vice.MultipleObjectsReturned: get() returned more than one Vice -- it returned more than 20!
+[ERROR] 2026-03-19 00:19:43,431 django.request - Internal Server Error: /api/characters/19/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 68, in update
+    self.perform_update(serializer)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 78, in perform_update
+    serializer.save()
+    ~~~~~~~~~~~~~~~^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 205, in save
+    self.instance = self.update(self.instance, validated_data)
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py", line 549, in update
+    vice, _ = Vice.objects.get_or_create(
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        name=custom_vice.strip(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+        defaults={'description': 'Custom vice'}
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 946, in get_or_create
+    return self.get(**kwargs), False
+           ~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 636, in get
+    raise self.model.MultipleObjectsReturned(
+    ...<5 lines>...
+    )
+characters.models.Vice.MultipleObjectsReturned: get() returned more than one Vice -- it returned more than 20!
+[ERROR] 2026-03-19 00:19:52,920 django.request - Internal Server Error: /api/characters/19/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 68, in update
+    self.perform_update(serializer)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 78, in perform_update
+    serializer.save()
+    ~~~~~~~~~~~~~~~^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 205, in save
+    self.instance = self.update(self.instance, validated_data)
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py", line 549, in update
+    vice, _ = Vice.objects.get_or_create(
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        name=custom_vice.strip(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+        defaults={'description': 'Custom vice'}
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 946, in get_or_create
+    return self.get(**kwargs), False
+           ~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 636, in get
+    raise self.model.MultipleObjectsReturned(
+    ...<5 lines>...
+    )
+characters.models.Vice.MultipleObjectsReturned: get() returned more than one Vice -- it returned more than 20!
+[ERROR] 2026-03-19 00:20:18,172 django.request - Internal Server Error: /api/characters/19/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 68, in update
+    self.perform_update(serializer)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 78, in perform_update
+    serializer.save()
+    ~~~~~~~~~~~~~~~^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 205, in save
+    self.instance = self.update(self.instance, validated_data)
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py", line 549, in update
+    vice, _ = Vice.objects.get_or_create(
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        name=custom_vice.strip(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+        defaults={'description': 'Custom vice'}
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 946, in get_or_create
+    return self.get(**kwargs), False
+           ~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 636, in get
+    raise self.model.MultipleObjectsReturned(
+    ...<5 lines>...
+    )
+characters.models.Vice.MultipleObjectsReturned: get() returned more than one Vice -- it returned more than 20!
+[ERROR] 2026-03-19 00:20:28,749 django.request - Internal Server Error: /api/characters/19/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 68, in update
+    self.perform_update(serializer)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 78, in perform_update
+    serializer.save()
+    ~~~~~~~~~~~~~~~^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 205, in save
+    self.instance = self.update(self.instance, validated_data)
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py", line 549, in update
+    vice, _ = Vice.objects.get_or_create(
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        name=custom_vice.strip(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+        defaults={'description': 'Custom vice'}
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 946, in get_or_create
+    return self.get(**kwargs), False
+           ~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 636, in get
+    raise self.model.MultipleObjectsReturned(
+    ...<5 lines>...
+    )
+characters.models.Vice.MultipleObjectsReturned: get() returned more than one Vice -- it returned more than 20!
+[ERROR] 2026-03-19 00:20:33,269 django.request - Internal Server Error: /api/characters/19/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 68, in update
+    self.perform_update(serializer)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 78, in perform_update
+    serializer.save()
+    ~~~~~~~~~~~~~~~^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 205, in save
+    self.instance = self.update(self.instance, validated_data)
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py", line 549, in update
+    vice, _ = Vice.objects.get_or_create(
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        name=custom_vice.strip(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+        defaults={'description': 'Custom vice'}
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 946, in get_or_create
+    return self.get(**kwargs), False
+           ~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 636, in get
+    raise self.model.MultipleObjectsReturned(
+    ...<5 lines>...
+    )
+characters.models.Vice.MultipleObjectsReturned: get() returned more than one Vice -- it returned more than 20!
+[ERROR] 2026-03-19 00:20:34,958 django.request - Internal Server Error: /api/characters/19/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 68, in update
+    self.perform_update(serializer)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 78, in perform_update
+    serializer.save()
+    ~~~~~~~~~~~~~~~^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 205, in save
+    self.instance = self.update(self.instance, validated_data)
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py", line 549, in update
+    vice, _ = Vice.objects.get_or_create(
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        name=custom_vice.strip(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+        defaults={'description': 'Custom vice'}
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 946, in get_or_create
+    return self.get(**kwargs), False
+           ~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 636, in get
+    raise self.model.MultipleObjectsReturned(
+    ...<5 lines>...
+    )
+characters.models.Vice.MultipleObjectsReturned: get() returned more than one Vice -- it returned more than 20!
+[ERROR] 2026-03-19 00:21:35,078 django.request - Internal Server Error: /api/characters/20/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 68, in update
+    self.perform_update(serializer)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 78, in perform_update
+    serializer.save()
+    ~~~~~~~~~~~~~~~^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 205, in save
+    self.instance = self.update(self.instance, validated_data)
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py", line 549, in update
+    vice, _ = Vice.objects.get_or_create(
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        name=custom_vice.strip(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+        defaults={'description': 'Custom vice'}
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 946, in get_or_create
+    return self.get(**kwargs), False
+           ~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 636, in get
+    raise self.model.MultipleObjectsReturned(
+    ...<5 lines>...
+    )
+characters.models.Vice.MultipleObjectsReturned: get() returned more than one Vice -- it returned more than 20!
+[ERROR] 2026-03-19 00:22:03,869 django.request - Internal Server Error: /api/characters/19/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 68, in update
+    self.perform_update(serializer)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 78, in perform_update
+    serializer.save()
+    ~~~~~~~~~~~~~~~^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 205, in save
+    self.instance = self.update(self.instance, validated_data)
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py", line 549, in update
+    vice, _ = Vice.objects.get_or_create(
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        name=custom_vice.strip(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+        defaults={'description': 'Custom vice'}
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 946, in get_or_create
+    return self.get(**kwargs), False
+           ~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 636, in get
+    raise self.model.MultipleObjectsReturned(
+    ...<5 lines>...
+    )
+characters.models.Vice.MultipleObjectsReturned: get() returned more than one Vice -- it returned more than 20!
+[ERROR] 2026-03-19 00:22:09,780 django.request - Internal Server Error: /api/characters/19/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 68, in update
+    self.perform_update(serializer)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 78, in perform_update
+    serializer.save()
+    ~~~~~~~~~~~~~~~^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 205, in save
+    self.instance = self.update(self.instance, validated_data)
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py", line 549, in update
+    vice, _ = Vice.objects.get_or_create(
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        name=custom_vice.strip(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+        defaults={'description': 'Custom vice'}
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 946, in get_or_create
+    return self.get(**kwargs), False
+           ~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 636, in get
+    raise self.model.MultipleObjectsReturned(
+    ...<5 lines>...
+    )
+characters.models.Vice.MultipleObjectsReturned: get() returned more than one Vice -- it returned more than 20!
+[INFO] 2026-03-19 00:22:42,527 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-19 00:22:42,828 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-19 00:22:45,953 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-19 00:22:46,203 django.utils.autoreload - Watching for file changes with StatReloader
+[ERROR] 2026-03-19 00:22:53,390 django.request - Internal Server Error: /api/characters/19/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 68, in update
+    self.perform_update(serializer)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 78, in perform_update
+    serializer.save()
+    ~~~~~~~~~~~~~~~^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 205, in save
+    self.instance = self.update(self.instance, validated_data)
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py", line 571, in update
+    vice, _ = Vice.objects.get_or_create(
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        name=custom_vice.strip(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+        defaults={'description': 'Custom vice'}
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 946, in get_or_create
+    return self.get(**kwargs), False
+           ~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 636, in get
+    raise self.model.MultipleObjectsReturned(
+    ...<5 lines>...
+    )
+characters.models.Vice.MultipleObjectsReturned: get() returned more than one Vice -- it returned more than 20!
+[ERROR] 2026-03-19 00:23:40,244 django.request - Internal Server Error: /api/characters/19/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 68, in update
+    self.perform_update(serializer)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 78, in perform_update
+    serializer.save()
+    ~~~~~~~~~~~~~~~^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 205, in save
+    self.instance = self.update(self.instance, validated_data)
+                    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py", line 571, in update
+    vice, _ = Vice.objects.get_or_create(
+              ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        name=custom_vice.strip(),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+        defaults={'description': 'Custom vice'}
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 946, in get_or_create
+    return self.get(**kwargs), False
+           ~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/db/models/query.py", line 636, in get
+    raise self.model.MultipleObjectsReturned(
+    ...<5 lines>...
+    )
+characters.models.Vice.MultipleObjectsReturned: get() returned more than one Vice -- it returned more than 20!
+[INFO] 2026-03-19 00:23:51,758 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-19 00:23:51,993 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-19 00:24:12,205 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-19 00:24:12,450 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-19 00:24:15,568 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-19 00:24:15,823 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-19 00:25:37,349 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-19 00:40:37,297 characters.views.auth_views - Login successful: user=zoob ip=127.0.0.1
+[WARNING] 2026-03-19 00:41:01,302 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-03-19 00:42:24,570 django.request - Bad Request: /api/characters/
+[INFO] 2026-03-19 00:46:16,026 characters.views.auth_views - Login successful: user=alecb100 ip=127.0.0.1
+[WARNING] 2026-03-19 00:46:25,112 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-19 00:46:49,821 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-19 00:46:56,909 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-19 00:47:12,281 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-19 00:50:05,750 django.request - Bad Request: /api/characters/26/
+[WARNING] 2026-03-19 00:58:08,234 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-19 01:07:10,219 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-19 01:30:11,309 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-19 01:30:59,495 django.request - Bad Request: /api/characters/
+[INFO] 2026-03-22 14:12:38,822 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-22 14:25:22,455 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-22 14:25:22,666 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-22 14:25:24,778 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-22 14:25:24,990 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-22 14:25:27,089 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-22 14:25:27,280 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-22 14:25:34,403 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-22 14:25:34,632 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-22 14:28:35,732 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/utility_views.py changed, reloading.
+[INFO] 2026-03-22 14:28:36,017 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-22 14:28:37,133 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/utility_views.py changed, reloading.
+[INFO] 2026-03-22 14:28:37,385 django.utils.autoreload - Watching for file changes with StatReloader
+[ERROR] 2026-03-22 14:30:59,090 django.security.DisallowedHost - Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/utils/deprecation.py", line 119, in __call__
+    response = self.process_request(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/middleware/common.py", line 48, in process_request
+    host = request.get_host()
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/http/request.py", line 186, in get_host
+    raise DisallowedHost(msg)
+django.core.exceptions.DisallowedHost: Invalid HTTP_HOST header: 'testserver'. You may need to add 'testserver' to ALLOWED_HOSTS.
+[WARNING] 2026-03-22 14:30:59,123 django.request - Bad Request: /api/characters/
+[INFO] 2026-03-22 14:32:44,664 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-22 14:32:44,868 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-22 14:32:45,967 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-22 14:32:46,187 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-22 14:33:02,322 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/utility_views.py changed, reloading.
+[INFO] 2026-03-22 14:33:02,507 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-22 14:33:35,773 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-22 14:33:35,999 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-22 21:36:19,416 django.request - Forbidden: /api/characters/
+[WARNING] 2026-03-22 21:36:32,825 django.request - Forbidden: /api/user-profiles/
+[WARNING] 2026-03-22 21:36:32,826 django.request - Forbidden: /api/accounts/me/
+[WARNING] 2026-03-22 21:36:35,649 django.request - Bad Request: /api/accounts/login/
+[INFO] 2026-03-22 21:36:55,726 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-22 21:36:58,876 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-03-22 21:37:01,557 django.request - Bad Request: /api/accounts/login/
+[INFO] 2026-03-22 21:37:37,111 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/auth_views.py changed, reloading.
+[INFO] 2026-03-22 21:37:37,331 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-22 21:37:38,438 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/auth_views.py changed, reloading.
+[INFO] 2026-03-22 21:37:38,667 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-22 21:38:11,375 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-22 21:38:14,182 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-03-22 21:38:53,186 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-03-22 21:39:13,837 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-03-22 21:39:18,738 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-03-22 21:39:25,961 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-03-22 21:39:54,740 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-03-22 21:41:39,293 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-03-22 21:41:44,937 django.request - Bad Request: /api/accounts/login/
+[INFO] 2026-03-22 22:08:49,823 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-22 22:08:50,105 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-22 22:20:07,998 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-22 22:20:19,060 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-22 22:20:56,491 django.request - Bad Request: /api/characters/
+[INFO] 2026-03-22 22:21:43,599 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-22 22:21:43,866 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-22 22:32:52,796 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-22 22:32:53,035 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-22 22:32:55,144 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-22 22:32:55,351 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-22 22:52:37,014 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-23 21:50:53,486 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-23 21:53:15,921 django.request - Not Found: /api/campaigns/9/invite/
+[INFO] 2026-03-23 21:53:55,662 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-23 21:53:55,911 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-23 21:56:09,153 django.request - Not Found: /favicon.ico
+[INFO] 2026-03-23 21:56:46,598 characters.views.auth_views - Login successful: user=zoob ip=127.0.0.1
+[WARNING] 2026-03-23 21:56:58,450 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-23 21:56:58,450 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-23 21:59:31,110 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-23 21:59:31,110 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-23 21:59:45,228 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-23 21:59:45,228 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-23 21:59:47,538 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-23 21:59:47,538 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-23 21:59:51,336 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-23 21:59:51,336 django.request - Bad Request: /api/characters/
