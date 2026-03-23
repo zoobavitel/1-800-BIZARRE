@@ -1,6 +1,7 @@
+import logging
 from django.shortcuts import render
 from django.http import JsonResponse
-from django.db import models
+from django.db.models import Q
 from rest_framework import viewsets, status, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -11,9 +12,20 @@ from django.core.exceptions import PermissionDenied
 import json
 
 import random
-from ..models import Character, Session, Roll, RollHistory, ExperienceTracker
+from ..models import Campaign, Character, Session, Roll, RollHistory, ExperienceTracker
 from ..parsers import MultipartJsonParser
 from ..serializers import CharacterSerializer
+
+
+def _character_queryset_for_user(user):
+    """Own PCs plus characters in campaigns this user GMs (staff sees all)."""
+    if user.is_staff:
+        return Character.objects.all()
+    return Character.objects.filter(Q(user=user) | Q(campaign__gm=user)).distinct()
+
+
+# Backward-compatible name for code that imported the old detail-only helper.
+_character_queryset_detail = _character_queryset_for_user
 
 
 class CharacterViewSet(viewsets.ModelViewSet):
@@ -23,16 +35,26 @@ class CharacterViewSet(viewsets.ModelViewSet):
     parser_classes = (JSONParser, MultipartJsonParser, FormParser)
 
     def get_queryset(self):
-        # Filter: own characters, or characters in campaigns where user is GM
-        user = self.request.user
-        if user.is_staff:
-            return Character.objects.all()
-        return Character.objects.filter(
-            models.Q(user=user) | models.Q(campaign__gm=user)
-        ).distinct()
+        return _character_queryset_for_user(self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            logger = logging.getLogger(__name__)
+            logger.warning("Character create validation failed: %s", serializer.errors)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        if not user.is_staff and instance.user_id != user.id:
+            raise PermissionDenied('You may only delete your own characters.')
+        instance.delete()
 
     @action(detail=False, methods=['get'], url_path='creation-guide', permission_classes=[permissions.AllowAny])
     def creation_guide(self, request):

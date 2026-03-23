@@ -129,6 +129,8 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
     reputation_status: payload.reputation_status ?? {},
     selected_benefits: payload.selected_benefits ?? [],
     selected_detriments: payload.selected_detriments ?? [],
+    image_url: payload.image_url ?? '',
+    imageFile: payload.imageFile,
   };
 }
 
@@ -189,14 +191,28 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
     setCampaigns(c || []);
     const front = (chars || []).map(transformBackendToFrontend);
     setCharacters(front);
-    // Update all character tabs with fresh data (e.g. after campaign assign)
-    setCharTabs((prev) =>
-      prev.map((t) => {
-        if (!t.characterId) return t;
-        const updated = front.find((x) => x.id === t.characterId);
-        return updated ? { ...t, character: updated } : t;
-      })
-    );
+    const byId = new Map(front.map((x) => [x.id, x]));
+    // Update all character tabs with fresh data (e.g. after campaign assign).
+    // GM-owned list may omit player PCs; fetch by id when missing.
+    setCharTabs((prev) => {
+      void (async () => {
+        const next = await Promise.all(
+          prev.map(async (t) => {
+            if (!t.characterId) return t;
+            const updated = byId.get(t.characterId);
+            if (updated) return { ...t, character: updated };
+            try {
+              const raw = await characterAPI.getCharacter(t.characterId);
+              return { ...t, character: transformBackendToFrontend(raw) };
+            } catch {
+              return t;
+            }
+          })
+        );
+        setCharTabs(next);
+      })();
+      return prev;
+    });
   }, []);
 
   // ── Load character list ──────────────────────────────────────────────────
@@ -218,7 +234,7 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
   }, []);
 
   useEffect(() => {
-    loadCharacters().then((front) => {
+    loadCharacters().then(async (front) => {
       if (charTabsInitialized.current) return;
       charTabsInitialized.current = true;
 
@@ -229,6 +245,16 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
           setCharTabs([tab]);
           setActiveCharTabId(tab.tabId);
           return;
+        }
+        try {
+          const raw = await characterAPI.getCharacter(initialCharacterId);
+          const ch = transformBackendToFrontend(raw);
+          const tab = { tabId: nextTabId++, characterId: ch.id, character: ch };
+          setCharTabs([tab]);
+          setActiveCharTabId(tab.tabId);
+          return;
+        } catch {
+          // Fall through to blank sheet (e.g. no access or invalid id)
         }
       }
       const blank = { tabId: nextTabId++, characterId: null, character: createDefaultCharacter() };
@@ -309,18 +335,25 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
       heritageValue = heritages[0].id;
     }
     const toSend = transformFrontendToBackend({ ...frontend, heritage: heritageValue, campaign: payload.campaign ?? frontend.campaign });
+    const withFile = { ...toSend, ...(frontend.imageFile instanceof File ? { imageFile: frontend.imageFile } : {}) };
     try {
       let saved;
       if (payload.id) {
-        saved = await characterAPI.updateCharacter(payload.id, toSend);
+        saved = await characterAPI.updateCharacter(payload.id, withFile);
       } else {
-        saved = await characterAPI.createCharacter(toSend);
+        saved = await characterAPI.createCharacter(withFile);
         if (saved.id && typeof window !== 'undefined') window.location.hash = `character/${saved.id}`;
       }
       const savedFrontend = transformBackendToFrontend(saved);
       // Preserve crew from payload: backend has crew as read_only FK, so it returns '' when we send a string.
       // Without this merge, character.crew becomes '' after save, causing a perceived "change" and save loop.
-      const merged = { ...savedFrontend, crew: payload.crew ?? savedFrontend.crew, crewId: payload.crewId ?? savedFrontend.crewId };
+      const merged = {
+        ...savedFrontend,
+        crew: payload.crew ?? savedFrontend.crew,
+        crewId: payload.crewId ?? savedFrontend.crewId,
+        image: savedFrontend.image,
+        image_url: savedFrontend.image_url,
+      };
       updateActiveCharTab(merged.id, merged);
       await loadCharacters();
     } catch (err) {

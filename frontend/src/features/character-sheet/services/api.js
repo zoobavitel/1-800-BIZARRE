@@ -1,7 +1,64 @@
 // API service for character sheet backend integration
 
 import { gradeToIndex, indexToGrade, DUR_TABLE, DEFAULT_TRAUMA } from '../constants/srd';
+
+/** Backend Character.playbook values */
+const PLAYBOOK_BACKEND = ['STAND', 'HAMON', 'SPIN'];
+
+/** Map API playbook (STAND/HAMON/SPIN) to CharacterSheet select labels */
+export function playbookToDisplay(pb) {
+  if (pb == null || pb === '') return 'Stand';
+  const u = String(pb).toUpperCase();
+  if (u === 'HAMON') return 'Hamon';
+  if (u === 'SPIN') return 'Spin';
+  return 'Stand';
+}
+
+/** Map sheet labels or backend enums to API playbook */
+export function playbookToBackend(pb) {
+  if (pb == null || pb === '') return 'STAND';
+  const s = String(pb).trim();
+  if (PLAYBOOK_BACKEND.includes(s)) return s;
+  const lower = s.toLowerCase();
+  if (lower === 'hamon') return 'HAMON';
+  if (lower === 'spin') return 'SPIN';
+  return 'STAND';
+}
+
+function abilityIdsByType(abilities, type) {
+  return (abilities || [])
+    .filter((a) => a.type === type && (typeof a.id === 'number' || (typeof a.id === 'string' && /^\d+$/.test(a.id))))
+    .map((a) => (typeof a.id === 'number' ? a.id : parseInt(a.id, 10)));
+}
 import { getApiBaseUrl } from '../../../config/apiConfig';
+
+/** Flatten DRF validation errors into a readable message. */
+function formatApiError(errorData, status, statusText) {
+  if (Array.isArray(errorData.non_field_errors) && errorData.non_field_errors[0])
+    return errorData.non_field_errors[0];
+  if (errorData.detail) return typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData.detail);
+  if (errorData.error) return errorData.error;
+  const entries = Object.entries(errorData).filter(([, v]) => v != null && v !== '');
+  if (entries.length > 0) {
+    const parts = entries.map(([k, v]) => {
+      const msg = Array.isArray(v) ? v[0] : typeof v === 'object' ? JSON.stringify(v) : String(v);
+      return `${k}: ${msg}`;
+    });
+    return parts.join('; ');
+  }
+  return `HTTP ${status}: ${statusText}`;
+}
+
+/** Build absolute URL for uploaded media paths (e.g. /media/...) so <img src> works with the API host. */
+export function resolveMediaUrl(pathOrUrl) {
+  if (pathOrUrl == null || pathOrUrl === '') return '';
+  const s = String(pathOrUrl).trim();
+  if (!s) return '';
+  if (/^https?:\/\//i.test(s) || s.startsWith('blob:') || s.startsWith('data:')) return s;
+  const base = getApiBaseUrl().replace(/\/api\/?$/i, '');
+  if (s.startsWith('/')) return `${base}${s}`;
+  return `${base}/${s}`;
+}
 
 // Helper function for API requests
 const apiRequest = async (endpoint, options = {}) => {
@@ -26,10 +83,7 @@ const apiRequest = async (endpoint, options = {}) => {
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      const message = (Array.isArray(errorData.non_field_errors) && errorData.non_field_errors[0])
-        || errorData.detail
-        || errorData.error
-        || `HTTP ${response.status}: ${response.statusText}`;
+      const message = formatApiError(errorData, response.status, response.statusText);
       throw new Error(message);
     }
     
@@ -256,7 +310,7 @@ const apiRequestMultipart = async (endpoint, formData, method = 'POST') => {
   const response = await fetch(url, { method, headers, body: formData });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    const message = errorData.detail || errorData.error || `HTTP ${response.status}: ${response.statusText}`;
+    const message = formatApiError(errorData, response.status, response.statusText);
     throw new Error(message);
   }
   return await response.json();
@@ -401,11 +455,14 @@ export const transformBackendToFrontend = (backendCharacter) => {
     heritageName: backendCharacter.heritage_details?.name || null,
     background: backendCharacter.background_note || '',
     look: backendCharacter.appearance || '',
-    vice: backendCharacter.vice?.name || '',
+    // DRF returns vice as FK id (number); nested name is on vice_info (see CharacterSerializer)
+    vice: backendCharacter.vice_info?.name || backendCharacter.vice?.name || '',
     viceDetails: backendCharacter.vice_details || '',
     crew: backendCharacter.crew?.name || '',
     crewId: backendCharacter.crew?.id ?? null,
-    
+    image_url: backendCharacter.image_url || '',
+    image: resolveMediaUrl(backendCharacter.image || backendCharacter.image_url || ''),
+
     // Action ratings (convert from action_dots)
     actionRatings: {
       HUNT: backendCharacter.action_dots?.hunt || 0,
@@ -518,7 +575,7 @@ export const transformBackendToFrontend = (backendCharacter) => {
     
     // Additional backend fields
     campaign: backendCharacter.campaign,
-    playbook: backendCharacter.playbook,
+    playbook: playbookToDisplay(backendCharacter.playbook),
     level: backendCharacter.level,
     loadout: backendCharacter.loadout,
     inventory: backendCharacter.inventory || [],
@@ -533,14 +590,20 @@ export const transformBackendToFrontend = (backendCharacter) => {
 export const transformFrontendToBackend = (frontendCharacter) => {
   const viceVal = frontendCharacter.vice;
   const isViceName = typeof viceVal === 'string' && viceVal.trim() !== '';
+  const vicePayload = isViceName
+    ? { custom_vice: viceVal }
+    : { vice: viceVal === '' || viceVal == null ? null : viceVal };
+  const abilitiesList = frontendCharacter.abilities || [];
   return {
     true_name: frontendCharacter.name,
     stand_name: frontendCharacter.standName,
     heritage: frontendCharacter.heritage,
+    playbook: playbookToBackend(frontendCharacter.playbook),
     background_note: frontendCharacter.background,
     appearance: frontendCharacter.look,
-    ...(isViceName ? { custom_vice: viceVal } : { vice: viceVal }),
+    ...vicePayload,
     vice_details: frontendCharacter.viceDetails ?? frontendCharacter.vice_details ?? '',
+    image_url: frontendCharacter.image_url ?? '',
     
     // Action dots
     action_dots: {
@@ -614,9 +677,10 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     reputation_status: frontendCharacter.reputation_status ?? {},
 
     // Standard abilities (array of Ability IDs)
-    standard_abilities: (frontendCharacter.abilities || [])
-      .filter((a) => a.type === 'standard' && (typeof a.id === 'number' || (typeof a.id === 'string' && /^\d+$/.test(a.id))))
-      .map((a) => (typeof a.id === 'number' ? a.id : parseInt(a.id, 10))),
+    standard_abilities: abilityIdsByType(abilitiesList, 'standard'),
+
+    hamon_ability_ids: abilityIdsByType(abilitiesList, 'hamon'),
+    spin_ability_ids: abilityIdsByType(abilitiesList, 'spin'),
 
     // Custom abilities (SRD: 3x1 or 1x3)
     ...(function () {
@@ -650,4 +714,4 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     selected_benefits: Array.isArray(frontendCharacter.selected_benefits) ? frontendCharacter.selected_benefits : [],
     selected_detriments: Array.isArray(frontendCharacter.selected_detriments) ? frontendCharacter.selected_detriments : [],
   };
-}; 
+};

@@ -10,8 +10,6 @@ from .models import (
     Claim, CrewPlaybook, CrewSpecialAbility, CrewUpgrade, XPHistory, StressHistory, ChatMessage,
     Faction, ShowcasedNPC, ProgressClock, Roll
 )
-import re
-
 class ClaimSerializer(serializers.ModelSerializer):
     class Meta:
         model = Claim
@@ -309,12 +307,12 @@ class StandAbilitySerializer(serializers.ModelSerializer):
 class HamonAbilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = HamonAbility
-        fields = ['id', 'name', 'hamon_type', 'description', 'stress_cost', 'frequency']
+        fields = ['id', 'name', 'hamon_type', 'description', 'required_a_count', 'stress_cost', 'frequency']
 
 class SpinAbilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = SpinAbility
-        fields = ['id', 'name', 'spin_type', 'description', 'stress_cost', 'frequency']
+        fields = ['id', 'name', 'spin_type', 'description', 'required_a_count', 'stress_cost', 'frequency']
 
 class StandSerializer(serializers.ModelSerializer):
     class Meta:
@@ -387,24 +385,31 @@ class CharacterSerializer(serializers.ModelSerializer):
                 )
             # Note: We don't auto-add trauma here, that's handled by the frontend
         
-        # enforce playbook ability prerequisites based on coin_stats
-        # count 'A' ratings in coin_stats
+        # enforce playbook ability prerequisites based on coin_stats (A-rank only; S does not count)
         coin_stats = data.get('coin_stats') or getattr(self.instance, 'coin_stats', {})
         count_A = sum(1 for v in coin_stats.values() if v == 'A')
-        # validate requested Hamon abilities
-        for ha in data.get('hamon_ability_ids', []):
-            m = re.match(r"^(\d)A", ha.name)
-            if m and count_A < int(m.group(1)):
+        hamon_ids = data.get('hamon_ability_ids', [])
+        spin_ids = data.get('spin_ability_ids', [])
+        playbook_val = data.get('playbook')
+        if playbook_val is None and self.instance:
+            playbook_val = self.instance.playbook
+        if playbook_val is None:
+            playbook_val = 'STAND'
+
+        for ha in hamon_ids:
+            if count_A < ha.required_a_count:
                 raise serializers.ValidationError(
-                    f"Insufficient 'A' ratings: need {m.group(1)} 'A's to select Hamon ability '{ha.name}' (you have {count_A})."
+                    f"Insufficient 'A' ratings: need {ha.required_a_count} 'A' coin stats for Hamon ability '{ha.name}' (you have {count_A})."
                 )
-        # validate requested Spin abilities
-        for sa in data.get('spin_ability_ids', []):
-            m = re.match(r"^(\d)A", sa.name)
-            if m and count_A < int(m.group(1)):
+        for sa in spin_ids:
+            if count_A < sa.required_a_count:
                 raise serializers.ValidationError(
-                    f"Insufficient 'A' ratings: need {m.group(1)} 'A's to select Spin ability '{sa.name}' (you have {count_A})."
+                    f"Insufficient 'A' ratings: need {sa.required_a_count} 'A' coin stats for Spin ability '{sa.name}' (you have {count_A})."
                 )
+        if hamon_ids and playbook_val != 'HAMON':
+            raise serializers.ValidationError('Hamon abilities require playbook HAMON.')
+        if spin_ids and playbook_val != 'SPIN':
+            raise serializers.ValidationError('Spin abilities require playbook SPIN.')
         heritage   = data.get('heritage') or getattr(self.instance, 'heritage', None)
         benefits   = data.get('selected_benefits', [])
         detriments = data.get('selected_detriments', [])
@@ -498,10 +503,10 @@ class CharacterSerializer(serializers.ModelSerializer):
         std_ids = validated_data.pop('standard_abilities', [])
 
         if custom_vice:
-            vice, _ = Vice.objects.get_or_create(
-                name=custom_vice.strip(),
-                defaults={'description': 'Custom vice'}
-            )
+            name = custom_vice.strip()
+            vice = Vice.objects.filter(name=name).first()
+            if vice is None:
+                vice = Vice.objects.create(name=name, description='Custom vice')
             validated_data['vice'] = vice
         if vice_details is not None:
             validated_data['vice_details'] = vice_details
@@ -546,10 +551,10 @@ class CharacterSerializer(serializers.ModelSerializer):
         coin_stats = validated_data.get('coin_stats') or (stand_data if isinstance(stand_data, dict) else {})
 
         if custom_vice:
-            vice, _ = Vice.objects.get_or_create(
-                name=custom_vice.strip(),
-                defaults={'description': 'Custom vice'}
-            )
+            name = custom_vice.strip()
+            vice = Vice.objects.filter(name=name).first()
+            if vice is None:
+                vice = Vice.objects.create(name=name, description='Custom vice')
             validated_data['vice'] = vice
         if vice_details is not None:
             validated_data['vice_details'] = vice_details
