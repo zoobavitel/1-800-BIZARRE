@@ -72,3 +72,6 @@ debug.log
 # Backend specific
 backend/src/db.sqlite3
 backend/src/debug.log
+
+# Database backups (may contain sensitive data)
+backups/

@@ -1,0 +1,47 @@
+---
+description: 
+alwaysApply: true
+---
+
+---
+description: 
+alwaysApply: true
+---
+
+---
+description: Agent rules for jojo-ttrpg-platform
+alwaysApply: true
+---
+
+# Cursor Agent Rules
+
+## Plan Files
+- All plan files saved to ~/.cursor/plans/ must include a frontmatter header with `created` and `modified` dates (YYYY-MM-DD)
+- When creating a new plan, set both `created` and `modified` to today's date
+- When editing an existing plan, update the `modified` date to today's date
+- Never delete a plan file without explicit user confirmation
+
+## General
+- Always read existing related plans and docs/1(800)-Bizarre SRD.md before creating a new plan
+- Prefer editing an existing plan over creating a duplicate
+
+# Agent Scope
+
+## Allowed Paths
+- ~/git/jojo-ttrpg-platform/** (project files)
+- ~/.cursor/plans/** (plan files)
+
+## Restricted Paths
+- Do not read, write, or execute anything outside the above paths
+- Do not access ~/Downloads, ~/.config, ~/.ssh, ~/Documents, or any other home directory paths
+- Do not access /etc, /var, /usr, or any system paths
+- Do not access other git repositories
+
+## Rules
+- If a task requires files outside the allowed paths, ask the user first
+- Never speculatively explore the filesystem outside allowed paths
+```
+
+Also worth noting — this file should live at:
+```
+~/git/jojo-ttrpg-platform/.cursor/rules/agent.md

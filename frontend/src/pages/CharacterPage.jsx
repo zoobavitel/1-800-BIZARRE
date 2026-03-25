@@ -336,6 +336,9 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
     }
     const toSend = transformFrontendToBackend({ ...frontend, heritage: heritageValue, campaign: payload.campaign ?? frontend.campaign });
     const withFile = { ...toSend, ...(frontend.imageFile instanceof File ? { imageFile: frontend.imageFile } : {}) };
+    // #region agent log
+    fetch('http://127.0.0.1:7322/ingest/da3c2fbe-bf33-4e52-b5b5-b4e8c790d437', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'af48c2' }, body: JSON.stringify({ sessionId: 'af48c2', location: 'CharacterPage.jsx:handleSaveCharacter', message: 'save payload', data: { payloadId: payload.id, vice: frontend.vice, custom_vice: toSend.custom_vice, vice_key: toSend.vice, vice_details_len: String(toSend.vice_details || '').length, hasImageFile: frontend.imageFile instanceof File, keysHasCustomVice: 'custom_vice' in toSend }, timestamp: Date.now(), hypothesisId: 'H1-H5' }) }).catch(() => {});
+    // #endregion
     try {
       let saved;
       if (payload.id) {
