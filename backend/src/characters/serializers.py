@@ -330,6 +330,13 @@ class CharacterSerializer(serializers.ModelSerializer):
     wanted_stars = serializers.IntegerField(source='campaign.wanted_stars', read_only=True)
     stand = StandSerializer(read_only=True)
     crew = CrewSerializer(read_only=True)
+    crew_id = serializers.PrimaryKeyRelatedField(
+        source='crew',
+        queryset=Crew.objects.all(),
+        allow_null=True,
+        required=False,
+        write_only=True,
+    )
     user = serializers.PrimaryKeyRelatedField(read_only=True)
     heritage_details = HeritageSerializer(source='heritage', read_only=True)
     # nested vice info
@@ -493,7 +500,51 @@ class CharacterSerializer(serializers.ModelSerializer):
                             raise serializers.ValidationError(
                                 f"Field '{field}' is locked by GM and cannot be modified."
                             )
-        
+
+        # Crew assignment (client sends crew_id; internal key is crew)
+        request = self.context.get('request')
+        if 'crew' in data:
+            if not request or not getattr(request, 'user', None) or not request.user.is_authenticated:
+                raise serializers.ValidationError({'crew_id': 'Authentication required.'})
+            new_crew = data['crew']
+            campaign = data.get('campaign')
+            if self.instance is not None:
+                if campaign is None:
+                    campaign = self.instance.campaign
+                elif not hasattr(campaign, 'id'):
+                    try:
+                        campaign = Campaign.objects.get(pk=campaign) if campaign is not None else None
+                    except Campaign.DoesNotExist:
+                        campaign = None
+            elif campaign is not None and not hasattr(campaign, 'id'):
+                try:
+                    campaign = Campaign.objects.get(pk=campaign)
+                except Campaign.DoesNotExist:
+                    campaign = None
+
+            if new_crew is not None:
+                if campaign is None:
+                    raise serializers.ValidationError(
+                        {'crew_id': 'Assign the character to a campaign before joining a crew.'}
+                    )
+                c_id = campaign.id if hasattr(campaign, 'id') else campaign
+                if new_crew.campaign_id != c_id:
+                    raise serializers.ValidationError(
+                        {'crew_id': 'Crew must belong to the same campaign as the character.'}
+                    )
+
+            if self.instance is not None:
+                u = request.user
+                is_owner = self.instance.user_id == u.id
+                is_gm = (
+                    self.instance.campaign_id is not None
+                    and self.instance.campaign.gm_id == u.id
+                )
+                if not (u.is_staff or is_owner or is_gm):
+                    raise serializers.ValidationError(
+                        {'crew_id': 'You cannot change this character\'s crew.'}
+                    )
+
         return data
 
     def create(self, validated_data):
@@ -542,6 +593,9 @@ class CharacterSerializer(serializers.ModelSerializer):
             CharacterHamonAbility.objects.create(character=character, hamon_ability=ha)
         for sa in spin_ids:
             CharacterSpinAbility.objects.create(character=character, spin_ability=sa)
+        if character.crew_id and character.personal_crew_name:
+            Character.objects.filter(pk=character.pk).update(personal_crew_name='')
+            character.personal_crew_name = ''
         return character
     
     def update(self, instance, validated_data):
@@ -607,6 +661,10 @@ class CharacterSerializer(serializers.ModelSerializer):
         # #endregion
 
         character = super().update(instance, validated_data)
+
+        if character.crew_id and character.personal_crew_name:
+            Character.objects.filter(pk=character.pk).update(personal_crew_name='')
+            character.personal_crew_name = ''
 
         # #region agent log
         try:

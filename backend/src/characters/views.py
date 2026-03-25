@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.db import models
-from rest_framework import viewsets, status, permissions
+from rest_framework import viewsets, status, permissions, serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -15,7 +15,8 @@ from rest_framework.decorators import api_view, permission_classes, action
 import json
 from django.db import transaction
 from django.core.exceptions import PermissionDenied
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import JSONParser, FormParser
+from .parsers import MultipartJsonParser
 
 
 from .models import (
@@ -369,16 +370,15 @@ class CharacterViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = CharacterSerializer
     queryset = Character.objects.all()
-    parser_classes = (MultiPartParser, FormParser)
-
+    parser_classes = (JSONParser, MultipartJsonParser, FormParser)
 
     def get_queryset(self):
         user = self.request.user
         if user.is_superuser:
             return Character.objects.all()
-        elif Campaign.objects.filter(gm=user).exists():
-            return Character.objects.filter(campaign__gm=user)
-        return Character.objects.filter(user=user)
+        return Character.objects.filter(
+            Q(user=user) | Q(campaign__gm=user)
+        ).distinct()
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -1253,21 +1253,30 @@ class CrewViewSet(viewsets.ModelViewSet):
         crew = self.get_object()
         user = self.request.user
 
-        # Allow GM to directly change the name
-        if user == crew.campaign.gm:
+        if user.is_superuser or user.is_staff or user == crew.campaign.gm:
             serializer.save()
             return
 
-        # Prevent non-GM users from directly changing the name field
-        if 'name' in serializer.validated_data and serializer.validated_data['name'] != crew.name:
-            raise serializers.ValidationError({'name': 'Crew name can only be changed by consensus or by the GM.'})
+        validated = serializer.validated_data
+        keys = set(validated.keys())
 
-        # Allow updates to proposed_name, proposed_by, approved_by fields for consensus mechanism
-        allowed_fields_for_players = ['proposed_name', 'proposed_by', 'approved_by']
-        for field in serializer.validated_data:
-            if field not in allowed_fields_for_players:
-                raise serializers.ValidationError({field: 'Only GM can directly edit this field.'})
-        
+        # Crew members may rename the shared crew (everyone in the campaign sees the same Crew row)
+        if crew.members.filter(user=user).exists() and keys <= {'name'}:
+            serializer.save()
+            return
+
+        if 'name' in validated and validated.get('name') != crew.name:
+            raise serializers.ValidationError(
+                {'name': 'Crew name can only be changed by the GM, by a crew member (name only), or via consensus.'}
+            )
+
+        allowed_fields_for_players = {'proposed_name', 'proposed_by', 'approved_by'}
+        extra = keys - allowed_fields_for_players
+        if extra:
+            raise serializers.ValidationError(
+                {f: 'Only the GM can directly edit this field.' for f in extra}
+            )
+
         serializer.save()
 
 class LoginView(ObtainAuthToken):

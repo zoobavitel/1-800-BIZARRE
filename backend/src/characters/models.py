@@ -350,6 +350,8 @@ class Character(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, null=True, blank=True, related_name='characters')
     crew = models.ForeignKey(Crew, on_delete=models.SET_NULL, null=True, blank=True, related_name='members')
+    # When not linked to a Crew (e.g. no campaign), the player-editable label shown as "crew name"
+    personal_crew_name = models.CharField(max_length=100, blank=True, default='')
 
     true_name = models.CharField(max_length=100)
     alias = models.CharField(max_length=100, blank=True, null=True)

@@ -25,23 +25,23 @@ alwaysApply: true
 - Always read existing related plans and docs/1(800)-Bizarre SRD.md before creating a new plan
 - Prefer editing an existing plan over creating a duplicate
 
-# Agent Scope
+## Python Environment
+- Always use the project venv at `~/git/jojo-ttrpg-platform/.venv/bin/activate`
+- Never run `python` or `pip` commands without activating this venv first
+- Never create or use a different venv for this project
 
-## Allowed Paths
-- ~/git/jojo-ttrpg-platform/** (project files)
-- ~/.cursor/plans/** (plan files)
+## Agent Scope
 
-## Restricted Paths
+### Allowed Paths
+- `~/git/jojo-ttrpg-platform/**` (project files)
+- `~/.cursor/plans/**` (plan files)
+
+### Restricted Paths
 - Do not read, write, or execute anything outside the above paths
 - Do not access ~/Downloads, ~/.config, ~/.ssh, ~/Documents, or any other home directory paths
 - Do not access /etc, /var, /usr, or any system paths
 - Do not access other git repositories
 
-## Rules
+### Rules
 - If a task requires files outside the allowed paths, ask the user first
 - Never speculatively explore the filesystem outside allowed paths
-```
-
-Also worth noting — this file should live at:
-```
-~/git/jojo-ttrpg-platform/.cursor/rules/agent.md

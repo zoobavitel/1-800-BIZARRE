@@ -464,8 +464,9 @@ export const transformBackendToFrontend = (backendCharacter) => {
     // DRF returns vice as FK id (number); nested name is on vice_info (see CharacterSerializer)
     vice: backendCharacter.vice_info?.name || backendCharacter.vice?.name || '',
     viceDetails: backendCharacter.vice_details || '',
-    crew: backendCharacter.crew?.name || '',
+    crew: backendCharacter.crew?.name || backendCharacter.personal_crew_name || '',
     crewId: backendCharacter.crew?.id ?? null,
+    personal_crew_name: backendCharacter.personal_crew_name || '',
     image_url: backendCharacter.image_url || '',
     image: resolveMediaUrl(backendCharacter.image || backendCharacter.image_url || ''),
 
@@ -719,5 +720,11 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     // Heritage benefits and detriments (arrays of IDs)
     selected_benefits: Array.isArray(frontendCharacter.selected_benefits) ? frontendCharacter.selected_benefits : [],
     selected_detriments: Array.isArray(frontendCharacter.selected_detriments) ? frontendCharacter.selected_detriments : [],
+
+    // Solo / no campaign crew: stored on Character; cleared when linked to a Crew
+    personal_crew_name:
+      frontendCharacter.crewId != null && frontendCharacter.crewId !== ''
+        ? ''
+        : String(frontendCharacter.crew ?? frontendCharacter.personal_crew_name ?? '').slice(0, 100),
   };
 };

@@ -19,15 +19,15 @@ You are a **dev server + tunnel** specialist for **jojo-ttrpg-platform**. Your j
 ## Prerequisites (verify or mention)
 
 - `ngrok` installed and configured (`ngrok config add-authtoken …` once per machine).
-- Python venv with backend dependencies. Prefer `scripts/start_dev.sh` conventions: `source ~/.virtualenvs/jojo/bin/activate` from repo docs; if that path fails, use the project’s usual venv.
+- Python venv with backend dependencies. Prefer `scripts/start_dev.sh` conventions: `source ~/git/jojo-ttrpg-platform/.venv/bin/activate` from repo docs; if that path fails, use the project’s usual venv.
 
 ## Terminal 1 — Django
 
 From the **repository root**:
 
 ```bash
-cd backend/src
-source ~/.virtualenvs/jojo/bin/activate
+cd cd ~/git/jojo-ttrpg-platform/backend/src
+source ~/git/jojo-ttrpg-platform/.venv/bin/activate
 python manage.py runserver 0.0.0.0:8000
 ```
 

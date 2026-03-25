@@ -808,18 +808,53 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                             value={charData.crew}
                             onChange={e => setCharData(p => ({ ...p, crew: e.target.value }))}
                             onBlur={async () => {
-                              const crewId = charData.crewId;
+                              if (!characterId) return;
                               const name = (charData.crew || '').trim();
-                              if (!crewId || !name) return;
-                              if (name === (character?.crew || '')) return;
+                              const crewCampaignId = (c) =>
+                                (typeof c?.campaign === 'object' ? c.campaign?.id : c?.campaign);
+
+                              if (charData.crewId) {
+                                if (name === (character?.crew || '')) return;
+                                try {
+                                  await crewAPI.patchCrew(charData.crewId, { name });
+                                  onCrewNameUpdated?.(name, charData.crewId, characterId);
+                                } catch (err) {
+                                  console.error('Failed to update crew name:', err);
+                                }
+                                return;
+                              }
+
+                              const cid = campaignId ? parseInt(String(campaignId), 10) : NaN;
+                              if (!Number.isFinite(cid)) {
+                                if (name === (character?.crew || '')) return;
+                                try {
+                                  await characterAPI.patchCharacter(characterId, { personal_crew_name: name });
+                                  setCharData((p) => ({ ...p, crew: name }));
+                                  onCrewNameUpdated?.(name, null, characterId);
+                                } catch (err) {
+                                  console.error('Failed to save crew name:', err);
+                                }
+                                return;
+                              }
+
+                              if (!name) return;
                               try {
-                                await crewAPI.patchCrew(crewId, { name });
-                                onCrewNameUpdated?.(name, crewId);
+                                const crews = await crewAPI.getCrews();
+                                let crewRow = (crews || []).find(
+                                  (c) => crewCampaignId(c) === cid && (c.name || '').trim() === name
+                                );
+                                if (!crewRow) {
+                                  crewRow = await crewAPI.createCrew({ name, campaign: cid });
+                                }
+                                await characterAPI.patchCharacter(characterId, { crew_id: crewRow.id });
+                                const resolvedName = crewRow.name || name;
+                                setCharData((p) => ({ ...p, crewId: crewRow.id, crew: resolvedName }));
+                                onCrewNameUpdated?.(resolvedName, crewRow.id, characterId);
                               } catch (err) {
-                                console.error('Failed to update crew name:', err);
+                                console.error('Failed to create/link crew:', err);
                               }
                             }}
-                            placeholder="Crew Name (shared across campaign)"
+                            placeholder="Crew name (shared in campaign when you are in one)"
                           />
                         </div>
                       </div>
