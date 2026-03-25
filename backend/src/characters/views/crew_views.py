@@ -4,7 +4,7 @@ from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 
 from ..models import Crew
 from ..serializers import CrewSerializer
@@ -14,7 +14,7 @@ class CrewViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Crew.objects.all()
     serializer_class = CrewSerializer
-    parser_classes = (MultiPartParser, FormParser)
+    parser_classes = (JSONParser, MultiPartParser, FormParser)
 
     def get_queryset(self):
         # Filter crews based on user permissions
@@ -28,58 +28,79 @@ class CrewViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='propose-name')
     def propose_name(self, request, pk=None):
-        """Propose a new name for the crew."""
+        """Propose a new name for the crew (consensus flow)."""
         crew = self.get_object()
-        proposed_name = request.data.get('name')
-        
+        proposed_name = (request.data.get('new_name') or request.data.get('name') or '').strip()
+
         if not proposed_name:
             return Response(
-                {'error': 'Crew name is required'}, 
+                {'error': 'Crew name is required'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Check if user is part of the crew
+
         if not self._is_crew_member(request.user, crew):
             return Response(
-                {'error': 'Only crew members can propose names'}, 
+                {'error': 'You are not a member of this crew.'},
                 status=status.HTTP_403_FORBIDDEN
             )
-        
-        # Update the proposed name
+
         crew.proposed_name = proposed_name
+        crew.proposed_by = request.user
+        crew.approved_by.clear()
+        crew.approved_by.add(request.user)
         crew.save()
-        
+
         return Response({
-            'message': f'Proposed name: {proposed_name}',
-            'proposed_name': proposed_name
+            'message': f'Proposed new name "{proposed_name}". Waiting for other members to approve.',
+            'proposed_name': proposed_name,
+            'proposed_by': request.user.username,
+            'approved_by': [u.username for u in crew.approved_by.all()],
         })
 
     @action(detail=True, methods=['post'], url_path='approve-name')
     def approve_name(self, request, pk=None):
-        """Approve the proposed crew name."""
+        """Crew members approve a proposed name; when all members have approved, rename."""
         crew = self.get_object()
-        
-        # Check if user is the GM of the campaign
-        if crew.campaign.gm != request.user and not request.user.is_staff:
-            return Response(
-                {'error': 'Only the GM can approve crew names'}, 
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
+        user = request.user
+
         if not crew.proposed_name:
             return Response(
-                {'error': 'No proposed name to approve'}, 
+                {'error': 'No name proposal is active.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        # Approve the name
-        crew.name = crew.proposed_name
-        crew.proposed_name = None
-        crew.save()
-        
+
+        if not self._is_crew_member(user, crew):
+            return Response(
+                {'error': 'You are not a member of this crew.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if user not in crew.approved_by.all():
+            crew.approved_by.add(user)
+            crew.save()
+
+        all_member_users = set(
+            crew.members.filter(user__isnull=False).values_list('user', flat=True)
+        )
+        approved_user_ids = set(crew.approved_by.values_list('id', flat=True))
+
+        if all_member_users.issubset(approved_user_ids):
+            crew.name = crew.proposed_name
+            crew.proposed_name = None
+            crew.proposed_by = None
+            crew.approved_by.clear()
+            crew.save()
+            return Response({
+                'message': f'Crew name changed to "{crew.name}" by consensus.',
+                'new_crew_name': crew.name,
+            })
+
+        remaining = len(all_member_users) - len(approved_user_ids)
         return Response({
-            'message': f'Crew name approved: {crew.name}',
-            'approved_name': crew.name
+            'message': f'You approved the name. Waiting for {remaining} more approvals.',
+            'proposed_name': crew.proposed_name,
+            'proposed_by': crew.proposed_by.username if crew.proposed_by else None,
+            'approved_by': [u.username for u in crew.approved_by.all()],
         })
 
     def perform_update(self, serializer):
@@ -88,6 +109,12 @@ class CrewViewSet(viewsets.ModelViewSet):
         # GM and staff can update anything
         if crew.campaign.gm == user or user.is_staff:
             serializer.save()
+            crew.refresh_from_db()
+            if 'name' in serializer.validated_data:
+                crew.proposed_name = None
+                crew.proposed_by = None
+                crew.save(update_fields=['proposed_name', 'proposed_by'])
+                crew.approved_by.clear()
             return
         # Crew members can update the crew name (syncs across all character/crew sheets)
         if self._is_crew_member(user, crew):

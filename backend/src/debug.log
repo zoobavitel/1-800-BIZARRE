@@ -4871,3 +4871,45 @@ Traceback (most recent call last):
            ^^^^^^^^^^^^^^^^^^^^^^^^^
 AssertionError: It is redundant to specify `source='xp_entries'` on field 'ListSerializer' in serializer 'SessionRecordsSerializer', because it is the same as the field name. Remove the `source` keyword argument.
 [INFO] 2026-03-25 23:03:02,163 characters.views.auth_views - Login successful: user=zoob ip=127.0.0.1
+[INFO] 2026-03-25 23:37:07,649 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-25 23:37:08,005 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-25 23:37:10,111 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-25 23:37:10,334 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-25 23:39:29,108 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-25 23:39:29,341 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-25 23:40:00,610 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-25 23:40:00,814 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-25 23:42:43,173 django.request - Unsupported Media Type: /api/crews/1/
+[WARNING] 2026-03-25 23:42:43,460 django.request - Unsupported Media Type: /api/crews/1/propose-name/
+[WARNING] 2026-03-25 23:42:43,461 django.request - Unsupported Media Type: /api/crews/1/
+[WARNING] 2026-03-25 23:42:43,743 django.request - Unsupported Media Type: /api/crews/1/propose-name/
+[WARNING] 2026-03-25 23:42:43,837 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-03-25 23:42:44,210 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-03-25 23:42:44,583 django.request - Unsupported Media Type: /api/crews/1/propose-name/
+[WARNING] 2026-03-25 23:42:44,585 django.request - Forbidden: /api/crews/1/approve-name/
+[WARNING] 2026-03-25 23:42:44,865 django.request - Unsupported Media Type: /api/crews/1/propose-name/
+[WARNING] 2026-03-25 23:42:45,148 django.request - Unsupported Media Type: /api/crews/1/propose-name/
+[WARNING] 2026-03-25 23:42:45,150 django.request - Forbidden: /api/crews/1/approve-name/
+[WARNING] 2026-03-25 23:42:45,430 django.request - Forbidden: /api/crews/1/approve-name/
+[WARNING] 2026-03-25 23:42:45,710 django.request - Unsupported Media Type: /api/crews/1/propose-name/
+[WARNING] 2026-03-25 23:42:45,712 django.request - Forbidden: /api/crews/1/approve-name/
+[WARNING] 2026-03-25 23:42:46,012 django.request - Unsupported Media Type: /api/crews/1/
+[WARNING] 2026-03-25 23:42:46,299 django.request - Unsupported Media Type: /api/crews/1/propose-name/
+[INFO] 2026-03-25 23:43:05,955 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/crew_views.py changed, reloading.
+[INFO] 2026-03-25 23:43:06,155 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-25 23:43:11,295 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/crew_views.py changed, reloading.
+[INFO] 2026-03-25 23:43:11,551 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-25 23:45:43,943 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-03-25 23:45:44,318 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-03-25 23:45:44,693 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-03-25 23:45:45,936 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-03-25 23:45:58,946 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-03-25 23:45:59,325 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-03-25 23:45:59,703 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-03-25 23:46:00,955 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-03-25 23:47:16,524 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-03-25 23:47:16,906 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-03-25 23:47:17,286 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-03-25 23:47:18,529 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-03-25 23:47:19,983 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-03-25 23:47:20,173 django.request - Not Found: /api/npcs/1/apply-effect/

@@ -102,6 +102,7 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
     viceDetails: payload.viceDetails ?? payload.vice_details ?? '',
     crew: payload.crew ?? '',
     crewId: payload.crewId ?? null,
+    personal_crew_name: payload.personal_crew_name ?? '',
     actionRatings: payload.actionRatings ?? {},
     standStats: payload.standStats ?? {},
     stressFilled: typeof payload.stressFilled === 'number' ? payload.stressFilled : 0,
@@ -312,13 +313,28 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
     });
   }, [activeCharTabId]);
 
-  const handleCrewNameUpdated = useCallback((crewName, crewId) => {
+  const handleCrewNameUpdated = useCallback((crewName, crewId, characterId) => {
     setCharTabs((prev) =>
-      prev.map((t) =>
-        t.character && t.character.crewId === crewId
-          ? { ...t, character: { ...t.character, crew: crewName } }
-          : t
-      )
+      prev.map((t) => {
+        if (!t.character) return t;
+        // Shared crew rename: update every open sheet that uses this crew (same campaign entity)
+        if (crewId != null && t.character.crewId === crewId) {
+          return { ...t, character: { ...t.character, crew: crewName, crewId } };
+        }
+        // Solo name or the tab that initiated the change
+        if (characterId != null && t.characterId === characterId) {
+          return {
+            ...t,
+            character: {
+              ...t.character,
+              crew: crewName,
+              personal_crew_name: crewId == null ? crewName : '',
+              ...(crewId != null ? { crewId } : {}),
+            },
+          };
+        }
+        return t;
+      })
     );
     loadCharacters();
   }, [loadCharacters]);
@@ -355,7 +371,11 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
         crew: payload.crew ?? savedFrontend.crew,
         crewId: payload.crewId ?? savedFrontend.crewId,
         image: savedFrontend.image,
-        image_url: savedFrontend.image_url,
+        image_url: payload.image_url ?? savedFrontend.image_url,
+        vice: payload.vice ?? savedFrontend.vice,
+        viceDetails: payload.viceDetails ?? payload.vice_details ?? savedFrontend.viceDetails,
+        personal_crew_name:
+          payload.personal_crew_name ?? savedFrontend.personal_crew_name ?? '',
       };
       updateActiveCharTab(merged.id, merged);
       await loadCharacters();
