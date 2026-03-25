@@ -1,3 +1,6 @@
+import json
+import time
+
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from django.contrib.auth.models import User
@@ -542,6 +545,31 @@ class CharacterSerializer(serializers.ModelSerializer):
         return character
     
     def update(self, instance, validated_data):
+        # #region agent log
+        try:
+            _req = self.context.get('request')
+            _files = list(getattr(_req, 'FILES', {}).keys()) if _req else []
+            with open('/home/z/git/jojo-ttrpg-platform/.cursor/debug-af48c2.log', 'a') as _f:
+                _f.write(json.dumps({
+                    'sessionId': 'af48c2',
+                    'hypothesisId': 'H1-H4',
+                    'location': 'serializers.py:CharacterSerializer.update:entry',
+                    'message': 'character update entry',
+                    'data': {
+                        'initial_custom_vice': self.initial_data.get('custom_vice'),
+                        'initial_vice': self.initial_data.get('vice'),
+                        'initial_vice_details_len': len(str(self.initial_data.get('vice_details') or '')),
+                        'validated_custom_vice': validated_data.get('custom_vice'),
+                        'validated_has_vice_key': 'vice' in validated_data,
+                        'validated_has_image_key': 'image' in validated_data,
+                        'instance_vice_id_before': getattr(instance, 'vice_id', None),
+                        'files_keys': _files,
+                    },
+                    'timestamp': int(time.time() * 1000),
+                }) + '\n')
+        except Exception:
+            pass
+        # #endregion
         custom_vice = validated_data.pop('custom_vice', None)
         vice_details = validated_data.pop('vice_details', None)
         hamon_ids = validated_data.pop('hamon_ability_ids', None)
@@ -559,7 +587,45 @@ class CharacterSerializer(serializers.ModelSerializer):
         if vice_details is not None:
             validated_data['vice_details'] = vice_details
 
+        # #region agent log
+        try:
+            with open('/home/z/git/jojo-ttrpg-platform/.cursor/debug-af48c2.log', 'a') as _f:
+                _f.write(json.dumps({
+                    'sessionId': 'af48c2',
+                    'hypothesisId': 'H2-H3',
+                    'location': 'serializers.py:CharacterSerializer.update:before_super',
+                    'message': 'after vice branch, before super().update',
+                    'data': {
+                        'custom_vice_popped': custom_vice,
+                        'validated_vice_fk': str(validated_data.get('vice')) if validated_data.get('vice') is not None else None,
+                        'will_set_vice_from_custom': bool(custom_vice),
+                    },
+                    'timestamp': int(time.time() * 1000),
+                }) + '\n')
+        except Exception:
+            pass
+        # #endregion
+
         character = super().update(instance, validated_data)
+
+        # #region agent log
+        try:
+            with open('/home/z/git/jojo-ttrpg-platform/.cursor/debug-af48c2.log', 'a') as _f:
+                _f.write(json.dumps({
+                    'sessionId': 'af48c2',
+                    'hypothesisId': 'H3-H4',
+                    'location': 'serializers.py:CharacterSerializer.update:after_super',
+                    'message': 'after super().update',
+                    'data': {
+                        'character_vice_id': character.vice_id,
+                        'character_image': bool(character.image),
+                        'image_name': getattr(character.image, 'name', '')[:120] if character.image else '',
+                    },
+                    'timestamp': int(time.time() * 1000),
+                }) + '\n')
+        except Exception:
+            pass
+        # #endregion
 
         # Sync Stand stats when coin_stats or stand data is provided
         if coin_stats and isinstance(coin_stats, dict):

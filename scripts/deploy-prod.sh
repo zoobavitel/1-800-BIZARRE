@@ -25,6 +25,13 @@ cd backend
 pip install -r requirements-prod.txt
 
 # Database operations
+echo "💾 Backing up database before migrations..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if ! "$SCRIPT_DIR/backup-database.sh"; then
+    echo "❌ Database backup failed; aborting deploy."
+    exit 1
+fi
+
 echo "🗄️ Running database migrations..."
 cd src
 python manage.py migrate

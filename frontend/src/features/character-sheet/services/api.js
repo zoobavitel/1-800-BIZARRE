@@ -325,9 +325,15 @@ function buildMultipartOrJson(data) {
       if (v == null) continue;
       fd.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7322/ingest/da3c2fbe-bf33-4e52-b5b5-b4e8c790d437', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'af48c2' }, body: JSON.stringify({ sessionId: 'af48c2', location: 'api.js:buildMultipartOrJson', message: 'multipart build', data: { hasCustomVice: 'custom_vice' in data && data.custom_vice != null, customViceVal: data.custom_vice != null ? String(data.custom_vice).slice(0, 40) : '', fdHasImage: true }, timestamp: Date.now(), hypothesisId: 'H4' }) }).catch(() => {});
+    // #endregion
     return { multipart: true, body: fd };
   }
   const { imageFile, ...rest } = data;
+  // #region agent log
+  fetch('http://127.0.0.1:7322/ingest/da3c2fbe-bf33-4e52-b5b5-b4e8c790d437', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'af48c2' }, body: JSON.stringify({ sessionId: 'af48c2', location: 'api.js:buildMultipartOrJson', message: 'json build', data: { hasCustomVice: 'custom_vice' in rest, customViceSample: rest.custom_vice != null ? String(rest.custom_vice).slice(0, 40) : '' }, timestamp: Date.now(), hypothesisId: 'H4' }) }).catch(() => {});
+  // #endregion
   return { multipart: false, body: JSON.stringify(rest) };
 }
 
