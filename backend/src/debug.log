@@ -4913,3 +4913,193 @@ AssertionError: It is redundant to specify `source='xp_entries'` on field 'ListS
 [WARNING] 2026-03-25 23:47:18,529 django.request - Bad Request: /api/crews/1/approve-name/
 [WARNING] 2026-03-25 23:47:19,983 django.request - Bad Request: /api/npcs/1/apply-effect/
 [WARNING] 2026-03-25 23:47:20,173 django.request - Not Found: /api/npcs/1/apply-effect/
+[INFO] 2026-03-25 23:48:23,776 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-25 23:48:38,927 django.request - Forbidden: /api/
+[INFO] 2026-03-25 23:49:43,136 characters.views.auth_views - Login successful: user=zoob ip=127.0.0.1
+[WARNING] 2026-03-25 23:49:47,172 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-25 23:49:47,172 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-25 23:51:18,783 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-25 23:51:18,784 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-25 23:53:00,908 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-25 23:53:00,908 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-25 23:53:09,438 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-25 23:53:09,439 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-25 23:53:16,107 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-25 23:53:16,107 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-25 23:53:19,102 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-25 23:53:19,102 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-25 23:53:49,278 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-25 23:53:49,278 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-26 00:01:37,618 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-26 00:01:37,618 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-26 00:02:03,238 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-03-26 00:02:03,613 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-03-26 00:02:03,987 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-03-26 00:02:05,216 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-03-26 00:02:06,644 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-03-26 00:02:06,832 django.request - Not Found: /api/npcs/1/apply-effect/
+[WARNING] 2026-03-26 00:02:49,024 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-03-26 00:02:49,408 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-03-26 00:02:49,788 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-03-26 00:02:51,038 django.request - Bad Request: /api/crews/1/approve-name/
+[ERROR] 2026-03-26 01:28:18,990 django.request - Internal Server Error: /api/sessions/3/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 56, in retrieve
+    return Response(serializer.data)
+                    ^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 573, in data
+    ret = super().data
+          ^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 251, in data
+    self._data = self.to_representation(self.instance)
+                 ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 525, in to_representation
+    for field in fields:
+                 ^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 386, in _readable_fields
+    for field in self.fields.values():
+                 ^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/utils/functional.py", line 47, in __get__
+    res = instance.__dict__[self.name] = self.func(instance)
+                                         ~~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 375, in fields
+    fields[key] = value
+    ~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/utils/serializer_helpers.py", line 167, in __setitem__
+    field.bind(field_name=key, parent=self.serializer)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/fields.py", line 358, in bind
+    assert self.source != field_name, (
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: It is redundant to specify `source='xp_entries'` on field 'ListSerializer' in serializer 'SessionRecordsSerializer', because it is the same as the field name. Remove the `source` keyword argument.
+[ERROR] 2026-03-26 01:46:05,452 django.request - Internal Server Error: /api/sessions/4/
+Traceback (most recent call last):
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/exception.py", line 55, in inner
+    response = get_response(request)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/core/handlers/base.py", line 197, in _get_response
+    response = wrapped_callback(request, *callback_args, **callback_kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/views/decorators/csrf.py", line 65, in _view_wrapper
+    return view_func(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/viewsets.py", line 125, in view
+    return self.dispatch(request, *args, **kwargs)
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 515, in dispatch
+    response = self.handle_exception(exc)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 475, in handle_exception
+    self.raise_uncaught_exception(exc)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 486, in raise_uncaught_exception
+    raise exc
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/views.py", line 512, in dispatch
+    response = handler(request, *args, **kwargs)
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/mixins.py", line 56, in retrieve
+    return Response(serializer.data)
+                    ^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 573, in data
+    ret = super().data
+          ^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 251, in data
+    self._data = self.to_representation(self.instance)
+                 ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 525, in to_representation
+    for field in fields:
+                 ^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 386, in _readable_fields
+    for field in self.fields.values():
+                 ^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/django/utils/functional.py", line 47, in __get__
+    res = instance.__dict__[self.name] = self.func(instance)
+                                         ~~~~~~~~~^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/serializers.py", line 375, in fields
+    fields[key] = value
+    ~~~~~~^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/utils/serializer_helpers.py", line 167, in __setitem__
+    field.bind(field_name=key, parent=self.serializer)
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/z/git/jojo-ttrpg-platform/.venv/lib/python3.14/site-packages/rest_framework/fields.py", line 358, in bind
+    assert self.source != field_name, (
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: It is redundant to specify `source='xp_entries'` on field 'ListSerializer' in serializer 'SessionRecordsSerializer', because it is the same as the field name. Remove the `source` keyword argument.
+[WARNING] 2026-03-26 03:50:50,953 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-26 03:50:50,954 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-26 03:55:41,865 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-03-26 03:55:42,255 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-03-26 03:55:42,644 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-03-26 03:55:43,925 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-03-26 03:55:45,392 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-03-26 03:55:45,585 django.request - Not Found: /api/npcs/1/apply-effect/
+[WARNING] 2026-03-26 03:59:38,320 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-26 03:59:38,321 django.request - Bad Request: /api/characters/
+[INFO] 2026-03-26 04:01:25,438 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-26 04:01:25,729 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:01:33,868 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-26 04:01:34,108 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:01:35,227 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-26 04:01:39,340 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:01:43,460 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-26 04:01:43,758 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:01:46,864 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-26 04:01:47,094 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:01:54,222 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/roll_helpers.py changed, reloading.
+[INFO] 2026-03-26 04:01:54,467 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:01:56,582 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/roll_views.py changed, reloading.
+[INFO] 2026-03-26 04:01:56,833 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:01:59,939 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/roll_views.py changed, reloading.
+[INFO] 2026-03-26 04:02:00,175 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:02:02,283 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/roll_views.py changed, reloading.
+[INFO] 2026-03-26 04:02:02,542 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:02:05,663 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-26 04:02:05,893 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-26 04:02:37,074 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-03-26 04:02:37,449 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-03-26 04:02:37,827 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-03-26 04:02:39,057 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-03-26 04:02:40,501 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-03-26 04:02:40,693 django.request - Not Found: /api/npcs/1/apply-effect/
+[INFO] 2026-03-26 04:02:51,251 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/npc_views.py changed, reloading.
+[INFO] 2026-03-26 04:02:51,466 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:06:33,782 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/models.py changed, reloading.
+[INFO] 2026-03-26 04:06:33,978 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:06:48,147 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-26 04:06:48,357 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:06:50,421 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
+[INFO] 2026-03-26 04:06:50,636 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:06:58,777 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/gameplay_views.py changed, reloading.
+[INFO] 2026-03-26 04:06:58,995 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:07:00,049 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/reference_views.py changed, reloading.
+[INFO] 2026-03-26 04:07:00,250 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:07:02,303 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-26 04:07:02,525 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:07:04,576 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-26 04:07:04,765 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:07:09,824 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/__init__.py changed, reloading.
+[INFO] 2026-03-26 04:07:10,033 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:07:22,135 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/gameplay_views.py changed, reloading.
+[INFO] 2026-03-26 04:07:22,345 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:07:24,441 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/group_action_views.py changed, reloading.
+[INFO] 2026-03-26 04:07:24,733 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-26 04:10:11,969 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-03-26 04:10:12,158 django.request - Not Found: /api/npcs/1/apply-effect/
+[WARNING] 2026-03-26 04:16:49,798 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-26 04:16:49,798 django.request - Bad Request: /api/characters/
+[WARNING] 2026-03-26 04:16:53,421 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
+[WARNING] 2026-03-26 04:16:53,422 django.request - Bad Request: /api/characters/
+[INFO] 2026-03-26 04:17:05,749 characters.views.auth_views - Login successful: user=zoob ip=127.0.0.1

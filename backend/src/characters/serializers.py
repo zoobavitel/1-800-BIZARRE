@@ -11,7 +11,7 @@ from .models import (
     CharacterHamonAbility, CharacterSpinAbility,
     CharacterHistory, ExperienceTracker, Session, SessionEvent, SessionNPCInvolvement,
     Claim, CrewPlaybook, CrewSpecialAbility, CrewUpgrade, XPHistory, StressHistory, ChatMessage,
-    Faction, ShowcasedNPC, ProgressClock, Roll
+    Faction, ShowcasedNPC, ProgressClock, Roll, GroupAction
 )
 class ClaimSerializer(serializers.ModelSerializer):
     class Meta:
@@ -207,12 +207,20 @@ class SessionEventSerializer(serializers.ModelSerializer):
 
 class ExperienceTrackerSerializer(serializers.ModelSerializer):
     character = serializers.PrimaryKeyRelatedField(queryset=Character.objects.all())
+    session = serializers.PrimaryKeyRelatedField(read_only=True, allow_null=True)
     trigger_display = serializers.CharField(source='get_trigger_display', read_only=True)
 
     class Meta:
         model = ExperienceTracker
-        fields = ['id', 'character', 'session_date', 'trigger', 'trigger_display', 'description', 'xp_gained']
-        read_only_fields = ['session_date']
+        fields = ['id', 'character', 'session', 'session_date', 'trigger', 'trigger_display', 'description', 'xp_gained']
+        read_only_fields = ['session_date', 'session']
+
+
+class GroupActionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GroupAction
+        fields = ['id', 'session', 'leader', 'goal_label', 'status', 'created_at']
+        read_only_fields = ['status', 'created_at']
 
 
 class RollSerializer(serializers.ModelSerializer):
@@ -224,10 +232,15 @@ class RollSerializer(serializers.ModelSerializer):
         model = Roll
         fields = [
             'id', 'character', 'character_name', 'session', 'roll_type', 'action_name',
-            'position', 'effect', 'dice_pool', 'results', 'outcome', 'description',
+            'position', 'effect', 'dice_pool', 'results', 'outcome', 'description', 'goal_label',
+            'group_action',
             'rolled_by', 'rolled_by_username', 'timestamp', 'xp_awarded'
         ]
-        read_only_fields = ['timestamp']
+        read_only_fields = ['timestamp', 'rolled_by']
+
+    def validate_effect(self, value):
+        from .roll_helpers import normalize_effect
+        return normalize_effect(value)
 
     def get_xp_awarded(self, obj):
         from .models import ExperienceTracker
@@ -903,6 +916,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             'show_position_effect_to_players': getattr(s, 'show_position_effect_to_players', True),
             'default_position': getattr(s, 'default_position', 'risky') or 'risky',
             'default_effect': getattr(s, 'default_effect', 'standard') or 'standard',
+            'roll_goal_label': getattr(s, 'roll_goal_label', '') or '',
             'session_npcs_with_clocks': session_npcs_with_clocks,
         }
 

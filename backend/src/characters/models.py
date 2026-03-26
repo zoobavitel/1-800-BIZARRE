@@ -1033,6 +1033,7 @@ class Session(models.Model):
     show_position_effect_to_players = models.BooleanField(default=True)
     default_position = models.CharField(max_length=20, default='risky', blank=True)
     default_effect = models.CharField(max_length=20, default='standard', blank=True)
+    roll_goal_label = models.CharField(max_length=300, blank=True, help_text='GM-set label for the current roll goal; copied to Roll on commit.')
 
     # Score proposal fields
     proposed_score_target = models.CharField(max_length=200, blank=True, null=True)
@@ -1153,7 +1154,7 @@ class Roll(models.Model):
     EFFECT_CHOICES = [
         ('limited', 'Limited'),
         ('standard', 'Standard'),
-        ('greater', 'Greater'),
+        ('extreme', 'Extreme'),
     ]
     OUTCOME_CHOICES = [
         ('CRITICAL_SUCCESS', 'Critical Success'),
@@ -1173,11 +1174,32 @@ class Roll(models.Model):
     results = models.JSONField(default=list, help_text='List of dice results')
     outcome = models.CharField(max_length=20, choices=OUTCOME_CHOICES)
     description = models.TextField(blank=True)
+    goal_label = models.CharField(max_length=300, blank=True, help_text='Goal or intent label for this roll (often from session roll_goal_label).')
+    group_action = models.ForeignKey(
+        'GroupAction', on_delete=models.SET_NULL, null=True, blank=True, related_name='rolls'
+    )
     rolled_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='rolls_made')
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.character.true_name} - {self.action_name} ({self.outcome})"
+
+
+class GroupAction(models.Model):
+    """BitD-style group action: multiple rolls, leader pays 1 stress per failed participant roll."""
+    STATUS_CHOICES = [
+        ('OPEN', 'Open'),
+        ('RESOLVED', 'Resolved'),
+    ]
+
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='group_actions')
+    leader = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='led_group_actions')
+    goal_label = models.CharField(max_length=300, blank=True)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default='OPEN')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"GroupAction {self.id} ({self.status}) — {self.goal_label or self.session.name}"
 
 
 class RollHistory(models.Model):

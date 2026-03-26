@@ -190,7 +190,8 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
     setFaction(npc?.faction ?? npc?.faction_id ?? '');
   }, [npc?.id, npc?.faction, npc?.faction_id]);
 
-  const campaignFactions = (campaign && campaigns?.find((c) => c.id == campaign || c.id === campaign?.id))?.factions || [];
+  const campaignId = typeof campaign === 'object' ? campaign?.id : campaign;
+  const campaignFactions = (campaignId != null && campaigns?.find((c) => c.id === campaignId))?.factions || [];
 
   // Crew / faction management fields
   const [contacts,     setContacts]     = useState(npc?.contacts     || []);

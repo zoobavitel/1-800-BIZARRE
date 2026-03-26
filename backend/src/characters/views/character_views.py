@@ -12,8 +12,14 @@ from django.core.exceptions import PermissionDenied
 import json
 
 import random
-from ..models import Campaign, Character, Session, Roll, RollHistory, ExperienceTracker
+from ..models import Campaign, Character, GroupAction, Session, Roll, RollHistory
 from ..parsers import MultipartJsonParser
+from ..roll_helpers import (
+    award_desperate_action_xp,
+    bump_effect,
+    normalize_effect,
+    normalize_position,
+)
 from ..serializers import CharacterSerializer
 
 
@@ -123,28 +129,41 @@ class CharacterViewSet(viewsets.ModelViewSet):
         """Roll dice for a character action. Supports position, effect, push (stress), and persists to Roll when session_id provided."""
         character = self.get_object()
         action_name = request.data.get('action')
-        position = (request.data.get('position') or 'risky').lower()
-        effect = (request.data.get('effect') or 'standard').lower()
         session_id = request.data.get('session_id')
         push_effect = request.data.get('push_effect', False)
         push_dice = request.data.get('push_dice', False)
         devil_bargain_dice = request.data.get('devil_bargain_dice', False)
         devil_bargain_note = request.data.get('devil_bargain_note', '')
         roll_type = request.data.get('roll_type', 'ACTION')
+        bonus_dice = int(request.data.get('bonus_dice') or 0)
+        ability_effect_steps = int(request.data.get('ability_effect_steps') or 0)
+        goal_label = (request.data.get('goal_label') or '').strip()
+        ability_bonuses = request.data.get('ability_bonuses')  # optional list for audit string
+        group_action_id = request.data.get('group_action_id')
 
-        # Normalize effect: 'great' -> 'greater'
-        if effect == 'great':
-            effect = 'greater'
-        if position not in ('controlled', 'risky', 'desperate'):
-            position = 'risky'
-        if effect not in ('limited', 'standard', 'greater'):
-            effect = 'standard'
+        stress_cost = 0
+        session = None
+        if session_id:
+            try:
+                session = Session.objects.get(id=session_id)
+                if character.campaign_id != session.campaign_id:
+                    return Response({'error': 'Session must belong to character\'s campaign.'}, status=status.HTTP_400_BAD_REQUEST)
+            except Session.DoesNotExist:
+                session = None
+
+        position = normalize_position(request.data.get('position'))
+        effect = normalize_effect(request.data.get('effect') or 'standard')
+        if session and roll_type.upper() == 'ACTION':
+            position = normalize_position(session.default_position)
+            effect = normalize_effect(session.default_effect)
+            gl = (getattr(session, 'roll_goal_label', None) or '').strip()
+            if gl and not goal_label:
+                goal_label = gl
 
         # Fortune roll: GM sets dice_pool directly; no action/incapacitated/push
         if roll_type.upper() == 'FORTUNE':
             action_name = action_name or 'Fortune'
             dice_pool = max(1, min(6, int(request.data.get('dice_pool', 2))))
-            stress_cost = 0
             action_rating = 0
             attribute_dice = 0
         else:
@@ -160,7 +179,6 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 )
 
             # Push costs 2 stress each
-            stress_cost = 0
             if push_effect:
                 stress_cost += 2
             if push_dice:
@@ -172,12 +190,10 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # Apply push: +1 effect tier
-            effect_order = ['limited', 'standard', 'greater']
-            if push_effect and effect in effect_order:
-                idx = effect_order.index(effect)
-                if idx < len(effect_order) - 1:
-                    effect = effect_order[idx + 1]
+            if push_effect:
+                effect = bump_effect(effect, 1)
+            if ability_effect_steps:
+                effect = bump_effect(effect, ability_effect_steps)
 
         # Get action rating from action_dots (flat or nested) - skip for FORTUNE
         if roll_type.upper() != 'FORTUNE':
@@ -212,6 +228,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 dice_pool += 1
             if devil_bargain_dice:
                 dice_pool += 1
+            dice_pool += max(0, bonus_dice)
 
         dice_results = [random.randint(1, 6) for _ in range(max(1, dice_pool))] if dice_pool > 0 else [0]
         max_result = max(dice_results) if dice_results else 0
@@ -227,64 +244,47 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
         # Deduct stress for push
         if stress_cost > 0:
+            current_stress = getattr(character, 'stress', 0) or 0
             character.stress = max(0, current_stress - stress_cost)
             character.save(update_fields=['stress'])
 
         roll = None
         xp_awarded = 0
         xp_track = None
-        if session_id:
-            try:
-                session = Session.objects.get(id=session_id)
-                if character.campaign_id != session.campaign_id:
-                    return Response({'error': 'Session must belong to character\'s campaign.'}, status=status.HTTP_400_BAD_REQUEST)
-                desc = f"{action_name} roll"
-                if devil_bargain_note:
-                    desc += f" [Devil's bargain: {devil_bargain_note}]"
-                roll = Roll.objects.create(
-                    character=character,
-                    session=session,
-                    roll_type=roll_type,
-                    action_name=action_name,
-                    position=position,
-                    effect=effect,
-                    dice_pool=dice_pool,
-                    results=dice_results,
-                    outcome=outcome,
-                    description=desc,
-                    rolled_by=request.user
-                )
-                RollHistory.objects.create(campaign=session.campaign, roll=roll)
+        if session:
+            desc = f"{action_name} roll"
+            if devil_bargain_note:
+                desc += f" [Devil's bargain: {devil_bargain_note}]"
+            if ability_bonuses and isinstance(ability_bonuses, list):
+                desc += f" [Abilities: {ability_bonuses}]"
+            elif isinstance(ability_bonuses, str) and ability_bonuses.strip():
+                desc += f" [Abilities: {ability_bonuses.strip()}]"
+            ga_obj = None
+            if group_action_id:
+                ga_obj = GroupAction.objects.filter(
+                    id=group_action_id, session=session, status='OPEN'
+                ).first()
+            roll = Roll.objects.create(
+                character=character,
+                session=session,
+                roll_type=roll_type,
+                action_name=action_name or '',
+                position=position,
+                effect=effect,
+                dice_pool=dice_pool,
+                results=dice_results,
+                outcome=outcome,
+                description=desc,
+                goal_label=goal_label or '',
+                group_action=ga_obj,
+                rolled_by=request.user,
+            )
+            RollHistory.objects.create(campaign=session.campaign, roll=roll)
 
-                # Auto-award 1 XP for desperate action rolls (SRD)
-                if position == 'desperate' and roll_type.upper() == 'ACTION' and action_name:
-                    action_lower = action_name.lower()
-                    track = None
-                    if action_lower in ['hunt', 'study', 'survey', 'tinker']:
-                        track = 'insight'
-                    elif action_lower in ['finesse', 'prowl', 'skirmish', 'wreck']:
-                        track = 'prowess'
-                    elif action_lower in ['bizarre', 'command', 'consort', 'sway']:
-                        track = 'resolve'
-                    if track:
-                        xp_clocks = character.xp_clocks or {}
-                        current = xp_clocks.get(track, 0)
-                        if current < 5:
-                            xp_clocks[track] = current + 1
-                            character.xp_clocks = xp_clocks
-                            character.save(update_fields=['xp_clocks'])
-                            ExperienceTracker.objects.create(
-                                character=character,
-                                session=session,
-                                roll=roll,
-                                trigger='DESPERATE_ROLL',
-                                description=f'Desperate roll: {action_name}',
-                                xp_gained=1
-                            )
-                            xp_awarded = 1
-                            xp_track = track
-            except Session.DoesNotExist:
-                pass
+            if position == 'desperate' and roll_type.upper() == 'ACTION' and action_name:
+                xp_awarded, xp_track = award_desperate_action_xp(
+                    character, session, roll, action_name, request.user
+                )
 
         return Response({
             'action': action_name,
@@ -298,8 +298,37 @@ class CharacterViewSet(viewsets.ModelViewSet):
             'outcome': outcome.lower().replace('_', ' '),
             'roll_id': roll.id if roll else None,
             'stress_spent': stress_cost,
-            'xp_gained': xp_awarded if session_id else 0,
+            'xp_gained': xp_awarded if session else 0,
             'xp_track': xp_track,
+            'group_action_id': roll.group_action_id if roll else None,
+        })
+
+    @action(detail=True, methods=['post'], url_path='assist-help')
+    def assist_help(self, request, pk=None):
+        """Help: another PC in the same crew spends 1 stress to assist the acting character."""
+        actor = self.get_object()
+        helper_id = request.data.get('helper_character_id')
+        if not helper_id:
+            return Response({'error': 'helper_character_id is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            helper = Character.objects.get(pk=helper_id)
+        except Character.DoesNotExist:
+            return Response({'error': 'Helper not found'}, status=status.HTTP_404_NOT_FOUND)
+        if actor.id == helper.id:
+            return Response({'error': 'Cannot help yourself'}, status=status.HTTP_400_BAD_REQUEST)
+        if actor.campaign_id != helper.campaign_id or not actor.campaign_id:
+            return Response({'error': 'Characters must be in the same campaign'}, status=status.HTTP_400_BAD_REQUEST)
+        if not actor.crew_id or actor.crew_id != helper.crew_id:
+            return Response({'error': 'Must be in the same crew to Help'}, status=status.HTTP_400_BAD_REQUEST)
+        hs = getattr(helper, 'stress', 0) or 0
+        if hs < 1:
+            return Response({'error': 'Helper has no stress to spend'}, status=status.HTTP_400_BAD_REQUEST)
+        helper.stress = hs - 1
+        helper.save(update_fields=['stress'])
+        return Response({
+            'helper_id': helper.id,
+            'helper_name': helper.true_name,
+            'helper_stress': helper.stress,
         })
 
     @action(detail=True, methods=['post'], url_path='indulge-vice')

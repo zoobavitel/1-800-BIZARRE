@@ -1,4 +1,5 @@
 #!/bin/bash
+# Prints a human deployment checklist (no side effects). See docs/codebase/scripts.md#production-deployment-checklistsh.
 
 # JoJo TTRPG - Production Deployment Checklist
 # Dynamic Ability Management System

@@ -3,7 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from ..models import (
     Heritage, Vice, Ability, Stand, StandAbility, HamonAbility, SpinAbility,
-    Trauma, CharacterHistory, ExperienceTracker
+    Trauma, CharacterHistory, Character, ExperienceTracker
 )
 from ..serializers import (
     HeritageSerializer, ViceSerializer, AbilitySerializer, StandSerializer,
@@ -73,17 +73,21 @@ class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
         return CharacterHistory.objects.filter(character__user=user)
 
 
-class ExperienceTrackerViewSet(viewsets.ModelViewSet):
+class ExperienceTrackerViewSet(viewsets.ReadOnlyModelViewSet):
+    """Desperate-roll and other tracked XP gains; read-only. Filter by ?character= (owner or GM)."""
     permission_classes = [IsAuthenticated]
+    queryset = ExperienceTracker.objects.all()
     serializer_class = ExperienceTrackerSerializer
 
     def get_queryset(self):
-        # Filter experience trackers based on user permissions
+        qs = ExperienceTracker.objects.all().select_related('character', 'session', 'character__campaign')
         user = self.request.user
         if user.is_staff:
-            return ExperienceTracker.objects.all()
-        return ExperienceTracker.objects.filter(character__user=user)
-
-    def perform_create(self, serializer):
-        # Set the creator as the current user
-        serializer.save(created_by=self.request.user) 
+            return qs
+        char_id = self.request.query_params.get('character')
+        if char_id:
+            char = Character.objects.filter(pk=char_id).select_related('campaign').first()
+            if char and (char.user_id == user.id or (char.campaign_id and char.campaign.gm_id == user.id)):
+                return qs.filter(character_id=char_id)
+            return ExperienceTracker.objects.none()
+        return qs.filter(character__user=user) 

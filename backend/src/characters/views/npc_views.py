@@ -9,8 +9,8 @@ from ..models import NPC
 from ..parsers import MultipartJsonParser
 from ..serializers import NPCSerializer
 
-# Effect level to clock ticks (SRD: Limited=1, Standard=2, Great/Greater=3)
-EFFECT_TO_TICKS = {'limited': 1, 'standard': 2, 'great': 3, 'greater': 3, 'extreme': 4}
+# Effect level to clock ticks (SRD: Limited=1, Standard=2, top tier=3; aligns with Roll effect "extreme")
+EFFECT_TO_TICKS = {'limited': 1, 'standard': 2, 'great': 3, 'greater': 3, 'extreme': 3}
 
 
 class NPCViewSet(viewsets.ModelViewSet):
@@ -43,7 +43,7 @@ class NPCViewSet(viewsets.ModelViewSet):
         """
         GM-only: Apply the effect of a roll to an NPC's clock. Players do not deal harm to NPCs;
         the GM uses this to tick vulnerability, harm, or narrative clocks based on player roll effect.
-        Effect → ticks: limited=1, standard=2, greater/great=3, extreme=4.
+        Effect → ticks: limited=1, standard=2, great/greater/extreme=3.
         """
         npc = self.get_object()
         if not self._user_can_edit_npc_clocks(request, npc):

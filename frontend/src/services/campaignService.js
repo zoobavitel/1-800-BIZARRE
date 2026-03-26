@@ -1,9 +1,9 @@
 import axios from 'axios';
-import { getApiBaseUrl } from '../config/apiConfig';
+import { requireApiBaseUrl } from '../config/apiConfig';
 
 const getCampaigns = async () => {
   try {
-    const base = getApiBaseUrl();
+    const base = requireApiBaseUrl();
     const headers = base.includes('ngrok') ? { 'ngrok-skip-browser-warning': '1' } : {};
     const response = await axios.get(`${base}/campaigns/`, { headers });
     return response.data;

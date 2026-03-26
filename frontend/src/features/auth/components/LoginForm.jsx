@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getStoredApiBaseUrl, setApiBaseUrl } from '../../../config/apiConfig';
+import { getApiBaseUrl, getStoredApiBaseUrl, setApiBaseUrl } from '../../../config/apiConfig';
 import { token, injectStyles, Divider, Label, TextInput } from './AuthFormShared';
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -9,6 +9,7 @@ const LoginForm = ({ onSwitchToSignup }) => {
   const [serverUrl, setServerUrl] = useState('');
   const [showServerUrl, setShowServerUrl] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [urlError, setUrlError] = useState('');
 
   const isLiveSite =
     typeof window !== 'undefined' && window.location.origin.includes('github.io');
@@ -26,12 +27,22 @@ const LoginForm = ({ onSwitchToSignup }) => {
     const value = e.target.value.trim();
     setServerUrl(e.target.value);
     setApiBaseUrl(value || null);
+    if (urlError) setUrlError('');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setIsLoading(true);
     clearError();
+    setUrlError('');
+    setApiBaseUrl(serverUrl.trim() || null);
+    if (!getApiBaseUrl()) {
+      setUrlError(
+        'Set the game server URL below (required on github.io). Locally use http://127.0.0.1:8000/api unless your host shared a tunnel URL.'
+      );
+      setShowServerUrl(true);
+      return;
+    }
+    setIsLoading(true);
     const result = await login(credentials);
     if (!result.success) setIsLoading(false);
   };
@@ -178,7 +189,7 @@ const LoginForm = ({ onSwitchToSignup }) => {
                 transition: 'transform 0.2s',
                 transform: showServerUrl ? 'rotate(90deg)' : 'rotate(0deg)',
               }}>▶</span>
-              Game server (optional)
+              Game server {isLiveSite ? '(required here)' : '(optional)'}
             </button>
 
             {showServerUrl && (
@@ -189,8 +200,15 @@ const LoginForm = ({ onSwitchToSignup }) => {
                   onChange={handleServerUrlChange}
                   placeholder="https://xxx.ngrok-free.app/api"
                 />
+                {urlError && (
+                  <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: '#fca5a5', lineHeight: 1.5 }}>
+                    {urlError}
+                  </p>
+                )}
                 <p style={{ marginTop: 6, marginBottom: 0, fontSize: 11.5, color: '#3d3d5c', lineHeight: 1.5 }}>
-                  Leave blank for localhost. When playing remotely, the host runs the backend and shares their URL.
+                  {isLiveSite
+                    ? 'Paste the URL your host sends (must include /api). This site has no baked-in API host.'
+                    : 'Leave blank to use http://127.0.0.1:8000/api (local dev). When playing remotely, use the host’s tunnel URL.'}
                 </p>
               </div>
             )}

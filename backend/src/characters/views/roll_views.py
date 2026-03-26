@@ -1,11 +1,13 @@
-"""RollViewSet for dice roll history; GM can PATCH position/effect and grant XP."""
+"""RollViewSet for dice roll history; GM can PATCH position/effect, create manual rolls, grant XP."""
 from django.db import models
+from django.shortcuts import get_object_or_404
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from ..models import Roll, ExperienceTracker
+from ..models import Character, ExperienceTracker, Roll, RollHistory, Session
+from ..roll_helpers import award_desperate_action_xp, normalize_effect, outcome_from_dice_results
 from ..serializers import RollSerializer
 
 
@@ -50,10 +52,9 @@ class RollViewSet(viewsets.ModelViewSet):
         if position and position in ('controlled', 'risky', 'desperate'):
             updates['position'] = position
         if effect:
-            if effect == 'great':
-                effect = 'greater'
-            if effect in ('limited', 'standard', 'greater'):
-                updates['effect'] = effect
+            ne = normalize_effect(effect)
+            if ne in ('limited', 'standard', 'extreme'):
+                updates['effect'] = ne
         if updates:
             for k, v in updates.items():
                 setattr(roll, k, v)
@@ -80,41 +81,57 @@ class RollViewSet(viewsets.ModelViewSet):
                 {'error': 'XP already awarded for this roll.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        action_name = (roll.action_name or '').lower()
-        track = None
-        if action_name in ['hunt', 'study', 'survey', 'tinker']:
-            track = 'insight'
-        elif action_name in ['finesse', 'prowl', 'skirmish', 'wreck']:
-            track = 'prowess'
-        elif action_name in ['bizarre', 'command', 'consort', 'sway']:
-            track = 'resolve'
-        if not track:
-            return Response(
-                {'error': f'Cannot map action "{roll.action_name}" to an attribute.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
         character = roll.character
-        xp_clocks = character.xp_clocks or {}
-        current = xp_clocks.get(track, 0)
-        if current >= 5:
+        xp_awarded, track = award_desperate_action_xp(
+            character, roll.session, roll, roll.action_name, request.user
+        )
+        if not xp_awarded or not track:
             return Response(
-                {'error': f'{track} track is already at cap (5).'},
+                {'error': f'Cannot map action "{roll.action_name}" to an attribute or track is capped.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        xp_clocks[track] = current + 1
-        character.xp_clocks = xp_clocks
-        character.save(update_fields=['xp_clocks'])
-        ExperienceTracker.objects.create(
-            character=character,
-            session=roll.session,
-            roll=roll,
-            trigger='DESPERATE_ROLL',
-            description=f'Desperate roll: {roll.action_name}',
-            xp_gained=1
-        )
+        xp_clocks = character.xp_clocks or {}
         return Response({
             'success': True,
             'track': track,
             'amount': 1,
-            'new_total': xp_clocks[track],
+            'new_total': xp_clocks.get(track, 0),
         })
+
+    def create(self, request, *args, **kwargs):
+        """GM-only: create a manual roll (offline dice) for a character in a session."""
+        session_id = request.data.get('session')
+        character_id = request.data.get('character')
+        if not session_id or not character_id:
+            return Response(
+                {'error': 'character and session are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        session = get_object_or_404(Session, pk=session_id)
+        character = get_object_or_404(Character, pk=character_id)
+        if character.campaign_id != session.campaign_id:
+            return Response(
+                {'error': 'Character must belong to session campaign.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if session.campaign.gm_id != request.user.id and not request.user.is_staff:
+            return Response(
+                {'error': 'Only the GM can create manual rolls.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        roll = serializer.save(rolled_by=self.request.user)
+        results = roll.results or []
+        if not roll.outcome and results:
+            roll.outcome = outcome_from_dice_results(results)
+            roll.save(update_fields=['outcome'])
+        RollHistory.objects.get_or_create(
+            roll=roll,
+            defaults={'campaign': roll.session.campaign},
+        )
+        if roll.position == 'desperate' and roll.roll_type == 'ACTION' and roll.action_name:
+            award_desperate_action_xp(
+                roll.character, roll.session, roll, roll.action_name, self.request.user
+            )

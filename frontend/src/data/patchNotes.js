@@ -4,6 +4,31 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-03-25",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Refactor agent rules and enhance character management features",
+          "Update logging and backup procedures; enhance character update handling"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-03-23",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Update database and log files; enhance character model and API interactions"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-03-18",
     "version": null,
     "sections": [

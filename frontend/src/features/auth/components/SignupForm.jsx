@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { getStoredApiBaseUrl, setApiBaseUrl } from '../../../config/apiConfig';
+import { getApiBaseUrl, getStoredApiBaseUrl, setApiBaseUrl } from '../../../config/apiConfig';
 import { token, injectStyles, Divider, Label, TextInput } from './AuthFormShared';
 
 const SignupForm = ({ onSwitchToLogin }) => {
@@ -29,6 +29,9 @@ const SignupForm = ({ onSwitchToLogin }) => {
     const value = e.target.value.trim();
     setServerUrl(e.target.value);
     setApiBaseUrl(value || null);
+    if (validationErrors.serverUrl) {
+      setValidationErrors((prev) => ({ ...prev, serverUrl: '' }));
+    }
   };
 
   const validateForm = () => {
@@ -58,9 +61,19 @@ const SignupForm = ({ onSwitchToLogin }) => {
     if (!validateForm()) {
       return;
     }
-    
+
+    setApiBaseUrl(serverUrl.trim() || null);
+    if (!getApiBaseUrl()) {
+      setValidationErrors({
+        serverUrl:
+          'Set the game server URL under Game server (required on github.io; locally http://127.0.0.1:8000/api).',
+      });
+      setShowServerUrl(true);
+      return;
+    }
+
     setIsLoading(true);
-    
+
     const result = await signup({
       username: userData.username,
       password: userData.password
@@ -240,7 +253,7 @@ const SignupForm = ({ onSwitchToLogin }) => {
                 transition: 'transform 0.2s',
                 transform: showServerUrl ? 'rotate(90deg)' : 'rotate(0deg)',
               }}>▶</span>
-              Game server (optional)
+              Game server {isLiveSite ? '(required here)' : '(optional)'}
             </button>
 
             {showServerUrl && (
@@ -251,8 +264,15 @@ const SignupForm = ({ onSwitchToLogin }) => {
                   onChange={handleServerUrlChange}
                   placeholder="https://xxx.ngrok-free.app/api"
                 />
+                {validationErrors.serverUrl && (
+                  <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: '#fca5a5', lineHeight: 1.5 }}>
+                    {validationErrors.serverUrl}
+                  </p>
+                )}
                 <p style={{ marginTop: 6, marginBottom: 0, fontSize: 11.5, color: '#3d3d5c', lineHeight: 1.5 }}>
-                  Leave blank for localhost. When playing remotely, the host runs the backend and shares their URL.
+                  {isLiveSite
+                    ? 'Paste the URL your host sends (must include /api).'
+                    : 'Leave blank to use http://127.0.0.1:8000/api (local dev).'}
                 </p>
               </div>
             )}

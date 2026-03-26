@@ -1,5 +1,6 @@
 // API service for character sheet backend integration
 
+import { getApiBaseUrl, requireApiBaseUrl } from '../../../config/apiConfig';
 import { gradeToIndex, indexToGrade, DUR_TABLE, DEFAULT_TRAUMA } from '../constants/srd';
 
 /** Backend Character.playbook values */
@@ -30,7 +31,6 @@ function abilityIdsByType(abilities, type) {
     .filter((a) => a.type === type && (typeof a.id === 'number' || (typeof a.id === 'string' && /^\d+$/.test(a.id))))
     .map((a) => (typeof a.id === 'number' ? a.id : parseInt(a.id, 10)));
 }
-import { getApiBaseUrl } from '../../../config/apiConfig';
 
 /** Flatten DRF validation errors into a readable message. */
 function formatApiError(errorData, status, statusText) {
@@ -64,7 +64,7 @@ export function resolveMediaUrl(pathOrUrl) {
 const apiRequest = async (endpoint, options = {}) => {
   const token = localStorage.getItem('authToken');
   
-  const base = getApiBaseUrl();
+  const base = requireApiBaseUrl();
   const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = `${base}${path}`;
 
@@ -132,6 +132,12 @@ export const characterAPI = {
   rollAction: (id, actionData) => apiRequest(`/characters/${id}/roll-action/`, {
     method: 'POST',
     body: JSON.stringify(actionData),
+  }),
+
+  /** Crew Help: helper spends 1 stress (same crew). */
+  assistHelp: (id, helperCharacterId) => apiRequest(`/characters/${id}/assist-help/`, {
+    method: 'POST',
+    body: JSON.stringify({ helper_character_id: helperCharacterId }),
   }),
   
   // Add XP to character
@@ -301,7 +307,7 @@ export const crewAPI = {
 // Multipart request helper (for file uploads)
 const apiRequestMultipart = async (endpoint, formData, method = 'POST') => {
   const token = localStorage.getItem('authToken');
-  const base = getApiBaseUrl();
+  const base = requireApiBaseUrl();
   const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const url = `${base}${path}`;
   const headers = {};
@@ -325,15 +331,9 @@ function buildMultipartOrJson(data) {
       if (v == null) continue;
       fd.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7322/ingest/da3c2fbe-bf33-4e52-b5b5-b4e8c790d437', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'af48c2' }, body: JSON.stringify({ sessionId: 'af48c2', location: 'api.js:buildMultipartOrJson', message: 'multipart build', data: { hasCustomVice: 'custom_vice' in data && data.custom_vice != null, customViceVal: data.custom_vice != null ? String(data.custom_vice).slice(0, 40) : '', fdHasImage: true }, timestamp: Date.now(), hypothesisId: 'H4' }) }).catch(() => {});
-    // #endregion
     return { multipart: true, body: fd };
   }
   const { imageFile, ...rest } = data;
-  // #region agent log
-  fetch('http://127.0.0.1:7322/ingest/da3c2fbe-bf33-4e52-b5b5-b4e8c790d437', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'af48c2' }, body: JSON.stringify({ sessionId: 'af48c2', location: 'api.js:buildMultipartOrJson', message: 'json build', data: { hasCustomVice: 'custom_vice' in rest, customViceSample: rest.custom_vice != null ? String(rest.custom_vice).slice(0, 40) : '' }, timestamp: Date.now(), hypothesisId: 'H4' }) }).catch(() => {});
-  // #endregion
   return { multipart: false, body: JSON.stringify(rest) };
 }
 
@@ -412,12 +412,45 @@ export const rollAPI = {
     return apiRequest(`/rolls/${qs ? '?' + qs : ''}`);
   },
   getRoll: (id) => apiRequest(`/rolls/${id}/`),
+  createRoll: (data) => apiRequest('/rolls/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
   patchRoll: (id, data) => apiRequest(`/rolls/${id}/`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   }),
   grantXP: (id) => apiRequest(`/rolls/${id}/grant-xp/`, {
     method: 'POST',
+  }),
+};
+
+export const experienceTrackerAPI = {
+  list: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return apiRequest(`/experience-tracker/${qs ? '?' + qs : ''}`);
+  },
+};
+
+export const xpHistoryAPI = {
+  list: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return apiRequest(`/xp-history/${qs ? '?' + qs : ''}`);
+  },
+};
+
+export const groupActionAPI = {
+  list: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return apiRequest(`/group-actions/${qs ? '?' + qs : ''}`);
+  },
+  create: (data) => apiRequest('/group-actions/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }),
+  resolve: (id) => apiRequest(`/group-actions/${id}/resolve/`, {
+    method: 'POST',
+    body: JSON.stringify({}),
   }),
 };
 

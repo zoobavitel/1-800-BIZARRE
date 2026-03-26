@@ -6,7 +6,7 @@
  * CHARACTER TABS: each open character gets a named tab in the top bar,
  * sorted alphabetically (unsaved "New Character" tabs always sort first).
  */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   characterAPI,
   npcAPI,
@@ -350,11 +350,26 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
     if ((heritageValue == null || heritageValue === '') && heritages.length) {
       heritageValue = heritages[0].id;
     }
-    const toSend = transformFrontendToBackend({ ...frontend, heritage: heritageValue, campaign: payload.campaign ?? frontend.campaign });
+    // Backend rejects blank true_name; avoid hollow PUT if local name lagged behind loaded character
+    let nameForSave = String(frontend.name ?? '').trim();
+    if (!nameForSave) {
+      if (payload.id) {
+        const tab =
+          charTabs.find(
+            (t) => t.characterId === payload.id || t.character?.id === payload.id
+          ) || charTabs.find((t) => t.tabId === activeCharTabId);
+        nameForSave = String(tab?.character?.name ?? '').trim() || 'Unnamed';
+      } else {
+        nameForSave = 'Unnamed';
+      }
+    }
+    const toSend = transformFrontendToBackend({
+      ...frontend,
+      name: nameForSave,
+      heritage: heritageValue,
+      campaign: payload.campaign ?? frontend.campaign,
+    });
     const withFile = { ...toSend, ...(frontend.imageFile instanceof File ? { imageFile: frontend.imageFile } : {}) };
-    // #region agent log
-    fetch('http://127.0.0.1:7322/ingest/da3c2fbe-bf33-4e52-b5b5-b4e8c790d437', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'af48c2' }, body: JSON.stringify({ sessionId: 'af48c2', location: 'CharacterPage.jsx:handleSaveCharacter', message: 'save payload', data: { payloadId: payload.id, vice: frontend.vice, custom_vice: toSend.custom_vice, vice_key: toSend.vice, vice_details_len: String(toSend.vice_details || '').length, hasImageFile: frontend.imageFile instanceof File, keysHasCustomVice: 'custom_vice' in toSend }, timestamp: Date.now(), hypothesisId: 'H1-H5' }) }).catch(() => {});
-    // #endregion
     try {
       let saved;
       if (payload.id) {
@@ -383,7 +398,7 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
       console.error('Save character failed:', err);
       throw err;
     }
-  }, [traumas, heritages, loadCharacters, updateActiveCharTab]);
+  }, [traumas, heritages, loadCharacters, updateActiveCharTab, charTabs, activeCharTabId]);
 
   const handleSwitchCharacter = useCallback((character) => {
     if (!character) {
@@ -484,7 +499,15 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
 
   // ── Derived values ───────────────────────────────────────────────────────
   const activeCharTab = charTabs.find((t) => t.tabId === activeCharTabId);
-  const sheetCharacter = activeCharTab?.character ?? createDefaultCharacter();
+  // Ensure `id` is present for autosave PUT when tab has characterId but character object lagged (e.g. race).
+  const sheetCharacter = useMemo(() => {
+    const base = activeCharTab?.character ?? createDefaultCharacter();
+    const tid = activeCharTab?.characterId;
+    if (tid != null && base.id == null) {
+      return { ...base, id: tid };
+    }
+    return base;
+  }, [activeCharTab]);
   const activeNpcTab = npcTabs.find(t => t.tabId === activeNpcTabId);
 
   // ── Render ───────────────────────────────────────────────────────────────

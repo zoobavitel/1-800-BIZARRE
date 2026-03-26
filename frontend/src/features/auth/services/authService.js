@@ -1,11 +1,11 @@
 // Authentication service for user management
 
-import { getApiBaseUrl } from '../../../config/apiConfig';
+import { requireApiBaseUrl } from '../../../config/apiConfig';
 
 // Helper function for API requests
 const apiRequest = async (endpoint, options = {}) => {
   const token = localStorage.getItem('authToken');
-  const base = getApiBaseUrl();
+  const base = requireApiBaseUrl();
   const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const fullUrl = `${base}${path}`;
 
