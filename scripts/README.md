@@ -1,19 +1,32 @@
 # scripts/
 
-This directory contains various shell scripts used for automating common development, deployment, and setup tasks for the 1-800-BIZARRE platform. These scripts are designed to streamline workflows and ensure consistency across different environments.
+Shell scripts for setup, local development, database backup, and production deployment for the **1-800-BIZARRE** / **jojo-ttrpg-platform** monorepo.
+
+**Full documentation:** [docs/codebase/scripts.md](../docs/codebase/scripts.md) (purpose, usage, env vars, venv notes).
+
+## Scripts at a glance
+
+| Script | Role |
+|--------|------|
+| [setup.sh](setup.sh) | Initial install: npm, frontend deps, `backend/venv`, migrate, loaddata, `.env` stub |
+| [start_dev.sh](start_dev.sh) | Background Django + React; PIDs in `.dev_pids` (uses `~/.virtualenvs/jojo`) |
+| [backup-database.sh](backup-database.sh) | SQLite or PostgreSQL backup to `backups/` |
+| [deploy-prod.sh](deploy-prod.sh) | Prod deploy: backup, migrate, collectstatic, tests, gunicorn |
+| [production-deployment-checklist.sh](production-deployment-checklist.sh) | Prints a human checklist (no side effects) |
 
 ## Purpose
 
-The primary purpose of this directory is to:
-*   **Automate Repetitive Tasks**: Provide single commands to execute complex sequences of operations, such as deploying the application or setting up the development environment.
-*   **Standardize Workflows**: Ensure that common procedures are performed consistently by all developers and in automated environments (e.g., CI/CD).
-*   **Simplify Operations**: Reduce the manual effort and potential for human error in critical processes like deployment.
+- **Automate** multi-step tasks (setup, deploy, backup).
+- **Standardize** how developers and CI run the same flows.
+- **Document** operations in one place (see `docs/codebase/scripts.md`).
 
 ## Key Contents
 
-*   `deploy-prod.sh`: A shell script likely responsible for deploying the application to a production environment. This script would typically handle building the frontend, collecting static files for the backend, running database migrations, and restarting services.
-*   `production-deployment-checklist.sh`: A script that might outline or automate a checklist of tasks to be performed before or during a production deployment, ensuring all necessary steps are covered.
-*   `setup.sh`: A script for initial project setup, which could include installing dependencies for both frontend and backend, setting up environment variables, and performing initial database migrations.
+*   `setup.sh` — New clone / clean backend setup; creates `backend/venv` and loads fixtures.
+*   `start_dev.sh` — Optional alternative to `npm run dev`; different venv path than root `package.json`.
+*   `backup-database.sh` — Used standalone or from `deploy-prod.sh`.
+*   `deploy-prod.sh` — Production Django sequence with gunicorn (requires env secrets).
+*   `production-deployment-checklist.sh` — Echoed checklist for release verification.
 
 ## Code Quality and Structure
 

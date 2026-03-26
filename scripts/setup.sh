@@ -1,5 +1,5 @@
 #!/bin/bash
-# Development setup script
+# Development setup script. See docs/codebase/scripts.md#setupsh.
 
 set -e
 

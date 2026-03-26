@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { campaignAPI, characterAPI, factionAPI, npcAPI, sessionAPI, progressClockAPI, rollAPI, crewAPI } from '../features/character-sheet';
+import { PositionStack, EffectShapes, HistoryBranchIcon } from '../components/position-effect/PositionEffectIndicators';
 import { useAuth } from '../features/auth';
 
 const S = {
@@ -827,7 +828,7 @@ function DiceHistoryRow({ roll, showPositionEffect, onPatch, onGrantXP, isGM }) 
             <select style={S.select} value={eff} onChange={(e) => setEff(e.target.value)}>
               <option value="limited">Limited</option>
               <option value="standard">Standard</option>
-              <option value="greater">Greater</option>
+              <option value="extreme">Extreme</option>
             </select>
             <button onClick={handleSave} style={{ ...S.btn, fontSize: '10px', padding: '2px 6px' }}>Save</button>
             <button onClick={() => setEditing(false)} style={{ ...S.btn, fontSize: '10px', padding: '2px 6px' }}>Cancel</button>
@@ -1000,6 +1001,9 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
   const [characters, setCharacters] = useState([]);
   const [campaignNPCs, setCampaignNPCs] = useState([]);
   const [showPositionEffect, setShowPositionEffect] = useState(false);
+  const [showDiceHistoryPanel, setShowDiceHistoryPanel] = useState(false);
+  const [manualRoll, setManualRoll] = useState({ characterId: '', actionName: 'skirmish', diceStr: '4,5', outcome: 'FULL_SUCCESS' });
+  const [manualRollSaving, setManualRollSaving] = useState(false);
   const [fortuneDice, setFortuneDice] = useState(2);
   const [fortuneRolling, setFortuneRolling] = useState(false);
   const [error, setError] = useState(null);
@@ -1018,6 +1022,20 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
   }, [session?.id, campaign?.id, campaign?.wanted_stars]);
 
   const campaignChars = campaign?.campaign_characters || characters.map((c) => ({ id: c.id, true_name: c.true_name, ...c }));
+
+  const desperateRollCount = useMemo(
+    () => rolls.filter((r) => (r.roll_type || '') === 'ACTION' && (r.position || '').toLowerCase() === 'desperate').length,
+    [rolls]
+  );
+
+  const lastRollByCharacter = useMemo(() => {
+    const m = {};
+    (rolls || []).forEach((r) => {
+      const cid = r.character;
+      if (cid != null && m[cid] == null) m[cid] = r;
+    });
+    return m;
+  }, [rolls]);
 
   const handleWantedStars = async (stars) => {
     setWantedStars(stars);
@@ -1073,6 +1091,45 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
       onRefresh();
     } catch (e) {
       setError(e.message);
+    }
+  };
+
+  const handleManualRollCreate = async () => {
+    const cid = parseInt(manualRoll.characterId, 10);
+    if (!cid) {
+      setError('Choose a character for the manual roll.');
+      return;
+    }
+    const results = manualRoll.diceStr
+      .split(/[\s,]+/)
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => !Number.isNaN(n) && n >= 1 && n <= 6);
+    if (results.length === 0) {
+      setError('Enter dice results as numbers 1–6 (e.g. 4, 5).');
+      return;
+    }
+    setManualRollSaving(true);
+    setError(null);
+    try {
+      await rollAPI.createRoll({
+        character: cid,
+        session: session.id,
+        roll_type: 'ACTION',
+        action_name: (manualRoll.actionName || 'action').toLowerCase(),
+        position: sessionData?.default_position || 'risky',
+        effect: sessionData?.default_effect || 'standard',
+        dice_pool: results.length,
+        results,
+        outcome: manualRoll.outcome,
+        description: 'Manual / offline dice (GM)',
+      });
+      const next = await rollAPI.getRolls({ session: session.id });
+      setRolls(next || []);
+      onRefresh();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setManualRollSaving(false);
     }
   };
 
@@ -1154,9 +1211,31 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
         <button onClick={handleSetActiveSession} style={S.btnPrimary}>Set as current session (enable for players)</button>
       </div>
 
-      {/* Position & Effect visibility (GM control) */}
+      {/* Position & Effect + dice history toggle (GM control) */}
       <div style={S.card}>
-        <span style={S.sectionLbl}>Position & Effect (Player Visibility)</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+          <span style={S.sectionLbl}>Position & Effect (Player Visibility)</span>
+          <button
+            type="button"
+            onClick={() => setShowDiceHistoryPanel((x) => !x)}
+            title={showDiceHistoryPanel ? 'Hide dice history' : 'Show dice history'}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              background: showDiceHistoryPanel ? '#312e81' : '#1f2937',
+              border: '1px solid #4b5563',
+              borderRadius: 6,
+              padding: '6px 10px',
+              cursor: 'pointer',
+              color: '#e5e7eb',
+              fontSize: 11,
+            }}
+          >
+            <HistoryBranchIcon size={16} />
+            Dice history
+          </button>
+        </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', cursor: 'pointer' }}>
           <input
             type="checkbox"
@@ -1165,7 +1244,7 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
           />
           <span>Show position & effect to players on their character sheets</span>
         </label>
-        <div style={{ display: 'flex', gap: '16px', marginTop: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '16px', marginTop: '12px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <div>
             <span style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Default position</span>
             <select
@@ -1187,10 +1266,113 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
             >
               <option value="limited">Limited</option>
               <option value="standard">Standard</option>
-              <option value="greater">Greater</option>
+              <option value="extreme">Extreme</option>
             </select>
           </div>
+          <div style={{ flex: '1 1 220px' }}>
+            <span style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Roll goal label (players see in roll pool)</span>
+            <input
+              style={{ ...S.inp, width: '100%', maxWidth: 360 }}
+              value={sessionData?.roll_goal_label ?? ''}
+              onChange={(e) => setSessionData((p) => ({ ...p, roll_goal_label: e.target.value }))}
+              onBlur={(e) => handleUpdateSession({ roll_goal_label: e.target.value })}
+              placeholder="e.g. Quietly open the service door"
+            />
+          </div>
         </div>
+        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '12px' }}>
+          <PositionStack activePosition={sessionData?.default_position || 'risky'} readOnly />
+          <EffectShapes activeEffect={sessionData?.default_effect || 'standard'} readOnly />
+        </div>
+
+        {showDiceHistoryPanel && (
+          <div style={{ marginTop: '14px', padding: '12px', background: '#0d1117', borderRadius: '8px', border: '1px solid #374151' }}>
+            <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '8px' }}>
+              Desperate action rolls this session: <span style={{ color: '#f97316', fontWeight: 'bold' }}>{desperateRollCount}</span>
+            </div>
+            <label style={{ fontSize: '11px', marginBottom: '8px', display: 'block' }}>
+              <input type="checkbox" checked={showPositionEffect} onChange={(e) => setShowPositionEffect(e.target.checked)} />
+              {' '}Show position & effect on rows
+            </label>
+            {rolls.length === 0 ? (
+              <div style={{ color: '#6b7280', fontSize: '12px' }}>No rolls for this session.</div>
+            ) : (
+              rolls.map((r) => (
+                <DiceHistoryRow key={r.id} roll={r} showPositionEffect={showPositionEffect} onPatch={handlePatchRoll} onGrantXP={handleGrantXP} isGM />
+              ))
+            )}
+            <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid #1f2937' }}>
+              <span style={{ fontSize: '11px', color: '#a78bfa', fontWeight: 'bold', display: 'block', marginBottom: '8px' }}>Manual roll (offline dice)</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'flex-end', fontSize: '11px' }}>
+                <div>
+                  <span style={{ color: '#9ca3af', display: 'block', marginBottom: '2px' }}>Character</span>
+                  <select
+                    style={S.select}
+                    value={manualRoll.characterId}
+                    onChange={(e) => setManualRoll((p) => ({ ...p, characterId: e.target.value }))}
+                  >
+                    <option value="">—</option>
+                    {campaignChars.map((ch) => (
+                      <option key={ch.id} value={ch.id}>{ch.true_name || ch.name || `PC ${ch.id}`}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <span style={{ color: '#9ca3af', display: 'block', marginBottom: '2px' }}>Action</span>
+                  <input style={{ ...S.inp, width: 100 }} value={manualRoll.actionName} onChange={(e) => setManualRoll((p) => ({ ...p, actionName: e.target.value }))} />
+                </div>
+                <div>
+                  <span style={{ color: '#9ca3af', display: 'block', marginBottom: '2px' }}>Dice (1–6)</span>
+                  <input style={{ ...S.inp, width: 90 }} value={manualRoll.diceStr} onChange={(e) => setManualRoll((p) => ({ ...p, diceStr: e.target.value }))} placeholder="4, 5" />
+                </div>
+                <div>
+                  <span style={{ color: '#9ca3af', display: 'block', marginBottom: '2px' }}>Outcome</span>
+                  <select style={S.select} value={manualRoll.outcome} onChange={(e) => setManualRoll((p) => ({ ...p, outcome: e.target.value }))}>
+                    <option value="CRITICAL_SUCCESS">Critical</option>
+                    <option value="FULL_SUCCESS">Full</option>
+                    <option value="PARTIAL_SUCCESS">Partial</option>
+                    <option value="FAILURE">Failure</option>
+                    <option value="BOTCH">Botch</option>
+                  </select>
+                </div>
+                <button type="button" onClick={handleManualRollCreate} style={S.btnPrimary} disabled={manualRollSaving}>
+                  {manualRollSaving ? 'Saving...' : 'Add manual roll'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* GM visibility: last roll line per PC (v1 snapshot) */}
+      <div style={S.card}>
+        <span style={S.sectionLbl}>Player dice pools (last committed roll)</span>
+        <p style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px', marginBottom: '8px' }}>
+          Full pool sources are stored on each roll&apos;s description. This list shows the most recent roll per character in this session.
+        </p>
+        {campaignChars.length === 0 ? (
+          <div style={{ color: '#6b7280', fontSize: '12px' }}>No characters in campaign.</div>
+        ) : (
+          campaignChars.map((ch) => {
+            const lr = lastRollByCharacter[ch.id];
+            return (
+              <div key={ch.id} style={{ fontSize: '12px', padding: '6px 0', borderBottom: '1px solid #1f2937' }}>
+                <strong style={{ color: '#e5e7eb' }}>{ch.true_name || ch.name}</strong>
+                {lr ? (
+                  <span style={{ color: '#9ca3af' }}>
+                    {' '}
+                    — {lr.action_name} · {[].concat(lr.results || []).join(', ')} → {lr.outcome}
+                    {(lr.description || '').trim() ? (
+                      <span style={{ color: '#6b7280' }}> · {(lr.description || '').slice(0, 140)}{(lr.description || '').length > 140 ? '…' : ''}</span>
+                    ) : null}
+                  </span>
+                ) : (
+                  <span style={{ color: '#6b7280' }}> — No rolls yet.</span>
+                )}
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Wanted level */}
@@ -1308,22 +1490,6 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
 
       {/* Clocks */}
       <ClockManager clocks={clocks} setClocks={setClocks} campaignId={campaign.id} sessionId={session.id} setError={setError} />
-
-      {/* Dice history */}
-      <div style={S.card}>
-        <span style={S.sectionLbl}>Dice History</span>
-        <label style={{ fontSize: '11px', marginBottom: '8px', display: 'block' }}>
-          <input type="checkbox" checked={showPositionEffect} onChange={(e) => setShowPositionEffect(e.target.checked)} />
-          Show position & effect
-        </label>
-        {rolls.length === 0 ? (
-          <div style={{ color: '#6b7280' }}>No rolls for this session.</div>
-        ) : (
-          rolls.map((r) => (
-            <DiceHistoryRow key={r.id} roll={r} showPositionEffect={showPositionEffect} onPatch={handlePatchRoll} onGrantXP={handleGrantXP} isGM />
-          ))
-        )}
-      </div>
     </div>
   );
 }

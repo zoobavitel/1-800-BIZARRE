@@ -1,4 +1,5 @@
 #!/bin/bash
+# Background Django + React dev servers. See docs/codebase/scripts.md#start_devsh.
 
 # Get the absolute path of the project root directory
 PROJECT_ROOT=$(git rev-parse --show-toplevel)

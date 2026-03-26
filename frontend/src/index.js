@@ -88,63 +88,98 @@ function AppBar({ onHamburgerClick, onBack, pageTitle, rightContent }) {
   );
 }
 
+/** Positive integer id from hash segment, or null if missing/invalid. */
+function parseHashId(segment) {
+  if (!segment) return null;
+  const n = parseInt(segment, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/** Parse #hash into route state. Used for lazy useState (first paint) and on hashchange. */
+function routeStateFromHash(hash) {
+  const base = {
+    currentPage: 'home',
+    characterPageId: null,
+    campaignPageId: null,
+    npcPageId: null,
+    abilityFilter: null,
+    rulesSection: null,
+  };
+  if (!hash) return base;
+  if (hash === 'test') return { ...base, currentPage: 'test' };
+  if (hash === 'npcs' || hash.startsWith('npcs/')) {
+    const idPart = hash.replace(/^npcs\/?/, '');
+    return {
+      ...base,
+      currentPage: 'npcs',
+      npcPageId: parseHashId(idPart),
+    };
+  }
+  if (hash === 'search') return { ...base, currentPage: 'search' };
+  if (hash === 'notifications') return { ...base, currentPage: 'notifications' };
+  if (hash === 'messages') return { ...base, currentPage: 'messages' };
+  if (hash === 'account-settings') return { ...base, currentPage: 'account-settings' };
+  if (hash === 'character-options') return { ...base, currentPage: 'character-options' };
+  if (hash === 'patch-notes') return { ...base, currentPage: 'patch-notes' };
+  if (hash === 'licenses') return { ...base, currentPage: 'licenses' };
+  if (hash === 'rules' || hash.startsWith('rules-')) {
+    return {
+      ...base,
+      currentPage: 'rules',
+      rulesSection: hash === 'rules' ? null : hash.replace(/^rules-/, ''),
+    };
+  }
+  if (hash === 'campaigns' || hash.startsWith('campaigns/')) {
+    const idPart = hash.replace(/^campaigns\/?/, '');
+    return {
+      ...base,
+      currentPage: 'campaigns',
+      campaignPageId: parseHashId(idPart),
+    };
+  }
+  if (hash === 'abilities' || hash.startsWith('abilities-')) {
+    const filterPart = hash.replace(/^abilities-?/, '');
+    return {
+      ...base,
+      currentPage: 'abilities',
+      abilityFilter: filterPart || null,
+    };
+  }
+  if (hash === 'character' || hash.startsWith('character/')) {
+    const idPart = hash.replace(/^character\/?/, '');
+    return {
+      ...base,
+      currentPage: 'character',
+      characterPageId: parseHashId(idPart),
+    };
+  }
+  return base;
+}
+
 const App = () => {
   const { isAuthenticated, logout } = useAuth();
-  const [currentPage, setCurrentPage] = useState('home');
-  const [characterPageId, setCharacterPageId] = useState(null);
-  const [campaignPageId, setCampaignPageId] = useState(null);
-  const [npcPageId, setNpcPageId] = useState(null);
-  const [abilityFilter, setAbilityFilter] = useState(null);
+  const initialRoute =
+    typeof window !== 'undefined'
+      ? routeStateFromHash(window.location.hash.substring(1))
+      : routeStateFromHash('');
+  const [currentPage, setCurrentPage] = useState(initialRoute.currentPage);
+  const [characterPageId, setCharacterPageId] = useState(initialRoute.characterPageId);
+  const [campaignPageId, setCampaignPageId] = useState(initialRoute.campaignPageId);
+  const [npcPageId, setNpcPageId] = useState(initialRoute.npcPageId);
+  const [abilityFilter, setAbilityFilter] = useState(initialRoute.abilityFilter);
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [menuCharacters, setMenuCharacters] = useState([]);
-  const [rulesSection, setRulesSection] = useState(null);
+  const [rulesSection, setRulesSection] = useState(initialRoute.rulesSection);
 
   const parseHash = useCallback(() => {
-    const hash = window.location.hash.substring(1);
-    if (hash === 'test') { setCurrentPage('test'); setNpcPageId(null); return; }
-    if (hash === 'npcs' || hash.startsWith('npcs/')) {
-      setCurrentPage('npcs');
-      const idPart = hash.replace(/^npcs\/?/, '');
-      setNpcPageId(idPart ? parseInt(idPart, 10) : null);
-      return;
-    }
-    if (hash === 'search') { setCurrentPage('search'); setNpcPageId(null); return; }
-    if (hash === 'notifications') { setCurrentPage('notifications'); setNpcPageId(null); return; }
-    if (hash === 'messages') { setCurrentPage('messages'); setNpcPageId(null); return; }
-    if (hash === 'account-settings') { setCurrentPage('account-settings'); setNpcPageId(null); return; }
-    if (hash === 'character-options') { setCurrentPage('character-options'); setNpcPageId(null); return; }
-    if (hash === 'patch-notes') { setCurrentPage('patch-notes'); setNpcPageId(null); return; }
-    if (hash === 'licenses') { setCurrentPage('licenses'); setNpcPageId(null); return; }
-    if (hash === 'rules' || hash.startsWith('rules-')) {
-      setCurrentPage('rules');
-      setRulesSection(hash === 'rules' ? null : hash.replace(/^rules-/, ''));
-      setNpcPageId(null);
-      return;
-    }
-    if (hash === 'campaigns' || hash.startsWith('campaigns/')) {
-      setCurrentPage('campaigns');
-      const idPart = hash.replace(/^campaigns\/?/, '');
-      setCampaignPageId(idPart ? parseInt(idPart, 10) : null);
-      setNpcPageId(null);
-      return;
-    }
-    if (hash === 'abilities' || hash.startsWith('abilities-')) {
-      setCurrentPage('abilities');
-      const filterPart = hash.replace(/^abilities-?/, '');
-      setAbilityFilter(filterPart || null);
-      setNpcPageId(null);
-      return;
-    }
-    if (hash === 'character' || hash.startsWith('character/')) {
-      setCurrentPage('character');
-      const idPart = hash.replace(/^character\/?/, '');
-      setCharacterPageId(idPart ? parseInt(idPart, 10) : null);
-      setNpcPageId(null);
-      return;
-    }
-    setCurrentPage('home');
-    setNpcPageId(null);
+    const s = routeStateFromHash(window.location.hash.substring(1));
+    setCurrentPage(s.currentPage);
+    setCharacterPageId(s.characterPageId);
+    setCampaignPageId(s.campaignPageId);
+    setNpcPageId(s.npcPageId);
+    setAbilityFilter(s.abilityFilter);
+    setRulesSection(s.rulesSection);
   }, []);
 
   useEffect(() => {

@@ -1,5 +1,5 @@
-# Production deployment script
 #!/bin/bash
+# Production deployment (gunicorn, migrate, etc.). See docs/codebase/scripts.md#deploy-prodsh.
 
 echo "🚀 Starting production deployment..."
 

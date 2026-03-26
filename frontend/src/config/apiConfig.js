@@ -5,7 +5,15 @@
  */
 
 const STORAGE_KEY = 'apiBaseUrl';
-const DEFAULT_BASE = (process.env.REACT_APP_API_URL || 'http://localhost:8000/api').replace(/\/+$/, '');
+
+/** Explicit REACT_APP_API_URL in .env wins. Otherwise dev uses localhost; production has no default (github.io must use Server URL / localStorage). */
+const envApi = process.env.REACT_APP_API_URL;
+const hasEnvApi = typeof envApi === 'string' && envApi.trim() !== '';
+const DEFAULT_BASE = hasEnvApi
+  ? envApi.trim().replace(/\/+$/, '')
+  : process.env.NODE_ENV === 'production'
+    ? ''
+    : 'http://localhost:8000/api';
 
 /** Force https for ngrok (avoids SSL_ERROR_RX_RECORD_TOO_LONG from http://). */
 function ensureHttpsForNgrok(url) {
@@ -32,6 +40,17 @@ export function getApiBaseUrl() {
     return normalizeBaseUrl(stored);
   }
   return DEFAULT_BASE;
+}
+
+/** Throws if no API base is configured (empty production default and no localStorage). */
+export function requireApiBaseUrl() {
+  const base = getApiBaseUrl();
+  if (typeof base !== 'string' || !base.trim()) {
+    throw new Error(
+      'Game server URL is not set. On github.io, expand Server URL on the login page, enter your host’s API base (e.g. https://xxxx.ngrok-free.app/api), then sign in. Local play: http://127.0.0.1:8000/api'
+    );
+  }
+  return base.trim();
 }
 
 export function setApiBaseUrl(url) {

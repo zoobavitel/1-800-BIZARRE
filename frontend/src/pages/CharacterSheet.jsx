@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   GRADE,
   INDEX_TO_GRADE,
@@ -12,11 +12,11 @@ import {
   RESISTANCE_ATTR_DESC,
   VICE_OPTIONS,
   DEFAULT_TRAUMA,
-  TRAUMA_KEYS,
   DEVILS_BARGAIN_DETRIMENTS,
 } from '../features/character-sheet/constants/srd';
-import { characterAPI, campaignAPI, crewAPI, rollAPI, progressClockAPI, referenceAPI } from '../features/character-sheet';
+import { characterAPI, campaignAPI, crewAPI, rollAPI, progressClockAPI, referenceAPI, experienceTrackerAPI, xpHistoryAPI, groupActionAPI } from '../features/character-sheet';
 import { useAuth } from '../features/auth';
+import { PositionStack, EffectShapes, HistoryBranchIcon } from '../components/position-effect/PositionEffectIndicators';
 
 // ─── ProgressClock ────────────────────────────────────────────────────────────
 
@@ -164,6 +164,22 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     );
   }, [character?.id, character?.vice, character?.viceDetails, character?.vice_details]);
 
+  // When parent merges id before full GET/list row arrives, fill empty identity from server (avoid PUT wiping true_name, etc.)
+  useEffect(() => {
+    setCharData((prev) => {
+      const patch = {};
+      const n = character?.name ?? '';
+      if (n && !(prev.name || '').trim()) patch.name = n;
+      const sn = character?.standName ?? '';
+      if (sn && !(prev.standName || '').trim()) patch.standName = sn;
+      const bg = character?.background ?? '';
+      if (bg && !(prev.background || '').trim()) patch.background = bg;
+      const look = character?.look ?? '';
+      if (look && !(prev.look || '').trim()) patch.look = look;
+      return Object.keys(patch).length ? { ...prev, ...patch } : prev;
+    });
+  }, [character?.id, character?.name, character?.standName, character?.background, character?.look]);
+
   // Portrait: sync from server/merged character; do not clobber while a file upload is pending
   useEffect(() => {
     if (imageFile) return;
@@ -179,6 +195,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     if (resolved != null && resolved !== charData.heritage) {
       setCharData(prev => ({ ...prev, heritage: resolved }));
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- avoid loops; only re-resolve when heritages or API heritage changes
   }, [heritages, character?.heritage]);
 
   // Sync selected benefits/detriments when character changes (e.g. switching tabs)
@@ -235,6 +252,17 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     BIZARRE: 0, COMMAND: 0, CONSORT: 0, SWAY: 0,
   });
 
+  // Sync action dots when loaded character arrives (missing sync caused blank action_dots on save)
+  useEffect(() => {
+    const next = character?.actionRatings;
+    if (!next || typeof next !== 'object') return;
+    setActionRatings((prev) => {
+      const keys = [...new Set([...Object.keys(prev), ...Object.keys(next)])];
+      const changed = keys.some((k) => (Number(prev[k]) || 0) !== (Number(next[k]) || 0));
+      return changed ? { ...prev, ...next } : prev;
+    });
+  }, [character?.id, character?.actionRatings]);
+
   // Stress — tracked as filled count; max derived from Durability
   const [stressFilled, setStressFilled] = useState(character?.stressFilled || 0);
 
@@ -267,6 +295,62 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const [xp, setXp] = useState(character?.xp || {
     insight: 0, prowess: 0, resolve: 0, heritage: 0, playbook: 0,
   });
+
+  // Hydrate sheet from server when character payload arrives after first paint (same class of bug as actionRatings)
+  useEffect(() => {
+    const v = character?.stressFilled;
+    if (typeof v === 'number') setStressFilled((p) => (p !== v ? v : p));
+  }, [character?.id, character?.stressFilled]);
+
+  useEffect(() => {
+    const t = character?.trauma;
+    if (!t || typeof t !== 'object' || Array.isArray(t)) return;
+    setTrauma((prev) => {
+      const merged = { ...DEFAULT_TRAUMA, ...t };
+      return Object.keys(merged).every((k) => merged[k] === prev[k]) ? prev : merged;
+    });
+  }, [character?.id, character?.trauma]);
+
+  useEffect(() => {
+    const h = character?.harm || character?.harmEntries;
+    if (!h || typeof h !== 'object') return;
+    setHarm((prev) => {
+      const levels = ['level1', 'level2', 'level3'];
+      const same = levels.every((lv) => JSON.stringify(prev[lv]) === JSON.stringify(h[lv]));
+      return same ? prev : { ...prev, ...h };
+    });
+  }, [character?.id, character?.harm, character?.harmEntries]);
+
+  useEffect(() => {
+    const h = character?.healingClock;
+    if (typeof h !== 'number') return;
+    setHealingClock((p) => (p !== h ? h : p));
+  }, [character?.id, character?.healingClock]);
+
+  useEffect(() => {
+    const nx = character?.xp;
+    if (!nx || typeof nx !== 'object') return;
+    setXp((prev) => {
+      const keys = [...new Set([...Object.keys(prev), ...Object.keys(nx)])];
+      const changed = keys.some((k) => (prev[k] ?? 0) !== (nx[k] ?? 0));
+      return changed ? { ...prev, ...nx } : prev;
+    });
+  }, [character?.id, character?.xp]);
+
+  useEffect(() => {
+    if (typeof character?.coinFilled === 'number') {
+      setCoinFilled((p) => (p !== character.coinFilled ? character.coinFilled : p));
+    } else if (Array.isArray(character?.coin)) {
+      const n = character.coin.filter(Boolean).length;
+      setCoinFilled((p) => (p !== n ? n : p));
+    }
+    if (Array.isArray(character?.stash)) {
+      const st = character.stash;
+      setStashBoxes((prev) =>
+        prev.length === st.length && prev.every((v, i) => v === st[i]) ? prev : st
+      );
+    }
+  }, [character?.id, character?.coinFilled, character?.coin, character?.stash]);
 
   // Heritage benefits and detriments (arrays of IDs)
   const [selectedBenefits, setSelectedBenefits] = useState(
@@ -315,6 +399,11 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const [spinAbilitiesList, setSpinAbilitiesList] = useState([]);
   useEffect(() => {
     referenceAPI.getSpinAbilities().then((list) => setSpinAbilitiesList(list || [])).catch(() => setSpinAbilitiesList([]));
+  }, []);
+
+  const [hamonAbilitiesList, setHamonAbilitiesList] = useState([]);
+  useEffect(() => {
+    referenceAPI.getHamonAbilities().then((list) => setHamonAbilitiesList(list || [])).catch(() => setHamonAbilitiesList([]));
   }, []);
 
   // Sync abilities when character changes (e.g. switching tabs)
@@ -379,9 +468,13 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const [spinAbilitySelected, setSpinAbilitySelected] = useState(null);
   const [spinAbilityPickerOpen, setSpinAbilityPickerOpen] = useState(false);
   const spinAbilityPickerRef = useRef(null);
+  const [hamonAbilitySearch, setHamonAbilitySearch] = useState('');
+  const [hamonAbilitySelected, setHamonAbilitySelected] = useState(null);
+  const [hamonAbilityPickerOpen, setHamonAbilityPickerOpen] = useState(false);
+  const hamonAbilityPickerRef = useRef(null);
   const [expandedAbilityId, setExpandedAbilityId] = useState(null);
 
-  // Close standard / spin ability pickers when clicking outside
+  // Close standard / spin / hamon ability pickers when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (standardAbilityPickerRef.current && !standardAbilityPickerRef.current.contains(e.target)) {
@@ -394,6 +487,11 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
         setSpinAbilitySelected(null);
         setSpinAbilitySearch('');
       }
+      if (hamonAbilityPickerRef.current && !hamonAbilityPickerRef.current.contains(e.target)) {
+        setHamonAbilityPickerOpen(false);
+        setHamonAbilitySelected(null);
+        setHamonAbilitySearch('');
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -403,6 +501,9 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   useEffect(() => {
     if (prevPlaybookRef.current === 'Spin' && playbook !== 'Spin') {
       setAbilities((p) => p.filter((a) => a.type !== 'spin'));
+    }
+    if (prevPlaybookRef.current === 'Hamon' && playbook !== 'Hamon') {
+      setAbilities((p) => p.filter((a) => a.type !== 'hamon'));
     }
     prevPlaybookRef.current = playbook;
   }, [playbook]);
@@ -436,6 +537,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     0
   );
   const isSpinPlaybook = playbook === 'Spin';
+  const isHamonPlaybook = playbook === 'Hamon';
   const totalXP          = Object.values(xp).reduce((s, v) => s + v, 0);
   const dotsRemaining    = MAX_CREATION_DOTS - totalActionDots;
 
@@ -522,10 +624,22 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
 
   // Roll modal for campaign/session context (position, effect, push)
   const [rollPending, setRollPending] = useState(null);
-  const [rollModal, setRollModal] = useState({ position: 'risky', effect: 'standard', push_effect: false, push_dice: false, devil_bargain_dice: false, devil_bargain_note: '' });
+  const [rollModal, setRollModal] = useState({ push_effect: false, push_dice: false, devil_bargain_dice: false, devil_bargain_note: '' });
+  const [rollAbilityBoost, setRollAbilityBoost] = useState({});
   const [rollApiError, setRollApiError] = useState(null);
   const [sessionRolls, setSessionRolls] = useState([]);
   const [showPositionEffect, setShowPositionEffect] = useState(false);
+  const [showDiceHistoryPanel, setShowDiceHistoryPanel] = useState(false);
+  const [showXpHistoryModal, setShowXpHistoryModal] = useState(false);
+  const [xpTimelineLoading, setXpTimelineLoading] = useState(false);
+  const [xpTimelineError, setXpTimelineError] = useState(null);
+  const [xpTimelineRows, setXpTimelineRows] = useState([]);
+  const [activeGroupAction, setActiveGroupAction] = useState(null);
+  const [groupGoalDraft, setGroupGoalDraft] = useState('');
+  const [groupBusy, setGroupBusy] = useState(false);
+  const [helpTargetId, setHelpTargetId] = useState('');
+  const [helpBusy, setHelpBusy] = useState(false);
+  const [helpErr, setHelpErr] = useState(null);
   const [pendingPushDice, setPendingPushDice] = useState(false);
   const [showDevilsBargainModal, setShowDevilsBargainModal] = useState(false);
   const [pendingDevilsBargain, setPendingDevilsBargain] = useState(null);
@@ -542,19 +656,89 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     }
   }, [activeSessionId, characterId]);
 
+  useEffect(() => {
+    if (!showXpHistoryModal || !characterId) return;
+    setXpTimelineLoading(true);
+    setXpTimelineError(null);
+    const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
+    Promise.all([
+      experienceTrackerAPI.list({ character: characterId }).catch(() => []),
+      xpHistoryAPI.list({ character: characterId }).catch(() => []),
+    ])
+      .then(([et, xh]) => {
+        const rows = [
+          ...asArray(et).map((e) => ({
+            key: `t-${e.id}`,
+            when: e.session_date,
+            text: `${e.trigger_display || e.trigger || 'XP'}: ${e.description || ''} (+${e.xp_gained ?? 0} XP)`,
+          })),
+          ...asArray(xh).map((x) => ({
+            key: `h-${x.id}`,
+            when: x.timestamp,
+            text: `${x.reason || 'XP'} (+${x.amount ?? 0})`,
+          })),
+        ];
+        rows.sort((a, b) => new Date(b.when) - new Date(a.when));
+        setXpTimelineRows(rows);
+      })
+      .catch((e) => setXpTimelineError(e.message))
+      .finally(() => setXpTimelineLoading(false));
+  }, [showXpHistoryModal, characterId]);
+
+  const desperateActionRollCount = useMemo(
+    () =>
+      (sessionRolls || []).filter(
+        (r) => (r.roll_type || '') === 'ACTION' && (r.position || '').toLowerCase() === 'desperate'
+      ).length,
+    [sessionRolls]
+  );
+
+  const helpCandidates = useMemo(() => {
+    const roster = charCampaign?.campaign_characters || [];
+    const same = roster.filter((c) => c.id !== characterId && charData.crewId && c.crewId === charData.crewId);
+    if (same.length) return same;
+    return roster.filter((c) => c.id !== characterId);
+  }, [charCampaign?.campaign_characters, characterId, charData.crewId]);
+
+  const { bonusDiceFromAbilities, abilityEffectSteps, abilityBonusAudit } = useMemo(() => {
+    let d = 0;
+    let e = 0;
+    const audit = [];
+    (abilities || [])
+      .filter((a) => a.type === 'standard')
+      .forEach((ab) => {
+        const id = ab.id ?? ab.name;
+        const b = rollAbilityBoost[id];
+        if (!b) return;
+        if (b.dice) {
+          d += 1;
+          audit.push(`${ab.name}: +1d`);
+        }
+        if (b.effect) {
+          e += 1;
+          audit.push(`${ab.name}: +1 effect`);
+        }
+      });
+    return { bonusDiceFromAbilities: d, abilityEffectSteps: e, abilityBonusAudit: audit };
+  }, [abilities, rollAbilityBoost]);
+
   const handleRollWithSession = async () => {
     if (!rollPending || !characterId || !activeSessionId) return;
     setRollApiError(null);
+    const asd = charCampaign?.active_session_detail;
     try {
       const res = await characterAPI.rollAction(characterId, {
         action: rollPending.actionName.toLowerCase(),
         session_id: activeSessionId,
-        position: rollModal.position,
-        effect: rollModal.effect,
         push_effect: rollModal.push_effect,
         push_dice: rollModal.push_dice,
         devil_bargain_dice: rollModal.devil_bargain_dice,
         devil_bargain_note: rollModal.devil_bargain_note || undefined,
+        bonus_dice: bonusDiceFromAbilities,
+        ability_effect_steps: abilityEffectSteps,
+        goal_label: (asd?.roll_goal_label || '').trim() || undefined,
+        ability_bonuses: abilityBonusAudit.length ? abilityBonusAudit : undefined,
+        group_action_id: activeGroupAction?.id || undefined,
       });
       setDiceResult({
         action: rollPending.actionName,
@@ -565,10 +749,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
         isResistance: false,
         stressCost: res.stress_spent || null,
         zeroDice: (res.dice_results || []).length === 0,
-        isDesperateAction: rollModal.position === 'desperate',
+        isDesperateAction: (res.position || asd?.default_position || '').toLowerCase() === 'desperate',
         isCritical: (res.dice_results || []).filter((d) => d === 6).length >= 2,
-        position: res.position || rollModal.position,
-        effect: res.effect || rollModal.effect,
+        position: res.position || asd?.default_position,
+        effect: res.effect || asd?.default_effect,
         xpGained: res.xp_gained || 0,
       });
       if (res.xp_gained > 0 && res.xp_track) {
@@ -579,6 +763,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
       setPendingPushDice(false);
       setPendingDevilsBargain(null);
       setRollModal((p) => ({ ...p, devil_bargain_dice: false, devil_bargain_note: '' }));
+      setRollAbilityBoost({});
       rollAPI.getRolls({ session: activeSessionId, character: characterId }).then(setSessionRolls).catch(() => {});
     } catch (e) {
       setRollApiError(e.message);
@@ -589,10 +774,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const rollDice = (actionName, diceCount, isResistance = false, isDesperateAction = false) => {
     if (activeSessionId && characterId && !isResistance) {
       setRollPending({ actionName, diceCount, isDesperateAction });
-      const asd = charCampaign?.active_session_detail;
+      setRollAbilityBoost({});
       setRollModal({
-        position: asd?.default_position || 'risky',
-        effect: asd?.default_effect || 'standard',
         push_effect: false,
         push_dice: pendingPushDice,
         devil_bargain_dice: !!pendingDevilsBargain,
@@ -696,7 +879,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     }, 1500);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [charData, standStats, actionRatings, stressFilled, trauma, regularArmorUsed, specialArmorUsed, harm, healingClock, coinFilled, stashBoxes, xp, abilities, clocks, playbook, campaignId, imageUrl, imageFile, selectedBenefits, selectedDetriments]);
+  }, [charData, standStats, actionRatings, stressFilled, trauma, regularArmorUsed, specialArmorUsed, harm, healingClock, coinFilled, stashBoxes, xp, abilities, clocks, playbook, campaignId, imageUrl, imageFile, selectedBenefits, selectedDetriments, character?.id]);
 
   // ─── Styles ──────────────────────────────────────────────────────────────────
 
@@ -757,13 +940,81 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                 <span style={{ fontWeight:'bold' }}>{charData.name || 'Unnamed Character'}</span>
                 {charData.standName && <span style={{ color:'#a78bfa' }}>「{charData.standName}」</span>}
               </div>
-              <div style={{ display:'flex', gap:'12px', alignItems:'center' }}>
-                <div style={{ background:'#1e1b4b', border:'1px solid #4338ca', borderRadius:'4px', padding:'4px 10px', textAlign:'center' }}>
-                  <div style={{ fontSize:'10px', color:'#818cf8', fontWeight:'bold', letterSpacing:'0.05em' }}>LEVEL</div>
-                  <div style={{ fontSize:'20px', fontWeight:'bold', lineHeight:1, color: pcLevel >= 7 ? '#f87171' : pcLevel >= 4 ? '#fbbf24' : '#a5b4fc' }}>
-                    {pcLevel}
+              <div style={{ display:'flex', gap:'12px', alignItems:'flex-start' }}>
+                <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:6 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    {activeSessionId && (
+                      <button
+                        type="button"
+                        onClick={() => setShowDiceHistoryPanel((x) => !x)}
+                        title={showDiceHistoryPanel ? 'Hide dice history' : 'Show dice history'}
+                        style={{
+                          background: showDiceHistoryPanel ? '#312e81' : '#1f2937',
+                          border: '1px solid #4b5563',
+                          borderRadius: 6,
+                          padding: '6px 8px',
+                          cursor: 'pointer',
+                          lineHeight: 0,
+                        }}
+                      >
+                        <HistoryBranchIcon />
+                      </button>
+                    )}
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => characterId && setShowXpHistoryModal(true)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && characterId) setShowXpHistoryModal(true); }}
+                      title="XP history"
+                      style={{
+                        background:'#1e1b4b', border:'1px solid #4338ca', borderRadius:'4px', padding:'4px 10px', textAlign:'center',
+                        cursor: characterId ? 'pointer' : 'default',
+                      }}
+                    >
+                      <div style={{ fontSize:'10px', color:'#818cf8', fontWeight:'bold', letterSpacing:'0.05em' }}>LEVEL</div>
+                      <div style={{ fontSize:'20px', fontWeight:'bold', lineHeight:1, color: pcLevel >= 7 ? '#f87171' : pcLevel >= 4 ? '#fbbf24' : '#a5b4fc' }}>
+                        {pcLevel}
+                      </div>
+                      <div style={{ fontSize:'9px', color:'#4b5563', marginTop:'1px' }}>{totalSpentXP} XP spent</div>
+                    </div>
                   </div>
-                  <div style={{ fontSize:'9px', color:'#4b5563', marginTop:'1px' }}>{totalSpentXP} XP spent</div>
+                  {showDiceHistoryPanel && activeSessionId && (
+                    <div
+                      style={{
+                        background: '#111827',
+                        border: '1px solid #374151',
+                        borderRadius: 8,
+                        padding: 10,
+                        minWidth: 260,
+                        maxWidth: 360,
+                        fontSize: 11,
+                      }}
+                    >
+                      <div style={{ color: '#a78bfa', fontWeight: 'bold', marginBottom: 6 }}>Session dice</div>
+                      <div style={{ color: '#9ca3af', marginBottom: 6 }}>
+                        Desperate action rolls (this session):{' '}
+                        <span style={{ color: '#f97316', fontWeight: 'bold' }}>{desperateActionRollCount}</span>
+                      </div>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={showPositionEffect} onChange={(e) => setShowPositionEffect(e.target.checked)} />
+                        Show position &amp; effect
+                      </label>
+                      {sessionRolls.length === 0 ? (
+                        <div style={{ color: '#6b7280' }}>No rolls this session.</div>
+                      ) : (
+                        sessionRolls.slice(0, 10).map((r) => (
+                          <div key={r.id} style={{ padding: '4px 0', borderBottom: '1px solid #1f2937' }}>
+                            {r.action_name} · {[].concat(r.results || []).join(', ')} → {r.outcome || ''}
+                            {showPositionEffect && (r.position || r.effect) && (
+                              <span style={{ color: '#6b7280', marginLeft: 6 }}>
+                                ({r.position || ''}, {r.effect || ''})
+                              </span>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
                  {onCreateNew && (
                   <button onClick={onCreateNew} style={{ ...S.btn, background:'#16a34a', color:'#fff' }}>+ New Character</button>
@@ -1371,7 +1622,11 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                               {(charCampaign?.active_session_detail?.default_position || 'Risky').replace(/^./, (c) => c.toUpperCase())}
                             </span>
                             <span style={{ padding:'4px 8px', borderRadius:'4px', fontSize:'11px', background:'#374151', color:'#d1d5db' }}>
-                              {(charCampaign?.active_session_detail?.default_effect || 'Standard').replace(/^./, (c) => c.toUpperCase())} Effect
+                              {(() => {
+                                const e = (charCampaign?.active_session_detail?.default_effect || 'standard').toLowerCase();
+                                const label = e === 'extreme' || e === 'greater' ? 'Extreme' : e === 'limited' ? 'Limited' : 'Standard';
+                                return `${label} effect`;
+                              })()}
                             </span>
                           </div>
                         </div>
@@ -1571,27 +1826,6 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                           </div>
                         )}
                       </div>
-                      <div>
-                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'4px' }}>
-                          <span style={{ fontSize:'11px', color:'#9ca3af' }}>Dice history</span>
-                          <label style={{ fontSize:'11px', cursor:'pointer' }}>
-                            <input type="checkbox" checked={showPositionEffect} onChange={(e) => setShowPositionEffect(e.target.checked)} />
-                            {' '}Position & effect
-                          </label>
-                        </div>
-                        {sessionRolls.length === 0 ? (
-                          <div style={{ fontSize:'11px', color:'#6b7280' }}>No rolls this session.</div>
-                        ) : (
-                          sessionRolls.slice(0, 10).map((r) => (
-                            <div key={r.id} style={{ fontSize:'11px', padding:'4px 0', borderBottom:'1px solid #1f2937' }}>
-                              {r.action_name} · {[].concat(r.results || []).join(', ')} → {r.outcome || ''}
-                              {showPositionEffect && (r.position || r.effect) && (
-                                <span style={{ color:'#6b7280', marginLeft:'6px' }}>{`(${r.position || ''}, ${r.effect || ''})`}</span>
-                              )}
-                            </div>
-                          ))
-                        )}
-                      </div>
                     </div>
                   )}
 
@@ -1708,6 +1942,105 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     </div>
                   </div>
 
+                  {/* Help & Group Action (session + campaign) */}
+                  {charCampaign && activeSessionId && characterId && (
+                    <div style={{ ...S.card, marginBottom: '12px' }}>
+                      <span style={S.lbl}>CREW ACTIONS</span>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'flex-end', marginTop: '8px', fontSize: '12px' }}>
+                        <div>
+                          <span style={{ fontSize: '10px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Help (helper −1 stress)</span>
+                          <select
+                            style={S.sel}
+                            value={helpTargetId}
+                            onChange={(e) => setHelpTargetId(e.target.value)}
+                          >
+                            <option value="">Choose crewmate…</option>
+                            {helpCandidates.map((c) => (
+                              <option key={c.id} value={c.id}>{c.true_name || c.name || `PC ${c.id}`}</option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={helpBusy || !helpTargetId}
+                            onClick={async () => {
+                              setHelpErr(null);
+                              setHelpBusy(true);
+                              try {
+                                await characterAPI.assistHelp(characterId, parseInt(helpTargetId, 10));
+                                setHelpTargetId('');
+                                onCampaignRefresh?.();
+                              } catch (e) {
+                                setHelpErr(e.message);
+                              } finally {
+                                setHelpBusy(false);
+                              }
+                            }}
+                            style={{ ...S.btn, marginLeft: 8, background: '#4b5563', color: '#fff', fontSize: '11px' }}
+                          >
+                            {helpBusy ? '…' : 'Help'}
+                          </button>
+                          {helpErr && <div style={{ color: '#f87171', fontSize: '10px', marginTop: 4 }}>{helpErr}</div>}
+                        </div>
+                        <div style={{ flex: '1 1 200px' }}>
+                          <span style={{ fontSize: '10px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Group action goal</span>
+                          <input
+                            style={{ ...S.inp, width: '100%', maxWidth: 320 }}
+                            value={groupGoalDraft}
+                            onChange={(e) => setGroupGoalDraft(e.target.value)}
+                            placeholder="Name the group action"
+                          />
+                          <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              disabled={groupBusy}
+                              onClick={async () => {
+                                setGroupBusy(true);
+                                try {
+                                  const ga = await groupActionAPI.create({
+                                    session: activeSessionId,
+                                    leader: characterId,
+                                    goal_label: groupGoalDraft.trim(),
+                                  });
+                                  setActiveGroupAction(ga);
+                                  onCampaignRefresh?.();
+                                } catch (e) {
+                                  setHelpErr(e.message);
+                                } finally {
+                                  setGroupBusy(false);
+                                }
+                              }}
+                              style={{ ...S.btn, background: '#4338ca', color: '#fff', fontSize: '11px' }}
+                            >
+                              {groupBusy ? '…' : 'Start group action'}
+                            </button>
+                            {activeGroupAction?.id && (
+                              <span style={{ fontSize: '10px', color: '#a78bfa' }}>
+                                Open group #{activeGroupAction.id} — rolls attach until resolved.
+                              </span>
+                            )}
+                            {activeGroupAction?.id && isGM && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    await groupActionAPI.resolve(activeGroupAction.id);
+                                    setActiveGroupAction(null);
+                                    onCampaignRefresh?.();
+                                  } catch (e) {
+                                    setHelpErr(e.message);
+                                  }
+                                }}
+                                style={{ ...S.btn, fontSize: '11px', background: '#7c3aed', color: '#fff' }}
+                              >
+                                Resolve (GM)
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Dice Result — FIX 8 */}
                   {diceResult && (
                     <div style={{ background:'#1f2937', padding:'12px', borderRadius:'4px', border:'1px solid #4b5563', marginBottom:'14px', fontSize:'12px' }}>
@@ -1798,34 +2131,76 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     </div>
                   )}
 
-                  {/* Roll modal (position/effect/push) when in campaign session */}
+                  {/* Player's Action pool — position/effect from GM session; push & abilities here */}
                   {rollPending && (
                     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-                      <div style={{ background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '20px', maxWidth: '360px', width: '90%' }}>
+                      <div style={{ background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '20px', maxWidth: '440px', width: '92%', maxHeight: '90vh', overflow: 'auto' }}>
                         <div style={{ fontWeight: 'bold', marginBottom: '12px', color: '#a78bfa' }}>
-                          {rollPending.actionName} — Set Position & Effect
+                          Player&apos;s Action — {rollPending.actionName}
                         </div>
                         {harmLevel3Used && !rollModal.push_effect && !rollModal.push_dice && (
                           <div style={{ background: '#7f1d1d', border: '1px solid #b91c1c', padding: '8px', borderRadius: '4px', marginBottom: '12px', fontSize: '11px', color: '#fca5a5' }}>
                             Incapacitated (Level 3 harm). You must push yourself to act (2 stress for +1 effect or +1d).
                           </div>
                         )}
-                        <div style={{ marginBottom: '10px' }}>
-                          <span style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Position</span>
-                          <select style={S.sel} value={rollModal.position} onChange={(e) => setRollModal((p) => ({ ...p, position: e.target.value }))}>
-                            <option value="controlled">Controlled</option>
-                            <option value="risky">Risky</option>
-                            <option value="desperate">Desperate</option>
-                          </select>
-                        </div>
-                        <div style={{ marginBottom: '10px' }}>
-                          <span style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Effect</span>
-                          <select style={S.sel} value={rollModal.effect} onChange={(e) => setRollModal((p) => ({ ...p, effect: e.target.value }))}>
-                            <option value="limited">Limited (+1 tick)</option>
-                            <option value="standard">Standard (+2 ticks)</option>
-                            <option value="greater">Greater (+3 ticks)</option>
-                          </select>
-                        </div>
+                        {charCampaign?.active_session_detail?.show_position_effect_to_players !== false ? (
+                          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                            <PositionStack activePosition={charCampaign?.active_session_detail?.default_position || 'risky'} readOnly />
+                            <EffectShapes activeEffect={charCampaign?.active_session_detail?.default_effect || 'standard'} readOnly />
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '12px' }}>
+                            Position and effect are hidden — ask your GM before rolling.
+                          </div>
+                        )}
+                        {(charCampaign?.active_session_detail?.roll_goal_label || '').trim() ? (
+                          <div style={{ fontSize: '11px', color: '#d1d5db', marginBottom: '10px', padding: '8px', background: '#1f2937', borderRadius: '6px' }}>
+                            <span style={{ color: '#9ca3af' }}>Goal: </span>
+                            {charCampaign.active_session_detail.roll_goal_label}
+                          </div>
+                        ) : null}
+                        {(abilities || []).filter((a) => a.type === 'standard').length > 0 && (
+                          <div style={{ marginBottom: '12px' }}>
+                            <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>Standard abilities (optional)</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '140px', overflow: 'auto' }}>
+                              {(abilities || []).filter((a) => a.type === 'standard').slice(0, 16).map((ab) => {
+                                const id = ab.id ?? ab.name;
+                                const b = rollAbilityBoost[id] || {};
+                                return (
+                                  <div key={id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', fontSize: '11px', flexWrap: 'wrap' }}>
+                                    <span style={{ color: '#e5e7eb', flex: '1 1 120px' }}>{ab.name}</span>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={!!b.dice}
+                                        onChange={(e) =>
+                                          setRollAbilityBoost((p) => ({
+                                            ...p,
+                                            [id]: { ...p[id], dice: e.target.checked, effect: !!p[id]?.effect },
+                                          }))
+                                        }
+                                      />
+                                      +1d
+                                    </label>
+                                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={!!b.effect}
+                                        onChange={(e) =>
+                                          setRollAbilityBoost((p) => ({
+                                            ...p,
+                                            [id]: { ...p[id], effect: e.target.checked, dice: !!p[id]?.dice },
+                                          }))
+                                        }
+                                      />
+                                      +1 effect
+                                    </label>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                         <div style={{ marginBottom: '12px' }}>
                           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer' }}>
                             <input type="checkbox" checked={rollModal.push_effect} onChange={(e) => setRollModal((p) => ({ ...p, push_effect: e.target.checked }))} />
@@ -1838,19 +2213,49 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                           {(rollModal.devil_bargain_dice || pendingDevilsBargain) && (
                             <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', marginTop: '4px' }}>
                               <input type="checkbox" checked={rollModal.devil_bargain_dice} onChange={(e) => { setRollModal((p) => ({ ...p, devil_bargain_dice: e.target.checked, devil_bargain_note: e.target.checked ? (p.devil_bargain_note || pendingDevilsBargain) : '' })); if (!e.target.checked) setPendingDevilsBargain(null); }} />
-                              Devil's bargain +1d {rollModal.devil_bargain_note && `(${rollModal.devil_bargain_note})`}
+                              Devil&apos;s bargain +1d {rollModal.devil_bargain_note && `(${rollModal.devil_bargain_note})`}
                             </label>
                           )}
                         </div>
+                        {(bonusDiceFromAbilities > 0 || abilityEffectSteps > 0) && (
+                          <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '8px' }}>
+                            Pool: +{bonusDiceFromAbilities}d from abilities
+                            {abilityEffectSteps > 0 ? `, +${abilityEffectSteps} effect tier step(s)` : ''}
+                          </div>
+                        )}
                         {rollApiError && <div style={{ color: '#f87171', fontSize: '11px', marginBottom: '8px' }}>{rollApiError}</div>}
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button onClick={handleRollWithSession} disabled={harmLevel3Used && !rollModal.push_effect && !rollModal.push_dice} style={{ ...S.btn, background: '#7c3aed', color: '#fff' }}>
                             Roll
                           </button>
-                          <button onClick={() => { setRollPending(null); setRollApiError(null); }} style={S.btn}>
+                          <button onClick={() => { setRollPending(null); setRollApiError(null); setRollAbilityBoost({}); }} style={S.btn}>
                             Cancel
                           </button>
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {showXpHistoryModal && (
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 120 }}>
+                      <div style={{ background: '#111827', border: '1px solid #374151', borderRadius: 8, padding: 16, maxWidth: 420, width: '92%', maxHeight: '80vh', overflow: 'auto' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                          <span style={{ fontWeight: 'bold', color: '#a78bfa' }}>XP history</span>
+                          <button type="button" onClick={() => setShowXpHistoryModal(false)} style={{ ...S.btn, fontSize: '11px' }}>Close</button>
+                        </div>
+                        {xpTimelineLoading && <div style={{ color: '#9ca3af', fontSize: '12px' }}>Loading…</div>}
+                        {xpTimelineError && <div style={{ color: '#f87171', fontSize: '12px' }}>{xpTimelineError}</div>}
+                        {!xpTimelineLoading && !xpTimelineError && xpTimelineRows.length === 0 && (
+                          <div style={{ color: '#6b7280', fontSize: '12px' }}>No XP entries yet.</div>
+                        )}
+                        <ul style={{ margin: 0, padding: '0 0 0 16px', fontSize: '12px', color: '#d1d5db' }}>
+                          {xpTimelineRows.map((row) => (
+                            <li key={row.key} style={{ marginBottom: 8 }}>
+                              <span style={{ color: '#6b7280', fontSize: '10px' }}>{row.when ? new Date(row.when).toLocaleString() : '—'}</span>
+                              <div>{row.text}</div>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     </div>
                   )}
@@ -1863,7 +2268,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                       const isExpanded = expandedAbilityId === abKey;
                       const standardRef = ab.type === 'standard' && standardAbilitiesList.find((a) => a.id === ab.id);
                       const spinRef = ab.type === 'spin' && spinAbilitiesList.find((a) => a.id === ab.id);
-                      const description = standardRef?.description || spinRef?.description || ab.description;
+                      const hamonRef = ab.type === 'hamon' && hamonAbilitiesList.find((a) => a.id === ab.id);
+                      const description = standardRef?.description || spinRef?.description || hamonRef?.description || ab.description;
                       const hasDescription = !!(description || (ab._uses && ab._uses.filter(Boolean).length > 0));
                       return (
                         <div key={abKey} style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', background:'#374151', padding:'5px 8px', borderRadius:'4px', marginBottom:'3px', fontSize:'12px' }}>
@@ -1890,25 +2296,47 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                       );
                     })}
                     <div style={{ display:'flex', gap:'5px', marginTop:'6px', flexWrap:'wrap', alignItems:'flex-start' }}>
-                      {/* Option A: Searchable dropdown + preview for standard abilities */}
+                      {/* Standard: button opens popover (search + list + preview) */}
                       <div style={{ position:'relative' }} ref={standardAbilityPickerRef}>
-                        <div style={{ display:'flex', flexDirection:'column', gap:'4px', minWidth:'200px' }}>
-                          <input
-                            style={{ ...S.inp, border:'1px solid #374151', padding:'6px 10px', fontSize:'12px' }}
-                            placeholder="+ Standard (search)..."
-                            value={standardAbilitySearch}
-                            onChange={(e) => {
-                              setStandardAbilitySearch(e.target.value);
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSpinAbilityPickerOpen(false);
+                            setSpinAbilitySelected(null);
+                            setSpinAbilitySearch('');
+                            setHamonAbilityPickerOpen(false);
+                            setHamonAbilitySelected(null);
+                            setHamonAbilitySearch('');
+                            if (standardAbilityPickerOpen) {
+                              setStandardAbilityPickerOpen(false);
+                              setStandardAbilitySelected(null);
+                              setStandardAbilitySearch('');
+                            } else {
                               setStandardAbilityPickerOpen(true);
-                              if (!standardAbilitySelected) setStandardAbilitySelected(null);
-                            }}
-                            onFocus={() => setStandardAbilityPickerOpen(true)}
-                          />
-                          {standardAbilityPickerOpen && (
+                            }
+                          }}
+                          style={{ ...S.btn, background:'#16a34a', color:'#fff', fontSize:'11px' }}
+                        >
+                          + Standard
+                        </button>
+                        {standardAbilityPickerOpen && (
+                          <div style={{
+                            position:'absolute', top:'100%', left:0, marginTop:'4px', zIndex:101, minWidth:'280px', maxWidth:'min(92vw, 320px)',
+                            padding:'8px', background:'#111827', border:'1px solid #374151', borderRadius:'4px', boxShadow:'0 4px 12px rgba(0,0,0,0.5)',
+                          }}>
+                            <input
+                              style={{ ...S.inp, border:'1px solid #374151', padding:'6px 10px', fontSize:'12px', width:'100%', boxSizing:'border-box' }}
+                              placeholder="Search standard abilities…"
+                              value={standardAbilitySearch}
+                              onChange={(e) => {
+                                setStandardAbilitySearch(e.target.value);
+                                setStandardAbilitySelected(null);
+                              }}
+                              autoFocus
+                            />
                             <div style={{
-                              position:'absolute', top:'100%', left:0, right:0, marginTop:'2px',
-                              background:'#111827', border:'1px solid #374151', borderRadius:'4px',
-                              maxHeight:'180px', overflowY:'auto', zIndex:100, boxShadow:'0 4px 12px rgba(0,0,0,0.5)',
+                              marginTop:'6px', maxHeight:'180px', overflowY:'auto',
+                              background:'#0f1419', border:'1px solid #1f2937', borderRadius:'4px',
                             }}>
                               {(() => {
                                 const available = standardAbilitiesList
@@ -1944,57 +2372,80 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                                 );
                               })()}
                             </div>
-                          )}
-                        </div>
-                        {standardAbilitySelected && (
-                          <div style={{
-                            marginTop:'8px', padding:'10px', background:'#1f2937', borderRadius:'4px', border:'1px solid #374151',
-                            fontSize:'11px', maxWidth:'280px',
-                          }}>
-                            <div style={{ fontWeight:'bold', marginBottom:'4px' }}>{standardAbilitySelected.name}</div>
-                            {standardAbilitySelected.category && (
-                              <span style={{ display:'inline-block', padding:'1px 6px', background:'#374151', borderRadius:'4px', fontSize:'10px', marginBottom:'6px' }}>
-                                {CATEGORY_LABELS[standardAbilitySelected.category] || standardAbilitySelected.category}
-                              </span>
+                            {standardAbilitySelected && (
+                              <div style={{
+                                marginTop:'8px', padding:'10px', background:'#1f2937', borderRadius:'4px', border:'1px solid #374151',
+                                fontSize:'11px',
+                              }}>
+                                <div style={{ fontWeight:'bold', marginBottom:'4px' }}>{standardAbilitySelected.name}</div>
+                                {standardAbilitySelected.category && (
+                                  <span style={{ display:'inline-block', padding:'1px 6px', background:'#374151', borderRadius:'4px', fontSize:'10px', marginBottom:'6px' }}>
+                                    {CATEGORY_LABELS[standardAbilitySelected.category] || standardAbilitySelected.category}
+                                  </span>
+                                )}
+                                {standardAbilitySelected.description && (
+                                  <div style={{ color:'#9ca3af', lineHeight:'1.4', marginTop:'4px' }}>{standardAbilitySelected.description}</div>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (!abilities.some((a) => a.type === 'standard' && a.id === standardAbilitySelected.id)) {
+                                      setAbilities((p) => [...p, { id: standardAbilitySelected.id, name: standardAbilitySelected.name, type: 'standard' }]);
+                                    }
+                                    setStandardAbilitySelected(null);
+                                    setStandardAbilitySearch('');
+                                    setStandardAbilityPickerOpen(false);
+                                  }}
+                                  style={{ ...S.btn, background:'#16a34a', color:'#fff', fontSize:'11px', marginTop:'8px' }}
+                                >
+                                  Add to sheet
+                                </button>
+                              </div>
                             )}
-                            {standardAbilitySelected.description && (
-                              <div style={{ color:'#9ca3af', lineHeight:'1.4', marginTop:'4px' }}>{standardAbilitySelected.description}</div>
-                            )}
-                            <button
-                              onClick={() => {
-                                if (!abilities.some((a) => a.type === 'standard' && a.id === standardAbilitySelected.id)) {
-                                  setAbilities((p) => [...p, { id: standardAbilitySelected.id, name: standardAbilitySelected.name, type: 'standard' }]);
-                                }
-                                setStandardAbilitySelected(null);
-                                setStandardAbilitySearch('');
-                                setStandardAbilityPickerOpen(false);
-                              }}
-                              style={{ ...S.btn, background:'#16a34a', color:'#fff', fontSize:'11px', marginTop:'8px' }}
-                            >
-                              Add to sheet
-                            </button>
                           </div>
                         )}
                       </div>
                       {isSpinPlaybook && (
                         <div style={{ position:'relative' }} ref={spinAbilityPickerRef}>
-                          <div style={{ display:'flex', flexDirection:'column', gap:'4px', minWidth:'200px' }}>
-                            <input
-                              style={{ ...S.inp, border:'1px solid #6d28d9', padding:'6px 10px', fontSize:'12px' }}
-                              placeholder="+ Spin playbook (search)..."
-                              value={spinAbilitySearch}
-                              onChange={(e) => {
-                                setSpinAbilitySearch(e.target.value);
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setStandardAbilityPickerOpen(false);
+                              setStandardAbilitySelected(null);
+                              setStandardAbilitySearch('');
+                              setHamonAbilityPickerOpen(false);
+                              setHamonAbilitySelected(null);
+                              setHamonAbilitySearch('');
+                              if (spinAbilityPickerOpen) {
+                                setSpinAbilityPickerOpen(false);
+                                setSpinAbilitySelected(null);
+                                setSpinAbilitySearch('');
+                              } else {
                                 setSpinAbilityPickerOpen(true);
-                                if (!spinAbilitySelected) setSpinAbilitySelected(null);
-                              }}
-                              onFocus={() => setSpinAbilityPickerOpen(true)}
-                            />
-                            {spinAbilityPickerOpen && (
+                              }
+                            }}
+                            style={{ ...S.btn, background:'#7c3aed', color:'#fff', fontSize:'11px' }}
+                          >
+                            + Spin abilities
+                          </button>
+                          {spinAbilityPickerOpen && (
+                            <div style={{
+                              position:'absolute', top:'100%', left:0, marginTop:'4px', zIndex:101, minWidth:'280px', maxWidth:'min(92vw, 320px)',
+                              padding:'8px', background:'#111827', border:'1px solid #6d28d9', borderRadius:'4px', boxShadow:'0 4px 12px rgba(0,0,0,0.5)',
+                            }}>
+                              <input
+                                style={{ ...S.inp, border:'1px solid #6d28d9', padding:'6px 10px', fontSize:'12px', width:'100%', boxSizing:'border-box' }}
+                                placeholder="Search Spin abilities…"
+                                value={spinAbilitySearch}
+                                onChange={(e) => {
+                                  setSpinAbilitySearch(e.target.value);
+                                  setSpinAbilitySelected(null);
+                                }}
+                                autoFocus
+                              />
                               <div style={{
-                                position:'absolute', top:'100%', left:0, right:0, marginTop:'2px',
-                                background:'#111827', border:'1px solid #6d28d9', borderRadius:'4px',
-                                maxHeight:'180px', overflowY:'auto', zIndex:100, boxShadow:'0 4px 12px rgba(0,0,0,0.5)',
+                                marginTop:'6px', maxHeight:'180px', overflowY:'auto',
+                                background:'#0f1419', border:'1px solid #4c1d95', borderRadius:'4px',
                               }}>
                                 {(() => {
                                   const need = (a) => (typeof a.required_a_count === 'number' ? a.required_a_count : 0);
@@ -2034,58 +2485,194 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                                   );
                                 })()}
                               </div>
-                            )}
-                          </div>
-                          {spinAbilitySelected && (
+                              {spinAbilitySelected && (
+                                <div style={{
+                                  marginTop:'8px', padding:'10px', background:'#1f2937', borderRadius:'4px', border:'1px solid #6d28d9',
+                                  fontSize:'11px',
+                                }}>
+                                  <div style={{ fontWeight:'bold', marginBottom:'4px' }}>{spinAbilitySelected.name}</div>
+                                  {spinAbilitySelected.spin_type && (
+                                    <span style={{ display:'inline-block', padding:'1px 6px', background:'#4c1d95', borderRadius:'4px', fontSize:'10px', marginBottom:'6px' }}>
+                                      {spinAbilitySelected.spin_type.replace(/_/g, ' ')}
+                                    </span>
+                                  )}
+                                  {spinAbilitySelected.description && (
+                                    <div style={{ color:'#9ca3af', lineHeight:'1.4', marginTop:'4px' }}>{spinAbilitySelected.description}</div>
+                                  )}
+                                  {(() => {
+                                    const req = typeof spinAbilitySelected.required_a_count === 'number' ? spinAbilitySelected.required_a_count : 0;
+                                    const canAdd = aRankCount >= req;
+                                    return (
+                                      <>
+                                        {!canAdd && (
+                                          <div style={{ color:'#f87171', marginTop:'8px', fontSize:'11px' }}>
+                                            Needs {req} A-rank coin stat{req === 1 ? '' : 's'} (you have {aRankCount}).
+                                          </div>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (!canAdd) return;
+                                            if (!abilities.some((x) => x.type === 'spin' && x.id === spinAbilitySelected.id)) {
+                                              setAbilities((p) => [...p, {
+                                                id: spinAbilitySelected.id,
+                                                name: spinAbilitySelected.name,
+                                                type: 'spin',
+                                                description: spinAbilitySelected.description,
+                                                spin_type: spinAbilitySelected.spin_type,
+                                                required_a_count: spinAbilitySelected.required_a_count,
+                                              }]);
+                                            }
+                                            setSpinAbilitySelected(null);
+                                            setSpinAbilitySearch('');
+                                            setSpinAbilityPickerOpen(false);
+                                          }}
+                                          disabled={!canAdd}
+                                          style={{ ...S.btn, background: canAdd ? '#7c3aed' : '#374151', color:'#fff', fontSize:'11px', marginTop:'8px', cursor: canAdd ? 'pointer' : 'not-allowed' }}
+                                        >
+                                          Add to sheet
+                                        </button>
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {isHamonPlaybook && (
+                        <div style={{ position:'relative' }} ref={hamonAbilityPickerRef}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setStandardAbilityPickerOpen(false);
+                              setStandardAbilitySelected(null);
+                              setStandardAbilitySearch('');
+                              setSpinAbilityPickerOpen(false);
+                              setSpinAbilitySelected(null);
+                              setSpinAbilitySearch('');
+                              if (hamonAbilityPickerOpen) {
+                                setHamonAbilityPickerOpen(false);
+                                setHamonAbilitySelected(null);
+                                setHamonAbilitySearch('');
+                              } else {
+                                setHamonAbilityPickerOpen(true);
+                              }
+                            }}
+                            style={{ ...S.btn, background:'#b45309', color:'#fff', fontSize:'11px' }}
+                          >
+                            + Hamon abilities
+                          </button>
+                          {hamonAbilityPickerOpen && (
                             <div style={{
-                              marginTop:'8px', padding:'10px', background:'#1f2937', borderRadius:'4px', border:'1px solid #6d28d9',
-                              fontSize:'11px', maxWidth:'280px',
+                              position:'absolute', top:'100%', left:0, marginTop:'4px', zIndex:101, minWidth:'280px', maxWidth:'min(92vw, 320px)',
+                              padding:'8px', background:'#111827', border:'1px solid #b45309', borderRadius:'4px', boxShadow:'0 4px 12px rgba(0,0,0,0.5)',
                             }}>
-                              <div style={{ fontWeight:'bold', marginBottom:'4px' }}>{spinAbilitySelected.name}</div>
-                              {spinAbilitySelected.spin_type && (
-                                <span style={{ display:'inline-block', padding:'1px 6px', background:'#4c1d95', borderRadius:'4px', fontSize:'10px', marginBottom:'6px' }}>
-                                  {spinAbilitySelected.spin_type.replace(/_/g, ' ')}
-                                </span>
+                              <input
+                                style={{ ...S.inp, border:'1px solid #b45309', padding:'6px 10px', fontSize:'12px', width:'100%', boxSizing:'border-box' }}
+                                placeholder="Search Hamon abilities…"
+                                value={hamonAbilitySearch}
+                                onChange={(e) => {
+                                  setHamonAbilitySearch(e.target.value);
+                                  setHamonAbilitySelected(null);
+                                }}
+                                autoFocus
+                              />
+                              <div style={{
+                                marginTop:'6px', maxHeight:'180px', overflowY:'auto',
+                                background:'#0f1419', border:'1px solid #78350f', borderRadius:'4px',
+                              }}>
+                                {(() => {
+                                  const need = (a) => (typeof a.required_a_count === 'number' ? a.required_a_count : 0);
+                                  const available = hamonAbilitiesList
+                                    .filter((a) => !abilities.some((ab) => ab.type === 'hamon' && ab.id === a.id));
+                                  const q = hamonAbilitySearch.trim().toLowerCase();
+                                  const filtered = q
+                                    ? available.filter((a) =>
+                                        (a.name || '').toLowerCase().includes(q) ||
+                                        (a.description || '').toLowerCase().includes(q) ||
+                                        (a.hamon_type || '').toLowerCase().includes(q))
+                                    : available;
+                                  return filtered.length === 0 ? (
+                                    <div style={{ padding:'12px', fontSize:'11px', color:'#6b7280' }}>No matching abilities</div>
+                                  ) : (
+                                    filtered.map((a) => {
+                                      const req = need(a);
+                                      const met = aRankCount >= req;
+                                      return (
+                                        <div
+                                          key={a.id}
+                                          onClick={() => met && setHamonAbilitySelected(a)}
+                                          style={{
+                                            padding:'8px 10px', fontSize:'12px', borderBottom:'1px solid #1f2937',
+                                            background: hamonAbilitySelected?.id === a.id ? '#78350f' : 'transparent',
+                                            cursor: met ? 'pointer' : 'not-allowed',
+                                            opacity: met ? 1 : 0.55,
+                                          }}
+                                        >
+                                          {a.name}
+                                          <span style={{ fontSize:'10px', color: met ? '#fdba74' : '#f87171', marginLeft:'6px' }}>
+                                            {req === 0 ? 'Foundation' : `${req} A-rank coin stat${req === 1 ? '' : 's'} (${aRankCount} have)`}
+                                          </span>
+                                        </div>
+                                      );
+                                    })
+                                  );
+                                })()}
+                              </div>
+                              {hamonAbilitySelected && (
+                                <div style={{
+                                  marginTop:'8px', padding:'10px', background:'#1f2937', borderRadius:'4px', border:'1px solid #b45309',
+                                  fontSize:'11px',
+                                }}>
+                                  <div style={{ fontWeight:'bold', marginBottom:'4px' }}>{hamonAbilitySelected.name}</div>
+                                  {hamonAbilitySelected.hamon_type && (
+                                    <span style={{ display:'inline-block', padding:'1px 6px', background:'#78350f', borderRadius:'4px', fontSize:'10px', marginBottom:'6px' }}>
+                                      {String(hamonAbilitySelected.hamon_type).replace(/_/g, ' ')}
+                                    </span>
+                                  )}
+                                  {hamonAbilitySelected.description && (
+                                    <div style={{ color:'#9ca3af', lineHeight:'1.4', marginTop:'4px' }}>{hamonAbilitySelected.description}</div>
+                                  )}
+                                  {(() => {
+                                    const req = typeof hamonAbilitySelected.required_a_count === 'number' ? hamonAbilitySelected.required_a_count : 0;
+                                    const canAdd = aRankCount >= req;
+                                    return (
+                                      <>
+                                        {!canAdd && (
+                                          <div style={{ color:'#f87171', marginTop:'8px', fontSize:'11px' }}>
+                                            Needs {req} A-rank coin stat{req === 1 ? '' : 's'} (you have {aRankCount}).
+                                          </div>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (!canAdd) return;
+                                            if (!abilities.some((x) => x.type === 'hamon' && x.id === hamonAbilitySelected.id)) {
+                                              setAbilities((p) => [...p, {
+                                                id: hamonAbilitySelected.id,
+                                                name: hamonAbilitySelected.name,
+                                                type: 'hamon',
+                                                description: hamonAbilitySelected.description,
+                                                hamon_type: hamonAbilitySelected.hamon_type,
+                                                required_a_count: hamonAbilitySelected.required_a_count,
+                                              }]);
+                                            }
+                                            setHamonAbilitySelected(null);
+                                            setHamonAbilitySearch('');
+                                            setHamonAbilityPickerOpen(false);
+                                          }}
+                                          disabled={!canAdd}
+                                          style={{ ...S.btn, background: canAdd ? '#b45309' : '#374151', color:'#fff', fontSize:'11px', marginTop:'8px', cursor: canAdd ? 'pointer' : 'not-allowed' }}
+                                        >
+                                          Add to sheet
+                                        </button>
+                                      </>
+                                    );
+                                  })()}
+                                </div>
                               )}
-                              {spinAbilitySelected.description && (
-                                <div style={{ color:'#9ca3af', lineHeight:'1.4', marginTop:'4px' }}>{spinAbilitySelected.description}</div>
-                              )}
-                              {(() => {
-                                const req = typeof spinAbilitySelected.required_a_count === 'number' ? spinAbilitySelected.required_a_count : 0;
-                                const canAdd = aRankCount >= req;
-                                return (
-                                  <>
-                                    {!canAdd && (
-                                      <div style={{ color:'#f87171', marginTop:'8px', fontSize:'11px' }}>
-                                        Needs {req} A-rank coin stat{req === 1 ? '' : 's'} (you have {aRankCount}).
-                                      </div>
-                                    )}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        if (!canAdd) return;
-                                        if (!abilities.some((x) => x.type === 'spin' && x.id === spinAbilitySelected.id)) {
-                                          setAbilities((p) => [...p, {
-                                            id: spinAbilitySelected.id,
-                                            name: spinAbilitySelected.name,
-                                            type: 'spin',
-                                            description: spinAbilitySelected.description,
-                                            spin_type: spinAbilitySelected.spin_type,
-                                            required_a_count: spinAbilitySelected.required_a_count,
-                                          }]);
-                                        }
-                                        setSpinAbilitySelected(null);
-                                        setSpinAbilitySearch('');
-                                        setSpinAbilityPickerOpen(false);
-                                      }}
-                                      disabled={!canAdd}
-                                      style={{ ...S.btn, background: canAdd ? '#7c3aed' : '#374151', color:'#fff', fontSize:'11px', marginTop:'8px', cursor: canAdd ? 'pointer' : 'not-allowed' }}
-                                    >
-                                      Add to sheet
-                                    </button>
-                                  </>
-                                );
-                              })()}
                             </div>
                           )}
                         </div>

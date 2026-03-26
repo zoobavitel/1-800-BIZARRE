@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from ..models import (
     Claim, CrewSpecialAbility, CrewPlaybook, CrewUpgrade,
-    XPHistory, StressHistory, ChatMessage, ProgressClock
+    Character, XPHistory, StressHistory, ChatMessage, ProgressClock
 )
 from ..serializers import (
     ClaimSerializer, CrewSpecialAbilitySerializer, CrewPlaybookSerializer,
@@ -37,10 +37,24 @@ class CrewUpgradeViewSet(viewsets.ModelViewSet):
     serializer_class = CrewUpgradeSerializer
 
 
-class XPHistoryViewSet(viewsets.ModelViewSet):
+class XPHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+    """XP ledger entries; players see own PC, GM sees campaign PCs when ?character= is set."""
     permission_classes = [IsAuthenticated]
     queryset = XPHistory.objects.all()
     serializer_class = XPHistorySerializer
+
+    def get_queryset(self):
+        qs = XPHistory.objects.all().select_related('character', 'session', 'character__campaign')
+        user = self.request.user
+        if user.is_staff:
+            return qs
+        char_id = self.request.query_params.get('character')
+        if char_id:
+            char = Character.objects.filter(pk=char_id).select_related('campaign').first()
+            if char and (char.user_id == user.id or (char.campaign_id and char.campaign.gm_id == user.id)):
+                return qs.filter(character_id=char_id)
+            return XPHistory.objects.none()
+        return qs.filter(character__user=user)
 
 
 class StressHistoryViewSet(viewsets.ModelViewSet):
