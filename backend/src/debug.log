@@ -5103,3 +5103,5 @@ AssertionError: It is redundant to specify `source='xp_entries'` on field 'ListS
 [WARNING] 2026-03-26 04:16:53,421 characters.views.character_views - Character create validation failed: {'true_name': [ErrorDetail(string='This field may not be blank.', code='blank')]}
 [WARNING] 2026-03-26 04:16:53,422 django.request - Bad Request: /api/characters/
 [INFO] 2026-03-26 04:17:05,749 characters.views.auth_views - Login successful: user=zoob ip=127.0.0.1
+[INFO] 2026-03-26 04:35:04,518 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 04:35:43,732 django.utils.autoreload - Watching for file changes with StatReloader
