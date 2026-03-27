@@ -48,6 +48,16 @@ Remind the user: **ngrok URLs change** each session unless they use a paid reser
 - **GitHub Pages / remote SPA:** set the game server URL in the app (login UI) or `localStorage` key used by `apiConfig.js` (`apiBaseUrl`) so the base becomes `https://<ngrok-host>/api` (trailing `/api` is applied automatically if omitted).
 - The app already sends `ngrok-skip-browser-warning` for ngrok hosts in `api.js` and `authService.js`.
 
+## Integration tests (Jest)
+
+`frontend/src/integration/backend.integration.test.js` smoke-tests `GET /` against a running API. **CI** uses `http://127.0.0.1:8000` (no ngrok). When you want the same test to hit your **ngrok** URL (backend still local behind the tunnel), run from `frontend/`:
+
+```bash
+INTEGRATION_API_URL=https://<your-subdomain>.ngrok-free.app npm test -- --testPathPattern=integration --watchAll=false
+```
+
+Use the **HTTPS** forwarding URL from `ngrok http 8000`. The test sends `ngrok-skip-browser-warning` when the host name includes `ngrok`.
+
 ## CORS and ALLOWED_HOSTS (only if relevant)
 
 Check `backend/src/app/settings.py` before suggesting edits.
