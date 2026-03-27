@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Other",
         "items": [
+          "Update database and enhance character management features",
           "Update agent descriptions and enhance character management features",
           "Update database and logging features",
           "Update database, logging, and character management features"
