@@ -5170,3 +5170,25 @@ AssertionError: It is redundant to specify `source='xp_entries'` on field 'ListS
 [WARNING] 2026-03-27 01:41:35,196 django.request - Bad Request: /api/npcs/1/apply-effect/
 [WARNING] 2026-03-27 01:41:35,386 django.request - Not Found: /api/npcs/1/apply-effect/
 [WARNING] 2026-03-27 01:41:40,372 django.request - Bad Request: /api/characters/1/roll-action/
+[WARNING] 2026-03-27 01:45:18,157 django.request - Forbidden: /api/accounts/me/
+[WARNING] 2026-03-27 01:45:18,158 django.request - Forbidden: /api/user-profiles/
+[WARNING] 2026-03-27 01:45:20,810 django.request - Bad Request: /api/accounts/login/
+[INFO] 2026-03-27 01:45:36,150 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-27 01:45:39,917 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-03-27 01:45:54,570 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-03-27 01:45:59,398 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-03-27 01:46:04,016 django.request - Bad Request: /api/accounts/login/
+[INFO] 2026-03-27 01:47:51,048 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/auth_views.py changed, reloading.
+[INFO] 2026-03-27 01:47:51,267 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-27 01:47:53,390 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/auth_views.py changed, reloading.
+[INFO] 2026-03-27 01:47:53,601 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-27 01:48:01,098 characters.views.auth_views - Login successful: user=z ip=127.0.0.1
+[INFO] 2026-03-27 01:48:05,778 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/auth_views.py changed, reloading.
+[INFO] 2026-03-27 01:48:05,976 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-27 01:48:20,720 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-03-27 01:48:21,092 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-03-27 01:48:21,470 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-03-27 01:48:22,704 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-03-27 01:48:24,146 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-03-27 01:48:24,337 django.request - Not Found: /api/npcs/1/apply-effect/
+[WARNING] 2026-03-27 01:48:29,344 django.request - Bad Request: /api/characters/1/roll-action/
