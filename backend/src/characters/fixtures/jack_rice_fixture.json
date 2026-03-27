@@ -18,9 +18,11 @@
     },
     {
         "model": "characters.ability",
-        "pk": 10,
+        "pk": 54,
         "fields": {
             "name": "Swan Song",
+            "type": "standard",
+            "category": "endurance",
             "description": "When you would be taken out by harm (Level 4), you may spend all remaining Stand armor charges (minimum 1) to remain standing for a short but heroic moment. You can take one last action before you collapse. If that action prevents or cancels the harm, you remain conscious."
         }
     },
@@ -28,23 +30,20 @@
         "model": "characters.character",
         "pk": 10,
         "fields": {
-            "user": 1,
-            "name": "Jack Rice",
+            "user": 2,
+            "campaign": 1,
+            "true_name": "Jack Rice",
             "heritage": 10,
             "vice": 10,
-            "insight": {
+            "action_dots": {
                 "hunt": 0,
                 "study": 0,
                 "survey": 0,
-                "tinker": 0
-            },
-            "prowess": {
+                "tinker": 0,
                 "finesse": 1,
                 "prowl": 0,
                 "skirmish": 2,
-                "wreck": 1
-            },
-            "resolve": {
+                "wreck": 1,
                 "bizarre": 1,
                 "command": 0,
                 "consort": 1,
@@ -59,12 +58,7 @@
                 "potential_xp": 4,
                 "action_upgrade": 0,
                 "playbook_upgrade": 0
-            },
-            "xp_triggers": [
-                "You addressed a challenge with your stand",
-                "You expressed your beliefs, drives, heritage, or background",
-                "You struggled with issues from your vice or traumas during the session"
-            ]
+            }
         }
     },
     {
@@ -73,7 +67,7 @@
         "fields": {
             "character": 10,
             "name": "The Phoenix",
-            "type": "Close-Range",
+            "type": "FIGHTING",
             "form": "Humanoid",
             "consciousness_level": "C",
             "power": "B",
@@ -82,8 +76,8 @@
             "durability": "C",
             "precision": "D",
             "development": "D",
-            "unique_ability": "Burn to the Wayside and Rise From the Ashes: Can imbue anything with decay that acts as acid. Rebirth effect strengthens items. Filling a Decay Clock causes rebirth. Rebirth may grant +1d, +1 effect, resistance, or a mutation.",
-            "standard_ability": 10
+            "armor": 0,
+            "standard_ability": 54
         }
     }
 ]
