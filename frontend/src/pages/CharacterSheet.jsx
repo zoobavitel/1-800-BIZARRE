@@ -1988,6 +1988,316 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     </div>
                   </div>
 
+                  {/* Action roll — dice pool preview (session) or roll result; same slot under action ratings */}
+                  {rollPending && activeSessionId && characterId && (
+                    <div
+                      style={{
+                        background: '#1f2937',
+                        padding: '12px',
+                        borderRadius: '4px',
+                        border: '1px solid #7c3aed',
+                        marginBottom: '14px',
+                        fontSize: '12px',
+                        maxHeight: 'min(70vh, 520px)',
+                        overflow: 'auto',
+                      }}
+                    >
+                      <div style={{ fontWeight: 'bold', marginBottom: '4px', color: '#a78bfa' }}>
+                        Dice pool — {rollPending.actionName}
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '12px' }}>
+                        Preview your pool, check position and effect, add push / assist / bargain, then roll. Cancel to pick another action.
+                      </div>
+                      {harmLevel3Used && !rollModal.push_effect && !rollModal.push_dice && (
+                        <div style={{ background: '#7f1d1d', border: '1px solid #b91c1c', padding: '8px', borderRadius: '4px', marginBottom: '12px', fontSize: '11px', color: '#fca5a5' }}>
+                          Incapacitated (Level 3 harm). You must push yourself to act (2 stress for +1 effect or +1d).
+                        </div>
+                      )}
+                      {charCampaign?.active_session_detail?.show_position_effect_to_players !== false ? (
+                        <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '12px', alignItems: 'flex-end' }}>
+                          <div>
+                            <div style={{ fontSize: '10px', color: '#9ca3af', marginBottom: '4px' }}>Position (this action)</div>
+                            <PositionStack activePosition={charCampaign?.active_session_detail?.default_position || 'risky'} readOnly />
+                          </div>
+                          <div>
+                            <div style={{ fontSize: '10px', color: '#9ca3af', marginBottom: '4px' }}>Effect (this action)</div>
+                            <EffectShapes activeEffect={charCampaign?.active_session_detail?.default_effect || 'standard'} readOnly />
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '12px' }}>
+                          Position and effect are hidden — ask your GM before rolling.
+                        </div>
+                      )}
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Goal (optional)</label>
+                        <textarea
+                          value={rollGoalDraft}
+                          onChange={(e) => setRollGoalDraft(e.target.value)}
+                          placeholder={((charCampaign?.active_session_detail?.roll_goal_label || '').trim()) || 'What are you trying to achieve on this roll?'}
+                          rows={2}
+                          style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            background: '#0d1117',
+                            color: '#e5e7eb',
+                            border: '1px solid #374151',
+                            borderRadius: '6px',
+                            padding: '8px',
+                            fontSize: '12px',
+                            resize: 'vertical',
+                          }}
+                        />
+                      </div>
+                      {rollPoolPreview && (
+                        <div style={{ marginBottom: '14px', padding: '10px', background: '#0d1117', borderRadius: '8px', border: '1px solid #374151' }}>
+                          <div style={{ fontSize: '11px', color: '#a78bfa', marginBottom: '8px', fontWeight: 'bold' }}>Your dice pool</div>
+                          <DicePoolStrip label="Action rating" count={rollPoolPreview.action_rating} />
+                          <DicePoolStrip label="Attribute (any dot in this attribute)" count={rollPoolPreview.attribute_dice} />
+                          {rollModal.push_dice ? <DicePoolStrip label="Push yourself (+1d, 2 stress)" count={1} /> : null}
+                          {rollModal.devil_bargain_dice ? <DicePoolStrip label="Devil's bargain (+1d, GM consequence)" count={1} /> : null}
+                          {assistHelperId ? <DicePoolStrip label="Assist (+1d, helper −1 stress)" count={1} /> : null}
+                          {bonusDiceFromAbilities > 0 ? <DicePoolStrip label={`Standard abilities (+${bonusDiceFromAbilities}d)`} count={bonusDiceFromAbilities} /> : null}
+                          <div style={{ fontSize: '12px', color: '#d1d5db', marginTop: '6px', paddingTop: '8px', borderTop: '1px solid #374151' }}>
+                            Total dice: <strong>{rollPoolPreview.total}</strong>
+                          </div>
+                        </div>
+                      )}
+                      {(abilities || []).filter((a) => a.type === 'standard').length > 0 && (
+                        <div style={{ marginBottom: '12px' }}>
+                          <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>Standard abilities (optional)</div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '140px', overflow: 'auto' }}>
+                            {(abilities || []).filter((a) => a.type === 'standard').slice(0, 16).map((ab) => {
+                              const id = ab.id ?? ab.name;
+                              const b = rollAbilityBoost[id] || {};
+                              return (
+                                <div key={id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', fontSize: '11px', flexWrap: 'wrap' }}>
+                                  <span style={{ color: '#e5e7eb', flex: '1 1 120px' }}>{ab.name}</span>
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={!!b.dice}
+                                      onChange={(e) =>
+                                        setRollAbilityBoost((p) => ({
+                                          ...p,
+                                          [id]: { ...p[id], dice: e.target.checked, effect: !!p[id]?.effect },
+                                        }))
+                                      }
+                                    />
+                                    +1d
+                                  </label>
+                                  <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
+                                    <input
+                                      type="checkbox"
+                                      checked={!!b.effect}
+                                      onChange={(e) =>
+                                        setRollAbilityBoost((p) => ({
+                                          ...p,
+                                          [id]: { ...p[id], effect: e.target.checked, dice: !!p[id]?.dice },
+                                        }))
+                                      }
+                                    />
+                                    +1 effect
+                                  </label>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={rollModal.push_effect} onChange={(e) => setRollModal((p) => ({ ...p, push_effect: e.target.checked }))} />
+                          Push for +1 effect (2 stress)
+                        </label>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', marginTop: '4px' }}>
+                          <input
+                            type="checkbox"
+                            checked={rollModal.push_dice}
+                            onChange={(e) => {
+                              setRollModal((p) => ({ ...p, push_dice: e.target.checked }));
+                              setPendingPushDice(e.target.checked);
+                            }}
+                          />
+                          Push for +1d (2 stress)
+                        </label>
+                        <div style={{ marginTop: '8px' }}>
+                          <span style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Assist (one teammate, +1d, helper pays 1 stress)</span>
+                          <select
+                            style={{ ...S.sel, width: '100%', maxWidth: 320 }}
+                            value={assistHelperId}
+                            onChange={(e) => setAssistHelperId(e.target.value)}
+                          >
+                            <option value="">No assist</option>
+                            {helpCandidates.map((c) => (
+                              <option key={c.id} value={String(c.id)}>
+                                {c.true_name || c.name || `PC ${c.id}`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div style={{ marginTop: '10px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={rollModal.devil_bargain_dice}
+                              onChange={(e) => {
+                                const on = e.target.checked;
+                                setRollModal((p) => ({
+                                  ...p,
+                                  devil_bargain_dice: on,
+                                  devil_bargain_note: on ? (p.devil_bargain_note || pendingDevilsBargain || '') : '',
+                                }));
+                                if (!on) setPendingDevilsBargain(null);
+                              }}
+                            />
+                            Devil&apos;s bargain (+1d, GM-determined consequence)
+                          </label>
+                          {rollModal.devil_bargain_dice && (
+                            <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                              <button
+                                type="button"
+                                onClick={() => setShowDevilsBargainModal(true)}
+                                style={{ ...S.btn, fontSize: '11px', background: '#4b5563', color: '#fff' }}
+                              >
+                                Choose consequence…
+                              </button>
+                              {rollModal.devil_bargain_note ? (
+                                <span style={{ fontSize: '11px', color: '#d1d5db' }}>({rollModal.devil_bargain_note})</span>
+                              ) : (
+                                <span style={{ fontSize: '11px', color: '#f87171' }}>Describe the consequence before rolling.</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {(bonusDiceFromAbilities > 0 || abilityEffectSteps > 0) && (
+                        <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '8px' }}>
+                          Pool: +{bonusDiceFromAbilities}d from abilities
+                          {abilityEffectSteps > 0 ? `, +${abilityEffectSteps} effect tier step(s)` : ''}
+                        </div>
+                      )}
+                      {rollApiError && <div style={{ color: '#f87171', fontSize: '11px', marginBottom: '8px' }}>{rollApiError}</div>}
+                      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={handleRollWithSession}
+                          disabled={
+                            (harmLevel3Used && !rollModal.push_effect && !rollModal.push_dice) ||
+                            (rollModal.devil_bargain_dice && !(rollModal.devil_bargain_note || '').trim())
+                          }
+                          style={{ ...S.btn, background: '#7c3aed', color: '#fff' }}
+                        >
+                          Roll
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setRollPending(null);
+                            setRollApiError(null);
+                            setRollAbilityBoost({});
+                            setRollGoalDraft('');
+                            setAssistHelperId('');
+                            setPendingPushDice(false);
+                            setPendingDevilsBargain(null);
+                            setRollModal({ push_effect: false, push_dice: false, devil_bargain_dice: false, devil_bargain_note: '' });
+                          }}
+                          style={S.btn}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Dice result — same slot under action ratings (after pool or resistance / offline roll) */}
+                  {diceResult && !rollPending && (
+                    <div style={{ background:'#1f2937', padding:'12px', borderRadius:'4px', border:'1px solid #4b5563', marginBottom:'14px', fontSize:'12px' }}>
+                      <div style={{ color:'#a78bfa', fontWeight:'bold', marginBottom:'6px' }}>
+                        {diceResult.action} {diceResult.isResistance ? 'Resistance Roll' : 'Action Roll'}
+                        {diceResult.zeroDice && <span style={{ color:'#f87171', marginLeft:'8px' }}>(0 Dice — take lower)</span>}
+                        {diceResult.isDesperateAction && <span style={{ color:'#f97316', marginLeft:'8px' }}>(Desperate — XP marked)</span>}
+                      </div>
+                      <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', marginBottom:'8px' }}>
+                        <div style={{ display:'flex', gap:'3px' }}>
+                          {diceResult.dice.map((die, i) => (
+                            <span key={i} style={{
+                              display:'inline-flex', width:'24px', height:'24px', borderRadius:'4px',
+                              alignItems:'center', justifyContent:'center', fontWeight:'bold', border:'1px solid',
+                              background: die === 6 ? '#166534' : die >= 4 ? '#1e3a8a' : '#374151',
+                              borderColor: die === 6 ? '#22c55e' : die >= 4 ? '#3b82f6' : '#6b7280',
+                            }}>
+                              {die}
+                            </span>
+                          ))}
+                        </div>
+                        <span style={{ fontWeight:'bold', color:
+                          diceResult.outcome.includes('Critical') ? '#fbbf24' :
+                          diceResult.outcome === 'Success' ? '#22c55e' :
+                          diceResult.outcome.includes('Partial') ? '#eab308' : '#ef4444' }}>
+                          {diceResult.outcome}
+                        </span>
+                        {diceResult.special && <span style={{ color:'#fbbf24' }}>{diceResult.special}</span>}
+                        {(diceResult.position || diceResult.effect) && !diceResult.isResistance && (
+                          <span style={{ color:'#6b7280', fontSize:'11px', marginLeft:'8px' }}>
+                            ({diceResult.position || '—'}, {diceResult.effect || '—'})
+                          </span>
+                        )}
+                        {diceResult.xpGained > 0 && (
+                          <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'9999px', fontWeight:'bold', background:'#16a34a', color:'#fff', marginLeft:'8px' }}>+{diceResult.xpGained} XP</span>
+                        )}
+                      </div>
+
+                      {diceResult.isResistance && (
+                        <div style={{ padding:'8px', borderRadius:'4px', ...(diceResult.isCritical
+                          ? { background:'#451a03', border:'1px solid #92400e' }
+                          : { background:'#0d1117', border:'1px solid #374151' }) }}>
+                          {diceResult.isCritical ? (
+                            <>
+                              <div style={{ color:'#fbbf24', fontWeight:'bold', marginBottom:'2px' }}>
+                                ✦ CRITICAL — 0 Stress cost + Clear 1 stress
+                              </div>
+                              <div style={{ color:'#fcd34d', fontSize:'11px' }}>
+                                Pay no stress AND remove one previously filled stress box.
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div style={{ color:'#eab308', fontWeight:'bold', marginBottom:'2px' }}>
+                                Stress Cost: {diceResult.stressCost}
+                              </div>
+                              <div style={{ color:'#d1d5db', fontSize:'11px', marginBottom:'6px' }}>
+                                Consequence reduced by 1 level (or fully negated at GM discretion).
+                              </div>
+                              <button
+                                onClick={() => {
+                                  const cost = diceResult.stressCost ?? 0;
+                                  setStressFilled((prev) => Math.min(maxStress, prev + cost));
+                                }}
+                                style={{ ...S.btn, background:'#b45309', color:'#fff', fontSize:'11px' }}
+                              >
+                                Apply {diceResult.stressCost} stress
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+
+                      {!diceResult.isResistance && !diceResult.isDesperateAction && (
+                        <button onClick={() => {
+                          const attr = ACTION_ATTR[diceResult.action];
+                          if (attr) setXp(p => ({ ...p, [attr]: Math.min(p[attr] + 1, 5) }));
+                          setDiceResult(p => ({ ...p, isDesperateAction: true }));
+                        }} style={{ ...S.btn, background:'#c2410c', color:'#fff', marginTop:'6px', fontSize:'11px' }}>
+                          Mark as Desperate (+1 XP)
+                        </button>
+                      )}
+                      <button onClick={() => setDiceResult(null)}
+                        style={{ display:'block', marginTop:'6px', color:'#6b7280', background:'none', border:'none', cursor:'pointer', fontSize:'11px' }}>
+                        ✕ Clear
+                      </button>
+                    </div>
+                  )}
+
                   {/* Help & Group Action (session + campaign) */}
                   {charCampaign && activeSessionId && characterId && (
                     <div style={{ ...S.card, marginBottom: '12px' }}>
@@ -2055,302 +2365,6 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                           {groupActionErr && (
                             <div style={{ color: '#f87171', fontSize: '10px', marginTop: 6 }}>{groupActionErr}</div>
                           )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Dice Result — FIX 8 */}
-                  {diceResult && (
-                    <div style={{ background:'#1f2937', padding:'12px', borderRadius:'4px', border:'1px solid #4b5563', marginBottom:'14px', fontSize:'12px' }}>
-                      <div style={{ color:'#a78bfa', fontWeight:'bold', marginBottom:'6px' }}>
-                        {diceResult.action} {diceResult.isResistance ? 'Resistance Roll' : 'Action Roll'}
-                        {diceResult.zeroDice && <span style={{ color:'#f87171', marginLeft:'8px' }}>(0 Dice — take lower)</span>}
-                        {diceResult.isDesperateAction && <span style={{ color:'#f97316', marginLeft:'8px' }}>(Desperate — XP marked)</span>}
-                      </div>
-                      <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', marginBottom:'8px' }}>
-                        <div style={{ display:'flex', gap:'3px' }}>
-                          {diceResult.dice.map((die, i) => (
-                            <span key={i} style={{
-                              display:'inline-flex', width:'24px', height:'24px', borderRadius:'4px',
-                              alignItems:'center', justifyContent:'center', fontWeight:'bold', border:'1px solid',
-                              background: die === 6 ? '#166534' : die >= 4 ? '#1e3a8a' : '#374151',
-                              borderColor: die === 6 ? '#22c55e' : die >= 4 ? '#3b82f6' : '#6b7280',
-                            }}>
-                              {die}
-                            </span>
-                          ))}
-                        </div>
-                        <span style={{ fontWeight:'bold', color:
-                          diceResult.outcome.includes('Critical') ? '#fbbf24' :
-                          diceResult.outcome === 'Success' ? '#22c55e' :
-                          diceResult.outcome.includes('Partial') ? '#eab308' : '#ef4444' }}>
-                          {diceResult.outcome}
-                        </span>
-                        {diceResult.special && <span style={{ color:'#fbbf24' }}>{diceResult.special}</span>}
-                        {(diceResult.position || diceResult.effect) && !diceResult.isResistance && (
-                          <span style={{ color:'#6b7280', fontSize:'11px', marginLeft:'8px' }}>
-                            ({diceResult.position || '—'}, {diceResult.effect || '—'})
-                          </span>
-                        )}
-                        {diceResult.xpGained > 0 && (
-                          <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'9999px', fontWeight:'bold', background:'#16a34a', color:'#fff', marginLeft:'8px' }}>+{diceResult.xpGained} XP</span>
-                        )}
-                      </div>
-
-                      {/* FIX 8: Critical resistance → clear 1 stress */}
-                      {diceResult.isResistance && (
-                        <div style={{ padding:'8px', borderRadius:'4px', ...(diceResult.isCritical
-                          ? { background:'#451a03', border:'1px solid #92400e' }
-                          : { background:'#0d1117', border:'1px solid #374151' }) }}>
-                          {diceResult.isCritical ? (
-                            <>
-                              <div style={{ color:'#fbbf24', fontWeight:'bold', marginBottom:'2px' }}>
-                                ✦ CRITICAL — 0 Stress cost + Clear 1 stress
-                              </div>
-                              <div style={{ color:'#fcd34d', fontSize:'11px' }}>
-                                Pay no stress AND remove one previously filled stress box.
-                              </div>
-                            </>
-                          ) : (
-                            <>
-                              <div style={{ color:'#eab308', fontWeight:'bold', marginBottom:'2px' }}>
-                                Stress Cost: {diceResult.stressCost}
-                              </div>
-                              <div style={{ color:'#d1d5db', fontSize:'11px', marginBottom:'6px' }}>
-                                Consequence reduced by 1 level (or fully negated at GM discretion).
-                              </div>
-                              <button
-                                onClick={() => {
-                                  const cost = diceResult.stressCost ?? 0;
-                                  setStressFilled((prev) => Math.min(maxStress, prev + cost));
-                                }}
-                                style={{ ...S.btn, background:'#b45309', color:'#fff', fontSize:'11px' }}
-                              >
-                                Apply {diceResult.stressCost} stress
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      )}
-
-                      {!diceResult.isResistance && !diceResult.isDesperateAction && (
-                        <button onClick={() => {
-                          const attr = ACTION_ATTR[diceResult.action];
-                          if (attr) setXp(p => ({ ...p, [attr]: Math.min(p[attr] + 1, 5) }));
-                          setDiceResult(p => ({ ...p, isDesperateAction: true }));
-                        }} style={{ ...S.btn, background:'#c2410c', color:'#fff', marginTop:'6px', fontSize:'11px' }}>
-                          Mark as Desperate (+1 XP)
-                        </button>
-                      )}
-                      <button onClick={() => setDiceResult(null)}
-                        style={{ display:'block', marginTop:'6px', color:'#6b7280', background:'none', border:'none', cursor:'pointer', fontSize:'11px' }}>
-                        ✕ Clear
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Dice pool (pre-roll): position/effect, goal, pool icons, push / assist / devil / abilities */}
-                  {rollPending && (
-                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-                      <div style={{ background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '20px', maxWidth: '480px', width: '92%', maxHeight: '90vh', overflow: 'auto' }}>
-                        <div style={{ fontWeight: 'bold', marginBottom: '4px', color: '#a78bfa' }}>
-                          Dice pool — {rollPending.actionName}
-                        </div>
-                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '12px' }}>
-                          Build your pool, then roll. Cancel to pick another action or change options.
-                        </div>
-                        {harmLevel3Used && !rollModal.push_effect && !rollModal.push_dice && (
-                          <div style={{ background: '#7f1d1d', border: '1px solid #b91c1c', padding: '8px', borderRadius: '4px', marginBottom: '12px', fontSize: '11px', color: '#fca5a5' }}>
-                            Incapacitated (Level 3 harm). You must push yourself to act (2 stress for +1 effect or +1d).
-                          </div>
-                        )}
-                        {charCampaign?.active_session_detail?.show_position_effect_to_players !== false ? (
-                          <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginBottom: '12px' }}>
-                            <PositionStack activePosition={charCampaign?.active_session_detail?.default_position || 'risky'} readOnly />
-                            <EffectShapes activeEffect={charCampaign?.active_session_detail?.default_effect || 'standard'} readOnly />
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '12px' }}>
-                            Position and effect are hidden — ask your GM before rolling.
-                          </div>
-                        )}
-                        <div style={{ marginBottom: '12px' }}>
-                          <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Goal (optional)</label>
-                          <textarea
-                            value={rollGoalDraft}
-                            onChange={(e) => setRollGoalDraft(e.target.value)}
-                            placeholder={((charCampaign?.active_session_detail?.roll_goal_label || '').trim()) || 'What are you trying to achieve on this roll?'}
-                            rows={2}
-                            style={{
-                              width: '100%',
-                              boxSizing: 'border-box',
-                              background: '#0d1117',
-                              color: '#e5e7eb',
-                              border: '1px solid #374151',
-                              borderRadius: '6px',
-                              padding: '8px',
-                              fontSize: '12px',
-                              resize: 'vertical',
-                            }}
-                          />
-                        </div>
-                        {rollPoolPreview && (
-                          <div style={{ marginBottom: '14px', padding: '10px', background: '#0d1117', borderRadius: '8px', border: '1px solid #374151' }}>
-                            <div style={{ fontSize: '11px', color: '#a78bfa', marginBottom: '8px', fontWeight: 'bold' }}>Your dice pool</div>
-                            <DicePoolStrip label="Action rating" count={rollPoolPreview.action_rating} />
-                            <DicePoolStrip label="Attribute (any dot in this attribute)" count={rollPoolPreview.attribute_dice} />
-                            {rollModal.push_dice ? <DicePoolStrip label="Push yourself (+1d, 2 stress)" count={1} /> : null}
-                            {rollModal.devil_bargain_dice ? <DicePoolStrip label="Devil's bargain (+1d, GM consequence)" count={1} /> : null}
-                            {assistHelperId ? <DicePoolStrip label="Assist (+1d, helper −1 stress)" count={1} /> : null}
-                            {bonusDiceFromAbilities > 0 ? <DicePoolStrip label={`Standard abilities (+${bonusDiceFromAbilities}d)`} count={bonusDiceFromAbilities} /> : null}
-                            <div style={{ fontSize: '12px', color: '#d1d5db', marginTop: '6px', paddingTop: '8px', borderTop: '1px solid #374151' }}>
-                              Total dice: <strong>{rollPoolPreview.total}</strong>
-                            </div>
-                          </div>
-                        )}
-                        {(abilities || []).filter((a) => a.type === 'standard').length > 0 && (
-                          <div style={{ marginBottom: '12px' }}>
-                            <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>Standard abilities (optional)</div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '140px', overflow: 'auto' }}>
-                              {(abilities || []).filter((a) => a.type === 'standard').slice(0, 16).map((ab) => {
-                                const id = ab.id ?? ab.name;
-                                const b = rollAbilityBoost[id] || {};
-                                return (
-                                  <div key={id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', fontSize: '11px', flexWrap: 'wrap' }}>
-                                    <span style={{ color: '#e5e7eb', flex: '1 1 120px' }}>{ab.name}</span>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                                      <input
-                                        type="checkbox"
-                                        checked={!!b.dice}
-                                        onChange={(e) =>
-                                          setRollAbilityBoost((p) => ({
-                                            ...p,
-                                            [id]: { ...p[id], dice: e.target.checked, effect: !!p[id]?.effect },
-                                          }))
-                                        }
-                                      />
-                                      +1d
-                                    </label>
-                                    <label style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}>
-                                      <input
-                                        type="checkbox"
-                                        checked={!!b.effect}
-                                        onChange={(e) =>
-                                          setRollAbilityBoost((p) => ({
-                                            ...p,
-                                            [id]: { ...p[id], effect: e.target.checked, dice: !!p[id]?.dice },
-                                          }))
-                                        }
-                                      />
-                                      +1 effect
-                                    </label>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                        <div style={{ marginBottom: '12px' }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer' }}>
-                            <input type="checkbox" checked={rollModal.push_effect} onChange={(e) => setRollModal((p) => ({ ...p, push_effect: e.target.checked }))} />
-                            Push for +1 effect (2 stress)
-                          </label>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', marginTop: '4px' }}>
-                            <input
-                              type="checkbox"
-                              checked={rollModal.push_dice}
-                              onChange={(e) => {
-                                setRollModal((p) => ({ ...p, push_dice: e.target.checked }));
-                                setPendingPushDice(e.target.checked);
-                              }}
-                            />
-                            Push for +1d (2 stress)
-                          </label>
-                          <div style={{ marginTop: '8px' }}>
-                            <span style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Assist (one teammate, +1d, helper pays 1 stress)</span>
-                            <select
-                              style={{ ...S.sel, width: '100%', maxWidth: 320 }}
-                              value={assistHelperId}
-                              onChange={(e) => setAssistHelperId(e.target.value)}
-                            >
-                              <option value="">No assist</option>
-                              {helpCandidates.map((c) => (
-                                <option key={c.id} value={String(c.id)}>
-                                  {c.true_name || c.name || `PC ${c.id}`}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div style={{ marginTop: '10px' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer' }}>
-                              <input
-                                type="checkbox"
-                                checked={rollModal.devil_bargain_dice}
-                                onChange={(e) => {
-                                  const on = e.target.checked;
-                                  setRollModal((p) => ({
-                                    ...p,
-                                    devil_bargain_dice: on,
-                                    devil_bargain_note: on ? (p.devil_bargain_note || pendingDevilsBargain || '') : '',
-                                  }));
-                                  if (!on) setPendingDevilsBargain(null);
-                                }}
-                              />
-                              Devil&apos;s bargain (+1d, GM-determined consequence)
-                            </label>
-                            {rollModal.devil_bargain_dice && (
-                              <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-                                <button
-                                  type="button"
-                                  onClick={() => setShowDevilsBargainModal(true)}
-                                  style={{ ...S.btn, fontSize: '11px', background: '#4b5563', color: '#fff' }}
-                                >
-                                  Choose consequence…
-                                </button>
-                                {rollModal.devil_bargain_note ? (
-                                  <span style={{ fontSize: '11px', color: '#d1d5db' }}>({rollModal.devil_bargain_note})</span>
-                                ) : (
-                                  <span style={{ fontSize: '11px', color: '#f87171' }}>Describe the consequence before rolling.</span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        {(bonusDiceFromAbilities > 0 || abilityEffectSteps > 0) && (
-                          <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '8px' }}>
-                            Pool: +{bonusDiceFromAbilities}d from abilities
-                            {abilityEffectSteps > 0 ? `, +${abilityEffectSteps} effect tier step(s)` : ''}
-                          </div>
-                        )}
-                        {rollApiError && <div style={{ color: '#f87171', fontSize: '11px', marginBottom: '8px' }}>{rollApiError}</div>}
-                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                          <button
-                            onClick={handleRollWithSession}
-                            disabled={
-                              (harmLevel3Used && !rollModal.push_effect && !rollModal.push_dice) ||
-                              (rollModal.devil_bargain_dice && !(rollModal.devil_bargain_note || '').trim())
-                            }
-                            style={{ ...S.btn, background: '#7c3aed', color: '#fff' }}
-                          >
-                            Roll
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRollPending(null);
-                              setRollApiError(null);
-                              setRollAbilityBoost({});
-                              setRollGoalDraft('');
-                              setAssistHelperId('');
-                              setPendingPushDice(false);
-                              setPendingDevilsBargain(null);
-                              setRollModal({ push_effect: false, push_dice: false, devil_bargain_dice: false, devil_bargain_note: '' });
-                            }}
-                            style={S.btn}
-                          >
-                            Cancel
-                          </button>
                         </div>
                       </div>
                     </div>
