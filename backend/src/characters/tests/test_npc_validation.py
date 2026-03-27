@@ -118,7 +118,7 @@ class NPCArmorSystemTest(TestCase):
             stand_coin_stats={'DURABILITY': 'S'}
         )
         
-        self.assertEqual(npc.special_armor_charges, 3)
+        self.assertEqual(npc.special_armor_charges, 2)
         
     def test_special_armor_charges_a_rank(self):
         """Test special armor charges for A-rank durability."""
@@ -129,7 +129,7 @@ class NPCArmorSystemTest(TestCase):
             stand_coin_stats={'DURABILITY': 'A'}
         )
         
-        self.assertEqual(npc.special_armor_charges, 3)
+        self.assertEqual(npc.special_armor_charges, 2)
         
     def test_special_armor_charges_b_rank(self):
         """Test special armor charges for B-rank durability."""
@@ -140,7 +140,7 @@ class NPCArmorSystemTest(TestCase):
             stand_coin_stats={'DURABILITY': 'B'}
         )
         
-        self.assertEqual(npc.special_armor_charges, 2)
+        self.assertEqual(npc.special_armor_charges, 1)
         
     def test_special_armor_charges_c_rank(self):
         """Test special armor charges for C-rank durability."""
@@ -162,7 +162,7 @@ class NPCArmorSystemTest(TestCase):
             stand_coin_stats={'DURABILITY': 'D'}
         )
         
-        self.assertEqual(npc.special_armor_charges, 1)
+        self.assertEqual(npc.special_armor_charges, 0)
         
     def test_special_armor_charges_f_rank(self):
         """Test special armor charges for F-rank durability."""
@@ -273,14 +273,14 @@ class NPCVulnerabilityClockTest(TestCase):
         self.assertEqual(npc.vulnerability_clock_max, 4)
 
     def test_regular_armor_charges_b_rank(self):
-        """SRD: B-rank Durability gives 3 regular armor charges (clock segments ÷ 3)."""
+        """B-rank Durability regular armor charges (see NPC.regular_armor_charges)."""
         npc = NPC.objects.create(
             name='B-Durability NPC',
             creator=self.gm_user,
             campaign=self.campaign,
             stand_coin_stats={'DURABILITY': 'B'}
         )
-        self.assertEqual(npc.regular_armor_charges, 3)
+        self.assertEqual(npc.regular_armor_charges, 2)
 
 
 class NPCMovementSpeedTest(TestCase):

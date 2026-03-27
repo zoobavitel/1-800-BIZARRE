@@ -63,7 +63,7 @@ class CharacterImporterTest(TestCase):
 
         serializer = CharacterSerializer(data=character_data)
         self.assertTrue(serializer.is_valid(), serializer.errors)
-        character = serializer.save()
+        character = serializer.save(user=self.user)
 
         self.assertEqual(character.true_name, "Mingo")
         self.assertEqual(character.level, 5)

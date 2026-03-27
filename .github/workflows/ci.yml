@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [ main, master, dev, pat ]
 
+# npm workspaces: lockfile lives at repo root (not frontend/package-lock.json).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: write  # needed for deploy job to push gh-pages
 
@@ -22,12 +26,10 @@ jobs:
       with:
         node-version: '18'
         cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
+        cache-dependency-path: package-lock.json
     
-    - name: Install frontend dependencies
-      run: |
-        cd frontend
-        npm ci
+    - name: Install dependencies (npm workspaces)
+      run: npm ci
     
     - name: Run frontend tests
       run: |
@@ -130,7 +132,7 @@ jobs:
         with:
           node-version: '18'
           cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install and build
         run: |
