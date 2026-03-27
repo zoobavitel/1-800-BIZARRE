@@ -510,6 +510,41 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
   }, [activeCharTab]);
   const activeNpcTab = npcTabs.find(t => t.tabId === activeNpcTabId);
 
+  const handleDeleteActiveCharacter = useCallback(async () => {
+    const id = activeCharTab?.characterId ?? activeCharTab?.character?.id;
+    if (!id) {
+      window.alert('This character is not saved yet. Close the tab to discard, or save first.');
+      return;
+    }
+    if (!window.confirm('Delete this character permanently? This cannot be undone.')) return;
+    setCharactersError(null);
+    try {
+      await characterAPI.deleteCharacter(id);
+      setCharacters((prev) => prev.filter((c) => c.id !== id));
+      setCharTabs((prev) => {
+        const filtered = prev.filter((t) => (t.characterId ?? t.character?.id) !== id);
+        if (filtered.length === 0) {
+          const blank = { tabId: nextTabId++, characterId: null, character: createDefaultCharacter() };
+          setActiveCharTabId(blank.tabId);
+          if (typeof window !== 'undefined') window.location.hash = 'character';
+          return [blank];
+        }
+        const nextActive = filtered.some((t) => t.tabId === activeCharTabId)
+          ? activeCharTabId
+          : filtered[filtered.length - 1].tabId;
+        setActiveCharTabId(nextActive);
+        const nextTab = filtered.find((t) => t.tabId === nextActive);
+        const nextHashId = nextTab?.characterId ?? nextTab?.character?.id;
+        if (typeof window !== 'undefined') {
+          window.location.hash = nextHashId ? `character/${nextHashId}` : 'character';
+        }
+        return sortCharTabs(filtered);
+      });
+    } catch (e) {
+      setCharactersError(e.message || 'Failed to delete character');
+    }
+  }, [activeCharTab, activeCharTabId]);
+
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={PAGE_STYLES.page}>
@@ -599,18 +634,38 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
           )}
 
           {mode === MODES.CHARACTER && characters.length > 0 && (
-            <select
-              style={{ background: '#1f2937', color: '#9ca3af', border: '1px solid #4b5563', padding: '4px 8px', fontSize: '11px', fontFamily: 'monospace', borderRadius: '4px' }}
-              value=""
-              onChange={e => {
-                const char = characters.find(c => c.id === parseInt(e.target.value));
-                if (char) openCharacterInTab(char);
-              }}>
-              <option value="">Open character...</option>
-              {characters.map(c => (
-                <option key={c.id} value={c.id}>{c.name || c.standName || 'Unnamed'}</option>
-              ))}
-            </select>
+            <>
+              <select
+                style={{ background: '#1f2937', color: '#9ca3af', border: '1px solid #4b5563', padding: '4px 8px', fontSize: '11px', fontFamily: 'monospace', borderRadius: '4px' }}
+                value=""
+                onChange={e => {
+                  const char = characters.find(c => c.id === parseInt(e.target.value));
+                  if (char) openCharacterInTab(char);
+                }}>
+                <option value="">Open character...</option>
+                {characters.map(c => (
+                  <option key={c.id} value={c.id}>{c.name || c.standName || 'Unnamed'}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleDeleteActiveCharacter}
+                title="Delete the character open in the active tab (permanent)"
+                style={{
+                  background: '#450a0a',
+                  color: '#fecaca',
+                  border: '1px solid #991b1b',
+                  padding: '4px 10px',
+                  fontSize: '11px',
+                  fontFamily: 'monospace',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Delete character
+              </button>
+            </>
           )}
 
           {mode === MODES.NPC && npcs.length > 0 && (
