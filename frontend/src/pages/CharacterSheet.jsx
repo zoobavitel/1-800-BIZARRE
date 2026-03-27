@@ -17,6 +17,26 @@ import {
 import { characterAPI, campaignAPI, crewAPI, rollAPI, progressClockAPI, referenceAPI, experienceTrackerAPI, xpHistoryAPI, groupActionAPI } from '../features/character-sheet';
 import { useAuth } from '../features/auth';
 import { PositionStack, EffectShapes, HistoryBranchIcon } from '../components/position-effect/PositionEffectIndicators';
+import { computeActionPoolBreakdown } from '../features/character-sheet/utils/actionDicePool';
+
+// ─── Dice pool (pre-roll preview) ─────────────────────────────────────────────
+
+const DicePoolStrip = ({ label, count }) => {
+  const n = Math.max(0, Number(count) || 0);
+  if (n < 1) return null;
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <div style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>{label}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+        {Array.from({ length: n }, (_, i) => (
+          <span key={`${label}-${i}`} style={{ fontSize: 20, lineHeight: 1 }} title={label}>
+            🎲
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 // ─── ProgressClock ────────────────────────────────────────────────────────────
 
@@ -637,9 +657,9 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const [activeGroupAction, setActiveGroupAction] = useState(null);
   const [groupGoalDraft, setGroupGoalDraft] = useState('');
   const [groupBusy, setGroupBusy] = useState(false);
-  const [helpTargetId, setHelpTargetId] = useState('');
-  const [helpBusy, setHelpBusy] = useState(false);
-  const [helpErr, setHelpErr] = useState(null);
+  const [groupActionErr, setGroupActionErr] = useState(null);
+  const [rollGoalDraft, setRollGoalDraft] = useState('');
+  const [assistHelperId, setAssistHelperId] = useState('');
   const [pendingPushDice, setPendingPushDice] = useState(false);
   const [showDevilsBargainModal, setShowDevilsBargainModal] = useState(false);
   const [pendingDevilsBargain, setPendingDevilsBargain] = useState(null);
@@ -722,11 +742,30 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     return { bonusDiceFromAbilities: d, abilityEffectSteps: e, abilityBonusAudit: audit };
   }, [abilities, rollAbilityBoost]);
 
+  const rollPoolPreview = useMemo(() => {
+    if (!rollPending) return null;
+    const { action_rating, attribute_dice, basePool } = computeActionPoolBreakdown(rollPending.actionName, actionRatings);
+    let mod = 0;
+    if (rollModal.push_dice) mod += 1;
+    if (rollModal.devil_bargain_dice) mod += 1;
+    if (assistHelperId) mod += 1;
+    mod += bonusDiceFromAbilities;
+    return { action_rating, attribute_dice, basePool, mod, total: basePool + mod };
+  }, [
+    rollPending,
+    actionRatings,
+    rollModal.push_dice,
+    rollModal.devil_bargain_dice,
+    assistHelperId,
+    bonusDiceFromAbilities,
+  ]);
+
   const handleRollWithSession = async () => {
     if (!rollPending || !characterId || !activeSessionId) return;
     setRollApiError(null);
     const asd = charCampaign?.active_session_detail;
     try {
+      const goalFromDraft = (rollGoalDraft || '').trim();
       const res = await characterAPI.rollAction(characterId, {
         action: rollPending.actionName.toLowerCase(),
         session_id: activeSessionId,
@@ -736,9 +775,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
         devil_bargain_note: rollModal.devil_bargain_note || undefined,
         bonus_dice: bonusDiceFromAbilities,
         ability_effect_steps: abilityEffectSteps,
-        goal_label: (asd?.roll_goal_label || '').trim() || undefined,
+        goal_label: goalFromDraft || (asd?.roll_goal_label || '').trim() || undefined,
         ability_bonuses: abilityBonusAudit.length ? abilityBonusAudit : undefined,
         group_action_id: activeGroupAction?.id || undefined,
+        assist_helper_id: assistHelperId ? parseInt(assistHelperId, 10) : undefined,
       });
       setDiceResult({
         action: rollPending.actionName,
@@ -759,7 +799,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
         setXp((p) => ({ ...p, [res.xp_track]: Math.min((p[res.xp_track] || 0) + res.xp_gained, 5) }));
       }
       if (res.stress_spent) setStressFilled((p) => Math.max(0, (p ?? 0) - res.stress_spent));
+      if (res.assist_helper_id) onCampaignRefresh?.();
       setRollPending(null);
+      setRollGoalDraft('');
+      setAssistHelperId('');
       setPendingPushDice(false);
       setPendingDevilsBargain(null);
       setRollModal((p) => ({ ...p, devil_bargain_dice: false, devil_bargain_note: '' }));
@@ -775,6 +818,9 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     if (activeSessionId && characterId && !isResistance) {
       setRollPending({ actionName, diceCount, isDesperateAction });
       setRollAbilityBoost({});
+      const asdGoal = (charCampaign?.active_session_detail?.roll_goal_label || '').trim();
+      setRollGoalDraft(asdGoal);
+      setAssistHelperId('');
       setRollModal({
         push_effect: false,
         push_dice: pendingPushDice,
@@ -1946,41 +1992,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                   {charCampaign && activeSessionId && characterId && (
                     <div style={{ ...S.card, marginBottom: '12px' }}>
                       <span style={S.lbl}>CREW ACTIONS</span>
+                      <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '8px', marginBottom: '10px', lineHeight: 1.4 }}>
+                        <strong style={{ color: '#d1d5db' }}>Assist:</strong> when you roll an action (dice pool), pick a teammate there — they spend 1 stress and add +1d to your pool.
+                      </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'flex-end', marginTop: '8px', fontSize: '12px' }}>
-                        <div>
-                          <span style={{ fontSize: '10px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Help (helper −1 stress)</span>
-                          <select
-                            style={S.sel}
-                            value={helpTargetId}
-                            onChange={(e) => setHelpTargetId(e.target.value)}
-                          >
-                            <option value="">Choose crewmate…</option>
-                            {helpCandidates.map((c) => (
-                              <option key={c.id} value={c.id}>{c.true_name || c.name || `PC ${c.id}`}</option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            disabled={helpBusy || !helpTargetId}
-                            onClick={async () => {
-                              setHelpErr(null);
-                              setHelpBusy(true);
-                              try {
-                                await characterAPI.assistHelp(characterId, parseInt(helpTargetId, 10));
-                                setHelpTargetId('');
-                                onCampaignRefresh?.();
-                              } catch (e) {
-                                setHelpErr(e.message);
-                              } finally {
-                                setHelpBusy(false);
-                              }
-                            }}
-                            style={{ ...S.btn, marginLeft: 8, background: '#4b5563', color: '#fff', fontSize: '11px' }}
-                          >
-                            {helpBusy ? '…' : 'Help'}
-                          </button>
-                          {helpErr && <div style={{ color: '#f87171', fontSize: '10px', marginTop: 4 }}>{helpErr}</div>}
-                        </div>
                         <div style={{ flex: '1 1 200px' }}>
                           <span style={{ fontSize: '10px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Group action goal</span>
                           <input
@@ -1996,6 +2011,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                               onClick={async () => {
                                 setGroupBusy(true);
                                 try {
+                                  setGroupActionErr(null);
                                   const ga = await groupActionAPI.create({
                                     session: activeSessionId,
                                     leader: characterId,
@@ -2004,7 +2020,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                                   setActiveGroupAction(ga);
                                   onCampaignRefresh?.();
                                 } catch (e) {
-                                  setHelpErr(e.message);
+                                  setGroupActionErr(e.message);
                                 } finally {
                                   setGroupBusy(false);
                                 }
@@ -2027,7 +2043,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                                     setActiveGroupAction(null);
                                     onCampaignRefresh?.();
                                   } catch (e) {
-                                    setHelpErr(e.message);
+                                    setGroupActionErr(e.message);
                                   }
                                 }}
                                 style={{ ...S.btn, fontSize: '11px', background: '#7c3aed', color: '#fff' }}
@@ -2036,6 +2052,9 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                               </button>
                             )}
                           </div>
+                          {groupActionErr && (
+                            <div style={{ color: '#f87171', fontSize: '10px', marginTop: 6 }}>{groupActionErr}</div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2131,12 +2150,15 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                     </div>
                   )}
 
-                  {/* Player's Action pool — position/effect from GM session; push & abilities here */}
+                  {/* Dice pool (pre-roll): position/effect, goal, pool icons, push / assist / devil / abilities */}
                   {rollPending && (
                     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-                      <div style={{ background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '20px', maxWidth: '440px', width: '92%', maxHeight: '90vh', overflow: 'auto' }}>
-                        <div style={{ fontWeight: 'bold', marginBottom: '12px', color: '#a78bfa' }}>
-                          Player&apos;s Action — {rollPending.actionName}
+                      <div style={{ background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '20px', maxWidth: '480px', width: '92%', maxHeight: '90vh', overflow: 'auto' }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: '4px', color: '#a78bfa' }}>
+                          Dice pool — {rollPending.actionName}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#6b7280', marginBottom: '12px' }}>
+                          Build your pool, then roll. Cancel to pick another action or change options.
                         </div>
                         {harmLevel3Used && !rollModal.push_effect && !rollModal.push_dice && (
                           <div style={{ background: '#7f1d1d', border: '1px solid #b91c1c', padding: '8px', borderRadius: '4px', marginBottom: '12px', fontSize: '11px', color: '#fca5a5' }}>
@@ -2153,12 +2175,40 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                             Position and effect are hidden — ask your GM before rolling.
                           </div>
                         )}
-                        {(charCampaign?.active_session_detail?.roll_goal_label || '').trim() ? (
-                          <div style={{ fontSize: '11px', color: '#d1d5db', marginBottom: '10px', padding: '8px', background: '#1f2937', borderRadius: '6px' }}>
-                            <span style={{ color: '#9ca3af' }}>Goal: </span>
-                            {charCampaign.active_session_detail.roll_goal_label}
+                        <div style={{ marginBottom: '12px' }}>
+                          <label style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Goal (optional)</label>
+                          <textarea
+                            value={rollGoalDraft}
+                            onChange={(e) => setRollGoalDraft(e.target.value)}
+                            placeholder={((charCampaign?.active_session_detail?.roll_goal_label || '').trim()) || 'What are you trying to achieve on this roll?'}
+                            rows={2}
+                            style={{
+                              width: '100%',
+                              boxSizing: 'border-box',
+                              background: '#0d1117',
+                              color: '#e5e7eb',
+                              border: '1px solid #374151',
+                              borderRadius: '6px',
+                              padding: '8px',
+                              fontSize: '12px',
+                              resize: 'vertical',
+                            }}
+                          />
+                        </div>
+                        {rollPoolPreview && (
+                          <div style={{ marginBottom: '14px', padding: '10px', background: '#0d1117', borderRadius: '8px', border: '1px solid #374151' }}>
+                            <div style={{ fontSize: '11px', color: '#a78bfa', marginBottom: '8px', fontWeight: 'bold' }}>Your dice pool</div>
+                            <DicePoolStrip label="Action rating" count={rollPoolPreview.action_rating} />
+                            <DicePoolStrip label="Attribute (any dot in this attribute)" count={rollPoolPreview.attribute_dice} />
+                            {rollModal.push_dice ? <DicePoolStrip label="Push yourself (+1d, 2 stress)" count={1} /> : null}
+                            {rollModal.devil_bargain_dice ? <DicePoolStrip label="Devil's bargain (+1d, GM consequence)" count={1} /> : null}
+                            {assistHelperId ? <DicePoolStrip label="Assist (+1d, helper −1 stress)" count={1} /> : null}
+                            {bonusDiceFromAbilities > 0 ? <DicePoolStrip label={`Standard abilities (+${bonusDiceFromAbilities}d)`} count={bonusDiceFromAbilities} /> : null}
+                            <div style={{ fontSize: '12px', color: '#d1d5db', marginTop: '6px', paddingTop: '8px', borderTop: '1px solid #374151' }}>
+                              Total dice: <strong>{rollPoolPreview.total}</strong>
+                            </div>
                           </div>
-                        ) : null}
+                        )}
                         {(abilities || []).filter((a) => a.type === 'standard').length > 0 && (
                           <div style={{ marginBottom: '12px' }}>
                             <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '6px' }}>Standard abilities (optional)</div>
@@ -2207,15 +2257,65 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                             Push for +1 effect (2 stress)
                           </label>
                           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', marginTop: '4px' }}>
-                            <input type="checkbox" checked={rollModal.push_dice} onChange={(e) => { setRollModal((p) => ({ ...p, push_dice: e.target.checked })); setPendingPushDice(e.target.checked); }} />
+                            <input
+                              type="checkbox"
+                              checked={rollModal.push_dice}
+                              onChange={(e) => {
+                                setRollModal((p) => ({ ...p, push_dice: e.target.checked }));
+                                setPendingPushDice(e.target.checked);
+                              }}
+                            />
                             Push for +1d (2 stress)
                           </label>
-                          {(rollModal.devil_bargain_dice || pendingDevilsBargain) && (
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer', marginTop: '4px' }}>
-                              <input type="checkbox" checked={rollModal.devil_bargain_dice} onChange={(e) => { setRollModal((p) => ({ ...p, devil_bargain_dice: e.target.checked, devil_bargain_note: e.target.checked ? (p.devil_bargain_note || pendingDevilsBargain) : '' })); if (!e.target.checked) setPendingDevilsBargain(null); }} />
-                              Devil&apos;s bargain +1d {rollModal.devil_bargain_note && `(${rollModal.devil_bargain_note})`}
+                          <div style={{ marginTop: '8px' }}>
+                            <span style={{ fontSize: '11px', color: '#9ca3af', display: 'block', marginBottom: '4px' }}>Assist (one teammate, +1d, helper pays 1 stress)</span>
+                            <select
+                              style={{ ...S.sel, width: '100%', maxWidth: 320 }}
+                              value={assistHelperId}
+                              onChange={(e) => setAssistHelperId(e.target.value)}
+                            >
+                              <option value="">No assist</option>
+                              {helpCandidates.map((c) => (
+                                <option key={c.id} value={String(c.id)}>
+                                  {c.true_name || c.name || `PC ${c.id}`}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div style={{ marginTop: '10px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer' }}>
+                              <input
+                                type="checkbox"
+                                checked={rollModal.devil_bargain_dice}
+                                onChange={(e) => {
+                                  const on = e.target.checked;
+                                  setRollModal((p) => ({
+                                    ...p,
+                                    devil_bargain_dice: on,
+                                    devil_bargain_note: on ? (p.devil_bargain_note || pendingDevilsBargain || '') : '',
+                                  }));
+                                  if (!on) setPendingDevilsBargain(null);
+                                }}
+                              />
+                              Devil&apos;s bargain (+1d, GM-determined consequence)
                             </label>
-                          )}
+                            {rollModal.devil_bargain_dice && (
+                              <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowDevilsBargainModal(true)}
+                                  style={{ ...S.btn, fontSize: '11px', background: '#4b5563', color: '#fff' }}
+                                >
+                                  Choose consequence…
+                                </button>
+                                {rollModal.devil_bargain_note ? (
+                                  <span style={{ fontSize: '11px', color: '#d1d5db' }}>({rollModal.devil_bargain_note})</span>
+                                ) : (
+                                  <span style={{ fontSize: '11px', color: '#f87171' }}>Describe the consequence before rolling.</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                         {(bonusDiceFromAbilities > 0 || abilityEffectSteps > 0) && (
                           <div style={{ fontSize: '10px', color: '#6b7280', marginBottom: '8px' }}>
@@ -2224,11 +2324,31 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                           </div>
                         )}
                         {rollApiError && <div style={{ color: '#f87171', fontSize: '11px', marginBottom: '8px' }}>{rollApiError}</div>}
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button onClick={handleRollWithSession} disabled={harmLevel3Used && !rollModal.push_effect && !rollModal.push_dice} style={{ ...S.btn, background: '#7c3aed', color: '#fff' }}>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                          <button
+                            onClick={handleRollWithSession}
+                            disabled={
+                              (harmLevel3Used && !rollModal.push_effect && !rollModal.push_dice) ||
+                              (rollModal.devil_bargain_dice && !(rollModal.devil_bargain_note || '').trim())
+                            }
+                            style={{ ...S.btn, background: '#7c3aed', color: '#fff' }}
+                          >
                             Roll
                           </button>
-                          <button onClick={() => { setRollPending(null); setRollApiError(null); setRollAbilityBoost({}); }} style={S.btn}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setRollPending(null);
+                              setRollApiError(null);
+                              setRollAbilityBoost({});
+                              setRollGoalDraft('');
+                              setAssistHelperId('');
+                              setPendingPushDice(false);
+                              setPendingDevilsBargain(null);
+                              setRollModal({ push_effect: false, push_dice: false, devil_bargain_dice: false, devil_bargain_note: '' });
+                            }}
+                            style={S.btn}
+                          >
                             Cancel
                           </button>
                         </div>
@@ -2878,12 +2998,14 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                         DEVIL'S BARGAIN {pendingDevilsBargain ? `(${pendingDevilsBargain})` : ''}
                       </button>
                     </div>
-                    <div style={{ color:'#9ca3af', marginTop:'6px', fontSize:'11px' }}>Assist: +1d to teammate's roll (costs you 1 Stress)</div>
+                    <div style={{ color:'#9ca3af', marginTop:'6px', fontSize:'11px', lineHeight: 1.4 }}>
+                      Shortcuts for your next <strong style={{ color: '#d1d5db' }}>dice pool</strong> (click 🎲 on an action). Assist is set in the pool, not here.
+                    </div>
                   </div>
 
-                  {/* Devil's Bargain modal */}
+                  {/* Devil's Bargain modal (above dice pool overlay when both open) */}
                   {showDevilsBargainModal && (
-                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 101 }}>
+                    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 110 }}>
                       <div style={{ background: '#111827', border: '1px solid #374151', borderRadius: '8px', padding: '20px', maxWidth: '360px', width: '90%' }}>
                         <div style={{ fontWeight: 'bold', marginBottom: '12px', color: '#a78bfa' }}>Devil's Bargain — +1d in exchange for a detriment</div>
                         <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '12px' }}>Choose a detriment for +1 die on your next roll:</div>
@@ -2891,20 +3013,38 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                           {DEVILS_BARGAIN_DETRIMENTS.map((detriment) => (
                             <button
                               key={detriment}
-                              onClick={() => { setPendingDevilsBargain(detriment); setShowDevilsBargainModal(false); }}
+                              type="button"
+                              onClick={() => {
+                                setPendingDevilsBargain(detriment);
+                                if (rollPending) {
+                                  setRollModal((p) => ({ ...p, devil_bargain_note: detriment, devil_bargain_dice: true }));
+                                }
+                                setShowDevilsBargainModal(false);
+                              }}
                               style={{ ...S.btn, padding: '6px 10px', fontSize: '11px', background: '#374151' }}
                             >
                               {detriment}
                             </button>
                           ))}
                           <button
-                            onClick={() => { const c = prompt('Custom detriment:'); if (c?.trim()) { setPendingDevilsBargain(c.trim()); setShowDevilsBargainModal(false); } }}
+                            type="button"
+                            onClick={() => {
+                              const c = prompt('Custom detriment:');
+                              if (c?.trim()) {
+                                const t = c.trim();
+                                setPendingDevilsBargain(t);
+                                if (rollPending) {
+                                  setRollModal((p) => ({ ...p, devil_bargain_note: t, devil_bargain_dice: true }));
+                                }
+                                setShowDevilsBargainModal(false);
+                              }
+                            }}
                             style={{ ...S.btn, padding: '6px 10px', fontSize: '11px', background: '#4b5563', borderStyle: 'dashed' }}
                           >
                             Custom…
                           </button>
                         </div>
-                        <button onClick={() => setShowDevilsBargainModal(false)} style={S.btn}>Cancel</button>
+                        <button type="button" onClick={() => setShowDevilsBargainModal(false)} style={S.btn}>Cancel</button>
                       </div>
                     </div>
                   )}

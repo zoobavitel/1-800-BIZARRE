@@ -1,0 +1,13 @@
+---
+description: When changing game mechanics, cite SRD paths in PR descriptions
+alwaysApply: true
+---
+
+# PR descriptions — mechanics & SRD
+
+When a PR changes **game rules behavior** (dice, rolls, position/effect, XP, stress, assist, group actions, sessions, advancement):
+
+- Add a **References** line citing `docs/1(800)-Bizarre SRD.md` (section or keywords).
+- If behavior **intentionally differs** from the SRD, say so in one sentence.
+
+Pure UI/refactor/infra PRs can state **“No mechanics change”** or skip References.

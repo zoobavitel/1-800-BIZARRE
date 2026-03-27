@@ -5105,3 +5105,32 @@ AssertionError: It is redundant to specify `source='xp_entries'` on field 'ListS
 [INFO] 2026-03-26 04:17:05,749 characters.views.auth_views - Login successful: user=zoob ip=127.0.0.1
 [INFO] 2026-03-26 04:35:04,518 django.utils.autoreload - Watching for file changes with StatReloader
 [INFO] 2026-03-26 04:35:43,732 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-26 23:40:35,534 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-03-26 23:40:35,917 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-03-26 23:40:36,298 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-03-26 23:40:37,548 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-03-26 23:40:39,003 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-03-26 23:40:39,194 django.request - Not Found: /api/npcs/1/apply-effect/
+[INFO] 2026-03-26 23:51:58,265 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-26 23:52:17,528 characters.views.auth_views - Login successful: user=zoob ip=127.0.0.1
+[WARNING] 2026-03-26 23:52:17,740 django.request - Not Found: /api/characters/13/
+[INFO] 2026-03-27 00:18:06,329 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-27 00:18:06,613 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-27 00:18:07,732 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-27 00:18:07,955 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-27 00:18:15,081 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-27 00:18:15,305 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-27 00:18:16,411 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/views/character_views.py changed, reloading.
+[INFO] 2026-03-27 00:18:16,603 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-03-27 00:23:35,648 django.request - Bad Request: /api/characters/1/roll-action/
+[WARNING] 2026-03-27 00:23:55,949 django.request - Bad Request: /api/characters/1/roll-action/
+[WARNING] 2026-03-27 00:27:47,369 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-03-27 00:27:47,750 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-03-27 00:27:48,152 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-03-27 00:27:49,403 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-03-27 00:27:50,864 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-03-27 00:27:51,055 django.request - Not Found: /api/npcs/1/apply-effect/
+[WARNING] 2026-03-27 00:27:56,203 django.request - Bad Request: /api/characters/1/roll-action/
+[WARNING] 2026-03-27 00:33:41,740 django.request - Not Found: /api/characters/13/
+[WARNING] 2026-03-27 00:34:00,991 django.request - Not Found: /api/characters/13/
+[INFO] 2026-03-27 00:34:26,742 django.utils.autoreload - Watching for file changes with StatReloader
