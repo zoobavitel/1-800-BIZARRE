@@ -201,10 +201,15 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
           prev.map(async (t) => {
             if (!t.characterId) return t;
             const updated = byId.get(t.characterId);
-            if (updated) return { ...t, character: updated };
+            const preserveLocal = (ch) => ({
+              ...ch,
+              coin: t.character?.coin ?? ch.coin,
+              stash: t.character?.stash ?? ch.stash,
+            });
+            if (updated) return { ...t, character: preserveLocal(updated) };
             try {
               const raw = await characterAPI.getCharacter(t.characterId);
-              return { ...t, character: transformBackendToFrontend(raw) };
+              return { ...t, character: preserveLocal(transformBackendToFrontend(raw)) };
             } catch {
               return t;
             }
@@ -391,6 +396,10 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
         viceDetails: payload.viceDetails ?? payload.vice_details ?? savedFrontend.viceDetails,
         personal_crew_name:
           payload.personal_crew_name ?? savedFrontend.personal_crew_name ?? '',
+        // Coin/stash are not stored on the Character model; transformBackendToFrontend clears them.
+        // Without this merge, autosave replaces the tab with empty boxes and the sheet resets local state.
+        coin: frontend.coin,
+        stash: frontend.stash,
       };
       updateActiveCharTab(merged.id, merged);
       await loadCharacters();
