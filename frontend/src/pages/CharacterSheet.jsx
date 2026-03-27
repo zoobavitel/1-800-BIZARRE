@@ -173,6 +173,62 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     );
   }, [character?.crew, character?.crewId]);
 
+  /** Persist crew label: shared campaign crew (PATCH crew) or personal_crew_name / create+link. Used in Character and Crew mode. */
+  const commitCrewName = useCallback(async () => {
+    if (!characterId) return;
+    const name = (charData.crew || '').trim();
+    const crewCampaignId = (c) =>
+      (typeof c?.campaign === 'object' ? c.campaign?.id : c?.campaign);
+
+    if (charData.crewId) {
+      if (name === (character?.crew || '')) return;
+      try {
+        await crewAPI.patchCrew(charData.crewId, { name });
+        onCrewNameUpdated?.(name, charData.crewId, characterId);
+      } catch (err) {
+        console.error('Failed to update crew name:', err);
+      }
+      return;
+    }
+
+    const cid = campaignId ? parseInt(String(campaignId), 10) : NaN;
+    if (!Number.isFinite(cid)) {
+      if (name === (character?.crew || '')) return;
+      try {
+        await characterAPI.patchCharacter(characterId, { personal_crew_name: name });
+        setCharData((p) => ({ ...p, crew: name }));
+        onCrewNameUpdated?.(name, null, characterId);
+      } catch (err) {
+        console.error('Failed to save crew name:', err);
+      }
+      return;
+    }
+
+    if (!name) return;
+    try {
+      const crews = await crewAPI.getCrews();
+      let crewRow = (crews || []).find(
+        (c) => crewCampaignId(c) === cid && (c.name || '').trim() === name
+      );
+      if (!crewRow) {
+        crewRow = await crewAPI.createCrew({ name, campaign: cid });
+      }
+      await characterAPI.patchCharacter(characterId, { crew_id: crewRow.id });
+      const resolvedName = crewRow.name || name;
+      setCharData((p) => ({ ...p, crewId: crewRow.id, crew: resolvedName }));
+      onCrewNameUpdated?.(resolvedName, crewRow.id, characterId);
+    } catch (err) {
+      console.error('Failed to create/link crew:', err);
+    }
+  }, [
+    characterId,
+    charData.crew,
+    charData.crewId,
+    campaignId,
+    character?.crew,
+    onCrewNameUpdated,
+  ]);
+
   // Sync vice/viceDetails when character changes (e.g. switching tabs or after load)
   useEffect(() => {
     const newVice = character?.vice ?? '';
@@ -533,7 +589,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
 
   // Crew
   const [crewData, setCrewData] = useState({
-    name: '', reputation: '', rep: 0, turf: 0, hold: 'strong', tier: 0,
+    reputation: '', rep: 0, turf: 0, hold: 'strong', tier: 0,
     wanted: 0, coin: 0, description: '', specialAbilities: [],
     upgrades: {
       lair: { carriage:false, boat:false, hidden:false, quarters:false, secure:false, vault:false, workshop:false },
@@ -663,6 +719,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const [pendingPushDice, setPendingPushDice] = useState(false);
   const [showDevilsBargainModal, setShowDevilsBargainModal] = useState(false);
   const [pendingDevilsBargain, setPendingDevilsBargain] = useState(null);
+  const [devilBargainConfirmed, setDevilBargainConfirmed] = useState(false);
   const [expandedActionInfo, setExpandedActionInfo] = useState(null);
   const [campaignAssignStatus, setCampaignAssignStatus] = useState(null);
   const [campaignAssignError, setCampaignAssignError] = useState(null);
@@ -742,6 +799,12 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     return { bonusDiceFromAbilities: d, abilityEffectSteps: e, abilityBonusAudit: audit };
   }, [abilities, rollAbilityBoost]);
 
+  const gmDevilBargainText = useMemo(() => {
+    const m = charCampaign?.active_session_detail?.devils_bargain_by_character;
+    if (!m || characterId == null) return '';
+    return String(m[String(characterId)] ?? m[characterId] ?? '').trim();
+  }, [charCampaign?.active_session_detail?.devils_bargain_by_character, characterId]);
+
   const rollPoolPreview = useMemo(() => {
     if (!rollPending) return null;
     const { action_rating, attribute_dice, basePool } = computeActionPoolBreakdown(rollPending.actionName, actionRatings);
@@ -750,11 +813,13 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     if (rollModal.devil_bargain_dice) mod += 1;
     if (assistHelperId) mod += 1;
     mod += bonusDiceFromAbilities;
-    return { action_rating, attribute_dice, basePool, mod, total: basePool + mod };
+    const pushStress = (rollModal.push_effect ? 2 : 0) + (rollModal.push_dice ? 2 : 0);
+    return { action_rating, attribute_dice, basePool, mod, total: basePool + mod, pushStress };
   }, [
     rollPending,
     actionRatings,
     rollModal.push_dice,
+    rollModal.push_effect,
     rollModal.devil_bargain_dice,
     assistHelperId,
     bonusDiceFromAbilities,
@@ -773,6 +838,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
         push_dice: rollModal.push_dice,
         devil_bargain_dice: rollModal.devil_bargain_dice,
         devil_bargain_note: rollModal.devil_bargain_note || undefined,
+        devil_bargain_confirmed: (!rollModal.devil_bargain_dice || !gmDevilBargainText || devilBargainConfirmed),
         bonus_dice: bonusDiceFromAbilities,
         ability_effect_steps: abilityEffectSteps,
         goal_label: goalFromDraft || (asd?.roll_goal_label || '').trim() || undefined,
@@ -805,6 +871,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
       setAssistHelperId('');
       setPendingPushDice(false);
       setPendingDevilsBargain(null);
+      setDevilBargainConfirmed(false);
       setRollModal((p) => ({ ...p, devil_bargain_dice: false, devil_bargain_note: '' }));
       setRollAbilityBoost({});
       rollAPI.getRolls({ session: activeSessionId, character: characterId }).then(setSessionRolls).catch(() => {});
@@ -818,6 +885,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     if (activeSessionId && characterId && !isResistance) {
       setRollPending({ actionName, diceCount, isDesperateAction });
       setRollAbilityBoost({});
+      setDevilBargainConfirmed(false);
       const asdGoal = (charCampaign?.active_session_detail?.roll_goal_label || '').trim();
       setRollGoalDraft(asdGoal);
       setAssistHelperId('');
@@ -983,7 +1051,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
             <div style={{ ...S.card, display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
               <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
                 <span style={{ color:'#9ca3af', fontSize:'11px', fontWeight:'bold' }}>CURRENT CHARACTER</span>
-                <span style={{ fontWeight:'bold' }}>{charData.name || 'Unnamed Character'}</span>
+                <span style={{ fontWeight:'bold' }}>{charData.name || 'New Character'}</span>
                 {charData.standName && <span style={{ color:'#a78bfa' }}>「{charData.standName}」</span>}
               </div>
               <div style={{ display:'flex', gap:'12px', alignItems:'flex-start' }}>
@@ -1104,53 +1172,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                             style={S.inp}
                             value={charData.crew}
                             onChange={e => setCharData(p => ({ ...p, crew: e.target.value }))}
-                            onBlur={async () => {
-                              if (!characterId) return;
-                              const name = (charData.crew || '').trim();
-                              const crewCampaignId = (c) =>
-                                (typeof c?.campaign === 'object' ? c.campaign?.id : c?.campaign);
-
-                              if (charData.crewId) {
-                                if (name === (character?.crew || '')) return;
-                                try {
-                                  await crewAPI.patchCrew(charData.crewId, { name });
-                                  onCrewNameUpdated?.(name, charData.crewId, characterId);
-                                } catch (err) {
-                                  console.error('Failed to update crew name:', err);
-                                }
-                                return;
-                              }
-
-                              const cid = campaignId ? parseInt(String(campaignId), 10) : NaN;
-                              if (!Number.isFinite(cid)) {
-                                if (name === (character?.crew || '')) return;
-                                try {
-                                  await characterAPI.patchCharacter(characterId, { personal_crew_name: name });
-                                  setCharData((p) => ({ ...p, crew: name }));
-                                  onCrewNameUpdated?.(name, null, characterId);
-                                } catch (err) {
-                                  console.error('Failed to save crew name:', err);
-                                }
-                                return;
-                              }
-
-                              if (!name) return;
-                              try {
-                                const crews = await crewAPI.getCrews();
-                                let crewRow = (crews || []).find(
-                                  (c) => crewCampaignId(c) === cid && (c.name || '').trim() === name
-                                );
-                                if (!crewRow) {
-                                  crewRow = await crewAPI.createCrew({ name, campaign: cid });
-                                }
-                                await characterAPI.patchCharacter(characterId, { crew_id: crewRow.id });
-                                const resolvedName = crewRow.name || name;
-                                setCharData((p) => ({ ...p, crewId: crewRow.id, crew: resolvedName }));
-                                onCrewNameUpdated?.(resolvedName, crewRow.id, characterId);
-                              } catch (err) {
-                                console.error('Failed to create/link crew:', err);
-                              }
-                            }}
+                            onBlur={commitCrewName}
                             placeholder="Crew name (shared in campaign when you are in one)"
                           />
                         </div>
@@ -2052,15 +2074,25 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                       {rollPoolPreview && (
                         <div style={{ marginBottom: '14px', padding: '10px', background: '#0d1117', borderRadius: '8px', border: '1px solid #374151' }}>
                           <div style={{ fontSize: '11px', color: '#a78bfa', marginBottom: '8px', fontWeight: 'bold' }}>Your dice pool</div>
-                          <DicePoolStrip label="Action rating" count={rollPoolPreview.action_rating} />
-                          <DicePoolStrip label="Attribute (any dot in this attribute)" count={rollPoolPreview.attribute_dice} />
-                          {rollModal.push_dice ? <DicePoolStrip label="Push yourself (+1d, 2 stress)" count={1} /> : null}
-                          {rollModal.devil_bargain_dice ? <DicePoolStrip label="Devil's bargain (+1d, GM consequence)" count={1} /> : null}
-                          {assistHelperId ? <DicePoolStrip label="Assist (+1d, helper −1 stress)" count={1} /> : null}
+                          <DicePoolStrip label="Action rating (dots in this action)" count={rollPoolPreview.action_rating} />
+                          <DicePoolStrip label="Attribute dice (any dot in this attribute)" count={rollPoolPreview.attribute_dice} />
+                          {rollModal.push_dice ? <DicePoolStrip label="Push yourself (+1d, costs 2 stress)" count={1} /> : null}
+                          {rollModal.push_effect ? (
+                            <div style={{ fontSize: '10px', color: '#fcd34d', marginBottom: '6px' }}>
+                              Push for +1 effect tier (costs 2 stress, no extra die)
+                            </div>
+                          ) : null}
+                          {rollModal.devil_bargain_dice ? <DicePoolStrip label="Devil's bargain (+1d)" count={1} /> : null}
+                          {assistHelperId ? <DicePoolStrip label="Assist (+1d, helper spends 1 stress)" count={1} /> : null}
                           {bonusDiceFromAbilities > 0 ? <DicePoolStrip label={`Standard abilities (+${bonusDiceFromAbilities}d)`} count={bonusDiceFromAbilities} /> : null}
                           <div style={{ fontSize: '12px', color: '#d1d5db', marginTop: '6px', paddingTop: '8px', borderTop: '1px solid #374151' }}>
                             Total dice: <strong>{rollPoolPreview.total}</strong>
                           </div>
+                          {rollPoolPreview.pushStress > 0 ? (
+                            <div style={{ fontSize: '11px', color: '#fca5a5', marginTop: '8px' }}>
+                              You will spend <strong>{rollPoolPreview.pushStress}</strong> stress when this roll resolves (push).
+                            </div>
+                          ) : null}
                         </div>
                       )}
                       {(abilities || []).filter((a) => a.type === 'standard').length > 0 && (
@@ -2143,17 +2175,33 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                               checked={rollModal.devil_bargain_dice}
                               onChange={(e) => {
                                 const on = e.target.checked;
+                                const gm = gmDevilBargainText;
+                                setDevilBargainConfirmed(false);
                                 setRollModal((p) => ({
                                   ...p,
                                   devil_bargain_dice: on,
-                                  devil_bargain_note: on ? (p.devil_bargain_note || pendingDevilsBargain || '') : '',
+                                  devil_bargain_note: on ? (gm || p.devil_bargain_note || pendingDevilsBargain || '') : '',
                                 }));
                                 if (!on) setPendingDevilsBargain(null);
                               }}
                             />
                             Devil&apos;s bargain (+1d, GM-determined consequence)
                           </label>
-                          {rollModal.devil_bargain_dice && (
+                          {rollModal.devil_bargain_dice && gmDevilBargainText ? (
+                            <div style={{ marginTop: '8px', padding: '8px', background: '#1f2937', borderRadius: '6px', border: '1px solid #4b5563' }}>
+                              <div style={{ fontSize: '10px', color: '#9ca3af', marginBottom: '4px' }}>GM consequence (you must confirm)</div>
+                              <div style={{ fontSize: '12px', color: '#e5e7eb', marginBottom: '8px' }}>{gmDevilBargainText}</div>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', cursor: 'pointer' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={devilBargainConfirmed}
+                                  onChange={(e) => setDevilBargainConfirmed(e.target.checked)}
+                                />
+                                I accept this consequence for +1d
+                              </label>
+                            </div>
+                          ) : null}
+                          {rollModal.devil_bargain_dice && !gmDevilBargainText ? (
                             <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
                               <button
                                 type="button"
@@ -2165,10 +2213,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                               {rollModal.devil_bargain_note ? (
                                 <span style={{ fontSize: '11px', color: '#d1d5db' }}>({rollModal.devil_bargain_note})</span>
                               ) : (
-                                <span style={{ fontSize: '11px', color: '#f87171' }}>Describe the consequence before rolling.</span>
+                                <span style={{ fontSize: '11px', color: '#f87171' }}>Describe the consequence, or ask your GM to set one in the session.</span>
                               )}
                             </div>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                       {(bonusDiceFromAbilities > 0 || abilityEffectSteps > 0) && (
@@ -2183,7 +2231,10 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                           onClick={handleRollWithSession}
                           disabled={
                             (harmLevel3Used && !rollModal.push_effect && !rollModal.push_dice) ||
-                            (rollModal.devil_bargain_dice && !(rollModal.devil_bargain_note || '').trim())
+                            (rollModal.devil_bargain_dice && (
+                              (gmDevilBargainText && !devilBargainConfirmed) ||
+                              (!gmDevilBargainText && !(rollModal.devil_bargain_note || '').trim())
+                            ))
                           }
                           style={{ ...S.btn, background: '#7c3aed', color: '#fff' }}
                         >
@@ -2199,6 +2250,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                             setAssistHelperId('');
                             setPendingPushDice(false);
                             setPendingDevilsBargain(null);
+                            setDevilBargainConfirmed(false);
                             setRollModal({ push_effect: false, push_dice: false, devil_bargain_dice: false, devil_bargain_note: '' });
                           }}
                           style={S.btn}
@@ -3106,7 +3158,16 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
           <div>
             <div style={S.card}>
               <div style={S.g2}>
-                <div><span style={S.lbl}>CREW NAME</span><input style={S.inp} value={crewData.name} onChange={e => setCrewData(p => ({ ...p, name: e.target.value }))} placeholder="Crew Name" /></div>
+                <div>
+                  <span style={S.lbl}>CREW NAME</span>
+                  <input
+                    style={S.inp}
+                    value={charData.crew}
+                    onChange={(e) => setCharData((p) => ({ ...p, crew: e.target.value }))}
+                    onBlur={commitCrewName}
+                    placeholder="Crew Name"
+                  />
+                </div>
                 <div><span style={S.lbl}>REPUTATION</span><input style={S.inp} value={crewData.reputation} onChange={e => setCrewData(p => ({ ...p, reputation: e.target.value }))} placeholder="Crew Reputation" /></div>
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'12px', marginTop:'12px' }}>

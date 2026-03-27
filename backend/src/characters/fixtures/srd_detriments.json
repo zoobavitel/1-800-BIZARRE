@@ -3,7 +3,7 @@
     "model": "characters.detriment",
     "pk": 1,
     "fields": {
-      "heritage": 2,
+      "heritage": 1,
       "name": "Physically Inferior",
       "hp_value": 1,
       "required": false,
@@ -14,7 +14,7 @@
     "model": "characters.detriment",
     "pk": 2,
     "fields": {
-      "heritage": 2,
+      "heritage": 1,
       "name": "Bizarre Blindspot",
       "hp_value": 1,
       "required": false,
@@ -25,7 +25,7 @@
     "model": "characters.detriment",
     "pk": 3,
     "fields": {
-      "heritage": 2,
+      "heritage": 1,
       "name": "Slower Recovery",
       "hp_value": 1,
       "required": false,
@@ -36,7 +36,7 @@
     "model": "characters.detriment",
     "pk": 4,
     "fields": {
-      "heritage": 2,
+      "heritage": 1,
       "name": "Slower Movement",
       "hp_value": 1,
       "required": false,
@@ -47,7 +47,7 @@
     "model": "characters.detriment",
     "pk": 5,
     "fields": {
-      "heritage": 3,
+      "heritage": 2,
       "name": "Sinks Like a Rock",
       "hp_value": 1,
       "required": true,
@@ -58,7 +58,7 @@
     "model": "characters.detriment",
     "pk": 6,
     "fields": {
-      "heritage": 3,
+      "heritage": 2,
       "name": "Slow Regeneration",
       "hp_value": 1,
       "required": true,
@@ -69,7 +69,7 @@
     "model": "characters.detriment",
     "pk": 7,
     "fields": {
-      "heritage": 3,
+      "heritage": 2,
       "name": "Hunted by Rock Humans",
       "hp_value": 1,
       "required": false,
@@ -80,7 +80,7 @@
     "model": "characters.detriment",
     "pk": 8,
     "fields": {
-      "heritage": 3,
+      "heritage": 2,
       "name": "Slow Reflexes",
       "hp_value": 1,
       "required": false,
@@ -91,7 +91,7 @@
     "model": "characters.detriment",
     "pk": 9,
     "fields": {
-      "heritage": 3,
+      "heritage": 2,
       "name": "Vulnerable to High Frequency Vibrations",
       "hp_value": 1,
       "required": false,
@@ -102,7 +102,7 @@
     "model": "characters.detriment",
     "pk": 10,
     "fields": {
-      "heritage": 3,
+      "heritage": 2,
       "name": "Cold-Brittle",
       "hp_value": 1,
       "required": false,
@@ -113,7 +113,7 @@
     "model": "characters.detriment",
     "pk": 11,
     "fields": {
-      "heritage": 4,
+      "heritage": 3,
       "name": "Sunlight Weakness",
       "hp_value": 2,
       "required": true,
@@ -124,7 +124,7 @@
     "model": "characters.detriment",
     "pk": 12,
     "fields": {
-      "heritage": 4,
+      "heritage": 3,
       "name": "Hamon Vulnerability",
       "hp_value": 1,
       "required": true,
@@ -135,7 +135,7 @@
     "model": "characters.detriment",
     "pk": 13,
     "fields": {
-      "heritage": 4,
+      "heritage": 3,
       "name": "Must Be Invited Inside",
       "hp_value": 1,
       "required": false,
@@ -146,7 +146,7 @@
     "model": "characters.detriment",
     "pk": 14,
     "fields": {
-      "heritage": 4,
+      "heritage": 3,
       "name": "Loses Max Stress Without Feeding",
       "hp_value": 1,
       "required": false,
@@ -157,7 +157,7 @@
     "model": "characters.detriment",
     "pk": 15,
     "fields": {
-      "heritage": 4,
+      "heritage": 3,
       "name": "Holy Symbol Weakness",
       "hp_value": 1,
       "required": false,
@@ -168,7 +168,7 @@
     "model": "characters.detriment",
     "pk": 16,
     "fields": {
-      "heritage": 4,
+      "heritage": 3,
       "name": "Silver Allergy",
       "hp_value": 1,
       "required": false,
@@ -179,7 +179,7 @@
     "model": "characters.detriment",
     "pk": 17,
     "fields": {
-      "heritage": 5,
+      "heritage": 4,
       "name": "Sunlight Turns You to Stone",
       "hp_value": 2,
       "required": true,
@@ -190,7 +190,7 @@
     "model": "characters.detriment",
     "pk": 18,
     "fields": {
-      "heritage": 5,
+      "heritage": 4,
       "name": "Hamon Weakness",
       "hp_value": 1,
       "required": true,
@@ -201,7 +201,7 @@
     "model": "characters.detriment",
     "pk": 19,
     "fields": {
-      "heritage": 5,
+      "heritage": 4,
       "name": "Cold Weakness",
       "hp_value": 1,
       "required": false,
@@ -212,7 +212,7 @@
     "model": "characters.detriment",
     "pk": 20,
     "fields": {
-      "heritage": 5,
+      "heritage": 4,
       "name": "Weak to Blood Loss",
       "hp_value": 1,
       "required": false,
@@ -223,7 +223,7 @@
     "model": "characters.detriment",
     "pk": 21,
     "fields": {
-      "heritage": 5,
+      "heritage": 4,
       "name": "Requires Constant Adaptation",
       "hp_value": 1,
       "required": false,
@@ -234,7 +234,7 @@
     "model": "characters.detriment",
     "pk": 22,
     "fields": {
-      "heritage": 5,
+      "heritage": 4,
       "name": "Hunted by Zeppeli Bloodline",
       "hp_value": 1,
       "required": false,
@@ -245,7 +245,7 @@
     "model": "characters.detriment",
     "pk": 23,
     "fields": {
-      "heritage": 6,
+      "heritage": 5,
       "name": "Weak to Electricity",
       "hp_value": 1,
       "required": true,
@@ -256,7 +256,7 @@
     "model": "characters.detriment",
     "pk": 24,
     "fields": {
-      "heritage": 6,
+      "heritage": 5,
       "name": "Alien Understanding",
       "hp_value": 1,
       "required": true,
@@ -267,7 +267,7 @@
     "model": "characters.detriment",
     "pk": 25,
     "fields": {
-      "heritage": 6,
+      "heritage": 5,
       "name": "Sensitive to Soundwaves",
       "hp_value": 1,
       "required": true,
@@ -278,7 +278,7 @@
     "model": "characters.detriment",
     "pk": 26,
     "fields": {
-      "heritage": 6,
+      "heritage": 5,
       "name": "Cannot Speak English",
       "hp_value": 1,
       "required": false,
@@ -289,7 +289,7 @@
     "model": "characters.detriment",
     "pk": 27,
     "fields": {
-      "heritage": 6,
+      "heritage": 5,
       "name": "Cannot Heal Normally",
       "hp_value": 1,
       "required": false,
@@ -300,7 +300,7 @@
     "model": "characters.detriment",
     "pk": 28,
     "fields": {
-      "heritage": 6,
+      "heritage": 5,
       "name": "Heat Sensitivity",
       "hp_value": 1,
       "required": false,
@@ -311,7 +311,7 @@
     "model": "characters.detriment",
     "pk": 29,
     "fields": {
-      "heritage": 7,
+      "heritage": 6,
       "name": "Hamon Disrupts Your Form",
       "hp_value": 1,
       "required": true,
@@ -322,7 +322,7 @@
     "model": "characters.detriment",
     "pk": 30,
     "fields": {
-      "heritage": 7,
+      "heritage": 6,
       "name": "Unstable Physiology",
       "hp_value": 1,
       "required": true,
@@ -333,7 +333,7 @@
     "model": "characters.detriment",
     "pk": 31,
     "fields": {
-      "heritage": 7,
+      "heritage": 6,
       "name": "Cannot Heal Normally",
       "hp_value": 1,
       "required": false,
@@ -344,7 +344,7 @@
     "model": "characters.detriment",
     "pk": 32,
     "fields": {
-      "heritage": 7,
+      "heritage": 6,
       "name": "Disrupts Electronics",
       "hp_value": 1,
       "required": false,
@@ -355,7 +355,7 @@
     "model": "characters.detriment",
     "pk": 33,
     "fields": {
-      "heritage": 7,
+      "heritage": 6,
       "name": "Cold Weakness",
       "hp_value": 1,
       "required": false,
@@ -366,7 +366,7 @@
     "model": "characters.detriment",
     "pk": 34,
     "fields": {
-      "heritage": 7,
+      "heritage": 6,
       "name": "Unfinished Business",
       "hp_value": 1,
       "required": false,
@@ -377,7 +377,7 @@
     "model": "characters.detriment",
     "pk": 35,
     "fields": {
-      "heritage": 8,
+      "heritage": 7,
       "name": "Frost Vulnerability",
       "hp_value": 1,
       "required": true,
@@ -388,7 +388,7 @@
     "model": "characters.detriment",
     "pk": 36,
     "fields": {
-      "heritage": 8,
+      "heritage": 7,
       "name": "Limited Repairs",
       "hp_value": 1,
       "required": true,
@@ -399,7 +399,7 @@
     "model": "characters.detriment",
     "pk": 37,
     "fields": {
-      "heritage": 8,
+      "heritage": 7,
       "name": "Heavy Frame",
       "hp_value": 1,
       "required": false,
@@ -410,7 +410,7 @@
     "model": "characters.detriment",
     "pk": 38,
     "fields": {
-      "heritage": 8,
+      "heritage": 7,
       "name": "Maintenance Required",
       "hp_value": 1,
       "required": false,
@@ -421,7 +421,7 @@
     "model": "characters.detriment",
     "pk": 39,
     "fields": {
-      "heritage": 8,
+      "heritage": 7,
       "name": "Loss of Touch",
       "hp_value": 1,
       "required": false,
@@ -432,7 +432,7 @@
     "model": "characters.detriment",
     "pk": 40,
     "fields": {
-      "heritage": 8,
+      "heritage": 7,
       "name": "Cybernetic Overload",
       "hp_value": 1,
       "required": false,
@@ -443,7 +443,7 @@
     "model": "characters.detriment",
     "pk": 41,
     "fields": {
-      "heritage": 9,
+      "heritage": 8,
       "name": "Visions Are Uncontrollable",
       "hp_value": 1,
       "required": true,
@@ -454,7 +454,7 @@
     "model": "characters.detriment",
     "pk": 42,
     "fields": {
-      "heritage": 9,
+      "heritage": 8,
       "name": "Cursed Fate",
       "hp_value": 1,
       "required": true,
@@ -465,7 +465,7 @@
     "model": "characters.detriment",
     "pk": 43,
     "fields": {
-      "heritage": 9,
+      "heritage": 8,
       "name": "Blind Faith",
       "hp_value": 1,
       "required": false,
@@ -476,7 +476,7 @@
     "model": "characters.detriment",
     "pk": 44,
     "fields": {
-      "heritage": 9,
+      "heritage": 8,
       "name": "Tragedy",
       "hp_value": 1,
       "required": false,

@@ -5,25 +5,7 @@
       "fields": {
         "name": "Human",
         "base_hp": 0,
-        "description": "Flexible and adaptable with no inherent strengths or weaknesses."
-      }
-    },
-    {
-      "model": "characters.heritage",
-      "pk": 2,
-      "fields": {
-        "name": "Vampire",
-        "base_hp": 3,
-        "description": "Immortal, powerful, and cursed by the sun and Hamon energy."
-      }
-    },
-    {
-      "model": "characters.heritage",
-      "pk": 3,
-      "fields": {
-        "name": "Pillar Man",
-        "base_hp": 3,
-        "description": "An ancient being with evolving powers and extreme vulnerabilities."
+        "description": "Versatile but without inherent supernatural abilities."
       }
     },
     {

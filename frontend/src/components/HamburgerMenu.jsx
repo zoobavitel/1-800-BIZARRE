@@ -300,7 +300,7 @@ export default function HamburgerMenu({
                 >
                   <option value="" disabled>Open Character…</option>
                   {characters.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name || 'Unnamed'}</option>
+                    <option key={c.id} value={c.id}>{c.name || 'New Character'}</option>
                   ))}
                 </select>
               </div>

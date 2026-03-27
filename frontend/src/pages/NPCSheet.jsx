@@ -181,6 +181,13 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
 
   const [name,      setName]      = useState(npc?.name      || '');
   const [standName, setStandName] = useState(npc?.standName ?? npc?.stand_name ?? '');
+
+  // After first save, parent passes API result with default name; keep local field in sync when still empty.
+  useEffect(() => {
+    const server = String(npc?.name ?? '').trim();
+    if (!server) return;
+    setName((prev) => (String(prev).trim() === '' ? npc.name : prev));
+  }, [npc?.id, npc?.name]);
   const [role,      setRole]      = useState(npc?.role      || '');
   const [notes,     setNotes]     = useState(npc?.notes     || '');
   const [campaign,  setCampaign]  = useState(npc?.campaign  || '');
@@ -933,7 +940,7 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
             <div style={S.card}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
                 <span style={{ fontSize: '16px', fontWeight: 'bold', color: '#c4b5fd' }}>
-                  {name || 'Unnamed NPC'} — Crew Management
+                  {name || 'New NPC'} — Crew Management
                 </span>
                 {role && <span style={{ background: '#4c1d95', padding: '2px 10px', borderRadius: '4px', fontSize: '11px', color: '#e9d5ff' }}>{role}</span>}
               </div>

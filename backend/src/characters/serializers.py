@@ -234,7 +234,10 @@ class RollSerializer(serializers.ModelSerializer):
             'id', 'character', 'character_name', 'session', 'roll_type', 'action_name',
             'position', 'effect', 'dice_pool', 'results', 'outcome', 'description', 'goal_label',
             'group_action',
-            'rolled_by', 'rolled_by_username', 'timestamp', 'xp_awarded'
+            'rolled_by', 'rolled_by_username', 'timestamp', 'xp_awarded',
+            'pool_action_rating', 'pool_attribute_dice', 'push_for_effect', 'push_for_dice',
+            'uses_devil_bargain', 'pool_assist_dice', 'pool_bonus_dice', 'roller_stress_spent',
+            'devil_bargain_consequence',
         ]
         read_only_fields = ['timestamp', 'rolled_by']
 
@@ -257,7 +260,7 @@ class SessionRecordsSerializer(serializers.ModelSerializer):
     events = SessionEventSerializer(many=True, read_only=True)
     xp_history = XPHistorySerializer(source='session_xp_history', many=True, read_only=True)
     stress_history = StressHistorySerializer(source='session_stress_history', many=True, read_only=True)
-    xp_entries = ExperienceTrackerSerializer(source='xp_entries', many=True, read_only=True)
+    xp_entries = ExperienceTrackerSerializer(many=True, read_only=True)
     rolls = RollSerializer(many=True, read_only=True)
 
     class Meta:
@@ -267,6 +270,8 @@ class SessionRecordsSerializer(serializers.ModelSerializer):
             'planned_for_next_session', 'status', 'npcs_involved', 'npc_involvements', 'characters_involved',
             'proposed_score_target', 'proposed_score_description', 'proposed_by', 'votes',
             'events', 'xp_history', 'stress_history', 'xp_entries', 'rolls',
+            'roll_goal_label', 'show_position_effect_to_players', 'default_position', 'default_effect',
+            'devils_bargain_by_character',
         ]
 
     def get_npcs_involved(self, obj):
@@ -917,6 +922,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             'default_position': getattr(s, 'default_position', 'risky') or 'risky',
             'default_effect': getattr(s, 'default_effect', 'standard') or 'standard',
             'roll_goal_label': getattr(s, 'roll_goal_label', '') or '',
+            'devils_bargain_by_character': getattr(s, 'devils_bargain_by_character', None) or {},
             'session_npcs_with_clocks': session_npcs_with_clocks,
         }
 
