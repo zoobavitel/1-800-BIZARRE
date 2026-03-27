@@ -5,6 +5,12 @@ description: Verifies session roll fetching, active_session_detail usage, positi
 
 # CharacterSheet change checklist
 
+## When to use
+
+- Editing `CharacterSheet.jsx`, session rolls, roll modal, position/effect display, or `characterAPI.rollAction` wiring.
+
+## Instructions
+
 `frontend/src/pages/CharacterSheet.jsx` is large; refactors often leave **half-wired state** (stale fetches, missing `active_session_detail` fields, P/E hidden in one place but shown in another, or a payload field dropped from `rollAction`). After any substantive edit, walk this list.
 
 ## Quick checklist

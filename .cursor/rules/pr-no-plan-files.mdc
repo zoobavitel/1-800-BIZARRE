@@ -1,0 +1,9 @@
+---
+description: Do not edit Cursor plan markdown files in implementation PRs
+alwaysApply: true
+---
+
+# No plan file churn in feature PRs
+
+- Do **not** edit `*.plan.md` under `.cursor/plans/` (or similar) as part of normal feature or bugfix PRs.
+- Planning doc updates belong in planning threads or a **documentation-only** PR.

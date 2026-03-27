@@ -1,15 +1,19 @@
 ---
-name: dev-server-starter
+name: django-backend-ngrok
 description: Starts the jojo-ttrpg-platform Django backend (venv activation and manage.py runserver on port 8000) and runs ngrok http 8000 so a remote or GitHub Pages frontend can reach the API; reports local and public URLs and reminds about CORS and ALLOWED_HOSTS when relevant. Use when the user says start backend, ngrok, tunnel, or remote API testing.
 ---
 
 # Django backend + ngrok (jojo-ttrpg-platform)
 
-## When helping
+## When to use
+
+- User asks to start the API locally, expose it with ngrok, or test a remote frontend against this backend.
+
+## Instructions
 
 Use **two terminals** (or run Django in background, then ngrok in foreground). Do not assume the user already has ngrok or Django running.
 
-## Prerequisites
+### Prerequisites
 
 - `ngrok` installed and authenticated (`ngrok config add-authtoken …` once per machine).
 - Python venv with backend deps. This repo’s `scripts/start_dev.sh` uses `source ~/.virtualenvs/jojo/bin/activate`; if that path fails, use whatever venv the user normally uses for this project.

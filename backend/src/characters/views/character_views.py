@@ -140,6 +140,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
         goal_label = (request.data.get('goal_label') or '').strip()
         ability_bonuses = request.data.get('ability_bonuses')  # optional list for audit string
         group_action_id = request.data.get('group_action_id')
+        assist_helper_id_raw = request.data.get('assist_helper_id')
+        assist_helper = None
 
         stress_cost = 0
         session = None
@@ -230,6 +232,41 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 dice_pool += 1
             dice_pool += max(0, bonus_dice)
 
+            if assist_helper_id_raw not in (None, '', False):
+                try:
+                    ahid = int(assist_helper_id_raw)
+                except (TypeError, ValueError):
+                    return Response(
+                        {'error': 'Invalid assist_helper_id'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                with transaction.atomic():
+                    assist_helper = Character.objects.select_for_update().get(pk=ahid)
+                    if character.id == assist_helper.id:
+                        return Response(
+                            {'error': 'Cannot help yourself'},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    if character.campaign_id != assist_helper.campaign_id or not character.campaign_id:
+                        return Response(
+                            {'error': 'Characters must be in the same campaign'},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    if not character.crew_id or character.crew_id != assist_helper.crew_id:
+                        return Response(
+                            {'error': 'Must be in the same crew to Help'},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    hs = getattr(assist_helper, 'stress', 0) or 0
+                    if hs < 1:
+                        return Response(
+                            {'error': 'Helper has no stress to spend'},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    assist_helper.stress = hs - 1
+                    assist_helper.save(update_fields=['stress'])
+                    dice_pool += 1
+
         dice_results = [random.randint(1, 6) for _ in range(max(1, dice_pool))] if dice_pool > 0 else [0]
         max_result = max(dice_results) if dice_results else 0
 
@@ -255,6 +292,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
             desc = f"{action_name} roll"
             if devil_bargain_note:
                 desc += f" [Devil's bargain: {devil_bargain_note}]"
+            if assist_helper:
+                desc += f" [Assist: {assist_helper.true_name}]"
             if ability_bonuses and isinstance(ability_bonuses, list):
                 desc += f" [Abilities: {ability_bonuses}]"
             elif isinstance(ability_bonuses, str) and ability_bonuses.strip():
@@ -301,6 +340,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
             'xp_gained': xp_awarded if session else 0,
             'xp_track': xp_track,
             'group_action_id': roll.group_action_id if roll else None,
+            'assist_helper_id': assist_helper.id if assist_helper else None,
+            'assist_helper_stress': assist_helper.stress if assist_helper else None,
         })
 
     @action(detail=True, methods=['post'], url_path='assist-help')

@@ -1,0 +1,9 @@
+---
+description: 
+alwaysApply: true
+---
+
+# Before PR — build & tests
+
+- **Frontend:** From `frontend/`, run `npm run build` and fix compile errors before merge.
+- **Backend:** When a venv with Django exists (jojo-ttrpg-platform/.venv/bin/activate), run targeted tests (e.g. `python manage.py test characters` from `backend/src/`). If Django is not available locally, note that in the PR and rely on CI.
