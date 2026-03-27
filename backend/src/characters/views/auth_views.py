@@ -1,6 +1,4 @@
-import json
 import logging
-import time
 
 from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -9,7 +7,6 @@ from rest_framework.views import APIView
 from rest_framework.decorators import action
 from rest_framework.authtoken.models import Token
 from rest_framework.authtoken.views import ObtainAuthToken
-from django.contrib.auth import authenticate
 
 from ..models import UserProfile
 from ..serializers import (
@@ -41,38 +38,10 @@ class RegisterView(APIView):
 
 class LoginView(ObtainAuthToken):
     def post(self, request, *args, **kwargs):
-        # #region agent log
-        _data = getattr(request, "data", {}) or {}
-        _keys = list(_data.keys()) if hasattr(_data, "keys") else []
-        _uname = _data.get("username", "")
-        _pwd = _data.get("password", "")
-        try:
-            with open(
-                "/home/z/git/jojo-ttrpg-platform/.cursor/debug-dbd452.log", "a"
-            ) as _df:
-                _df.write(
-                    json.dumps(
-                        {
-                            "sessionId": "dbd452",
-                            "timestamp": int(time.time() * 1000),
-                            "location": "auth_views.py:LoginView.post",
-                            "message": "login_request",
-                            "hypothesisId": "H2-H3",
-                            "data": {
-                                "content_type": request.META.get("CONTENT_TYPE", ""),
-                                "data_keys": _keys,
-                                "username_len": len(str(_uname)),
-                                "password_len": len(str(_pwd)) if _pwd is not None else 0,
-                            },
-                        }
-                    )
-                    + "\n"
-                )
-        except Exception:
-            pass
-        # #endregion
-        serializer = self.serializer_class(data=request.data,
-                                         context={'request': request})
+        serializer = self.serializer_class(
+            data=request.data,
+            context={'request': request},
+        )
         if serializer.is_valid():
             user = serializer.validated_data['user']
             token, created = Token.objects.get_or_create(user=user)
@@ -86,27 +55,6 @@ class LoginView(ObtainAuthToken):
                     'email': getattr(user, 'email', '') or '',
                 },
             })
-        # #region agent log
-        try:
-            with open(
-                "/home/z/git/jojo-ttrpg-platform/.cursor/debug-dbd452.log", "a"
-            ) as _df:
-                _df.write(
-                    json.dumps(
-                        {
-                            "sessionId": "dbd452",
-                            "timestamp": int(time.time() * 1000),
-                            "location": "auth_views.py:LoginView.post",
-                            "message": "login_serializer_invalid",
-                            "hypothesisId": "H1-H4",
-                            "data": {"errors": serializer.errors},
-                        }
-                    )
-                    + "\n"
-                )
-        except Exception:
-            pass
-        # #endregion
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
