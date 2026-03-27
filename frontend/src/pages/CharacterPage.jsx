@@ -221,6 +221,48 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
     });
   }, []);
 
+  // When returning to this tab/window, refetch characters so crew names updated by other players sync into open sheets.
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState !== 'visible') return;
+      void (async () => {
+        try {
+          const list = await characterAPI.getCharacters();
+          const front = (list || []).map(transformBackendToFrontend);
+          setCharacters(front);
+          const byId = new Map(front.map((c) => [c.id, c]));
+          setCharTabs((prev) =>
+            prev.map((t) => {
+              if (!t.characterId) return t;
+              const fresh = byId.get(t.characterId);
+              if (!fresh || !t.character) return t;
+              if (
+                (fresh.crew || '') === (t.character.crew || '') &&
+                fresh.crewId === t.character.crewId &&
+                (fresh.personal_crew_name || '') === (t.character.personal_crew_name || '')
+              ) {
+                return t;
+              }
+              return {
+                ...t,
+                character: {
+                  ...t.character,
+                  crew: fresh.crew,
+                  crewId: fresh.crewId,
+                  personal_crew_name: fresh.personal_crew_name ?? '',
+                },
+              };
+            })
+          );
+        } catch {
+          /* ignore */
+        }
+      })();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+
   // ── Load character list ──────────────────────────────────────────────────
   const loadCharacters = useCallback(async () => {
     setCharactersLoading(true);
@@ -363,9 +405,9 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
           charTabs.find(
             (t) => t.characterId === payload.id || t.character?.id === payload.id
           ) || charTabs.find((t) => t.tabId === activeCharTabId);
-        nameForSave = String(tab?.character?.name ?? '').trim() || 'Unnamed';
+        nameForSave = String(tab?.character?.name ?? '').trim() || 'New Character';
       } else {
-        nameForSave = 'Unnamed';
+        nameForSave = 'New Character';
       }
     }
     const toSend = transformFrontendToBackend({
@@ -425,7 +467,7 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
       .then((npc) => {
         if (!npc) return;
         npcTabsInitialized.current = true;
-        const tab = { tabId: nextTabId++, npcId: npc.id, npc, label: npc.name || 'Unnamed' };
+        const tab = { tabId: nextTabId++, npcId: npc.id, npc, label: npc.name || 'New NPC' };
         setNpcTabs([tab]);
         setActiveNpcTabId(tab.tabId);
         npcAPI.getNPCs(campaignId).then((list) => setNpcs(list || [])).catch(() => setNpcs([]));
@@ -444,7 +486,7 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
       if (!npcTabsInitialized.current) {
         npcTabsInitialized.current = true;
         if (npcList.length > 0) {
-          const tab = { tabId: nextTabId++, npcId: npcList[0].id, npc: npcList[0], label: npcList[0].name || 'Unnamed' };
+          const tab = { tabId: nextTabId++, npcId: npcList[0].id, npc: npcList[0], label: npcList[0].name || 'New NPC' };
           setNpcTabs([tab]);
           setActiveNpcTabId(tab.tabId);
         } else {
@@ -458,15 +500,17 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
 
   const handleSaveNpc = useCallback(async (npcData) => {
     try {
+      const nameTrim = String(npcData.name ?? '').trim();
+      const payload = { ...npcData, name: nameTrim || 'New NPC' };
       let result;
-      if (npcData.id) {
-        result = await npcAPI.updateNPC(npcData.id, npcData);
+      if (payload.id) {
+        result = await npcAPI.updateNPC(payload.id, payload);
       } else {
-        result = await npcAPI.createNPC(npcData);
+        result = await npcAPI.createNPC(payload);
       }
       setNpcTabs(prev => prev.map(t =>
         t.tabId === activeNpcTabId
-          ? { ...t, npcId: result.id, npc: result, label: result.name || 'Unnamed' }
+          ? { ...t, npcId: result.id, npc: result, label: result.name || 'New NPC' }
           : t
       ));
       const list = await npcAPI.getNPCs(campaignId);
@@ -501,7 +545,7 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
       setActiveNpcTabId(existing.tabId);
       return;
     }
-    const tab = { tabId: nextTabId++, npcId: npc.id, npc, label: npc.name || 'Unnamed' };
+    const tab = { tabId: nextTabId++, npcId: npc.id, npc, label: npc.name || 'New NPC' };
     setNpcTabs(prev => [...prev, tab]);
     setActiveNpcTabId(tab.tabId);
   }, [npcTabs]);
@@ -653,7 +697,7 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
                 }}>
                 <option value="">Open character...</option>
                 {characters.map(c => (
-                  <option key={c.id} value={c.id}>{c.name || c.standName || 'Unnamed'}</option>
+                  <option key={c.id} value={c.id}>{c.name || c.standName || 'New Character'}</option>
                 ))}
               </select>
               <button
@@ -686,7 +730,7 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
                 if (npc) handleOpenExistingNpc(npc);
               }}>
               <option value="">Open NPC...</option>
-              {npcs.map(n => <option key={n.id} value={n.id}>{n.name || 'Unnamed'}</option>)}
+              {npcs.map(n => <option key={n.id} value={n.id}>{n.name || 'New NPC'}</option>)}
             </select>
           )}
         </div>

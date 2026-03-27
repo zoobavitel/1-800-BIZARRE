@@ -134,6 +134,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         push_dice = request.data.get('push_dice', False)
         devil_bargain_dice = request.data.get('devil_bargain_dice', False)
         devil_bargain_note = request.data.get('devil_bargain_note', '')
+        devil_bargain_confirmed = bool(request.data.get('devil_bargain_confirmed', False))
         roll_type = request.data.get('roll_type', 'ACTION')
         bonus_dice = int(request.data.get('bonus_dice') or 0)
         ability_effect_steps = int(request.data.get('ability_effect_steps') or 0)
@@ -179,6 +180,30 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     {'error': 'Incapacitated (level 3 harm). You must push yourself to take an action (2 stress for +1 effect or +1d).'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
+
+            # Devil's bargain: GM may set per-character text; player must confirm before +1d
+            if session and devil_bargain_dice:
+                gm_map = getattr(session, 'devils_bargain_by_character', None) or {}
+                if not isinstance(gm_map, dict):
+                    gm_map = {}
+                gm_text = (gm_map.get(str(character.pk)) or '').strip()
+                if gm_text:
+                    if not devil_bargain_confirmed:
+                        return Response(
+                            {'error': 'Confirm the GM\'s devil\'s bargain consequence before rolling.'},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    devil_bargain_note = gm_text
+                elif not (devil_bargain_note or '').strip():
+                    return Response(
+                        {
+                            'error': (
+                                'Describe the devil\'s bargain consequence, or ask your GM to set one '
+                                'for your character in the active session.'
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
             # Push costs 2 stress each
             if push_effect:
@@ -303,6 +328,25 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 ga_obj = GroupAction.objects.filter(
                     id=group_action_id, session=session, status='OPEN'
                 ).first()
+            if roll_type.upper() == 'FORTUNE':
+                rp_ar = rp_ad = 0
+                rp_pe = rp_pd = False
+                rp_devil = False
+                rp_assist = 0
+                rp_bonus = 0
+                rp_stress = 0
+                rp_devil_txt = ''
+            else:
+                rp_ar = action_rating
+                rp_ad = attribute_dice
+                rp_pe = push_effect
+                rp_pd = push_dice
+                rp_devil = bool(devil_bargain_dice)
+                rp_assist = 1 if assist_helper else 0
+                rp_bonus = max(0, bonus_dice)
+                rp_stress = stress_cost
+                rp_devil_txt = (devil_bargain_note or '').strip() if devil_bargain_dice else ''
+
             roll = Roll.objects.create(
                 character=character,
                 session=session,
@@ -317,6 +361,15 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 goal_label=goal_label or '',
                 group_action=ga_obj,
                 rolled_by=request.user,
+                pool_action_rating=rp_ar,
+                pool_attribute_dice=rp_ad,
+                push_for_effect=rp_pe,
+                push_for_dice=rp_pd,
+                uses_devil_bargain=rp_devil,
+                pool_assist_dice=rp_assist,
+                pool_bonus_dice=rp_bonus,
+                roller_stress_spent=rp_stress,
+                devil_bargain_consequence=rp_devil_txt,
             )
             RollHistory.objects.create(campaign=session.campaign, roll=roll)
 

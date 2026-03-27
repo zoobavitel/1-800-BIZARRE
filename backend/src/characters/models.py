@@ -1034,6 +1034,11 @@ class Session(models.Model):
     default_position = models.CharField(max_length=20, default='risky', blank=True)
     default_effect = models.CharField(max_length=20, default='standard', blank=True)
     roll_goal_label = models.CharField(max_length=300, blank=True, help_text='GM-set label for the current roll goal; copied to Roll on commit.')
+    devils_bargain_by_character = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Map of character id (string) to GM-written devil's bargain consequence; player must confirm before rolling with +1d.",
+    )
 
     # Score proposal fields
     proposed_score_target = models.CharField(max_length=200, blank=True, null=True)
@@ -1180,6 +1185,18 @@ class Roll(models.Model):
     )
     rolled_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='rolls_made')
     timestamp = models.DateTimeField(auto_now_add=True)
+
+    pool_action_rating = models.PositiveSmallIntegerField(default=0)
+    pool_attribute_dice = models.PositiveSmallIntegerField(default=0)
+    push_for_effect = models.BooleanField(default=False)
+    push_for_dice = models.BooleanField(default=False)
+    uses_devil_bargain = models.BooleanField(default=False)
+    pool_assist_dice = models.PositiveSmallIntegerField(default=0)
+    pool_bonus_dice = models.PositiveSmallIntegerField(default=0)
+    roller_stress_spent = models.PositiveSmallIntegerField(
+        default=0, help_text='Stress spent by the rolling character (push, etc.).'
+    )
+    devil_bargain_consequence = models.CharField(max_length=500, blank=True)
 
     def __str__(self):
         return f"{self.character.true_name} - {self.action_name} ({self.outcome})"

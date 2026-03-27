@@ -10,11 +10,25 @@ export const PATCH_NOTES = [
       {
         "title": "Other",
         "items": [
+          "Enhance SKILL.md with integration test instructions for ngrok",
+          "Update debug.log with additional warning entries and refresh db.sqlite3",
+          "Update debug.log with additional warning entries for crew and NPC actions",
+          "ci(frontend): run lint from root (script lives in workspace root)",
+          "ci(integration): install deps with root npm ci (workspace lockfile)",
+          "Enhance character management features and update logging",
           "Update database and enhance character management features",
           "Update database and enhance character management features",
           "Update agent descriptions and enhance character management features",
           "Update database and logging features",
           "Update database, logging, and character management features"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "store hashed passwords in example_campaign fixture",
+          "align jack_rice fixture with Character/Stand schema",
+          "resolve characters test module clash and npm cache path"
         ]
       }
     ]
