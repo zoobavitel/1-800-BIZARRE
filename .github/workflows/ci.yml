@@ -92,8 +92,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        npm install
-        cd frontend && npm ci && cd ..
+        npm ci
         cd backend && pip install -r requirements.txt && cd ..
     
     - name: Setup test database
