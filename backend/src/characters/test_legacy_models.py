@@ -532,7 +532,7 @@ class HamonAbilityModelTest(TestCase):
         self.assertEqual(hamon_ability.name, 'Ripple Breathing')
         self.assertEqual(hamon_ability.hamon_type, 'FOUNDATION')
         self.assertEqual(hamon_ability.stress_cost, 0)
-        self.assertEqual(str(hamon_ability), 'Ripple Breathing (Foundation Hamon)')
+        self.assertEqual(str(hamon_ability), 'Ripple Breathing (Foundations of Hamon)')
     
     def test_hamon_foundation_abilities(self):
         """Test that foundation Hamon abilities can be created according to SRD."""
@@ -568,7 +568,7 @@ class SpinAbilityModelTest(TestCase):
         
         self.assertEqual(spin_ability.name, 'Golden Arc')
         self.assertEqual(spin_ability.spin_type, 'FOUNDATION')
-        self.assertEqual(str(spin_ability), 'Golden Arc (Spin Foundation)')
+        self.assertEqual(str(spin_ability), 'Golden Arc (Spin Foundations)')
     
     def test_spin_foundation_abilities(self):
         """Test that foundation Spin abilities can be created according to SRD."""
