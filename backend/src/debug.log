@@ -5192,3 +5192,5 @@ AssertionError: It is redundant to specify `source='xp_entries'` on field 'ListS
 [WARNING] 2026-03-27 01:48:24,146 django.request - Bad Request: /api/npcs/1/apply-effect/
 [WARNING] 2026-03-27 01:48:24,337 django.request - Not Found: /api/npcs/1/apply-effect/
 [WARNING] 2026-03-27 01:48:29,344 django.request - Bad Request: /api/characters/1/roll-action/
+[INFO] 2026-03-27 01:52:55,041 django.utils.autoreload - Watching for file changes with StatReloader
+[INFO] 2026-03-27 01:53:36,433 django.utils.autoreload - Watching for file changes with StatReloader
