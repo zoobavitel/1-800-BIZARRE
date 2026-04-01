@@ -1,139 +1,162 @@
+# CI: test + GitHub Pages frontend. Optional manual SSH deploy to bizarre-api LXC.
+#
+# LXC note: GitHub-hosted runners cannot reach private LAN IPs (e.g. 192.168.x.x).
+# To deploy from CI you need one of:
+#   - SSH to a reachable host: Tailscale hostname/IP, public IP + port forward, or
+#   - A self-hosted runner on your network, or
+#   - Manual: ssh to CT → cd /opt/bizarre && git pull && migrate + restart (see deploy/bizarre-api/README.md)
+#
+# Branch flow (example): feature → dev → pat → main (prod)
+
 name: CI/CD Pipeline
 
-# Branch flow: playersheet → dev (merge) → pat (test CI/CD) → main (prod deploy)
 on:
   push:
-    branches: [ main, master, dev, pat ]
+    branches: [main, master, dev, pat]
   pull_request:
-    branches: [ main, master, dev, pat ]
+    branches: [main, master, dev, pat]
+  workflow_dispatch:
+    inputs:
+      deploy_lxc:
+        description: "After tests, SSH deploy to LXC (requires secrets + reachable host)"
+        type: boolean
+        default: false
 
-# npm workspaces: lockfile lives at repo root (not frontend/package-lock.json).
+# npm workspaces: lockfile at repo root
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
-  contents: write  # needed for deploy job to push gh-pages
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test-frontend:
     runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: package-lock.json
-    
-    - name: Install dependencies (npm workspaces)
-      run: npm ci
-    
-    - name: Run frontend tests
-      run: |
-        cd frontend
-        npm test -- --coverage --watchAll=false
-    
-    - name: Run frontend linting
-      run: npm run lint
-    
-    - name: Build frontend
-      run: |
-        cd frontend
-        npm run build
-
-  test-backend:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: Install Python dependencies
-      run: |
-        cd backend
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-    
-    - name: Run Django tests
-      run: |
-        cd backend/src
-        python manage.py test
-    
-    - name: Check Django migrations
-      run: |
-        cd backend/src
-        python manage.py makemigrations --check --dry-run
-
-  integration-test:
-    needs: [test-frontend, test-backend]
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '18'
-    
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-    
-    - name: Install dependencies
-      run: |
-        npm ci
-        cd backend && pip install -r requirements.txt && cd ..
-    
-    - name: Setup test database
-      run: |
-        cd backend/src
-        python manage.py migrate
-        python manage.py loaddata characters/fixtures/*.json
-    
-    - name: Run integration tests
-      run: |
-        # Start backend in background
-        cd backend/src
-        python manage.py runserver &
-        BACKEND_PID=$!
-        
-        # Wait for backend to start
-        sleep 5
-        
-        # Run frontend integration tests
-        cd ../../frontend
-        npm test -- --testPathPattern=integration --watchAll=false
-        
-        # Clean up
-        kill $BACKEND_PID
-
-  # Deploy to GitHub Pages (prod only). Runs only on main.
-  deploy:
-    needs: [integration-test]
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
-          cache: 'npm'
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies (npm workspaces)
+        run: npm ci
+
+      - name: Run frontend tests
+        run: cd frontend && npm test -- --coverage --watchAll=false
+
+      - name: Run frontend linting
+        run: npm run lint
+
+      - name: Build frontend
+        run: cd frontend && npm run build
+
+  test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Run Django tests
+        env:
+          DJANGO_SETTINGS_MODULE: app.settings
+        run: cd backend/src && python manage.py test
+
+      - name: Check Django migrations
+        env:
+          DJANGO_SETTINGS_MODULE: app.settings
+        run: cd backend/src && python manage.py makemigrations --check --dry-run
+
+  integration-test:
+    needs: [test-frontend, test-backend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          pip install -r backend/requirements.txt
+
+      - name: Setup test database
+        env:
+          DJANGO_SETTINGS_MODULE: app.settings
+        run: |
+          cd backend/src
+          python manage.py migrate
+          python manage.py loaddata characters/fixtures/*.json
+
+      - name: Run integration tests
+        env:
+          DJANGO_SETTINGS_MODULE: app.settings
+        run: |
+          set -e
+          cd backend/src
+          python manage.py runserver 127.0.0.1:8000 --noreload &
+          BACKEND_PID=$!
+          trap 'kill $BACKEND_PID 2>/dev/null || true' EXIT
+          # Wait until API root responds (integration test hits GET /)
+          for i in $(seq 1 30); do
+            if curl -sf "http://127.0.0.1:8000/" >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -sf "http://127.0.0.1:8000/" >/dev/null
+          cd ../../frontend
+          npm test -- --testPathPattern=integration --watchAll=false
+
+  # Frontend static site → GitHub Pages (prod only)
+  deploy-github-pages:
+    needs: [integration-test]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
           cache-dependency-path: package-lock.json
 
       - name: Install and build
         env:
-          # Optional repo secret: bake a public API base into the gh-pages build (e.g. https://api.example.com/api).
           REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
         run: |
           npm ci
@@ -145,3 +168,35 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./frontend/build
           force_orphan: true
+
+  # Optional: pull + migrate + restart on bizarre-api. Only when manually dispatched with deploy_lxc=true.
+  # Configure repo Secrets: LXC_SSH_HOST, LXC_SSH_USER, LXC_SSH_KEY (private key for that user).
+  # Host must be reachable from the internet (not only 192.168.x.x) unless you use a self-hosted runner.
+  deploy-lxc:
+    needs: [integration-test]
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.deploy_lxc == 'true' &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.LXC_SSH_HOST }}
+          username: ${{ secrets.LXC_SSH_USER }}
+          key: ${{ secrets.LXC_SSH_KEY }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd /opt/bizarre
+            git pull --ff-only
+            source .venv/bin/activate
+            pip install -q -r backend/requirements.txt
+            pip install -q -r backend/requirements-prod.txt
+            cd backend/src
+            export DJANGO_SETTINGS_MODULE=app.settings_prod
+            python manage.py migrate --noinput
+            python manage.py collectstatic --noinput
+            sudo systemctl restart gunicorn
+            sudo systemctl restart celery-worker || true
