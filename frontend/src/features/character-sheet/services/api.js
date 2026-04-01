@@ -618,10 +618,22 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     ? { custom_vice: viceVal }
     : { vice: viceVal === '' || viceVal == null ? null : viceVal };
   const abilitiesList = frontendCharacter.abilities || [];
+  const heritageOut = (() => {
+    const h = frontendCharacter.heritage;
+    if (h == null || h === '') return null;
+    if (typeof h === 'number' && Number.isFinite(h)) return h;
+    if (typeof h === 'string') {
+      const t = h.trim();
+      if (!t) return null;
+      if (/^\d+$/.test(t)) return parseInt(t, 10);
+    }
+    return null;
+  })();
+
   return {
     true_name: frontendCharacter.name,
     stand_name: frontendCharacter.standName,
-    heritage: frontendCharacter.heritage,
+    heritage: heritageOut,
     playbook: playbookToBackend(frontendCharacter.playbook),
     background_note: frontendCharacter.background,
     appearance: frontendCharacter.look,

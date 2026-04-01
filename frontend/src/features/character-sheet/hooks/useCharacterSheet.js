@@ -131,19 +131,27 @@ export const useCharacterSheet = (characterId, onSave) => {
         lastModified: new Date().toISOString()
       };
       
-      // Resolve heritage name to id for create (backend expects FK id)
+      // Resolve heritage name to id (serializers often expect integer PK only)
       let payloadCharacter = frontendCharacter;
-      if (typeof frontendCharacter.heritage === 'string') {
-        try {
-          const heritages = await referenceAPI.getHeritages();
-          const match = (heritages || []).find(
-            (h) => (h.name || '').toLowerCase() === (frontendCharacter.heritage || '').toLowerCase()
-          );
-          if (match) {
-            payloadCharacter = { ...frontendCharacter, heritage: match.id };
+      const h0 = frontendCharacter.heritage;
+      if (typeof h0 === 'number' && Number.isFinite(h0)) {
+        /* already id */
+      } else if (typeof h0 === 'string') {
+        const t = h0.trim();
+        if (t && /^\d+$/.test(t)) {
+          payloadCharacter = { ...frontendCharacter, heritage: parseInt(t, 10) };
+        } else {
+          try {
+            const heritages = await referenceAPI.getHeritages();
+            const list = heritages || [];
+            const match = list.find(
+              (h) => (h.name || '').toLowerCase() === t.toLowerCase()
+            );
+            const id = match ? match.id : list[0]?.id;
+            if (id != null) payloadCharacter = { ...frontendCharacter, heritage: id };
+          } catch (_) {
+            /* transformFrontendToBackend will coerce string to null */
           }
-        } catch (_) {
-          // Keep string if lookup fails; backend will validate
         }
       }
       
