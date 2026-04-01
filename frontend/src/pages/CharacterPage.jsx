@@ -395,11 +395,22 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
       heritageList = await referenceAPI.getHeritages().catch(() => []);
       if (heritageList.length) setHeritages(heritageList);
     }
-    if (typeof heritageValue === 'string' && heritageList.length) {
-      const match = heritageList.find((h) => (h.name || '').toLowerCase() === (heritageValue || '').toLowerCase());
-      if (match) heritageValue = match.id;
+    // Strict FK: many deployments expect integer PK only (not display names). Never send a stray string.
+    if (typeof heritageValue === 'number' && Number.isFinite(heritageValue)) {
+      /* keep */
+    } else if (typeof heritageValue === 'string') {
+      const s = heritageValue.trim();
+      if (s && /^\d+$/.test(s)) {
+        heritageValue = parseInt(s, 10);
+      } else if (heritageList.length) {
+        const match = heritageList.find((h) => (h.name || '').toLowerCase() === s.toLowerCase());
+        heritageValue = match ? match.id : heritageList[0].id;
+      }
     }
     if ((heritageValue == null || heritageValue === '') && heritageList.length) {
+      heritageValue = heritageList[0].id;
+    }
+    if (typeof heritageValue === 'string' && heritageList.length) {
       heritageValue = heritageList[0].id;
     }
     // Backend rejects blank true_name; avoid hollow PUT if local name lagged behind loaded character

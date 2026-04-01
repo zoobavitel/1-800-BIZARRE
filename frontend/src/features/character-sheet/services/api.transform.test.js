@@ -56,6 +56,12 @@ describe('transformFrontendToBackend playbook and playbook abilities', () => {
     expect(playbookToBackend('SPIN')).toBe('SPIN');
   });
 
+  test('coerces heritage to integer PK or null (never passes display name strings)', () => {
+    expect(transformFrontendToBackend(makeSheet({ heritage: 2 })).heritage).toBe(2);
+    expect(transformFrontendToBackend(makeSheet({ heritage: '7' })).heritage).toBe(7);
+    expect(transformFrontendToBackend(makeSheet({ heritage: 'Human' })).heritage).toBe(null);
+  });
+
   test('emits spin_ability_ids and hamon_ability_ids from abilities array', () => {
     const out = transformFrontendToBackend(
       makeSheet({
