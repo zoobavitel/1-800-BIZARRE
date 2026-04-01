@@ -10,6 +10,10 @@ export const PATCH_NOTES = [
       {
         "title": "Other",
         "items": [
+          "Refactor heritage handling in character sheet and API transformation",
+          "Update README to include new subagent documentation for feature branches",
+          "Update README to include new subagent documentation for feature branches",
+          "Update character serializers to accept heritage display names and enhance error handling",
           "Update README and enhance error handling in authentication views",
           "Enhance CI/CD workflow for frontend and backend testing"
         ]
