@@ -7,8 +7,9 @@ User=root
 Group=root
 WorkingDirectory=/opt/bizarre/backend/src
 Environment="PATH=/opt/bizarre/.venv/bin"
-EnvironmentFile=-/opt/bizarre/backend/src/.env
 Environment="DJANGO_SETTINGS_MODULE=app.settings_prod"
+# Do not use EnvironmentFile=.env here — systemd expands $ and breaks SECRET_KEY / passwords.
+# python-decouple reads backend/src/.env from WorkingDirectory.
 ExecStart=/opt/bizarre/.venv/bin/gunicorn app.wsgi:application \
   --bind 127.0.0.1:8000 \
   --workers 3 \

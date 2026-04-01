@@ -7,8 +7,8 @@ User=root
 Group=root
 WorkingDirectory=/opt/bizarre/backend/src
 Environment="PATH=/opt/bizarre/.venv/bin"
-EnvironmentFile=-/opt/bizarre/backend/src/.env
 Environment="DJANGO_SETTINGS_MODULE=app.settings_prod"
+# .env loaded by decouple from WorkingDirectory (see gunicorn.service comment).
 ExecStart=/opt/bizarre/.venv/bin/celery -A app worker --loglevel=info
 Restart=on-failure
 

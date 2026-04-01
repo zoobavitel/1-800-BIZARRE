@@ -31,12 +31,17 @@ python manage.py createsuperuser
 
 ## 3. systemd
 
+**Paths:** Unit files live under **`/opt/bizarre/deploy/bizarre-api/`** (repo root), not under `backend/src`. If you `cd` into `backend/src`, relative `deploy/...` will fail — always use the absolute paths below.
+
 ```bash
 sudo cp /opt/bizarre/deploy/bizarre-api/gunicorn.service /etc/systemd/system/
 sudo cp /opt/bizarre/deploy/bizarre-api/celery-worker.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now gunicorn celery-worker
+sudo systemctl status gunicorn celery-worker --no-pager
 ```
+
+Units rely on **`WorkingDirectory=/opt/bizarre/backend/src`** so **python-decouple** loads `.env` there. Do not use `EnvironmentFile=` for `.env` in systemd: it mangles values containing **`$`**, which breaks `SECRET_KEY` and DB passwords.
 
 Adjust `User=` / paths if you run as non-root.
 
