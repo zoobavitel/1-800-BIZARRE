@@ -1,0 +1,15 @@
+---
+description: Start new feature or fix work on a branch from updated master, not on master directly
+alwaysApply: true
+---
+
+# Git — feature and fix branches
+
+When starting **new** work that adds a feature or fixes a bug (anything that will ship as its own change set or PR):
+
+1. **Do not implement on `master`** — create a dedicated branch first.
+2. **Base the branch on up-to-date `master`:** `git fetch origin`, `git checkout master`, `git pull origin master`, then `git checkout -b feature/<slug>` or `fix/<slug>` (kebab-case, descriptive).
+3. If the user is already on an appropriate `feature/*` or `fix/*` branch for this task, continue there; do not create a duplicate branch unless they ask to rename or split work.
+4. If there are uncommitted changes, coordinate stash or a WIP commit before switching branches.
+
+For the full checklist (edge cases, naming), invoke the **feature-branch-git** subagent or see `.cursor/agents/feature-branch-git.md`.
