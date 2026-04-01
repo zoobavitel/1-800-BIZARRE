@@ -310,6 +310,37 @@ class HeritageSerializer(serializers.ModelSerializer):
         model = Heritage
         fields = ['id', 'name', 'base_hp', 'description', 'benefits', 'detriments']
 
+
+class FlexibleHeritagePrimaryKeyField(serializers.PrimaryKeyRelatedField):
+    """Accepts heritage id (int or numeric string) or heritage display name (e.g. Human)."""
+
+    def to_internal_value(self, data):
+        if data is None:
+            if self.required:
+                self.fail('required')
+            return None
+        queryset = self.get_queryset()
+        if isinstance(data, Heritage):
+            if not queryset.filter(pk=data.pk).exists():
+                self.fail('does_not_exist', pk_name=data.pk)
+            return data
+        if isinstance(data, int):
+            return queryset.get(pk=data)
+        if isinstance(data, str):
+            s = data.strip()
+            if not s:
+                if self.allow_null:
+                    return None
+                self.fail('invalid')
+            if s.isdigit():
+                return queryset.get(pk=int(s))
+            match = queryset.filter(name__iexact=s).first()
+            if match is not None:
+                return match
+            self.fail('does_not_exist', pk_name=s)
+        return super().to_internal_value(data)
+
+
 class ViceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vice
@@ -344,6 +375,9 @@ class StandSerializer(serializers.ModelSerializer):
 
 class CharacterSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(required=False)
+    heritage = FlexibleHeritagePrimaryKeyField(
+        queryset=Heritage.objects.all(), allow_null=True, required=False
+    )
     # display current campaign's wanted stars
     wanted_stars = serializers.IntegerField(source='campaign.wanted_stars', read_only=True)
     stand = StandSerializer(read_only=True)
@@ -957,6 +991,9 @@ class CampaignSerializer(serializers.ModelSerializer):
 
 class NPCSerializer(serializers.ModelSerializer):
     creator = serializers.PrimaryKeyRelatedField(read_only=True, default=serializers.CurrentUserDefault())
+    heritage = FlexibleHeritagePrimaryKeyField(
+        queryset=Heritage.objects.all(), allow_null=True, required=False
+    )
     harm_clock_max = serializers.IntegerField(read_only=True)
     special_armor_charges = serializers.IntegerField(read_only=True)
     vulnerability_clock_max = serializers.IntegerField(read_only=True)

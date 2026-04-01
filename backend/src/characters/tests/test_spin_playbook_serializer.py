@@ -166,6 +166,19 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         self.assertIn('non_field_errors', serializer.errors)
         self.assertIn('Hamon abilities require playbook HAMON.', str(serializer.errors['non_field_errors'][0]))
 
+    def test_heritage_accepts_display_name_string(self):
+        """PATCH may send heritage as display name (matches frontend before /heritages/ resolves)."""
+        other = Heritage.objects.create(name='Rock Human', base_hp=2)
+        data = {'heritage': 'Rock Human'}
+        serializer = CharacterSerializer(
+            instance=self.char,
+            data=data,
+            partial=True,
+            context={'request': self._request()},
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data['heritage'], other)
+
     def test_create_character_with_spin_abilities_via_api(self):
         """POST /api/characters/ assigns user in perform_create; spin abilities persist when prereqs met."""
         client = APIClient()

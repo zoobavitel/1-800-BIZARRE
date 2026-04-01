@@ -390,12 +390,17 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
   const handleSaveCharacter = useCallback(async (payload) => {
     const frontend = normalizeSheetPayloadToFrontend(payload, traumas);
     let heritageValue = frontend.heritage;
-    if (typeof heritageValue === 'string' && heritages.length) {
-      const match = heritages.find((h) => (h.name || '').toLowerCase() === (heritageValue || '').toLowerCase());
+    let heritageList = heritages;
+    if (typeof heritageValue === 'string' && !heritageList.length) {
+      heritageList = await referenceAPI.getHeritages().catch(() => []);
+      if (heritageList.length) setHeritages(heritageList);
+    }
+    if (typeof heritageValue === 'string' && heritageList.length) {
+      const match = heritageList.find((h) => (h.name || '').toLowerCase() === (heritageValue || '').toLowerCase());
       if (match) heritageValue = match.id;
     }
-    if ((heritageValue == null || heritageValue === '') && heritages.length) {
-      heritageValue = heritages[0].id;
+    if ((heritageValue == null || heritageValue === '') && heritageList.length) {
+      heritageValue = heritageList[0].id;
     }
     // Backend rejects blank true_name; avoid hollow PUT if local name lagged behind loaded character
     let nameForSave = String(frontend.name ?? '').trim();
