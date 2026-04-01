@@ -4,6 +4,31 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-04-01",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Enhance CI/CD workflow for frontend and backend testing"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-03-31",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Update production settings and deployment configurations",
+          "Enhance CI configuration and update production settings"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-03-27",
     "version": null,
     "sections": [

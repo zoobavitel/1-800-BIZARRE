@@ -17,6 +17,19 @@ from ..serializers import (
 logger = logging.getLogger(__name__)
 
 
+def _signup_user_message(errors: dict) -> str:
+    """Short user-facing summary for failed signup (field details remain in body)."""
+    u = errors.get('username')
+    if isinstance(u, list) and u:
+        text = str(u[0]).lower()
+        if 'taken' in text or 'already' in text:
+            return str(u[0])
+    p = errors.get('password')
+    if isinstance(p, list) and p:
+        return f"Password: {p[0]}"
+    return 'Could not create this account. Check username and password, then try again.'
+
+
 class RegisterView(APIView):
     permission_classes = [AllowAny]
 
@@ -33,7 +46,9 @@ class RegisterView(APIView):
                     'email': getattr(user, 'email', '') or '',
                 },
             }, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        body = dict(serializer.errors)
+        body['message'] = _signup_user_message(body)
+        return Response(body, status=status.HTTP_400_BAD_REQUEST)
 
 
 class LoginView(ObtainAuthToken):
@@ -55,7 +70,11 @@ class LoginView(ObtainAuthToken):
                     'email': getattr(user, 'email', '') or '',
                 },
             })
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        body = dict(serializer.errors)
+        body['message'] = (
+            'Invalid username or password. Check your credentials and try again.'
+        )
+        return Response(body, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CurrentUserView(APIView):

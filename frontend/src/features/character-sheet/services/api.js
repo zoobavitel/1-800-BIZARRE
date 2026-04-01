@@ -1,6 +1,7 @@
 // API service for character sheet backend integration
 
 import { getApiBaseUrl, requireApiBaseUrl } from '../../../config/apiConfig';
+import { getApiErrorMessage } from '../../../utils/apiErrorMessage';
 import { gradeToIndex, indexToGrade, DUR_TABLE, DEFAULT_TRAUMA } from '../constants/srd';
 
 /** Backend Character.playbook values */
@@ -30,23 +31,6 @@ function abilityIdsByType(abilities, type) {
   return (abilities || [])
     .filter((a) => a.type === type && (typeof a.id === 'number' || (typeof a.id === 'string' && /^\d+$/.test(a.id))))
     .map((a) => (typeof a.id === 'number' ? a.id : parseInt(a.id, 10)));
-}
-
-/** Flatten DRF validation errors into a readable message. */
-function formatApiError(errorData, status, statusText) {
-  if (Array.isArray(errorData.non_field_errors) && errorData.non_field_errors[0])
-    return errorData.non_field_errors[0];
-  if (errorData.detail) return typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData.detail);
-  if (errorData.error) return errorData.error;
-  const entries = Object.entries(errorData).filter(([, v]) => v != null && v !== '');
-  if (entries.length > 0) {
-    const parts = entries.map(([k, v]) => {
-      const msg = Array.isArray(v) ? v[0] : typeof v === 'object' ? JSON.stringify(v) : String(v);
-      return `${k}: ${msg}`;
-    });
-    return parts.join('; ');
-  }
-  return `HTTP ${status}: ${statusText}`;
 }
 
 /** Build absolute URL for uploaded media paths (e.g. /media/...) so <img src> works with the API host. */
@@ -83,7 +67,7 @@ const apiRequest = async (endpoint, options = {}) => {
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      const message = formatApiError(errorData, response.status, response.statusText);
+      const message = getApiErrorMessage(errorData, response.status, response.statusText);
       throw new Error(message);
     }
     
@@ -316,7 +300,7 @@ const apiRequestMultipart = async (endpoint, formData, method = 'POST') => {
   const response = await fetch(url, { method, headers, body: formData });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    const message = formatApiError(errorData, response.status, response.statusText);
+    const message = getApiErrorMessage(errorData, response.status, response.statusText);
     throw new Error(message);
   }
   return await response.json();
