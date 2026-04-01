@@ -132,6 +132,9 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install and build
+        env:
+          # Optional repo secret: bake a public API base into the gh-pages build (e.g. https://api.example.com/api).
+          REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
         run: |
           npm ci
           npm run build

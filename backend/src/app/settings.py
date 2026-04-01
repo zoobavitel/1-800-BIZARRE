@@ -88,6 +88,7 @@ USE_TZ = True
 
 # Static files
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
@@ -142,3 +143,9 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
 
 # Dev-only: allow all origins (optional fallback, comment out in production)
 # CORS_ALLOW_ALL_ORIGINS = True
+
+# Celery (used when worker runs; dev uses eager mode — see CELERY_TASK_ALWAYS_EAGER)
+CELERY_BROKER_URL = os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
+CELERY_TASK_ALWAYS_EAGER = os.environ.get("CELERY_TASK_ALWAYS_EAGER", "true").lower() == "true"
+CELERY_TASK_EAGER_PROPAGATES = True
