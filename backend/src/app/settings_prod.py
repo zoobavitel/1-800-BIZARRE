@@ -36,7 +36,14 @@ CORS_ALLOW_CREDENTIALS = True
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 SECURE_SSL_REDIRECT = config("DJANGO_SECURE_SSL_REDIRECT", default=True, cast=bool)
-SECURE_HSTS_SECONDS = config("SECURE_HSTS_SECONDS", default=31536000, cast=int)
+# When false, session/CSRF cookies work over plain HTTP (e.g. LAN testing). When true,
+# browsers only send cookies on HTTPS — required for real TLS deployments.
+DJANGO_SECURE_COOKIES = config("DJANGO_SECURE_COOKIES", default=True, cast=bool)
+SECURE_HSTS_SECONDS = (
+    config("SECURE_HSTS_SECONDS", default=31536000, cast=int)
+    if DJANGO_SECURE_COOKIES
+    else 0
+)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
@@ -97,9 +104,17 @@ EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@your-domain.com")
 
-SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = DJANGO_SECURE_COOKIES
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_AGE = 86400
 
-CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = DJANGO_SECURE_COOKIES
 CSRF_COOKIE_HTTPONLY = True
+
+# Django 4+: required for cross-origin POSTs with credentials (e.g. GitHub Pages → API).
+# For LAN HTTP, include http://<your-ip> and http://hostname (e.g. http://bizarre-api).
+CSRF_TRUSTED_ORIGINS = config(
+    "CSRF_TRUSTED_ORIGINS",
+    default="https://zoobavitel.github.io",
+    cast=Csv(),
+)
