@@ -5806,3 +5806,5 @@ django.db.utils.OperationalError: no such column: characters_session.devils_barg
 [WARNING] 2026-04-01 04:27:23,925 django.request - Bad Request: /api/npcs/1/apply-effect/
 [WARNING] 2026-04-01 04:27:24,113 django.request - Not Found: /api/npcs/1/apply-effect/
 [WARNING] 2026-04-01 04:27:29,082 django.request - Bad Request: /api/characters/1/roll-action/
+[WARNING] 2026-04-01 23:04:37,082 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-01 23:04:37,278 django.request - Not Found: /api/npcs/1/apply-effect/

@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Other",
         "items": [
+          "Update README and enhance error handling in authentication views",
           "Enhance CI/CD workflow for frontend and backend testing"
         ]
       }
