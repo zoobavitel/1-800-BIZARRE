@@ -1,6 +1,7 @@
 // Authentication service for user management
 
 import { requireApiBaseUrl } from '../../../config/apiConfig';
+import { getApiErrorMessage } from '../../../utils/apiErrorMessage';
 
 // Helper function for API requests
 const apiRequest = async (endpoint, options = {}) => {
@@ -24,13 +25,11 @@ const apiRequest = async (endpoint, options = {}) => {
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      const message =
-        (Array.isArray(errorData.non_field_errors) && errorData.non_field_errors[0]) ||
-        errorData.detail ||
-        errorData.error ||
-        (typeof errorData.username === 'string' ? errorData.username : errorData.username?.[0]) ||
-        (typeof errorData.password === 'string' ? errorData.password : errorData.password?.[0]) ||
-        `HTTP ${response.status}: ${response.statusText}`;
+      const message = getApiErrorMessage(
+        errorData,
+        response.status,
+        response.statusText
+      );
       throw new Error(message);
     }
     
