@@ -5785,3 +5785,17 @@ Traceback (most recent call last):
     return super().execute(query, params)
            ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
 django.db.utils.OperationalError: no such column: characters_session.devils_bargain_by_character
+[WARNING] 2026-04-01 01:47:52,113 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-04-01 01:47:52,498 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-04-01 01:47:52,877 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-04-01 01:47:54,128 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-04-01 01:47:55,580 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-01 01:47:55,771 django.request - Not Found: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-01 01:48:00,843 django.request - Bad Request: /api/characters/1/roll-action/
+[WARNING] 2026-04-01 01:49:31,848 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-04-01 01:49:32,221 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-04-01 01:49:32,593 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-04-01 01:49:33,821 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-04-01 01:49:35,242 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-01 01:49:35,428 django.request - Not Found: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-01 01:49:40,401 django.request - Bad Request: /api/characters/1/roll-action/

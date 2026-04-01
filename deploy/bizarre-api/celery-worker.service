@@ -1,0 +1,16 @@
+[Unit]
+Description=Celery worker for jojo-ttrpg-platform
+After=network.target redis-server.service postgresql.service
+
+[Service]
+User=root
+Group=root
+WorkingDirectory=/opt/bizarre/backend/src
+Environment="PATH=/opt/bizarre/.venv/bin"
+EnvironmentFile=-/opt/bizarre/backend/src/.env
+Environment="DJANGO_SETTINGS_MODULE=app.settings_prod"
+ExecStart=/opt/bizarre/.venv/bin/celery -A app worker --loglevel=info
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

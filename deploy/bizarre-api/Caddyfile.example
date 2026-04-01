@@ -1,0 +1,12 @@
+# Replace api.example.com with your public hostname (or use Tailscale Serve/Funnel hostname).
+# Caddy obtains Let's Encrypt certs automatically for public DNS pointing at this host.
+
+api.example.com {
+	reverse_proxy 127.0.0.1:8000
+}
+
+# Optional: also listen on LAN for testing (replace IP if needed)
+# :443 {
+# 	tls internal
+# 	reverse_proxy 127.0.0.1:8000
+# }
