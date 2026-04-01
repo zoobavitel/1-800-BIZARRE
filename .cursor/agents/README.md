@@ -9,6 +9,7 @@ Markdown files in this directory define **subagents**: specialized assistants wi
 | [migration-sanity.md](migration-sanity.md) | Migrations, `on_delete`, session roll history |
 | [test-runner-django-frontend.md](test-runner-django-frontend.md) | `manage.py test` + `npm run build` |
 | [security-hardening-web.md](security-hardening-web.md) | Web research + Django/React security hardening with tests and `check --deploy` |
+| [feature-branch-git.md](feature-branch-git.md) | New feature/fix work on a branch from updated `master` (not on `master`) |
 
 **Invoke:** `/api-parity-checker` (or natural language: “run the api-parity-checker subagent on …”) from Agent chat.
 
