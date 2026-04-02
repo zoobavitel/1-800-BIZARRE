@@ -167,6 +167,14 @@ export const characterAPI = {
   }),
 };
 
+/** Unwrap list responses: plain array or paginated `{ results: [...] }`. */
+export function normalizeListResponse(data) {
+  if (data == null) return [];
+  if (Array.isArray(data)) return data;
+  if (typeof data === 'object' && Array.isArray(data.results)) return data.results;
+  return [];
+}
+
 // Reference data API functions
 export const referenceAPI = {
   // Get all heritages

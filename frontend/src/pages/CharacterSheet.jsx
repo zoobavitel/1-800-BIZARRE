@@ -97,7 +97,22 @@ const CLOCK_TYPE_OPTIONS = [
   { value: 'COUNTDOWN', label: 'Countdown' },
 ];
 
-const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwitchCharacter, onCrewNameUpdated, allCharacters = [], campaigns = [], heritages = [], isGM = false, onCampaignRefresh }) => {
+const CharacterSheetWrapper = ({
+  character,
+  onClose,
+  onSave,
+  onCreateNew,
+  onSwitchCharacter,
+  onCrewNameUpdated,
+  allCharacters = [],
+  campaigns = [],
+  heritages = [],
+  heritagesLoading = false,
+  heritagesError = null,
+  onRetryHeritages,
+  isGM = false,
+  onCampaignRefresh,
+}) => {
   const { user } = useAuth();
   const [activeMode, setActiveMode] = useState('CHARACTER MODE');
   const charCampaign = campaigns?.find((c) => c.id === character?.campaign);
@@ -110,7 +125,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
   const [createClockVisibleToParty, setCreateClockVisibleToParty] = useState(false);
   const [creatingClock, setCreatingClock] = useState(false);
 
-  // Resolve heritage: backend sends ID; createDefaultCharacter sends 'Human' string
+  // Resolve heritage: backend sends ID; new tabs may have null until heritages load
   const resolveHeritageId = (h) => {
     if (h == null || h === '') return heritages[0]?.id ?? null;
     if (typeof h === 'number') return heritages.some(x => x.id === h) ? h : heritages[0]?.id ?? null;
@@ -966,6 +981,8 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       if (savingRef.current || !onSave) return;
+      if (heritagesLoading || heritages.length === 0) return;
+      if (typeof charData.heritage !== 'number' || !Number.isFinite(charData.heritage)) return;
       const payload = buildPayload();
       // Skip save if payload matches last saved (prevents loop from server response overwriting fields)
       const { lastModified, imageFile: _img, ...rest } = payload;
@@ -993,7 +1010,7 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
     }, 1500);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [charData, standStats, actionRatings, stressFilled, trauma, regularArmorUsed, specialArmorUsed, harm, healingClock, coinFilled, stashBoxes, xp, abilities, clocks, playbook, campaignId, imageUrl, imageFile, selectedBenefits, selectedDetriments, character?.id]);
+  }, [charData, standStats, actionRatings, stressFilled, trauma, regularArmorUsed, specialArmorUsed, harm, healingClock, coinFilled, stashBoxes, xp, abilities, clocks, playbook, campaignId, imageUrl, imageFile, selectedBenefits, selectedDetriments, character?.id, heritages, heritagesLoading]);
 
   // ─── Styles ──────────────────────────────────────────────────────────────────
 
@@ -1188,35 +1205,52 @@ const CharacterSheetWrapper = ({ character, onClose, onSave, onCreateNew, onSwit
                       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px', marginTop:'8px' }}>
                         <div>
                           <span style={S.lbl}>HERITAGE</span>
-                          <select
-                            style={{ ...S.sel, width:'100%' }}
-                            value={charData.heritage ?? ''}
-                            onChange={e => {
-                              const val = e.target.value;
-                              const newHeritageId = val ? parseInt(val, 10) : null;
-                              setCharData(p => ({ ...p, heritage: newHeritageId }));
-                              if (newHeritageId && heritages.length) {
-                                const h = heritages.find((x) => x.id === newHeritageId);
-                                if (h) {
-                                  const reqB = (h.benefits || []).filter((b) => b.required).map((b) => b.id);
-                                  const reqD = (h.detriments || []).filter((d) => d.required).map((d) => d.id);
-                                  setSelectedBenefits(reqB);
-                                  setSelectedDetriments(reqD);
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <select
+                              style={{ ...S.sel, width:'100%', flex: 1, minWidth: 0 }}
+                              disabled={heritagesLoading || heritages.length === 0}
+                              value={charData.heritage ?? ''}
+                              onChange={e => {
+                                const val = e.target.value;
+                                const newHeritageId = val ? parseInt(val, 10) : null;
+                                setCharData(p => ({ ...p, heritage: newHeritageId }));
+                                if (newHeritageId && heritages.length) {
+                                  const h = heritages.find((x) => x.id === newHeritageId);
+                                  if (h) {
+                                    const reqB = (h.benefits || []).filter((b) => b.required).map((b) => b.id);
+                                    const reqD = (h.detriments || []).filter((d) => d.required).map((d) => d.id);
+                                    setSelectedBenefits(reqB);
+                                    setSelectedDetriments(reqD);
+                                  }
+                                } else {
+                                  setSelectedBenefits([]);
+                                  setSelectedDetriments([]);
                                 }
-                              } else {
-                                setSelectedBenefits([]);
-                                setSelectedDetriments([]);
-                              }
-                            }}
-                          >
-                            {heritages.length === 0 ? (
-                              <option value="">Loading...</option>
-                            ) : (
-                              heritages.map(h => (
-                                <option key={h.id} value={h.id}>{h.name}</option>
-                              ))
+                              }}
+                            >
+                              {heritagesLoading ? (
+                                <option value="">Loading heritages…</option>
+                              ) : heritagesError && !heritages.length ? (
+                                <option value="">Could not load heritages</option>
+                              ) : (
+                                heritages.map(h => (
+                                  <option key={h.id} value={h.id}>{h.name}</option>
+                                ))
+                              )}
+                            </select>
+                            {heritagesError && onRetryHeritages && (
+                              <button
+                                type="button"
+                                onClick={() => onRetryHeritages()}
+                                style={{ ...S.btn, background: '#374151', color: '#e5e7eb', fontSize: '11px', whiteSpace: 'nowrap' }}
+                              >
+                                Retry
+                              </button>
                             )}
-                          </select>
+                          </div>
+                          {heritagesError && (
+                            <div style={{ fontSize: '10px', color: '#f87171', marginTop: '4px' }}>{heritagesError}</div>
+                          )}
                         </div>
                         <div><span style={S.lbl}>BACKGROUND</span><input style={S.inp} value={charData.background} onChange={e => setCharData(p => ({ ...p, background: e.target.value }))} placeholder="Background" /></div>
                         <div>
