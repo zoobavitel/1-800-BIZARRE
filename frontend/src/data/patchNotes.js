@@ -8,14 +8,37 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Maintenance",
+        "items": [
+          "restore backend/src/db.sqlite3 to match master (drop stray migrate diff)"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "improve heritage error message on CharacterPage",
+          "resolve heritage PK before save and improve heritages load UX"
+        ]
+      },
+      {
         "title": "Other",
         "items": [
+          "ci: use Node 24 action runtimes (checkout v5, setup-node v5, setup-python v6)",
+          "Enhance CI and integration tests",
+          "Merge pull request #2 from zoobavitel/fix/ci-migration-and-frontend-tests",
+          "Update patch notes with recent changes",
           "Refactor heritage handling in character sheet and API transformation",
           "Update README to include new subagent documentation for feature branches",
           "Update README to include new subagent documentation for feature branches",
           "Update character serializers to accept heritage display names and enhance error handling",
           "Update README and enhance error handling in authentication views",
           "Enhance CI/CD workflow for frontend and backend testing"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "add resolveHeritagePkForSave function and enhance character page"
         ]
       }
     ]
