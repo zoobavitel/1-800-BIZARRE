@@ -1501,11 +1501,18 @@ const CharacterSheetWrapper = ({
                       <option>Stand</option><option>Hamon</option><option>Spin</option>
                     </select>
                   </div>
+                  {((playbook === 'Stand' && standardAbilitiesList.length === 0) ||
+                    (playbook === 'Hamon' && hamonAbilitiesList.length === 0) ||
+                    (playbook === 'Spin' && spinAbilitiesList.length === 0)) && (
+                    <div style={{ fontSize: '11px', color: '#9ca3af', marginBottom: '12px', padding: '8px 10px', background: '#111827', borderRadius: '6px', border: '1px solid #374151' }}>
+                      Reference playbook abilities are missing on the server. Run migrations or load reference fixtures, then refresh.
+                    </div>
+                  )}
 
                   {/* Heritage Benefits & Detriments — above Stand Coin Stats */}
                   {charData.heritage && heritages.length > 0 && (() => {
                     const currentHeritage = heritages.find((h) => h.id === charData.heritage);
-                    if (!currentHeritage?.benefits && !currentHeritage?.detriments) return null;
+                    if (!currentHeritage) return null;
                     const benefits = currentHeritage.benefits || [];
                     const detriments = currentHeritage.detriments || [];
                     const baseHp = currentHeritage.base_hp ?? 0;
@@ -1526,6 +1533,16 @@ const CharacterSheetWrapper = ({
                         prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
                       );
                     };
+                    if (benefits.length === 0 && detriments.length === 0) {
+                      return (
+                        <div style={{ marginBottom:'16px', paddingBottom:'16px', borderBottom:'1px solid #374151' }}>
+                          <span style={S.lbl}>HERITAGE BENEFITS & DETRIMENTS</span>
+                          <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '8px' }}>
+                            Reference benefits and detriments are missing on the server. Run migrations or load reference fixtures, then refresh.
+                          </div>
+                        </div>
+                      );
+                    }
                     return (
                       <div style={{ marginBottom:'16px', paddingBottom:'16px', borderBottom:'1px solid #374151' }}>
                         <span style={S.lbl}>HERITAGE BENEFITS & DETRIMENTS</span>

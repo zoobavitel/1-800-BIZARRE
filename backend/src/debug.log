@@ -5829,3 +5829,10 @@ django.db.utils.OperationalError: no such column: characters_session.devils_barg
 [WARNING] 2026-04-02 01:16:30,143 django.request - Bad Request: /api/npcs/1/apply-effect/
 [WARNING] 2026-04-02 01:16:30,339 django.request - Not Found: /api/npcs/1/apply-effect/
 [WARNING] 2026-04-02 01:16:35,689 django.request - Bad Request: /api/characters/1/roll-action/
+[WARNING] 2026-04-02 02:56:53,787 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-04-02 02:56:54,170 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-04-02 02:56:54,554 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-04-02 02:56:55,814 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-04-02 02:56:57,281 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-02 02:56:57,472 django.request - Not Found: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-02 02:57:02,624 django.request - Bad Request: /api/characters/1/roll-action/

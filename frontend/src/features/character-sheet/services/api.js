@@ -44,6 +44,20 @@ export function resolveMediaUrl(pathOrUrl) {
   return `${base}/${s}`;
 }
 
+/** Personal Blades coin boxes (4 booleans); persisted on Character.coin_boxes. */
+export function normalizeCoinBoxes(v) {
+  const d = [false, false, false, false];
+  if (!Array.isArray(v)) return d;
+  return d.map((_, i) => Boolean(v[i]));
+}
+
+/** Shared crew stash grid (40 booleans); persisted on Crew.stash_slots. */
+export function normalizeStashSlots(v) {
+  const d = Array(40).fill(false);
+  if (!Array.isArray(v)) return d;
+  return d.map((_, i) => Boolean(v[i]));
+}
+
 // Helper function for API requests
 const apiRequest = async (endpoint, options = {}) => {
   const token = localStorage.getItem('authToken');
@@ -577,9 +591,9 @@ export const transformBackendToFrontend = (backendCharacter) => {
       ],
     },
     
-    // Coin and stash
-    coin: Array(4).fill(false), // Not in backend model
-    stash: Array(40).fill(false), // Not in backend model
+    // Coin (character) and stash (crew when linked)
+    coin: normalizeCoinBoxes(backendCharacter.coin_boxes),
+    stash: normalizeStashSlots(backendCharacter.crew?.stash_slots),
     
     // Healing clock
     healingClock: backendCharacter.healing_clock_filled || 0,
@@ -765,6 +779,8 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     // Heritage benefits and detriments (arrays of IDs)
     selected_benefits: Array.isArray(frontendCharacter.selected_benefits) ? frontendCharacter.selected_benefits : [],
     selected_detriments: Array.isArray(frontendCharacter.selected_detriments) ? frontendCharacter.selected_detriments : [],
+
+    coin_boxes: normalizeCoinBoxes(frontendCharacter.coin),
 
     // Solo / no campaign crew: stored on Character; cleared when linked to a Crew
     personal_crew_name:

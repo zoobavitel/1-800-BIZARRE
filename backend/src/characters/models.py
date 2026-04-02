@@ -8,6 +8,16 @@ from django.utils import timezone
 import json
 
 
+def _default_coin_boxes():
+    """Blades-style personal coin (4 boxes)."""
+    return [False, False, False, False]
+
+
+def _default_stash_slots():
+    """Blades-style crew stash grid (40 boxes)."""
+    return [False] * 40
+
+
 class Campaign(models.Model):
     name = models.CharField(max_length=100)
     gm = models.ForeignKey(User, on_delete=models.CASCADE, related_name='campaigns_led')
@@ -136,6 +146,11 @@ class Crew(models.Model):
 
     coin = models.IntegerField(default=0)
     stash = models.IntegerField(default=0)
+    stash_slots = models.JSONField(
+        default=_default_stash_slots,
+        blank=True,
+        help_text="Shared crew stash grid: 40 booleans (Blades-style).",
+    )
 
     claims = models.ManyToManyField(Claim, related_name='crews', blank=True)
     upgrade_progress = models.JSONField(default=dict, help_text="Progress on crew upgrades, e.g., {'Smuggling Tunnels': 2}")
@@ -444,6 +459,8 @@ class Character(models.Model):
     action_dice_gained = models.IntegerField(default=0)
     inventory = models.JSONField(default=list, blank=True, help_text="List of items the character possesses")
     reputation_status = models.JSONField(default=dict, blank=True, help_text="Tracks character's reputation with allies, rivals, and factions (e.g., {'Faction Name': 2, 'NPC Name': -1})")
+
+    coin_boxes = models.JSONField(default=_default_coin_boxes, blank=True, help_text="Four personal coin boxes (booleans).")
 
     ACTION_CATEGORIES = {
         'insight': ['hunt', 'study', 'survey', 'tinker'],

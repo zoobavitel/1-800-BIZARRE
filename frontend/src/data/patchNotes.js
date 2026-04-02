@@ -24,7 +24,9 @@ export const PATCH_NOTES = [
       {
         "title": "Other",
         "items": [
+          "Merge pull request #4 from zoobavitel/fix/character-sheet-heritage-save",
           "ci: use Node 24 action runtimes (checkout v5, setup-node v5, setup-python v6)",
+          "Merge pull request #3 from zoobavitel/fix/character-sheet-heritage-save",
           "Enhance CI and integration tests",
           "Merge pull request #2 from zoobavitel/fix/ci-migration-and-frontend-tests",
           "Update patch notes with recent changes",
