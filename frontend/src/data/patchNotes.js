@@ -8,22 +8,16 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
-        "title": "Fixed",
+        "title": "Added",
         "items": [
-          "update database seeding logic and enhance heritage error handling",
-          "improve heritage error message on CharacterPage",
-          "resolve heritage PK before save and improve heritages load UX"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "restore backend/src/db.sqlite3 to match master (drop stray migrate diff)"
+          "add coin boxes and stash slots to character and crew models",
+          "add resolveHeritagePkForSave function and enhance character page"
         ]
       },
       {
         "title": "Other",
         "items": [
+          "Merge pull request #5 from zoobavitel/fix/character-sheet-heritage-save",
           "Merge pull request #4 from zoobavitel/fix/character-sheet-heritage-save",
           "ci: use Node 24 action runtimes (checkout v5, setup-node v5, setup-python v6)",
           "Merge pull request #3 from zoobavitel/fix/character-sheet-heritage-save",
@@ -39,9 +33,18 @@ export const PATCH_NOTES = [
         ]
       },
       {
-        "title": "Added",
+        "title": "Fixed",
         "items": [
-          "add resolveHeritagePkForSave function and enhance character page"
+          "enhance heritage loading and error handling",
+          "update database seeding logic and enhance heritage error handling",
+          "improve heritage error message on CharacterPage",
+          "resolve heritage PK before save and improve heritages load UX"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "restore backend/src/db.sqlite3 to match master (drop stray migrate diff)"
         ]
       }
     ]

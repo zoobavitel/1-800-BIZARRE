@@ -429,11 +429,13 @@ const CharacterSheetWrapper = ({
   }, [character?.id, character?.xp]);
 
   useEffect(() => {
-    if (typeof character?.coinFilled === 'number') {
-      setCoinFilled((p) => (p !== character.coinFilled ? character.coinFilled : p));
-    } else if (Array.isArray(character?.coin)) {
+    // Prefer the 4-box boolean array over coinFilled: coinFilled === 0 is still typeof number and would
+    // otherwise win and wipe filled boxes when parent omits or zeros coinFilled.
+    if (Array.isArray(character?.coin)) {
       const n = character.coin.filter(Boolean).length;
       setCoinFilled((p) => (p !== n ? n : p));
+    } else if (typeof character?.coinFilled === 'number' && Number.isFinite(character.coinFilled)) {
+      setCoinFilled((p) => (p !== character.coinFilled ? character.coinFilled : p));
     }
     if (Array.isArray(character?.stash)) {
       const st = character.stash;

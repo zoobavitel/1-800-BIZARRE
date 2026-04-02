@@ -95,7 +95,12 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
   const harm = payload.harm || {
     level3: [''], level2: ['', ''], level1: ['', ''],
   };
-  const coinFilled = typeof payload.coinFilled === 'number' ? payload.coinFilled : 0;
+  const coinFilled =
+    typeof payload.coinFilled === 'number' && Number.isFinite(payload.coinFilled)
+      ? payload.coinFilled
+      : Array.isArray(payload.coin)
+        ? payload.coin.filter(Boolean).length
+        : 0;
   return {
     name: payload.name ?? '',
     standName: payload.standName ?? '',
@@ -490,7 +495,12 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
         viceDetails: payload.viceDetails ?? payload.vice_details ?? savedFrontend.viceDetails,
         personal_crew_name:
           payload.personal_crew_name ?? savedFrontend.personal_crew_name ?? '',
-        coin: savedFrontend.coin,
+        // If API omits coin_boxes on the response, normalizeCoinBoxes(undefined) is all false and the sheet reverts.
+        // Prefer the payload we just saved when the server did not echo coin_boxes (undefined). null is a valid echo.
+        coin:
+          saved && Object.prototype.hasOwnProperty.call(saved, 'coin_boxes')
+            ? savedFrontend.coin
+            : (frontend.coin ?? savedFrontend.coin),
         stash:
           stashMerged !== null ? stashMerged : (frontend.stash ?? savedFrontend.stash),
       };
