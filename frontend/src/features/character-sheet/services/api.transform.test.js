@@ -1,7 +1,10 @@
 import {
   transformFrontendToBackend,
+  transformBackendToFrontend,
   playbookToBackend,
   normalizeListResponse,
+  normalizeCoinBoxes,
+  normalizeStashSlots,
   buildMultipartOrJson,
 } from './api';
 
@@ -106,6 +109,39 @@ describe('transformFrontendToBackend playbook and playbook abilities', () => {
     expect(out.standard_abilities).toEqual([10]);
     expect(out.spin_ability_ids).toEqual([20]);
     expect(out.hamon_ability_ids).toEqual([30]);
+  });
+
+  test('emits coin_boxes from coin array', () => {
+    const out = transformFrontendToBackend(
+      makeSheet({ coin: [true, false, true, false] })
+    );
+    expect(out.coin_boxes).toEqual([true, false, true, false]);
+  });
+});
+
+describe('normalizeCoinBoxes and normalizeStashSlots', () => {
+  test('normalizeCoinBoxes pads and truncates to 4 booleans', () => {
+    expect(normalizeCoinBoxes(null)).toEqual([false, false, false, false]);
+    expect(normalizeCoinBoxes([1, 0, 1])).toEqual([true, false, true, false]);
+  });
+
+  test('normalizeStashSlots pads to 40 booleans', () => {
+    expect(normalizeStashSlots(undefined).length).toBe(40);
+    expect(normalizeStashSlots([true])[0]).toBe(true);
+    expect(normalizeStashSlots([true])[1]).toBe(false);
+  });
+});
+
+describe('transformBackendToFrontend coin and crew stash', () => {
+  test('maps coin_boxes and crew.stash_slots', () => {
+    const fe = transformBackendToFrontend({
+      coin_boxes: [true, false, false, false],
+      crew: { stash_slots: Array.from({ length: 40 }, (_, i) => i === 0) },
+    });
+    expect(fe.coin).toEqual([true, false, false, false]);
+    expect(fe.stash[0]).toBe(true);
+    expect(fe.stash[1]).toBe(false);
+    expect(fe.stash.length).toBe(40);
   });
 });
 

@@ -50,9 +50,21 @@ class CrewSerializer(serializers.ModelSerializer):
             'id', 'name', 'campaign', 'playbook', 'description', 'image',
             'xp', 'xp_track_size', 'advancement_points',
             'level', 'hold', 'rep', 'wanted_level',
-            'coin', 'stash', 'claims', 'upgrade_progress', 'special_abilities',
+            'coin', 'stash', 'stash_slots', 'claims', 'upgrade_progress', 'special_abilities',
             'proposed_name', 'proposed_by', 'approved_by'
         ]
+
+    def validate_stash_slots(self, value):
+        if value is None:
+            return value
+        if not isinstance(value, list):
+            raise serializers.ValidationError('stash_slots must be a list.')
+        if len(value) != 40:
+            raise serializers.ValidationError('stash_slots must have exactly 40 boolean elements.')
+        for i, x in enumerate(value):
+            if not isinstance(x, bool):
+                raise serializers.ValidationError(f'stash_slots[{i}] must be a boolean.')
+        return value
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -432,6 +444,18 @@ class CharacterSerializer(serializers.ModelSerializer):
     class Meta:
         model = Character
         fields = '__all__'
+
+    def validate_coin_boxes(self, value):
+        if value is None:
+            return value
+        if not isinstance(value, list):
+            raise serializers.ValidationError('coin_boxes must be a list.')
+        if len(value) != 4:
+            raise serializers.ValidationError('coin_boxes must have exactly 4 boolean elements.')
+        for i, x in enumerate(value):
+            if not isinstance(x, bool):
+                raise serializers.ValidationError(f'coin_boxes[{i}] must be a boolean.')
+        return value
 
     def validate(self, data):
         # Validate stress/trauma system

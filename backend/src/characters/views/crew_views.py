@@ -9,6 +9,13 @@ from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 from ..models import Crew
 from ..serializers import CrewSerializer
 
+# Crew members (non-GM) may PATCH these fields; GM/staff have full access.
+_CREW_MEMBER_ALLOWED_PATCH_FIELDS = frozenset({
+    'name', 'stash_slots', 'description', 'upgrade_progress',
+    'xp', 'xp_track_size', 'advancement_points', 'level', 'hold', 'rep', 'wanted_level',
+    'coin', 'stash', 'image',
+})
+
 
 class CrewViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -116,12 +123,17 @@ class CrewViewSet(viewsets.ModelViewSet):
                 crew.save(update_fields=['proposed_name', 'proposed_by'])
                 crew.approved_by.clear()
             return
-        # Crew members can update the crew name (syncs across all character/crew sheets)
+        # Crew members can update shared crew sheet fields (name, stash grid, resources, etc.)
         if self._is_crew_member(user, crew):
             validated = serializer.validated_data
-            if set(validated.keys()) <= {'name'}:
-                crew.name = validated.get('name', crew.name)
-                crew.save(update_fields=['name'])
+            if set(validated.keys()) <= _CREW_MEMBER_ALLOWED_PATCH_FIELDS:
+                serializer.save()
+                crew.refresh_from_db()
+                if 'name' in validated:
+                    crew.proposed_name = None
+                    crew.proposed_by = None
+                    crew.save(update_fields=['proposed_name', 'proposed_by'])
+                    crew.approved_by.clear()
                 return
         raise PermissionDenied("Only the GM or crew members can update this crew")
 

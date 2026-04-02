@@ -9,6 +9,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   characterAPI,
+  crewAPI,
   npcAPI,
   referenceAPI,
   campaignAPI,
@@ -18,6 +19,7 @@ import {
   traumaObjectToIds,
   normalizeListResponse,
   resolveHeritagePkForSave,
+  normalizeStashSlots,
 } from '../features/character-sheet';
 import { useAuth } from '../features/auth';
 import { CharacterSheetWrapper } from './CharacterSheet';
@@ -464,6 +466,17 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
         saved = await characterAPI.createCharacter(withFile);
         if (saved.id && typeof window !== 'undefined') window.location.hash = `character/${saved.id}`;
       }
+      let stashMerged = null;
+      if (saved?.id && frontend.crewId && Array.isArray(frontend.stash)) {
+        try {
+          const crewUpdated = await crewAPI.patchCrew(frontend.crewId, {
+            stash_slots: normalizeStashSlots(frontend.stash),
+          });
+          stashMerged = normalizeStashSlots(crewUpdated?.stash_slots);
+        } catch (e) {
+          console.error('Crew stash save failed:', e);
+        }
+      }
       const savedFrontend = transformBackendToFrontend(saved);
       // Preserve crew from payload: backend has crew as read_only FK, so it returns '' when we send a string.
       // Without this merge, character.crew becomes '' after save, causing a perceived "change" and save loop.
@@ -477,10 +490,9 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
         viceDetails: payload.viceDetails ?? payload.vice_details ?? savedFrontend.viceDetails,
         personal_crew_name:
           payload.personal_crew_name ?? savedFrontend.personal_crew_name ?? '',
-        // Coin/stash are not stored on the Character model; transformBackendToFrontend clears them.
-        // Without this merge, autosave replaces the tab with empty boxes and the sheet resets local state.
-        coin: frontend.coin,
-        stash: frontend.stash,
+        coin: savedFrontend.coin,
+        stash:
+          stashMerged !== null ? stashMerged : (frontend.stash ?? savedFrontend.stash),
       };
       updateActiveCharTab(merged.id, merged);
       await loadCharacters();
