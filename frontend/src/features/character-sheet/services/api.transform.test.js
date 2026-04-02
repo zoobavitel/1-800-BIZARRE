@@ -1,4 +1,4 @@
-import { transformFrontendToBackend, playbookToBackend } from './api';
+import { transformFrontendToBackend, playbookToBackend, normalizeListResponse } from './api';
 
 /** Minimal sheet-like object for transform coverage (spin_playbook_abilities_ui). */
 function makeSheet(overrides = {}) {
@@ -47,6 +47,32 @@ function makeSheet(overrides = {}) {
   };
   return { ...base, ...overrides };
 }
+
+describe('normalizeListResponse', () => {
+  test('returns empty array for null and undefined', () => {
+    expect(normalizeListResponse(null)).toEqual([]);
+    expect(normalizeListResponse(undefined)).toEqual([]);
+  });
+
+  test('passes through plain arrays', () => {
+    const arr = [{ id: 1 }, { id: 2 }];
+    expect(normalizeListResponse(arr)).toBe(arr);
+    expect(normalizeListResponse([])).toEqual([]);
+  });
+
+  test('unwraps paginated { results: [...] }', () => {
+    const inner = [{ id: 3 }];
+    expect(normalizeListResponse({ results: inner })).toBe(inner);
+    expect(normalizeListResponse({ count: 0, results: [] })).toEqual([]);
+  });
+
+  test('returns empty array for unexpected shapes', () => {
+    expect(normalizeListResponse({})).toEqual([]);
+    expect(normalizeListResponse({ results: {} })).toEqual([]);
+    expect(normalizeListResponse('oops')).toEqual([]);
+    expect(normalizeListResponse(42)).toEqual([]);
+  });
+});
 
 describe('transformFrontendToBackend playbook and playbook abilities', () => {
   test('playbookToBackend maps display labels to STAND/HAMON/SPIN', () => {
