@@ -194,7 +194,9 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
       if (heritageFetchFailed) {
         setHeritagesError('Could not load heritages. Check your connection and try again.');
       } else if (!hList.length) {
-        setHeritagesError('No heritages returned from the server.');
+        setHeritagesError(
+          'No heritages in the server database. On the API host run: python manage.py migrate (seeds an empty DB) or loaddata characters/fixtures/srd_heritages.json'
+        );
       } else {
         setHeritagesError(null);
       }
