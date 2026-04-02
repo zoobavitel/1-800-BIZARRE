@@ -29,6 +29,17 @@ cd /opt/bizarre/backend/src && source /opt/bizarre/.venv/bin/activate
 python manage.py createsuperuser
 ```
 
+### Reference data (heritage benefits / detriments)
+
+Migrations can seed **Heritage** rows while **Benefit** / **Detriment** tables stay empty if fixtures were never loaded. The sheet then shows heritages with no pick lists. With `DJANGO_SETTINGS_MODULE=app.settings_prod`, run once:
+
+```bash
+cd /opt/bizarre/backend/src && source /opt/bizarre/.venv/bin/activate
+python manage.py load_srd_reference_data
+```
+
+The command loads `srd_benefits` / `srd_detriments` only when the corresponding table is empty.
+
 ## 3. systemd
 
 **Paths:** Unit files live under **`/opt/bizarre/deploy/bizarre-api/`** (repo root), not under `backend/src`. If you `cd` into `backend/src`, relative `deploy/...` will fail — always use the absolute paths below.

@@ -142,7 +142,7 @@ class UserProfileViewSet(viewsets.ModelViewSet):
 
 class HeritageViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
-    queryset = Heritage.objects.all()
+    queryset = Heritage.objects.prefetch_related('benefits', 'detriments').order_by('id')
     serializer_class = HeritageSerializer
 
 

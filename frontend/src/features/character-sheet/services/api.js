@@ -314,18 +314,26 @@ const apiRequestMultipart = async (endpoint, formData, method = 'POST') => {
   return await response.json();
 };
 
-function buildMultipartOrJson(data) {
-  const hasFile = data.imageFile instanceof File;
+/** Used by character/NPC multipart saves; exported for unit tests. */
+export function buildMultipartOrJson(data) {
+  const file = data?.imageFile;
+  const hasFile =
+    file != null && (file instanceof File || (typeof Blob !== 'undefined' && file instanceof Blob));
   if (hasFile) {
     const fd = new FormData();
+    fd.append('image', file);
     for (const [k, v] of Object.entries(data)) {
-      if (k === 'imageFile') { fd.append('image', v); continue; }
+      if (k === 'imageFile' || k === 'image') continue;
       if (v == null) continue;
-      fd.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
+      if (typeof v === 'object' && v !== null && !(v instanceof File) && !(v instanceof Blob)) {
+        fd.append(k, JSON.stringify(v));
+      } else {
+        fd.append(k, v);
+      }
     }
     return { multipart: true, body: fd };
   }
-  const { imageFile, ...rest } = data;
+  const { imageFile: _if, image: _img, ...rest } = data || {};
   return { multipart: false, body: JSON.stringify(rest) };
 }
 
