@@ -248,15 +248,12 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
           prev.map(async (t) => {
             if (!t.characterId) return t;
             const updated = byId.get(t.characterId);
-            const preserveLocal = (ch) => ({
-              ...ch,
-              coin: t.character?.coin ?? ch.coin,
-              stash: t.character?.stash ?? ch.stash,
-            });
-            if (updated) return { ...t, character: preserveLocal(updated) };
+            // Do not merge tab.character.coin/stash: those snapshots are stale until save; live state lives
+            // in CharacterSheet. Merging them here overwrote fresh list/detail data and reset the UI.
+            if (updated) return { ...t, character: updated };
             try {
               const raw = await characterAPI.getCharacter(t.characterId);
-              return { ...t, character: preserveLocal(transformBackendToFrontend(raw)) };
+              return { ...t, character: transformBackendToFrontend(raw) };
             } catch {
               return t;
             }

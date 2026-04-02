@@ -428,22 +428,21 @@ const CharacterSheetWrapper = ({
     });
   }, [character?.id, character?.xp]);
 
+  // Hydrate coin/stash only when switching characters (id change). Parent refresh (campaign list refetch,
+  // getCharacters) reuses the same id with a new object; syncing on character.coin/stash then wiped
+  // local boxes before autosave ran.
   useEffect(() => {
-    // Prefer the 4-box boolean array over coinFilled: coinFilled === 0 is still typeof number and would
-    // otherwise win and wipe filled boxes when parent omits or zeros coinFilled.
+    if (character?.id == null) return;
     if (Array.isArray(character?.coin)) {
-      const n = character.coin.filter(Boolean).length;
-      setCoinFilled((p) => (p !== n ? n : p));
+      setCoinFilled(character.coin.filter(Boolean).length);
     } else if (typeof character?.coinFilled === 'number' && Number.isFinite(character.coinFilled)) {
-      setCoinFilled((p) => (p !== character.coinFilled ? character.coinFilled : p));
+      setCoinFilled(character.coinFilled);
     }
     if (Array.isArray(character?.stash)) {
-      const st = character.stash;
-      setStashBoxes((prev) =>
-        prev.length === st.length && prev.every((v, i) => v === st[i]) ? prev : st
-      );
+      setStashBoxes(character.stash);
     }
-  }, [character?.id, character?.coinFilled, character?.coin, character?.stash]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate coin/stash only on id change (see comment above)
+  }, [character?.id]);
 
   // Heritage benefits and detriments (arrays of IDs)
   const [selectedBenefits, setSelectedBenefits] = useState(
