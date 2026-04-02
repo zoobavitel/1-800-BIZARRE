@@ -121,6 +121,7 @@ jobs:
       - name: Run integration tests
         env:
           DJANGO_SETTINGS_MODULE: app.settings
+          RUN_BACKEND_INTEGRATION: "1"
         run: |
           set -e
           cd backend/src

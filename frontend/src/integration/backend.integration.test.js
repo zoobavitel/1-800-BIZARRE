@@ -1,9 +1,13 @@
 /**
  * Hits the API root (GET /) against a running backend.
  *
- * - CI: Django is started on 127.0.0.1:8000 (see .github/workflows/ci.yml).
- * - Local with ngrok: point at your tunnel, e.g.
- *     INTEGRATION_API_URL=https://xxxx.ngrok-free.app npm test -- --testPathPattern=integration --watchAll=false
+ * Skipped unless RUN_BACKEND_INTEGRATION=1 or INTEGRATION_API_URL is set, so the
+ * default `npm test` / CI test-frontend job does not require Django on :8000.
+ *
+ * - CI (with backend): integration-test job sets RUN_BACKEND_INTEGRATION=1 (see .github/workflows/ci.yml).
+ * - Local: RUN_BACKEND_INTEGRATION=1 npm test -- --testPathPattern=integration --watchAll=false
+ * - Local with ngrok:
+ *     RUN_BACKEND_INTEGRATION=1 INTEGRATION_API_URL=https://xxxx.ngrok-free.app npm test -- --testPathPattern=integration --watchAll=false
  */
 
 const http = require('http');
@@ -11,6 +15,11 @@ const https = require('https');
 
 const BASE =
   process.env.INTEGRATION_API_URL || 'http://127.0.0.1:8000';
+
+const runIntegration =
+  process.env.RUN_BACKEND_INTEGRATION === '1' ||
+  (process.env.INTEGRATION_API_URL != null &&
+    process.env.INTEGRATION_API_URL !== '');
 
 function getJson(urlString) {
   const u = new URL(urlString);
@@ -30,7 +39,12 @@ function getJson(urlString) {
           try {
             resolve({ statusCode: res.statusCode, body: JSON.parse(raw) });
           } catch (e) {
-            reject(e);
+            const preview = raw.length > 200 ? `${raw.slice(0, 200)}…` : raw;
+            reject(
+              new Error(
+                `Expected JSON from ${urlString} but could not parse body: ${preview}`
+              )
+            );
           }
         });
       })
@@ -38,7 +52,7 @@ function getJson(urlString) {
   });
 }
 
-describe('Backend integration', () => {
+(runIntegration ? describe : describe.skip)('Backend integration', () => {
   it('serves the API root', async () => {
     const { statusCode, body } = await getJson(`${BASE}/`);
     expect(statusCode).toBe(200);
