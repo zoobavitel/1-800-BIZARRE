@@ -8,16 +8,17 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
-        "title": "Maintenance",
+        "title": "Fixed",
         "items": [
-          "restore backend/src/db.sqlite3 to match master (drop stray migrate diff)"
+          "update database seeding logic and enhance heritage error handling",
+          "improve heritage error message on CharacterPage",
+          "resolve heritage PK before save and improve heritages load UX"
         ]
       },
       {
-        "title": "Fixed",
+        "title": "Maintenance",
         "items": [
-          "improve heritage error message on CharacterPage",
-          "resolve heritage PK before save and improve heritages load UX"
+          "restore backend/src/db.sqlite3 to match master (drop stray migrate diff)"
         ]
       },
       {

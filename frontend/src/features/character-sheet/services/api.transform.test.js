@@ -1,4 +1,9 @@
-import { transformFrontendToBackend, playbookToBackend, normalizeListResponse } from './api';
+import {
+  transformFrontendToBackend,
+  playbookToBackend,
+  normalizeListResponse,
+  buildMultipartOrJson,
+} from './api';
 
 /** Minimal sheet-like object for transform coverage (spin_playbook_abilities_ui). */
 function makeSheet(overrides = {}) {
@@ -101,5 +106,31 @@ describe('transformFrontendToBackend playbook and playbook abilities', () => {
     expect(out.standard_abilities).toEqual([10]);
     expect(out.spin_ability_ids).toEqual([20]);
     expect(out.hamon_ability_ids).toEqual([30]);
+  });
+});
+
+describe('buildMultipartOrJson', () => {
+  it('sends the file as image and does not send a string image URL as the image field', () => {
+    const file = new File(['x'], 'p.png', { type: 'image/png' });
+    const { multipart, body } = buildMultipartOrJson({
+      true_name: 'A',
+      image: 'https://example.com/media/x.png',
+      image_url: 'https://example.com/media/x.png',
+      imageFile: file,
+    });
+    expect(multipart).toBe(true);
+    expect(body.get('image')).toBe(file);
+  });
+
+  it('drops stray image URL from JSON saves', () => {
+    const { multipart, body } = buildMultipartOrJson({
+      true_name: 'B',
+      image: 'https://example.com/wrong.jpg',
+      image_url: 'https://example.com/ok.jpg',
+    });
+    expect(multipart).toBe(false);
+    const parsed = JSON.parse(body);
+    expect(parsed.image).toBeUndefined();
+    expect(parsed.image_url).toBe('https://example.com/ok.jpg');
   });
 });
