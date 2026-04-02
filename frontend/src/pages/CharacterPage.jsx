@@ -17,6 +17,7 @@ import {
   createDefaultCharacter,
   traumaObjectToIds,
   normalizeListResponse,
+  resolveHeritagePkForSave,
 } from '../features/character-sheet';
 import { useAuth } from '../features/auth';
 import { CharacterSheetWrapper } from './CharacterSheet';
@@ -169,8 +170,10 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
   const [heritages, setHeritages] = useState([]);
   const [heritagesLoading, setHeritagesLoading] = useState(true);
   const [heritagesError, setHeritagesError] = useState(null);
+  const referenceDataLoadSeqRef = useRef(0);
 
   const loadReferenceData = useCallback(async () => {
+    const seq = ++referenceDataLoadSeqRef.current;
     setHeritagesLoading(true);
     setHeritagesError(null);
     let heritageFetchFailed = false;
@@ -183,6 +186,7 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
         }),
         campaignAPI.getCampaigns().catch(() => null),
       ]);
+      if (seq !== referenceDataLoadSeqRef.current) return;
       setTraumas(normalizeListResponse(t));
       const hList = normalizeListResponse(h);
       setHeritages(hList);
@@ -190,23 +194,34 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
       if (heritageFetchFailed) {
         setHeritagesError('Could not load heritages. Check your connection and try again.');
       } else if (!hList.length) {
-        setHeritagesError('No heritages returned from the server.');
+        console.warn(
+          'No heritages in the server database. On the API host run: python manage.py migrate (seeds an empty DB) or loaddata characters/fixtures/srd_heritages.json'
+        );
+        setHeritagesError(
+          'No heritages available. Try Retry, or ask the game host to check the server.'
+        );
       } else {
         setHeritagesError(null);
       }
     } catch (e) {
+      if (seq !== referenceDataLoadSeqRef.current) return;
       setHeritagesError(e?.message || 'Failed to load reference data.');
       setTraumas([]);
       setHeritages([]);
       setCampaigns([]);
     } finally {
-      setHeritagesLoading(false);
+      if (seq === referenceDataLoadSeqRef.current) {
+        setHeritagesLoading(false);
+      }
     }
   }, []);
 
   // ── Reference data ───────────────────────────────────────────────────────
   useEffect(() => {
     loadReferenceData();
+    return () => {
+      referenceDataLoadSeqRef.current += 1;
+    };
   }, [loadReferenceData]);
 
   const refreshCampaigns = useCallback(async () => {
@@ -414,44 +429,13 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
   // ── Save character ───────────────────────────────────────────────────────
   const handleSaveCharacter = useCallback(async (payload) => {
     const frontend = normalizeSheetPayloadToFrontend(payload, traumas);
-    let heritageValue = frontend.heritage;
     let heritageList = normalizeListResponse(heritages);
     if (!heritageList.length) {
       const raw = await referenceAPI.getHeritages().catch(() => null);
       heritageList = normalizeListResponse(raw);
       if (heritageList.length) setHeritages(heritageList);
     }
-    // Strict FK: always send integer PK (never display name strings).
-    if (typeof heritageValue === 'number' && Number.isFinite(heritageValue)) {
-      /* keep */
-    } else if (typeof heritageValue === 'string') {
-      const s = heritageValue.trim();
-      if (s && /^\d+$/.test(s)) {
-        heritageValue = parseInt(s, 10);
-      } else if (heritageList.length) {
-        const match = heritageList.find((h) => (h.name || '').toLowerCase() === s.toLowerCase());
-        heritageValue = match ? match.id : heritageList[0].id;
-      }
-    }
-    if ((heritageValue == null || heritageValue === '') && heritageList.length) {
-      heritageValue = heritageList[0].id;
-    }
-    if (typeof heritageValue === 'string' && heritageList.length) {
-      heritageValue = heritageList[0].id;
-    }
-    const coerced =
-      typeof heritageValue === 'number' && Number.isFinite(heritageValue)
-        ? heritageValue
-        : (typeof heritageValue === 'string' && /^\d+$/.test(String(heritageValue).trim())
-            ? parseInt(String(heritageValue).trim(), 10)
-            : NaN);
-    if (Number.isFinite(coerced)) {
-      heritageValue = coerced;
-    } else if (heritageList.length) {
-      heritageValue = heritageList[0].id;
-    } else {
-      throw new Error('Could not resolve heritage: heritages unavailable. Use Retry or refresh the page.');
-    }
+    const heritageValue = resolveHeritagePkForSave(frontend.heritage, heritageList);
     // Backend rejects blank true_name; avoid hollow PUT if local name lagged behind loaded character
     let nameForSave = String(frontend.name ?? '').trim();
     if (!nameForSave) {

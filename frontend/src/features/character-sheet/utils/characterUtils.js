@@ -84,4 +84,48 @@ export function traumaObjectToIds(traumaObj, traumasList = []) {
     .filter(([, checked]) => checked)
     .map(([name]) => nameToId[name.toUpperCase()])
     .filter((id) => id != null);
-} 
+}
+
+/**
+ * Resolve sheet heritage to an integer PK for the API (strict FK; never send display names).
+ * @param {*} heritageValue - from normalized sheet (number, digit string, name string, null, etc.)
+ * @param {Array<{ id: number|string, name?: string }>} heritageList - from reference API (must be non-empty)
+ * @returns {number}
+ */
+export function resolveHeritagePkForSave(heritageValue, heritageList) {
+  if (!heritageList?.length) {
+    throw new Error('Could not resolve heritage: heritages unavailable. Use Retry or refresh the page.');
+  }
+  const first = heritageList[0];
+  const firstPk =
+    typeof first.id === 'number' && Number.isFinite(first.id)
+      ? first.id
+      : (typeof first.id === 'string' && /^\d+$/.test(String(first.id).trim())
+          ? parseInt(String(first.id).trim(), 10)
+          : NaN);
+  if (!Number.isFinite(firstPk)) {
+    throw new Error('Could not resolve heritage: heritages unavailable. Use Retry or refresh the page.');
+  }
+
+  if (heritageValue == null || heritageValue === '') {
+    return firstPk;
+  }
+  if (typeof heritageValue === 'number' && Number.isFinite(heritageValue)) {
+    return heritageValue;
+  }
+  if (typeof heritageValue === 'string') {
+    const s = heritageValue.trim();
+    if (!s) return firstPk;
+    if (/^\d+$/.test(s)) return parseInt(s, 10);
+    const match = heritageList.find((h) => (h.name || '').toLowerCase() === s.toLowerCase());
+    if (match) {
+      const id = match.id;
+      if (typeof id === 'number' && Number.isFinite(id)) return id;
+      if (typeof id === 'string' && /^\d+$/.test(id.trim())) return parseInt(id.trim(), 10);
+    }
+    return firstPk;
+  }
+  const asStr = String(heritageValue).trim();
+  if (/^\d+$/.test(asStr)) return parseInt(asStr, 10);
+  return firstPk;
+}
