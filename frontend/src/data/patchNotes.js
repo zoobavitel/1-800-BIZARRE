@@ -8,6 +8,12 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Refactored",
+        "items": [
+          "update patch notes and enhance character page logic"
+        ]
+      },
+      {
         "title": "Added",
         "items": [
           "add coin boxes and stash slots to character and crew models",
