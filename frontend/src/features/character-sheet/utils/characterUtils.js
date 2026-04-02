@@ -11,7 +11,7 @@ export const getTotalXP = (xpTracks) => {
 export const createDefaultCharacter = () => ({
   name: '',
   standName: '',
-  heritage: 'Human',
+  heritage: null,
   background: '',
   look: '',
   vice: '',
