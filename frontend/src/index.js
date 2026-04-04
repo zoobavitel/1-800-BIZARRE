@@ -328,7 +328,6 @@ const App = () => {
               onNavigateToCharacter={(characterId) => handlePageChange('character', { characterId })}
               onNavigateToCharacterOptions={() => handlePageChange('character-options')}
               onNavigateToCampaign={(campaignId) => handlePageChange('campaigns', { campaignId })}
-              onNavigateToRules={(section) => handlePageChange('rules', { section })}
             />
           </>
         )}
