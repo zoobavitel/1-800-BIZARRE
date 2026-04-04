@@ -1,7 +1,7 @@
 import './styles/global.css';
 import React, { useState, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
-import { Menu, Search, Settings } from 'lucide-react';
+import { Menu } from 'lucide-react';
 import Home from './pages/Home.jsx';
 import CharacterPage from './pages/CharacterPage.jsx';
 import ResponsiveTest from './pages/ResponsiveTest.jsx';
@@ -284,33 +284,17 @@ const App = () => {
           onLogout={logout}
         />
 
-        {currentPage !== 'search' && currentPage !== 'notifications' && currentPage !== 'messages' && currentPage !== 'account-settings' && currentPage !== 'patch-notes' && currentPage !== 'licenses' && (
+        {currentPage !== 'home' &&
+          currentPage !== 'search' &&
+          currentPage !== 'notifications' &&
+          currentPage !== 'messages' &&
+          currentPage !== 'account-settings' &&
+          currentPage !== 'patch-notes' &&
+          currentPage !== 'licenses' && (
           <AppBar
             onHamburgerClick={toggleMenu}
-            onBack={currentPage !== 'home' ? handleBack : undefined}
+            onBack={handleBack}
             pageTitle={PAGE_TITLES[currentPage]}
-            rightContent={currentPage === 'home' ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => handlePageChange('search')}
-                  aria-label="Search"
-                  title="Search"
-                  style={barStyles.actionBtn}
-                >
-                  <Search style={{ width: 20, height: 20 }} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setUserMenuOpen(true)}
-                  aria-label="User menu"
-                  title="User menu"
-                  style={barStyles.actionBtn}
-                >
-                  <Settings style={{ width: 20, height: 20 }} />
-                </button>
-              </>
-            ) : null}
           />
         )}
 
@@ -325,9 +309,17 @@ const App = () => {
               onLogout={logout}
             />
             <Home
+              menuOpen={menuOpen}
+              onToggleMenu={toggleMenu}
+              onSearch={() => handlePageChange('search')}
+              onOpenAccountMenu={() => setUserMenuOpen(true)}
               onNavigateToCharacter={(characterId) => handlePageChange('character', { characterId })}
               onNavigateToCharacterOptions={() => handlePageChange('character-options')}
               onNavigateToCampaign={(campaignId) => handlePageChange('campaigns', { campaignId })}
+              onNavigateToRules={() => handlePageChange('rules')}
+              onNavigateToPatchNotes={() => handlePageChange('patch-notes')}
+              onNavigateToLicenses={() => handlePageChange('licenses')}
+              onNavigateToNPC={(npcId) => handlePageChange('npcs', { npcId })}
             />
           </>
         )}
