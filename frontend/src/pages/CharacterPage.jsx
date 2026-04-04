@@ -21,11 +21,14 @@ import {
   resolveHeritagePkForSave,
   normalizeStashSlots,
 } from '../features/character-sheet';
+import { subscribeCampaignEvents } from '../features/character-sheet/services/campaignEvents';
 import { useAuth } from '../features/auth';
 import { CharacterSheetWrapper } from './CharacterSheet';
 import { NPCSheet } from './NPCSheet';
 
 const MODES = { CHARACTER: 'character', NPC: 'npc' };
+/** Poll open character sheets + campaigns while the tab is visible (backup if SSE disconnects). */
+const SHEET_SYNC_INTERVAL_MS = 12000;
 
 const PAGE_STYLES = {
   page: { fontFamily: 'monospace', fontSize: '13px', background: '#000', color: '#fff', minHeight: '100vh' },
@@ -163,6 +166,9 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
   const [charTabs, setCharTabs] = useState([]);
   const [activeCharTabId, setActiveCharTabId] = useState(null);
   const charTabsInitialized = useRef(false);
+  const charTabsRef = useRef(charTabs);
+  /** Bumps when remote sync completes so CharacterSheet refetches session rolls. */
+  const [sheetPollTick, setSheetPollTick] = useState(0);
 
   // ── NPC state ───────────────────────────────────────────────────────────
   const [npcs, setNpcs] = useState([]);
@@ -231,7 +237,15 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
     };
   }, [loadReferenceData]);
 
-  const refreshCampaigns = useCallback(async () => {
+  useEffect(() => {
+    charTabsRef.current = charTabs;
+  }, [charTabs]);
+
+  /**
+   * Refresh campaigns list and merge full character detail into every open tab (GM edits, session P/E, etc.).
+   * Always GET /characters/:id/ per open PC so stats stay aligned with the server.
+   */
+  const syncOpenSheetsFromServer = useCallback(async () => {
     const [c, chars] = await Promise.all([
       campaignAPI.getCampaigns().catch(() => []),
       characterAPI.getCharacters().catch(() => []),
@@ -240,72 +254,53 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
     const front = (chars || []).map(transformBackendToFrontend);
     setCharacters(front);
     const byId = new Map(front.map((x) => [x.id, x]));
-    // Update all character tabs with fresh data (e.g. after campaign assign).
-    // GM-owned list may omit player PCs; fetch by id when missing.
     setCharTabs((prev) => {
       void (async () => {
         const next = await Promise.all(
           prev.map(async (t) => {
             if (!t.characterId) return t;
-            const updated = byId.get(t.characterId);
-            // Do not merge tab.character.coin/stash: those snapshots are stale until save; live state lives
-            // in CharacterSheet. Merging them here overwrote fresh list/detail data and reset the UI.
-            if (updated) return { ...t, character: updated };
             try {
               const raw = await characterAPI.getCharacter(t.characterId);
               return { ...t, character: transformBackendToFrontend(raw) };
             } catch {
+              const updated = byId.get(t.characterId);
+              if (updated) return { ...t, character: updated };
               return t;
             }
           })
         );
         setCharTabs(next);
+        setSheetPollTick((x) => x + 1);
       })();
       return prev;
     });
   }, []);
 
-  // When returning to this tab/window, refetch characters so crew names updated by other players sync into open sheets.
+  const refreshCampaigns = syncOpenSheetsFromServer;
+
+  // While the document is hidden, skip network sync; on focus, pull full sheet + campaign state.
   useEffect(() => {
     const onVis = () => {
       if (document.visibilityState !== 'visible') return;
-      void (async () => {
-        try {
-          const list = await characterAPI.getCharacters();
-          const front = (list || []).map(transformBackendToFrontend);
-          setCharacters(front);
-          const byId = new Map(front.map((c) => [c.id, c]));
-          setCharTabs((prev) =>
-            prev.map((t) => {
-              if (!t.characterId) return t;
-              const fresh = byId.get(t.characterId);
-              if (!fresh || !t.character) return t;
-              if (
-                (fresh.crew || '') === (t.character.crew || '') &&
-                fresh.crewId === t.character.crewId &&
-                (fresh.personal_crew_name || '') === (t.character.personal_crew_name || '')
-              ) {
-                return t;
-              }
-              return {
-                ...t,
-                character: {
-                  ...t.character,
-                  crew: fresh.crew,
-                  crewId: fresh.crewId,
-                  personal_crew_name: fresh.personal_crew_name ?? '',
-                },
-              };
-            })
-          );
-        } catch {
-          /* ignore */
-        }
-      })();
+      const tabs = charTabsRef.current;
+      if (!tabs.some((t) => t.characterId)) return;
+      void syncOpenSheetsFromServer();
     };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, []);
+  }, [syncOpenSheetsFromServer]);
+
+  // Periodic sync while Character mode has at least one saved PC open (complements SSE).
+  useEffect(() => {
+    if (mode !== MODES.CHARACTER) return undefined;
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      const tabs = charTabsRef.current;
+      if (!tabs.some((t) => t.characterId)) return;
+      void syncOpenSheetsFromServer();
+    }, SHEET_SYNC_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [mode, syncOpenSheetsFromServer]);
 
   // ── Load character list ──────────────────────────────────────────────────
   const loadCharacters = useCallback(async () => {
@@ -619,6 +614,24 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
     }
     return base;
   }, [activeCharTab]);
+
+  const campaignIdForRealtime = useMemo(() => {
+    const c = sheetCharacter?.campaign;
+    const id = typeof c === 'object' ? c?.id : c;
+    if (id == null || id === '') return null;
+    const n = typeof id === 'number' ? id : parseInt(String(id), 10);
+    return Number.isFinite(n) ? n : null;
+  }, [sheetCharacter?.campaign]);
+
+  useEffect(() => {
+    if (mode !== MODES.CHARACTER || !campaignIdForRealtime) return undefined;
+    return subscribeCampaignEvents(campaignIdForRealtime, {
+      onUpdate: () => {
+        void syncOpenSheetsFromServer();
+      },
+    });
+  }, [mode, campaignIdForRealtime, syncOpenSheetsFromServer]);
+
   const activeNpcTab = npcTabs.find(t => t.tabId === activeNpcTabId);
 
   const handleDeleteActiveCharacter = useCallback(async () => {
@@ -816,6 +829,7 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
             onSwitchCharacter={handleSwitchCharacter}
             onCrewNameUpdated={handleCrewNameUpdated}
             onCampaignRefresh={refreshCampaigns}
+            sessionDataPollTick={sheetPollTick}
           />
         )
       )}
