@@ -7,6 +7,7 @@ from rest_framework import routers
 from rest_framework_nested import routers as nested_routers
 from django.conf import settings
 from django.conf.urls.static import static
+from characters.views_sse import campaign_events_stream
 from characters.views import (
     UserProfileViewSet, HeritageViewSet, ViceViewSet, AbilityViewSet,
     StandViewSet, CharacterViewSet,
@@ -62,6 +63,11 @@ router.register(r'crew-upgrades', CrewUpgradeViewSet)
 
 urlpatterns = [
     path('', home),
+    path(
+        'api/campaigns/<int:campaign_id>/events/',
+        campaign_events_stream,
+        name='campaign_events_stream',
+    ),
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
     path('api/search/', global_search, name='global_search'),

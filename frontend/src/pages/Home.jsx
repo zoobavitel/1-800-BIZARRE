@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, ArrowRight, Zap, Users, Dice6, BookOpen, Settings } from 'lucide-react';
+import { Plus, ArrowRight } from 'lucide-react';
 import '../styles/Home.css';
 import { characterAPI, campaignAPI, transformBackendToFrontend } from '../features/character-sheet';
 import { useAuth } from '../features/auth';
 
 // Main Home Page Component — character create/edit goes to Character page
-const HomePage = ({ onNavigateToCharacter, onNavigateToCharacterOptions, onNavigateToCampaign, onNavigateToRules }) => {
+const HomePage = ({ onNavigateToCharacter, onNavigateToCharacterOptions, onNavigateToCampaign }) => {
   const { user } = useAuth();
   const [characters, setCharacters] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -88,11 +88,6 @@ const HomePage = ({ onNavigateToCharacter, onNavigateToCharacterOptions, onNavig
   const handleJoinCampaign = (campaignId) => {
     // Logic for joining a campaign
     console.log('Joining campaign:', campaignId);
-  };
-
-  const handleCreateCampaign = () => {
-    // Logic for creating a new campaign
-    console.log('Creating new campaign');
   };
 
   const handleManageCampaign = (campaignId) => {
@@ -281,101 +276,6 @@ const HomePage = ({ onNavigateToCharacter, onNavigateToCharacterOptions, onNavig
             )}
           </div>
         </div>
-        </section>
-
-        {/* Features Section */}
-        <section className="features-section">
-          <div className="features-container">
-            <h3 className="features-title">
-              Why <span className="highlight-red">1(800)BIZARRE</span>?
-            </h3>
-            
-            <div className="features-grid">
-              {/* Feature 1 */}
-              <div className="feature-card purple">
-                <div className="feature-icon purple">
-                  <Zap className="icon" />
-                </div>
-                <h4 className="feature-title">Unique Stands</h4>
-                <p className="feature-description">
-                  Create supernatural abilities as unique as your character. From time manipulation to reality bending, 
-                  your Stand reflects your inner self and fighting style.
-                </p>
-              </div>
-
-              {/* Feature 2 */}
-              <div className="feature-card red">
-                <div className="feature-icon red">
-                  <Users className="icon" />
-                </div>
-                <h4 className="feature-title">Team Dynamics</h4>
-                <p className="feature-description">
-                  Collaborate with your crew through teamwork mechanics. Assist allies, lead group actions, 
-                  and discover the power of friendship in the face of bizarre threats.
-                </p>
-              </div>
-
-              {/* Feature 3 */}
-              <div className="feature-card yellow">
-                <div className="feature-icon yellow">
-                  <Dice6 className="icon" />
-                </div>
-                <h4 className="feature-title">Interactive Sheets</h4>
-                <p className="feature-description">
-                  Full-featured digital character sheets with dice rolling, progress tracking, and all the tools 
-                  you need for an epic JoJo adventure.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Quick Actions Section */}
-        <section className="quick-actions-section">
-          <div className="quick-actions-container">
-            <h3 className="quick-actions-title">
-              Quick <span className="highlight-purple">Actions</span>
-            </h3>
-            
-            <div className="quick-actions-grid">
-              <button 
-                onClick={handleCreateCharacter}
-                className="quick-action-card purple"
-              >
-                <Plus className="quick-action-icon" />
-                <h4 className="quick-action-title">Create Character</h4>
-                <p className="quick-action-description">Build your next Stand user and start your bizarre adventure.</p>
-                <ArrowRight className="quick-action-arrow" />
-              </button>
-
-              <div className="quick-action-card yellow">
-                <Users className="quick-action-icon" />
-                <h4 className="quick-action-title">Join Campaign</h4>
-                <p className="quick-action-description">Find other players and embark on group adventures.</p>
-                <ArrowRight className="quick-action-arrow" />
-              </div>
-
-              <button
-                onClick={() => typeof onNavigateToRules === 'function' && onNavigateToRules()}
-                className="quick-action-card red"
-              >
-                <BookOpen className="quick-action-icon" />
-                <h4 className="quick-action-title">Learn Rules</h4>
-                <p className="quick-action-description">Master the mechanics of Stands, Hamon, and Spin techniques.</p>
-                <ArrowRight className="quick-action-arrow" />
-              </button>
-
-              <button 
-                onClick={handleCreateCampaign}
-                className="quick-action-card green"
-              >
-                <Settings className="quick-action-icon" />
-                <h4 className="quick-action-title">Create Campaign</h4>
-                <p className="quick-action-description">Start your own bizarre adventure as Game Master.</p>
-                <ArrowRight className="quick-action-arrow" />
-              </button>
-            </div>
-          </div>
         </section>
 
       </div>

@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Refactored",
         "items": [
+          "update patch notes and improve character page logic",
           "update patch notes and enhance character page logic"
         ]
       },

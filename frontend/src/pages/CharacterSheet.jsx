@@ -112,6 +112,8 @@ const CharacterSheetWrapper = ({
   onRetryHeritages,
   isGM = false,
   onCampaignRefresh,
+  /** Incremented when CharacterPage finishes a remote sync (poll, SSE, visibility) so session rolls refetch. */
+  sessionDataPollTick = 0,
 }) => {
   const { user } = useAuth();
   const [activeMode, setActiveMode] = useState('CHARACTER MODE');
@@ -747,7 +749,7 @@ const CharacterSheetWrapper = ({
     } else {
       setSessionRolls([]);
     }
-  }, [activeSessionId, characterId]);
+  }, [activeSessionId, characterId, sessionDataPollTick]);
 
   useEffect(() => {
     if (!showXpHistoryModal || !characterId) return;
