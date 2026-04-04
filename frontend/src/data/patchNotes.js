@@ -4,6 +4,24 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-04-03",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #6 from zoobavitel/feature/realtime-sheet-sync"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "implement campaign events streaming and enhance character page synchronization"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-04-01",
     "version": null,
     "sections": [
