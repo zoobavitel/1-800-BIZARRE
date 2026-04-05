@@ -4,6 +4,18 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-04-04",
+    "version": null,
+    "sections": [
+      {
+        "title": "Maintenance",
+        "items": [
+          "update database and enhance frontend styles"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-04-03",
     "version": null,
     "sections": [
