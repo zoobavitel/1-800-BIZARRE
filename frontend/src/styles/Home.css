@@ -333,6 +333,55 @@
   margin-top: 3px;
 }
 
+.home-poc .home-chart {
+  position: relative;
+  z-index: 1;
+  padding: 6px 8px 4px;
+  margin-top: 2px;
+  border-top: 1px solid rgba(234, 222, 183, 0.08);
+}
+.home-poc .home-chart-line {
+  padding-top: 10px;
+}
+.home-poc .home-chart-title {
+  font-family: var(--font-heading);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(234, 222, 183, 0.45);
+  margin-bottom: 4px;
+}
+.home-poc .home-chart-placeholder {
+  font-size: 10px;
+  color: rgba(234, 222, 183, 0.35);
+  padding: 24px 0;
+  text-align: center;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.home-poc .home-chart-empty {
+  font-size: 9px;
+  color: rgba(234, 222, 183, 0.35);
+  text-align: center;
+  margin-bottom: 4px;
+  letter-spacing: 0.04em;
+}
+.home-poc .home-chart-inner {
+  width: 100%;
+}
+.home-poc .home-chart-inner-dim {
+  opacity: 0.5;
+}
+.home-poc .home-chart .recharts-cartesian-axis-tick-value {
+  font-family: var(--font-mono);
+}
+.home-poc .home-chart-bar .recharts-surface {
+  overflow: visible;
+}
+
 .home-poc .split {
   display: grid;
   grid-template-columns: 1fr 1fr;

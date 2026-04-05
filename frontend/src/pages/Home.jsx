@@ -10,6 +10,9 @@ import {
 import { useAuth } from '../features/auth';
 import { PATCH_NOTES } from '../data/patchNotes';
 import { flattenPatchNotesPreview } from '../utils/patchNotesPreview';
+import { buildSessionsByMonth, buildBarChartRows } from '../utils/homeChartData';
+import HomeSessionLineChart from '../components/home/HomeSessionLineChart';
+import HomeStatsBarChart from '../components/home/HomeStatsBarChart';
 
 function tierRoman(level) {
   const n = Number(level);
@@ -130,6 +133,10 @@ const HomePage = ({
       npcCount,
     };
   }, [campaigns, characters.length, npcs.length, crewCount]);
+
+  const sessionsByMonth = useMemo(() => buildSessionsByMonth(campaigns), [campaigns]);
+  const barChartRows = useMemo(() => buildBarChartRows(heroStats), [heroStats]);
+  const chartsLoading = loading || campaignsLoading || npcsLoading;
 
   const primaryCampaignForFactions = useMemo(() => {
     const withF = (campaigns || []).find((c) => Array.isArray(c.factions) && c.factions.length);
@@ -272,6 +279,8 @@ const HomePage = ({
                 <span className="hero-stat-value highlight">—</span>
               </div>
             </div>
+            <HomeSessionLineChart data={sessionsByMonth} loading={chartsLoading} />
+            <HomeStatsBarChart data={barChartRows} loading={chartsLoading} />
             <div className="hero-art-label">
               <div className="hero-art-label-title">STAND USERS</div>
               <div className="hero-art-label-sub">A Bizarre Adventure TTRPG</div>
