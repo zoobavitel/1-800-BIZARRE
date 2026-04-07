@@ -161,7 +161,7 @@ If you have 0 dice in an action rating, you must roll 2d and take the lower resu
 **RESISTANCE CHECKS:**  
 Each attribute resists a different type of danger. If you get stabbed, for example, you resist physical harm with your ***Prowess*** rating. Resistance checks always succeed—you diminish or deflect the bad result—but the better your roll, the less **stress** it costs to reduce or avoid the danger.
 
-When the enemy has a big advantage, you’ll need to make a resistance check before you can take your own action. For example, when you duel the master Stand User, she disarms you before you can strike. You need to make a resistance check to keep focus if you want to attack her. Or perhaps you face a powerful ghost and attempt to Attune with it to control its actions. But before you can make your own roll, you must resist possession from the spirit (Change these examples).
+When the enemy has a big advantage, you’ll need to make a resistance check before you can take your own action. For example, a master stand user with all A’s in their stand coin can react and make a move against you unless you also have all A’s or some narrative advantage. Otherwise, you need to make a resistance check to keep focus if you want to attack her. Or perhaps you find an ancient Spin Golem and attempt a Bizarre roll to control its actions. But before you can make your own roll, you must resist possession from the golem.
 
 The GM judges the threat level of the enemies and uses these “preemptive” resistance checks as needed to reflect the capabilities of especially dangerous foes.
 
@@ -172,7 +172,7 @@ Find out more about [Resistance Checks]().
 **SKILLS:**  
 When you roll ***Bizarre***, you open your mind to paranormal power.
 
-*You might communicate with a bizarre entity. You could try to perceive beyond sight in order to better understand your situation (but Surveying might be better).*
+*You might communicate or manipulate bizarre entities. You could try to perceive beyond sight in order to better understand your situation (but Surveying might be better).*
 
 When you roll ***Command***, you compel swift obedience.
 
@@ -495,7 +495,7 @@ F (0)
 At the beginning of a new game, distribute 6 points among:  
 \- Power (physical destructive power)  
 \- Speed (initiative & mobility)  
-\- Range (operational distance of the stand & it’s abilities)  
+\- Range (operational distance of the stand & its abilities)  
 \- Durability (resistance, & armor)  
 \- Precision (accuracy & control)   
 \- Development (growth potential)
@@ -518,12 +518,6 @@ B: Can destroy reinforced structures and thick concrete barriers
 C: Can shatter stone and heavy structural materials   
 D: Can break through standard materials (wood, metal plating)   
 F: Human-level strength; baseline to above-average human physical capability
-
-When Power \> Enemy Durability: You have potency (+1 effect)  
-When Power \= Enemy Durability: Standard effect   
-When Power \< Enemy Durability: You lack potency (-1 effect) 
-
-When attempting to Wreck/Skirmish/Finnesse against targets beyond your Power tier, you lack potency regardless of enemy Durability.
 
 **\- Speed: Determines initiative and mobility (same levels of speed as range):**   
 S: 200 ft movement, acts before everyone, able to act twice before GM cuts to enemies  
@@ -555,7 +549,7 @@ S: Double 6s and double 5s count as critical success; inherit A, B, and C proper
 A: 5 counts as success; inherit B and C properties  
 B: 3 counts as partial success; inherit C properties  
 C: You can no longer critical fail  
-D: Double 1s count as critical fail  
+D: Double 1s count as a critical fail  
 F: 1s and double 1s count as critical fail
 
 **\- Development Potential**: **Determines the Stand’s capacity to improve abilities and gain experience.**  
