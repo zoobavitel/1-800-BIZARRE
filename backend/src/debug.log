@@ -5848,3 +5848,5 @@ django.db.utils.OperationalError: no such column: characters_session.devils_barg
 [WARNING] 2026-04-05 00:04:13,247 django.request - Not Found: /favicon.ico
 [WARNING] 2026-04-05 00:04:24,065 django.request - Not Found: /favicon.ico
 [INFO] 2026-04-05 00:04:59,845 characters.views.auth_views - Login successful: user=zoob ip=127.0.0.1
+[WARNING] 2026-04-05 04:47:15,158 django.request - Bad Request: /api/characters/11/roll-action/
+[WARNING] 2026-04-05 04:47:22,682 django.request - Bad Request: /api/characters/11/roll-action/
