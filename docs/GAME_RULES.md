@@ -1,6 +1,6 @@
 # 1(800) Bizarre — Game Rules Reference
 
-This document is the structured rules reference for the platform, derived from the **1(800)-Bizarre SRD** (`1(800)-Bizarre SRD.txt`). For full wording, examples, and extended content (heritages, playbook abilities, entanglements), use the SRD.
+This document is the structured rules reference for the platform, derived from the **1(800)-Bizarre SRD** (`docs/1(800)-Bizarre SRD.md`). For full wording, examples, and extended content (heritages, playbook abilities, entanglements), use the SRD.
 
 ---
 
@@ -68,7 +68,7 @@ Six properties, rated **F (0), D (1), C (2), B (3), A (4), S (special)**. At cre
 
 | Stat        | Meaning |
 |------------|--------|
-| Power      | Physical destructive power; vs enemy Durability sets potency. |
+| Power      | Physical destructive power (tiered scale in SRD). |
 | Speed      | Initiative and mobility; movement and who acts first. |
 | Range      | Operational distance of Stand and abilities. |
 | Durability | Stress capacity, armor charges, Stand armor effectiveness. |
@@ -76,7 +76,6 @@ Six properties, rated **F (0), D (1), C (2), B (3), A (4), S (special)**. At cre
 | Development| Growth potential; XP per session and ability flexibility. |
 
 **Constraints:** Minimum one stat must be D or higher (no all-F).  
-**Potency:** When Power > Enemy Durability, +1 effect; when Power < Enemy Durability, you lack potency.  
 Full grade tables (movement, range, stress/armor by grade, Precision effects, Development XP) are in the SRD.
 
 ---
@@ -139,6 +138,7 @@ Full grade tables (movement, range, stress/armor by grade, Precision effects, De
 ## Resistance & Armor
 
 - **Resist:** Declare resistance; consequence is reduced or avoided (GM says which). Then roll **resistance check** with the appropriate attribute.
+- **Preemptive resistance:** When the enemy has a big advantage, the GM may require a resistance check **before** you take your own action (e.g. a master stand user with all A’s on the coin unless you match or have a narrative edge; resisting possession before a Bizarre roll against a Spin Golem). The GM uses these checks to reflect especially dangerous foes.
 - **Stress cost:** **6 minus highest die.** Critical on resistance also clears 1 stress. You cannot fail a resistance check.
 - **One roll per consequence.** GM may allow resisting multiple consequences (separate rolls).
 - **Armor:** Mark an armor box to reduce or avoid a consequence instead of resisting. Restored when you choose load for the next score.
@@ -278,7 +278,7 @@ Full **HP, required/optional detriments, benefit costs** are in the SRD. List: *
 
 ## References
 
-- **Full SRD:** `docs/1(800)-Bizarre SRD.txt`
+- **Full SRD:** `docs/1(800)-Bizarre SRD.md`
 - **Platform integration:** `docs/SRD_INTEGRATION.md`
 - **NPC rules:** `docs/NPC_CREATION_RULES.md`
 - **Abilities (dev):** `docs/ABILITY_MANAGEMENT_SYSTEM.md`
