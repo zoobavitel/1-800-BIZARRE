@@ -4,14 +4,28 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-04-08",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Site stats API, stash slots & portrait uploads; sheet/home fixes"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-04-07",
     "version": null,
     "sections": [
       {
         "title": "Other",
         "items": [
+          "Merge pull request #12 from zoobavitel/fix/character-delete-empty-response-and-home-errors",
           "Stop tracking backend/src/db.sqlite3 (local dev DB)",
           "Add hero Stand Coin, centered layout; update patch notes and db",
+          "Merge pull request #11 from zoobavitel/fix/character-delete-empty-response-and-home-errors",
           "Merge remote-tracking branch 'origin/master' into fix/character-delete-empty-response-and-home-errors",
           "Merge pull request #10 from zoobavitel/feature/home-campaign-invites",
           "Merge pull request #9 from zoobavitel/cursor/srd-potency-doc-sync",
@@ -21,6 +35,7 @@ export const PATCH_NOTES = [
       {
         "title": "Maintenance",
         "items": [
+          "update patch notes and backend debug log",
           "update local db.sqlite3 snapshot",
           "refresh game-rules-srd and patch notes; update local db and debug log",
           "update database and log warnings"

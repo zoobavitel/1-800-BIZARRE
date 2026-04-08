@@ -228,8 +228,8 @@
 .home-poc .home-stand-coin-readout-stack {
   display: grid;
   grid-template-columns: 1fr;
-  /* Reserve height for stat + grade + multi-line blurb so the coin SVG does not shift on hover */
-  grid-template-rows: minmax(5.75rem, auto);
+  /* Fixed track height: minmax(..., auto) still grew when blurbs wrapped and pushed the SVG down */
+  grid-template-rows: 8.25rem;
 }
 .home-poc .home-stand-coin-readout-stack > .home-stand-coin-readout-panel {
   grid-column: 1;
@@ -267,7 +267,10 @@
   line-height: 1.35;
   color: var(--light-text-2);
   max-width: 220px;
-  min-height: 2.7em;
+  min-height: 0;
+  max-height: 3.6em;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .home-poc .home-stand-coin-readout-hint {
   font-size: 10px;
