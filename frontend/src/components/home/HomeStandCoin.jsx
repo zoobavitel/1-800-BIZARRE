@@ -141,17 +141,24 @@ export default function HomeStandCoin() {
         <div className="home-stand-coin-name">Example stand</div>
       </div>
       <div className="home-stand-coin-readout">
-        {active ? (
-          <>
-            <span className="home-stand-coin-readout-stat">{active.label}</span>
-            <span className="home-stand-coin-readout-grade">{active.grade}</span>
-            <span className="home-stand-coin-readout-blurb">{active.blurb}</span>
-          </>
-        ) : (
-          <span className="home-stand-coin-readout-hint">
-            Hover or tap a segment to see each stat and grade (F–S).
-          </span>
-        )}
+        <div className="home-stand-coin-readout-stack">
+          <div
+            className={`home-stand-coin-readout-panel${active ? ' is-inactive' : ''}`}
+            aria-hidden={!!active}
+          >
+            <span className="home-stand-coin-readout-hint">
+              Hover or tap a segment to see each stat and grade (F–S).
+            </span>
+          </div>
+          <div
+            className={`home-stand-coin-readout-panel${active ? '' : ' is-inactive'}`}
+            aria-hidden={!active}
+          >
+            <span className="home-stand-coin-readout-stat">{active?.label ?? '\u00a0'}</span>
+            <span className="home-stand-coin-readout-grade">{active?.grade ?? '\u00a0'}</span>
+            <span className="home-stand-coin-readout-blurb">{active?.blurb ?? '\u00a0'}</span>
+          </div>
+        </div>
       </div>
       <svg
         className="home-stand-coin-svg"

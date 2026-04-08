@@ -21,8 +21,9 @@ export const createDefaultCharacter = () => ({
     FINESSE: 0, PROWL: 0, SKIRMISH: 0, WRECK: 0,
     BIZARRE: 0, COMMAND: 0, CONSORT: 0, SWAY: 0
   },
+  /* Six D ranks = 6 coin points (SRD-valid baseline); player reallocates from here. */
   standStats: {
-    power: 1, speed: 1, range: 1, durability: 1, precision: 1, development: 1
+    power: 1, speed: 1, range: 1, durability: 1, precision: 1, development: 1,
   },
   stress: Array(9).fill(false),
   trauma: {

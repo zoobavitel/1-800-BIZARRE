@@ -219,18 +219,34 @@
   color: var(--light-text);
 }
 .home-poc .home-stand-coin-readout {
-  min-height: 52px;
   width: 100%;
   padding: 8px 10px;
   border-radius: 4px;
   background: rgba(26, 22, 16, 0.06);
   border: 1px solid var(--light-border);
+}
+.home-poc .home-stand-coin-readout-stack {
+  display: grid;
+  grid-template-columns: 1fr;
+  /* Reserve height for stat + grade + multi-line blurb so the coin SVG does not shift on hover */
+  grid-template-rows: minmax(5.75rem, auto);
+}
+.home-poc .home-stand-coin-readout-stack > .home-stand-coin-readout-panel {
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
   gap: 2px;
+  width: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+.home-poc .home-stand-coin-readout-panel.is-inactive {
+  visibility: hidden;
+  pointer-events: none;
 }
 .home-poc .home-stand-coin-readout-stat {
   font-family: var(--font-heading);
@@ -251,6 +267,7 @@
   line-height: 1.35;
   color: var(--light-text-2);
   max-width: 220px;
+  min-height: 2.7em;
 }
 .home-poc .home-stand-coin-readout-hint {
   font-size: 10px;
@@ -347,24 +364,6 @@
   background: var(--light-text);
   overflow: hidden;
 }
-.home-poc .hero-art-stripes {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 40%;
-  height: 100%;
-  display: flex;
-}
-.home-poc .hero-art-stripes span {
-  flex: 1;
-  transform: skewX(-14deg);
-  transform-origin: top right;
-  margin: 0 -8px;
-}
-.home-poc .hero-art-stripes span:nth-child(1) { background: var(--stripe-1); opacity: 0.95; }
-.home-poc .hero-art-stripes span:nth-child(2) { background: var(--stripe-2); opacity: 0.85; }
-.home-poc .hero-art-stripes span:nth-child(3) { background: var(--stripe-3); opacity: 0.75; }
-.home-poc .hero-art-stripes span:nth-child(4) { background: var(--stripe-4); opacity: 0.65; }
 .home-poc .hero-art-ghost {
   position: absolute;
   top: 12px;
@@ -398,6 +397,17 @@
 }
 .home-poc .hero-stat-row:last-child {
   border-bottom: none;
+}
+.home-poc .hero-stat-row-tall {
+  align-items: flex-start;
+}
+.home-poc .hero-stat-value-compact {
+  font-size: 10px;
+  line-height: 1.35;
+  text-align: right;
+  max-width: 58%;
+  font-weight: 600;
+  word-break: break-word;
 }
 .home-poc .hero-stat-label {
   color: rgba(234, 222, 183, 0.5);

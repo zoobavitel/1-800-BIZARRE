@@ -17,7 +17,7 @@ from characters.views import (
     RollViewSet, GroupActionViewSet,
     home, RegisterView, StandAbilityViewSet, LoginView, CurrentUserView,
     HamonAbilityViewSet, SpinAbilityViewSet, global_search,
-    get_available_playbook_abilities, api_documentation,
+    get_available_playbook_abilities, api_documentation, site_stats,
     XPHistoryViewSet, StressHistoryViewSet, ChatMessageViewSet,
     ClaimViewSet, CrewPlaybookViewSet, CrewSpecialAbilityViewSet, CrewUpgradeViewSet,
     ProgressClockViewSet
@@ -71,6 +71,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include(router.urls)),
     path('api/search/', global_search, name='global_search'),
+    path('api/site-stats/', site_stats, name='site_stats'),
     path('api/get_available_playbook_abilities/', get_available_playbook_abilities, name='get_available_playbook_abilities'),
     path('api/docs/', api_documentation, name='api_documentation'),
     # Use your custom LoginView instead of obtain_auth_token
