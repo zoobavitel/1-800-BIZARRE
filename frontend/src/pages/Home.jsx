@@ -157,7 +157,7 @@ const HomePage = ({
       setCharacters((prev) => prev.filter((char) => char.id !== characterId));
     } catch (err) {
       console.error('Failed to delete character:', err);
-      setCharacters((prev) => prev.filter((char) => char.id !== characterId));
+      setError(err.message || 'Failed to delete character');
     }
   };
 
