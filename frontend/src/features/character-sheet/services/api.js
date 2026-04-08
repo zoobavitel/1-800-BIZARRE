@@ -58,6 +58,22 @@ export function normalizeStashSlots(v) {
   return d.map((_, i) => Boolean(v[i]));
 }
 
+/**
+ * Read response body once. DELETE and some endpoints return 204 / empty body — avoid response.json() on empty.
+ */
+async function readFetchResponseBody(response) {
+  const text = await response.text();
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return { parsed: null };
+  }
+  try {
+    return { parsed: JSON.parse(trimmed) };
+  } catch {
+    return { parsed: null, invalidJson: true, textPreview: trimmed.slice(0, 200) };
+  }
+}
+
 // Helper function for API requests
 const apiRequest = async (endpoint, options = {}) => {
   const token = localStorage.getItem('authToken');
@@ -78,14 +94,21 @@ const apiRequest = async (endpoint, options = {}) => {
 
   try {
     const response = await fetch(url, config);
-    
+    const { parsed, invalidJson, textPreview } = await readFetchResponseBody(response);
+
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
+      const errorData = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
       const message = getApiErrorMessage(errorData, response.status, response.statusText);
       throw new Error(message);
     }
-    
-    return await response.json();
+
+    if (invalidJson) {
+      throw new Error(
+        `Invalid JSON response (${response.status})${textPreview ? `: ${textPreview}` : ''}`
+      );
+    }
+
+    return parsed;
   } catch (error) {
     console.error('API request failed:', error);
     throw error;
@@ -320,12 +343,18 @@ const apiRequestMultipart = async (endpoint, formData, method = 'POST') => {
   if (token) headers['Authorization'] = `Token ${token}`;
   if (url.includes('ngrok')) headers['ngrok-skip-browser-warning'] = '1';
   const response = await fetch(url, { method, headers, body: formData });
+  const { parsed, invalidJson, textPreview } = await readFetchResponseBody(response);
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
+    const errorData = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
     const message = getApiErrorMessage(errorData, response.status, response.statusText);
     throw new Error(message);
   }
-  return await response.json();
+  if (invalidJson) {
+    throw new Error(
+      `Invalid JSON response (${response.status})${textPreview ? `: ${textPreview}` : ''}`
+    );
+  }
+  return parsed;
 };
 
 /** Used by character/NPC multipart saves; exported for unit tests. */
