@@ -495,7 +495,7 @@ F (0)
 At the beginning of a new game, distribute 6 points among:  
 \- Power (physical destructive power)  
 \- Speed (initiative & mobility)  
-\- Range (operational distance of the stand & it’s abilities)  
+\- Range (operational distance of the stand & its abilities)  
 \- Durability (resistance, & armor)  
 \- Precision (accuracy & control)   
 \- Development (growth potential)
@@ -549,7 +549,7 @@ S: Double 6s and double 5s count as critical success; inherit A, B, and C proper
 A: 5 counts as success; inherit B and C properties  
 B: 3 counts as partial success; inherit C properties  
 C: You can no longer critical fail  
-D: Double 1s count as critical fail  
+D: Double 1s count as a critical fail  
 F: 1s and double 1s count as critical fail
 
 **\- Development Potential**: **Determines the Stand’s capacity to improve abilities and gain experience.**  
