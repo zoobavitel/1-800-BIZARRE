@@ -5850,3 +5850,12 @@ django.db.utils.OperationalError: no such column: characters_session.devils_barg
 [INFO] 2026-04-05 00:04:59,845 characters.views.auth_views - Login successful: user=zoob ip=127.0.0.1
 [WARNING] 2026-04-05 04:47:15,158 django.request - Bad Request: /api/characters/11/roll-action/
 [WARNING] 2026-04-05 04:47:22,682 django.request - Bad Request: /api/characters/11/roll-action/
+[INFO] 2026-04-07 23:54:29,657 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-04-07 23:55:20,666 django.request - Not Found: /api/…
+[INFO] 2026-04-07 23:55:54,277 characters.views.auth_views - Login successful: user=zoob ip=127.0.0.1
+[WARNING] 2026-04-08 01:08:52,517 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-04-08 01:08:59,548 django.request - Bad Request: /api/accounts/login/
+[WARNING] 2026-04-08 01:09:07,544 django.request - Bad Request: /api/accounts/login/
+[INFO] 2026-04-08 01:11:19,647 characters.views.auth_views - Login successful: user=admin ip=127.0.0.1
+[WARNING] 2026-04-08 01:11:49,070 django.request - Forbidden: /api/campaigns/2/events/
+[WARNING] 2026-04-08 01:11:58,583 django.request - Forbidden: /api/campaigns/2/events/
