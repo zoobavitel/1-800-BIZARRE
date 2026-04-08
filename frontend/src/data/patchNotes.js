@@ -10,6 +10,8 @@ export const PATCH_NOTES = [
       {
         "title": "Other",
         "items": [
+          "Stop tracking backend/src/db.sqlite3 (local dev DB)",
+          "Add hero Stand Coin, centered layout; update patch notes and db",
           "Merge remote-tracking branch 'origin/master' into fix/character-delete-empty-response-and-home-errors",
           "Merge pull request #10 from zoobavitel/feature/home-campaign-invites",
           "Merge pull request #9 from zoobavitel/cursor/srd-potency-doc-sync",
