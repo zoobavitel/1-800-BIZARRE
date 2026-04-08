@@ -10,8 +10,26 @@ export const PATCH_NOTES = [
       {
         "title": "Other",
         "items": [
+          "Stop tracking backend/src/db.sqlite3 (local dev DB)",
+          "Add hero Stand Coin, centered layout; update patch notes and db",
+          "Merge remote-tracking branch 'origin/master' into fix/character-delete-empty-response-and-home-errors",
+          "Merge pull request #10 from zoobavitel/feature/home-campaign-invites",
           "Merge pull request #9 from zoobavitel/cursor/srd-potency-doc-sync",
           "Merge pull request #8 from zoobavitel/feature/bizarrepoc-homepage"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "update local db.sqlite3 snapshot",
+          "refresh game-rules-srd and patch notes; update local db and debug log",
+          "update database and log warnings"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "DELETE 204 empty body; Home delete shows errors"
         ]
       },
       {
@@ -19,12 +37,6 @@ export const PATCH_NOTES = [
         "items": [
           "sync rules mirrors with SRD (potency removal, preemptive resistance)",
           "drop Power-vs-Durability potency ladder; expand skills preemptive resistance"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "update database and log warnings"
         ]
       }
     ]

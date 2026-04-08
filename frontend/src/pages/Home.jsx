@@ -13,6 +13,7 @@ import { flattenPatchNotesPreview } from '../utils/patchNotesPreview';
 import { buildSessionsByMonth, buildBarChartRows } from '../utils/homeChartData';
 import HomeSessionLineChart from '../components/home/HomeSessionLineChart';
 import HomeStatsBarChart from '../components/home/HomeStatsBarChart';
+import HomeStandCoin from '../components/home/HomeStandCoin';
 
 function tierRoman(level) {
   const n = Number(level);
@@ -229,6 +230,9 @@ const HomePage = ({
                 Game Rules
               </button>
             </div>
+          </div>
+          <div className="hero-coin-column fade-up d3">
+            <HomeStandCoin />
           </div>
           <div className="hero-art fade-up d3">
             <div className="hero-art-ghost">VOL.1</div>

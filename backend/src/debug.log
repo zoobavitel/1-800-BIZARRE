@@ -5859,3 +5859,13 @@ django.db.utils.OperationalError: no such column: characters_session.devils_barg
 [INFO] 2026-04-08 01:11:19,647 characters.views.auth_views - Login successful: user=admin ip=127.0.0.1
 [WARNING] 2026-04-08 01:11:49,070 django.request - Forbidden: /api/campaigns/2/events/
 [WARNING] 2026-04-08 01:11:58,583 django.request - Forbidden: /api/campaigns/2/events/
+[INFO] 2026-04-08 02:43:00,685 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-04-08 02:44:06,341 django.request - Unauthorized: /api/campaigns/1/events/
+[WARNING] 2026-04-08 02:44:06,634 django.request - Forbidden: /api/campaigns/1/events/
+[WARNING] 2026-04-08 02:44:08,307 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-04-08 02:44:08,695 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-04-08 02:44:09,075 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-04-08 02:44:10,345 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-04-08 02:44:11,817 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-08 02:44:12,008 django.request - Not Found: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-08 02:44:17,146 django.request - Bad Request: /api/characters/1/roll-action/
