@@ -91,7 +91,11 @@ export const AuthProvider = ({ children }) => {
       setToken(newToken);
       setUser(userInfo);
       localStorage.setItem('authToken', newToken);
-      
+      // Drop stale #character/… (or other) hash from a prior session so the app opens on home.
+      if (typeof window !== 'undefined') {
+        window.location.hash = '';
+      }
+
       return { success: true };
     } catch (err) {
       setError(err.message);

@@ -500,11 +500,11 @@ const CharacterSheetWrapper = ({
     referenceAPI.getHamonAbilities().then((list) => setHamonAbilitiesList(list || [])).catch(() => setHamonAbilitiesList([]));
   }, []);
 
-  // Sync abilities when character changes (e.g. switching tabs)
+  // Load abilities when switching character only — do not re-sync on every `character.abilities`
+  // reference change or removals are overwritten by stale server data before autosave completes.
   useEffect(() => {
-    const next = character?.abilities || [];
-    setAbilities((prev) => (prev.length !== next.length || prev.some((p, i) => p?.id !== next[i]?.id || p?.name !== next[i]?.name) ? next : prev));
-  }, [character?.id, character?.abilities]);
+    setAbilities(character?.abilities || []);
+  }, [character?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- only reset on sheet identity
 
   // Sync playbook label when character changes (API uses STAND/HAMON/SPIN; sheet uses Stand/Hamon/Spin)
   useEffect(() => {
@@ -2503,8 +2503,8 @@ const CharacterSheetWrapper = ({
                   {/* Abilities */}
                   <div style={{ marginBottom:'14px' }}>
                     <span style={S.lbl}>ABILITIES</span>
-                    {abilities.map(ab => {
-                      const abKey = ab.id || ab.name;
+                    {abilities.map((ab, abIndex) => {
+                      const abKey = ab.id || ab.name || `ability-${abIndex}`;
                       const isExpanded = expandedAbilityId === abKey;
                       const standardRef = ab.type === 'standard' && standardAbilitiesList.find((a) => a.id === ab.id);
                       const spinRef = ab.type === 'spin' && spinAbilitiesList.find((a) => a.id === ab.id);
@@ -2530,8 +2530,14 @@ const CharacterSheetWrapper = ({
                               </ul>
                             )}
                           </div>
-                          <button onClick={() => setAbilities(p => p.filter(a => (a.id || a.name) !== abKey))}
-                            style={{ color:'#f87171', background:'none', border:'none', cursor:'pointer', fontSize:'15px' }}>×</button>
+                          <button
+                            type="button"
+                            aria-label={`Remove ${ab.name || 'ability'}`}
+                            onClick={() => setAbilities((p) => p.filter((_, i) => i !== abIndex))}
+                            style={{ color:'#f87171', background:'none', border:'none', cursor:'pointer', fontSize:'15px' }}
+                          >
+                            ×
+                          </button>
                         </div>
                       );
                     })}

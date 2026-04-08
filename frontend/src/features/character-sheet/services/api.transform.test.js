@@ -6,6 +6,7 @@ import {
   normalizeCoinBoxes,
   normalizeStashSlots,
   buildMultipartOrJson,
+  isImageUploadPayload,
 } from './api';
 
 /** Minimal sheet-like object for transform coverage (spin_playbook_abilities_ui). */
@@ -117,6 +118,18 @@ describe('transformFrontendToBackend playbook and playbook abilities', () => {
     );
     expect(out.coin_boxes).toEqual([true, false, true, false]);
   });
+
+  test('clears custom ability payload when sheet has no custom abilities (after user removed them)', () => {
+    const out = transformFrontendToBackend(
+      makeSheet({
+        abilities: [{ id: 1, type: 'standard', name: 'Only standard' }],
+        extra_custom_abilities: [{ description: 'stale' }],
+        custom_ability_description: 'stale',
+      })
+    );
+    expect(out.extra_custom_abilities).toEqual([]);
+    expect(out.custom_ability_description).toBe('');
+  });
 });
 
 describe('normalizeCoinBoxes and normalizeStashSlots', () => {
@@ -143,6 +156,46 @@ describe('transformBackendToFrontend coin and crew stash', () => {
     expect(fe.stash[1]).toBe(false);
     expect(fe.stash.length).toBe(40);
   });
+
+  test('maps character stash_slots when no crew', () => {
+    const fe = transformBackendToFrontend({
+      stash_slots: Array.from({ length: 40 }, (_, i) => i === 3),
+    });
+    expect(fe.stash[3]).toBe(true);
+    expect(fe.stash[0]).toBe(false);
+  });
+
+  test('prefers crew stash_slots over character when both exist', () => {
+    const fe = transformBackendToFrontend({
+      stash_slots: Array(40).fill(true),
+      crew: { id: 1, stash_slots: Array.from({ length: 40 }, (_, i) => i === 0) },
+    });
+    expect(fe.stash[0]).toBe(true);
+    expect(fe.stash[1]).toBe(false);
+  });
+});
+
+describe('transformFrontendToBackend stash_slots', () => {
+  test('sends stash_slots when not in a crew', () => {
+    const out = transformFrontendToBackend(
+      makeSheet({
+        crewId: null,
+        stash: Array.from({ length: 40 }, (_, i) => i === 2),
+      })
+    );
+    expect(out.stash_slots[2]).toBe(true);
+    expect(out.stash_slots[0]).toBe(false);
+  });
+
+  test('omits stash_slots when linked to a crew (crew PATCH handles grid)', () => {
+    const out = transformFrontendToBackend(
+      makeSheet({
+        crewId: 99,
+        stash: Array(40).fill(false),
+      })
+    );
+    expect(out.stash_slots).toBeUndefined();
+  });
 });
 
 describe('buildMultipartOrJson', () => {
@@ -155,7 +208,16 @@ describe('buildMultipartOrJson', () => {
       imageFile: file,
     });
     expect(multipart).toBe(true);
-    expect(body.get('image')).toBe(file);
+    const uploaded = body.get('image');
+    expect(uploaded instanceof File).toBe(true);
+    expect((uploaded && uploaded.name) || '').toBe('p.png');
+  });
+
+  it('accepts Blob uploads (not only File) for multipart', () => {
+    const blob = new Blob([new Uint8Array([0x47, 0x49, 0x46])], { type: 'image/gif' });
+    expect(isImageUploadPayload(blob)).toBe(true);
+    const { multipart } = buildMultipartOrJson({ true_name: 'B', imageFile: blob });
+    expect(multipart).toBe(true);
   });
 
   it('drops stray image URL from JSON saves', () => {

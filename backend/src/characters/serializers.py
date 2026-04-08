@@ -42,7 +42,7 @@ class CrewSerializer(serializers.ModelSerializer):
     special_abilities = CrewSpecialAbilitySerializer(many=True, read_only=True)
     proposed_by = serializers.PrimaryKeyRelatedField(read_only=True)
     approved_by = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
-    image = serializers.ImageField(required=False)
+    image = serializers.FileField(required=False)
 
     class Meta:
         model = Crew
@@ -386,7 +386,7 @@ class StandSerializer(serializers.ModelSerializer):
 
 
 class CharacterSerializer(serializers.ModelSerializer):
-    image = serializers.ImageField(required=False)
+    image = serializers.FileField(required=False)
     heritage = FlexibleHeritagePrimaryKeyField(
         queryset=Heritage.objects.all(), allow_null=True, required=False
     )
@@ -455,6 +455,18 @@ class CharacterSerializer(serializers.ModelSerializer):
         for i, x in enumerate(value):
             if not isinstance(x, bool):
                 raise serializers.ValidationError(f'coin_boxes[{i}] must be a boolean.')
+        return value
+
+    def validate_stash_slots(self, value):
+        if value is None:
+            return value
+        if not isinstance(value, list):
+            raise serializers.ValidationError('stash_slots must be a list.')
+        if len(value) != 40:
+            raise serializers.ValidationError('stash_slots must have exactly 40 boolean elements.')
+        for i, x in enumerate(value):
+            if not isinstance(x, bool):
+                raise serializers.ValidationError(f'stash_slots[{i}] must be a boolean.')
         return value
 
     def validate(self, data):
@@ -1023,7 +1035,7 @@ class NPCSerializer(serializers.ModelSerializer):
     vulnerability_clock_max = serializers.IntegerField(read_only=True)
     harm_clock_current = serializers.IntegerField(read_only=True)
     vulnerability_clock_current = serializers.IntegerField(read_only=True)
-    image = serializers.ImageField(required=False, allow_null=True)
+    image = serializers.FileField(required=False, allow_null=True)
 
     class Meta:
         model = NPC

@@ -1,4 +1,4 @@
-import { resolveHeritagePkForSave } from './characterUtils';
+import { createDefaultCharacter, resolveHeritagePkForSave } from './characterUtils';
 
 const list = [
   { id: 1, name: 'Human' },
@@ -51,5 +51,22 @@ describe('resolveHeritagePkForSave', () => {
         { id: 1, name: 'Human' },
       ])
     ).toBe(2);
+  });
+});
+
+describe('createDefaultCharacter', () => {
+  test('starts with no abilities, no name, and a valid six-D coin baseline', () => {
+    const c = createDefaultCharacter();
+    expect(c.abilities).toEqual([]);
+    expect(c.standStats).toEqual({
+      power: 1,
+      speed: 1,
+      range: 1,
+      durability: 1,
+      precision: 1,
+      development: 1,
+    });
+    expect(c.name).toBe('');
+    expect(c.heritage).toBe(null);
   });
 });

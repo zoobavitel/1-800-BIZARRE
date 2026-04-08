@@ -5,6 +5,7 @@ import {
   campaignAPI,
   npcAPI,
   crewAPI,
+  siteStatsAPI,
   transformBackendToFrontend,
 } from '../features/character-sheet';
 import { useAuth } from '../features/auth';
@@ -66,10 +67,30 @@ const HomePage = ({
   const [npcs, setNpcs] = useState([]);
   const [npcsLoading, setNpcsLoading] = useState(true);
   const [crewCount, setCrewCount] = useState(0);
+  const [siteStats, setSiteStats] = useState(null);
 
   useEffect(() => {
     loadCharacters();
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setSiteStats(null);
+      return undefined;
+    }
+    let cancelled = false;
+    siteStatsAPI
+      .getSiteStats()
+      .then((data) => {
+        if (!cancelled && data && typeof data === 'object') setSiteStats(data);
+      })
+      .catch(() => {
+        if (!cancelled) setSiteStats(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   useEffect(() => {
     if (!user) {
@@ -138,6 +159,18 @@ const HomePage = ({
   const sessionsByMonth = useMemo(() => buildSessionsByMonth(campaigns), [campaigns]);
   const barChartRows = useMemo(() => buildBarChartRows(heroStats), [heroStats]);
   const chartsLoading = loading || campaignsLoading || npcsLoading;
+
+  const playbookLine = useMemo(() => {
+    const pc = siteStats?.playbook_counts;
+    if (!pc) return '—';
+    return `Stand ${pc.STAND ?? 0} · Hamon ${pc.HAMON ?? 0} · Spin ${pc.SPIN ?? 0}`;
+  }, [siteStats]);
+
+  const topHeritagesLine = useMemo(() => {
+    const list = siteStats?.top_heritages;
+    if (!Array.isArray(list) || list.length === 0) return '—';
+    return list.map((h) => `${h.name} (${h.count})`).join(', ');
+  }, [siteStats]);
 
   const primaryCampaignForFactions = useMemo(() => {
     const withF = (campaigns || []).find((c) => Array.isArray(c.factions) && c.factions.length);
@@ -236,12 +269,6 @@ const HomePage = ({
           </div>
           <div className="hero-art fade-up d3">
             <div className="hero-art-ghost">VOL.1</div>
-            <div className="hero-art-stripes">
-              <span />
-              <span />
-              <span />
-              <span />
-            </div>
             <div className="hero-stats">
               <div className="hero-stats-title">Live Stats</div>
               <div className="hero-stat-row">
@@ -274,13 +301,13 @@ const HomePage = ({
                   {heroStats.pcCount} / {heroStats.npcCount}
                 </span>
               </div>
-              <div className="hero-stat-row">
-                <span className="hero-stat-label">Top Ability</span>
-                <span className="hero-stat-value highlight">—</span>
+              <div className="hero-stat-row hero-stat-row-tall">
+                <span className="hero-stat-label">Stand / Hamon / Spin</span>
+                <span className="hero-stat-value hero-stat-value-compact">{playbookLine}</span>
               </div>
-              <div className="hero-stat-row">
-                <span className="hero-stat-label">Luckiest</span>
-                <span className="hero-stat-value highlight">—</span>
+              <div className="hero-stat-row hero-stat-row-tall">
+                <span className="hero-stat-label">Top heritages</span>
+                <span className="hero-stat-value hero-stat-value-compact">{topHeritagesLine}</span>
               </div>
             </div>
             <HomeSessionLineChart data={sessionsByMonth} loading={chartsLoading} />

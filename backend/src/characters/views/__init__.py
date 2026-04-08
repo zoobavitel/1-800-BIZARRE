@@ -19,8 +19,8 @@ from .reference_views import (
     TraumaViewSet, CharacterHistoryViewSet, ExperienceTrackerViewSet
 )
 from .utility_views import (
-    global_search, get_available_playbook_abilities, 
-    api_documentation, home, SpendCoinAPIView
+    global_search, get_available_playbook_abilities,
+    api_documentation, home, SpendCoinAPIView, site_stats,
 )
 
 __all__ = [
@@ -34,5 +34,5 @@ __all__ = [
     'HamonAbilityViewSet', 'SpinAbilityViewSet', 'TraumaViewSet',
     'CharacterHistoryViewSet', 'ExperienceTrackerViewSet',
     'global_search', 'get_available_playbook_abilities', 'api_documentation',
-    'home', 'SpendCoinAPIView'
+    'home', 'SpendCoinAPIView', 'site_stats',
 ] 

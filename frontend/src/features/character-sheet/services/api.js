@@ -16,6 +16,13 @@ export function playbookToDisplay(pb) {
   return 'Stand';
 }
 
+/** True when the sheet is linked to a campaign crew (stash lives on Crew). */
+function hasLinkedCrew(crewId) {
+  if (crewId == null || crewId === '') return false;
+  const n = typeof crewId === 'number' ? crewId : parseInt(String(crewId).trim(), 10);
+  return Number.isFinite(n) && n > 0;
+}
+
 /** Map sheet labels or backend enums to API playbook */
 export function playbookToBackend(pb) {
   if (pb == null || pb === '') return 'STAND';
@@ -56,6 +63,30 @@ export function normalizeStashSlots(v) {
   const d = Array(40).fill(false);
   if (!Array.isArray(v)) return d;
   return d.map((_, i) => Boolean(v[i]));
+}
+
+/** File input returns File; drag/paste or tests may use Blob — both must multipart-upload. */
+export function isImageUploadPayload(v) {
+  return (
+    v != null &&
+    (v instanceof File || (typeof Blob !== 'undefined' && v instanceof Blob))
+  );
+}
+
+function portraitFilenameForUpload(fileOrBlob) {
+  if (fileOrBlob instanceof File && fileOrBlob.name && String(fileOrBlob.name).trim() !== '') {
+    return fileOrBlob.name;
+  }
+  const mime = (fileOrBlob && fileOrBlob.type) || '';
+  if (mime.includes('png')) return 'portrait.png';
+  if (mime.includes('gif')) return 'portrait.gif';
+  if (mime.includes('webp')) return 'portrait.webp';
+  if (mime.includes('bmp')) return 'portrait.bmp';
+  if (mime.includes('svg')) return 'portrait.svg';
+  if (mime.includes('tiff')) return 'portrait.tiff';
+  if (mime.includes('heic') || mime.includes('heif')) return 'portrait.heic';
+  if (mime.includes('jpeg') || mime.includes('jpg')) return 'portrait.jpg';
+  return 'portrait.jpg';
 }
 
 /**
@@ -364,7 +395,7 @@ export function buildMultipartOrJson(data) {
     file != null && (file instanceof File || (typeof Blob !== 'undefined' && file instanceof Blob));
   if (hasFile) {
     const fd = new FormData();
-    fd.append('image', file);
+    fd.append('image', file, portraitFilenameForUpload(file));
     for (const [k, v] of Object.entries(data)) {
       if (k === 'imageFile' || k === 'image') continue;
       if (v == null) continue;
@@ -502,6 +533,11 @@ export const searchAPI = {
   globalSearch: (query) => apiRequest(`/search/?q=${encodeURIComponent(query)}`),
 };
 
+/** Site-wide aggregates (all PCs / rolls); authenticated only. */
+export const siteStatsAPI = {
+  getSiteStats: () => apiRequest('/site-stats/'),
+};
+
 // Authentication API functions
 export const authAPI = {
   // Login
@@ -620,9 +656,13 @@ export const transformBackendToFrontend = (backendCharacter) => {
       ],
     },
     
-    // Coin (character) and stash (crew when linked)
+    // Coin (character); stash on crew when linked, else personal Character.stash_slots
     coin: normalizeCoinBoxes(backendCharacter.coin_boxes),
-    stash: normalizeStashSlots(backendCharacter.crew?.stash_slots),
+    stash: normalizeStashSlots(
+      Array.isArray(backendCharacter.crew?.stash_slots)
+        ? backendCharacter.crew.stash_slots
+        : backendCharacter.stash_slots
+    ),
     
     // Healing clock
     healingClock: backendCharacter.healing_clock_filled || 0,
@@ -780,6 +820,13 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     // Custom abilities (SRD: 3x1 or 1x3)
     ...(function () {
       const customs = (frontendCharacter.abilities || []).filter((a) => a.type === 'custom');
+      if (customs.length === 0) {
+        return {
+          custom_ability_type: 'single_with_3_uses',
+          custom_ability_description: '',
+          extra_custom_abilities: [],
+        };
+      }
       const single = customs.find((a) => a.id === 'custom-single' || a._uses);
       if (single && single._uses && single._uses.length >= 3) {
         return {
@@ -810,6 +857,11 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     selected_detriments: Array.isArray(frontendCharacter.selected_detriments) ? frontendCharacter.selected_detriments : [],
 
     coin_boxes: normalizeCoinBoxes(frontendCharacter.coin),
+
+    // Stash: crew grid when linked; otherwise personal stash_slots on Character
+    ...(hasLinkedCrew(frontendCharacter.crewId)
+      ? {}
+      : { stash_slots: normalizeStashSlots(frontendCharacter.stash) }),
 
     // Solo / no campaign crew: stored on Character; cleared when linked to a Crew
     personal_crew_name:

@@ -20,6 +20,7 @@ import {
   normalizeListResponse,
   resolveHeritagePkForSave,
   normalizeStashSlots,
+  isImageUploadPayload,
 } from '../features/character-sheet';
 import { subscribeCampaignEvents } from '../features/character-sheet/services/campaignEvents';
 import { useAuth } from '../features/auth';
@@ -454,7 +455,10 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
       heritage: heritageValue,
       campaign: payload.campaign ?? frontend.campaign,
     });
-    const withFile = { ...toSend, ...(frontend.imageFile instanceof File ? { imageFile: frontend.imageFile } : {}) };
+    const withFile = {
+      ...toSend,
+      ...(isImageUploadPayload(frontend.imageFile) ? { imageFile: frontend.imageFile } : {}),
+    };
     try {
       let saved;
       if (payload.id) {
@@ -464,14 +468,23 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
         if (saved.id && typeof window !== 'undefined') window.location.hash = `character/${saved.id}`;
       }
       let stashMerged = null;
-      if (saved?.id && frontend.crewId && Array.isArray(frontend.stash)) {
-        try {
-          const crewUpdated = await crewAPI.patchCrew(frontend.crewId, {
-            stash_slots: normalizeStashSlots(frontend.stash),
-          });
-          stashMerged = normalizeStashSlots(crewUpdated?.stash_slots);
-        } catch (e) {
-          console.error('Crew stash save failed:', e);
+      if (saved?.id && Array.isArray(frontend.stash)) {
+        const crewPk =
+          frontend.crewId != null && frontend.crewId !== ''
+            ? parseInt(String(frontend.crewId), 10)
+            : NaN;
+        if (Number.isFinite(crewPk) && crewPk > 0) {
+          try {
+            const crewUpdated = await crewAPI.patchCrew(crewPk, {
+              stash_slots: normalizeStashSlots(frontend.stash),
+            });
+            stashMerged = Array.isArray(crewUpdated?.stash_slots)
+              ? normalizeStashSlots(crewUpdated.stash_slots)
+              : normalizeStashSlots(frontend.stash);
+          } catch (e) {
+            console.error('Crew stash save failed:', e);
+            stashMerged = normalizeStashSlots(frontend.stash);
+          }
         }
       }
       const savedFrontend = transformBackendToFrontend(saved);
@@ -494,7 +507,9 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
             ? savedFrontend.coin
             : (frontend.coin ?? savedFrontend.coin),
         stash:
-          stashMerged !== null ? stashMerged : (frontend.stash ?? savedFrontend.stash),
+          stashMerged !== null
+            ? stashMerged
+            : normalizeStashSlots(saved?.stash_slots ?? savedFrontend.stash ?? frontend.stash),
       };
       updateActiveCharTab(merged.id, merged);
       await loadCharacters();

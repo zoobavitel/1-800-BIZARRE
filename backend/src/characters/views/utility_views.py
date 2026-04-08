@@ -1,3 +1,5 @@
+from collections import Counter
+
 from django.shortcuts import render
 from django.http import JsonResponse
 from rest_framework import status
@@ -5,11 +7,11 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.decorators import api_view, permission_classes
-from django.db.models import Q
+from django.db.models import Q, Count
 
 from ..models import (
     Character, Campaign, NPC, Crew, Heritage, Vice, Ability,
-    StandAbility, HamonAbility, SpinAbility
+    StandAbility, HamonAbility, SpinAbility,
 )
 from .character_views import _character_queryset_for_user
 
@@ -17,6 +19,53 @@ from .character_views import _character_queryset_for_user
 # Optional root view
 def home(request):
     return JsonResponse({"message": "Welcome to the 1(800)Bizarre API!"})
+
+
+def _merge_playbook_counts(queryset):
+    out = {'STAND': 0, 'HAMON': 0, 'SPIN': 0}
+    for row in queryset.values('playbook').annotate(count=Count('id')):
+        key = (row['playbook'] or 'STAND').upper()
+        if key in out:
+            out[key] += row['count']
+    return out
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def site_stats(request):
+    """Aggregate site-wide stats: playbooks (PCs + NPCs) and top heritages."""
+    playbook_counts = _merge_playbook_counts(Character.objects.all())
+    npc_pb = _merge_playbook_counts(NPC.objects.all())
+    for k in playbook_counts:
+        playbook_counts[k] += npc_pb[k]
+
+    h_counter = Counter()
+    for row in (
+        Character.objects.filter(heritage__isnull=False)
+        .values('heritage__name')
+        .annotate(c=Count('id'))
+    ):
+        name = row['heritage__name'] or '—'
+        h_counter[name] += row['c']
+    for row in (
+        NPC.objects.filter(heritage__isnull=False)
+        .values('heritage__name')
+        .annotate(c=Count('id'))
+    ):
+        name = row['heritage__name'] or '—'
+        h_counter[name] += row['c']
+
+    top_heritages = [
+        {'name': name, 'count': count}
+        for name, count in h_counter.most_common(3)
+    ]
+
+    return Response(
+        {
+            'playbook_counts': playbook_counts,
+            'top_heritages': top_heritages,
+        }
+    )
 
 
 class SpendCoinAPIView(APIView):

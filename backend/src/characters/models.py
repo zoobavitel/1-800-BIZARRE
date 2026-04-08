@@ -128,7 +128,7 @@ class Crew(models.Model):
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='crews')
     playbook = models.ForeignKey(CrewPlaybook, on_delete=models.SET_NULL, null=True, blank=True)
     description = models.TextField(blank=True)
-    image = models.ImageField(upload_to='crew_images/', blank=True, null=True)
+    image = models.FileField(upload_to='crew_images/', blank=True, null=True)
     xp = models.IntegerField(default=0)
     xp_track_size = models.IntegerField(default=8)
     advancement_points = models.IntegerField(default=0)
@@ -228,7 +228,7 @@ class NPC(models.Model):
     creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_npcs')
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, null=True, blank=True, related_name='npcs')
     faction = models.ForeignKey(Faction, on_delete=models.SET_NULL, null=True, blank=True, related_name='npcs')
-    image = models.ImageField(upload_to='npc_images/', null=True, blank=True)
+    image = models.FileField(upload_to='npc_images/', null=True, blank=True)
     image_url = models.URLField(max_length=500, blank=True, default='')
 
     # Stand Description Fields
@@ -371,7 +371,7 @@ class Character(models.Model):
     true_name = models.CharField(max_length=100)
     alias = models.CharField(max_length=100, blank=True, null=True)
     appearance = models.TextField(blank=True, null=True)
-    image = models.ImageField(upload_to='character_images/', blank=True, null=True)
+    image = models.FileField(upload_to='character_images/', blank=True, null=True)
     image_url = models.URLField(max_length=500, blank=True, default='')
 
     @property
@@ -461,6 +461,11 @@ class Character(models.Model):
     reputation_status = models.JSONField(default=dict, blank=True, help_text="Tracks character's reputation with allies, rivals, and factions (e.g., {'Faction Name': 2, 'NPC Name': -1})")
 
     coin_boxes = models.JSONField(default=_default_coin_boxes, blank=True, help_text="Four personal coin boxes (booleans).")
+    stash_slots = models.JSONField(
+        default=_default_stash_slots,
+        blank=True,
+        help_text="Personal stash grid when not in a crew (40 booleans). When crew is set, use Crew.stash_slots.",
+    )
 
     ACTION_CATEGORIES = {
         'insight': ['hunt', 'study', 'survey', 'tinker'],
