@@ -4,12 +4,51 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-04-07",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #9 from zoobavitel/cursor/srd-potency-doc-sync",
+          "Merge pull request #8 from zoobavitel/feature/bizarrepoc-homepage"
+        ]
+      },
+      {
+        "title": "Documentation",
+        "items": [
+          "sync rules mirrors with SRD (potency removal, preemptive resistance)",
+          "drop Power-vs-Durability potency ladder; expand skills preemptive resistance"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "update database and log warnings"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-04-05",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #7 from zoobavitel/feature/bizarrepoc-homepage"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-04-04",
     "version": null,
     "sections": [
       {
         "title": "Maintenance",
         "items": [
+          "update dependencies and enhance HomePage with new charts",
           "update database and enhance frontend styles"
         ]
       }
