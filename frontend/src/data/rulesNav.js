@@ -1,12 +1,13 @@
 /**
  * Navigation structure for the Rules page, mirroring the SRD table of contents.
- * Each item maps to a # heading in the SRD; slug is used for scroll targets.
+ * Each item opens public/srd/<slug>.md (slug null → overview at game-rules-srd).
  */
 export const RULES_NAV = [
   {
     label: 'The Basics',
     expanded: true,
     items: [
+      { label: 'Overview', slug: null },
       { label: 'The Basics', slug: 'the-basics' },
       { label: 'The Core System', slug: 'the-core-system' },
       { label: 'Skills & Attributes', slug: 'skills-attributes' },
@@ -66,6 +67,8 @@ export const RULES_NAV = [
     items: [
       { label: 'STANDARD ABILITIES', slug: 'standard-abilities' },
       { label: 'Resources', slug: 'resources' },
+      { label: 'GM Cheat Sheet', slug: 'gm-cheat-sheet' },
+      { label: 'Da Bay sicks', slug: 'da-bay-sicks' },
     ],
   },
 ];
