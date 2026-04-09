@@ -1,5 +1,5 @@
-import React from 'react';
-import { useAuth } from '../features/auth';
+import React from "react";
+import { useAuth } from "../features/auth";
 
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
@@ -25,7 +25,7 @@ const ProtectedRoute = ({ children }) => {
 // Simple login page component that will be replaced by the auth forms
 const LoginPage = () => {
   const [isLogin, setIsLogin] = React.useState(true);
-  const { LoginForm, SignupForm } = require('../features/auth');
+  const { LoginForm, SignupForm } = require("../features/auth");
 
   return (
     <>
@@ -38,4 +38,4 @@ const LoginPage = () => {
   );
 };
 
-export default ProtectedRoute; 
+export default ProtectedRoute;

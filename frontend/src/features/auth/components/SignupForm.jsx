@@ -1,20 +1,32 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { getApiBaseUrl, getStoredApiBaseUrl, setApiBaseUrl } from '../../../config/apiConfig';
-import { token, injectStyles, Divider, Label, TextInput } from './AuthFormShared';
+import React, { useState, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
+import {
+  getApiBaseUrl,
+  getStoredApiBaseUrl,
+  setApiBaseUrl,
+} from "../../../config/apiConfig";
+import {
+  token,
+  injectStyles,
+  Divider,
+  Label,
+  TextInput,
+} from "./AuthFormShared";
 
 const SignupForm = ({ onSwitchToLogin }) => {
   const [userData, setUserData] = useState({
-    username: '',
-    password: '',
-    confirmPassword: ''
+    username: "",
+    password: "",
+    confirmPassword: "",
   });
-  const [serverUrl, setServerUrl] = useState('');
+  const [serverUrl, setServerUrl] = useState("");
   const [showServerUrl, setShowServerUrl] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
 
-  const isLiveSite = typeof window !== 'undefined' && window.location.origin.includes('github.io');
+  const isLiveSite =
+    typeof window !== "undefined" &&
+    window.location.origin.includes("github.io");
 
   useEffect(() => {
     injectStyles();
@@ -30,25 +42,25 @@ const SignupForm = ({ onSwitchToLogin }) => {
     setServerUrl(e.target.value);
     setApiBaseUrl(value || null);
     if (validationErrors.serverUrl) {
-      setValidationErrors((prev) => ({ ...prev, serverUrl: '' }));
+      setValidationErrors((prev) => ({ ...prev, serverUrl: "" }));
     }
   };
 
   const validateForm = () => {
     const errors = {};
-    
+
     if (userData.username.length < 3) {
-      errors.username = 'Username must be at least 3 characters long';
+      errors.username = "Username must be at least 3 characters long";
     }
-    
+
     if (userData.password.length < 6) {
-      errors.password = 'Password must be at least 6 characters long';
+      errors.password = "Password must be at least 6 characters long";
     }
-    
+
     if (userData.password !== userData.confirmPassword) {
-      errors.confirmPassword = 'Passwords do not match';
+      errors.confirmPassword = "Passwords do not match";
     }
-    
+
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -57,7 +69,7 @@ const SignupForm = ({ onSwitchToLogin }) => {
     e.preventDefault();
     clearError();
     setValidationErrors({});
-    
+
     if (!validateForm()) {
       return;
     }
@@ -66,7 +78,7 @@ const SignupForm = ({ onSwitchToLogin }) => {
     if (!getApiBaseUrl()) {
       setValidationErrors({
         serverUrl:
-          'Set the game server URL under Game server (required on github.io; locally http://127.0.0.1:8000/api).',
+          "Set the game server URL under Game server (required on github.io; locally http://127.0.0.1:8000/api).",
       });
       setShowServerUrl(true);
       return;
@@ -76,16 +88,16 @@ const SignupForm = ({ onSwitchToLogin }) => {
 
     const result = await signup({
       username: userData.username,
-      password: userData.password
+      password: userData.password,
     });
-    
+
     if (!result.success) {
       setIsLoading(false);
-      const isUsernameError = result.error && (
-        /already taken|already exists|username/i.test(result.error)
-      );
+      const isUsernameError =
+        result.error &&
+        /already taken|already exists|username/i.test(result.error);
       if (isUsernameError) {
-        setValidationErrors(prev => ({ ...prev, username: result.error }));
+        setValidationErrors((prev) => ({ ...prev, username: result.error }));
       }
       return;
     }
@@ -93,18 +105,18 @@ const SignupForm = ({ onSwitchToLogin }) => {
   };
 
   const handleChange = (e) => {
-    setUserData(prev => ({
+    setUserData((prev) => ({
       ...prev,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     }));
-    
-    if (e.target.name === 'username' && error) {
+
+    if (e.target.name === "username" && error) {
       clearError();
     }
     if (validationErrors[e.target.name]) {
-      setValidationErrors(prev => ({
+      setValidationErrors((prev) => ({
         ...prev,
-        [e.target.name]: ''
+        [e.target.name]: "",
       }));
     }
   };
@@ -112,10 +124,10 @@ const SignupForm = ({ onSwitchToLogin }) => {
   return (
     <div
       style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
         background: token.bg,
         backgroundImage: `radial-gradient(ellipse 60% 50% at 50% 40%, rgba(124,58,237,0.08) 0%, transparent 70%)`,
         fontFamily: "'Rajdhani', sans-serif",
@@ -126,12 +138,12 @@ const SignupForm = ({ onSwitchToLogin }) => {
       <div
         className="lf-card"
         style={{
-          width: '100%',
+          width: "100%",
           maxWidth: 420,
           background: token.surface,
           border: `1px solid ${token.border}`,
           borderRadius: 16,
-          padding: '40px 36px',
+          padding: "40px 36px",
           boxShadow: `
             0 0 0 1px rgba(255,255,255,0.03) inset,
             0 32px 64px rgba(0,0,0,0.6),
@@ -140,20 +152,39 @@ const SignupForm = ({ onSwitchToLogin }) => {
         }}
       >
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
           {/* Decorative top accent */}
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            marginBottom: 16,
-          }}>
-            <div style={{ width: 28, height: 1, background: `linear-gradient(to right, transparent, ${token.gold})` }} />
-            <div style={{
-              width: 8, height: 8,
-              background: token.gold,
-              transform: 'rotate(45deg)',
-              boxShadow: `0 0 12px ${token.gold}`,
-            }} />
-            <div style={{ width: 28, height: 1, background: `linear-gradient(to left, transparent, ${token.gold})` }} />
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 16,
+            }}
+          >
+            <div
+              style={{
+                width: 28,
+                height: 1,
+                background: `linear-gradient(to right, transparent, ${token.gold})`,
+              }}
+            />
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                background: token.gold,
+                transform: "rotate(45deg)",
+                boxShadow: `0 0 12px ${token.gold}`,
+              }}
+            />
+            <div
+              style={{
+                width: 28,
+                height: 1,
+                background: `linear-gradient(to left, transparent, ${token.gold})`,
+              }}
+            />
           </div>
 
           <h1
@@ -163,18 +194,20 @@ const SignupForm = ({ onSwitchToLogin }) => {
               fontSize: 26,
               fontFamily: "'Cinzel Decorative', cursive",
               fontWeight: 700,
-              letterSpacing: '0.04em',
+              letterSpacing: "0.04em",
             }}
           >
             1(800)BIZARRE
           </h1>
-          <p style={{
-            marginTop: 8,
-            fontSize: 12,
-            letterSpacing: '0.2em',
-            textTransform: 'uppercase',
-            color: token.muted,
-          }}>
+          <p
+            style={{
+              marginTop: 8,
+              fontSize: 12,
+              letterSpacing: "0.2em",
+              textTransform: "uppercase",
+              color: token.muted,
+            }}
+          >
             Create your account
           </p>
         </div>
@@ -185,43 +218,60 @@ const SignupForm = ({ onSwitchToLogin }) => {
             role="alert"
             style={{
               marginBottom: 20,
-              padding: '14px 18px',
+              padding: "14px 18px",
               background: token.dangerDim,
-              border: '2px solid rgba(239,68,68,0.6)',
+              border: "2px solid rgba(239,68,68,0.6)",
               borderRadius: 10,
               fontSize: 14,
               fontWeight: 600,
-              color: '#fca5a5',
+              color: "#fca5a5",
               lineHeight: 1.5,
-              boxShadow: '0 4px 12px rgba(239,68,68,0.2)',
+              boxShadow: "0 4px 12px rgba(239,68,68,0.2)",
             }}
           >
             {error}
-            {error.includes('Could not reach game server') && isLiveSite && (
-              <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, fontWeight: 400 }}>
-                Enter the host's URL below: <strong>https://</strong>their-ngrok-url<strong>/api</strong>
+            {error.includes("Could not reach game server") && isLiveSite && (
+              <p
+                style={{
+                  marginTop: 8,
+                  marginBottom: 0,
+                  fontSize: 12,
+                  fontWeight: 400,
+                }}
+              >
+                Enter the host's URL below: <strong>https://</strong>
+                their-ngrok-url<strong>/api</strong>
               </p>
             )}
           </div>
         )}
 
         {/* Form */}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
+        <form
+          onSubmit={handleSubmit}
+          style={{ display: "flex", flexDirection: "column", gap: 20 }}
+        >
           {/* Live-site warning */}
           {isLiveSite && !serverUrl && (
-            <div style={{
-              padding: '10px 14px',
-              background: token.warnDim,
-              border: `1px solid rgba(245,158,11,0.4)`,
-              borderRadius: 8,
-              fontSize: 12.5,
-              color: '#fcd34d',
-              lineHeight: 1.6,
-            }}>
-              Using the live site — set the Game server URL below (your host's backend, e.g.{' '}
-              <code style={{ color: '#fde68a' }}>https://xxx.ngrok-free.app/api</code>).
-              Host runs <code style={{ color: '#fde68a' }}>ngrok http 8000</code> and shares that URL.
+            <div
+              style={{
+                padding: "10px 14px",
+                background: token.warnDim,
+                border: `1px solid rgba(245,158,11,0.4)`,
+                borderRadius: 8,
+                fontSize: 12.5,
+                color: "#fcd34d",
+                lineHeight: 1.6,
+              }}
+            >
+              Using the live site — set the Game server URL below (your host's
+              backend, e.g.{" "}
+              <code style={{ color: "#fde68a" }}>
+                https://xxx.ngrok-free.app/api
+              </code>
+              ). Host runs{" "}
+              <code style={{ color: "#fde68a" }}>ngrok http 8000</code> and
+              shares that URL.
             </div>
           )}
 
@@ -234,26 +284,30 @@ const SignupForm = ({ onSwitchToLogin }) => {
               className="lf-toggle"
               onClick={() => setShowServerUrl((s) => !s)}
               style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
+                background: "none",
+                border: "none",
+                cursor: "pointer",
                 padding: 0,
                 fontSize: 12,
-                letterSpacing: '0.08em',
-                color: '#4a4a6a',
-                display: 'flex',
-                alignItems: 'center',
+                letterSpacing: "0.08em",
+                color: "#4a4a6a",
+                display: "flex",
+                alignItems: "center",
                 gap: 6,
-                transition: 'color 0.2s',
+                transition: "color 0.2s",
               }}
             >
-              <span style={{
-                display: 'inline-block',
-                fontSize: 9,
-                transition: 'transform 0.2s',
-                transform: showServerUrl ? 'rotate(90deg)' : 'rotate(0deg)',
-              }}>▶</span>
-              Game server {isLiveSite ? '(required here)' : '(optional)'}
+              <span
+                style={{
+                  display: "inline-block",
+                  fontSize: 9,
+                  transition: "transform 0.2s",
+                  transform: showServerUrl ? "rotate(90deg)" : "rotate(0deg)",
+                }}
+              >
+                ▶
+              </span>
+              Game server {isLiveSite ? "(required here)" : "(optional)"}
             </button>
 
             {showServerUrl && (
@@ -265,14 +319,30 @@ const SignupForm = ({ onSwitchToLogin }) => {
                   placeholder="https://xxx.ngrok-free.app/api"
                 />
                 {validationErrors.serverUrl && (
-                  <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: '#fca5a5', lineHeight: 1.5 }}>
+                  <p
+                    style={{
+                      marginTop: 8,
+                      marginBottom: 0,
+                      fontSize: 12,
+                      color: "#fca5a5",
+                      lineHeight: 1.5,
+                    }}
+                  >
                     {validationErrors.serverUrl}
                   </p>
                 )}
-                <p style={{ marginTop: 6, marginBottom: 0, fontSize: 11.5, color: '#3d3d5c', lineHeight: 1.5 }}>
+                <p
+                  style={{
+                    marginTop: 6,
+                    marginBottom: 0,
+                    fontSize: 11.5,
+                    color: "#3d3d5c",
+                    lineHeight: 1.5,
+                  }}
+                >
                   {isLiveSite
-                    ? 'Paste the URL your host sends (must include /api).'
-                    : 'Leave blank to use http://127.0.0.1:8000/api (local dev).'}
+                    ? "Paste the URL your host sends (must include /api)."
+                    : "Leave blank to use http://127.0.0.1:8000/api (local dev)."}
                 </p>
               </div>
             )}
@@ -293,7 +363,15 @@ const SignupForm = ({ onSwitchToLogin }) => {
               hasError={!!validationErrors.username}
             />
             {validationErrors.username && (
-              <p style={{ marginTop: 6, marginBottom: 0, fontSize: 12, color: '#fca5a5', lineHeight: 1.5 }}>
+              <p
+                style={{
+                  marginTop: 6,
+                  marginBottom: 0,
+                  fontSize: 12,
+                  color: "#fca5a5",
+                  lineHeight: 1.5,
+                }}
+              >
                 {validationErrors.username}
               </p>
             )}
@@ -313,7 +391,15 @@ const SignupForm = ({ onSwitchToLogin }) => {
               hasError={!!validationErrors.password}
             />
             {validationErrors.password && (
-              <p style={{ marginTop: 6, marginBottom: 0, fontSize: 12, color: '#fca5a5', lineHeight: 1.5 }}>
+              <p
+                style={{
+                  marginTop: 6,
+                  marginBottom: 0,
+                  fontSize: 12,
+                  color: "#fca5a5",
+                  lineHeight: 1.5,
+                }}
+              >
                 {validationErrors.password}
               </p>
             )}
@@ -333,7 +419,15 @@ const SignupForm = ({ onSwitchToLogin }) => {
               hasError={!!validationErrors.confirmPassword}
             />
             {validationErrors.confirmPassword && (
-              <p style={{ marginTop: 6, marginBottom: 0, fontSize: 12, color: '#fca5a5', lineHeight: 1.5 }}>
+              <p
+                style={{
+                  marginTop: 6,
+                  marginBottom: 0,
+                  fontSize: 12,
+                  color: "#fca5a5",
+                  lineHeight: 1.5,
+                }}
+              >
                 {validationErrors.confirmPassword}
               </p>
             )}
@@ -346,61 +440,68 @@ const SignupForm = ({ onSwitchToLogin }) => {
             className="lf-btn-primary"
             style={{
               marginTop: 4,
-              width: '100%',
-              padding: '12px 0',
+              width: "100%",
+              padding: "12px 0",
               background: token.accent,
-              border: 'none',
+              border: "none",
               borderRadius: 8,
-              color: '#fff',
+              color: "#fff",
               fontSize: 13,
               fontFamily: "'Rajdhani', sans-serif",
               fontWeight: 700,
-              letterSpacing: '0.15em',
-              textTransform: 'uppercase',
-              cursor: isLoading ? 'not-allowed' : 'pointer',
+              letterSpacing: "0.15em",
+              textTransform: "uppercase",
+              cursor: isLoading ? "not-allowed" : "pointer",
               opacity: isLoading ? 0.55 : 1,
-              transition: 'background 0.2s, box-shadow 0.2s, transform 0.15s',
+              transition: "background 0.2s, box-shadow 0.2s, transform 0.15s",
               boxShadow: `0 4px 16px ${token.accentGlow}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               gap: 8,
             }}
           >
             {isLoading ? (
               <>
-                <span style={{
-                  display: 'inline-block',
-                  width: 14, height: 14,
-                  borderRadius: '50%',
-                  border: '2px solid rgba(255,255,255,0.3)',
-                  borderTopColor: '#fff',
-                  animation: 'spin 0.7s linear infinite',
-                }} />
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: 14,
+                    height: 14,
+                    borderRadius: "50%",
+                    border: "2px solid rgba(255,255,255,0.3)",
+                    borderTopColor: "#fff",
+                    animation: "spin 0.7s linear infinite",
+                  }}
+                />
                 Creating account…
               </>
-            ) : 'Create account'}
+            ) : (
+              "Create account"
+            )}
           </button>
 
           {/* Switch to login */}
-          <div style={{ textAlign: 'center', paddingTop: 4 }}>
+          <div style={{ textAlign: "center", paddingTop: 4 }}>
             <button
               type="button"
               onClick={onSwitchToLogin}
               className="lf-btn-ghost"
               style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
+                background: "none",
+                border: "none",
+                cursor: "pointer",
                 fontSize: 12.5,
-                color: '#5b5b7d',
-                letterSpacing: '0.04em',
-                transition: 'color 0.2s',
+                color: "#5b5b7d",
+                letterSpacing: "0.04em",
+                transition: "color 0.2s",
                 padding: 0,
               }}
             >
-              Already have an account?{' '}
-              <span style={{ color: token.accent, fontWeight: 600 }}>Sign in</span>
+              Already have an account?{" "}
+              <span style={{ color: token.accent, fontWeight: 600 }}>
+                Sign in
+              </span>
             </button>
           </div>
         </form>

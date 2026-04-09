@@ -1,2 +1,2 @@
 // Export all data from this directory
-export * from './data.js'; 
+export * from "./data.js";

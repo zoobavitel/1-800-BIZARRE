@@ -1,18 +1,32 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { getApiBaseUrl, getStoredApiBaseUrl, setApiBaseUrl } from '../../../config/apiConfig';
-import { token, injectStyles, Divider, Label, TextInput } from './AuthFormShared';
+import React, { useState, useEffect } from "react";
+import { useAuth } from "../context/AuthContext";
+import {
+  getApiBaseUrl,
+  getStoredApiBaseUrl,
+  setApiBaseUrl,
+} from "../../../config/apiConfig";
+import {
+  token,
+  injectStyles,
+  Divider,
+  Label,
+  TextInput,
+} from "./AuthFormShared";
 
 // ─── Main component ───────────────────────────────────────────────────────────
 const LoginForm = ({ onSwitchToSignup }) => {
-  const [credentials, setCredentials] = useState({ username: '', password: '' });
-  const [serverUrl, setServerUrl] = useState('');
+  const [credentials, setCredentials] = useState({
+    username: "",
+    password: "",
+  });
+  const [serverUrl, setServerUrl] = useState("");
   const [showServerUrl, setShowServerUrl] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [urlError, setUrlError] = useState('');
+  const [urlError, setUrlError] = useState("");
 
   const isLiveSite =
-    typeof window !== 'undefined' && window.location.origin.includes('github.io');
+    typeof window !== "undefined" &&
+    window.location.origin.includes("github.io");
 
   useEffect(() => {
     injectStyles();
@@ -27,17 +41,17 @@ const LoginForm = ({ onSwitchToSignup }) => {
     const value = e.target.value.trim();
     setServerUrl(e.target.value);
     setApiBaseUrl(value || null);
-    if (urlError) setUrlError('');
+    if (urlError) setUrlError("");
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     clearError();
-    setUrlError('');
+    setUrlError("");
     setApiBaseUrl(serverUrl.trim() || null);
     if (!getApiBaseUrl()) {
       setUrlError(
-        'Set the game server URL below (required on github.io). Locally use http://127.0.0.1:8000/api unless your host shared a tunnel URL.'
+        "Set the game server URL below (required on github.io). Locally use http://127.0.0.1:8000/api unless your host shared a tunnel URL.",
       );
       setShowServerUrl(true);
       return;
@@ -53,10 +67,10 @@ const LoginForm = ({ onSwitchToSignup }) => {
   return (
     <div
       style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
         background: token.bg,
         backgroundImage: `radial-gradient(ellipse 60% 50% at 50% 40%, rgba(124,58,237,0.08) 0%, transparent 70%)`,
         fontFamily: "'Rajdhani', sans-serif",
@@ -67,12 +81,12 @@ const LoginForm = ({ onSwitchToSignup }) => {
       <div
         className="lf-card"
         style={{
-          width: '100%',
+          width: "100%",
           maxWidth: 420,
           background: token.surface,
           border: `1px solid ${token.border}`,
           borderRadius: 16,
-          padding: '40px 36px',
+          padding: "40px 36px",
           boxShadow: `
             0 0 0 1px rgba(255,255,255,0.03) inset,
             0 32px 64px rgba(0,0,0,0.6),
@@ -81,20 +95,39 @@ const LoginForm = ({ onSwitchToSignup }) => {
         }}
       >
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
           {/* Decorative top accent */}
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 8,
-            marginBottom: 16,
-          }}>
-            <div style={{ width: 28, height: 1, background: `linear-gradient(to right, transparent, ${token.gold})` }} />
-            <div style={{
-              width: 8, height: 8,
-              background: token.gold,
-              transform: 'rotate(45deg)',
-              boxShadow: `0 0 12px ${token.gold}`,
-            }} />
-            <div style={{ width: 28, height: 1, background: `linear-gradient(to left, transparent, ${token.gold})` }} />
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              marginBottom: 16,
+            }}
+          >
+            <div
+              style={{
+                width: 28,
+                height: 1,
+                background: `linear-gradient(to right, transparent, ${token.gold})`,
+              }}
+            />
+            <div
+              style={{
+                width: 8,
+                height: 8,
+                background: token.gold,
+                transform: "rotate(45deg)",
+                boxShadow: `0 0 12px ${token.gold}`,
+              }}
+            />
+            <div
+              style={{
+                width: 28,
+                height: 1,
+                background: `linear-gradient(to left, transparent, ${token.gold})`,
+              }}
+            />
           </div>
 
           <h1
@@ -104,58 +137,73 @@ const LoginForm = ({ onSwitchToSignup }) => {
               fontSize: 26,
               fontFamily: "'Cinzel Decorative', cursive",
               fontWeight: 700,
-              letterSpacing: '0.04em',
+              letterSpacing: "0.04em",
             }}
           >
             1(800)BIZARRE
           </h1>
-          <p style={{
-            marginTop: 8,
-            fontSize: 12,
-            letterSpacing: '0.2em',
-            textTransform: 'uppercase',
-            color: token.muted,
-          }}>
+          <p
+            style={{
+              marginTop: 8,
+              fontSize: 12,
+              letterSpacing: "0.2em",
+              textTransform: "uppercase",
+              color: token.muted,
+            }}
+          >
             Sign in to your account
           </p>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-
+        <form
+          onSubmit={handleSubmit}
+          style={{ display: "flex", flexDirection: "column", gap: 20 }}
+        >
           {/* Live-site warning */}
           {isLiveSite && !serverUrl && (
-            <div style={{
-              padding: '10px 14px',
-              background: token.warnDim,
-              border: `1px solid rgba(245,158,11,0.4)`,
-              borderRadius: 8,
-              fontSize: 12.5,
-              color: '#fcd34d',
-              lineHeight: 1.6,
-            }}>
-              Using the live site — set the Game server URL below (your host's backend, e.g.{' '}
-              <code style={{ color: '#fde68a' }}>https://xxx.ngrok-free.app/api</code>).
-              Host runs <code style={{ color: '#fde68a' }}>ngrok http 8000</code> and shares that URL.
+            <div
+              style={{
+                padding: "10px 14px",
+                background: token.warnDim,
+                border: `1px solid rgba(245,158,11,0.4)`,
+                borderRadius: 8,
+                fontSize: 12.5,
+                color: "#fcd34d",
+                lineHeight: 1.6,
+              }}
+            >
+              Using the live site — set the Game server URL below (your host's
+              backend, e.g.{" "}
+              <code style={{ color: "#fde68a" }}>
+                https://xxx.ngrok-free.app/api
+              </code>
+              ). Host runs{" "}
+              <code style={{ color: "#fde68a" }}>ngrok http 8000</code> and
+              shares that URL.
             </div>
           )}
 
           {/* Error */}
           {error && (
-            <div style={{
-              padding: '10px 14px',
-              background: token.dangerDim,
-              border: `1px solid rgba(239,68,68,0.4)`,
-              borderRadius: 8,
-              fontSize: 13,
-              color: '#fca5a5',
-              lineHeight: 1.6,
-            }}>
+            <div
+              style={{
+                padding: "10px 14px",
+                background: token.dangerDim,
+                border: `1px solid rgba(239,68,68,0.4)`,
+                borderRadius: 8,
+                fontSize: 13,
+                color: "#fca5a5",
+                lineHeight: 1.6,
+              }}
+            >
               {error}
-              {error.includes('Could not reach game server') && isLiveSite && (
+              {error.includes("Could not reach game server") && isLiveSite && (
                 <p style={{ marginTop: 6, marginBottom: 0, fontSize: 12 }}>
-                  Enter the host's URL above: <strong>https://</strong>their-ngrok-url
-                  <strong>/api</strong> (host runs <code>ngrok http 8000</code>).
+                  Enter the host's URL above: <strong>https://</strong>
+                  their-ngrok-url
+                  <strong>/api</strong> (host runs <code>ngrok http 8000</code>
+                  ).
                 </p>
               )}
             </div>
@@ -170,26 +218,30 @@ const LoginForm = ({ onSwitchToSignup }) => {
               className="lf-toggle"
               onClick={() => setShowServerUrl((s) => !s)}
               style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
+                background: "none",
+                border: "none",
+                cursor: "pointer",
                 padding: 0,
                 fontSize: 12,
-                letterSpacing: '0.08em',
-                color: '#4a4a6a',
-                display: 'flex',
-                alignItems: 'center',
+                letterSpacing: "0.08em",
+                color: "#4a4a6a",
+                display: "flex",
+                alignItems: "center",
                 gap: 6,
-                transition: 'color 0.2s',
+                transition: "color 0.2s",
               }}
             >
-              <span style={{
-                display: 'inline-block',
-                fontSize: 9,
-                transition: 'transform 0.2s',
-                transform: showServerUrl ? 'rotate(90deg)' : 'rotate(0deg)',
-              }}>▶</span>
-              Game server {isLiveSite ? '(required here)' : '(optional)'}
+              <span
+                style={{
+                  display: "inline-block",
+                  fontSize: 9,
+                  transition: "transform 0.2s",
+                  transform: showServerUrl ? "rotate(90deg)" : "rotate(0deg)",
+                }}
+              >
+                ▶
+              </span>
+              Game server {isLiveSite ? "(required here)" : "(optional)"}
             </button>
 
             {showServerUrl && (
@@ -201,14 +253,30 @@ const LoginForm = ({ onSwitchToSignup }) => {
                   placeholder="https://xxx.ngrok-free.app/api"
                 />
                 {urlError && (
-                  <p style={{ marginTop: 8, marginBottom: 0, fontSize: 12, color: '#fca5a5', lineHeight: 1.5 }}>
+                  <p
+                    style={{
+                      marginTop: 8,
+                      marginBottom: 0,
+                      fontSize: 12,
+                      color: "#fca5a5",
+                      lineHeight: 1.5,
+                    }}
+                  >
                     {urlError}
                   </p>
                 )}
-                <p style={{ marginTop: 6, marginBottom: 0, fontSize: 11.5, color: '#3d3d5c', lineHeight: 1.5 }}>
+                <p
+                  style={{
+                    marginTop: 6,
+                    marginBottom: 0,
+                    fontSize: 11.5,
+                    color: "#3d3d5c",
+                    lineHeight: 1.5,
+                  }}
+                >
                   {isLiveSite
-                    ? 'Paste the URL your host sends (must include /api). This site has no baked-in API host.'
-                    : 'Leave blank to use http://127.0.0.1:8000/api (local dev). When playing remotely, use the host’s tunnel URL.'}
+                    ? "Paste the URL your host sends (must include /api). This site has no baked-in API host."
+                    : "Leave blank to use http://127.0.0.1:8000/api (local dev). When playing remotely, use the host’s tunnel URL."}
                 </p>
               </div>
             )}
@@ -250,61 +318,68 @@ const LoginForm = ({ onSwitchToSignup }) => {
             className="lf-btn-primary"
             style={{
               marginTop: 4,
-              width: '100%',
-              padding: '12px 0',
+              width: "100%",
+              padding: "12px 0",
               background: token.accent,
-              border: 'none',
+              border: "none",
               borderRadius: 8,
-              color: '#fff',
+              color: "#fff",
               fontSize: 13,
               fontFamily: "'Rajdhani', sans-serif",
               fontWeight: 700,
-              letterSpacing: '0.15em',
-              textTransform: 'uppercase',
-              cursor: isLoading ? 'not-allowed' : 'pointer',
+              letterSpacing: "0.15em",
+              textTransform: "uppercase",
+              cursor: isLoading ? "not-allowed" : "pointer",
               opacity: isLoading ? 0.55 : 1,
-              transition: 'background 0.2s, box-shadow 0.2s, transform 0.15s',
+              transition: "background 0.2s, box-shadow 0.2s, transform 0.15s",
               boxShadow: `0 4px 16px ${token.accentGlow}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               gap: 8,
             }}
           >
             {isLoading ? (
               <>
-                <span style={{
-                  display: 'inline-block',
-                  width: 14, height: 14,
-                  borderRadius: '50%',
-                  border: '2px solid rgba(255,255,255,0.3)',
-                  borderTopColor: '#fff',
-                  animation: 'spin 0.7s linear infinite',
-                }} />
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: 14,
+                    height: 14,
+                    borderRadius: "50%",
+                    border: "2px solid rgba(255,255,255,0.3)",
+                    borderTopColor: "#fff",
+                    animation: "spin 0.7s linear infinite",
+                  }}
+                />
                 Signing in…
               </>
-            ) : 'Sign In'}
+            ) : (
+              "Sign In"
+            )}
           </button>
 
           {/* Switch to signup */}
-          <div style={{ textAlign: 'center', paddingTop: 4 }}>
+          <div style={{ textAlign: "center", paddingTop: 4 }}>
             <button
               type="button"
               onClick={onSwitchToSignup}
               className="lf-btn-ghost"
               style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
+                background: "none",
+                border: "none",
+                cursor: "pointer",
                 fontSize: 12.5,
-                color: '#5b5b7d',
-                letterSpacing: '0.04em',
-                transition: 'color 0.2s',
+                color: "#5b5b7d",
+                letterSpacing: "0.04em",
+                transition: "color 0.2s",
                 padding: 0,
               }}
             >
-              Don't have an account?{' '}
-              <span style={{ color: token.accent, fontWeight: 600 }}>Sign up</span>
+              Don't have an account?{" "}
+              <span style={{ color: token.accent, fontWeight: 600 }}>
+                Sign up
+              </span>
             </button>
           </div>
         </form>

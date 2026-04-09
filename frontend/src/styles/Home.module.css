@@ -3,7 +3,7 @@
   min-height: 100vh;
   background-color: #000000;
   color: #ffffff;
-  font-family: Monaco, Menlo, 'Ubuntu Mono', monospace;
+  font-family: Monaco, Menlo, "Ubuntu Mono", monospace;
   font-size: 0.875rem; /* text-sm */
 }
 
@@ -353,15 +353,15 @@
   .campaign-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  
+
   .hero-title {
     font-size: 6rem;
   }
-  
+
   .hero-subtitle {
     font-size: 2.25rem;
   }
-  
+
   .hero-description {
     font-size: 1.5rem;
   }
@@ -524,7 +524,7 @@
   .features-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  
+
   .features-title {
     font-size: 3rem;
   }
@@ -632,7 +632,7 @@
   .quick-actions-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  
+
   .quick-actions-title {
     font-size: 3rem;
   }
@@ -734,7 +734,8 @@
 }
 
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
   50% {
@@ -761,4 +762,4 @@
 
 .grid {
   display: grid;
-} 
+}

@@ -1,23 +1,23 @@
-import React from 'react';
+import React from "react";
 
 // ─── Design tokens ──────────────────────────────────────────────────────────
 export const token = {
-  bg:           '#080810',
-  surface:      '#0e0e1a',
-  surfaceHover: '#13131f',
-  border:       '#2a2a4a',
-  borderFocus:  '#7c3aed',
-  text:         '#e2e2f0',
-  muted:        '#6b6b8d',
-  accent:       '#7c3aed',
-  accentHover:  '#6d28d9',
-  accentGlow:   'rgba(124,58,237,0.35)',
-  gold:         '#f5c842',
-  goldDim:      'rgba(245,200,66,0.12)',
-  danger:       '#ef4444',
-  dangerDim:    'rgba(239,68,68,0.15)',
-  warn:         '#f59e0b',
-  warnDim:      'rgba(245,158,11,0.12)',
+  bg: "#080810",
+  surface: "#0e0e1a",
+  surfaceHover: "#13131f",
+  border: "#2a2a4a",
+  borderFocus: "#7c3aed",
+  text: "#e2e2f0",
+  muted: "#6b6b8d",
+  accent: "#7c3aed",
+  accentHover: "#6d28d9",
+  accentGlow: "rgba(124,58,237,0.35)",
+  gold: "#f5c842",
+  goldDim: "rgba(245,200,66,0.12)",
+  danger: "#ef4444",
+  dangerDim: "rgba(239,68,68,0.15)",
+  warn: "#f59e0b",
+  warnDim: "rgba(245,158,11,0.12)",
 };
 
 // ─── Keyframes injected once ─────────────────────────────────────────────────
@@ -72,22 +72,29 @@ const KEYFRAMES = `
 `;
 
 export function injectStyles() {
-  if (typeof document === 'undefined') return;
-  if (document.getElementById('lf-styles')) return;
-  const el = document.createElement('style');
-  el.id = 'lf-styles';
+  if (typeof document === "undefined") return;
+  if (document.getElementById("lf-styles")) return;
+  const el = document.createElement("style");
+  el.id = "lf-styles";
   el.textContent = KEYFRAMES;
   document.head.appendChild(el);
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 export const Divider = () => (
-  <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '4px 0' }}>
+  <div
+    style={{ display: "flex", alignItems: "center", gap: 12, margin: "4px 0" }}
+  >
     <div style={{ flex: 1, height: 1, background: token.border }} />
-    <div style={{
-      width: 6, height: 6, borderRadius: '50%',
-      background: token.accent, boxShadow: `0 0 8px ${token.accentGlow}`,
-    }} />
+    <div
+      style={{
+        width: 6,
+        height: 6,
+        borderRadius: "50%",
+        background: token.accent,
+        boxShadow: `0 0 8px ${token.accentGlow}`,
+      }}
+    />
     <div style={{ flex: 1, height: 1, background: token.border }} />
   </div>
 );
@@ -96,13 +103,13 @@ export const Label = ({ htmlFor, children }) => (
   <label
     htmlFor={htmlFor}
     style={{
-      display: 'block',
+      display: "block",
       marginBottom: 6,
       fontSize: 11,
       fontFamily: "'Rajdhani', sans-serif",
       fontWeight: 600,
-      letterSpacing: '0.12em',
-      textTransform: 'uppercase',
+      letterSpacing: "0.12em",
+      textTransform: "uppercase",
       color: token.muted,
     }}
   >
@@ -113,7 +120,7 @@ export const Label = ({ htmlFor, children }) => (
 export const TextInput = ({
   id,
   name,
-  type = 'text',
+  type = "text",
   required,
   value,
   onChange,
@@ -130,18 +137,18 @@ export const TextInput = ({
     placeholder={placeholder}
     className="lf-input"
     style={{
-      display: 'block',
-      width: '100%',
-      boxSizing: 'border-box',
-      padding: '10px 14px',
-      background: '#07070f',
+      display: "block",
+      width: "100%",
+      boxSizing: "border-box",
+      padding: "10px 14px",
+      background: "#07070f",
       border: `1px solid ${hasError ? token.danger : token.border}`,
       borderRadius: 8,
       color: token.text,
       fontFamily: "'Rajdhani', sans-serif",
       fontSize: 15,
       fontWeight: 500,
-      transition: 'border-color 0.2s, box-shadow 0.2s',
+      transition: "border-color 0.2s, box-shadow 0.2s",
     }}
   />
 );

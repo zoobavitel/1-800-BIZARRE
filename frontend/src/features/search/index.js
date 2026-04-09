@@ -1,2 +1,2 @@
 // Search Feature - Public API
-export { useSearch } from './hooks/useSearch'; 
+export { useSearch } from "./hooks/useSearch";

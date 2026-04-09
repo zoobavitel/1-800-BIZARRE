@@ -5,25 +5,27 @@ This directory contains the core source code for the React frontend application.
 ## Purpose
 
 The primary purpose of this directory is to:
-*   **Develop React Components**: House all reusable UI components that make up the application's interface.
-*   **Implement Application Logic**: Contain the JavaScript/TypeScript code that defines the behavior and state management of the frontend.
-*   **Manage Styles**: Organize CSS or other styling solutions used to visually design the application.
-*   **Define Entry Point**: Include the main entry file (e.g., `main.jsx` or `index.jsx`) that bootstraps the React application.
+
+- **Develop React Components**: House all reusable UI components that make up the application's interface.
+- **Implement Application Logic**: Contain the JavaScript/TypeScript code that defines the behavior and state management of the frontend.
+- **Manage Styles**: Organize CSS or other styling solutions used to visually design the application.
+- **Define Entry Point**: Include the main entry file (e.g., `main.jsx` or `index.jsx`) that bootstraps the React application.
 
 ## Key Contents
 
-*   `Character.jsx`: A React component likely responsible for rendering and managing the character sheet, including displaying character data and handling user interactions for character updates.
-*   `Home.jsx`: A React component likely representing the main landing page or dashboard of the application.
-*   Other `.jsx` or `.tsx` files: (Not explicitly listed, but typically present) Additional React components for various parts of the UI (e.g., navigation, forms, data display).
-*   CSS/SCSS/Tailwind CSS files: (Not explicitly listed, but typically present) Styling definitions for the components and overall application layout.
+- `Character.jsx`: A React component likely responsible for rendering and managing the character sheet, including displaying character data and handling user interactions for character updates.
+- `Home.jsx`: A React component likely representing the main landing page or dashboard of the application.
+- Other `.jsx` or `.tsx` files: (Not explicitly listed, but typically present) Additional React components for various parts of the UI (e.g., navigation, forms, data display).
+- CSS/SCSS/Tailwind CSS files: (Not explicitly listed, but typically present) Styling definitions for the components and overall application layout.
 
 ## Code Quality and Structure
 
 This directory follows a component-based architecture, which is a best practice for React applications. This promotes:
-*   **Modularity**: Each component is self-contained and responsible for a specific part of the UI.
-*   **Reusability**: Components can be easily reused across different parts of the application.
-*   **Maintainability**: Changes to one part of the UI are isolated to its respective component, reducing the risk of unintended side effects.
-*   **Testability**: Individual components can be tested in isolation.
+
+- **Modularity**: Each component is self-contained and responsible for a specific part of the UI.
+- **Reusability**: Components can be easily reused across different parts of the application.
+- **Maintainability**: Changes to one part of the UI are isolated to its respective component, reducing the risk of unintended side effects.
+- **Testability**: Individual components can be tested in isolation.
 
 ## Logic Behind Decisions
 

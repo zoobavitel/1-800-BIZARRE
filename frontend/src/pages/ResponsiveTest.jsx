@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 
 // Test component to validate TailwindCSS responsive design features
 const ResponsiveTest = () => {
@@ -12,7 +12,8 @@ const ResponsiveTest = () => {
           </span>
         </h1>
         <p className="text-sm sm:text-base lg:text-lg text-gray-400 max-w-md sm:max-w-2xl lg:max-w-4xl mx-auto">
-          Testing TailwindCSS responsive design with different breakpoints and utility classes.
+          Testing TailwindCSS responsive design with different breakpoints and
+          utility classes.
         </p>
       </header>
 
@@ -23,7 +24,7 @@ const ResponsiveTest = () => {
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
           {[1, 2, 3, 4, 5, 6, 7, 8].map((item) => (
-            <div 
+            <div
               key={item}
               className="bg-gray-800 border border-gray-600 rounded-lg p-4 sm:p-6 lg:p-8 hover:border-purple-500 transition-all duration-300 transform hover:scale-105"
             >
@@ -32,7 +33,8 @@ const ResponsiveTest = () => {
                 Card {item}
               </h3>
               <p className="text-sm sm:text-base text-gray-400 line-clamp-2">
-                This is a test card to demonstrate responsive design with TailwindCSS. The layout adapts to different screen sizes.
+                This is a test card to demonstrate responsive design with
+                TailwindCSS. The layout adapts to different screen sizes.
               </p>
             </div>
           ))}
@@ -50,7 +52,8 @@ const ResponsiveTest = () => {
               Extra Small to Large
             </h3>
             <p className="text-xs sm:text-sm lg:text-base xl:text-lg text-gray-400">
-              This text scales from extra small on mobile to large on extra large screens.
+              This text scales from extra small on mobile to large on extra
+              large screens.
             </p>
           </div>
           <div className="bg-gray-800 rounded-lg p-4 sm:p-6 lg:p-8">
@@ -90,19 +93,25 @@ const ResponsiveTest = () => {
         </h2>
         <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row gap-4 sm:gap-6 lg:gap-8">
           <div className="flex-1 bg-red-600 rounded-lg p-4 sm:p-6 lg:p-8">
-            <h3 className="text-lg sm:text-xl font-bold text-white mb-2">Flex Item 1</h3>
+            <h3 className="text-lg sm:text-xl font-bold text-white mb-2">
+              Flex Item 1
+            </h3>
             <p className="text-red-100 text-sm sm:text-base">
               Changes from column to row layout at different breakpoints
             </p>
           </div>
           <div className="flex-1 bg-blue-600 rounded-lg p-4 sm:p-6 lg:p-8">
-            <h3 className="text-lg sm:text-xl font-bold text-white mb-2">Flex Item 2</h3>
+            <h3 className="text-lg sm:text-xl font-bold text-white mb-2">
+              Flex Item 2
+            </h3>
             <p className="text-blue-100 text-sm sm:text-base">
               Responsive flex layout demonstration
             </p>
           </div>
           <div className="flex-1 bg-green-600 rounded-lg p-4 sm:p-6 lg:p-8">
-            <h3 className="text-lg sm:text-xl font-bold text-white mb-2">Flex Item 3</h3>
+            <h3 className="text-lg sm:text-xl font-bold text-white mb-2">
+              Flex Item 3
+            </h3>
             <p className="text-green-100 text-sm sm:text-base">
               Works across all screen sizes
             </p>
@@ -118,9 +127,15 @@ const ResponsiveTest = () => {
         <div className="space-y-4">
           <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
             <p className="text-white text-sm sm:text-base">
-              <span className="inline sm:hidden text-red-400 font-bold">Mobile only text</span>
-              <span className="hidden sm:inline lg:hidden text-blue-400 font-bold">Tablet only text</span>
-              <span className="hidden lg:inline text-green-400 font-bold">Desktop only text</span>
+              <span className="inline sm:hidden text-red-400 font-bold">
+                Mobile only text
+              </span>
+              <span className="hidden sm:inline lg:hidden text-blue-400 font-bold">
+                Tablet only text
+              </span>
+              <span className="hidden lg:inline text-green-400 font-bold">
+                Desktop only text
+              </span>
             </p>
           </div>
         </div>
@@ -129,11 +144,21 @@ const ResponsiveTest = () => {
       {/* Breakpoint indicator */}
       <section className="fixed bottom-4 right-4 bg-black bg-opacity-75 rounded-lg p-2 sm:p-3 lg:p-4 border border-gray-600">
         <div className="text-white text-xs sm:text-sm font-mono">
-          <div className="block sm:hidden text-red-400">📱 Mobile (&lt; 640px)</div>
-          <div className="hidden sm:block md:hidden text-blue-400">📱 Small (640px - 768px)</div>
-          <div className="hidden md:block lg:hidden text-yellow-400">💻 Medium (768px - 1024px)</div>
-          <div className="hidden lg:block xl:hidden text-green-400">🖥️ Large (1024px - 1280px)</div>
-          <div className="hidden xl:block text-purple-400">🖥️ Extra Large (&gt; 1280px)</div>
+          <div className="block sm:hidden text-red-400">
+            📱 Mobile (&lt; 640px)
+          </div>
+          <div className="hidden sm:block md:hidden text-blue-400">
+            📱 Small (640px - 768px)
+          </div>
+          <div className="hidden md:block lg:hidden text-yellow-400">
+            💻 Medium (768px - 1024px)
+          </div>
+          <div className="hidden lg:block xl:hidden text-green-400">
+            🖥️ Large (1024px - 1280px)
+          </div>
+          <div className="hidden xl:block text-purple-400">
+            🖥️ Extra Large (&gt; 1280px)
+          </div>
         </div>
       </section>
     </div>

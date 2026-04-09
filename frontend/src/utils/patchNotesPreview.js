@@ -9,7 +9,7 @@ export function flattenPatchNotesPreview(entries, limit = 7) {
   if (!Array.isArray(entries)) return rows;
   for (const entry of entries) {
     for (const section of entry.sections || []) {
-      const cat = section.title || 'Other';
+      const cat = section.title || "Other";
       for (const item of section.items || []) {
         rows.push({ date: entry.date, cat, text: item });
         if (rows.length >= limit) return rows;

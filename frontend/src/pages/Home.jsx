@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import '../styles/Home.css';
+import React, { useState, useEffect, useMemo } from "react";
+import "../styles/Home.css";
 import {
   characterAPI,
   campaignAPI,
@@ -7,43 +7,46 @@ import {
   crewAPI,
   siteStatsAPI,
   transformBackendToFrontend,
-} from '../features/character-sheet';
-import { useAuth } from '../features/auth';
-import { PATCH_NOTES } from '../data/patchNotes';
-import { flattenPatchNotesPreview } from '../utils/patchNotesPreview';
-import { buildSessionsByMonth, buildBarChartRows } from '../utils/homeChartData';
-import HomeSessionLineChart from '../components/home/HomeSessionLineChart';
-import HomeStatsBarChart from '../components/home/HomeStatsBarChart';
-import HomeStandCoin from '../components/home/HomeStandCoin';
+} from "../features/character-sheet";
+import { useAuth } from "../features/auth";
+import { PATCH_NOTES } from "../data/patchNotes";
+import { flattenPatchNotesPreview } from "../utils/patchNotesPreview";
+import {
+  buildSessionsByMonth,
+  buildBarChartRows,
+} from "../utils/homeChartData";
+import HomeSessionLineChart from "../components/home/HomeSessionLineChart";
+import HomeStatsBarChart from "../components/home/HomeStatsBarChart";
+import HomeStandCoin from "../components/home/HomeStandCoin";
 
 function tierRoman(level) {
   const n = Number(level);
-  if (!Number.isFinite(n) || n <= 0) return '—';
-  const map = ['I', 'II', 'III', 'IV', 'V', 'VI'];
+  if (!Number.isFinite(n) || n <= 0) return "—";
+  const map = ["I", "II", "III", "IV", "V", "VI"];
   return map[Math.min(n - 1, map.length - 1)] || String(n);
 }
 
 function holdLabel(hold) {
-  if (!hold) return '—';
+  if (!hold) return "—";
   return hold.charAt(0).toUpperCase() + hold.slice(1);
 }
 
 function factionStatusClass(rep) {
   const r = Number(rep);
-  if (r <= -4) return 'f-status-war';
-  if (r < 0) return 'f-status-hostile';
-  if (r === 0) return 'f-status-neutral';
-  if (r >= 2) return 'f-status-allied';
-  return 'f-status-neutral';
+  if (r <= -4) return "f-status-war";
+  if (r < 0) return "f-status-hostile";
+  if (r === 0) return "f-status-neutral";
+  if (r >= 2) return "f-status-allied";
+  return "f-status-neutral";
 }
 
 function factionStatusLabel(rep) {
   const r = Number(rep);
-  if (r <= -4) return 'WAR';
-  if (r < 0) return 'Hostile';
-  if (r === 0) return 'Neutral';
-  if (r >= 2) return 'Allied';
-  return 'Friendly';
+  if (r <= -4) return "WAR";
+  if (r < 0) return "Hostile";
+  if (r === 0) return "Neutral";
+  if (r >= 2) return "Allied";
+  return "Friendly";
 }
 
 const HomePage = ({
@@ -82,7 +85,7 @@ const HomePage = ({
     siteStatsAPI
       .getSiteStats()
       .then((data) => {
-        if (!cancelled && data && typeof data === 'object') setSiteStats(data);
+        if (!cancelled && data && typeof data === "object") setSiteStats(data);
       })
       .catch(() => {
         if (!cancelled) setSiteStats(null);
@@ -126,10 +129,12 @@ const HomePage = ({
     setError(null);
     try {
       const backendCharacters = await characterAPI.getCharacters();
-      const frontendCharacters = (backendCharacters || []).map(transformBackendToFrontend);
+      const frontendCharacters = (backendCharacters || []).map(
+        transformBackendToFrontend,
+      );
       setCharacters(frontendCharacters);
     } catch (err) {
-      console.error('Failed to load characters:', err);
+      console.error("Failed to load characters:", err);
       setError(err.message);
       setCharacters([]);
     } finally {
@@ -140,10 +145,12 @@ const HomePage = ({
   const patchRows = useMemo(() => flattenPatchNotesPreview(PATCH_NOTES, 7), []);
 
   const heroStats = useMemo(() => {
-    const activeCampaigns = (campaigns || []).filter((c) => c.is_active !== false).length;
+    const activeCampaigns = (campaigns || []).filter(
+      (c) => c.is_active !== false,
+    ).length;
     const sessionCount = (campaigns || []).reduce(
       (acc, c) => acc + (Array.isArray(c.sessions) ? c.sessions.length : 0),
-      0
+      0,
     );
     const pcCount = characters.length;
     const npcCount = npcs.length;
@@ -156,33 +163,40 @@ const HomePage = ({
     };
   }, [campaigns, characters.length, npcs.length, crewCount]);
 
-  const sessionsByMonth = useMemo(() => buildSessionsByMonth(campaigns), [campaigns]);
+  const sessionsByMonth = useMemo(
+    () => buildSessionsByMonth(campaigns),
+    [campaigns],
+  );
   const barChartRows = useMemo(() => buildBarChartRows(heroStats), [heroStats]);
   const chartsLoading = loading || campaignsLoading || npcsLoading;
 
   const playbookLine = useMemo(() => {
     const pc = siteStats?.playbook_counts;
-    if (!pc) return '—';
+    if (!pc) return "—";
     return `Stand ${pc.STAND ?? 0} · Hamon ${pc.HAMON ?? 0} · Spin ${pc.SPIN ?? 0}`;
   }, [siteStats]);
 
   const topHeritagesLine = useMemo(() => {
     const list = siteStats?.top_heritages;
-    if (!Array.isArray(list) || list.length === 0) return '—';
-    return list.map((h) => `${h.name} (${h.count})`).join(', ');
+    if (!Array.isArray(list) || list.length === 0) return "—";
+    return list.map((h) => `${h.name} (${h.count})`).join(", ");
   }, [siteStats]);
 
   const primaryCampaignForFactions = useMemo(() => {
-    const withF = (campaigns || []).find((c) => Array.isArray(c.factions) && c.factions.length);
+    const withF = (campaigns || []).find(
+      (c) => Array.isArray(c.factions) && c.factions.length,
+    );
     return withF || (campaigns || [])[0] || null;
   }, [campaigns]);
 
   const handleCreateCharacter = () => {
-    if (typeof onNavigateToCharacter === 'function') onNavigateToCharacter(null);
+    if (typeof onNavigateToCharacter === "function")
+      onNavigateToCharacter(null);
   };
 
   const handleEditCharacter = (character) => {
-    if (typeof onNavigateToCharacter === 'function' && character?.id) onNavigateToCharacter(character.id);
+    if (typeof onNavigateToCharacter === "function" && character?.id)
+      onNavigateToCharacter(character.id);
   };
 
   const handleDeleteCharacter = async (characterId) => {
@@ -190,21 +204,22 @@ const HomePage = ({
       await characterAPI.deleteCharacter(characterId);
       setCharacters((prev) => prev.filter((char) => char.id !== characterId));
     } catch (err) {
-      console.error('Failed to delete character:', err);
-      setError(err.message || 'Failed to delete character');
+      console.error("Failed to delete character:", err);
+      setError(err.message || "Failed to delete character");
     }
   };
 
   const handleManageCampaign = (campaignId) => {
-    if (typeof onNavigateToCampaign === 'function') onNavigateToCampaign(campaignId);
+    if (typeof onNavigateToCampaign === "function")
+      onNavigateToCampaign(campaignId);
   };
 
   const handleEditNpc = (npcId) => {
-    if (typeof onNavigateToNPC === 'function' && npcId) onNavigateToNPC(npcId);
+    if (typeof onNavigateToNPC === "function" && npcId) onNavigateToNPC(npcId);
   };
 
   const openRules = () => {
-    if (typeof onNavigateToRules === 'function') onNavigateToRules();
+    if (typeof onNavigateToRules === "function") onNavigateToRules();
   };
 
   return (
@@ -221,7 +236,7 @@ const HomePage = ({
           <div className="header-left">
             <button
               type="button"
-              className={`hamburger${menuOpen ? ' open' : ''}`}
+              className={`hamburger${menuOpen ? " open" : ""}`}
               onClick={onToggleMenu}
               aria-label="Open menu"
             >
@@ -238,7 +253,11 @@ const HomePage = ({
               Search
             </button>
             <div className="account-wrapper">
-              <button type="button" className="header-btn" onClick={onOpenAccountMenu}>
+              <button
+                type="button"
+                className="header-btn"
+                onClick={onOpenAccountMenu}
+              >
                 Account
               </button>
             </div>
@@ -256,10 +275,18 @@ const HomePage = ({
               <span className="accent">BIZARRE</span>
             </h1>
             <div className="hero-cta fade-up d3">
-              <button type="button" className="btn btn-primary" onClick={handleCreateCharacter}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleCreateCharacter}
+              >
                 + Create Character
               </button>
-              <button type="button" className="btn btn-secondary" onClick={openRules}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={openRules}
+              >
                 Game Rules
               </button>
             </div>
@@ -276,21 +303,27 @@ const HomePage = ({
                   <span className="hero-stat-dot hero-stat-dot-green" />
                   Campaigns
                 </span>
-                <span className="hero-stat-value">{heroStats.activeCampaigns} active</span>
+                <span className="hero-stat-value">
+                  {heroStats.activeCampaigns} active
+                </span>
               </div>
               <div className="hero-stat-row">
                 <span className="hero-stat-label">
                   <span className="hero-stat-dot hero-stat-dot-amber" />
                   Sessions
                 </span>
-                <span className="hero-stat-value">{heroStats.sessionCount} played</span>
+                <span className="hero-stat-value">
+                  {heroStats.sessionCount} played
+                </span>
               </div>
               <div className="hero-stat-row">
                 <span className="hero-stat-label">
                   <span className="hero-stat-dot hero-stat-dot-purple" />
                   Crews
                 </span>
-                <span className="hero-stat-value">{heroStats.crewCount} formed</span>
+                <span className="hero-stat-value">
+                  {heroStats.crewCount} formed
+                </span>
               </div>
               <div className="hero-stat-row">
                 <span className="hero-stat-label">
@@ -303,18 +336,27 @@ const HomePage = ({
               </div>
               <div className="hero-stat-row hero-stat-row-tall">
                 <span className="hero-stat-label">Stand / Hamon / Spin</span>
-                <span className="hero-stat-value hero-stat-value-compact">{playbookLine}</span>
+                <span className="hero-stat-value hero-stat-value-compact">
+                  {playbookLine}
+                </span>
               </div>
               <div className="hero-stat-row hero-stat-row-tall">
                 <span className="hero-stat-label">Top heritages</span>
-                <span className="hero-stat-value hero-stat-value-compact">{topHeritagesLine}</span>
+                <span className="hero-stat-value hero-stat-value-compact">
+                  {topHeritagesLine}
+                </span>
               </div>
             </div>
-            <HomeSessionLineChart data={sessionsByMonth} loading={chartsLoading} />
+            <HomeSessionLineChart
+              data={sessionsByMonth}
+              loading={chartsLoading}
+            />
             <HomeStatsBarChart data={barChartRows} loading={chartsLoading} />
             <div className="hero-art-label">
               <div className="hero-art-label-title">STAND USERS</div>
-              <div className="hero-art-label-sub">A Bizarre Adventure TTRPG</div>
+              <div className="hero-art-label-sub">
+                A Bizarre Adventure TTRPG
+              </div>
             </div>
           </div>
         </div>
@@ -325,7 +367,11 @@ const HomePage = ({
           <div className="split-label">Player</div>
           <div className="split-action-bar">
             <div className="split-title">Your Characters</div>
-            <button type="button" className="split-btn" onClick={handleCreateCharacter}>
+            <button
+              type="button"
+              className="split-btn"
+              onClick={handleCreateCharacter}
+            >
               + New
             </button>
           </div>
@@ -334,8 +380,12 @@ const HomePage = ({
             <p className="home-muted">Loading characters…</p>
           ) : error ? (
             <p className="home-error">
-              {error}{' '}
-              <button type="button" className="split-btn" onClick={loadCharacters}>
+              {error}{" "}
+              <button
+                type="button"
+                className="split-btn"
+                onClick={loadCharacters}
+              >
                 Retry
               </button>
             </p>
@@ -345,12 +395,16 @@ const HomePage = ({
                 <div className="p-card-stripe" />
                 <div className="p-card-body">
                   <div className="p-card-info">
-                    <div className="p-card-name">{character.name || '—'}</div>
-                    <div className="p-card-stand">「{character.standName || '—'}」</div>
+                    <div className="p-card-name">{character.name || "—"}</div>
+                    <div className="p-card-stand">
+                      「{character.standName || "—"}」
+                    </div>
                     <div className="p-card-tags">
-                      <span className="p-tag">{character.heritageName || character.heritage || '—'}</span>
-                      <span className="p-tag">{character.playbook || '—'}</span>
-                      <span className="p-tag">Lv {character.level ?? '—'}</span>
+                      <span className="p-tag">
+                        {character.heritageName || character.heritage || "—"}
+                      </span>
+                      <span className="p-tag">{character.playbook || "—"}</span>
+                      <span className="p-tag">Lv {character.level ?? "—"}</span>
                     </div>
                   </div>
                   <div className="p-card-actions">
@@ -386,7 +440,11 @@ const HomePage = ({
           </div>
           <div className="split-npc-row">
             <div className="split-label">Game Master</div>
-            <button type="button" className="split-btn split-btn-purple" onClick={() => onNavigateToNPC?.(null)}>
+            <button
+              type="button"
+              className="split-btn split-btn-purple"
+              onClick={() => onNavigateToNPC?.(null)}
+            >
               + New NPC
             </button>
           </div>
@@ -401,12 +459,14 @@ const HomePage = ({
                 <div className="npc-card-stripe" />
                 <div className="npc-card-body">
                   <div className="npc-card-info">
-                    <div className="npc-card-name">{npc.name || '—'}</div>
-                    <div className="npc-card-stand">「{npc.stand_name || '—'}」</div>
+                    <div className="npc-card-name">{npc.name || "—"}</div>
+                    <div className="npc-card-stand">
+                      「{npc.stand_name || "—"}」
+                    </div>
                     <div className="npc-card-meta">
-                      <span>Lv {npc.level ?? '—'}</span>
+                      <span>Lv {npc.level ?? "—"}</span>
                       <span>·</span>
-                      <span>{npc.role || 'NPC'}</span>
+                      <span>{npc.role || "NPC"}</span>
                     </div>
                   </div>
                   <div className="p-card-actions">
@@ -428,7 +488,11 @@ const HomePage = ({
           <div className="split-label">Campaigns</div>
           <div className="split-action-bar">
             <div className="split-title">Your Campaigns</div>
-            <button type="button" className="split-btn" onClick={() => onNavigateToCampaign?.(null)}>
+            <button
+              type="button"
+              className="split-btn"
+              onClick={() => onNavigateToCampaign?.(null)}
+            >
               + New Campaign
             </button>
           </div>
@@ -440,33 +504,49 @@ const HomePage = ({
           ) : (
             campaigns.map((campaign) => {
               const isGm = user && campaign.gm?.id === user.id;
-              const role = isGm ? 'GM' : 'Player';
-              const playerCount = Array.isArray(campaign.players) ? campaign.players.length : 0;
-              const myChar = (campaign.campaign_characters || []).find((cc) => cc.user_id === user?.id);
+              const role = isGm ? "GM" : "Player";
+              const playerCount = Array.isArray(campaign.players)
+                ? campaign.players.length
+                : 0;
+              const myChar = (campaign.campaign_characters || []).find(
+                (cc) => cc.user_id === user?.id,
+              );
               const playingAs = myChar?.true_name || null;
-              const sessionCount = Array.isArray(campaign.sessions) ? campaign.sessions.length : 0;
+              const sessionCount = Array.isArray(campaign.sessions)
+                ? campaign.sessions.length
+                : 0;
               const live = campaign.active_session_detail;
               const inactive = campaign.is_active === false;
 
               return (
                 <div
                   key={campaign.id}
-                  className={`g-card${inactive ? ' g-card-inactive' : ''}`}
+                  className={`g-card${inactive ? " g-card-inactive" : ""}`}
                   role="button"
                   tabIndex={0}
                   onClick={() => handleManageCampaign(campaign.id)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleManageCampaign(campaign.id)}
+                  onKeyDown={(e) =>
+                    e.key === "Enter" && handleManageCampaign(campaign.id)
+                  }
                 >
                   <div className="g-card-header">
-                    <div className="g-card-name">{campaign.name || '—'}</div>
+                    <div className="g-card-name">{campaign.name || "—"}</div>
                     <div className="g-card-badges">
-                      <span className={`g-badge ${inactive ? 'g-badge-inactive' : 'g-badge-active'}`}>
-                        {inactive ? 'Inactive' : 'Active'}
+                      <span
+                        className={`g-badge ${inactive ? "g-badge-inactive" : "g-badge-active"}`}
+                      >
+                        {inactive ? "Inactive" : "Active"}
                       </span>
-                      <span className={`g-badge ${isGm ? 'g-badge-gm' : 'g-badge-player'}`}>{role}</span>
+                      <span
+                        className={`g-badge ${isGm ? "g-badge-gm" : "g-badge-player"}`}
+                      >
+                        {role}
+                      </span>
                     </div>
                   </div>
-                  <div className="g-card-desc">{campaign.description || '—'}</div>
+                  <div className="g-card-desc">
+                    {campaign.description || "—"}
+                  </div>
                   <div className="g-card-stats">
                     <span>
                       Players
@@ -479,13 +559,16 @@ const HomePage = ({
                     {playingAs && (
                       <span>
                         Playing as
-                        <span className="g-card-stat-val g-card-stat-accent">{playingAs}</span>
+                        <span className="g-card-stat-val g-card-stat-accent">
+                          {playingAs}
+                        </span>
                       </span>
                     )}
                   </div>
                   {live && !inactive && (
                     <div className="g-session-live">
-                      {live.name ? `Session: ${live.name}` : 'Session active'} — open campaign to join
+                      {live.name ? `Session: ${live.name}` : "Session active"} —
+                      open campaign to join
                     </div>
                   )}
                 </div>
@@ -501,17 +584,24 @@ const HomePage = ({
           <div className="split-npc-row">
             <div>
               {primaryCampaignForFactions ? (
-                <div className="split-label">{primaryCampaignForFactions.name}</div>
+                <div className="split-label">
+                  {primaryCampaignForFactions.name}
+                </div>
               ) : (
                 <div className="split-label">Factions</div>
               )}
             </div>
-            <button type="button" className="split-btn split-btn-amber" onClick={() => onNavigateToCampaign?.(null)}>
+            <button
+              type="button"
+              className="split-btn split-btn-amber"
+              onClick={() => onNavigateToCampaign?.(null)}
+            >
               + New Faction
             </button>
           </div>
 
-          {!primaryCampaignForFactions || !Array.isArray(primaryCampaignForFactions.factions) ? (
+          {!primaryCampaignForFactions ||
+          !Array.isArray(primaryCampaignForFactions.factions) ? (
             <p className="home-muted-dark">No factions yet.</p>
           ) : (
             primaryCampaignForFactions.factions.map((f) => (
@@ -521,23 +611,31 @@ const HomePage = ({
                   <div className="f-card-meta">
                     <span>
                       Tier
-                      <span className="f-card-meta-val"> {tierRoman(f.level)}</span>
+                      <span className="f-card-meta-val">
+                        {" "}
+                        {tierRoman(f.level)}
+                      </span>
                     </span>
                     <span>
                       Hold
-                      <span className="f-card-meta-val"> {holdLabel(f.hold)}</span>
+                      <span className="f-card-meta-val">
+                        {" "}
+                        {holdLabel(f.hold)}
+                      </span>
                     </span>
                     <span>
                       Rep
                       <span className="f-card-meta-val">
-                        {' '}
-                        {(f.reputation ?? 0) > 0 ? '+' : ''}
+                        {" "}
+                        {(f.reputation ?? 0) > 0 ? "+" : ""}
                         {f.reputation ?? 0}
                       </span>
                     </span>
                   </div>
                 </div>
-                <div className={`f-card-status ${factionStatusClass(f.reputation)}`}>
+                <div
+                  className={`f-card-status ${factionStatusClass(f.reputation)}`}
+                >
                   {factionStatusLabel(f.reputation)}
                 </div>
               </div>
@@ -553,7 +651,11 @@ const HomePage = ({
           <div className="qa-desc">Build your next Stand user.</div>
           <div className="qa-arrow">→</div>
         </button>
-        <button type="button" className="qa" onClick={() => onNavigateToCampaign?.(null)}>
+        <button
+          type="button"
+          className="qa"
+          onClick={() => onNavigateToCampaign?.(null)}
+        >
           <div className="qa-icon">☆</div>
           <div className="qa-title">Join Campaign</div>
           <div className="qa-desc">Find other bizarre individuals.</div>
@@ -565,7 +667,11 @@ const HomePage = ({
           <div className="qa-desc">Master the SRD mechanics.</div>
           <div className="qa-arrow">→</div>
         </button>
-        <button type="button" className="qa" onClick={() => onNavigateToCampaign?.(null)}>
+        <button
+          type="button"
+          className="qa"
+          onClick={() => onNavigateToCampaign?.(null)}
+        >
           <div className="qa-icon">✎</div>
           <div className="qa-title">Create Campaign</div>
           <div className="qa-desc">Run your own bizarre adventure.</div>
@@ -576,7 +682,11 @@ const HomePage = ({
       <section className="patch-section">
         <div className="patch-header">
           <span className="patch-header-title">Recent Changes</span>
-          <button type="button" className="patch-header-link" onClick={() => onNavigateToPatchNotes?.()}>
+          <button
+            type="button"
+            className="patch-header-link"
+            onClick={() => onNavigateToPatchNotes?.()}
+          >
             View all patch notes →
           </button>
         </div>
@@ -594,20 +704,30 @@ const HomePage = ({
       <footer className="site-footer">
         <div className="footer-inner">
           <span>
-            1(800)BIZARRE © {new Date().getFullYear()} — Based on Blades in the Dark by John Harper (CC BY 3.0)
+            1(800)BIZARRE © {new Date().getFullYear()} — Based on Blades in the
+            Dark by John Harper (CC BY 3.0)
           </span>
           <div className="footer-links">
-            <button type="button" className="footer-link" onClick={() => onNavigateToLicenses?.()}>
+            <button
+              type="button"
+              className="footer-link"
+              onClick={() => onNavigateToLicenses?.()}
+            >
               Licenses
             </button>
-            <button type="button" className="footer-link" onClick={() => onNavigateToPatchNotes?.()}>
+            <button
+              type="button"
+              className="footer-link"
+              onClick={() => onNavigateToPatchNotes?.()}
+            >
               Patch Notes
             </button>
             <button
               type="button"
               className="footer-link"
               onClick={() => {
-                window.location.href = 'mailto:?subject=1(800)BIZARRE%20error%20report';
+                window.location.href =
+                  "mailto:?subject=1(800)BIZARRE%20error%20report";
               }}
             >
               Report Error

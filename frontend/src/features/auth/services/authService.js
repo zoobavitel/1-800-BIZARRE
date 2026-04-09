@@ -1,20 +1,20 @@
 // Authentication service for user management
 
-import { requireApiBaseUrl } from '../../../config/apiConfig';
-import { getApiErrorMessage } from '../../../utils/apiErrorMessage';
+import { requireApiBaseUrl } from "../../../config/apiConfig";
+import { getApiErrorMessage } from "../../../utils/apiErrorMessage";
 
 // Helper function for API requests
 const apiRequest = async (endpoint, options = {}) => {
-  const token = localStorage.getItem('authToken');
+  const token = localStorage.getItem("authToken");
   const base = requireApiBaseUrl();
-  const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const fullUrl = `${base}${path}`;
 
   const config = {
     headers: {
-      'Content-Type': 'application/json',
-      ...(token && { 'Authorization': `Token ${token}` }),
-      ...(fullUrl.includes('ngrok') && { 'ngrok-skip-browser-warning': '1' }),
+      "Content-Type": "application/json",
+      ...(token && { Authorization: `Token ${token}` }),
+      ...(fullUrl.includes("ngrok") && { "ngrok-skip-browser-warning": "1" }),
       ...options.headers,
     },
     ...options,
@@ -22,21 +22,23 @@ const apiRequest = async (endpoint, options = {}) => {
 
   try {
     const response = await fetch(fullUrl, config);
-    
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
       const message = getApiErrorMessage(
         errorData,
         response.status,
-        response.statusText
+        response.statusText,
       );
       throw new Error(message);
     }
-    
+
     return await response.json();
   } catch (error) {
-    if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      throw new Error('Could not reach game server. Check the Game server URL, ensure the host\'s backend is running, and try disabling ad blockers for this site.');
+    if (error.name === "TypeError" && error.message.includes("fetch")) {
+      throw new Error(
+        "Could not reach game server. Check the Game server URL, ensure the host's backend is running, and try disabling ad blockers for this site.",
+      );
     }
     throw error;
   }
@@ -45,36 +47,42 @@ const apiRequest = async (endpoint, options = {}) => {
 // Authentication API functions
 export const authAPI = {
   // Login user
-  login: (credentials) => apiRequest('/accounts/login/', {
-    method: 'POST',
-    body: JSON.stringify(credentials),
-  }),
-  
+  login: (credentials) =>
+    apiRequest("/accounts/login/", {
+      method: "POST",
+      body: JSON.stringify(credentials),
+    }),
+
   // Register new user
-  signup: (userData) => apiRequest('/accounts/signup/', {
-    method: 'POST',
-    body: JSON.stringify(userData),
-  }),
-  
+  signup: (userData) =>
+    apiRequest("/accounts/signup/", {
+      method: "POST",
+      body: JSON.stringify(userData),
+    }),
+
   // Get current user info (for token validation and display)
-  getCurrentUser: () => apiRequest('/accounts/me/'),
+  getCurrentUser: () => apiRequest("/accounts/me/"),
 
   // Get current user's profile (signature, theme, etc.)
-  getProfile: () => apiRequest('/user-profiles/').then((data) => (Array.isArray(data) ? data[0] : data?.results?.[0] ?? data)),
+  getProfile: () =>
+    apiRequest("/user-profiles/").then((data) =>
+      Array.isArray(data) ? data[0] : (data?.results?.[0] ?? data),
+    ),
 
   // Update current user's profile
-  updateProfile: (profileData) => apiRequest('/user-profiles/update/', {
-    method: 'PUT',
-    body: JSON.stringify(profileData),
-  }),
+  updateProfile: (profileData) =>
+    apiRequest("/user-profiles/update/", {
+      method: "PUT",
+      body: JSON.stringify(profileData),
+    }),
 
   // Logout (clear token)
   logout: () => {
-    localStorage.removeItem('authToken');
+    localStorage.removeItem("authToken");
   },
-  
+
   // Check if user is authenticated
   isAuthenticated: () => {
-    return !!localStorage.getItem('authToken');
+    return !!localStorage.getItem("authToken");
   },
-}; 
+};

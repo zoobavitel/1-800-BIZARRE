@@ -6,7 +6,13 @@
  * CHARACTER TABS: each open character gets a named tab in the top bar,
  * sorted alphabetically (unsaved "New Character" tabs always sort first).
  */
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
 import {
   characterAPI,
   crewAPI,
@@ -21,52 +27,88 @@ import {
   resolveHeritagePkForSave,
   normalizeStashSlots,
   isImageUploadPayload,
-} from '../features/character-sheet';
-import { subscribeCampaignEvents } from '../features/character-sheet/services/campaignEvents';
-import { useAuth } from '../features/auth';
-import { CharacterSheetWrapper } from './CharacterSheet';
-import { NPCSheet } from './NPCSheet';
+} from "../features/character-sheet";
+import { subscribeCampaignEvents } from "../features/character-sheet/services/campaignEvents";
+import { useAuth } from "../features/auth";
+import { CharacterSheetWrapper } from "./CharacterSheet";
+import { NPCSheet } from "./NPCSheet";
 
-const MODES = { CHARACTER: 'character', NPC: 'npc' };
+const MODES = { CHARACTER: "character", NPC: "npc" };
 /** Poll open character sheets + campaigns while the tab is visible (backup if SSE disconnects). */
 const SHEET_SYNC_INTERVAL_MS = 12000;
 
 const PAGE_STYLES = {
-  page: { fontFamily: 'monospace', fontSize: '13px', background: '#000', color: '#fff', minHeight: '100vh' },
-  content: { padding: '16px', maxWidth: '1400px', margin: '0 auto' },
+  page: {
+    fontFamily: "monospace",
+    fontSize: "13px",
+    background: "#000",
+    color: "#fff",
+    minHeight: "100vh",
+  },
+  content: { padding: "16px", maxWidth: "1400px", margin: "0 auto" },
   modeBar: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '8px 16px', borderBottom: '1px solid #374151',
-    flexWrap: 'wrap', gap: '6px',
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "8px 16px",
+    borderBottom: "1px solid #374151",
+    flexWrap: "wrap",
+    gap: "6px",
   },
   modeBtn: (active) => ({
-    padding: '6px 12px', border: '1px solid #4b5563', borderRadius: '4px',
-    background: active ? '#374151' : 'transparent',
-    color: active ? '#fff' : '#9ca3af',
-    cursor: 'pointer', fontFamily: 'monospace', fontSize: '12px',
+    padding: "6px 12px",
+    border: "1px solid #4b5563",
+    borderRadius: "4px",
+    background: active ? "#374151" : "transparent",
+    color: active ? "#fff" : "#9ca3af",
+    cursor: "pointer",
+    fontFamily: "monospace",
+    fontSize: "12px",
   }),
 };
 
 const TAB_STYLES = {
   tab: (active) => ({
-    display: 'flex', alignItems: 'center', gap: '6px',
-    padding: '4px 10px', borderRadius: '4px',
-    background: active ? '#4b5563' : '#374151',
-    color: active ? '#fff' : '#9ca3af',
-    cursor: 'pointer', fontFamily: 'monospace', fontSize: '11px',
-    border: 'none', whiteSpace: 'nowrap',
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    padding: "4px 10px",
+    borderRadius: "4px",
+    background: active ? "#4b5563" : "#374151",
+    color: active ? "#fff" : "#9ca3af",
+    cursor: "pointer",
+    fontFamily: "monospace",
+    fontSize: "11px",
+    border: "none",
+    whiteSpace: "nowrap",
   }),
   close: {
-    background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer',
-    fontSize: '13px', padding: '0 2px', lineHeight: 1, fontFamily: 'monospace',
+    background: "none",
+    border: "none",
+    color: "#9ca3af",
+    cursor: "pointer",
+    fontSize: "13px",
+    padding: "0 2px",
+    lineHeight: 1,
+    fontFamily: "monospace",
   },
   divider: {
-    width: '1px', height: '20px', background: '#4b5563', margin: '0 4px', flexShrink: 0,
+    width: "1px",
+    height: "20px",
+    background: "#4b5563",
+    margin: "0 4px",
+    flexShrink: 0,
   },
   addBtn: {
-    padding: '4px 8px', borderRadius: '4px', fontSize: '11px',
-    background: '#1f2937', color: '#9ca3af', border: '1px dashed #4b5563',
-    cursor: 'pointer', fontFamily: 'monospace', whiteSpace: 'nowrap',
+    padding: "4px 8px",
+    borderRadius: "4px",
+    fontSize: "11px",
+    background: "#1f2937",
+    color: "#9ca3af",
+    border: "1px dashed #4b5563",
+    cursor: "pointer",
+    fontFamily: "monospace",
+    whiteSpace: "nowrap",
   },
 };
 
@@ -78,7 +120,7 @@ let nextTabId = 1;
 
 function charTabLabel(tab) {
   const name = tab.character?.name?.trim();
-  return name || 'New Character';
+  return name || "New Character";
 }
 
 function sortCharTabs(tabs) {
@@ -97,28 +139,32 @@ function sortCharTabs(tabs) {
 function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
   const traumaIds = traumaObjectToIds(payload.trauma || {}, traumasList);
   const harm = payload.harm || {
-    level3: [''], level2: ['', ''], level1: ['', ''],
+    level3: [""],
+    level2: ["", ""],
+    level1: ["", ""],
   };
   const coinFilled =
-    typeof payload.coinFilled === 'number' && Number.isFinite(payload.coinFilled)
+    typeof payload.coinFilled === "number" &&
+    Number.isFinite(payload.coinFilled)
       ? payload.coinFilled
       : Array.isArray(payload.coin)
         ? payload.coin.filter(Boolean).length
         : 0;
   return {
-    name: payload.name ?? '',
-    standName: payload.standName ?? '',
+    name: payload.name ?? "",
+    standName: payload.standName ?? "",
     heritage: payload.heritage ?? null,
-    background: payload.background ?? '',
-    look: payload.look ?? '',
-    vice: payload.vice ?? '',
-    viceDetails: payload.viceDetails ?? payload.vice_details ?? '',
-    crew: payload.crew ?? '',
+    background: payload.background ?? "",
+    look: payload.look ?? "",
+    vice: payload.vice ?? "",
+    viceDetails: payload.viceDetails ?? payload.vice_details ?? "",
+    crew: payload.crew ?? "",
     crewId: payload.crewId ?? null,
-    personal_crew_name: payload.personal_crew_name ?? '',
+    personal_crew_name: payload.personal_crew_name ?? "",
     actionRatings: payload.actionRatings ?? {},
     standStats: payload.standStats ?? {},
-    stressFilled: typeof payload.stressFilled === 'number' ? payload.stressFilled : 0,
+    stressFilled:
+      typeof payload.stressFilled === "number" ? payload.stressFilled : 0,
     trauma: traumaIds,
     armor: {
       armor: (payload.regularArmorUsed ?? 0) > 0,
@@ -126,24 +172,32 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
       special: payload.specialArmorUsed === true,
     },
     harmEntries: {
-      level3: Array.isArray(harm.level3) ? harm.level3 : [''],
-      level2: Array.isArray(harm.level2) ? harm.level2 : ['', ''],
-      level1: Array.isArray(harm.level1) ? harm.level1 : ['', ''],
+      level3: Array.isArray(harm.level3) ? harm.level3 : [""],
+      level2: Array.isArray(harm.level2) ? harm.level2 : ["", ""],
+      level1: Array.isArray(harm.level1) ? harm.level1 : ["", ""],
     },
-    coin: Array(4).fill(false).map((_, i) => i < coinFilled),
+    coin: Array(4)
+      .fill(false)
+      .map((_, i) => i < coinFilled),
     stash: Array.isArray(payload.stash) ? payload.stash : Array(40).fill(false),
     healingClock: payload.healingClock ?? 0,
-    xp: payload.xp ?? { insight: 0, prowess: 0, resolve: 0, heritage: 0, playbook: 0 },
+    xp: payload.xp ?? {
+      insight: 0,
+      prowess: 0,
+      resolve: 0,
+      heritage: 0,
+      playbook: 0,
+    },
     abilities: Array.isArray(payload.abilities) ? payload.abilities : [],
     clocks: Array.isArray(payload.clocks) ? payload.clocks : [],
     campaign: payload.campaign ?? null,
-    playbook: payload.playbook ?? 'Stand',
+    playbook: payload.playbook ?? "Stand",
     id: payload.id,
     inventory: payload.inventory ?? [],
     reputation_status: payload.reputation_status ?? {},
     selected_benefits: payload.selected_benefits ?? [],
     selected_detriments: payload.selected_detriments ?? [],
-    image_url: payload.image_url ?? '',
+    image_url: payload.image_url ?? "",
     imageFile: payload.imageFile,
   };
 }
@@ -152,10 +206,14 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
 // Component
 // ---------------------------------------------------------------------------
 
-export default function CharacterPage({ initialCharacterId = null, initialNpcId = null, preferNpcMode = false }) {
+export default function CharacterPage({
+  initialCharacterId = null,
+  initialNpcId = null,
+  preferNpcMode = false,
+}) {
   const { user } = useAuth();
   const [mode, setMode] = useState(
-    preferNpcMode || initialNpcId != null ? MODES.NPC : MODES.CHARACTER
+    preferNpcMode || initialNpcId != null ? MODES.NPC : MODES.CHARACTER,
   );
 
   // ── Character list (used by the "Open character…" dropdown) ─────────────
@@ -206,20 +264,22 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
       setHeritages(hList);
       setCampaigns(normalizeListResponse(c));
       if (heritageFetchFailed) {
-        setHeritagesError('Could not load heritages. Check your connection and try again.');
+        setHeritagesError(
+          "Could not load heritages. Check your connection and try again.",
+        );
       } else if (!hList.length) {
         console.warn(
-          'No heritages in the server database. On the API host run: python manage.py migrate (seeds an empty DB) or loaddata characters/fixtures/srd_heritages.json'
+          "No heritages in the server database. On the API host run: python manage.py migrate (seeds an empty DB) or loaddata characters/fixtures/srd_heritages.json",
         );
         setHeritagesError(
-          'No heritages available. Try Retry, or ask the game host to check the server.'
+          "No heritages available. Try Retry, or ask the game host to check the server.",
         );
       } else {
         setHeritagesError(null);
       }
     } catch (e) {
       if (seq !== referenceDataLoadSeqRef.current) return;
-      setHeritagesError(e?.message || 'Failed to load reference data.');
+      setHeritagesError(e?.message || "Failed to load reference data.");
       setTraumas([]);
       setHeritages([]);
       setCampaigns([]);
@@ -268,7 +328,7 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
               if (updated) return { ...t, character: updated };
               return t;
             }
-          })
+          }),
         );
         setCharTabs(next);
         setSheetPollTick((x) => x + 1);
@@ -282,20 +342,20 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
   // While the document is hidden, skip network sync; on focus, pull full sheet + campaign state.
   useEffect(() => {
     const onVis = () => {
-      if (document.visibilityState !== 'visible') return;
+      if (document.visibilityState !== "visible") return;
       const tabs = charTabsRef.current;
       if (!tabs.some((t) => t.characterId)) return;
       void syncOpenSheetsFromServer();
     };
-    document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
   }, [syncOpenSheetsFromServer]);
 
   // Periodic sync while Character mode has at least one saved PC open (complements SSE).
   useEffect(() => {
     if (mode !== MODES.CHARACTER) return undefined;
     const id = window.setInterval(() => {
-      if (document.visibilityState !== 'visible') return;
+      if (document.visibilityState !== "visible") return;
       const tabs = charTabsRef.current;
       if (!tabs.some((t) => t.characterId)) return;
       void syncOpenSheetsFromServer();
@@ -313,7 +373,7 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
       setCharacters(front);
       return front;
     } catch (err) {
-      setCharactersError(err.message || 'Failed to load characters');
+      setCharactersError(err.message || "Failed to load characters");
       setCharacters([]);
       return [];
     } finally {
@@ -329,7 +389,11 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
       if (initialCharacterId) {
         const found = front.find((c) => c.id === initialCharacterId);
         if (found) {
-          const tab = { tabId: nextTabId++, characterId: found.id, character: found };
+          const tab = {
+            tabId: nextTabId++,
+            characterId: found.id,
+            character: found,
+          };
           setCharTabs([tab]);
           setActiveCharTabId(tab.tabId);
           return;
@@ -345,7 +409,11 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
           // Fall through to blank sheet (e.g. no access or invalid id)
         }
       }
-      const blank = { tabId: nextTabId++, characterId: null, character: createDefaultCharacter() };
+      const blank = {
+        tabId: nextTabId++,
+        characterId: null,
+        character: createDefaultCharacter(),
+      };
       setCharTabs([blank]);
       setActiveCharTabId(blank.tabId);
     });
@@ -369,176 +437,231 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
   }, []);
 
   const handleCreateNewCharacterTab = useCallback(() => {
-    const tab = { tabId: nextTabId++, characterId: null, character: createDefaultCharacter() };
+    const tab = {
+      tabId: nextTabId++,
+      characterId: null,
+      character: createDefaultCharacter(),
+    };
     setCharTabs((prev) => sortCharTabs([tab, ...prev]));
     setActiveCharTabId(tab.tabId);
   }, []);
 
-  const handleCloseCharTab = useCallback((tabId) => {
-    setCharTabs((prev) => {
-      const filtered = prev.filter((t) => t.tabId !== tabId);
-      if (filtered.length === 0) {
-        const blank = { tabId: nextTabId++, characterId: null, character: createDefaultCharacter() };
-        setActiveCharTabId(blank.tabId);
-        return [blank];
-      }
-      if (activeCharTabId === tabId) {
-        setActiveCharTabId(filtered[filtered.length - 1].tabId);
-      }
-      return filtered;
-    });
-  }, [activeCharTabId]);
-
-  const updateActiveCharTab = useCallback((characterId, character) => {
-    setCharTabs((prev) => {
-      const updated = prev.map((t) =>
-        t.tabId === activeCharTabId
-          ? { ...t, characterId, character }
-          : t
-      );
-      return sortCharTabs(updated);
-    });
-  }, [activeCharTabId]);
-
-  const handleCrewNameUpdated = useCallback((crewName, crewId, characterId) => {
-    setCharTabs((prev) =>
-      prev.map((t) => {
-        if (!t.character) return t;
-        // Shared crew rename: update every open sheet that uses this crew (same campaign entity)
-        if (crewId != null && t.character.crewId === crewId) {
-          return { ...t, character: { ...t.character, crew: crewName, crewId } };
-        }
-        // Solo name or the tab that initiated the change
-        if (characterId != null && t.characterId === characterId) {
-          return {
-            ...t,
-            character: {
-              ...t.character,
-              crew: crewName,
-              personal_crew_name: crewId == null ? crewName : '',
-              ...(crewId != null ? { crewId } : {}),
-            },
+  const handleCloseCharTab = useCallback(
+    (tabId) => {
+      setCharTabs((prev) => {
+        const filtered = prev.filter((t) => t.tabId !== tabId);
+        if (filtered.length === 0) {
+          const blank = {
+            tabId: nextTabId++,
+            characterId: null,
+            character: createDefaultCharacter(),
           };
+          setActiveCharTabId(blank.tabId);
+          return [blank];
         }
-        return t;
-      })
-    );
-    loadCharacters();
-  }, [loadCharacters]);
+        if (activeCharTabId === tabId) {
+          setActiveCharTabId(filtered[filtered.length - 1].tabId);
+        }
+        return filtered;
+      });
+    },
+    [activeCharTabId],
+  );
+
+  const updateActiveCharTab = useCallback(
+    (characterId, character) => {
+      setCharTabs((prev) => {
+        const updated = prev.map((t) =>
+          t.tabId === activeCharTabId ? { ...t, characterId, character } : t,
+        );
+        return sortCharTabs(updated);
+      });
+    },
+    [activeCharTabId],
+  );
+
+  const handleCrewNameUpdated = useCallback(
+    (crewName, crewId, characterId) => {
+      setCharTabs((prev) =>
+        prev.map((t) => {
+          if (!t.character) return t;
+          // Shared crew rename: update every open sheet that uses this crew (same campaign entity)
+          if (crewId != null && t.character.crewId === crewId) {
+            return {
+              ...t,
+              character: { ...t.character, crew: crewName, crewId },
+            };
+          }
+          // Solo name or the tab that initiated the change
+          if (characterId != null && t.characterId === characterId) {
+            return {
+              ...t,
+              character: {
+                ...t.character,
+                crew: crewName,
+                personal_crew_name: crewId == null ? crewName : "",
+                ...(crewId != null ? { crewId } : {}),
+              },
+            };
+          }
+          return t;
+        }),
+      );
+      loadCharacters();
+    },
+    [loadCharacters],
+  );
 
   // ── Save character ───────────────────────────────────────────────────────
-  const handleSaveCharacter = useCallback(async (payload) => {
-    const frontend = normalizeSheetPayloadToFrontend(payload, traumas);
-    let heritageList = normalizeListResponse(heritages);
-    if (!heritageList.length) {
-      const raw = await referenceAPI.getHeritages().catch(() => null);
-      heritageList = normalizeListResponse(raw);
-      if (heritageList.length) setHeritages(heritageList);
-    }
-    const heritageValue = resolveHeritagePkForSave(frontend.heritage, heritageList);
-    // Backend rejects blank true_name; avoid hollow PUT if local name lagged behind loaded character
-    let nameForSave = String(frontend.name ?? '').trim();
-    if (!nameForSave) {
-      if (payload.id) {
-        const tab =
-          charTabs.find(
-            (t) => t.characterId === payload.id || t.character?.id === payload.id
-          ) || charTabs.find((t) => t.tabId === activeCharTabId);
-        nameForSave = String(tab?.character?.name ?? '').trim() || 'New Character';
-      } else {
-        nameForSave = 'New Character';
+  const handleSaveCharacter = useCallback(
+    async (payload) => {
+      const frontend = normalizeSheetPayloadToFrontend(payload, traumas);
+      let heritageList = normalizeListResponse(heritages);
+      if (!heritageList.length) {
+        const raw = await referenceAPI.getHeritages().catch(() => null);
+        heritageList = normalizeListResponse(raw);
+        if (heritageList.length) setHeritages(heritageList);
       }
-    }
-    const toSend = transformFrontendToBackend({
-      ...frontend,
-      name: nameForSave,
-      heritage: heritageValue,
-      campaign: payload.campaign ?? frontend.campaign,
-    });
-    const withFile = {
-      ...toSend,
-      ...(isImageUploadPayload(frontend.imageFile) ? { imageFile: frontend.imageFile } : {}),
-    };
-    try {
-      let saved;
-      if (payload.id) {
-        saved = await characterAPI.updateCharacter(payload.id, withFile);
-      } else {
-        saved = await characterAPI.createCharacter(withFile);
-        if (saved.id && typeof window !== 'undefined') window.location.hash = `character/${saved.id}`;
-      }
-      let stashMerged = null;
-      if (saved?.id && Array.isArray(frontend.stash)) {
-        const crewPk =
-          frontend.crewId != null && frontend.crewId !== ''
-            ? parseInt(String(frontend.crewId), 10)
-            : NaN;
-        if (Number.isFinite(crewPk) && crewPk > 0) {
-          try {
-            const crewUpdated = await crewAPI.patchCrew(crewPk, {
-              stash_slots: normalizeStashSlots(frontend.stash),
-            });
-            stashMerged = Array.isArray(crewUpdated?.stash_slots)
-              ? normalizeStashSlots(crewUpdated.stash_slots)
-              : normalizeStashSlots(frontend.stash);
-          } catch (e) {
-            console.error('Crew stash save failed:', e);
-            stashMerged = normalizeStashSlots(frontend.stash);
-          }
+      const heritageValue = resolveHeritagePkForSave(
+        frontend.heritage,
+        heritageList,
+      );
+      // Backend rejects blank true_name; avoid hollow PUT if local name lagged behind loaded character
+      let nameForSave = String(frontend.name ?? "").trim();
+      if (!nameForSave) {
+        if (payload.id) {
+          const tab =
+            charTabs.find(
+              (t) =>
+                t.characterId === payload.id || t.character?.id === payload.id,
+            ) || charTabs.find((t) => t.tabId === activeCharTabId);
+          nameForSave =
+            String(tab?.character?.name ?? "").trim() || "New Character";
+        } else {
+          nameForSave = "New Character";
         }
       }
-      const savedFrontend = transformBackendToFrontend(saved);
-      // Preserve crew from payload: backend has crew as read_only FK, so it returns '' when we send a string.
-      // Without this merge, character.crew becomes '' after save, causing a perceived "change" and save loop.
-      const merged = {
-        ...savedFrontend,
-        crew: payload.crew ?? savedFrontend.crew,
-        crewId: payload.crewId ?? savedFrontend.crewId,
-        image: savedFrontend.image,
-        image_url: payload.image_url ?? savedFrontend.image_url,
-        vice: payload.vice ?? savedFrontend.vice,
-        viceDetails: payload.viceDetails ?? payload.vice_details ?? savedFrontend.viceDetails,
-        personal_crew_name:
-          payload.personal_crew_name ?? savedFrontend.personal_crew_name ?? '',
-        // If API omits coin_boxes on the response, normalizeCoinBoxes(undefined) is all false and the sheet reverts.
-        // Prefer the payload we just saved when the server did not echo coin_boxes (undefined). null is a valid echo.
-        coin:
-          saved && Object.prototype.hasOwnProperty.call(saved, 'coin_boxes')
-            ? savedFrontend.coin
-            : (frontend.coin ?? savedFrontend.coin),
-        stash:
-          stashMerged !== null
-            ? stashMerged
-            : normalizeStashSlots(saved?.stash_slots ?? savedFrontend.stash ?? frontend.stash),
+      const toSend = transformFrontendToBackend({
+        ...frontend,
+        name: nameForSave,
+        heritage: heritageValue,
+        campaign: payload.campaign ?? frontend.campaign,
+      });
+      const withFile = {
+        ...toSend,
+        ...(isImageUploadPayload(frontend.imageFile)
+          ? { imageFile: frontend.imageFile }
+          : {}),
       };
-      updateActiveCharTab(merged.id, merged);
-      await loadCharacters();
-    } catch (err) {
-      console.error('Save character failed:', err);
-      throw err;
-    }
-  }, [traumas, heritages, loadCharacters, updateActiveCharTab, charTabs, activeCharTabId]);
+      try {
+        let saved;
+        if (payload.id) {
+          saved = await characterAPI.updateCharacter(payload.id, withFile);
+        } else {
+          saved = await characterAPI.createCharacter(withFile);
+          if (saved.id && typeof window !== "undefined")
+            window.location.hash = `character/${saved.id}`;
+        }
+        let stashMerged = null;
+        if (saved?.id && Array.isArray(frontend.stash)) {
+          const crewPk =
+            frontend.crewId != null && frontend.crewId !== ""
+              ? parseInt(String(frontend.crewId), 10)
+              : NaN;
+          if (Number.isFinite(crewPk) && crewPk > 0) {
+            try {
+              const crewUpdated = await crewAPI.patchCrew(crewPk, {
+                stash_slots: normalizeStashSlots(frontend.stash),
+              });
+              stashMerged = Array.isArray(crewUpdated?.stash_slots)
+                ? normalizeStashSlots(crewUpdated.stash_slots)
+                : normalizeStashSlots(frontend.stash);
+            } catch (e) {
+              console.error("Crew stash save failed:", e);
+              stashMerged = normalizeStashSlots(frontend.stash);
+            }
+          }
+        }
+        const savedFrontend = transformBackendToFrontend(saved);
+        // Preserve crew from payload: backend has crew as read_only FK, so it returns '' when we send a string.
+        // Without this merge, character.crew becomes '' after save, causing a perceived "change" and save loop.
+        const merged = {
+          ...savedFrontend,
+          crew: payload.crew ?? savedFrontend.crew,
+          crewId: payload.crewId ?? savedFrontend.crewId,
+          image: savedFrontend.image,
+          image_url: payload.image_url ?? savedFrontend.image_url,
+          vice: payload.vice ?? savedFrontend.vice,
+          viceDetails:
+            payload.viceDetails ??
+            payload.vice_details ??
+            savedFrontend.viceDetails,
+          personal_crew_name:
+            payload.personal_crew_name ??
+            savedFrontend.personal_crew_name ??
+            "",
+          // If API omits coin_boxes on the response, normalizeCoinBoxes(undefined) is all false and the sheet reverts.
+          // Prefer the payload we just saved when the server did not echo coin_boxes (undefined). null is a valid echo.
+          coin:
+            saved && Object.prototype.hasOwnProperty.call(saved, "coin_boxes")
+              ? savedFrontend.coin
+              : (frontend.coin ?? savedFrontend.coin),
+          stash:
+            stashMerged !== null
+              ? stashMerged
+              : normalizeStashSlots(
+                  saved?.stash_slots ?? savedFrontend.stash ?? frontend.stash,
+                ),
+        };
+        updateActiveCharTab(merged.id, merged);
+        await loadCharacters();
+      } catch (err) {
+        console.error("Save character failed:", err);
+        throw err;
+      }
+    },
+    [
+      traumas,
+      heritages,
+      loadCharacters,
+      updateActiveCharTab,
+      charTabs,
+      activeCharTabId,
+    ],
+  );
 
-  const handleSwitchCharacter = useCallback((character) => {
-    if (!character) {
-      handleCreateNewCharacterTab();
-      return;
-    }
-    openCharacterInTab(character);
-  }, [handleCreateNewCharacterTab, openCharacterInTab]);
+  const handleSwitchCharacter = useCallback(
+    (character) => {
+      if (!character) {
+        handleCreateNewCharacterTab();
+        return;
+      }
+      openCharacterInTab(character);
+    },
+    [handleCreateNewCharacterTab, openCharacterInTab],
+  );
 
   // ── NPC logic: when initialNpcId is set (e.g. from #npcs/123), fetch and open that NPC
   useEffect(() => {
     if (initialNpcId == null || mode !== MODES.NPC) return;
     setNpcsLoading(true);
-    npcAPI.getNPC(initialNpcId)
+    npcAPI
+      .getNPC(initialNpcId)
       .then((npc) => {
         if (!npc) return;
         npcTabsInitialized.current = true;
-        const tab = { tabId: nextTabId++, npcId: npc.id, npc, label: npc.name || 'New NPC' };
+        const tab = {
+          tabId: nextTabId++,
+          npcId: npc.id,
+          npc,
+          label: npc.name || "New NPC",
+        };
         setNpcTabs([tab]);
         setActiveNpcTabId(tab.tabId);
-        npcAPI.getNPCs(campaignId).then((list) => setNpcs(list || [])).catch(() => setNpcs([]));
+        npcAPI
+          .getNPCs(campaignId)
+          .then((list) => setNpcs(list || []))
+          .catch(() => setNpcs([]));
       })
       .catch(() => setNpcs([]))
       .finally(() => setNpcsLoading(false));
@@ -548,75 +671,115 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
   useEffect(() => {
     if (mode !== MODES.NPC || initialNpcId != null) return;
     setNpcsLoading(true);
-    npcAPI.getNPCs(campaignId).then((list) => {
-      const npcList = list || [];
-      setNpcs(npcList);
-      if (!npcTabsInitialized.current) {
-        npcTabsInitialized.current = true;
-        if (npcList.length > 0) {
-          const tab = { tabId: nextTabId++, npcId: npcList[0].id, npc: npcList[0], label: npcList[0].name || 'New NPC' };
-          setNpcTabs([tab]);
-          setActiveNpcTabId(tab.tabId);
-        } else {
-          const tab = { tabId: nextTabId++, npcId: null, npc: null, label: 'New NPC' };
-          setNpcTabs([tab]);
-          setActiveNpcTabId(tab.tabId);
+    npcAPI
+      .getNPCs(campaignId)
+      .then((list) => {
+        const npcList = list || [];
+        setNpcs(npcList);
+        if (!npcTabsInitialized.current) {
+          npcTabsInitialized.current = true;
+          if (npcList.length > 0) {
+            const tab = {
+              tabId: nextTabId++,
+              npcId: npcList[0].id,
+              npc: npcList[0],
+              label: npcList[0].name || "New NPC",
+            };
+            setNpcTabs([tab]);
+            setActiveNpcTabId(tab.tabId);
+          } else {
+            const tab = {
+              tabId: nextTabId++,
+              npcId: null,
+              npc: null,
+              label: "New NPC",
+            };
+            setNpcTabs([tab]);
+            setActiveNpcTabId(tab.tabId);
+          }
         }
-      }
-    }).catch(() => setNpcs([])).finally(() => setNpcsLoading(false));
+      })
+      .catch(() => setNpcs([]))
+      .finally(() => setNpcsLoading(false));
   }, [mode, campaignId, initialNpcId]);
 
-  const handleSaveNpc = useCallback(async (npcData) => {
-    try {
-      const nameTrim = String(npcData.name ?? '').trim();
-      const payload = { ...npcData, name: nameTrim || 'New NPC' };
-      let result;
-      if (payload.id) {
-        result = await npcAPI.updateNPC(payload.id, payload);
-      } else {
-        result = await npcAPI.createNPC(payload);
+  const handleSaveNpc = useCallback(
+    async (npcData) => {
+      try {
+        const nameTrim = String(npcData.name ?? "").trim();
+        const payload = { ...npcData, name: nameTrim || "New NPC" };
+        let result;
+        if (payload.id) {
+          result = await npcAPI.updateNPC(payload.id, payload);
+        } else {
+          result = await npcAPI.createNPC(payload);
+        }
+        setNpcTabs((prev) =>
+          prev.map((t) =>
+            t.tabId === activeNpcTabId
+              ? {
+                  ...t,
+                  npcId: result.id,
+                  npc: result,
+                  label: result.name || "New NPC",
+                }
+              : t,
+          ),
+        );
+        const list = await npcAPI.getNPCs(campaignId);
+        setNpcs(list || []);
+        return result;
+      } catch (err) {
+        console.error("Save NPC failed:", err);
+        throw err;
       }
-      setNpcTabs(prev => prev.map(t =>
-        t.tabId === activeNpcTabId
-          ? { ...t, npcId: result.id, npc: result, label: result.name || 'New NPC' }
-          : t
-      ));
-      const list = await npcAPI.getNPCs(campaignId);
-      setNpcs(list || []);
-      return result;
-    } catch (err) {
-      console.error('Save NPC failed:', err);
-      throw err;
-    }
-  }, [campaignId, activeNpcTabId]);
+    },
+    [campaignId, activeNpcTabId],
+  );
 
   const handleCreateNewNpcTab = useCallback(() => {
-    const tab = { tabId: nextTabId++, npcId: null, npc: null, label: 'New NPC' };
-    setNpcTabs(prev => [...prev, tab]);
+    const tab = {
+      tabId: nextTabId++,
+      npcId: null,
+      npc: null,
+      label: "New NPC",
+    };
+    setNpcTabs((prev) => [...prev, tab]);
     setActiveNpcTabId(tab.tabId);
   }, []);
 
-  const handleCloseNpcTab = useCallback((tabId) => {
-    setNpcTabs(prev => {
-      if (prev.length <= 1) return prev;
-      const filtered = prev.filter(t => t.tabId !== tabId);
-      if (activeNpcTabId === tabId) {
-        setActiveNpcTabId(filtered[filtered.length - 1].tabId);
-      }
-      return filtered;
-    });
-  }, [activeNpcTabId]);
+  const handleCloseNpcTab = useCallback(
+    (tabId) => {
+      setNpcTabs((prev) => {
+        if (prev.length <= 1) return prev;
+        const filtered = prev.filter((t) => t.tabId !== tabId);
+        if (activeNpcTabId === tabId) {
+          setActiveNpcTabId(filtered[filtered.length - 1].tabId);
+        }
+        return filtered;
+      });
+    },
+    [activeNpcTabId],
+  );
 
-  const handleOpenExistingNpc = useCallback((npc) => {
-    const existing = npcTabs.find(t => t.npcId === npc.id);
-    if (existing) {
-      setActiveNpcTabId(existing.tabId);
-      return;
-    }
-    const tab = { tabId: nextTabId++, npcId: npc.id, npc, label: npc.name || 'New NPC' };
-    setNpcTabs(prev => [...prev, tab]);
-    setActiveNpcTabId(tab.tabId);
-  }, [npcTabs]);
+  const handleOpenExistingNpc = useCallback(
+    (npc) => {
+      const existing = npcTabs.find((t) => t.npcId === npc.id);
+      if (existing) {
+        setActiveNpcTabId(existing.tabId);
+        return;
+      }
+      const tab = {
+        tabId: nextTabId++,
+        npcId: npc.id,
+        npc,
+        label: npc.name || "New NPC",
+      };
+      setNpcTabs((prev) => [...prev, tab]);
+      setActiveNpcTabId(tab.tabId);
+    },
+    [npcTabs],
+  );
 
   // ── Derived values ───────────────────────────────────────────────────────
   const activeCharTab = charTabs.find((t) => t.tabId === activeCharTabId);
@@ -632,9 +795,9 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
 
   const campaignIdForRealtime = useMemo(() => {
     const c = sheetCharacter?.campaign;
-    const id = typeof c === 'object' ? c?.id : c;
-    if (id == null || id === '') return null;
-    const n = typeof id === 'number' ? id : parseInt(String(id), 10);
+    const id = typeof c === "object" ? c?.id : c;
+    if (id == null || id === "") return null;
+    const n = typeof id === "number" ? id : parseInt(String(id), 10);
     return Number.isFinite(n) ? n : null;
   }, [sheetCharacter?.campaign]);
 
@@ -647,25 +810,38 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
     });
   }, [mode, campaignIdForRealtime, syncOpenSheetsFromServer]);
 
-  const activeNpcTab = npcTabs.find(t => t.tabId === activeNpcTabId);
+  const activeNpcTab = npcTabs.find((t) => t.tabId === activeNpcTabId);
 
   const handleDeleteActiveCharacter = useCallback(async () => {
     const id = activeCharTab?.characterId ?? activeCharTab?.character?.id;
     if (!id) {
-      window.alert('This character is not saved yet. Close the tab to discard, or save first.');
+      window.alert(
+        "This character is not saved yet. Close the tab to discard, or save first.",
+      );
       return;
     }
-    if (!window.confirm('Delete this character permanently? This cannot be undone.')) return;
+    if (
+      !window.confirm(
+        "Delete this character permanently? This cannot be undone.",
+      )
+    )
+      return;
     setCharactersError(null);
     try {
       await characterAPI.deleteCharacter(id);
       setCharacters((prev) => prev.filter((c) => c.id !== id));
       setCharTabs((prev) => {
-        const filtered = prev.filter((t) => (t.characterId ?? t.character?.id) !== id);
+        const filtered = prev.filter(
+          (t) => (t.characterId ?? t.character?.id) !== id,
+        );
         if (filtered.length === 0) {
-          const blank = { tabId: nextTabId++, characterId: null, character: createDefaultCharacter() };
+          const blank = {
+            tabId: nextTabId++,
+            characterId: null,
+            character: createDefaultCharacter(),
+          };
           setActiveCharTabId(blank.tabId);
-          if (typeof window !== 'undefined') window.location.hash = 'character';
+          if (typeof window !== "undefined") window.location.hash = "character";
           return [blank];
         }
         const nextActive = filtered.some((t) => t.tabId === activeCharTabId)
@@ -674,30 +850,39 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
         setActiveCharTabId(nextActive);
         const nextTab = filtered.find((t) => t.tabId === nextActive);
         const nextHashId = nextTab?.characterId ?? nextTab?.character?.id;
-        if (typeof window !== 'undefined') {
-          window.location.hash = nextHashId ? `character/${nextHashId}` : 'character';
+        if (typeof window !== "undefined") {
+          window.location.hash = nextHashId
+            ? `character/${nextHashId}`
+            : "character";
         }
         return sortCharTabs(filtered);
       });
     } catch (e) {
-      setCharactersError(e.message || 'Failed to delete character');
+      setCharactersError(e.message || "Failed to delete character");
     }
   }, [activeCharTab, activeCharTabId]);
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={PAGE_STYLES.page}>
-
       {/* ── Top bar ── */}
       <div style={PAGE_STYLES.modeBar}>
-        <nav style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
-
+        <nav
+          style={{
+            display: "flex",
+            gap: "4px",
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
           <button
             type="button"
             onClick={() => {
               setMode(MODES.CHARACTER);
-              const id = activeCharTab?.characterId ?? activeCharTab?.character?.id;
-              if (typeof window !== 'undefined') window.location.hash = id ? `character/${id}` : 'character';
+              const id =
+                activeCharTab?.characterId ?? activeCharTab?.character?.id;
+              if (typeof window !== "undefined")
+                window.location.hash = id ? `character/${id}` : "character";
             }}
             style={PAGE_STYLES.modeBtn(mode === MODES.CHARACTER)}
           >
@@ -708,7 +893,8 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
             onClick={() => {
               setMode(MODES.NPC);
               const id = activeNpcTab?.npcId ?? activeNpcTab?.npc?.id;
-              if (typeof window !== 'undefined') window.location.hash = id ? `npcs/${id}` : 'npcs';
+              if (typeof window !== "undefined")
+                window.location.hash = id ? `npcs/${id}` : "npcs";
             }}
             style={PAGE_STYLES.modeBtn(mode === MODES.NPC)}
           >
@@ -730,13 +916,20 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
                   <span
                     style={TAB_STYLES.close}
                     title="Close tab"
-                    onClick={(e) => { e.stopPropagation(); handleCloseCharTab(tab.tabId); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCloseCharTab(tab.tabId);
+                    }}
                   >
                     ×
                   </span>
                 </button>
               ))}
-              <button type="button" onClick={handleCreateNewCharacterTab} style={TAB_STYLES.addBtn}>
+              <button
+                type="button"
+                onClick={handleCreateNewCharacterTab}
+                style={TAB_STYLES.addBtn}
+              >
                 + New Character
               </button>
             </>
@@ -746,20 +939,32 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
           {mode === MODES.NPC && npcTabs.length > 0 && (
             <>
               <div style={TAB_STYLES.divider} />
-              {npcTabs.map(tab => (
-                <button key={tab.tabId} type="button"
+              {npcTabs.map((tab) => (
+                <button
+                  key={tab.tabId}
+                  type="button"
                   onClick={() => setActiveNpcTabId(tab.tabId)}
-                  style={TAB_STYLES.tab(tab.tabId === activeNpcTabId)}>
+                  style={TAB_STYLES.tab(tab.tabId === activeNpcTabId)}
+                >
                   <span>{tab.label}</span>
                   {npcTabs.length > 1 && (
-                    <span style={TAB_STYLES.close}
-                      onClick={e => { e.stopPropagation(); handleCloseNpcTab(tab.tabId); }}>
+                    <span
+                      style={TAB_STYLES.close}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCloseNpcTab(tab.tabId);
+                      }}
+                    >
                       ×
                     </span>
                   )}
                 </button>
               ))}
-              <button type="button" onClick={handleCreateNewNpcTab} style={TAB_STYLES.addBtn}>
+              <button
+                type="button"
+                onClick={handleCreateNewNpcTab}
+                style={TAB_STYLES.addBtn}
+              >
                 + New NPC
               </button>
             </>
@@ -767,23 +972,38 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
         </nav>
 
         {/* Right side: error banner + "Open…" dropdowns */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           {charactersError && (
-            <span style={{ fontSize: '12px', color: '#fca5a5' }}>{charactersError}</span>
+            <span style={{ fontSize: "12px", color: "#fca5a5" }}>
+              {charactersError}
+            </span>
           )}
 
           {mode === MODES.CHARACTER && characters.length > 0 && (
             <>
               <select
-                style={{ background: '#1f2937', color: '#9ca3af', border: '1px solid #4b5563', padding: '4px 8px', fontSize: '11px', fontFamily: 'monospace', borderRadius: '4px' }}
+                style={{
+                  background: "#1f2937",
+                  color: "#9ca3af",
+                  border: "1px solid #4b5563",
+                  padding: "4px 8px",
+                  fontSize: "11px",
+                  fontFamily: "monospace",
+                  borderRadius: "4px",
+                }}
                 value=""
-                onChange={e => {
-                  const char = characters.find(c => c.id === parseInt(e.target.value));
+                onChange={(e) => {
+                  const char = characters.find(
+                    (c) => c.id === parseInt(e.target.value),
+                  );
                   if (char) openCharacterInTab(char);
-                }}>
+                }}
+              >
                 <option value="">Open character...</option>
-                {characters.map(c => (
-                  <option key={c.id} value={c.id}>{c.name || c.standName || 'New Character'}</option>
+                {characters.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name || c.standName || "New Character"}
+                  </option>
                 ))}
               </select>
               <button
@@ -791,15 +1011,15 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
                 onClick={handleDeleteActiveCharacter}
                 title="Delete the character open in the active tab (permanent)"
                 style={{
-                  background: '#450a0a',
-                  color: '#fecaca',
-                  border: '1px solid #991b1b',
-                  padding: '4px 10px',
-                  fontSize: '11px',
-                  fontFamily: 'monospace',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
+                  background: "#450a0a",
+                  color: "#fecaca",
+                  border: "1px solid #991b1b",
+                  padding: "4px 10px",
+                  fontSize: "11px",
+                  fontFamily: "monospace",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
                 }}
               >
                 Delete character
@@ -809,28 +1029,48 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
 
           {mode === MODES.NPC && npcs.length > 0 && (
             <select
-              style={{ background: '#1f2937', color: '#9ca3af', border: '1px solid #4b5563', padding: '4px 8px', fontSize: '11px', fontFamily: 'monospace', borderRadius: '4px' }}
+              style={{
+                background: "#1f2937",
+                color: "#9ca3af",
+                border: "1px solid #4b5563",
+                padding: "4px 8px",
+                fontSize: "11px",
+                fontFamily: "monospace",
+                borderRadius: "4px",
+              }}
               value=""
-              onChange={e => {
-                const npc = npcs.find(n => n.id === parseInt(e.target.value));
+              onChange={(e) => {
+                const npc = npcs.find((n) => n.id === parseInt(e.target.value));
                 if (npc) handleOpenExistingNpc(npc);
-              }}>
+              }}
+            >
               <option value="">Open NPC...</option>
-              {npcs.map(n => <option key={n.id} value={n.id}>{n.name || 'New NPC'}</option>)}
+              {npcs.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.name || "New NPC"}
+                </option>
+              ))}
             </select>
           )}
         </div>
       </div>
 
       {/* ── Character mode ── */}
-      {mode === MODES.CHARACTER && (
-        charactersLoading && charTabs.length === 0 ? (
-          <div style={{ ...PAGE_STYLES.content, padding: '24px', textAlign: 'center', color: '#9ca3af' }}>
+      {mode === MODES.CHARACTER &&
+        (charactersLoading && charTabs.length === 0 ? (
+          <div
+            style={{
+              ...PAGE_STYLES.content,
+              padding: "24px",
+              textAlign: "center",
+              color: "#9ca3af",
+            }}
+          >
             Loading characters...
           </div>
         ) : (
           <CharacterSheetWrapper
-            key={activeCharTab?.tabId ?? 'new'}
+            key={activeCharTab?.tabId ?? "new"}
             character={sheetCharacter}
             heritages={heritages}
             heritagesLoading={heritagesLoading}
@@ -838,7 +1078,10 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
             onRetryHeritages={loadReferenceData}
             allCharacters={characters}
             campaigns={campaigns}
-            isGM={campaigns?.find((c) => c.id === sheetCharacter?.campaign)?.gm?.id === user?.id}
+            isGM={
+              campaigns?.find((c) => c.id === sheetCharacter?.campaign)?.gm
+                ?.id === user?.id
+            }
             onSave={handleSaveCharacter}
             onCreateNew={handleCreateNewCharacterTab}
             onSwitchCharacter={handleSwitchCharacter}
@@ -846,21 +1089,24 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
             onCampaignRefresh={refreshCampaigns}
             sessionDataPollTick={sheetPollTick}
           />
-        )
-      )}
+        ))}
 
       {/* ── NPC mode ── */}
       {mode === MODES.NPC && (
         <div style={PAGE_STYLES.content}>
           {npcsLoading ? (
-            <div style={{ padding: '24px', textAlign: 'center', color: '#9ca3af' }}>
+            <div
+              style={{ padding: "24px", textAlign: "center", color: "#9ca3af" }}
+            >
               Loading NPCs...
             </div>
           ) : npcTabs.length > 0 ? (
             npcTabs.map((tab) => (
               <div
                 key={tab.tabId}
-                style={{ display: tab.tabId === activeNpcTabId ? 'block' : 'none' }}
+                style={{
+                  display: tab.tabId === activeNpcTabId ? "block" : "none",
+                }}
               >
                 <NPCSheet
                   npc={tab.npc ?? undefined}
@@ -870,13 +1116,14 @@ export default function CharacterPage({ initialCharacterId = null, initialNpcId 
               </div>
             ))
           ) : (
-            <div style={{ padding: '24px', textAlign: 'center', color: '#9ca3af' }}>
+            <div
+              style={{ padding: "24px", textAlign: "center", color: "#9ca3af" }}
+            >
               Click "+ New NPC" to create one.
             </div>
           )}
         </div>
       )}
-
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { referenceAPI } from '../services/api';
+import { useState, useEffect } from "react";
+import { referenceAPI } from "../services/api";
 
 export const useReferenceData = () => {
   const [heritages, setHeritages] = useState([]);
@@ -23,14 +23,14 @@ export const useReferenceData = () => {
         abilitiesData,
         hamonAbilitiesData,
         spinAbilitiesData,
-        traumasData
+        traumasData,
       ] = await Promise.all([
         referenceAPI.getHeritages(),
         referenceAPI.getVices(),
         referenceAPI.getAbilities(),
         referenceAPI.getHamonAbilities(),
         referenceAPI.getSpinAbilities(),
-        referenceAPI.getTraumas()
+        referenceAPI.getTraumas(),
       ]);
 
       setHeritages(heritagesData);
@@ -39,22 +39,40 @@ export const useReferenceData = () => {
       setHamonAbilities(hamonAbilitiesData);
       setSpinAbilities(spinAbilitiesData);
       setTraumas(traumasData);
-
     } catch (err) {
       setError(err.message);
-      console.error('Failed to load reference data:', err);
-      
+      console.error("Failed to load reference data:", err);
+
       // Set fallback data if backend fails
       setHeritages([
-        { id: 1, name: 'Human', base_hp: 0, description: 'Standard human heritage' }
+        {
+          id: 1,
+          name: "Human",
+          base_hp: 0,
+          description: "Standard human heritage",
+        },
       ]);
       setVices([
-        { id: 1, name: 'Gambling', description: 'Risk-taking and chance' },
-        { id: 2, name: 'Violence', description: 'Physical conflict and aggression' }
+        { id: 1, name: "Gambling", description: "Risk-taking and chance" },
+        {
+          id: 2,
+          name: "Violence",
+          description: "Physical conflict and aggression",
+        },
       ]);
       setAbilities([
-        { id: 1, name: 'Iron Will', description: 'Resist mental effects', type: 'standard' },
-        { id: 2, name: 'Shadow', description: 'Hide in darkness', type: 'standard' }
+        {
+          id: 1,
+          name: "Iron Will",
+          description: "Resist mental effects",
+          type: "standard",
+        },
+        {
+          id: 2,
+          name: "Shadow",
+          description: "Hide in darkness",
+          type: "standard",
+        },
       ]);
     } finally {
       setLoading(false);
@@ -63,10 +81,13 @@ export const useReferenceData = () => {
 
   const getAvailablePlaybookAbilities = async (playbook, coinStats) => {
     try {
-      const abilities = await referenceAPI.getAvailablePlaybookAbilities(playbook, coinStats);
+      const abilities = await referenceAPI.getAvailablePlaybookAbilities(
+        playbook,
+        coinStats,
+      );
       return abilities;
     } catch (err) {
-      console.error('Failed to get available playbook abilities:', err);
+      console.error("Failed to get available playbook abilities:", err);
       return [];
     }
   };
@@ -86,6 +107,6 @@ export const useReferenceData = () => {
     loading,
     error,
     loadReferenceData,
-    getAvailablePlaybookAbilities
+    getAvailablePlaybookAbilities,
   };
-}; 
+};

@@ -66,7 +66,7 @@ export interface ArmorUses {
 export interface Ability {
   id: number;
   name: string;
-  type: 'standard' | 'custom' | 'playbook';
+  type: "standard" | "custom" | "playbook";
   description?: string;
 }
 
@@ -99,4 +99,4 @@ export interface Character {
   abilities: Ability[];
   clocks: CustomClock[];
   lastModified?: string;
-} 
+}
