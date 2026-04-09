@@ -78,3 +78,7 @@ backend/src/debug.log
 
 # Database backups (may contain sensitive data)
 backups/
+
+# Local SSH keys (never commit)
+gha_pve2
+gha_pve2.pub
