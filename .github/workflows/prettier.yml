@@ -10,6 +10,8 @@ jobs:
   prettier:
     name: Check code formatting
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v5
 
