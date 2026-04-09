@@ -1,88 +1,130 @@
-import './styles/global.css';
-import React, { useState, useEffect, useCallback } from 'react';
-import ReactDOM from 'react-dom/client';
-import { Menu } from 'lucide-react';
-import Home from './pages/Home.jsx';
-import CharacterPage from './pages/CharacterPage.jsx';
-import ResponsiveTest from './pages/ResponsiveTest.jsx';
-import CampaignManagement from './pages/CampaignManagement.jsx';
-import AbilityBrowser from './pages/AbilityBrowser.jsx';
-import CharacterOptionsPage from './pages/CharacterOptionsPage.jsx';
-import SearchPage from './pages/SearchPage.jsx';
-import NotificationsPage from './pages/NotificationsPage.jsx';
-import MessagesPage from './pages/MessagesPage.jsx';
-import AccountSettingsPage from './pages/AccountSettingsPage.jsx';
-import PatchNotesPage from './pages/PatchNotesPage.jsx';
-import RulesPage from './pages/RulesPage.jsx';
-import LicensesPage from './pages/LicensesPage.jsx';
-import UserMenu from './components/UserMenu.jsx';
-import { AuthProvider, useAuth } from './features/auth';
-import { ThemeProvider } from './features/theme/ThemeContext';
-import ProtectedRoute from './components/ProtectedRoute';
-import HamburgerMenu from './components/HamburgerMenu.jsx';
-import { characterAPI, transformBackendToFrontend } from './features/character-sheet';
+import "./styles/global.css";
+import React, { useState, useEffect, useCallback } from "react";
+import ReactDOM from "react-dom/client";
+import { Menu } from "lucide-react";
+import Home from "./pages/Home.jsx";
+import CharacterPage from "./pages/CharacterPage.jsx";
+import ResponsiveTest from "./pages/ResponsiveTest.jsx";
+import CampaignManagement from "./pages/CampaignManagement.jsx";
+import AbilityBrowser from "./pages/AbilityBrowser.jsx";
+import CharacterOptionsPage from "./pages/CharacterOptionsPage.jsx";
+import SearchPage from "./pages/SearchPage.jsx";
+import NotificationsPage from "./pages/NotificationsPage.jsx";
+import MessagesPage from "./pages/MessagesPage.jsx";
+import AccountSettingsPage from "./pages/AccountSettingsPage.jsx";
+import PatchNotesPage from "./pages/PatchNotesPage.jsx";
+import RulesPage from "./pages/RulesPage.jsx";
+import LicensesPage from "./pages/LicensesPage.jsx";
+import UserMenu from "./components/UserMenu.jsx";
+import { AuthProvider, useAuth } from "./features/auth";
+import { ThemeProvider } from "./features/theme/ThemeContext";
+import ProtectedRoute from "./components/ProtectedRoute";
+import HamburgerMenu from "./components/HamburgerMenu.jsx";
+import {
+  characterAPI,
+  transformBackendToFrontend,
+} from "./features/character-sheet";
 
 const PAGE_TITLES = {
-  home:              'HOME',
-  character:        'CHARACTERS',
-  'character-options': 'CHARACTER OPTIONS',
-  campaigns:         'CAMPAIGN MANAGEMENT',
-  abilities:         'ABILITY BROWSER',
-  npcs:              'GM — NPCs',
-  test:              'RESPONSIVE TEST',
-  search:            'SEARCH',
-  notifications:     'NOTIFICATIONS',
-  messages:         'MESSAGES',
-  'account-settings': 'ACCOUNT SETTINGS',
-  'patch-notes': 'PATCH NOTES',
-  'licenses': 'LICENSES',
-  rules: 'GAME RULES',
+  home: "HOME",
+  character: "CHARACTERS",
+  "character-options": "CHARACTER OPTIONS",
+  campaigns: "CAMPAIGN MANAGEMENT",
+  abilities: "ABILITY BROWSER",
+  npcs: "GM — NPCs",
+  test: "RESPONSIVE TEST",
+  search: "SEARCH",
+  notifications: "NOTIFICATIONS",
+  messages: "MESSAGES",
+  "account-settings": "ACCOUNT SETTINGS",
+  "patch-notes": "PATCH NOTES",
+  licenses: "LICENSES",
+  rules: "GAME RULES",
 };
 
 const barStyles = {
   bar: {
-    background: '#1f2937', padding: '8px 16px',
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    borderBottom: '1px solid #4b5563', position: 'sticky', top: 0, zIndex: 20,
-    fontFamily: "'Roboto Mono', 'Consolas', monospace", fontSize: '13px',
+    background: "#1f2937",
+    padding: "8px 16px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderBottom: "1px solid #4b5563",
+    position: "sticky",
+    top: 0,
+    zIndex: 20,
+    fontFamily: "'Roboto Mono', 'Consolas', monospace",
+    fontSize: "13px",
   },
   hamburger: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    width: '36px', height: '36px', border: 'none', borderRadius: '4px',
-    background: '#374151', color: '#9ca3af', cursor: 'pointer',
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "36px",
+    height: "36px",
+    border: "none",
+    borderRadius: "4px",
+    background: "#374151",
+    color: "#9ca3af",
+    cursor: "pointer",
   },
   back: {
-    padding: '6px 12px', border: '1px solid #4b5563', borderRadius: '4px',
-    background: 'transparent', color: '#9ca3af', cursor: 'pointer',
-    fontFamily: 'monospace', fontSize: '12px',
+    padding: "6px 12px",
+    border: "1px solid #4b5563",
+    borderRadius: "4px",
+    background: "transparent",
+    color: "#9ca3af",
+    cursor: "pointer",
+    fontFamily: "monospace",
+    fontSize: "12px",
   },
   actionBtn: {
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    width: '36px', height: '36px', border: 'none', borderRadius: '4px',
-    background: '#374151', color: '#9ca3af', cursor: 'pointer',
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "36px",
+    height: "36px",
+    border: "none",
+    borderRadius: "4px",
+    background: "#374151",
+    color: "#9ca3af",
+    cursor: "pointer",
   },
 };
 
 function AppBar({ onHamburgerClick, onBack, pageTitle, rightContent }) {
   return (
     <header style={barStyles.bar}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <button type="button" onClick={onHamburgerClick} aria-label="Open menu" style={barStyles.hamburger}>
+      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+        <button
+          type="button"
+          onClick={onHamburgerClick}
+          aria-label="Open menu"
+          style={barStyles.hamburger}
+        >
           <Menu style={{ width: 20, height: 20 }} />
         </button>
         {onBack && (
-          <button type="button" onClick={onBack} style={barStyles.back}>← Back</button>
+          <button type="button" onClick={onBack} style={barStyles.back}>
+            ← Back
+          </button>
         )}
-        <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#fff' }}>1(800) BIZARRE</span>
+        <span style={{ fontSize: "18px", fontWeight: "bold", color: "#fff" }}>
+          1(800) BIZARRE
+        </span>
         {pageTitle && (
           <>
-            <span style={{ color: '#6b7280' }}>—</span>
-            <span style={{ color: '#9ca3af', fontSize: '14px' }}>{pageTitle}</span>
+            <span style={{ color: "#6b7280" }}>—</span>
+            <span style={{ color: "#9ca3af", fontSize: "14px" }}>
+              {pageTitle}
+            </span>
           </>
         )}
       </div>
       {rightContent && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>{rightContent}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {rightContent}
+        </div>
       )}
     </header>
   );
@@ -98,7 +140,7 @@ function parseHashId(segment) {
 /** Parse #hash into route state. Used for lazy useState (first paint) and on hashchange. */
 function routeStateFromHash(hash) {
   const base = {
-    currentPage: 'home',
+    currentPage: "home",
     characterPageId: null,
     campaignPageId: null,
     npcPageId: null,
@@ -106,50 +148,53 @@ function routeStateFromHash(hash) {
     rulesSection: null,
   };
   if (!hash) return base;
-  if (hash === 'test') return { ...base, currentPage: 'test' };
-  if (hash === 'npcs' || hash.startsWith('npcs/')) {
-    const idPart = hash.replace(/^npcs\/?/, '');
+  if (hash === "test") return { ...base, currentPage: "test" };
+  if (hash === "npcs" || hash.startsWith("npcs/")) {
+    const idPart = hash.replace(/^npcs\/?/, "");
     return {
       ...base,
-      currentPage: 'npcs',
+      currentPage: "npcs",
       npcPageId: parseHashId(idPart),
     };
   }
-  if (hash === 'search') return { ...base, currentPage: 'search' };
-  if (hash === 'notifications') return { ...base, currentPage: 'notifications' };
-  if (hash === 'messages') return { ...base, currentPage: 'messages' };
-  if (hash === 'account-settings') return { ...base, currentPage: 'account-settings' };
-  if (hash === 'character-options') return { ...base, currentPage: 'character-options' };
-  if (hash === 'patch-notes') return { ...base, currentPage: 'patch-notes' };
-  if (hash === 'licenses') return { ...base, currentPage: 'licenses' };
-  if (hash === 'rules' || hash.startsWith('rules-')) {
+  if (hash === "search") return { ...base, currentPage: "search" };
+  if (hash === "notifications")
+    return { ...base, currentPage: "notifications" };
+  if (hash === "messages") return { ...base, currentPage: "messages" };
+  if (hash === "account-settings")
+    return { ...base, currentPage: "account-settings" };
+  if (hash === "character-options")
+    return { ...base, currentPage: "character-options" };
+  if (hash === "patch-notes") return { ...base, currentPage: "patch-notes" };
+  if (hash === "licenses") return { ...base, currentPage: "licenses" };
+  if (hash === "rules" || hash.startsWith("rules-")) {
     return {
       ...base,
-      currentPage: 'rules',
-      rulesSection: hash === 'rules' ? null : hash.replace(/^rules-/, ''),
+      currentPage: "rules",
+      rulesSection: hash === "rules" ? null : hash.replace(/^rules-/, ""),
     };
   }
-  if (hash === 'campaigns' || hash.startsWith('campaigns/')) {
-    const idPart = hash.replace(/^campaigns\/?/, '');
+  if (hash === "campaigns" || hash.startsWith("campaigns/")) {
+    const idPart = hash.replace(/^campaigns\/?/, "");
     return {
       ...base,
-      currentPage: 'campaigns',
+      currentPage: "campaigns",
       campaignPageId: parseHashId(idPart),
     };
   }
-  if (hash === 'abilities' || hash.startsWith('abilities-')) {
-    const filterPart = hash.replace(/^abilities-?/, '');
+  if (hash === "abilities" || hash.startsWith("abilities-")) {
+    const filterPart = hash.replace(/^abilities-?/, "");
     return {
       ...base,
-      currentPage: 'abilities',
+      currentPage: "abilities",
       abilityFilter: filterPart || null,
     };
   }
-  if (hash === 'character' || hash.startsWith('character/')) {
-    const idPart = hash.replace(/^character\/?/, '');
+  if (hash === "character" || hash.startsWith("character/")) {
+    const idPart = hash.replace(/^character\/?/, "");
     return {
       ...base,
-      currentPage: 'character',
+      currentPage: "character",
       characterPageId: parseHashId(idPart),
     };
   }
@@ -159,14 +204,20 @@ function routeStateFromHash(hash) {
 const App = () => {
   const { isAuthenticated, logout } = useAuth();
   const initialRoute =
-    typeof window !== 'undefined'
+    typeof window !== "undefined"
       ? routeStateFromHash(window.location.hash.substring(1))
-      : routeStateFromHash('');
+      : routeStateFromHash("");
   const [currentPage, setCurrentPage] = useState(initialRoute.currentPage);
-  const [characterPageId, setCharacterPageId] = useState(initialRoute.characterPageId);
-  const [campaignPageId, setCampaignPageId] = useState(initialRoute.campaignPageId);
+  const [characterPageId, setCharacterPageId] = useState(
+    initialRoute.characterPageId,
+  );
+  const [campaignPageId, setCampaignPageId] = useState(
+    initialRoute.campaignPageId,
+  );
   const [npcPageId, setNpcPageId] = useState(initialRoute.npcPageId);
-  const [abilityFilter, setAbilityFilter] = useState(initialRoute.abilityFilter);
+  const [abilityFilter, setAbilityFilter] = useState(
+    initialRoute.abilityFilter,
+  );
   const [menuOpen, setMenuOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [menuCharacters, setMenuCharacters] = useState([]);
@@ -188,53 +239,59 @@ const App = () => {
 
   useEffect(() => {
     const onHashChange = () => parseHash();
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
   }, [parseHash]);
 
   const handlePageChange = (page, payload) => {
     setCurrentPage(page);
-    if (page === 'character') {
+    if (page === "character") {
       setCharacterPageId(payload?.characterId ?? null);
       setCampaignPageId(null);
       setAbilityFilter(null);
-      window.location.hash = payload?.characterId != null ? `character/${payload.characterId}` : 'character';
-    } else if (page === 'campaigns') {
+      window.location.hash =
+        payload?.characterId != null
+          ? `character/${payload.characterId}`
+          : "character";
+    } else if (page === "campaigns") {
       setCampaignPageId(payload?.campaignId ?? null);
       setCharacterPageId(null);
       setAbilityFilter(null);
-      window.location.hash = payload?.campaignId != null ? `campaigns/${payload.campaignId}` : 'campaigns';
-    } else if (page === 'abilities') {
+      window.location.hash =
+        payload?.campaignId != null
+          ? `campaigns/${payload.campaignId}`
+          : "campaigns";
+    } else if (page === "abilities") {
       setCharacterPageId(null);
       setCampaignPageId(null);
       const filter = payload?.filter || null;
       setAbilityFilter(filter);
-      window.location.hash = filter ? `abilities-${filter}` : 'abilities';
-    } else if (page === 'character-options') {
+      window.location.hash = filter ? `abilities-${filter}` : "abilities";
+    } else if (page === "character-options") {
       setCharacterPageId(null);
       setCampaignPageId(null);
       setAbilityFilter(null);
-      window.location.hash = 'character-options';
-    } else if (page === 'rules') {
+      window.location.hash = "character-options";
+    } else if (page === "rules") {
       setCharacterPageId(null);
       setCampaignPageId(null);
       setAbilityFilter(null);
       const section = payload?.section || null;
       setRulesSection(section);
-      window.location.hash = section ? `rules-${section}` : 'rules';
-    } else if (page === 'npcs') {
+      window.location.hash = section ? `rules-${section}` : "rules";
+    } else if (page === "npcs") {
       setCharacterPageId(null);
       setCampaignPageId(null);
       const npcId = payload?.npcId ?? null;
       setNpcPageId(npcId);
-      window.location.hash = npcId != null ? `npcs/${npcId}` : 'npcs';
+      window.location.hash = npcId != null ? `npcs/${npcId}` : "npcs";
     } else {
       setCharacterPageId(null);
       setCampaignPageId(null);
       setNpcPageId(null);
       setAbilityFilter(null);
       setRulesSection(null);
-      window.location.hash = page === 'home' ? '' : page;
+      window.location.hash = page === "home" ? "" : page;
     }
   };
 
@@ -257,11 +314,11 @@ const App = () => {
   }, [menuOpen, loadMenuCharacters]);
 
   const handleMenuSelectCharacter = useCallback((id) => {
-    handlePageChange('character', { characterId: id });
+    handlePageChange("character", { characterId: id });
   }, []);
 
   const handleMenuNewCharacter = useCallback(() => {
-    handlePageChange('character', { characterId: null });
+    handlePageChange("character", { characterId: null });
   }, []);
 
   const toggleMenu = () => setMenuOpen((o) => !o);
@@ -280,94 +337,132 @@ const App = () => {
           onSelectCharacter={handleMenuSelectCharacter}
           onNewCharacter={handleMenuNewCharacter}
           isAuthenticated={isAuthenticated}
-          onLogin={() => handlePageChange('home')}
+          onLogin={() => handlePageChange("home")}
           onLogout={logout}
         />
 
-        {currentPage !== 'home' &&
-          currentPage !== 'search' &&
-          currentPage !== 'notifications' &&
-          currentPage !== 'messages' &&
-          currentPage !== 'account-settings' &&
-          currentPage !== 'patch-notes' &&
-          currentPage !== 'licenses' && (
-          <AppBar
-            onHamburgerClick={toggleMenu}
-            onBack={handleBack}
-            pageTitle={PAGE_TITLES[currentPage]}
-          />
-        )}
+        {currentPage !== "home" &&
+          currentPage !== "search" &&
+          currentPage !== "notifications" &&
+          currentPage !== "messages" &&
+          currentPage !== "account-settings" &&
+          currentPage !== "patch-notes" &&
+          currentPage !== "licenses" && (
+            <AppBar
+              onHamburgerClick={toggleMenu}
+              onBack={handleBack}
+              pageTitle={PAGE_TITLES[currentPage]}
+            />
+          )}
 
-        {currentPage === 'home' && (
+        {currentPage === "home" && (
           <>
             <UserMenu
               open={userMenuOpen}
               onClose={() => setUserMenuOpen(false)}
-              onNavigateToNotifications={() => handlePageChange('notifications')}
-              onNavigateToMessages={() => handlePageChange('messages')}
-              onNavigateToAccountSettings={() => handlePageChange('account-settings')}
+              onNavigateToNotifications={() =>
+                handlePageChange("notifications")
+              }
+              onNavigateToMessages={() => handlePageChange("messages")}
+              onNavigateToAccountSettings={() =>
+                handlePageChange("account-settings")
+              }
               onLogout={logout}
             />
             <Home
               menuOpen={menuOpen}
               onToggleMenu={toggleMenu}
-              onSearch={() => handlePageChange('search')}
+              onSearch={() => handlePageChange("search")}
               onOpenAccountMenu={() => setUserMenuOpen(true)}
-              onNavigateToCharacter={(characterId) => handlePageChange('character', { characterId })}
-              onNavigateToCharacterOptions={() => handlePageChange('character-options')}
-              onNavigateToCampaign={(campaignId) => handlePageChange('campaigns', { campaignId })}
-              onNavigateToRules={() => handlePageChange('rules')}
-              onNavigateToPatchNotes={() => handlePageChange('patch-notes')}
-              onNavigateToLicenses={() => handlePageChange('licenses')}
-              onNavigateToNPC={(npcId) => handlePageChange('npcs', { npcId })}
+              onNavigateToCharacter={(characterId) =>
+                handlePageChange("character", { characterId })
+              }
+              onNavigateToCharacterOptions={() =>
+                handlePageChange("character-options")
+              }
+              onNavigateToCampaign={(campaignId) =>
+                handlePageChange("campaigns", { campaignId })
+              }
+              onNavigateToRules={() => handlePageChange("rules")}
+              onNavigateToPatchNotes={() => handlePageChange("patch-notes")}
+              onNavigateToLicenses={() => handlePageChange("licenses")}
+              onNavigateToNPC={(npcId) => handlePageChange("npcs", { npcId })}
             />
           </>
         )}
-        {currentPage === 'character' && (
+        {currentPage === "character" && (
           <CharacterPage initialCharacterId={characterPageId} />
         )}
-        {currentPage === 'character-options' && (
+        {currentPage === "character-options" && (
           <CharacterOptionsPage
-            onNavigateToAbilities={(filter) => handlePageChange('abilities', { filter })}
+            onNavigateToAbilities={(filter) =>
+              handlePageChange("abilities", { filter })
+            }
           />
         )}
-        {currentPage === 'npcs' && <CharacterPage initialCharacterId={null} initialNpcId={npcPageId} preferNpcMode />}
-        {currentPage === 'campaigns' && (
+        {currentPage === "npcs" && (
+          <CharacterPage
+            initialCharacterId={null}
+            initialNpcId={npcPageId}
+            preferNpcMode
+          />
+        )}
+        {currentPage === "campaigns" && (
           <CampaignManagement
             initialCampaignId={campaignPageId}
-            onNavigateToCharacter={(id) => handlePageChange('character', { characterId: id })}
-            onNavigateToNPC={(id) => handlePageChange('npcs', { npcId: id })}
-            onCampaignSelect={(id) => handlePageChange('campaigns', { campaignId: id })}
+            onNavigateToCharacter={(id) =>
+              handlePageChange("character", { characterId: id })
+            }
+            onNavigateToNPC={(id) => handlePageChange("npcs", { npcId: id })}
+            onCampaignSelect={(id) =>
+              handlePageChange("campaigns", { campaignId: id })
+            }
           />
         )}
-        {currentPage === 'abilities' && <AbilityBrowser initialFilter={abilityFilter} />}
-        {currentPage === 'search' && (
+        {currentPage === "abilities" && (
+          <AbilityBrowser initialFilter={abilityFilter} />
+        )}
+        {currentPage === "search" && (
           <SearchPage
             onBack={handleBack}
-            onNavigateToCharacter={(id) => handlePageChange('character', { characterId: id })}
-            onNavigateToCampaign={(id) => handlePageChange('campaigns', { campaignId: id })}
-            onNavigateToAbilities={(filter) => handlePageChange('abilities', { filter })}
+            onNavigateToCharacter={(id) =>
+              handlePageChange("character", { characterId: id })
+            }
+            onNavigateToCampaign={(id) =>
+              handlePageChange("campaigns", { campaignId: id })
+            }
+            onNavigateToAbilities={(filter) =>
+              handlePageChange("abilities", { filter })
+            }
           />
         )}
-        {currentPage === 'notifications' && <NotificationsPage onBack={handleBack} />}
-        {currentPage === 'messages' && <MessagesPage onBack={handleBack} />}
-        {currentPage === 'account-settings' && <AccountSettingsPage onBack={handleBack} />}
-        {currentPage === 'patch-notes' && <PatchNotesPage onBack={handleBack} />}
-        {currentPage === 'licenses' && <LicensesPage onBack={handleBack} />}
-        {currentPage === 'rules' && (
+        {currentPage === "notifications" && (
+          <NotificationsPage onBack={handleBack} />
+        )}
+        {currentPage === "messages" && <MessagesPage onBack={handleBack} />}
+        {currentPage === "account-settings" && (
+          <AccountSettingsPage onBack={handleBack} />
+        )}
+        {currentPage === "patch-notes" && (
+          <PatchNotesPage onBack={handleBack} />
+        )}
+        {currentPage === "licenses" && <LicensesPage onBack={handleBack} />}
+        {currentPage === "rules" && (
           <RulesPage
             onBack={handleBack}
             initialSection={rulesSection}
-            onNavigateSection={(slug) => handlePageChange('rules', slug != null ? { section: slug } : {})}
+            onNavigateSection={(slug) =>
+              handlePageChange("rules", slug != null ? { section: slug } : {})
+            }
           />
         )}
-        {currentPage === 'test' && <ResponsiveTest />}
+        {currentPage === "test" && <ResponsiveTest />}
       </div>
     </ProtectedRoute>
   );
 };
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
+const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
   <React.StrictMode>
     <AuthProvider>
@@ -375,5 +470,5 @@ root.render(
         <App />
       </ThemeProvider>
     </AuthProvider>
-  </React.StrictMode>
+  </React.StrictMode>,
 );

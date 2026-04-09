@@ -1,37 +1,70 @@
-import { useState, useEffect } from 'react';
-import { createDefaultCharacter } from '../utils/characterUtils';
-import { characterAPI, referenceAPI, transformBackendToFrontend, transformFrontendToBackend } from '../services/api';
+import { useState, useEffect } from "react";
+import { createDefaultCharacter } from "../utils/characterUtils";
+import {
+  characterAPI,
+  referenceAPI,
+  transformBackendToFrontend,
+  transformFrontendToBackend,
+} from "../services/api";
 
 export const useCharacterSheet = (characterId, onSave) => {
   const [characterData, setCharacterData] = useState(createDefaultCharacter());
   const [stressBoxes, setStressBoxes] = useState(Array(9).fill(false));
   const [traumaChecks, setTraumaChecks] = useState({
-    COLD: false, HAUNTED: false, OBSESSED: false, PARANOID: false,
-    RECKLESS: false, SOFT: false, UNSTABLE: false, VICIOUS: false
+    COLD: false,
+    HAUNTED: false,
+    OBSESSED: false,
+    PARANOID: false,
+    RECKLESS: false,
+    SOFT: false,
+    UNSTABLE: false,
+    VICIOUS: false,
   });
-  const [armorUses, setArmorUses] = useState({ armor: false, heavy: false, special: false });
+  const [armorUses, setArmorUses] = useState({
+    armor: false,
+    heavy: false,
+    special: false,
+  });
   const [harmEntries, setHarmEntries] = useState({
-    level3: [''],
-    level2: ['', ''],
-    level1: ['', '']
+    level3: [""],
+    level2: ["", ""],
+    level1: ["", ""],
   });
   const [coinBoxes, setCoinBoxes] = useState(Array(4).fill(false));
   const [stashBoxes, setStashBoxes] = useState(Array(40).fill(false));
   const [healingClock, setHealingClock] = useState(0);
   const [actionRatings, setActionRatings] = useState({
-    HUNT: 0, STUDY: 0, SURVEY: 0, TINKER: 0,
-    FINESSE: 0, PROWL: 0, SKIRMISH: 0, WRECK: 0,
-    BIZARRE: 0, COMMAND: 0, CONSORT: 0, SWAY: 0
+    HUNT: 0,
+    STUDY: 0,
+    SURVEY: 0,
+    TINKER: 0,
+    FINESSE: 0,
+    PROWL: 0,
+    SKIRMISH: 0,
+    WRECK: 0,
+    BIZARRE: 0,
+    COMMAND: 0,
+    CONSORT: 0,
+    SWAY: 0,
   });
   const [standStats, setStandStats] = useState({
-    power: 1, speed: 1, range: 1, durability: 1, precision: 1, development: 1
+    power: 1,
+    speed: 1,
+    range: 1,
+    durability: 1,
+    precision: 1,
+    development: 1,
   });
   const [xpTracks, setXpTracks] = useState({
-    insight: 0, prowess: 0, resolve: 0, heritage: 0, playbook: 0
+    insight: 0,
+    prowess: 0,
+    resolve: 0,
+    heritage: 0,
+    playbook: 0,
   });
   const [selectedAbilities, setSelectedAbilities] = useState([]);
   const [customClocks, setCustomClocks] = useState([]);
-  
+
   // Loading and error states
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -40,14 +73,14 @@ export const useCharacterSheet = (characterId, onSave) => {
   // Load character from backend
   const loadCharacter = async (id) => {
     if (!id) return;
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       const backendCharacter = await characterAPI.getCharacter(id);
       const frontendCharacter = transformBackendToFrontend(backendCharacter);
-      
+
       // Update all state with backend data
       setCharacterData({
         name: frontendCharacter.name,
@@ -56,9 +89,9 @@ export const useCharacterSheet = (characterId, onSave) => {
         background: frontendCharacter.background,
         look: frontendCharacter.look,
         vice: frontendCharacter.vice,
-        crew: frontendCharacter.crew
+        crew: frontendCharacter.crew,
       });
-      
+
       setStressBoxes(frontendCharacter.stress);
       setTraumaChecks(frontendCharacter.trauma);
       setArmorUses(frontendCharacter.armor);
@@ -71,10 +104,9 @@ export const useCharacterSheet = (characterId, onSave) => {
       setXpTracks(frontendCharacter.xp);
       setSelectedAbilities(frontendCharacter.abilities);
       setCustomClocks(frontendCharacter.clocks);
-      
     } catch (err) {
       setError(err.message);
-      console.error('Failed to load character:', err);
+      console.error("Failed to load character:", err);
     } finally {
       setLoading(false);
     }
@@ -89,18 +121,42 @@ export const useCharacterSheet = (characterId, onSave) => {
       const defaultChar = createDefaultCharacter();
       setCharacterData(defaultChar);
       setStressBoxes(defaultChar.stress || Array(9).fill(false));
-      setTraumaChecks(defaultChar.trauma || {
-        COLD: false, HAUNTED: false, OBSESSED: false, PARANOID: false,
-        RECKLESS: false, SOFT: false, UNSTABLE: false, VICIOUS: false
-      });
-      setArmorUses(defaultChar.armor || { armor: false, heavy: false, special: false });
-      setHarmEntries(defaultChar.harmEntries || { level3: [''], level2: ['', ''], level1: ['', ''] });
+      setTraumaChecks(
+        defaultChar.trauma || {
+          COLD: false,
+          HAUNTED: false,
+          OBSESSED: false,
+          PARANOID: false,
+          RECKLESS: false,
+          SOFT: false,
+          UNSTABLE: false,
+          VICIOUS: false,
+        },
+      );
+      setArmorUses(
+        defaultChar.armor || { armor: false, heavy: false, special: false },
+      );
+      setHarmEntries(
+        defaultChar.harmEntries || {
+          level3: [""],
+          level2: ["", ""],
+          level1: ["", ""],
+        },
+      );
       setCoinBoxes(defaultChar.coin || Array(4).fill(false));
       setStashBoxes(defaultChar.stash || Array(40).fill(false));
       setHealingClock(defaultChar.healingClock ?? 0);
       setActionRatings(defaultChar.actionRatings || {});
       setStandStats(defaultChar.standStats || {});
-      setXpTracks(defaultChar.xp || { insight: 0, prowess: 0, resolve: 0, heritage: 0, playbook: 0 });
+      setXpTracks(
+        defaultChar.xp || {
+          insight: 0,
+          prowess: 0,
+          resolve: 0,
+          heritage: 0,
+          playbook: 0,
+        },
+      );
       setSelectedAbilities(defaultChar.abilities || []);
       setCustomClocks(defaultChar.clocks || []);
       setError(null);
@@ -111,7 +167,7 @@ export const useCharacterSheet = (characterId, onSave) => {
   const handleSave = async () => {
     setSaving(true);
     setError(null);
-    
+
     try {
       const frontendCharacter = {
         ...characterData,
@@ -128,99 +184,108 @@ export const useCharacterSheet = (characterId, onSave) => {
         abilities: selectedAbilities,
         clocks: customClocks,
         id: characterId,
-        lastModified: new Date().toISOString()
+        lastModified: new Date().toISOString(),
       };
-      
+
       // Resolve heritage name to id (serializers often expect integer PK only)
       let payloadCharacter = frontendCharacter;
       const h0 = frontendCharacter.heritage;
-      if (typeof h0 === 'number' && Number.isFinite(h0)) {
+      if (typeof h0 === "number" && Number.isFinite(h0)) {
         /* already id */
-      } else if (typeof h0 === 'string') {
+      } else if (typeof h0 === "string") {
         const t = h0.trim();
         if (t && /^\d+$/.test(t)) {
-          payloadCharacter = { ...frontendCharacter, heritage: parseInt(t, 10) };
+          payloadCharacter = {
+            ...frontendCharacter,
+            heritage: parseInt(t, 10),
+          };
         } else {
           try {
             const heritages = await referenceAPI.getHeritages();
             const list = heritages || [];
             const match = list.find(
-              (h) => (h.name || '').toLowerCase() === t.toLowerCase()
+              (h) => (h.name || "").toLowerCase() === t.toLowerCase(),
             );
             const id = match ? match.id : list[0]?.id;
-            if (id != null) payloadCharacter = { ...frontendCharacter, heritage: id };
+            if (id != null)
+              payloadCharacter = { ...frontendCharacter, heritage: id };
           } catch (_) {
             /* transformFrontendToBackend will coerce string to null */
           }
         }
       }
-      
+
       const backendCharacter = transformFrontendToBackend(payloadCharacter);
-      
+
       if (characterId) {
         // Update existing character
         await characterAPI.updateCharacter(characterId, backendCharacter);
         if (onSave) onSave(frontendCharacter);
       } else {
         // Create new character
-        const newCharacter = await characterAPI.createCharacter(backendCharacter);
+        const newCharacter =
+          await characterAPI.createCharacter(backendCharacter);
         if (onSave) onSave(transformBackendToFrontend(newCharacter));
       }
-      
     } catch (err) {
       setError(err.message);
-      console.error('Failed to save character:', err);
+      console.error("Failed to save character:", err);
     } finally {
       setSaving(false);
     }
   };
 
   // Roll action dice
-  const rollAction = async (actionName, diceCount, isResistanceRoll = false, isDesperateAction = false) => {
+  const rollAction = async (
+    actionName,
+    diceCount,
+    isResistanceRoll = false,
+    isDesperateAction = false,
+  ) => {
     if (!characterId) {
-      console.warn('Cannot roll dice without a character ID');
+      console.warn("Cannot roll dice without a character ID");
       return null;
     }
-    
+
     try {
       const result = await characterAPI.rollAction(characterId, {
         action: actionName,
         dice_count: diceCount,
         is_resistance_roll: isResistanceRoll,
-        is_desperate_action: isDesperateAction
+        is_desperate_action: isDesperateAction,
       });
-      
+
       // Reload character to get updated state
       await loadCharacter(characterId);
-      
+
       return result;
     } catch (err) {
       setError(err.message);
-      console.error('Failed to roll action:', err);
+      console.error("Failed to roll action:", err);
       return null;
     }
   };
 
   // Add XP
-  const addXP = async (xpType, amount, reason = '') => {
+  const addXP = async (xpType, amount, reason = "") => {
     if (!characterId) {
-      console.warn('Cannot add XP without a character ID');
+      console.warn("Cannot add XP without a character ID");
       return false;
     }
-    
+
     try {
       await characterAPI.addXP(characterId, {
         xp_type: xpType,
         amount: amount,
-        reason: reason
+        reason: reason,
       });
-      
+
       // Reload character to get updated state
       await loadCharacter(characterId);
       return true;
     } catch (err) {
       setError(err.message);
-      console.error('Failed to add XP:', err);
+      console.error("Failed to add XP:", err);
       return false;
     }
   };
@@ -228,46 +293,46 @@ export const useCharacterSheet = (characterId, onSave) => {
   // Take harm
   const takeHarm = async (harmLevel, harmName, stressCost = 0) => {
     if (!characterId) {
-      console.warn('Cannot take harm without a character ID');
+      console.warn("Cannot take harm without a character ID");
       return false;
     }
-    
+
     try {
       await characterAPI.takeHarm(characterId, {
         harm_level: harmLevel,
         harm_name: harmName,
-        stress_cost: stressCost
+        stress_cost: stressCost,
       });
-      
+
       // Reload character to get updated state
       await loadCharacter(characterId);
       return true;
     } catch (err) {
       setError(err.message);
-      console.error('Failed to take harm:', err);
+      console.error("Failed to take harm:", err);
       return false;
     }
   };
 
   // Heal harm
-  const healHarm = async (harmLevel, healingMethod = 'recovery') => {
+  const healHarm = async (harmLevel, healingMethod = "recovery") => {
     if (!characterId) {
-      console.warn('Cannot heal harm without a character ID');
+      console.warn("Cannot heal harm without a character ID");
       return false;
     }
-    
+
     try {
       await characterAPI.healHarm(characterId, {
         harm_level: harmLevel,
-        healing_method: healingMethod
+        healing_method: healingMethod,
       });
-      
+
       // Reload character to get updated state
       await loadCharacter(characterId);
       return true;
     } catch (err) {
       setError(err.message);
-      console.error('Failed to heal harm:', err);
+      console.error("Failed to heal harm:", err);
       return false;
     }
   };
@@ -275,22 +340,22 @@ export const useCharacterSheet = (characterId, onSave) => {
   // Indulge vice
   const indulgeVice = async (viceName, stressRelieved) => {
     if (!characterId) {
-      console.warn('Cannot indulge vice without a character ID');
+      console.warn("Cannot indulge vice without a character ID");
       return false;
     }
-    
+
     try {
       await characterAPI.indulgeVice(characterId, {
         vice_name: viceName,
-        stress_relieved: stressRelieved
+        stress_relieved: stressRelieved,
       });
-      
+
       // Reload character to get updated state
       await loadCharacter(characterId);
       return true;
     } catch (err) {
       setError(err.message);
-      console.error('Failed to indulge vice:', err);
+      console.error("Failed to indulge vice:", err);
       return false;
     }
   };
@@ -298,21 +363,21 @@ export const useCharacterSheet = (characterId, onSave) => {
   // Log armor expenditure
   const logArmorExpenditure = async (armorType) => {
     if (!characterId) {
-      console.warn('Cannot log armor expenditure without a character ID');
+      console.warn("Cannot log armor expenditure without a character ID");
       return false;
     }
-    
+
     try {
       await characterAPI.logArmorExpenditure(characterId, {
-        armor_type: armorType
+        armor_type: armorType,
       });
-      
+
       // Reload character to get updated state
       await loadCharacter(characterId);
       return true;
     } catch (err) {
       setError(err.message);
-      console.error('Failed to log armor expenditure:', err);
+      console.error("Failed to log armor expenditure:", err);
       return false;
     }
   };
@@ -320,19 +385,19 @@ export const useCharacterSheet = (characterId, onSave) => {
   // Add progress clock
   const addProgressClock = async (clockData) => {
     if (!characterId) {
-      console.warn('Cannot add progress clock without a character ID');
+      console.warn("Cannot add progress clock without a character ID");
       return false;
     }
-    
+
     try {
       await characterAPI.addProgressClock(characterId, clockData);
-      
+
       // Reload character to get updated state
       await loadCharacter(characterId);
       return true;
     } catch (err) {
       setError(err.message);
-      console.error('Failed to add progress clock:', err);
+      console.error("Failed to add progress clock:", err);
       return false;
     }
   };
@@ -340,22 +405,22 @@ export const useCharacterSheet = (characterId, onSave) => {
   // Update progress clock
   const updateProgressClock = async (clockId, newFilled) => {
     if (!characterId) {
-      console.warn('Cannot update progress clock without a character ID');
+      console.warn("Cannot update progress clock without a character ID");
       return false;
     }
-    
+
     try {
       await characterAPI.updateProgressClock(characterId, {
         clock_id: clockId,
-        filled_segments: newFilled
+        filled_segments: newFilled,
       });
-      
+
       // Reload character to get updated state
       await loadCharacter(characterId);
       return true;
     } catch (err) {
       setError(err.message);
-      console.error('Failed to update progress clock:', err);
+      console.error("Failed to update progress clock:", err);
       return false;
     }
   };
@@ -388,12 +453,12 @@ export const useCharacterSheet = (characterId, onSave) => {
     setSelectedAbilities,
     customClocks,
     setCustomClocks,
-    
+
     // Loading states
     loading,
     saving,
     error,
-    
+
     // Actions
     handleSave,
     rollAction,
@@ -406,4 +471,4 @@ export const useCharacterSheet = (characterId, onSave) => {
     updateProgressClock,
     loadCharacter,
   };
-}; 
+};

@@ -4,4 +4,4 @@
  * Run via prebuild/prestart.
  */
 
-require('./splitSrd.js');
+require("./splitSrd.js");

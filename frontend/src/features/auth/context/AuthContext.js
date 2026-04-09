@@ -1,19 +1,19 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { authAPI } from '../services/authService';
+import React, { createContext, useContext, useState, useEffect } from "react";
+import { authAPI } from "../services/authService";
 
 const AuthContext = createContext();
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 };
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('authToken'));
+  const [token, setToken] = useState(localStorage.getItem("authToken"));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -27,7 +27,7 @@ export const AuthProvider = ({ children }) => {
         } catch (err) {
           setToken(null);
           setUser(null);
-          localStorage.removeItem('authToken');
+          localStorage.removeItem("authToken");
         }
       }
       setLoading(false);
@@ -39,11 +39,11 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials) => {
     setLoading(true);
     setError(null);
-    
+
     // Trim to avoid "Unable to log in" from accidental spaces
     const trimmed = {
-      username: (credentials.username || '').trim(),
-      password: (credentials.password || '').trim(),
+      username: (credentials.username || "").trim(),
+      password: (credentials.password || "").trim(),
     };
 
     try {
@@ -53,13 +53,13 @@ export const AuthProvider = ({ children }) => {
       const userData = response.user ?? {
         id: response.user_id,
         username: response.username,
-        email: response.email ?? '',
+        email: response.email ?? "",
       };
-      
+
       setToken(newToken);
       setUser(userData);
-      localStorage.setItem('authToken', newToken);
-      
+      localStorage.setItem("authToken", newToken);
+
       return { success: true };
     } catch (err) {
       setError(err.message);
@@ -72,11 +72,11 @@ export const AuthProvider = ({ children }) => {
   const signup = async (userData) => {
     setLoading(true);
     setError(null);
-    
+
     // Trim to keep signup and login consistent (avoids login failures from accidental spaces)
     const trimmed = {
-      username: (userData.username || '').trim(),
-      password: (userData.password || '').trim(),
+      username: (userData.username || "").trim(),
+      password: (userData.password || "").trim(),
     };
 
     try {
@@ -85,15 +85,15 @@ export const AuthProvider = ({ children }) => {
       const userInfo = response.user ?? {
         id: response.user_id,
         username: response.username,
-        email: response.email ?? '',
+        email: response.email ?? "",
       };
-      
+
       setToken(newToken);
       setUser(userInfo);
-      localStorage.setItem('authToken', newToken);
+      localStorage.setItem("authToken", newToken);
       // Drop stale #character/… (or other) hash from a prior session so the app opens on home.
-      if (typeof window !== 'undefined') {
-        window.location.hash = '';
+      if (typeof window !== "undefined") {
+        window.location.hash = "";
       }
 
       return { success: true };
@@ -109,7 +109,7 @@ export const AuthProvider = ({ children }) => {
     setToken(null);
     setUser(null);
     setError(null);
-    localStorage.removeItem('authToken');
+    localStorage.removeItem("authToken");
   };
 
   const isAuthenticated = !!token && !!user;
@@ -123,12 +123,8 @@ export const AuthProvider = ({ children }) => {
     login,
     signup,
     logout,
-    clearError: () => setError(null)
+    clearError: () => setError(null),
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
-}; 
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};

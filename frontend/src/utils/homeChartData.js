@@ -5,7 +5,7 @@
 const MONTHS_BACK = 12;
 
 function monthKeyFromDate(d) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
 /**
@@ -17,7 +17,10 @@ export function buildSessionsByMonth(campaigns, monthsBack = MONTHS_BACK) {
   for (let i = monthsBack - 1; i >= 0; i -= 1) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const key = monthKeyFromDate(d);
-    const label = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+    const label = d.toLocaleDateString("en-US", {
+      month: "short",
+      year: "2-digit",
+    });
     buckets.push({ monthKey: key, label, count: 0 });
   }
 
@@ -42,10 +45,10 @@ export function buildSessionsByMonth(campaigns, monthsBack = MONTHS_BACK) {
 /** Bar chart rows aligned with hero stat dots (green, amber, purple, orange, yellow). */
 export function buildBarChartRows(heroStats) {
   return [
-    { name: 'Campaigns', value: heroStats.activeCampaigns, fill: '#16a34a' },
-    { name: 'Sessions', value: heroStats.sessionCount, fill: '#c8920a' },
-    { name: 'Crews', value: heroStats.crewCount, fill: '#7c3aed' },
-    { name: 'PCs', value: heroStats.pcCount, fill: '#d97b2a' },
-    { name: 'NPCs', value: heroStats.npcCount, fill: '#e6b422' },
+    { name: "Campaigns", value: heroStats.activeCampaigns, fill: "#16a34a" },
+    { name: "Sessions", value: heroStats.sessionCount, fill: "#c8920a" },
+    { name: "Crews", value: heroStats.crewCount, fill: "#7c3aed" },
+    { name: "PCs", value: heroStats.pcCount, fill: "#d97b2a" },
+    { name: "NPCs", value: heroStats.npcCount, fill: "#e6b422" },
   ];
 }

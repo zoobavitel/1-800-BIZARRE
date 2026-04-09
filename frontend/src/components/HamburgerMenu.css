@@ -28,7 +28,7 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  font-family: var(--hm-font-mono, 'Share Tech Mono', monospace);
+  font-family: var(--hm-font-mono, "Share Tech Mono", monospace);
   font-size: 12px;
   line-height: 1.5;
   color: var(--hm-dark-text, #eadeb7);
@@ -46,7 +46,7 @@
   justify-content: space-between;
 }
 .hm-poc .nav-drawer-top .nav-logo {
-  font-family: var(--hm-font-display, 'Bebas Neue', sans-serif);
+  font-family: var(--hm-font-display, "Bebas Neue", sans-serif);
   font-size: 18px;
   letter-spacing: 0.06em;
   color: var(--hm-cream, #eadeb7);
@@ -123,14 +123,14 @@
   background: #0e0e0e;
 }
 .hm-poc .nav-section-num {
-  font-family: var(--hm-font-display, 'Bebas Neue', sans-serif);
+  font-family: var(--hm-font-display, "Bebas Neue", sans-serif);
   font-size: 18px;
   color: #d97b2a;
   width: 28px;
   line-height: 1;
 }
 .hm-poc .nav-section-title {
-  font-family: var(--hm-font-heading, 'Oswald', sans-serif);
+  font-family: var(--hm-font-heading, "Oswald", sans-serif);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -180,7 +180,7 @@
   cursor: default;
 }
 .hm-poc .nav-item-soon::after {
-  content: 'SOON';
+  content: "SOON";
   font-style: normal;
   font-size: 8px;
   letter-spacing: 0.1em;
@@ -214,7 +214,7 @@
   margin-bottom: 8px;
 }
 .hm-poc .nav-footer-user-name {
-  font-family: var(--hm-font-heading, 'Oswald', sans-serif);
+  font-family: var(--hm-font-heading, "Oswald", sans-serif);
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--hm-cream, #eadeb7);

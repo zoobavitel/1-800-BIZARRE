@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
-import { searchAPI } from '../../character-sheet/services/api';
+import { useState, useRef, useEffect } from "react";
+import { searchAPI } from "../../character-sheet/services/api";
 
 export const useSearch = (isAuthenticated = true) => {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -20,26 +20,38 @@ export const useSearch = (isAuthenticated = true) => {
     try {
       // Use backend search API
       const results = await searchAPI.globalSearch(query);
-      
+
       // Transform backend results to frontend format
-      const transformedResults = results.map(result => ({
-        type: result.model || 'Unknown',
-        title: result.name || result.title || 'Untitled',
-        subtitle: result.description || result.subtitle || '',
+      const transformedResults = results.map((result) => ({
+        type: result.model || "Unknown",
+        title: result.name || result.title || "Untitled",
+        subtitle: result.description || result.subtitle || "",
         id: result.id,
         url: `/${result.model?.toLowerCase()}/${result.id}`,
         score: result.score || 0,
-        backendData: result
+        backendData: result,
       }));
-      
+
       setSearchResults(transformedResults);
       setShowSearchResults(true);
     } catch (error) {
-      console.error('Search error:', error);
+      console.error("Search error:", error);
       // Fallback to mock results if backend fails
       const mockResults = [
-        { type: 'Character', title: 'Metal Fingers', subtitle: 'Cyborg Stand User', id: 1, url: '/characters/1' },
-        { type: 'Ability', title: 'Iron Will', subtitle: 'Standard Ability', id: 2, url: '/abilities/iron-will' }
+        {
+          type: "Character",
+          title: "Metal Fingers",
+          subtitle: "Cyborg Stand User",
+          id: 1,
+          url: "/characters/1",
+        },
+        {
+          type: "Ability",
+          title: "Iron Will",
+          subtitle: "Standard Ability",
+          id: 2,
+          url: "/abilities/iron-will",
+        },
       ];
       setSearchResults(mockResults);
       setShowSearchResults(true);
@@ -63,9 +75,9 @@ export const useSearch = (isAuthenticated = true) => {
 
   const handleSearchResultClick = (result) => {
     setShowSearchResults(false);
-    setSearchQuery('');
+    setSearchQuery("");
     // Mock navigation - in a real app this would use router
-    console.log('Navigate to:', result.url);
+    console.log("Navigate to:", result.url);
   };
 
   const handleSearchSubmit = () => {
@@ -81,9 +93,9 @@ export const useSearch = (isAuthenticated = true) => {
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, []);
 
@@ -104,6 +116,6 @@ export const useSearch = (isAuthenticated = true) => {
     handleSearchChange,
     handleSearchResultClick,
     handleSearchSubmit,
-    setShowSearchResults
+    setShowSearchResults,
   };
-}; 
+};

@@ -1,38 +1,47 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import ReactMarkdown from 'react-markdown';
-import { ChevronDown, ChevronRight } from 'lucide-react';
-import { RULES_NAV } from '../data/rulesNav';
-import '../styles/Rules.css';
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import ReactMarkdown from "react-markdown";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import { RULES_NAV } from "../data/rulesNav";
+import "../styles/Rules.css";
 
 function slugify(text) {
-  if (!text || typeof text !== 'string') return '';
+  if (!text || typeof text !== "string") return "";
   return text
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-')
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-")
     .toLowerCase()
-    .replace(/^-+|-+$/g, '');
+    .replace(/^-+|-+$/g, "");
 }
 
 function getTextFromChildren(children) {
-  if (typeof children === 'string') return children;
-  if (Array.isArray(children)) return children.map(getTextFromChildren).join('');
-  if (children?.props?.children) return getTextFromChildren(children.props.children);
-  return '';
+  if (typeof children === "string") return children;
+  if (Array.isArray(children))
+    return children.map(getTextFromChildren).join("");
+  if (children?.props?.children)
+    return getTextFromChildren(children.props.children);
+  return "";
 }
 
 /** Hash section (null = overview) → static file slug under public/srd/. */
 function sectionToFetchSlug(section) {
-  if (section == null || section === '') return 'game-rules-srd';
+  if (section == null || section === "") return "game-rules-srd";
   return section;
 }
 
-export default function RulesPage({ onBack, initialSection, onNavigateSection }) {
+export default function RulesPage({
+  onBack,
+  initialSection,
+  onNavigateSection,
+}) {
   const fetchSlug = sectionToFetchSlug(initialSection);
-  const [markdown, setMarkdown] = useState('');
+  const [markdown, setMarkdown] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedCategories, setExpandedCategories] = useState(
-    RULES_NAV.reduce((acc, cat) => ({ ...acc, [cat.label]: cat.expanded ?? true }), {})
+    RULES_NAV.reduce(
+      (acc, cat) => ({ ...acc, [cat.label]: cat.expanded ?? true }),
+      {},
+    ),
   );
   const mainRef = useRef(null);
 
@@ -40,10 +49,12 @@ export default function RulesPage({ onBack, initialSection, onNavigateSection })
     let cancelled = false;
     setLoading(true);
     setError(null);
-    const base = process.env.PUBLIC_URL || '';
+    const base = process.env.PUBLIC_URL || "";
     const url = `${base}/srd/${fetchSlug}.md`;
     fetch(url)
-      .then((r) => (r.ok ? r.text() : Promise.reject(new Error('Failed to load section'))))
+      .then((r) =>
+        r.ok ? r.text() : Promise.reject(new Error("Failed to load section")),
+      )
       .then((text) => {
         if (!cancelled) setMarkdown(text);
       })
@@ -69,12 +80,12 @@ export default function RulesPage({ onBack, initialSection, onNavigateSection })
       if (onNavigateSection) {
         onNavigateSection(slug);
       } else if (slug == null) {
-        window.location.hash = 'rules';
+        window.location.hash = "rules";
       } else {
         window.location.hash = `rules-${slug}`;
       }
     },
-    [onNavigateSection]
+    [onNavigateSection],
   );
 
   const isItemActive = useCallback(
@@ -82,7 +93,7 @@ export default function RulesPage({ onBack, initialSection, onNavigateSection })
       const itemFetch = sectionToFetchSlug(itemSlug);
       return itemFetch === fetchSlug;
     },
-    [fetchSlug]
+    [fetchSlug],
   );
 
   const toggleCategory = (label) => {
@@ -149,9 +160,9 @@ export default function RulesPage({ onBack, initialSection, onNavigateSection })
             <div className="rules-nav-items">
               {category.items.map((item) => (
                 <button
-                  key={item.slug ?? 'overview'}
+                  key={item.slug ?? "overview"}
                   type="button"
-                  className={`rules-nav-item${isItemActive(item.slug) ? ' active' : ''}`}
+                  className={`rules-nav-item${isItemActive(item.slug) ? " active" : ""}`}
                   onClick={() => selectNavItem(item.slug)}
                 >
                   {item.label}

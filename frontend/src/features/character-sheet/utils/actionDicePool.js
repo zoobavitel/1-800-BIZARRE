@@ -6,12 +6,12 @@
  * @param {string} actionName - e.g. "HUNT" or "hunt"
  * @param {Record<string, number>} actionRatings - sheet keys (HUNT, BIZARRE, …)
  */
-export const INSIGHT_ACTIONS = ['HUNT', 'STUDY', 'SURVEY', 'TINKER'];
-export const PROWESS_ACTIONS = ['FINESSE', 'PROWL', 'SKIRMISH', 'WRECK'];
-export const RESOLVE_ACTIONS = ['BIZARRE', 'COMMAND', 'CONSORT', 'SWAY'];
+export const INSIGHT_ACTIONS = ["HUNT", "STUDY", "SURVEY", "TINKER"];
+export const PROWESS_ACTIONS = ["FINESSE", "PROWL", "SKIRMISH", "WRECK"];
+export const RESOLVE_ACTIONS = ["BIZARRE", "COMMAND", "CONSORT", "SWAY"];
 
 export function attributeGroupForAction(actionName) {
-  const u = String(actionName || '').toUpperCase();
+  const u = String(actionName || "").toUpperCase();
   if (INSIGHT_ACTIONS.includes(u)) return INSIGHT_ACTIONS;
   if (PROWESS_ACTIONS.includes(u)) return PROWESS_ACTIONS;
   if (RESOLVE_ACTIONS.includes(u)) return RESOLVE_ACTIONS;
@@ -20,10 +20,12 @@ export function attributeGroupForAction(actionName) {
 
 export function computeActionPoolBreakdown(actionName, actionRatings) {
   const ratings = actionRatings || {};
-  const key = String(actionName || '').toUpperCase();
+  const key = String(actionName || "").toUpperCase();
   const action_rating = Math.max(0, Number(ratings[key] ?? 0) || 0);
   const attrGroup = attributeGroupForAction(key);
-  const attribute_dice = attrGroup.filter((a) => (Number(ratings[a] ?? 0) || 0) > 0).length;
+  const attribute_dice = attrGroup.filter(
+    (a) => (Number(ratings[a] ?? 0) || 0) > 0,
+  ).length;
   return {
     action_rating,
     attribute_dice,

@@ -1,5 +1,6 @@
 /* Theme variables - dark (default) and light */
-[data-theme="dark"], :root {
+[data-theme="dark"],
+:root {
   --bg-page: #000000;
   --bg-header: #1f2937;
   --bg-card: #111827;
@@ -21,7 +22,8 @@
   --border: #d1d5db;
 }
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   background: var(--bg-page);

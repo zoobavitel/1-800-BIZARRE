@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 const CX = 100;
 const CY = 100;
@@ -11,40 +17,40 @@ const R_DATA_MIN = 14;
 /** SRD order: top = Power, then clockwise */
 const STATS = [
   {
-    key: 'power',
-    label: 'Power',
-    grade: 'D',
-    blurb: 'Physical destructive power.',
+    key: "power",
+    label: "Power",
+    grade: "D",
+    blurb: "Physical destructive power.",
   },
   {
-    key: 'speed',
-    label: 'Speed',
-    grade: 'B',
-    blurb: 'Initiative and mobility.',
+    key: "speed",
+    label: "Speed",
+    grade: "B",
+    blurb: "Initiative and mobility.",
   },
   {
-    key: 'range',
-    label: 'Range',
-    grade: 'A',
-    blurb: 'Operational distance of the stand and its abilities.',
+    key: "range",
+    label: "Range",
+    grade: "A",
+    blurb: "Operational distance of the stand and its abilities.",
   },
   {
-    key: 'durability',
-    label: 'Durability',
-    grade: 'A',
-    blurb: 'Resistance and armor.',
+    key: "durability",
+    label: "Durability",
+    grade: "A",
+    blurb: "Resistance and armor.",
   },
   {
-    key: 'precision',
-    label: 'Precision',
-    grade: 'B',
-    blurb: 'Accuracy and control.',
+    key: "precision",
+    label: "Precision",
+    grade: "B",
+    blurb: "Accuracy and control.",
   },
   {
-    key: 'development',
-    label: 'Development',
-    grade: 'C',
-    blurb: 'Growth potential.',
+    key: "development",
+    label: "Development",
+    grade: "C",
+    blurb: "Growth potential.",
   },
 ];
 
@@ -62,7 +68,7 @@ function polar(cx, cy, r, angleRad) {
 }
 
 function wedgePath(i) {
-  const center = (-Math.PI / 2 + (i * Math.PI) / 3);
+  const center = -Math.PI / 2 + (i * Math.PI) / 3;
   const a0 = center - Math.PI / 6;
   const a1 = center + Math.PI / 6;
   const [x0, y0] = polar(CX, CY, R_OUTER, a0);
@@ -81,7 +87,7 @@ function polygonPoints() {
     const r = R_DATA_MIN + t * (R_DATA_MAX - R_DATA_MIN);
     const [x, y] = polar(CX, CY, r, statAngle(i));
     return `${x.toFixed(2)},${y.toFixed(2)}`;
-  }).join(' ');
+  }).join(" ");
 }
 
 export default function HomeStandCoin() {
@@ -99,8 +105,8 @@ export default function HomeStandCoin() {
         setPinned(null);
       }
     };
-    document.addEventListener('pointerdown', onDoc, true);
-    return () => document.removeEventListener('pointerdown', onDoc, true);
+    document.addEventListener("pointerdown", onDoc, true);
+    return () => document.removeEventListener("pointerdown", onDoc, true);
   }, [pinned]);
 
   const onWedgeClick = useCallback((key) => {
@@ -109,27 +115,27 @@ export default function HomeStandCoin() {
 
   const onWedgeKey = useCallback(
     (e, key) => {
-      if (e.key === 'Enter' || e.key === ' ') {
+      if (e.key === "Enter" || e.key === " ") {
         e.preventDefault();
         onWedgeClick(key);
       }
     },
-    [onWedgeClick]
+    [onWedgeClick],
   );
 
   const gradeRings = useMemo(
     () =>
-      ['F', 'D', 'C', 'B', 'A', 'S'].map((g) => {
+      ["F", "D", "C", "B", "A", "S"].map((g) => {
         const t = GRADE_RADIUS[g];
         const r = R_DATA_MIN + t * (R_DATA_MAX - R_DATA_MIN);
         return { g, r };
       }),
-    []
+    [],
   );
 
   const announce = active
     ? `${active.label}, grade ${active.grade}. ${active.blurb}`
-    : 'Stand coin: hover or focus a segment for stat details. Tap outside to clear selection.';
+    : "Stand coin: hover or focus a segment for stat details. Tap outside to clear selection.";
 
   return (
     <div className="home-stand-coin" ref={rootRef}>
@@ -143,7 +149,7 @@ export default function HomeStandCoin() {
       <div className="home-stand-coin-readout">
         <div className="home-stand-coin-readout-stack">
           <div
-            className={`home-stand-coin-readout-panel${active ? ' is-inactive' : ''}`}
+            className={`home-stand-coin-readout-panel${active ? " is-inactive" : ""}`}
             aria-hidden={!!active}
           >
             <span className="home-stand-coin-readout-hint">
@@ -151,12 +157,18 @@ export default function HomeStandCoin() {
             </span>
           </div>
           <div
-            className={`home-stand-coin-readout-panel${active ? '' : ' is-inactive'}`}
+            className={`home-stand-coin-readout-panel${active ? "" : " is-inactive"}`}
             aria-hidden={!active}
           >
-            <span className="home-stand-coin-readout-stat">{active?.label ?? '\u00a0'}</span>
-            <span className="home-stand-coin-readout-grade">{active?.grade ?? '\u00a0'}</span>
-            <span className="home-stand-coin-readout-blurb">{active?.blurb ?? '\u00a0'}</span>
+            <span className="home-stand-coin-readout-stat">
+              {active?.label ?? "\u00a0"}
+            </span>
+            <span className="home-stand-coin-readout-grade">
+              {active?.grade ?? "\u00a0"}
+            </span>
+            <span className="home-stand-coin-readout-blurb">
+              {active?.blurb ?? "\u00a0"}
+            </span>
           </div>
         </div>
       </div>
@@ -167,8 +179,8 @@ export default function HomeStandCoin() {
         aria-labelledby="home-stand-coin-title"
       >
         <title id="home-stand-coin-title">
-          Demo stand coin with six stats: Power, Speed, Range, Durability, Precision, and Development.
-          Grades from F to S.
+          Demo stand coin with six stats: Power, Speed, Range, Durability,
+          Precision, and Development. Grades from F to S.
         </title>
         <defs>
           <clipPath id="home-stand-coin-clip">
@@ -257,7 +269,11 @@ export default function HomeStandCoin() {
                 transform={`rotate(${deg}, ${lx}, ${ly})`}
                 className="home-stand-coin-label"
                 fill="var(--light-text)"
-                style={{ fontSize: 7.5, fontFamily: 'var(--font-heading)', fontWeight: 700 }}
+                style={{
+                  fontSize: 7.5,
+                  fontFamily: "var(--font-heading)",
+                  fontWeight: 700,
+                }}
               >
                 {s.label.toUpperCase()}
               </text>
@@ -267,14 +283,36 @@ export default function HomeStandCoin() {
                 textAnchor="middle"
                 dominantBaseline="middle"
                 fill="var(--orange)"
-                style={{ fontSize: 9, fontFamily: 'var(--font-display)', fontWeight: 700 }}
+                style={{
+                  fontSize: 9,
+                  fontFamily: "var(--font-display)",
+                  fontWeight: 700,
+                }}
               >
                 {s.grade}
               </text>
               {isActive && (
                 <circle
-                  cx={polar(CX, CY, R_DATA_MIN + (GRADE_RADIUS[s.grade] ?? 0.5) * (R_DATA_MAX - R_DATA_MIN), a)[0]}
-                  cy={polar(CX, CY, R_DATA_MIN + (GRADE_RADIUS[s.grade] ?? 0.5) * (R_DATA_MAX - R_DATA_MIN), a)[1]}
+                  cx={
+                    polar(
+                      CX,
+                      CY,
+                      R_DATA_MIN +
+                        (GRADE_RADIUS[s.grade] ?? 0.5) *
+                          (R_DATA_MAX - R_DATA_MIN),
+                      a,
+                    )[0]
+                  }
+                  cy={
+                    polar(
+                      CX,
+                      CY,
+                      R_DATA_MIN +
+                        (GRADE_RADIUS[s.grade] ?? 0.5) *
+                          (R_DATA_MAX - R_DATA_MIN),
+                      a,
+                    )[1]
+                  }
                   r={4}
                   fill="var(--orange)"
                   fillOpacity={0.9}
@@ -292,10 +330,10 @@ export default function HomeStandCoin() {
             <path
               key={`hit-${s.key}`}
               d={wedgePath(i)}
-              fill={isHot ? 'var(--orange)' : '#1a1610'}
+              fill={isHot ? "var(--orange)" : "#1a1610"}
               fillOpacity={isHot ? 0.14 : 0.001}
               stroke="none"
-              style={{ cursor: 'pointer' }}
+              style={{ cursor: "pointer" }}
               role="button"
               tabIndex={0}
               aria-label={`${s.label}, grade ${s.grade}`}
