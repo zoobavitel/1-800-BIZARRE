@@ -1,0 +1,18 @@
+# Build outputs
+frontend/build/
+backend/src/staticfiles/
+
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Python
+backend/
+*.py
+
+# Generated files
+frontend/src/data/patchNotes.json
+frontend/public/
+
+# Config files managed by other tools
+package-lock.json
