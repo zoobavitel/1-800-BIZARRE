@@ -46,6 +46,9 @@ jspm_packages/
 dist/
 build/
 
+# Generated from docs/1(800)-Bizarre SRD.md (see frontend/scripts/splitSrd.js)
+frontend/public/srd/
+
 # Python
 __pycache__/
 *.py[cod]
