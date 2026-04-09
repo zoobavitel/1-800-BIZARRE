@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Other",
         "items": [
+          "Fix CI: stash_slots migration; coin readout height; patch notes",
           "Site stats API, stash slots & portrait uploads; sheet/home fixes"
         ]
       }

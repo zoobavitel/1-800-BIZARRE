@@ -354,7 +354,13 @@ const App = () => {
         {currentPage === 'account-settings' && <AccountSettingsPage onBack={handleBack} />}
         {currentPage === 'patch-notes' && <PatchNotesPage onBack={handleBack} />}
         {currentPage === 'licenses' && <LicensesPage onBack={handleBack} />}
-        {currentPage === 'rules' && <RulesPage onBack={handleBack} initialSection={rulesSection} />}
+        {currentPage === 'rules' && (
+          <RulesPage
+            onBack={handleBack}
+            initialSection={rulesSection}
+            onNavigateSection={(slug) => handlePageChange('rules', slug != null ? { section: slug } : {})}
+          />
+        )}
         {currentPage === 'test' && <ResponsiveTest />}
       </div>
     </ProtectedRoute>

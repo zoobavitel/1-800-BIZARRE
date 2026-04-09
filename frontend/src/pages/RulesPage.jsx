@@ -20,35 +20,70 @@ function getTextFromChildren(children) {
   return '';
 }
 
-export default function RulesPage({ onBack, initialSection }) {
+/** Hash section (null = overview) → static file slug under public/srd/. */
+function sectionToFetchSlug(section) {
+  if (section == null || section === '') return 'game-rules-srd';
+  return section;
+}
+
+export default function RulesPage({ onBack, initialSection, onNavigateSection }) {
+  const fetchSlug = sectionToFetchSlug(initialSection);
   const [markdown, setMarkdown] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expandedCategories, setExpandedCategories] = useState(
-    RULES_NAV.reduce((acc, cat, i) => ({ ...acc, [cat.label]: cat.expanded ?? true }), {})
+    RULES_NAV.reduce((acc, cat) => ({ ...acc, [cat.label]: cat.expanded ?? true }), {})
   );
   const mainRef = useRef(null);
 
   useEffect(() => {
-    fetch('/game-rules-srd.md')
-      .then((r) => (r.ok ? r.text() : Promise.reject(new Error('Failed to load SRD'))))
-      .then(setMarkdown)
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const scrollToSection = useCallback((slug) => {
-    const el = document.getElementById(slug);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, []);
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    const base = process.env.PUBLIC_URL || '';
+    const url = `${base}/srd/${fetchSlug}.md`;
+    fetch(url)
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error('Failed to load section'))))
+      .then((text) => {
+        if (!cancelled) setMarkdown(text);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchSlug]);
 
   useEffect(() => {
-    if (initialSection && !loading && mainRef.current) {
-      setTimeout(() => scrollToSection(initialSection), 100);
+    if (mainRef.current) {
+      mainRef.current.scrollTop = 0;
     }
-  }, [initialSection, loading, scrollToSection]);
+  }, [fetchSlug]);
+
+  const selectNavItem = useCallback(
+    (slug) => {
+      if (onNavigateSection) {
+        onNavigateSection(slug);
+      } else if (slug == null) {
+        window.location.hash = 'rules';
+      } else {
+        window.location.hash = `rules-${slug}`;
+      }
+    },
+    [onNavigateSection]
+  );
+
+  const isItemActive = useCallback(
+    (itemSlug) => {
+      const itemFetch = sectionToFetchSlug(itemSlug);
+      return itemFetch === fetchSlug;
+    },
+    [fetchSlug]
+  );
 
   const toggleCategory = (label) => {
     setExpandedCategories((prev) => ({ ...prev, [label]: !prev[label] }));
@@ -93,14 +128,48 @@ export default function RulesPage({ onBack, initialSection }) {
     },
   };
 
+  const sidebar = (
+    <aside className="rules-sidebar">
+      <div className="rules-sidebar-header">Game Rules (SRD)</div>
+      {RULES_NAV.map((category) => (
+        <div key={category.label} className="rules-nav-category">
+          <button
+            type="button"
+            className="rules-nav-category-header"
+            onClick={() => toggleCategory(category.label)}
+          >
+            {expandedCategories[category.label] ? (
+              <ChevronDown size={14} />
+            ) : (
+              <ChevronRight size={14} />
+            )}
+            {category.label}
+          </button>
+          {expandedCategories[category.label] && (
+            <div className="rules-nav-items">
+              {category.items.map((item) => (
+                <button
+                  key={item.slug ?? 'overview'}
+                  type="button"
+                  className={`rules-nav-item${isItemActive(item.slug) ? ' active' : ''}`}
+                  onClick={() => selectNavItem(item.slug)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </aside>
+  );
+
   if (loading) {
     return (
       <div className="rules-layout">
-        <aside className="rules-sidebar">
-          <div className="rules-sidebar-header">Game Rules (SRD)</div>
-        </aside>
-        <main className="rules-main">
-          <div className="rules-loading">Loading rules…</div>
+        {sidebar}
+        <main className="rules-main" ref={mainRef}>
+          <div className="rules-loading">Loading section…</div>
         </main>
       </div>
     );
@@ -109,10 +178,8 @@ export default function RulesPage({ onBack, initialSection }) {
   if (error) {
     return (
       <div className="rules-layout">
-        <aside className="rules-sidebar">
-          <div className="rules-sidebar-header">Game Rules (SRD)</div>
-        </aside>
-        <main className="rules-main">
+        {sidebar}
+        <main className="rules-main" ref={mainRef}>
           <div className="rules-error">Error: {error}</div>
         </main>
       </div>
@@ -121,39 +188,7 @@ export default function RulesPage({ onBack, initialSection }) {
 
   return (
     <div className="rules-layout">
-      <aside className="rules-sidebar">
-        <div className="rules-sidebar-header">Game Rules (SRD)</div>
-        {RULES_NAV.map((category) => (
-          <div key={category.label} className="rules-nav-category">
-            <button
-              type="button"
-              className="rules-nav-category-header"
-              onClick={() => toggleCategory(category.label)}
-            >
-              {expandedCategories[category.label] ? (
-                <ChevronDown size={14} />
-              ) : (
-                <ChevronRight size={14} />
-              )}
-              {category.label}
-            </button>
-            {expandedCategories[category.label] && (
-              <div className="rules-nav-items">
-                {category.items.map((item) => (
-                  <button
-                    key={item.slug}
-                    type="button"
-                    className="rules-nav-item"
-                    onClick={() => scrollToSection(item.slug)}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </aside>
+      {sidebar}
       <main ref={mainRef} className="rules-main">
         <ReactMarkdown components={components}>{markdown}</ReactMarkdown>
       </main>
