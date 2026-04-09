@@ -1,24 +1,18 @@
-# CI: test + GitHub Pages frontend. Optional manual SSH deploy to bizarre-api LXC.
-#
-# LXC note: GitHub-hosted runners cannot reach private LAN IPs (e.g. 192.168.x.x).
-# To deploy from CI you need one of:
-#   - SSH to a reachable host: Tailscale hostname/IP, public IP + port forward, or
-#   - A self-hosted runner on your network, or
-#   - Manual: ssh to CT → cd /opt/bizarre && git pull && migrate + restart (see deploy/bizarre-api/README.md)
-#
-# Branch flow (example): feature → dev → pat → main (prod)
+# CI: frontend + backend + integration tests
+# CD: GitHub Pages on master
+# Optional manual deploy to LXC (CT 103) via pve2 over Tailscale + SSH
 
 name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, master, dev, pat]
+    branches: [master]
   pull_request:
-    branches: [main, master, dev, pat]
+    branches: [master]
   workflow_dispatch:
     inputs:
       deploy_lxc:
-        description: "After tests, SSH deploy to LXC (requires secrets + reachable host)"
+        description: "After tests, deploy to LXC (CT 103) via pve2"
         type: boolean
         default: false
 
@@ -124,7 +118,6 @@ jobs:
           python manage.py runserver 127.0.0.1:8000 --noreload &
           BACKEND_PID=$!
           trap 'kill $BACKEND_PID 2>/dev/null || true' EXIT
-          # Wait until API root responds (integration test hits GET /)
           for i in $(seq 1 30); do
             if curl -sf "http://127.0.0.1:8000/" >/dev/null; then
               break
@@ -135,11 +128,10 @@ jobs:
           cd ../../frontend
           npm test -- --testPathPattern=integration --watchAll=false
 
-  # Frontend static site → GitHub Pages (prod only)
   deploy-github-pages:
     needs: [integration-test]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master'
     permissions:
       contents: write
     steps:
@@ -166,34 +158,39 @@ jobs:
           publish_dir: ./frontend/build
           force_orphan: true
 
-  # Optional: pull + migrate + restart on bizarre-api. Only when manually dispatched with deploy_lxc=true.
-  # Configure repo Secrets: LXC_SSH_HOST, LXC_SSH_USER, LXC_SSH_KEY (private key for that user).
-  # Host must be reachable from the internet (not only 192.168.x.x) unless you use a self-hosted runner.
   deploy-lxc:
     needs: [integration-test]
     runs-on: ubuntu-latest
     if: |
       github.event_name == 'workflow_dispatch' &&
       github.event.inputs.deploy_lxc == 'true' &&
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+      github.ref == 'refs/heads/master'
     steps:
-      - name: Deploy via SSH
+      - name: Connect runner to Tailscale
+        uses: tailscale/github-action@v3
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+
+      - name: Deploy via SSH (pve2 -> CT 103)
         uses: appleboy/ssh-action@v1.2.2
         with:
-          host: ${{ secrets.LXC_SSH_HOST }}
-          username: ${{ secrets.LXC_SSH_USER }}
+          host: ${{ secrets.LXC_SSH_HOST }} # e.g. pve2.tailb65341.ts.net
+          username: ${{ secrets.LXC_SSH_USER }} # root
           key: ${{ secrets.LXC_SSH_KEY }}
           script_stop: true
           script: |
             set -euo pipefail
-            cd /opt/bizarre
-            git pull --ff-only
-            source .venv/bin/activate
-            pip install -q -r backend/requirements.txt
-            pip install -q -r backend/requirements-prod.txt
-            cd backend/src
-            export DJANGO_SETTINGS_MODULE=app.settings_prod
-            python manage.py migrate --noinput
-            python manage.py collectstatic --noinput
-            sudo systemctl restart gunicorn
-            sudo systemctl restart celery-worker || true
+            pct exec 103 -- bash -lc '
+              set -euo pipefail
+              cd /opt/bizarre
+              git pull --ff-only
+              source .venv/bin/activate
+              pip install -q -r backend/requirements.txt
+              pip install -q -r backend/requirements-prod.txt
+              cd backend/src
+              export DJANGO_SETTINGS_MODULE=app.settings_prod
+              python manage.py migrate --noinput
+              python manage.py collectstatic --noinput
+              systemctl restart gunicorn
+              systemctl restart celery-worker || true
+            '
