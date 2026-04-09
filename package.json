@@ -20,6 +20,8 @@
     "lint": "npm run lint:frontend",
     "lint:frontend": "cd frontend && npx eslint src/",
     "lint:fix": "cd frontend && npx eslint src/ --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "install:all": "npm install && cd frontend && npm install",
     "clean": "rm -rf node_modules frontend/node_modules frontend/build backend/src/db.sqlite3"
   },
@@ -29,7 +31,8 @@
     "gh-pages": "^5.0.0",
     "postcss": "^8.5.6",
     "postcss-flexbugs-fixes": "^5.0.2",
-    "postcss-preset-env": "^10.2.4"
+    "postcss-preset-env": "^10.2.4",
+    "prettier": "^3.8.1"
   },
   "engines": {
     "node": ">=18.0.0",
