@@ -569,6 +569,8 @@ class NPCPutAbilitiesRegressionTest(TestCase):
             },
             'abilities': [
                 {
+                    # Frontend generates IDs as Date.now() timestamps; using a realistic value
+                    # from the original bug report to exercise large integer handling.
                     'id': 1775836770466,
                     'name': 'Pool Ball Transformation',
                     'type': 'unique',
