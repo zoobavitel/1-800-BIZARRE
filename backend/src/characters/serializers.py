@@ -9,6 +9,7 @@ from .models import (
     Campaign, CampaignInvitation, NPC, Crew, Detriment, Benefit, StandAbility,
     HamonAbility, SpinAbility, Trauma,
     CharacterHamonAbility, CharacterSpinAbility,
+    NPCHamonAbility, NPCSpinAbility,
     CharacterHistory, ExperienceTracker, Session, SessionEvent, SessionNPCInvolvement,
     Claim, CrewPlaybook, CrewSpecialAbility, CrewUpgrade, XPHistory, StressHistory, ChatMessage,
     Faction, ShowcasedNPC, ProgressClock, Roll, GroupAction
@@ -1030,22 +1031,73 @@ class NPCSerializer(serializers.ModelSerializer):
     heritage = FlexibleHeritagePrimaryKeyField(
         queryset=Heritage.objects.all(), allow_null=True, required=False
     )
+    heritage_details = HeritageSerializer(source='heritage', read_only=True)
     harm_clock_max = serializers.IntegerField(read_only=True)
     special_armor_charges = serializers.IntegerField(read_only=True)
     vulnerability_clock_max = serializers.IntegerField(read_only=True)
     harm_clock_current = serializers.IntegerField(read_only=True)
     vulnerability_clock_current = serializers.IntegerField(required=False)
     image = serializers.FileField(required=False, allow_null=True)
+    hamon_ability_ids = serializers.PrimaryKeyRelatedField(
+        queryset=HamonAbility.objects.all(), many=True, write_only=True, required=False
+    )
+    spin_ability_ids = serializers.PrimaryKeyRelatedField(
+        queryset=SpinAbility.objects.all(), many=True, write_only=True, required=False
+    )
+    selected_hamon_abilities = serializers.SerializerMethodField()
+    selected_spin_abilities = serializers.SerializerMethodField()
+
+    def get_selected_hamon_abilities(self, obj):
+        return list(obj.npc_hamon_abilities.values_list('hamon_ability_id', flat=True))
+
+    def get_selected_spin_abilities(self, obj):
+        return list(obj.npc_spin_abilities.values_list('spin_ability_id', flat=True))
 
     class Meta:
         model = NPC
-        fields = ['id', 'name', 'level', 'appearance', 'role', 'weakness', 'need', 'desire', 'rumour', 'secret', 'passion', 'description', 'stand_coin_stats', 'stand_name', 'heritage', 'playbook', 'custom_abilities', 'abilities', 'relationships', 'harm_clock_current', 'vulnerability_clock_current', 'armor_charges', 'regular_armor_used', 'special_armor_used', 'creator', 'campaign', 'faction', 'image', 'image_url', 'stand_description', 'stand_appearance', 'stand_manifestation', 'special_traits', 'harm_clock_max', 'special_armor_charges', 'vulnerability_clock_max', 'purveyor', 'notes', 'items', 'contacts', 'faction_status', 'inventory', 'conflict_clocks', 'alt_clocks']
+        fields = [
+            'id', 'name', 'level', 'appearance', 'role', 'weakness', 'need', 'desire',
+            'rumour', 'secret', 'passion', 'description', 'stand_coin_stats', 'stand_name',
+            'heritage', 'heritage_details', 'playbook', 'custom_abilities', 'abilities',
+            'hamon_ability_ids', 'spin_ability_ids', 'selected_hamon_abilities', 'selected_spin_abilities',
+            'relationships', 'harm_clock_current', 'vulnerability_clock_current', 'armor_charges',
+            'regular_armor_used', 'special_armor_used', 'creator', 'campaign', 'faction',
+            'image', 'image_url', 'stand_description', 'stand_appearance', 'stand_manifestation',
+            'special_traits', 'harm_clock_max', 'special_armor_charges', 'vulnerability_clock_max',
+            'purveyor', 'notes', 'items', 'contacts', 'faction_status', 'inventory',
+            'conflict_clocks', 'alt_clocks',
+        ]
 
     def create(self, validated_data):
-        # Set the creator to the current user if not explicitly provided
+        hamon_ids = validated_data.pop('hamon_ability_ids', [])
+        spin_ids = validated_data.pop('spin_ability_ids', [])
         if 'creator' not in validated_data:
             validated_data['creator'] = self.context['request'].user
-        return super().create(validated_data)
+        npc = super().create(validated_data)
+        NPCHamonAbility.objects.bulk_create(
+            [NPCHamonAbility(npc=npc, hamon_ability=ability) for ability in hamon_ids]
+        )
+        NPCSpinAbility.objects.bulk_create(
+            [NPCSpinAbility(npc=npc, spin_ability=ability) for ability in spin_ids]
+        )
+        return npc
+
+    def update(self, instance, validated_data):
+        hamon_ids = validated_data.pop('hamon_ability_ids', None)
+        spin_ids = validated_data.pop('spin_ability_ids', None)
+        instance = super().update(instance, validated_data)
+        if hamon_ids is not None:
+            instance.npc_hamon_abilities.all().delete()
+            NPCHamonAbility.objects.bulk_create(
+                [NPCHamonAbility(npc=instance, hamon_ability=ability) for ability in hamon_ids]
+            )
+        if spin_ids is not None:
+            instance.npc_spin_abilities.all().delete()
+            NPCSpinAbility.objects.bulk_create(
+                [NPCSpinAbility(npc=instance, spin_ability=ability) for ability in spin_ids]
+            )
+        return instance
+
 
 class TraumaSerializer(serializers.ModelSerializer):
     class Meta:

@@ -206,9 +206,10 @@ class Trauma(models.Model):
 
 class NPC(models.Model):
     PLAYBOOK_CHOICES = [
-        ('STAND','Stand'),
-        ('HAMON','Hamon'),
-        ('SPIN','Spin'),
+        ('STAND', 'Stand User'),
+        ('HAMON', 'Hamon User'),
+        ('SPIN', 'Spin User'),
+        ('NON_BIZARRE', 'Non-Bizarre'),
     ]
     
 
@@ -905,6 +906,30 @@ class CharacterSpinAbility(models.Model):
     
     class Meta:
         unique_together = ('character', 'spin_ability')
+
+
+class NPCHamonAbility(models.Model):
+    """Junction table for NPCs and their selected Hamon abilities."""
+    npc = models.ForeignKey('NPC', on_delete=models.CASCADE, related_name='npc_hamon_abilities')
+    hamon_ability = models.ForeignKey(HamonAbility, on_delete=models.CASCADE)
+
+    class Meta:
+        unique_together = ('npc', 'hamon_ability')
+
+    def __str__(self):
+        return f"{self.npc.name} — {self.hamon_ability.name}"
+
+
+class NPCSpinAbility(models.Model):
+    """Junction table for NPCs and their selected Spin abilities."""
+    npc = models.ForeignKey('NPC', on_delete=models.CASCADE, related_name='npc_spin_abilities')
+    spin_ability = models.ForeignKey(SpinAbility, on_delete=models.CASCADE)
+
+    class Meta:
+        unique_together = ('npc', 'spin_ability')
+
+    def __str__(self):
+        return f"{self.npc.name} — {self.spin_ability.name}"
 
 
 class ProgressClock(models.Model):
