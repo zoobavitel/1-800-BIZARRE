@@ -427,6 +427,24 @@ export const crewAPI = {
       method: "PATCH",
       body: JSON.stringify(crewData),
     }),
+
+  // Delete crew
+  deleteCrew: (id) => apiRequest(`/crews/${id}/`, { method: "DELETE" }),
+
+  // Get crews for a specific campaign
+  getCrewsByCampaign: (campaignId) =>
+    apiRequest(`/crews/?campaign=${campaignId}`),
+
+  // Propose a new crew name (consensus flow)
+  proposeName: (id, newName) =>
+    apiRequest(`/crews/${id}/propose-name/`, {
+      method: "POST",
+      body: JSON.stringify({ new_name: newName }),
+    }),
+
+  // Approve a proposed crew name
+  approveName: (id) =>
+    apiRequest(`/crews/${id}/approve-name/`, { method: "POST" }),
 };
 
 // Multipart request helper (for file uploads)
