@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { referenceAPI } from "../features/character-sheet";
+import { referenceAPI, factionAPI } from "../features/character-sheet";
 
 // ─── SRD Data Tables ──────────────────────────────────────────────────────────
 
@@ -350,7 +350,7 @@ const GradeSelector = ({ value, onChange, label, infoLine }) => (
 
 // ─── NPCSheet ─────────────────────────────────────────────────────────────────
 
-const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
+const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactionChange }) => {
   const [activeMode, setActiveMode] = useState("NPC");
 
   const [name, setName] = useState(npc?.name || "");
@@ -374,9 +374,135 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
   }, [npc?.id, npc?.faction, npc?.faction_id]);
 
   const campaignId = typeof campaign === "object" ? campaign?.id : campaign;
-  const campaignFactions =
+  const baseCampaignFactions =
     (campaignId != null && campaigns?.find((c) => c.id === campaignId))
       ?.factions || [];
+
+  // Optimistically track factions created inline (not yet in the campaigns prop)
+  const [localExtraFactions, setLocalExtraFactions] = useState([]);
+  const campaignFactions = [
+    ...baseCampaignFactions,
+    ...localExtraFactions.filter(
+      (lf) => !baseCampaignFactions.some((bf) => bf.id === lf.id),
+    ),
+  ];
+
+  // Inline "New Faction" form state
+  const [showNewFactionForm, setShowNewFactionForm] = useState(false);
+  const [newFactionName, setNewFactionName] = useState("");
+  const [creatingFaction, setCreatingFaction] = useState(false);
+
+  // Faction detail — loaded from server when a faction is selected
+  const [factionDetailLoading, setFactionDetailLoading] = useState(false);
+
+  // Faction-level editable fields (shared across all NPCs in the faction)
+  const [factionName, setFactionName] = useState("");
+  const [factionType, setFactionType] = useState("");
+  const [factionLevel, setFactionLevel] = useState(0);
+  const [factionHold, setFactionHold] = useState("weak");
+  const [factionReputation, setFactionReputation] = useState(0);
+  const [factionContacts, setFactionContacts] = useState([]);
+  const [factionInventory, setFactionInventory] = useState([]);
+  const [factionStatusData, setFactionStatusData] = useState({});
+  const [factionCrewNotes, setFactionCrewNotes] = useState("");
+
+  // Load faction detail whenever the selected faction changes
+  useEffect(() => {
+    if (!faction) {
+      return;
+    }
+    setFactionDetailLoading(true);
+    factionAPI
+      .getFaction(faction)
+      .then((f) => {
+        setFactionName(f.name || "");
+        setFactionType(f.faction_type || "");
+        setFactionLevel(typeof f.level === "number" ? f.level : 0);
+        setFactionHold(f.hold || "weak");
+        setFactionReputation(typeof f.reputation === "number" ? f.reputation : 0);
+        setFactionContacts(Array.isArray(f.contacts) ? f.contacts : []);
+        setFactionInventory(Array.isArray(f.inventory) ? f.inventory : []);
+        setFactionStatusData(f.faction_status && typeof f.faction_status === "object" ? f.faction_status : {});
+        setFactionCrewNotes(f.crew_notes || "");
+      })
+      .catch(() => {})
+      .finally(() => setFactionDetailLoading(false));
+  }, [faction]);
+
+  // Debounce ref for faction auto-save
+  const factionDebounceRef = useRef(null);
+  const factionSavingRef = useRef(false);
+  const factionMountedRef = useRef(false);
+
+  // Debounced faction auto-save
+  useEffect(() => {
+    if (!factionMountedRef.current) {
+      factionMountedRef.current = true;
+      return;
+    }
+    if (!faction || !isGM) return;
+    if (factionDebounceRef.current) clearTimeout(factionDebounceRef.current);
+    factionDebounceRef.current = setTimeout(async () => {
+      if (factionSavingRef.current) return;
+      factionSavingRef.current = true;
+      try {
+        const updated = await factionAPI.patchFaction(faction, {
+          name: factionName,
+          faction_type: factionType,
+          level: factionLevel,
+          hold: factionHold,
+          reputation: factionReputation,
+          contacts: factionContacts,
+          inventory: factionInventory,
+          faction_status: factionStatusData,
+          crew_notes: factionCrewNotes,
+        });
+        if (onFactionChange) onFactionChange(updated);
+      } catch {
+        // silently ignore faction save errors
+      } finally {
+        factionSavingRef.current = false;
+      }
+    }, 1500);
+    return () => {
+      if (factionDebounceRef.current) clearTimeout(factionDebounceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    faction,
+    factionName,
+    factionType,
+    factionLevel,
+    factionHold,
+    factionReputation,
+    factionContacts,
+    factionInventory,
+    factionStatusData,
+    factionCrewNotes,
+  ]);
+
+  // Reset faction-mounted flag when faction changes so first load doesn't trigger a spurious save
+  useEffect(() => {
+    factionMountedRef.current = false;
+  }, [faction]);
+
+  const handleCreateFaction = useCallback(async () => {
+    const trimmed = newFactionName.trim();
+    if (!trimmed || !campaignId) return;
+    setCreatingFaction(true);
+    try {
+      const created = await factionAPI.createFaction({ name: trimmed, campaign: campaignId });
+      setLocalExtraFactions((prev) => [...prev, created]);
+      setFaction(created.id);
+      setShowNewFactionForm(false);
+      setNewFactionName("");
+      if (onFactionChange) onFactionChange(created);
+    } catch {
+      // silently ignore
+    } finally {
+      setCreatingFaction(false);
+    }
+  }, [newFactionName, campaignId, onFactionChange]);
 
   // Crew / faction management fields
   const [contacts, setContacts] = useState(npc?.contacts || []);
@@ -974,6 +1100,69 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                         </option>
                       ))}
                     </select>
+                    {isGM && campaignId && !showNewFactionForm && (
+                      <button
+                        onClick={() => setShowNewFactionForm(true)}
+                        style={{
+                          ...S.btn,
+                          marginTop: "4px",
+                          fontSize: "10px",
+                          padding: "2px 8px",
+                          background: "transparent",
+                          border: "1px dashed #4b2d8f",
+                          color: "#a78bfa",
+                          width: "100%",
+                        }}
+                      >
+                        ＋ New Faction
+                      </button>
+                    )}
+                    {isGM && showNewFactionForm && (
+                      <div style={{ marginTop: "6px", display: "flex", gap: "4px" }}>
+                        <input
+                          style={{ ...S.inp, flex: 1 }}
+                          value={newFactionName}
+                          onChange={(e) => setNewFactionName(e.target.value)}
+                          placeholder="Faction name…"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleCreateFaction();
+                            if (e.key === "Escape") {
+                              setShowNewFactionForm(false);
+                              setNewFactionName("");
+                            }
+                          }}
+                          autoFocus
+                        />
+                        <button
+                          onClick={handleCreateFaction}
+                          disabled={creatingFaction || !newFactionName.trim()}
+                          style={{
+                            ...S.btn,
+                            background: "#4c1d95",
+                            color: "#e9d5ff",
+                            fontSize: "10px",
+                            padding: "2px 8px",
+                          }}
+                        >
+                          {creatingFaction ? "…" : "Create"}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowNewFactionForm(false);
+                            setNewFactionName("");
+                          }}
+                          style={{
+                            ...S.btn,
+                            background: "transparent",
+                            color: "#6b7280",
+                            fontSize: "10px",
+                            padding: "2px 6px",
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <div style={{ textAlign: "center", minWidth: "100px" }}>
                     <span style={S.lbl}>NPC LEVEL</span>
@@ -2176,6 +2365,68 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                     </option>
                   ))}
                 </select>
+                {isGM && campaignId && !showNewFactionForm && (
+                  <button
+                    onClick={() => setShowNewFactionForm(true)}
+                    style={{
+                      ...S.btn,
+                      marginLeft: "8px",
+                      fontSize: "10px",
+                      padding: "3px 10px",
+                      background: "transparent",
+                      border: "1px dashed #4b2d8f",
+                      color: "#a78bfa",
+                    }}
+                  >
+                    ＋ New Faction
+                  </button>
+                )}
+                {isGM && showNewFactionForm && (
+                  <div style={{ marginTop: "6px", display: "flex", gap: "4px" }}>
+                    <input
+                      style={{ ...S.inp, flex: 1 }}
+                      value={newFactionName}
+                      onChange={(e) => setNewFactionName(e.target.value)}
+                      placeholder="Faction name…"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleCreateFaction();
+                        if (e.key === "Escape") {
+                          setShowNewFactionForm(false);
+                          setNewFactionName("");
+                        }
+                      }}
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleCreateFaction}
+                      disabled={creatingFaction || !newFactionName.trim()}
+                      style={{
+                        ...S.btn,
+                        background: "#4c1d95",
+                        color: "#e9d5ff",
+                        fontSize: "10px",
+                        padding: "2px 8px",
+                      }}
+                    >
+                      {creatingFaction ? "…" : "Create"}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowNewFactionForm(false);
+                        setNewFactionName("");
+                      }}
+                      style={{
+                        ...S.btn,
+                        background: "transparent",
+                        color: "#6b7280",
+                        fontSize: "10px",
+                        padding: "2px 6px",
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
                 <div
                   style={{
                     fontSize: "10px",
@@ -2189,12 +2440,101 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
               </div>
             </div>
 
+            {/* Faction Identity Panel — only shown when a faction is selected */}
+            {faction && (
+              <div style={{ ...S.card, borderColor: "#4c1d95" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+                  <span style={{ ...S.lbl, margin: 0 }}>FACTION IDENTITY</span>
+                  {factionDetailLoading && (
+                    <span style={{ fontSize: "10px", color: "#6b7280" }}>Loading…</span>
+                  )}
+                  {isGM && (
+                    <span style={{ fontSize: "10px", color: "#a78bfa", marginLeft: "auto" }}>
+                      ⚡ Changes saved to faction &amp; shared with all NPCs in this faction
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr", gap: "12px" }}>
+                  <div>
+                    <span style={S.lbl}>Faction Name</span>
+                    <input
+                      style={S.inp}
+                      value={factionName}
+                      onChange={(e) => setFactionName(e.target.value)}
+                      placeholder="e.g. The Passione"
+                      disabled={!isGM}
+                    />
+                  </div>
+                  <div>
+                    <span style={S.lbl}>Faction Type</span>
+                    <input
+                      style={S.inp}
+                      value={factionType}
+                      onChange={(e) => setFactionType(e.target.value)}
+                      placeholder="e.g. Criminal Syndicate"
+                      disabled={!isGM}
+                    />
+                  </div>
+                  <div>
+                    <span style={S.lbl}>Level</span>
+                    <input
+                      style={{ ...S.inp, width: "60px" }}
+                      type="number"
+                      min="0"
+                      value={factionLevel}
+                      onChange={(e) => setFactionLevel(Number(e.target.value))}
+                      disabled={!isGM}
+                    />
+                  </div>
+                  <div>
+                    <span style={S.lbl}>Hold</span>
+                    <select
+                      style={S.sel}
+                      value={factionHold}
+                      onChange={(e) => setFactionHold(e.target.value)}
+                      disabled={!isGM}
+                    >
+                      <option value="weak">Weak</option>
+                      <option value="strong">Strong</option>
+                    </select>
+                  </div>
+                  <div>
+                    <span style={S.lbl}>Reputation</span>
+                    <input
+                      style={{ ...S.inp, width: "60px" }}
+                      type="number"
+                      value={factionReputation}
+                      onChange={(e) => setFactionReputation(Number(e.target.value))}
+                      disabled={!isGM}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Shared label banner when faction is set */}
+            {faction && (
+              <div
+                style={{
+                  background: "#1a0533",
+                  border: "1px solid #4b2d8f",
+                  borderRadius: "4px",
+                  padding: "6px 12px",
+                  marginBottom: "10px",
+                  fontSize: "11px",
+                  color: "#a78bfa",
+                }}
+              >
+                ⚡ The fields below are <strong>shared across all NPCs in this faction</strong> — edits here update the faction for everyone.
+              </div>
+            )}
+
             <div style={S.g2}>
               {/* Contacts */}
               <div style={S.card}>
                 <span style={S.lbl}>CONTACTS / ASSOCIATES</span>
                 <div style={{ marginBottom: "8px" }}>
-                  {contacts.map((c, i) => (
+                  {(faction ? factionContacts : contacts).map((c, i) => (
                     <div
                       key={i}
                       style={{
@@ -2208,11 +2548,17 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                         value={c.name}
                         placeholder="Name"
                         onChange={(e) =>
-                          setContacts((p) =>
-                            p.map((x, j) =>
-                              j === i ? { ...x, name: e.target.value } : x,
-                            ),
-                          )
+                          faction
+                            ? setFactionContacts((p) =>
+                                p.map((x, j) =>
+                                  j === i ? { ...x, name: e.target.value } : x,
+                                ),
+                              )
+                            : setContacts((p) =>
+                                p.map((x, j) =>
+                                  j === i ? { ...x, name: e.target.value } : x,
+                                ),
+                              )
                         }
                         style={{ ...S.inp, flex: 1 }}
                       />
@@ -2220,24 +2566,38 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                         value={c.role || ""}
                         placeholder="Role / relation"
                         onChange={(e) =>
-                          setContacts((p) =>
-                            p.map((x, j) =>
-                              j === i ? { ...x, role: e.target.value } : x,
-                            ),
-                          )
+                          faction
+                            ? setFactionContacts((p) =>
+                                p.map((x, j) =>
+                                  j === i ? { ...x, role: e.target.value } : x,
+                                ),
+                              )
+                            : setContacts((p) =>
+                                p.map((x, j) =>
+                                  j === i ? { ...x, role: e.target.value } : x,
+                                ),
+                              )
                         }
                         style={{ ...S.inp, flex: 1 }}
                       />
                       <select
                         value={c.disposition || "neutral"}
                         onChange={(e) =>
-                          setContacts((p) =>
-                            p.map((x, j) =>
-                              j === i
-                                ? { ...x, disposition: e.target.value }
-                                : x,
-                            ),
-                          )
+                          faction
+                            ? setFactionContacts((p) =>
+                                p.map((x, j) =>
+                                  j === i
+                                    ? { ...x, disposition: e.target.value }
+                                    : x,
+                                ),
+                              )
+                            : setContacts((p) =>
+                                p.map((x, j) =>
+                                  j === i
+                                    ? { ...x, disposition: e.target.value }
+                                    : x,
+                                ),
+                              )
                         }
                         style={{
                           ...S.sel,
@@ -2253,7 +2613,9 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                       </select>
                       <button
                         onClick={() =>
-                          setContacts((p) => p.filter((_, j) => j !== i))
+                          faction
+                            ? setFactionContacts((p) => p.filter((_, j) => j !== i))
+                            : setContacts((p) => p.filter((_, j) => j !== i))
                         }
                         style={{
                           color: "#f87171",
@@ -2271,10 +2633,15 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                 </div>
                 <button
                   onClick={() =>
-                    setContacts((p) => [
-                      ...p,
-                      { name: "", role: "", disposition: "neutral" },
-                    ])
+                    faction
+                      ? setFactionContacts((p) => [
+                          ...p,
+                          { name: "", role: "", disposition: "neutral" },
+                        ])
+                      : setContacts((p) => [
+                          ...p,
+                          { name: "", role: "", disposition: "neutral" },
+                        ])
                   }
                   style={{
                     ...S.btn,
@@ -2293,9 +2660,9 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
               <div style={S.card}>
                 <span style={S.lbl}>FACTION STATUS</span>
                 <div style={{ marginBottom: "8px" }}>
-                  {Object.entries(factionStatus).map(([faction, value]) => (
+                  {Object.entries(faction ? factionStatusData : factionStatus).map(([fName, value]) => (
                     <div
-                      key={faction}
+                      key={fName}
                       style={{
                         display: "flex",
                         gap: "6px",
@@ -2306,7 +2673,7 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                       <span
                         style={{ flex: 1, fontSize: "12px", color: "#d1d5db" }}
                       >
-                        {faction}
+                        {fName}
                       </span>
                       <div
                         style={{
@@ -2317,10 +2684,15 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                       >
                         <button
                           onClick={() =>
-                            setFactionStatus((p) => ({
-                              ...p,
-                              [faction]: Math.max(-3, (p[faction] || 0) - 1),
-                            }))
+                            faction
+                              ? setFactionStatusData((p) => ({
+                                  ...p,
+                                  [fName]: Math.max(-3, (p[fName] || 0) - 1),
+                                }))
+                              : setFactionStatus((p) => ({
+                                  ...p,
+                                  [fName]: Math.max(-3, (p[fName] || 0) - 1),
+                                }))
                           }
                           style={{
                             ...S.btn,
@@ -2351,10 +2723,15 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                         </span>
                         <button
                           onClick={() =>
-                            setFactionStatus((p) => ({
-                              ...p,
-                              [faction]: Math.min(3, (p[faction] || 0) + 1),
-                            }))
+                            faction
+                              ? setFactionStatusData((p) => ({
+                                  ...p,
+                                  [fName]: Math.min(3, (p[fName] || 0) + 1),
+                                }))
+                              : setFactionStatus((p) => ({
+                                  ...p,
+                                  [fName]: Math.min(3, (p[fName] || 0) + 1),
+                                }))
                           }
                           style={{
                             ...S.btn,
@@ -2369,11 +2746,17 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                       </div>
                       <button
                         onClick={() =>
-                          setFactionStatus((p) => {
-                            const n = { ...p };
-                            delete n[faction];
-                            return n;
-                          })
+                          faction
+                            ? setFactionStatusData((p) => {
+                                const n = { ...p };
+                                delete n[fName];
+                                return n;
+                              })
+                            : setFactionStatus((p) => {
+                                const n = { ...p };
+                                delete n[fName];
+                                return n;
+                              })
                         }
                         style={{
                           color: "#f87171",
@@ -2392,8 +2775,14 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                 <button
                   onClick={() => {
                     const n = prompt("Faction name:");
-                    if (n && !factionStatus[n])
-                      setFactionStatus((p) => ({ ...p, [n]: 0 }));
+                    if (!n) return;
+                    if (faction) {
+                      if (!factionStatusData[n])
+                        setFactionStatusData((p) => ({ ...p, [n]: 0 }));
+                    } else {
+                      if (!factionStatus[n])
+                        setFactionStatus((p) => ({ ...p, [n]: 0 }));
+                    }
                   }}
                   style={{
                     ...S.btn,
@@ -2430,7 +2819,7 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                   marginBottom: "8px",
                 }}
               >
-                {inventory.map((item, i) => (
+                {(faction ? factionInventory : inventory).map((item, i) => (
                   <div
                     key={i}
                     style={{
@@ -2447,11 +2836,17 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                       value={item.name}
                       placeholder="Item"
                       onChange={(e) =>
-                        setInventory((p) =>
-                          p.map((x, j) =>
-                            j === i ? { ...x, name: e.target.value } : x,
-                          ),
-                        )
+                        faction
+                          ? setFactionInventory((p) =>
+                              p.map((x, j) =>
+                                j === i ? { ...x, name: e.target.value } : x,
+                              ),
+                            )
+                          : setInventory((p) =>
+                              p.map((x, j) =>
+                                j === i ? { ...x, name: e.target.value } : x,
+                              ),
+                            )
                       }
                       style={{
                         ...S.inp,
@@ -2466,19 +2861,33 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                       type="number"
                       min="0"
                       onChange={(e) =>
-                        setInventory((p) =>
-                          p.map((x, j) =>
-                            j === i
-                              ? {
-                                  ...x,
-                                  qty:
-                                    e.target.value === ""
-                                      ? null
-                                      : Number(e.target.value),
-                                }
-                              : x,
-                          ),
-                        )
+                        faction
+                          ? setFactionInventory((p) =>
+                              p.map((x, j) =>
+                                j === i
+                                  ? {
+                                      ...x,
+                                      qty:
+                                        e.target.value === ""
+                                          ? null
+                                          : Number(e.target.value),
+                                    }
+                                  : x,
+                              ),
+                            )
+                          : setInventory((p) =>
+                              p.map((x, j) =>
+                                j === i
+                                  ? {
+                                      ...x,
+                                      qty:
+                                        e.target.value === ""
+                                          ? null
+                                          : Number(e.target.value),
+                                    }
+                                  : x,
+                              ),
+                            )
                       }
                       style={{
                         ...S.inp,
@@ -2490,7 +2899,9 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                     />
                     <button
                       onClick={() =>
-                        setInventory((p) => p.filter((_, j) => j !== i))
+                        faction
+                          ? setFactionInventory((p) => p.filter((_, j) => j !== i))
+                          : setInventory((p) => p.filter((_, j) => j !== i))
                       }
                       style={{
                         color: "#f87171",
@@ -2507,7 +2918,9 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
               </div>
               <button
                 onClick={() =>
-                  setInventory((p) => [...p, { name: "", qty: 1 }])
+                  faction
+                    ? setFactionInventory((p) => [...p, { name: "", qty: 1 }])
+                    : setInventory((p) => [...p, { name: "", qty: 1 }])
                 }
                 style={{
                   ...S.btn,
@@ -2526,8 +2939,10 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
             <div style={S.card}>
               <span style={S.lbl}>CREW NOTES</span>
               <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
+                value={faction ? factionCrewNotes : notes}
+                onChange={(e) =>
+                  faction ? setFactionCrewNotes(e.target.value) : setNotes(e.target.value)
+                }
                 placeholder="Crew connections, territory control, gang resources, operations notes…"
                 style={{
                   width: "100%",

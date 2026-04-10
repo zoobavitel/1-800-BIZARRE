@@ -68,6 +68,12 @@ class Faction(models.Model):
     hold = models.CharField(max_length=10, choices=[('weak', 'Weak'), ('strong', 'Strong')], default='weak')
     reputation = models.IntegerField(default=0)
 
+    # Shared faction data — all NPCs in this faction share these fields
+    inventory = models.JSONField(default=list, blank=True, help_text="Shared faction assets/inventory.")
+    contacts = models.JSONField(default=list, blank=True, help_text="Faction-level contacts and associates.")
+    faction_status = models.JSONField(default=dict, blank=True, help_text="This faction's standing towards other factions (-3 to +3).")
+    crew_notes = models.TextField(blank=True, help_text="Operational notes shared across all faction members.")
+
     def __str__(self):
         return f"{self.name} ({self.get_faction_type_display()}) - {self.campaign.name}"
 
