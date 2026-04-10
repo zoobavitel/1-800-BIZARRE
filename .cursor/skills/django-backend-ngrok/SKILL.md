@@ -1,9 +1,9 @@
 ---
 name: django-backend-ngrok
-description: Starts the jojo-ttrpg-platform Django backend (venv activation and manage.py runserver on port 8000) and runs ngrok http 8000 so a remote or GitHub Pages frontend can reach the API; reports local and public URLs and reminds about CORS and ALLOWED_HOSTS when relevant. Use when the user says start backend, ngrok, tunnel, or remote API testing.
+description: Starts the 1-800-BIZARRE Django backend (venv activation and manage.py runserver on port 8000) and runs ngrok http 8000 so a remote or GitHub Pages frontend can reach the API; reports local and public URLs and reminds about CORS and ALLOWED_HOSTS when relevant. Use when the user says start backend, ngrok, tunnel, or remote API testing.
 ---
 
-# Django backend + ngrok (jojo-ttrpg-platform)
+# Django backend + ngrok (1-800-BIZARRE)
 
 ## When to use
 
