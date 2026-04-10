@@ -3,7 +3,7 @@ name: dice-session-data-model
 description: Maps Roll.session vs Campaign.active_session, XP storage (ExperienceTracker vs XPHistory), and GM-only roll endpoints. Use when changing rolls, sessions, campaigns, XP APIs, or explaining why rolls stay on a past session.
 ---
 
-# Dice & session data model (jojo-ttrpg-platform)
+# Dice & session data model (1-800-BIZARRE)
 
 ## When to use
 

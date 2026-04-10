@@ -6663,3 +6663,5 @@ django.db.utils.OperationalError: no such column: characters_character.stash_slo
 [WARNING] 2026-04-10 14:56:57,494 django.request - Not Found: /api/npcs/1/apply-effect/
 [WARNING] 2026-04-10 14:57:14,107 django.request - Bad Request: /api/characters/1/roll-action/
 [WARNING] 2026-04-10 14:57:15,365 django.request - Forbidden: /api/site-stats/
+[WARNING] 2026-04-10 14:44:54,531 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-10 14:44:55,149 django.request - Not Found: /api/npcs/1/apply-effect/

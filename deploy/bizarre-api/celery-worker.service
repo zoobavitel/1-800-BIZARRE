@@ -1,5 +1,5 @@
 [Unit]
-Description=Celery worker for jojo-ttrpg-platform
+Description=Celery worker for 1-800-BIZARRE
 After=network.target redis-server.service postgresql.service
 
 [Service]

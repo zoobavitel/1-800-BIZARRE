@@ -25,7 +25,7 @@ If you see auth errors, see [Authentication](#authentication-password-authentica
 
 ### Step 2: Confirm gh-pages has the app
 
-Open: **https://github.com/zoobavitel/jojo-ttrpg-platform/tree/gh-pages**
+Open: **https://github.com/zoobavitel/1-800-BIZARRE/tree/gh-pages**
 
 You should see:
 
@@ -39,7 +39,7 @@ If you see README / source code or the branch is missing, Step 1 didn’t work; 
 
 GitHub must serve the **gh-pages** branch, not the default branch:
 
-1. Repo: **https://github.com/zoobavitel/jojo-ttrpg-platform**
+1. Repo: **https://github.com/zoobavitel/1-800-BIZARRE**
 2. **Settings** (tab at top).
 3. Left sidebar → **Pages** (under “Code and automation”).
 4. Under **“Build and deployment”** set:
@@ -48,13 +48,13 @@ GitHub must serve the **gh-pages** branch, not the default branch:
    - **Folder:** **/ (root)**
 5. Click **Save**.
 
-Wait 1–2 minutes, then open **https://zoobavitel.github.io/jojo-ttrpg-platform/** — you should see the app.
+Wait 1–2 minutes, then open **https://zoobavitel.github.io/1-800-BIZARRE/** — you should see the app.
 
 ---
 
 ## Checklist (Create React App deployment)
 
-- [x] **homepage** in **frontend/package.json**: `"https://zoobavitel.github.io/jojo-ttrpg-platform"` (no trailing slash) — so the build uses correct asset paths.
+- [x] **homepage** in **frontend/package.json**: `"https://zoobavitel.github.io/1-800-BIZARRE"` (no trailing slash) — so the build uses correct asset paths.
 - [x] **Root package.json**: `predeploy` and `deploy` scripts; `deploy` uses `gh-pages -d frontend/build`.
 - [ ] **You ran** `npm run deploy` from repo root at least once.
 - [ ] **GitHub Settings → Pages**: Source = “Deploy from a branch”, Branch = **gh-pages**, Folder = **/ (root)**.
@@ -63,7 +63,7 @@ Wait 1–2 minutes, then open **https://zoobavitel.github.io/jojo-ttrpg-platform
 
 ## Remote play: connecting the live site to your backend (ngrok)
 
-When players open the app from **https://zoobavitel.github.io/jojo-ttrpg-platform/** they must point it at a running game server. The host runs the backend and exposes it with ngrok.
+When players open the app from **https://zoobavitel.github.io/1-800-BIZARRE/** they must point it at a running game server. The host runs the backend and exposes it with ngrok.
 
 **Host (you):**
 
@@ -76,7 +76,7 @@ When players open the app from **https://zoobavitel.github.io/jojo-ttrpg-platfor
 
 **Players (or you on the live site):**
 
-1. Open **https://zoobavitel.github.io/jojo-ttrpg-platform/**.
+1. Open **https://zoobavitel.github.io/1-800-BIZARRE/**.
 2. On the sign-in page, expand **Game server (optional)** and set **Game server URL** to the host's ngrok URL + `/api`, e.g. `https://roger-premunicipal-branden.ngrok-free.app/api`. Use **https** to avoid `SSL_ERROR_RX_RECORD_TOO_LONG`.
 3. Sign in or create an account.
 
@@ -111,7 +111,7 @@ git config --global credential.helper 'cache --timeout=3600'
 2. Use the SSH remote for this repo:
 
 ```bash
-git remote set-url origin git@github.com:zoobavitel/jojo-ttrpg-platform.git
+git remote set-url origin git@github.com:zoobavitel/1-800-BIZARRE.git
 ```
 
 Then `npm run deploy` will use SSH and your SSH key (no username/password).
@@ -139,4 +139,4 @@ npm run deploy
 - Runs `predeploy` (builds the frontend into `frontend/build`).
 - Pushes the **contents** of `frontend/build` to the **gh-pages** branch.
 
-The **homepage** in **frontend/package.json** must match your Pages URL (e.g. `https://zoobavitel.github.io/jojo-ttrpg-platform`).
+The **homepage** in **frontend/package.json** must match your Pages URL (e.g. `https://zoobavitel.github.io/1-800-BIZARRE`).

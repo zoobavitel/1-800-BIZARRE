@@ -20,7 +20,7 @@
    Merge `dev` → `pat` (or push to `pat`). CI runs (frontend + backend tests, build). No deploy; use this to verify the pipeline.
 
 3. **Prod (main)**  
-   When pat looks good, merge `pat` → `main` (or `dev` → `main`). CI runs and, on **main**, the workflow deploys the frontend build to GitHub Pages (https://zoobavitel.github.io/jojo-ttrpg-platform/).
+   When pat looks good, merge `pat` → `main` (or `dev` → `main`). CI runs and, on **main**, the workflow deploys the frontend build to GitHub Pages (https://zoobavitel.github.io/1-800-BIZARRE/).
 
 ## Making main = prod
 
