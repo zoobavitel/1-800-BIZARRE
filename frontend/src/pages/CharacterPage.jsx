@@ -857,6 +857,50 @@ export default function CharacterPage({
     }
   }, [activeCharTab, activeCharTabId]);
 
+  const handleDeleteActiveNpc = useCallback(async () => {
+    const id = activeNpcTab?.npcId ?? activeNpcTab?.npc?.id;
+    if (!id) {
+      window.alert(
+        "This NPC is not saved yet. Close the tab to discard, or save first.",
+      );
+      return;
+    }
+    if (
+      !window.confirm("Delete this NPC permanently? This cannot be undone.")
+    )
+      return;
+    try {
+      await npcAPI.deleteNPC(id);
+      setNpcs((prev) => prev.filter((n) => n.id !== id));
+      setNpcTabs((prev) => {
+        const filtered = prev.filter((t) => (t.npcId ?? t.npc?.id) !== id);
+        if (filtered.length === 0) {
+          const blank = {
+            tabId: nextTabId++,
+            npcId: null,
+            npc: null,
+            label: "New NPC",
+          };
+          setActiveNpcTabId(blank.tabId);
+          if (typeof window !== "undefined") window.location.hash = "npcs";
+          return [blank];
+        }
+        const nextActive = filtered.some((t) => t.tabId === activeNpcTabId)
+          ? activeNpcTabId
+          : filtered[filtered.length - 1].tabId;
+        setActiveNpcTabId(nextActive);
+        const nextTab = filtered.find((t) => t.tabId === nextActive);
+        const nextHashId = nextTab?.npcId ?? nextTab?.npc?.id;
+        if (typeof window !== "undefined") {
+          window.location.hash = nextHashId ? `npcs/${nextHashId}` : "npcs";
+        }
+        return filtered;
+      });
+    } catch (e) {
+      window.alert(e.message || "Failed to delete NPC");
+    }
+  }, [activeNpcTab, activeNpcTabId]);
+
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={PAGE_STYLES.page}>
@@ -1023,29 +1067,51 @@ export default function CharacterPage({
           )}
 
           {mode === MODES.NPC && npcs.length > 0 && (
-            <select
-              style={{
-                background: "#1f2937",
-                color: "#9ca3af",
-                border: "1px solid #4b5563",
-                padding: "4px 8px",
-                fontSize: "11px",
-                fontFamily: "monospace",
-                borderRadius: "4px",
-              }}
-              value=""
-              onChange={(e) => {
-                const npc = npcs.find((n) => n.id === parseInt(e.target.value));
-                if (npc) handleOpenExistingNpc(npc);
-              }}
-            >
-              <option value="">Open NPC...</option>
-              {npcs.map((n) => (
-                <option key={n.id} value={n.id}>
-                  {n.name || "New NPC"}
-                </option>
-              ))}
-            </select>
+            <>
+              <select
+                style={{
+                  background: "#1f2937",
+                  color: "#9ca3af",
+                  border: "1px solid #4b5563",
+                  padding: "4px 8px",
+                  fontSize: "11px",
+                  fontFamily: "monospace",
+                  borderRadius: "4px",
+                }}
+                value=""
+                onChange={(e) => {
+                  const npc = npcs.find(
+                    (n) => n.id === parseInt(e.target.value),
+                  );
+                  if (npc) handleOpenExistingNpc(npc);
+                }}
+              >
+                <option value="">Open NPC...</option>
+                {npcs.map((n) => (
+                  <option key={n.id} value={n.id}>
+                    {n.name || "New NPC"}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleDeleteActiveNpc}
+                title="Delete the NPC open in the active tab (permanent)"
+                style={{
+                  background: "#450a0a",
+                  color: "#fecaca",
+                  border: "1px solid #991b1b",
+                  padding: "4px 10px",
+                  fontSize: "11px",
+                  fontFamily: "monospace",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Delete NPC
+              </button>
+            </>
           )}
         </div>
       </div>
