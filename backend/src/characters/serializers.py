@@ -44,6 +44,29 @@ from .models import (
     GroupAction,
 )
 
+# ── NPC level computation (mirrors NPCSheet.jsx formula) ─────────────────────
+_NPC_GRADE_PTS = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 5}
+_NPC_STAND_STAT_KEYS = (
+    "POWER",
+    "SPEED",
+    "RANGE",
+    "DURABILITY",
+    "PRECISION",
+    "DEVELOPMENT",
+)
+_NPC_DEFAULT_GRADE = "D"
+_NPC_LEVEL_OFFSET = 9
+
+
+def _compute_npc_level(stand_coin_stats):
+    """Derive NPC level from stand_coin_stats, defaulting missing stats to 'D'."""
+    scs = stand_coin_stats or {}
+    total = sum(
+        _NPC_GRADE_PTS.get(scs.get(key, _NPC_DEFAULT_GRADE), 0)
+        for key in _NPC_STAND_STAT_KEYS
+    )
+    return max(1, total - _NPC_LEVEL_OFFSET)
+
 
 class ClaimSerializer(serializers.ModelSerializer):
     class Meta:
@@ -1139,13 +1162,8 @@ class NPCSummarySerializer(serializers.ModelSerializer):
     )
     level = serializers.SerializerMethodField()
 
-    _GRADE_PTS = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 5}
-    _LEVEL_OFFSET = 9
-
     def get_level(self, obj):
-        scs = obj.stand_coin_stats or {}
-        total = sum(self._GRADE_PTS.get(g, 0) for g in scs.values())
-        return max(1, total - self._LEVEL_OFFSET)
+        return _compute_npc_level(obj.stand_coin_stats)
 
     class Meta:
         model = NPC
@@ -1457,6 +1475,10 @@ class NPCSerializer(serializers.ModelSerializer):
     )
     selected_hamon_abilities = serializers.SerializerMethodField()
     selected_spin_abilities = serializers.SerializerMethodField()
+    level = serializers.SerializerMethodField()
+
+    def get_level(self, obj):
+        return _compute_npc_level(obj.stand_coin_stats)
 
     def get_selected_hamon_abilities(self, obj):
         return list(obj.npc_hamon_abilities.values_list("hamon_ability_id", flat=True))
