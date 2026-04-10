@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { referenceAPI, factionAPI } from "../features/character-sheet";
 
 // ─── SRD Data Tables ──────────────────────────────────────────────────────────
@@ -374,23 +374,27 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
   }, [npc?.id, npc?.faction, npc?.faction_id]);
 
   const campaignId = typeof campaign === "object" ? campaign?.id : campaign;
-  const baseCampaignFactions =
-    (campaignId != null && campaigns?.find((c) => c.id === campaignId))
-      ?.factions || [];
+  const baseCampaignFactions = useMemo(
+    () =>
+      (campaignId != null && campaigns?.find((c) => c.id === campaignId))
+        ?.factions || [],
+    [campaignId, campaigns],
+  );
 
   // Optimistically track factions created inline (not yet in the campaigns prop)
   const [localExtraFactions, setLocalExtraFactions] = useState([]);
-  const campaignFactions = [
+  const campaignFactions = useMemo(() => [
     ...baseCampaignFactions,
     ...localExtraFactions.filter(
       (lf) => !baseCampaignFactions.some((bf) => bf.id === lf.id),
     ),
-  ];
+  ], [baseCampaignFactions, localExtraFactions]);
 
   // Inline "New Faction" form state
   const [showNewFactionForm, setShowNewFactionForm] = useState(false);
   const [newFactionName, setNewFactionName] = useState("");
   const [creatingFaction, setCreatingFaction] = useState(false);
+  const [factionCreateError, setFactionCreateError] = useState("");
 
   // Faction detail — loaded from server when a faction is selected
   const [factionDetailLoading, setFactionDetailLoading] = useState(false);
@@ -489,6 +493,14 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
   const handleCreateFaction = useCallback(async () => {
     const trimmed = newFactionName.trim();
     if (!trimmed || !campaignId) return;
+    const duplicate = campaignFactions.some(
+      (f) => f.name.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (duplicate) {
+      setFactionCreateError(`A faction named "${trimmed}" already exists in this campaign.`);
+      return;
+    }
+    setFactionCreateError("");
     setCreatingFaction(true);
     try {
       const created = await factionAPI.createFaction({ name: trimmed, campaign: campaignId });
@@ -497,12 +509,17 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
       setShowNewFactionForm(false);
       setNewFactionName("");
       if (onFactionChange) onFactionChange(created);
-    } catch {
-      // silently ignore
+    } catch (err) {
+      const msg =
+        err?.detail ||
+        err?.name?.[0] ||
+        err?.non_field_errors?.[0] ||
+        "Failed to create faction.";
+      setFactionCreateError(typeof msg === "string" ? msg : "Failed to create faction.");
     } finally {
       setCreatingFaction(false);
     }
-  }, [newFactionName, campaignId, onFactionChange]);
+  }, [newFactionName, campaignId, campaignFactions, onFactionChange]);
 
   // Crew / faction management fields
   const [contacts, setContacts] = useState(npc?.contacts || []);
@@ -1151,7 +1168,11 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
                     <select
                       style={{ ...S.sel, width: "100%" }}
                       value={campaign}
-                      onChange={(e) => setCampaign(e.target.value)}
+                      onChange={(e) =>
+                        setCampaign(
+                          e.target.value ? parseInt(e.target.value, 10) : "",
+                        )
+                      }
                     >
                       <option value="">No Campaign</option>
                       {campaigns.map((c) => (
@@ -1201,13 +1222,14 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
                         <input
                           style={{ ...S.inp, flex: 1 }}
                           value={newFactionName}
-                          onChange={(e) => setNewFactionName(e.target.value)}
+                          onChange={(e) => { setNewFactionName(e.target.value); setFactionCreateError(""); }}
                           placeholder="Faction name…"
                           onKeyDown={(e) => {
                             if (e.key === "Enter") handleCreateFaction();
                             if (e.key === "Escape") {
                               setShowNewFactionForm(false);
                               setNewFactionName("");
+                              setFactionCreateError("");
                             }
                           }}
                           autoFocus
@@ -1229,6 +1251,7 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
                           onClick={() => {
                             setShowNewFactionForm(false);
                             setNewFactionName("");
+                            setFactionCreateError("");
                           }}
                           style={{
                             ...S.btn,
@@ -1240,6 +1263,11 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
                         >
                           ✕
                         </button>
+                      </div>
+                    )}
+                    {factionCreateError && (
+                      <div style={{ color: "#f87171", fontSize: "11px", marginTop: "4px" }}>
+                        {factionCreateError}
                       </div>
                     )}
                   </div>
@@ -2772,13 +2800,14 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
                     <input
                       style={{ ...S.inp, flex: 1 }}
                       value={newFactionName}
-                      onChange={(e) => setNewFactionName(e.target.value)}
+                      onChange={(e) => { setNewFactionName(e.target.value); setFactionCreateError(""); }}
                       placeholder="Faction name…"
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleCreateFaction();
                         if (e.key === "Escape") {
                           setShowNewFactionForm(false);
                           setNewFactionName("");
+                          setFactionCreateError("");
                         }
                       }}
                       autoFocus
@@ -2800,6 +2829,7 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
                       onClick={() => {
                         setShowNewFactionForm(false);
                         setNewFactionName("");
+                        setFactionCreateError("");
                       }}
                       style={{
                         ...S.btn,
@@ -2811,6 +2841,11 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
                     >
                       ✕
                     </button>
+                  </div>
+                )}
+                {factionCreateError && (
+                  <div style={{ color: "#f87171", fontSize: "11px", marginTop: "4px" }}>
+                    {factionCreateError}
                   </div>
                 )}
                 <div
