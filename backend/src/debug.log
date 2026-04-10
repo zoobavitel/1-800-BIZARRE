@@ -6655,3 +6655,13 @@ django.db.utils.OperationalError: no such column: characters_character.stash_slo
 [INFO] 2026-04-08 23:40:05,072 django.utils.autoreload - Watching for file changes with StatReloader
 [WARNING] 2026-04-10 14:44:54,531 django.request - Bad Request: /api/npcs/1/apply-effect/
 [WARNING] 2026-04-10 14:44:55,149 django.request - Not Found: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-10 15:29:21,567 django.request - Unauthorized: /api/campaigns/1/events/
+[WARNING] 2026-04-10 15:29:22,493 django.request - Forbidden: /api/campaigns/1/events/
+[WARNING] 2026-04-10 15:29:29,182 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-04-10 15:29:30,427 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-04-10 15:29:31,672 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-04-10 15:29:35,728 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-04-10 15:29:40,423 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-10 15:29:41,044 django.request - Not Found: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-10 15:29:57,513 django.request - Bad Request: /api/characters/1/roll-action/
+[WARNING] 2026-04-10 15:29:58,759 django.request - Forbidden: /api/site-stats/

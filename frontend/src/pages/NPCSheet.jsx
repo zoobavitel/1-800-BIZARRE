@@ -432,6 +432,62 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
   const [abilities, setAbilities] = useState(npc?.abilities ?? []);
   const [standardAbilitiesList, setStandardAbilitiesList] = useState([]);
 
+  // Heritage and NPC type
+  const [heritage, setHeritage] = useState(
+    npc?.heritage ?? npc?.heritage_id ?? "",
+  );
+  const [heritagesList, setHeritagesList] = useState([]);
+  const [playbook, setPlaybook] = useState(npc?.playbook ?? "STAND");
+
+  useEffect(() => {
+    referenceAPI
+      .getHeritages()
+      .then((list) => setHeritagesList(list || []))
+      .catch(() => setHeritagesList([]));
+  }, []);
+
+  // Sync heritage/playbook when NPC changes
+  useEffect(() => {
+    setHeritage(npc?.heritage ?? npc?.heritage_id ?? "");
+    setPlaybook(npc?.playbook ?? "STAND");
+  }, [npc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Hamon / Spin playbook abilities
+  const [hamonAbilitiesList, setHamonAbilitiesList] = useState([]);
+  const [spinAbilitiesList, setSpinAbilitiesList] = useState([]);
+  const [selectedHamonIds, setSelectedHamonIds] = useState(
+    npc?.selected_hamon_abilities ?? [],
+  );
+  const [selectedSpinIds, setSelectedSpinIds] = useState(
+    npc?.selected_spin_abilities ?? [],
+  );
+
+  useEffect(() => {
+    referenceAPI
+      .getHamonAbilities()
+      .then((list) => setHamonAbilitiesList(list || []))
+      .catch(() => setHamonAbilitiesList([]));
+    referenceAPI
+      .getSpinAbilities()
+      .then((list) => setSpinAbilitiesList(list || []))
+      .catch(() => setSpinAbilitiesList([]));
+  }, []);
+
+  useEffect(() => {
+    setSelectedHamonIds(npc?.selected_hamon_abilities ?? []);
+    setSelectedSpinIds(npc?.selected_spin_abilities ?? []);
+  }, [npc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleHamonAbility = (id) =>
+    setSelectedHamonIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+
+  const toggleSpinAbility = (id) =>
+    setSelectedSpinIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+
   useEffect(() => {
     referenceAPI
       .getAbilities()
@@ -561,6 +617,8 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
       stand_name: standName,
       role,
       notes,
+      heritage: heritage || null,
+      playbook,
       stand_coin_stats: {
         POWER: stats.power,
         SPEED: stats.speed,
@@ -575,6 +633,8 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
       regular_armor_used: regularUsed,
       special_armor_used: specialUsed,
       abilities,
+      hamon_ability_ids: selectedHamonIds,
+      spin_ability_ids: selectedSpinIds,
       campaign: campaign || null,
       faction: faction || null,
       image_url: imageUrl,
@@ -588,6 +648,8 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
       standName,
       role,
       notes,
+      heritage,
+      playbook,
       stats,
       conflictClocks,
       altClocks,
@@ -595,6 +657,8 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
       regularUsed,
       specialUsed,
       abilities,
+      selectedHamonIds,
+      selectedSpinIds,
       campaign,
       faction,
       imageUrl,
@@ -639,6 +703,8 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
     standName,
     role,
     notes,
+    heritage,
+    playbook,
     stats,
     conflictClocks,
     altClocks,
@@ -646,6 +712,8 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
     regularUsed,
     specialUsed,
     abilities,
+    selectedHamonIds,
+    selectedSpinIds,
     campaign,
     imageUrl,
     imageFile,
@@ -933,10 +1001,17 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                   <div>
                     <span style={S.lbl}>Stand Name</span>
                     <input
-                      style={S.inp}
+                      style={{
+                        ...S.inp,
+                        opacity: playbook === "NON_BIZARRE" ? 0.4 : 1,
+                      }}
                       value={standName}
                       onChange={(e) => setStandName(e.target.value)}
-                      placeholder="e.g. 「Killer Queen」"
+                      placeholder={
+                        playbook === "NON_BIZARRE"
+                          ? "No stand (unless narrative beat)"
+                          : "e.g. 「Killer Queen」"
+                      }
                     />
                   </div>
                   <div>
@@ -1017,6 +1092,50 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                     >
                       = {totalSpentXP} XP spent
                     </div>
+                  </div>
+                </div>
+                {/* Heritage + NPC Type row */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "16px",
+                    marginTop: "12px",
+                  }}
+                >
+                  <div>
+                    <span style={S.lbl}>Heritage</span>
+                    <select
+                      style={{ ...S.sel, width: "100%" }}
+                      value={heritage || ""}
+                      onChange={(e) =>
+                        setHeritage(
+                          e.target.value
+                            ? parseInt(e.target.value, 10)
+                            : "",
+                        )
+                      }
+                    >
+                      <option value="">— None —</option>
+                      {heritagesList.map((h) => (
+                        <option key={h.id} value={h.id}>
+                          {h.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <span style={S.lbl}>NPC Type</span>
+                    <select
+                      style={{ ...S.sel, width: "100%" }}
+                      value={playbook}
+                      onChange={(e) => setPlaybook(e.target.value)}
+                    >
+                      <option value="STAND">Stand User</option>
+                      <option value="HAMON">Hamon User</option>
+                      <option value="SPIN">Spin User</option>
+                      <option value="NON_BIZARRE">Non-Bizarre</option>
+                    </select>
                   </div>
                 </div>
               </div>
@@ -1562,6 +1681,270 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                     + Add Ability
                   </button>
                 </div>
+
+                {/* Playbook Abilities — Hamon / Spin / Non-Bizarre */}
+                {playbook !== "STAND" && (
+                  <div style={S.card}>
+                    <span style={S.lbl}>
+                      {playbook === "HAMON"
+                        ? "Hamon Playbook Abilities"
+                        : playbook === "SPIN"
+                          ? "Spin Playbook Abilities"
+                          : "Non-Bizarre NPC"}
+                    </span>
+
+                    {playbook === "NON_BIZARRE" && (
+                      <div
+                        style={{
+                          background: "#0a0a14",
+                          border: "1px solid #374151",
+                          borderRadius: "4px",
+                          padding: "10px",
+                          fontSize: "11px",
+                          color: "#9ca3af",
+                          lineHeight: "1.6",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontWeight: "bold",
+                            color: "#fbbf24",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          ⚠ Non-Bizarre NPC
+                        </div>
+                        <div>
+                          This NPC does not draw from the Hamon or Spin
+                          playbooks. Any standard abilities assigned do{" "}
+                          <strong>not</strong> automatically grant a Stand —
+                          Stand manifestation requires a narrative beat (GM
+                          decision).
+                        </div>
+                      </div>
+                    )}
+
+                    {playbook === "HAMON" && (
+                      <div>
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#6b7280",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          Select Hamon abilities from the playbook. Toggle to
+                          assign or remove.
+                        </div>
+                        {hamonAbilitiesList.length === 0 ? (
+                          <div
+                            style={{
+                              fontSize: "11px",
+                              color: "#6b7280",
+                              padding: "8px",
+                            }}
+                          >
+                            Loading abilities…
+                          </div>
+                        ) : (
+                          hamonAbilitiesList.map((a) => {
+                            const selected = selectedHamonIds.includes(a.id);
+                            return (
+                              <div
+                                key={a.id}
+                                onClick={() => toggleHamonAbility(a.id)}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "flex-start",
+                                  gap: "8px",
+                                  padding: "6px 8px",
+                                  marginBottom: "4px",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                  background: selected
+                                    ? "#1a0a3a"
+                                    : "#0d0d1a",
+                                  border: `1px solid ${selected ? "#7c3aed" : "#2d1f52"}`,
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    width: "14px",
+                                    height: "14px",
+                                    borderRadius: "3px",
+                                    border: "1px solid #7c3aed",
+                                    background: selected
+                                      ? "#7c3aed"
+                                      : "transparent",
+                                    flexShrink: 0,
+                                    marginTop: "1px",
+                                  }}
+                                />
+                                <div style={{ flex: 1 }}>
+                                  <div
+                                    style={{
+                                      fontWeight: "bold",
+                                      fontSize: "12px",
+                                      color: selected ? "#e9d5ff" : "#d1d5db",
+                                    }}
+                                  >
+                                    {a.name}
+                                    {a.hamon_type && (
+                                      <span
+                                        style={{
+                                          marginLeft: "6px",
+                                          fontSize: "10px",
+                                          color: "#a78bfa",
+                                          fontWeight: "normal",
+                                        }}
+                                      >
+                                        {a.hamon_type}
+                                      </span>
+                                    )}
+                                    {a.stress_cost > 0 && (
+                                      <span
+                                        style={{
+                                          marginLeft: "6px",
+                                          fontSize: "10px",
+                                          color: "#f87171",
+                                          fontWeight: "normal",
+                                        }}
+                                      >
+                                        {a.stress_cost} stress
+                                      </span>
+                                    )}
+                                  </div>
+                                  {a.description && (
+                                    <div
+                                      style={{
+                                        fontSize: "11px",
+                                        color: "#6b7280",
+                                        marginTop: "2px",
+                                        lineHeight: "1.4",
+                                      }}
+                                    >
+                                      {a.description}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+
+                    {playbook === "SPIN" && (
+                      <div>
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#6b7280",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          Select Spin abilities from the playbook. Toggle to
+                          assign or remove.
+                        </div>
+                        {spinAbilitiesList.length === 0 ? (
+                          <div
+                            style={{
+                              fontSize: "11px",
+                              color: "#6b7280",
+                              padding: "8px",
+                            }}
+                          >
+                            Loading abilities…
+                          </div>
+                        ) : (
+                          spinAbilitiesList.map((a) => {
+                            const selected = selectedSpinIds.includes(a.id);
+                            return (
+                              <div
+                                key={a.id}
+                                onClick={() => toggleSpinAbility(a.id)}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "flex-start",
+                                  gap: "8px",
+                                  padding: "6px 8px",
+                                  marginBottom: "4px",
+                                  borderRadius: "4px",
+                                  cursor: "pointer",
+                                  background: selected
+                                    ? "#0a1a0a"
+                                    : "#0d0d1a",
+                                  border: `1px solid ${selected ? "#16a34a" : "#2d1f52"}`,
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    width: "14px",
+                                    height: "14px",
+                                    borderRadius: "3px",
+                                    border: "1px solid #16a34a",
+                                    background: selected
+                                      ? "#16a34a"
+                                      : "transparent",
+                                    flexShrink: 0,
+                                    marginTop: "1px",
+                                  }}
+                                />
+                                <div style={{ flex: 1 }}>
+                                  <div
+                                    style={{
+                                      fontWeight: "bold",
+                                      fontSize: "12px",
+                                      color: selected ? "#86efac" : "#d1d5db",
+                                    }}
+                                  >
+                                    {a.name}
+                                    {a.spin_type && (
+                                      <span
+                                        style={{
+                                          marginLeft: "6px",
+                                          fontSize: "10px",
+                                          color: "#34d399",
+                                          fontWeight: "normal",
+                                        }}
+                                      >
+                                        {a.spin_type}
+                                      </span>
+                                    )}
+                                    {a.stress_cost > 0 && (
+                                      <span
+                                        style={{
+                                          marginLeft: "6px",
+                                          fontSize: "10px",
+                                          color: "#f87171",
+                                          fontWeight: "normal",
+                                        }}
+                                      >
+                                        {a.stress_cost} stress
+                                      </span>
+                                    )}
+                                  </div>
+                                  {a.description && (
+                                    <div
+                                      style={{
+                                        fontSize: "11px",
+                                        color: "#6b7280",
+                                        marginTop: "2px",
+                                        lineHeight: "1.4",
+                                      }}
+                                    >
+                                      {a.description}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* ════ RIGHT — Clocks + Armor ════ */}
