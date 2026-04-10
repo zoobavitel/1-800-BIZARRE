@@ -523,3 +523,72 @@ class NPCApplyEffectTest(TestCase):
             format='json',
         )
         self.assertEqual(resp.status_code, 400)
+
+
+class NPCPutAbilitiesRegressionTest(TestCase):
+    """Regression: PUT /api/npcs/{id}/ with ability descriptions must return 200, not 500."""
+
+    def setUp(self):
+        self.gm_user = User.objects.create_user(username='gm2', email='gm2@test.com', password='testpass')
+        self.campaign = Campaign.objects.create(name='Test Campaign', gm=self.gm_user)
+        self.npc = NPC.objects.create(
+            name='Lucy Brown',
+            creator=self.gm_user,
+            campaign=self.campaign,
+            role='Treasure Hunter',
+            stand_name='Corner Pocket',
+            stand_coin_stats={
+                'POWER': 'D',
+                'SPEED': 'F',
+                'DURABILITY': 'B',
+                'PRECISION': 'B',
+                'RANGE': 'C',
+                'DEVELOPMENT': 'C',
+            },
+            abilities=[],
+        )
+
+    def _auth_client(self):
+        c = APIClient()
+        c.force_authenticate(user=self.gm_user)
+        return c
+
+    def test_put_npc_with_ability_description_returns_200(self):
+        """PUT /api/npcs/{id}/ including abilities with description text must not return 500."""
+        payload = {
+            'name': 'Lucy Brown',
+            'role': 'Treasure Hunter',
+            'stand_name': 'Corner Pocket',
+            'stand_coin_stats': {
+                'POWER': 'D',
+                'SPEED': 'F',
+                'DURABILITY': 'B',
+                'PRECISION': 'B',
+                'RANGE': 'C',
+                'DEVELOPMENT': 'C',
+            },
+            'abilities': [
+                {
+                    'id': 1775836770466,
+                    'name': 'Pool Ball Transformation',
+                    'type': 'unique',
+                    'description': (
+                        'Lucy targets a person within C Range and transforms them into a giant pool ball. '
+                        'While transformed, the target cannot take actions but is not harmed.'
+                    ),
+                }
+            ],
+            'notes': 'GM Note: Lucy is the most tactically interesting of this group.',
+            'regular_armor_used': 0,
+            'special_armor_used': 0,
+            'vulnerability_clock_current': 0,
+            'faction_status': {},
+            'inventory': [],
+            'contacts': [],
+        }
+        resp = self._auth_client().put(
+            f'/api/npcs/{self.npc.id}/',
+            payload,
+            format='json',
+        )
+        self.assertIn(resp.status_code, (200, 204), f'Expected 200/204 but got {resp.status_code}: {getattr(resp, "data", resp.content)}')
