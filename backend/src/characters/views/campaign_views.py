@@ -6,7 +6,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from ..models import Campaign, CampaignInvitation, Character, ShowcasedNPC, NPC
-from ..serializers import CampaignSerializer, CampaignInvitationSerializer, ShowcasedNPCSerializer, InvitableUserSerializer
+from ..serializers import (
+    CampaignSerializer,
+    CampaignInvitationSerializer,
+    ShowcasedNPCSerializer,
+    InvitableUserSerializer,
+)
 
 
 class CampaignViewSet(viewsets.ModelViewSet):
@@ -29,8 +34,8 @@ class CampaignViewSet(viewsets.ModelViewSet):
         campaign = self.get_object()
         if campaign.gm != request.user and not request.user.is_staff:
             return Response(
-                {'error': 'Only the GM can update this campaign'},
-                status=status.HTTP_403_FORBIDDEN
+                {"error": "Only the GM can update this campaign"},
+                status=status.HTTP_403_FORBIDDEN,
             )
         return super().update(request, *args, **kwargs)
 
@@ -38,151 +43,229 @@ class CampaignViewSet(viewsets.ModelViewSet):
         campaign = self.get_object()
         if campaign.gm != request.user and not request.user.is_staff:
             return Response(
-                {'error': 'Only the GM can update this campaign'},
-                status=status.HTTP_403_FORBIDDEN
+                {"error": "Only the GM can update this campaign"},
+                status=status.HTTP_403_FORBIDDEN,
             )
         return super().partial_update(request, *args, **kwargs)
 
-    @action(detail=True, methods=['post'], url_path='invite')
+    @action(detail=True, methods=["post"], url_path="invite")
     def invite_player(self, request, pk=None):
         campaign = self.get_object()
         if campaign.gm != request.user and not request.user.is_staff:
-            return Response({'error': 'Only the GM can invite players.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Only the GM can invite players."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
-        username = request.data.get('username', '').strip()
+        username = request.data.get("username", "").strip()
         if not username:
-            return Response({'error': 'Username is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Username is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             invited_user = User.objects.get(username=username)
         except User.DoesNotExist:
-            return Response({'error': f'User "{username}" not found.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": f'User "{username}" not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         if invited_user == campaign.gm:
-            return Response({'error': 'Cannot invite the GM to their own campaign.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Cannot invite the GM to their own campaign."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if campaign.players.filter(id=invited_user.id).exists():
-            return Response({'error': f'{username} is already in this campaign.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": f"{username} is already in this campaign."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         existing = CampaignInvitation.objects.filter(
-            campaign=campaign, invited_user=invited_user, status='pending'
+            campaign=campaign, invited_user=invited_user, status="pending"
         ).first()
         if existing:
-            return Response({'error': f'{username} already has a pending invitation.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": f"{username} already has a pending invitation."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         invitation = CampaignInvitation.objects.create(
             campaign=campaign, invited_user=invited_user, invited_by=request.user
         )
-        return Response(CampaignInvitationSerializer(invitation).data, status=status.HTTP_201_CREATED)
+        return Response(
+            CampaignInvitationSerializer(invitation).data,
+            status=status.HTTP_201_CREATED,
+        )
 
-    @action(detail=True, methods=['get'], url_path='invitable-users')
+    @action(detail=True, methods=["get"], url_path="invitable-users")
     def invitable_users(self, request, pk=None):
         campaign = self.get_object()
         if campaign.gm != request.user and not request.user.is_staff:
-            return Response({'error': 'Only the GM can view invitable users.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Only the GM can view invitable users."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
-        queryset = User.objects.all().order_by('username')
+        queryset = User.objects.all().order_by("username")
 
         # Exclude GM
         queryset = queryset.exclude(id=campaign.gm_id)
         # Exclude current players
-        queryset = queryset.exclude(id__in=campaign.players.values_list('id', flat=True))
+        queryset = queryset.exclude(
+            id__in=campaign.players.values_list("id", flat=True)
+        )
         # Exclude users with pending invitations
         pending_user_ids = CampaignInvitation.objects.filter(
-            campaign=campaign, status='pending'
-        ).values_list('invited_user_id', flat=True)
+            campaign=campaign, status="pending"
+        ).values_list("invited_user_id", flat=True)
         queryset = queryset.exclude(id__in=pending_user_ids)
 
-        search = request.query_params.get('search', '').strip()
+        search = request.query_params.get("search", "").strip()
         if search:
             queryset = queryset.filter(username__icontains=search)
 
         serializer = InvitableUserSerializer(queryset, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['post'], url_path='deactivate')
+    @action(detail=True, methods=["post"], url_path="deactivate")
     def deactivate(self, request, pk=None):
         campaign = self.get_object()
         if campaign.gm != request.user and not request.user.is_staff:
-            return Response({'error': 'Only the GM can deactivate this campaign.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Only the GM can deactivate this campaign."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         campaign.is_active = False
-        campaign.save(update_fields=['is_active'])
-        return Response({'status': 'Campaign deactivated.'})
+        campaign.save(update_fields=["is_active"])
+        return Response({"status": "Campaign deactivated."})
 
-    @action(detail=True, methods=['post'], url_path='activate')
+    @action(detail=True, methods=["post"], url_path="activate")
     def activate(self, request, pk=None):
         campaign = self.get_object()
         if campaign.gm != request.user and not request.user.is_staff:
-            return Response({'error': 'Only the GM can activate this campaign.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Only the GM can activate this campaign."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         campaign.is_active = True
-        campaign.save(update_fields=['is_active'])
-        return Response({'status': 'Campaign activated.'})
+        campaign.save(update_fields=["is_active"])
+        return Response({"status": "Campaign activated."})
 
-    @action(detail=True, methods=['post'], url_path='assign-character')
+    @action(detail=True, methods=["post"], url_path="assign-character")
     def assign_character(self, request, pk=None):
         campaign = self.get_object()
-        character_id = request.data.get('character_id')
+        character_id = request.data.get("character_id")
         if not character_id:
-            return Response({'error': 'character_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "character_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
             character = Character.objects.get(id=character_id, user=request.user)
         except Character.DoesNotExist:
-            return Response({'error': 'Character not found or not owned by you.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Character not found or not owned by you."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-        if not campaign.players.filter(id=request.user.id).exists() and campaign.gm != request.user:
-            return Response({'error': 'You must be a member of this campaign.'}, status=status.HTTP_403_FORBIDDEN)
+        if (
+            not campaign.players.filter(id=request.user.id).exists()
+            and campaign.gm != request.user
+        ):
+            return Response(
+                {"error": "You must be a member of this campaign."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         character.campaign = campaign
-        character.save(update_fields=['campaign'])
+        character.save(update_fields=["campaign"])
         if not campaign.players.filter(id=request.user.id).exists():
             campaign.players.add(request.user)
-        return Response({'status': f'Character "{character.true_name}" assigned to campaign.'})
 
-    @action(detail=True, methods=['post'], url_path='unassign-character')
+        # Auto-assign character to the campaign's crew if there is exactly one
+        campaign_crews = list(campaign.crews.all())
+        if len(campaign_crews) == 1 and character.crew_id is None:
+            character.crew = campaign_crews[0]
+            character.save(update_fields=["crew"])
+
+        return Response(
+            {"status": f'Character "{character.true_name}" assigned to campaign.'}
+        )
+
+    @action(detail=True, methods=["post"], url_path="unassign-character")
     def unassign_character(self, request, pk=None):
         campaign = self.get_object()
-        character_id = request.data.get('character_id')
+        character_id = request.data.get("character_id")
         if not character_id:
-            return Response({'error': 'character_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "character_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
-            character = Character.objects.get(id=character_id, user=request.user, campaign=campaign)
+            character = Character.objects.get(
+                id=character_id, user=request.user, campaign=campaign
+            )
         except Character.DoesNotExist:
-            return Response({'error': 'Character not found in this campaign.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Character not found in this campaign."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         character.campaign = None
-        character.save(update_fields=['campaign'])
-        remaining = Character.objects.filter(campaign=campaign, user=request.user).exists()
+        character.save(update_fields=["campaign"])
+        remaining = Character.objects.filter(
+            campaign=campaign, user=request.user
+        ).exists()
         if not remaining and request.user != campaign.gm:
             campaign.players.remove(request.user)
-        return Response({'status': f'Character "{character.true_name}" removed from campaign.'})
+        return Response(
+            {"status": f'Character "{character.true_name}" removed from campaign.'}
+        )
 
-    @action(detail=True, methods=['post'], url_path='showcase-npc')
+    @action(detail=True, methods=["post"], url_path="showcase-npc")
     def showcase_npc(self, request, pk=None):
         """Add an NPC to the campaign showcase (opposition in Entanglement/All-Out-Brawl)."""
         campaign = self.get_object()
         if campaign.gm != request.user and not request.user.is_staff:
-            return Response({'error': 'Only the GM can add NPCs to the showcase.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Only the GM can add NPCs to the showcase."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
-        npc_id = request.data.get('npc_id')
+        npc_id = request.data.get("npc_id")
         if not npc_id:
-            return Response({'error': 'npc_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "npc_id is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         try:
             npc = NPC.objects.get(id=npc_id, campaign=campaign)
         except NPC.DoesNotExist:
-            return Response({'error': 'NPC not found or not in this campaign.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "NPC not found or not in this campaign."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-        showcased, created = ShowcasedNPC.objects.get_or_create(campaign=campaign, npc=npc)
-        return Response(ShowcasedNPCSerializer(showcased).data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        showcased, created = ShowcasedNPC.objects.get_or_create(
+            campaign=campaign, npc=npc
+        )
+        return Response(
+            ShowcasedNPCSerializer(showcased).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
 
 
 class ShowcasedNPCViewSet(viewsets.ModelViewSet):
     """CRUD for showcased NPCs - GM can update reveal flags and remove from showcase."""
+
     permission_classes = [IsAuthenticated]
     serializer_class = ShowcasedNPCSerializer
-    http_method_names = ['get', 'patch', 'delete', 'head', 'options']
+    http_method_names = ["get", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
         user = self.request.user
@@ -193,13 +276,19 @@ class ShowcasedNPCViewSet(viewsets.ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         obj = self.get_object()
         if obj.campaign.gm != request.user and not request.user.is_staff:
-            return Response({'error': 'Only the GM can update showcased NPCs.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Only the GM can update showcased NPCs."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         return super().partial_update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
         obj = self.get_object()
         if obj.campaign.gm != request.user and not request.user.is_staff:
-            return Response({'error': 'Only the GM can remove showcased NPCs.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Only the GM can remove showcased NPCs."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         return super().destroy(request, *args, **kwargs)
 
 
@@ -209,36 +298,40 @@ class CampaignInvitationViewSet(viewsets.GenericViewSet):
 
     def get_queryset(self):
         return CampaignInvitation.objects.filter(
-            invited_user=self.request.user, status='pending'
-        ).select_related('campaign', 'invited_by', 'invited_user')
+            invited_user=self.request.user, status="pending"
+        ).select_related("campaign", "invited_by", "invited_user")
 
     def list(self, request):
         serializer = self.get_serializer(self.get_queryset(), many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['post'], url_path='accept')
+    @action(detail=True, methods=["post"], url_path="accept")
     def accept(self, request, pk=None):
         try:
             invitation = CampaignInvitation.objects.get(
-                id=pk, invited_user=request.user, status='pending'
+                id=pk, invited_user=request.user, status="pending"
             )
         except CampaignInvitation.DoesNotExist:
-            return Response({'error': 'Invitation not found.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Invitation not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
-        invitation.status = 'accepted'
-        invitation.save(update_fields=['status'])
+        invitation.status = "accepted"
+        invitation.save(update_fields=["status"])
         invitation.campaign.players.add(request.user)
-        return Response({'status': 'Invitation accepted.'})
+        return Response({"status": "Invitation accepted."})
 
-    @action(detail=True, methods=['post'], url_path='decline')
+    @action(detail=True, methods=["post"], url_path="decline")
     def decline(self, request, pk=None):
         try:
             invitation = CampaignInvitation.objects.get(
-                id=pk, invited_user=request.user, status='pending'
+                id=pk, invited_user=request.user, status="pending"
             )
         except CampaignInvitation.DoesNotExist:
-            return Response({'error': 'Invitation not found.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "Invitation not found."}, status=status.HTTP_404_NOT_FOUND
+            )
 
-        invitation.status = 'declined'
-        invitation.save(update_fields=['status'])
-        return Response({'status': 'Invitation declined.'}) 
+        invitation.status = "declined"
+        invitation.save(update_fields=["status"])
+        return Response({"status": "Invitation declined."})
