@@ -88,5 +88,5 @@ docs/INTERACTION_SUMMARY.md
 *_INTERACTION_SUMMARY.md
 
 # User-binding management commands (contain real usernames – keep local only)
+# Use explicit naming convention: bind_<character>_to_user.py
 backend/src/characters/management/commands/bind_*_to_user.py
-backend/src/characters/management/commands/create_[a-z]*[0-9]*_*.py

@@ -15,8 +15,9 @@ tags = ["secret", "django"]
 
 [[rules]]
 id = "hardcoded-password-assignment"
-description = "Hardcoded password string assigned in code"
-regex = '''set_password\([\"'][^\"']{6,}[\"']\)'''
+description = "Literal password string passed to set_password() in code"
+# Matches set_password('...' or "...") but NOT set_password(some_function())
+regex = '''set_password\(\s*[\"'][^\"']{6,}[\"']\s*\)'''
 tags = ["secret", "password"]
 
 [[rules]]
