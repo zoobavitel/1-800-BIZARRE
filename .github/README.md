@@ -11,7 +11,7 @@ This directory holds **GitHub Actions** automation for [1-800-BIZARRE](../README
 We are glad you want to contribute. Typical flow:
 
 1. Fork the repository and create a branch for your change (see [docs/development.md](../docs/development.md) for local workflow).
-2. Open a **pull request** against `main`, `master`, `dev`, or `pat`. Those branches run the **CI/CD Pipeline** workflow on push and on PRs ([workflows/ci.yml](workflows/ci.yml)).
+2. Open a **pull request** against `master`. Those branches run the **CI/CD Pipeline** workflow on push and on PRs ([workflows/ci.yml](workflows/ci.yml)).
 3. Address review feedback; keep CI green.
 
 For full-stack local development (venv, migrate, `npm run dev`), use [docs/development.md](../docs/development.md). For day-to-day monorepo layout, see the root [README.md](../README.md).
