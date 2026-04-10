@@ -6653,3 +6653,5 @@ django.db.utils.OperationalError: no such column: characters_character.stash_slo
 [INFO] 2026-04-08 23:27:43,093 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
 [INFO] 2026-04-08 23:27:43,351 django.utils.autoreload - Watching for file changes with StatReloader
 [INFO] 2026-04-08 23:40:05,072 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-04-10 14:44:54,531 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-10 14:44:55,149 django.request - Not Found: /api/npcs/1/apply-effect/
