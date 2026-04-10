@@ -418,6 +418,10 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
     npc?.alt_clocks ?? npc?.altClocks ?? [],
   );
 
+  const [vulnFilled, setVulnFilled] = useState(
+    npc?.vulnerability_clock_current ?? 0,
+  );
+
   const [regularUsed, setRegularUsed] = useState(
     npc?.regular_armor_used ?? npc?.regularUsed ?? 0,
   );
@@ -567,6 +571,7 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
       },
       conflict_clocks: conflictClocks,
       alt_clocks: altClocks,
+      vulnerability_clock_current: vulnFilled,
       regular_armor_used: regularUsed,
       special_armor_used: specialUsed,
       abilities,
@@ -586,6 +591,7 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
       stats,
       conflictClocks,
       altClocks,
+      vulnFilled,
       regularUsed,
       specialUsed,
       abilities,
@@ -636,6 +642,7 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
     stats,
     conflictClocks,
     altClocks,
+    vulnFilled,
     regularUsed,
     specialUsed,
     abilities,
@@ -1748,7 +1755,7 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                       </span>
                     </div>
 
-                    {/* Vuln clock — read-only display; PCs fill it via conflict clocks */}
+                    {/* Vuln clock — independently adjustable by GM */}
                     <div
                       style={{
                         display: "flex",
@@ -1758,14 +1765,8 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                       }}
                     >
                       <div style={{ flex: "0 0 auto" }}>
-                        {/* Vulnerability clock — represents cumulative harm taken */}
+                        {/* Vulnerability clock — GM can increment or decrement directly */}
                         {(() => {
-                          // Calculate total ticks from conflict clocks
-                          const totalTicks = conflictClocks.reduce(
-                            (s, c) => s + c.filled,
-                            0,
-                          );
-                          const vulnFilled = Math.min(totalTicks, vulnSegs);
                           const isDefeated = vulnFilled >= vulnSegs;
                           return (
                             <div style={{ textAlign: "center" }}>
@@ -1788,6 +1789,11 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                                 color={isDefeated ? "#991b1b" : "#dc2626"}
                                 label="Vulnerability"
                                 sublabel={`${vulnFilled}/${vulnSegs}`}
+                                onClick={(newFilled) =>
+                                  setVulnFilled(
+                                    Math.min(Math.max(0, newFilled), vulnSegs),
+                                  )
+                                }
                               />
                             </div>
                           );
