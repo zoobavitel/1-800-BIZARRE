@@ -1101,6 +1101,8 @@ export default function CharacterPage({
                   npc={tab.npc ?? undefined}
                   onSave={handleSaveNpc}
                   campaigns={campaigns}
+                  isGM={true}
+                  onFactionChange={refreshCampaigns}
                 />
               </div>
             ))

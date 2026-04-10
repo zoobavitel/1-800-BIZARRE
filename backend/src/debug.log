@@ -6653,3 +6653,13 @@ django.db.utils.OperationalError: no such column: characters_character.stash_slo
 [INFO] 2026-04-08 23:27:43,093 django.utils.autoreload - /home/z/git/jojo-ttrpg-platform/backend/src/characters/serializers.py changed, reloading.
 [INFO] 2026-04-08 23:27:43,351 django.utils.autoreload - Watching for file changes with StatReloader
 [INFO] 2026-04-08 23:40:05,072 django.utils.autoreload - Watching for file changes with StatReloader
+[WARNING] 2026-04-10 14:56:38,129 django.request - Unauthorized: /api/campaigns/1/events/
+[WARNING] 2026-04-10 14:56:39,052 django.request - Forbidden: /api/campaigns/1/events/
+[WARNING] 2026-04-10 14:56:45,727 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-04-10 14:56:46,962 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-04-10 14:56:48,192 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-04-10 14:56:52,212 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-04-10 14:56:56,878 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-10 14:56:57,494 django.request - Not Found: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-10 14:57:14,107 django.request - Bad Request: /api/characters/1/roll-action/
+[WARNING] 2026-04-10 14:57:15,365 django.request - Forbidden: /api/site-stats/
