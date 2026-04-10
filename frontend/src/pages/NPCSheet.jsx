@@ -818,6 +818,10 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       if (savingRef.current || !onSave) return;
+      // Don't auto-save a brand-new NPC that has never been persisted and
+      // still has no name — this prevents spurious creates when a blank tab
+      // mounts and init effects fire state changes before the user types.
+      if (!npcIdRef.current && !name.trim()) return;
       savingRef.current = true;
       setSaveStatus("saving");
       try {
