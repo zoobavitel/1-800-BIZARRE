@@ -625,12 +625,14 @@ class NPCPutAbilitiesRegressionTest(TestCase):
         typographic characters must save without error (was returning 500 in production).
         """
         # This is the exact text from the original bug report.
+        # \u2014 = EM DASH (—), \u2019 = RIGHT SINGLE QUOTATION MARK ('),
+        # \u201c/\u201d = LEFT/RIGHT DOUBLE QUOTATION MARK ("")
         em_dash_description = (
             "Lucy targets a person within C Range and transforms them into a giant pool ball "
-            "(numbered, solid or striped \u2014 GM\u2019s choice, purely flavor). "
+            "(numbered, solid or striped \u2014 GM\u2019s choice, purely flavor). "  # — and '
             "While transformed, the target cannot take actions but is not harmed. "
             "They remain a pool ball until Lucy releases them, her clock fills, or a PC opens "
-            "a 6-segment \u201cBreak the Spell\u201d clock. "
+            "a 6-segment \u201cBreak the Spell\u201d clock. "  # " and "
             "Lucy can have up to 3 active pool balls at once."
         )
         payload = {
