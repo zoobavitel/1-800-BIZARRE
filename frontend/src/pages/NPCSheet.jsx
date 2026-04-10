@@ -434,7 +434,7 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
 
   // Heritage and NPC type
   const [heritage, setHeritage] = useState(
-    npc?.heritage ?? npc?.heritage_id ?? "",
+    npc?.heritage ?? npc?.heritage_id ?? null,
   );
   const [heritagesList, setHeritagesList] = useState([]);
   const [playbook, setPlaybook] = useState(npc?.playbook ?? "STAND");
@@ -446,10 +446,12 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
       .catch(() => setHeritagesList([]));
   }, []);
 
-  // Sync heritage/playbook when NPC changes
+  // Sync heritage/playbook when NPC identity changes
   useEffect(() => {
-    setHeritage(npc?.heritage ?? npc?.heritage_id ?? "");
+    setHeritage(npc?.heritage ?? npc?.heritage_id ?? null);
     setPlaybook(npc?.playbook ?? "STAND");
+    setSelectedHamonIds(npc?.selected_hamon_abilities ?? []);
+    setSelectedSpinIds(npc?.selected_spin_abilities ?? []);
   }, [npc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hamon / Spin playbook abilities
@@ -472,11 +474,6 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
       .then((list) => setSpinAbilitiesList(list || []))
       .catch(() => setSpinAbilitiesList([]));
   }, []);
-
-  useEffect(() => {
-    setSelectedHamonIds(npc?.selected_hamon_abilities ?? []);
-    setSelectedSpinIds(npc?.selected_spin_abilities ?? []);
-  }, [npc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleHamonAbility = (id) =>
     setSelectedHamonIds((prev) =>
@@ -1107,12 +1104,12 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                     <span style={S.lbl}>Heritage</span>
                     <select
                       style={{ ...S.sel, width: "100%" }}
-                      value={heritage || ""}
+                      value={heritage ?? ""}
                       onChange={(e) =>
                         setHeritage(
                           e.target.value
                             ? parseInt(e.target.value, 10)
-                            : "",
+                            : null,
                         )
                       }
                     >
