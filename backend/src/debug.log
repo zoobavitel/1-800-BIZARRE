@@ -6695,3 +6695,15 @@ django.db.utils.OperationalError: no such column: characters_character.stash_slo
 [WARNING] 2026-04-10 15:35:48,532 django.request - Not Found: /api/npcs/1/apply-effect/
 [WARNING] 2026-04-10 15:36:05,037 django.request - Bad Request: /api/characters/1/roll-action/
 [WARNING] 2026-04-10 15:36:06,278 django.request - Forbidden: /api/site-stats/
+[WARNING] 2026-04-10 16:20:00,166 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-10 16:20:00,780 django.request - Not Found: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-10 16:20:42,766 django.request - Unauthorized: /api/campaigns/1/events/
+[WARNING] 2026-04-10 16:20:43,687 django.request - Forbidden: /api/campaigns/1/events/
+[WARNING] 2026-04-10 16:20:50,222 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-04-10 16:20:51,452 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-04-10 16:20:52,682 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-04-10 16:20:56,701 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-04-10 16:21:01,660 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-10 16:21:02,274 django.request - Not Found: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-10 16:21:18,909 django.request - Bad Request: /api/characters/1/roll-action/
+[WARNING] 2026-04-10 16:21:20,156 django.request - Forbidden: /api/site-stats/

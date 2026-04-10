@@ -61,3 +61,14 @@ class GMLockTestCase(TestCase):
         self.character.save()
         self.character.refresh_from_db()
         self.assertEqual(self.character.level, 3)
+
+    def test_save_existing_character_does_not_raise_attribute_error(self):
+        # Regression: Character.save() must not raise AttributeError when gm_locked_fields
+        # is empty (the default). This guards against the 500 error on NPC/Character updates.
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.gm_locked_fields, [])
+        # Should not raise
+        self.character.alias = 'Updated Alias'
+        self.character.save()
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.alias, 'Updated Alias')

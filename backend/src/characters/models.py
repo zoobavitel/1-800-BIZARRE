@@ -361,7 +361,7 @@ class Character(models.Model):
 
     def save(self, *args, **kwargs):
         if self.pk:  # Only enforce for existing objects (not on creation)
-            for field_name in self.gm_locked_fields:
+            for field_name in getattr(self, 'gm_locked_fields', []) or []:
                 if field_name not in self._original_data:
                     continue
                 field = self._meta.get_field(field_name)
