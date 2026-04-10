@@ -1151,7 +1151,11 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
                     <select
                       style={{ ...S.sel, width: "100%" }}
                       value={campaign}
-                      onChange={(e) => setCampaign(e.target.value)}
+                      onChange={(e) =>
+                        setCampaign(
+                          e.target.value ? parseInt(e.target.value, 10) : "",
+                        )
+                      }
                     >
                       <option value="">No Campaign</option>
                       {campaigns.map((c) => (
