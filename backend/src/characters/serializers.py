@@ -691,7 +691,7 @@ class CharacterSerializer(serializers.ModelSerializer):
         try:
             _req = self.context.get('request')
             _files = list(getattr(_req, 'FILES', {}).keys()) if _req else []
-            with open('/home/z/git/jojo-ttrpg-platform/.cursor/debug-af48c2.log', 'a') as _f:
+            with open('/home/z/git/1-800-BIZARRE/.cursor/debug-af48c2.log', 'a') as _f:
                 _f.write(json.dumps({
                     'sessionId': 'af48c2',
                     'hypothesisId': 'H1-H4',
@@ -731,7 +731,7 @@ class CharacterSerializer(serializers.ModelSerializer):
 
         # #region agent log
         try:
-            with open('/home/z/git/jojo-ttrpg-platform/.cursor/debug-af48c2.log', 'a') as _f:
+            with open('/home/z/git/1-800-BIZARRE/.cursor/debug-af48c2.log', 'a') as _f:
                 _f.write(json.dumps({
                     'sessionId': 'af48c2',
                     'hypothesisId': 'H2-H3',
@@ -756,7 +756,7 @@ class CharacterSerializer(serializers.ModelSerializer):
 
         # #region agent log
         try:
-            with open('/home/z/git/jojo-ttrpg-platform/.cursor/debug-af48c2.log', 'a') as _f:
+            with open('/home/z/git/1-800-BIZARRE/.cursor/debug-af48c2.log', 'a') as _f:
                 _f.write(json.dumps({
                     'sessionId': 'af48c2',
                     'hypothesisId': 'H3-H4',
