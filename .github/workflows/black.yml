@@ -13,6 +13,6 @@ jobs:
 
       - uses: psf/black@stable
         with:
-          options: "--check --diff"
+          options: "--check"
           src: "backend/src"
           version: "26.3.1"
