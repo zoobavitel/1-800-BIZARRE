@@ -1,10 +1,10 @@
 # GitHub configuration (`.github/`)
 
-[![CI/CD Pipeline](https://github.com/zoobavitel/jojo-ttrpg-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/zoobavitel/jojo-ttrpg-platform/actions/workflows/ci.yml)
+[![CI/CD Pipeline](https://github.com/zoobavitel/1-800-BIZARRE/actions/workflows/ci.yml/badge.svg)](https://github.com/zoobavitel/1-800-BIZARRE/actions/workflows/ci.yml)
 
-This directory holds **GitHub Actions** automation for [jojo-ttrpg-platform](../README.md): continuous integration, optional **GitHub Pages** deploy for the static frontend, and an optional **SSH deploy** to a self-hosted API host. The main workflow is [workflows/ci.yml](workflows/ci.yml). For YAML-focused notes, see [workflows/README.md](workflows/README.md).
+This directory holds **GitHub Actions** automation for [1-800-BIZARRE](../README.md): continuous integration, optional **GitHub Pages** deploy for the static frontend, and an optional **SSH deploy** to a self-hosted API host. The main workflow is [workflows/ci.yml](workflows/ci.yml). For YAML-focused notes, see [workflows/README.md](workflows/README.md).
 
-**Note:** The status badge above uses `zoobavitel/jojo-ttrpg-platform` (matches the [published GitHub Pages site](https://zoobavitel.github.io/jojo-ttrpg-platform/)). If your fork or upstream uses a different `owner/repo`, update the badge URLs accordingly.
+**Note:** The status badge above uses `zoobavitel/1-800-BIZARRE` (matches the [published GitHub Pages site](https://zoobavitel.github.io/1-800-BIZARRE/)). If your fork or upstream uses a different `owner/repo`, update the badge URLs accordingly.
 
 ## Contributing
 
