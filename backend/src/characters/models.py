@@ -106,9 +106,6 @@ class Faction(models.Model):
         blank=True, help_text="Operational notes shared across all faction members."
     )
 
-    class Meta:
-        unique_together = ("campaign", "name")
-
     def __str__(self):
         return f"{self.name} ({self.get_faction_type_display()}) - {self.campaign.name}"
 
@@ -294,7 +291,7 @@ class NPC(models.Model):
         max_length=20, choices=PLAYBOOK_CHOICES, default="STAND"
     )
     custom_abilities = models.TextField(blank=True)
-    relationships = models.JSONField(default=dict)
+    relationships = models.JSONField(default=dict, blank=True)
     harm_clock_current = models.IntegerField(default=0)
     vulnerability_clock_current = models.IntegerField(default=0)
     armor_charges = models.IntegerField(default=0)
@@ -386,7 +383,8 @@ class NPC(models.Model):
         return 0
 
     def __str__(self):
-        return f"{self.name} (NPC for {self.campaign.name})"
+        campaign_name = self.campaign.name if self.campaign else "no campaign"
+        return f"{self.name} (NPC for {campaign_name})"
 
 
 class ShowcasedNPC(models.Model):
