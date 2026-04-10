@@ -1137,6 +1137,15 @@ class NPCSummarySerializer(serializers.ModelSerializer):
     heritage_name = serializers.CharField(
         source="heritage.name", read_only=True, default=None
     )
+    level = serializers.SerializerMethodField()
+
+    _GRADE_PTS = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 5}
+    _LEVEL_OFFSET = 9
+
+    def get_level(self, obj):
+        scs = obj.stand_coin_stats or {}
+        total = sum(self._GRADE_PTS.get(g, 0) for g in scs.values())
+        return max(1, total - self._LEVEL_OFFSET)
 
     class Meta:
         model = NPC
