@@ -392,6 +392,11 @@ export const factionAPI = {
       method: "PUT",
       body: JSON.stringify(data),
     }),
+  patchFaction: (id, data) =>
+    apiRequest(`/factions/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
   deleteFaction: (id) => apiRequest(`/factions/${id}/`, { method: "DELETE" }),
 };
 

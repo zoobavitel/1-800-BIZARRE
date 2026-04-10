@@ -869,7 +869,7 @@ class FactionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Faction
-        fields = ['id', 'name', 'campaign', 'faction_type', 'notes', 'level', 'hold', 'reputation', 'npcs']
+        fields = ['id', 'name', 'campaign', 'faction_type', 'notes', 'level', 'hold', 'reputation', 'inventory', 'contacts', 'faction_status', 'crew_notes', 'npcs']
 
 
 class ShowcasedNPCSerializer(serializers.ModelSerializer):
