@@ -875,15 +875,14 @@ export default function CharacterPage({
       setNpcTabs((prev) => {
         const filtered = prev.filter((t) => (t.npcId ?? t.npc?.id) !== id);
         if (filtered.length === 0) {
-          const blank = {
-            tabId: nextTabId++,
-            npcId: null,
-            npc: null,
-            label: "New NPC",
-          };
-          setActiveNpcTabId(blank.tabId);
-          if (typeof window !== "undefined") window.location.hash = "npcs";
-          return [blank];
+          // No NPC tabs remain — land on a blank character sheet so the user
+          // can start fresh or navigate elsewhere via the hamburger menu.
+          // A blank NPCSheet must not be created here because its init effects
+          // trigger auto-save immediately, causing the delete/re-create cycle.
+          setActiveNpcTabId(null);
+          setMode(MODES.CHARACTER);
+          if (typeof window !== "undefined") window.location.hash = "character";
+          return [];
         }
         const nextActive = filtered.some((t) => t.tabId === activeNpcTabId)
           ? activeNpcTabId
