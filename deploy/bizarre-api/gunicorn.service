@@ -1,5 +1,5 @@
 [Unit]
-Description=gunicorn daemon for jojo-ttrpg-platform (Django)
+Description=gunicorn daemon for 1-800-BIZARRE (Django)
 After=network.target postgresql.service redis-server.service
 
 [Service]

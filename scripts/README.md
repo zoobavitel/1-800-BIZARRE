@@ -1,6 +1,6 @@
 # scripts/
 
-Shell scripts for setup, local development, database backup, and production deployment for the **1-800-BIZARRE** / **jojo-ttrpg-platform** monorepo.
+Shell scripts for setup, local development, database backup, and production deployment for the **1-800-BIZARRE** / **1-800-BIZARRE** monorepo.
 
 **Full documentation:** [docs/codebase/scripts.md](../docs/codebase/scripts.md) (purpose, usage, env vars, venv notes).
 

@@ -1,7 +1,7 @@
 {
-  "name": "jojo-ttrpg-platform",
+  "name": "1-800-bizarre",
   "version": "1.0.0",
-  "homepage": "https://zoobavitel.github.io/jojo-ttrpg-platform/",
+  "homepage": "https://zoobavitel.github.io/1-800-BIZARRE/",
   "description": "A comprehensive web platform for the JoJo's Bizarre Adventure TTRPG",
   "private": true,
   "workspaces": [
@@ -40,7 +40,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yourusername/jojo-ttrpg-platform.git"
+    "url": "git+https://github.com/zoobavitel/1-800-BIZARRE.git"
   },
   "keywords": [
     "jojo",
