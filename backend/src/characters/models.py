@@ -106,6 +106,9 @@ class Faction(models.Model):
         blank=True, help_text="Operational notes shared across all faction members."
     )
 
+    class Meta:
+        unique_together = [("campaign", "name")]
+
     def __str__(self):
         return f"{self.name} ({self.get_faction_type_display()}) - {self.campaign.name}"
 
