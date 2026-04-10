@@ -383,9 +383,7 @@ class NPC(models.Model):
         return 0
 
     def __str__(self):
-        campaign_name = (
-            self.campaign.name if self.campaign_id and self.campaign else "no campaign"
-        )
+        campaign_name = self.campaign.name if self.campaign else "no campaign"
         return f"{self.name} (NPC for {campaign_name})"
 
 
