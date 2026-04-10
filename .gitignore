@@ -82,3 +82,11 @@ backups/
 # Local SSH keys (never commit)
 gha_pve2
 gha_pve2.pub
+
+# Session / interaction logs (may contain real usernames, tokens, or other PII)
+docs/INTERACTION_SUMMARY.md
+*_INTERACTION_SUMMARY.md
+
+# User-binding management commands (contain real usernames – keep local only)
+backend/src/characters/management/commands/bind_*_to_user.py
+backend/src/characters/management/commands/create_[a-z]*[0-9]*_*.py

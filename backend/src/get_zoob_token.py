@@ -1,25 +1,18 @@
+# This script has been replaced by get_user_token.py which accepts any username.
+# Do not hardcode real usernames here. See SECURITY.md.
 from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
 
+import sys
+
+username = sys.argv[1] if len(sys.argv) > 1 else None
+if not username:
+    print("Usage: python get_user_token.py <username>")
+    sys.exit(1)
+
 try:
-    # Get the user "zoob"
-    zoob_user = User.objects.get(username="zoob")
-    print(f"Found user: {zoob_user.username} (ID: {zoob_user.id})")
-    
-    # Get or create a token for this user
-    token, created = Token.objects.get_or_create(user=zoob_user)
-    
-    if created:
-        print(f"Created new token for user 'zoob'")
-    else:
-        print(f"Retrieved existing token for user 'zoob'")
-    
-    print(f"Token: {token.key}")
-    print(f"Token created: {token.created}")
-    
+    user = User.objects.get(username=username)
+    token, _ = Token.objects.get_or_create(user=user)
+    print(f"Token for '{username}': {token.key}")
 except User.DoesNotExist:
-    print("User 'zoob' not found in the database.")
-    print("\nAvailable users:")
-    users = User.objects.all()
-    for user in users:
-        print(f"  - {user.username}") 
+    print(f"User '{username}' not found.")
