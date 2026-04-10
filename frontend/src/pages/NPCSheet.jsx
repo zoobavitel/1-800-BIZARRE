@@ -551,10 +551,7 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
   });
 
   const [conflictClocks, setConflictClocks] = useState(
-    npc?.conflict_clocks ??
-      npc?.conflictClocks ?? [
-        { id: 1, name: "Defeat", segments: 8, filled: 0 },
-      ],
+    npc?.conflict_clocks ?? npc?.conflictClocks ?? [],
   );
 
   const [altClocks, setAltClocks] = useState(
