@@ -20,20 +20,28 @@ def _default_stash_slots():
 
 class Campaign(models.Model):
     name = models.CharField(max_length=100)
-    gm = models.ForeignKey(User, on_delete=models.CASCADE, related_name='campaigns_led')
-    players = models.ManyToManyField(User, related_name='campaigns_joined', blank=True)
+    gm = models.ForeignKey(User, on_delete=models.CASCADE, related_name="campaigns_led")
+    players = models.ManyToManyField(User, related_name="campaigns_joined", blank=True)
     description = models.TextField(blank=True)
     wanted_stars = models.IntegerField(default=0)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(default=timezone.now)
-    active_session = models.ForeignKey('Session', on_delete=models.SET_NULL, null=True, blank=True, related_name='active_in_campaign')
+    active_session = models.ForeignKey(
+        "Session",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="active_in_campaign",
+    )
 
     SCENE_TYPE_CHOICES = [
-        ('NONE', 'None'),
-        ('ENTANGLEMENT', 'Entanglement'),
-        ('ALL_OUT_BRAWL', 'All-Out-Brawl'),
+        ("NONE", "None"),
+        ("ENTANGLEMENT", "Entanglement"),
+        ("ALL_OUT_BRAWL", "All-Out-Brawl"),
     ]
-    current_scene_type = models.CharField(max_length=20, choices=SCENE_TYPE_CHOICES, default='NONE')
+    current_scene_type = models.CharField(
+        max_length=20, choices=SCENE_TYPE_CHOICES, default="NONE"
+    )
 
     def __str__(self):
         return self.name
@@ -41,19 +49,25 @@ class Campaign(models.Model):
 
 class CampaignInvitation(models.Model):
     STATUS_CHOICES = [
-        ('pending', 'Pending'),
-        ('accepted', 'Accepted'),
-        ('declined', 'Declined'),
+        ("pending", "Pending"),
+        ("accepted", "Accepted"),
+        ("declined", "Declined"),
     ]
 
-    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='invitations')
-    invited_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='campaign_invitations')
-    invited_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_invitations')
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    campaign = models.ForeignKey(
+        Campaign, on_delete=models.CASCADE, related_name="invitations"
+    )
+    invited_user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="campaign_invitations"
+    )
+    invited_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="sent_invitations"
+    )
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="pending")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ('campaign', 'invited_user')
+        unique_together = ("campaign", "invited_user")
 
     def __str__(self):
         return f"{self.invited_user.username} invited to {self.campaign.name} ({self.status})"
@@ -61,33 +75,51 @@ class CampaignInvitation(models.Model):
 
 class Faction(models.Model):
     name = models.CharField(max_length=100)
-    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='factions')
-    faction_type = models.CharField(max_length=100, blank=True, help_text="A user-defined type for the faction (e.g., 'Criminal Syndicate', 'Ancient Order', 'Merchant Guild').")
+    campaign = models.ForeignKey(
+        Campaign, on_delete=models.CASCADE, related_name="factions"
+    )
+    faction_type = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="A user-defined type for the faction (e.g., 'Criminal Syndicate', 'Ancient Order', 'Merchant Guild').",
+    )
     notes = models.TextField(blank=True)
     level = models.IntegerField(default=0)
-    hold = models.CharField(max_length=10, choices=[('weak', 'Weak'), ('strong', 'Strong')], default='weak')
+    hold = models.CharField(
+        max_length=10, choices=[("weak", "Weak"), ("strong", "Strong")], default="weak"
+    )
     reputation = models.IntegerField(default=0)
 
     # Shared faction data — all NPCs in this faction share these fields
-    inventory = models.JSONField(default=list, blank=True, help_text="Shared faction assets/inventory.")
-    contacts = models.JSONField(default=list, blank=True, help_text="Faction-level contacts and associates.")
-    faction_status = models.JSONField(default=dict, blank=True, help_text="This faction's standing towards other factions (-3 to +3).")
-    crew_notes = models.TextField(blank=True, help_text="Operational notes shared across all faction members.")
+    inventory = models.JSONField(
+        default=list, blank=True, help_text="Shared faction assets/inventory."
+    )
+    contacts = models.JSONField(
+        default=list, blank=True, help_text="Faction-level contacts and associates."
+    )
+    faction_status = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="This faction's standing towards other factions (-3 to +3).",
+    )
+    crew_notes = models.TextField(
+        blank=True, help_text="Operational notes shared across all faction members."
+    )
 
     def __str__(self):
         return f"{self.name} ({self.get_faction_type_display()}) - {self.campaign.name}"
 
 
-
-
 class UserProfile(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
-    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
-    signature = models.TextField(blank=True, default='')
-    display_title = models.CharField(max_length=100, blank=True, default='')
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
+    avatar = models.ImageField(upload_to="avatars/", null=True, blank=True)
+    signature = models.TextField(blank=True, default="")
+    display_title = models.CharField(max_length=100, blank=True, default="")
     show_avatars = models.BooleanField(default=True)
     show_signatures = models.BooleanField(default=True)
-    theme = models.CharField(max_length=20, default='dark', choices=[('dark', 'Dark'), ('light', 'Light')])
+    theme = models.CharField(
+        max_length=20, default="dark", choices=[("dark", "Dark"), ("light", "Light")]
+    )
     email_digest = models.BooleanField(default=False)
     email_digest_days = models.JSONField(default=list, blank=True)
     receive_all_email = models.BooleanField(default=True)
@@ -96,12 +128,14 @@ class UserProfile(models.Model):
     def __str__(self):
         return self.user.username
 
+
 class Claim(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField()
 
     def __str__(self):
         return self.name
+
 
 class CrewSpecialAbility(models.Model):
     name = models.CharField(max_length=100)
@@ -110,42 +144,59 @@ class CrewSpecialAbility(models.Model):
     def __str__(self):
         return self.name
 
+
 class CrewPlaybook(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField()
-    claims = models.ManyToManyField(Claim, related_name='playbooks')
-    special_abilities = models.ManyToManyField(CrewSpecialAbility, related_name='playbooks')
+    claims = models.ManyToManyField(Claim, related_name="playbooks")
+    special_abilities = models.ManyToManyField(
+        CrewSpecialAbility, related_name="playbooks"
+    )
 
     def __str__(self):
         return self.name
+
 
 class CrewUpgrade(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField()
     total_boxes = models.IntegerField(default=1)
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True
+    )
     is_default = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.name} ({self.total_boxes} boxes)"
 
+
 class Crew(models.Model):
     name = models.CharField(max_length=100)
-    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='crews')
-    playbook = models.ForeignKey(CrewPlaybook, on_delete=models.SET_NULL, null=True, blank=True)
+    campaign = models.ForeignKey(
+        Campaign, on_delete=models.CASCADE, related_name="crews"
+    )
+    playbook = models.ForeignKey(
+        CrewPlaybook, on_delete=models.SET_NULL, null=True, blank=True
+    )
     description = models.TextField(blank=True)
-    image = models.FileField(upload_to='crew_images/', blank=True, null=True)
+    image = models.FileField(upload_to="crew_images/", blank=True, null=True)
     xp = models.IntegerField(default=0)
     xp_track_size = models.IntegerField(default=8)
     advancement_points = models.IntegerField(default=0)
 
     # Fields for name change consensus
     proposed_name = models.CharField(max_length=100, blank=True, null=True)
-    proposed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='proposed_crew_names')
-    approved_by = models.ManyToManyField(User, blank=True, related_name='approved_crew_names')
+    proposed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, related_name="proposed_crew_names"
+    )
+    approved_by = models.ManyToManyField(
+        User, blank=True, related_name="approved_crew_names"
+    )
 
     level = models.IntegerField(default=0)
-    hold = models.CharField(max_length=10, choices=[('weak', 'Weak'), ('strong', 'Strong')], default='weak')
+    hold = models.CharField(
+        max_length=10, choices=[("weak", "Weak"), ("strong", "Strong")], default="weak"
+    )
 
     rep = models.IntegerField(default=0)
     wanted_level = models.IntegerField(default=0)
@@ -158,9 +209,14 @@ class Crew(models.Model):
         help_text="Shared crew stash grid: 40 booleans (Blades-style).",
     )
 
-    claims = models.ManyToManyField(Claim, related_name='crews', blank=True)
-    upgrade_progress = models.JSONField(default=dict, help_text="Progress on crew upgrades, e.g., {'Smuggling Tunnels': 2}")
-    special_abilities = models.ManyToManyField(CrewSpecialAbility, related_name='crews', blank=True)
+    claims = models.ManyToManyField(Claim, related_name="crews", blank=True)
+    upgrade_progress = models.JSONField(
+        default=dict,
+        help_text="Progress on crew upgrades, e.g., {'Smuggling Tunnels': 2}",
+    )
+    special_abilities = models.ManyToManyField(
+        CrewSpecialAbility, related_name="crews", blank=True
+    )
 
     def __str__(self):
         return self.name
@@ -173,7 +229,9 @@ class Heritage(models.Model):
 
 
 class Detriment(models.Model):
-    heritage = models.ForeignKey(Heritage, on_delete=models.CASCADE, related_name='detriments')
+    heritage = models.ForeignKey(
+        Heritage, on_delete=models.CASCADE, related_name="detriments"
+    )
     name = models.CharField(max_length=100)
     hp_value = models.IntegerField()
     required = models.BooleanField(default=False)
@@ -181,7 +239,9 @@ class Detriment(models.Model):
 
 
 class Benefit(models.Model):
-    heritage = models.ForeignKey(Heritage, on_delete=models.CASCADE, related_name='benefits')
+    heritage = models.ForeignKey(
+        Heritage, on_delete=models.CASCADE, related_name="benefits"
+    )
     name = models.CharField(max_length=100)
     hp_cost = models.IntegerField()
     required = models.BooleanField(default=False)
@@ -206,12 +266,11 @@ class Trauma(models.Model):
 
 class NPC(models.Model):
     PLAYBOOK_CHOICES = [
-        ('STAND', 'Stand User'),
-        ('HAMON', 'Hamon User'),
-        ('SPIN', 'Spin User'),
-        ('NON_BIZARRE', 'Non-Bizarre'),
+        ("STAND", "Stand User"),
+        ("HAMON", "Hamon User"),
+        ("SPIN", "Spin User"),
+        ("NON_BIZARRE", "Non-Bizarre"),
     ]
-    
 
     name = models.CharField(max_length=100)
     level = models.IntegerField(default=1)
@@ -225,18 +284,28 @@ class NPC(models.Model):
     passion = models.TextField(blank=True)
     description = models.TextField(blank=True)
     stand_coin_stats = models.JSONField(default=dict)
-    heritage = models.ForeignKey(Heritage, on_delete=models.SET_NULL, null=True, blank=True)
-    playbook = models.CharField(max_length=20, choices=PLAYBOOK_CHOICES, default='STAND')
+    heritage = models.ForeignKey(
+        Heritage, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    playbook = models.CharField(
+        max_length=20, choices=PLAYBOOK_CHOICES, default="STAND"
+    )
     custom_abilities = models.TextField(blank=True)
-    relationships = models.JSONField(default=dict)
+    relationships = models.JSONField(default=dict, blank=True)
     harm_clock_current = models.IntegerField(default=0)
     vulnerability_clock_current = models.IntegerField(default=0)
     armor_charges = models.IntegerField(default=0)
-    creator = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_npcs')
-    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, null=True, blank=True, related_name='npcs')
-    faction = models.ForeignKey(Faction, on_delete=models.SET_NULL, null=True, blank=True, related_name='npcs')
-    image = models.FileField(upload_to='npc_images/', null=True, blank=True)
-    image_url = models.URLField(max_length=500, blank=True, default='')
+    creator = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="created_npcs"
+    )
+    campaign = models.ForeignKey(
+        Campaign, on_delete=models.CASCADE, null=True, blank=True, related_name="npcs"
+    )
+    faction = models.ForeignKey(
+        Faction, on_delete=models.SET_NULL, null=True, blank=True, related_name="npcs"
+    )
+    image = models.FileField(upload_to="npc_images/", null=True, blank=True)
+    image_url = models.URLField(max_length=500, blank=True, default="")
 
     # Stand Description Fields
     stand_description = models.TextField(blank=True)
@@ -268,64 +337,72 @@ class NPC(models.Model):
     @property
     def regular_armor_charges(self):
         """Regular armor charges based on durability grade (SRD: F=0, D=1, C=1, B=2, A=3, S=3)."""
-        durability_grade = self.stand_coin_stats.get('DURABILITY', 'F')
-        return {'S': 3, 'A': 3, 'B': 2, 'C': 1, 'D': 1, 'F': 0}.get(durability_grade, 0)
+        durability_grade = self.stand_coin_stats.get("DURABILITY", "F")
+        return {"S": 3, "A": 3, "B": 2, "C": 1, "D": 1, "F": 0}.get(durability_grade, 0)
 
     @property
     def special_armor_charges(self):
         """Special armor charges (Stand Armor effectiveness)."""
-        durability_grade = self.stand_coin_stats.get('DURABILITY', 'F')
-        return {'S': 2, 'A': 2, 'B': 1, 'C': 1, 'D': 0, 'F': 0}.get(durability_grade, 0)
+        durability_grade = self.stand_coin_stats.get("DURABILITY", "F")
+        return {"S": 2, "A": 2, "B": 1, "C": 1, "D": 0, "F": 0}.get(durability_grade, 0)
 
     @property
     def vulnerability_clock_max(self):
-        durability_grade = self.stand_coin_stats.get('DURABILITY', 'F')
-        if durability_grade == 'S':
-            return 0  # Indicates a special condition; cannot be defeated by normal harm.
-        elif durability_grade == 'A':
+        durability_grade = self.stand_coin_stats.get("DURABILITY", "F")
+        if durability_grade == "S":
+            return (
+                0  # Indicates a special condition; cannot be defeated by normal harm.
+            )
+        elif durability_grade == "A":
             return 12
-        elif durability_grade == 'B':
+        elif durability_grade == "B":
             return 10
-        elif durability_grade == 'C':
+        elif durability_grade == "C":
             return 8
-        elif durability_grade == 'D':
+        elif durability_grade == "D":
             return 6
-        elif durability_grade == 'F':
+        elif durability_grade == "F":
             return 4
         return 0
 
     @property
     def movement_speed(self):
-        speed_grade = self.stand_coin_stats.get('SPEED', 'F')
-        if speed_grade == 'S':
+        speed_grade = self.stand_coin_stats.get("SPEED", "F")
+        if speed_grade == "S":
             return 200
-        elif speed_grade == 'A':
+        elif speed_grade == "A":
             return 60
-        elif speed_grade == 'B':
+        elif speed_grade == "B":
             return 40
-        elif speed_grade == 'C':
+        elif speed_grade == "C":
             return 35
-        elif speed_grade == 'D':
+        elif speed_grade == "D":
             return 30
-        elif speed_grade == 'F':
+        elif speed_grade == "F":
             return 25
         return 0
 
     def __str__(self):
-        return f"{self.name} (NPC for {self.campaign.name})"
+        campaign_name = self.campaign.name if self.campaign else "no campaign"
+        return f"{self.name} (NPC for {campaign_name})"
 
 
 class ShowcasedNPC(models.Model):
     """NPC showcased as opposition in Entanglement or All-Out-Brawl. GM controls what info players see."""
-    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='showcased_npcs')
-    npc = models.ForeignKey(NPC, on_delete=models.CASCADE, related_name='showcased_in')
+
+    campaign = models.ForeignKey(
+        Campaign, on_delete=models.CASCADE, related_name="showcased_npcs"
+    )
+    npc = models.ForeignKey(NPC, on_delete=models.CASCADE, related_name="showcased_in")
     reveal_items = models.BooleanField(default=False)
     reveal_stand_stats = models.BooleanField(default=False)
     reveal_faction_status = models.BooleanField(default=False)
-    show_clocks_to_party = models.BooleanField(default=False, help_text='When True, party can see this NPC\'s clocks')
+    show_clocks_to_party = models.BooleanField(
+        default=False, help_text="When True, party can see this NPC's clocks"
+    )
 
     class Meta:
-        unique_together = ('campaign', 'npc')
+        unique_together = ("campaign", "npc")
 
     def __str__(self):
         return f"{self.npc.name} in {self.campaign.name}"
@@ -344,9 +421,13 @@ class Ability(models.Model):
     ]
 
     name = models.CharField(max_length=100)
-    type = models.CharField(max_length=50, choices=[("standard", "Standard"), ("other", "Other")])
+    type = models.CharField(
+        max_length=50, choices=[("standard", "Standard"), ("other", "Other")]
+    )
     description = models.TextField()
-    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default="aggression")
+    category = models.CharField(
+        max_length=20, choices=CATEGORY_CHOICES, default="aggression"
+    )
 
 
 class Character(models.Model):
@@ -361,41 +442,58 @@ class Character(models.Model):
 
     def save(self, *args, **kwargs):
         if self.pk:  # Only enforce for existing objects (not on creation)
-            for field_name in getattr(self, 'gm_locked_fields', []) or []:
+            for field_name in getattr(self, "gm_locked_fields", []) or []:
                 if field_name not in self._original_data:
                     continue
                 field = self._meta.get_field(field_name)
-                current = getattr(self, field.attname, None) if field.is_relation else getattr(self, field_name)
+                current = (
+                    getattr(self, field.attname, None)
+                    if field.is_relation
+                    else getattr(self, field_name)
+                )
                 if current != self._original_data[field_name]:
-                    raise ValidationError(f'Field \'{field_name}\' is locked by the GM and cannot be changed.')
+                    raise ValidationError(
+                        f"Field '{field_name}' is locked by the GM and cannot be changed."
+                    )
         super().save(*args, **kwargs)
+
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, null=True, blank=True, related_name='characters')
-    crew = models.ForeignKey(Crew, on_delete=models.SET_NULL, null=True, blank=True, related_name='members')
+    campaign = models.ForeignKey(
+        Campaign,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="characters",
+    )
+    crew = models.ForeignKey(
+        Crew, on_delete=models.SET_NULL, null=True, blank=True, related_name="members"
+    )
     # When not linked to a Crew (e.g. no campaign), the player-editable label shown as "crew name"
-    personal_crew_name = models.CharField(max_length=100, blank=True, default='')
+    personal_crew_name = models.CharField(max_length=100, blank=True, default="")
 
     true_name = models.CharField(max_length=100)
     alias = models.CharField(max_length=100, blank=True, null=True)
     appearance = models.TextField(blank=True, null=True)
-    image = models.FileField(upload_to='character_images/', blank=True, null=True)
-    image_url = models.URLField(max_length=500, blank=True, default='')
+    image = models.FileField(upload_to="character_images/", blank=True, null=True)
+    image_url = models.URLField(max_length=500, blank=True, default="")
 
     @property
     def development_xp_bonus(self):
-        if not hasattr(self, 'stand'):
-            return 0  # Or handle as an error, depending on game rules for non-Stand users
+        if not hasattr(self, "stand"):
+            return (
+                0  # Or handle as an error, depending on game rules for non-Stand users
+            )
 
         dev_grade = self.stand.development
-        if dev_grade == 'S':
+        if dev_grade == "S":
             return 5
-        elif dev_grade == 'A':
+        elif dev_grade == "A":
             return 4
-        elif dev_grade == 'B':
+        elif dev_grade == "B":
             return 3
-        elif dev_grade == 'C':
+        elif dev_grade == "C":
             return 2
-        elif dev_grade == 'D':
+        elif dev_grade == "D":
             return 1
         else:  # F or other
             return 0
@@ -403,18 +501,27 @@ class Character(models.Model):
     @property
     def level(self):
         return 1 + (self.total_xp_spent // 10)
+
     level = models.IntegerField(default=1)
 
     heritage = models.ForeignKey(Heritage, on_delete=models.SET_NULL, null=True)
-    selected_benefits = models.ManyToManyField(Benefit, blank=True, related_name='characters')
-    selected_detriments = models.ManyToManyField(Detriment, blank=True, related_name='characters')
+    selected_benefits = models.ManyToManyField(
+        Benefit, blank=True, related_name="characters"
+    )
+    selected_detriments = models.ManyToManyField(
+        Detriment, blank=True, related_name="characters"
+    )
     bonus_hp_from_xp = models.IntegerField(default=0)
 
     background_note = models.TextField(blank=True, null=True)
     background_note2 = models.TextField(blank=True, null=True)
 
     action_dots = models.JSONField(default=dict)
-    playbook = models.CharField(max_length=20, choices=[('STAND','Stand'),('HAMON','Hamon'),('SPIN','Spin')], default='STAND')
+    playbook = models.CharField(
+        max_length=20,
+        choices=[("STAND", "Stand"), ("HAMON", "Hamon"), ("SPIN", "Spin")],
+        default="STAND",
+    )
 
     stand_type = models.CharField(max_length=50, blank=True, null=True)
     stand_name = models.CharField(max_length=100, blank=True, null=True)
@@ -424,9 +531,14 @@ class Character(models.Model):
 
     armor_type = models.CharField(
         max_length=20,
-        choices=[('LIGHT','Light'),('MEDIUM','Medium'),('HEAVY','Heavy'),('ENCUMBERED','Encumbered')],
+        choices=[
+            ("LIGHT", "Light"),
+            ("MEDIUM", "Medium"),
+            ("HEAVY", "Heavy"),
+            ("ENCUMBERED", "Encumbered"),
+        ],
         blank=True,
-        null=True
+        null=True,
     )
 
     close_friend = models.CharField(max_length=100, blank=True)
@@ -464,10 +576,20 @@ class Character(models.Model):
     heritage_points_gained = models.IntegerField(default=0)
     stand_coin_points_gained = models.IntegerField(default=0)
     action_dice_gained = models.IntegerField(default=0)
-    inventory = models.JSONField(default=list, blank=True, help_text="List of items the character possesses")
-    reputation_status = models.JSONField(default=dict, blank=True, help_text="Tracks character's reputation with allies, rivals, and factions (e.g., {'Faction Name': 2, 'NPC Name': -1})")
+    inventory = models.JSONField(
+        default=list, blank=True, help_text="List of items the character possesses"
+    )
+    reputation_status = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Tracks character's reputation with allies, rivals, and factions (e.g., {'Faction Name': 2, 'NPC Name': -1})",
+    )
 
-    coin_boxes = models.JSONField(default=_default_coin_boxes, blank=True, help_text="Four personal coin boxes (booleans).")
+    coin_boxes = models.JSONField(
+        default=_default_coin_boxes,
+        blank=True,
+        help_text="Four personal coin boxes (booleans).",
+    )
     stash_slots = models.JSONField(
         default=_default_stash_slots,
         blank=True,
@@ -475,9 +597,9 @@ class Character(models.Model):
     )
 
     ACTION_CATEGORIES = {
-        'insight': ['hunt', 'study', 'survey', 'tinker'],
-        'prowess': ['finesse', 'prowl', 'skirmish', 'wreck'],
-        'resolve': ['bizarre', 'command', 'consort', 'sway'],
+        "insight": ["hunt", "study", "survey", "tinker"],
+        "prowess": ["finesse", "prowl", "skirmish", "wreck"],
+        "resolve": ["bizarre", "command", "consort", "sway"],
     }
 
     def _calculate_attribute_rating(self, actions):
@@ -489,15 +611,15 @@ class Character(models.Model):
 
     @property
     def insight_attribute_rating(self):
-        return self._calculate_attribute_rating(self.ACTION_CATEGORIES['insight'])
+        return self._calculate_attribute_rating(self.ACTION_CATEGORIES["insight"])
 
     @property
     def prowess_attribute_rating(self):
-        return self._calculate_attribute_rating(self.ACTION_CATEGORIES['prowess'])
+        return self._calculate_attribute_rating(self.ACTION_CATEGORIES["prowess"])
 
     @property
     def resolve_attribute_rating(self):
-        return self._calculate_attribute_rating(self.ACTION_CATEGORIES['resolve'])
+        return self._calculate_attribute_rating(self.ACTION_CATEGORIES["resolve"])
 
     @property
     def total_abilities_count(self):
@@ -522,7 +644,7 @@ class Character(models.Model):
             self._validate_stress_based_on_durability()
             self._validate_initial_abilities_count()
         self._validate_xp_advancements()
-        if hasattr(self, 'stand'):
+        if hasattr(self, "stand"):
             self._validate_a_rank_abilities()
 
     def _validate_level_1_creation(self):
@@ -535,27 +657,38 @@ class Character(models.Model):
         total_dots = sum(self.action_dots.values())
         if total_dots != 7:
             raise ValidationError(
-                {'action_dots': 'A new character at level 1 must have exactly 7 action dots.'}
+                {
+                    "action_dots": "A new character at level 1 must have exactly 7 action dots."
+                }
             )
         for action, dots in self.action_dots.items():
             if self.level == 1 and dots > 2:  # Max 2 dots per action at level 1
                 raise ValidationError(
-                    {'action_dots': f'Action "{action}" cannot have more than 2 dots at level 1.'}
+                    {
+                        "action_dots": f'Action "{action}" cannot have more than 2 dots at level 1.'
+                    }
                 )
-            elif self.level > 1 and dots > 4: # Max 4 dots per action after level 1
+            elif self.level > 1 and dots > 4:  # Max 4 dots per action after level 1
                 raise ValidationError(
-                    {'action_dots': f'Action "{action}" cannot have more than 4 dots.'}
+                    {"action_dots": f'Action "{action}" cannot have more than 4 dots.'}
                 )
 
     def _validate_stand_coin_stats(self):
-        grade_points = {'S': 5, 'A': 4, 'B': 3, 'C': 2, 'D': 1, 'F': 0}
+        grade_points = {"S": 5, "A": 4, "B": 3, "C": 2, "D": 1, "F": 0}
         total_stand_coin_points = 0
-        stand_fields = ['power', 'speed', 'range', 'durability', 'precision', 'development']
+        stand_fields = [
+            "power",
+            "speed",
+            "range",
+            "durability",
+            "precision",
+            "development",
+        ]
 
         # Use Stand if it exists, otherwise fall back to coin_stats (for new characters)
         grades = {}
         try:
-            if hasattr(self, 'stand'):
+            if hasattr(self, "stand"):
                 stand = self.stand
                 for field in stand_fields:
                     if hasattr(stand, field):
@@ -570,23 +703,31 @@ class Character(models.Model):
 
         if not grades:
             raise ValidationError(
-                {'stand': 'A level 1 character must have a Stand with stats defined (or coin_stats).'}
+                {
+                    "stand": "A level 1 character must have a Stand with stats defined (or coin_stats)."
+                }
             )
 
         for field, grade in grades.items():
             if grade not in grade_points:
                 raise ValidationError(
-                    {'stand_coin_stats': f'Invalid grade "{grade}" for stat "{field}". Must be S, A, B, C, D, or F.'}
+                    {
+                        "stand_coin_stats": f'Invalid grade "{grade}" for stat "{field}". Must be S, A, B, C, D, or F.'
+                    }
                 )
-            if grade == 'S' and not self.gm_can_have_s_rank_stand_stats:
+            if grade == "S" and not self.gm_can_have_s_rank_stand_stats:
                 raise ValidationError(
-                    {'stand_coin_stats': f'Player characters cannot have S-rank in {field} unless explicitly allowed by the GM.'}
+                    {
+                        "stand_coin_stats": f"Player characters cannot have S-rank in {field} unless explicitly allowed by the GM."
+                    }
                 )
             total_stand_coin_points += grade_points[grade]
 
         if total_stand_coin_points != 6:
             raise ValidationError(
-                {'stand_coin_stats': f'A new character at level 1 must have exactly 6 Stand Coin points. Current total: {total_stand_coin_points}.'}
+                {
+                    "stand_coin_stats": f"A new character at level 1 must have exactly 6 Stand Coin points. Current total: {total_stand_coin_points}."
+                }
             )
 
     def _validate_stress_based_on_durability(self):
@@ -594,27 +735,29 @@ class Character(models.Model):
         expected_stress = 9
         durability_grade = None
         try:
-            if hasattr(self, 'stand'):
-                durability_grade = getattr(self.stand, 'durability', None)
+            if hasattr(self, "stand"):
+                durability_grade = getattr(self.stand, "durability", None)
         except Exception:
             pass
         if not durability_grade and self.coin_stats:
-            durability_grade = self.coin_stats.get('durability')
-        if durability_grade == 'S':
+            durability_grade = self.coin_stats.get("durability")
+        if durability_grade == "S":
             expected_stress = 13
-        elif durability_grade == 'A':
+        elif durability_grade == "A":
             expected_stress = 12
-        elif durability_grade == 'B':
+        elif durability_grade == "B":
             expected_stress = 11
-        elif durability_grade == 'C':
+        elif durability_grade == "C":
             expected_stress = 10
-        elif durability_grade == 'D':
+        elif durability_grade == "D":
             expected_stress = 9
-        elif durability_grade == 'F':
+        elif durability_grade == "F":
             expected_stress = 8
         if self.level == 1 and self.stress != expected_stress:
             raise ValidationError(
-                {'stress': f'Stress must be {expected_stress} for a level 1 character with {durability_grade} Stand Durability.'}
+                {
+                    "stress": f"Stress must be {expected_stress} for a level 1 character with {durability_grade} Stand Durability."
+                }
             )
 
     def _validate_initial_abilities_count(self):
@@ -622,22 +765,32 @@ class Character(models.Model):
         if self.level != 1:
             return
         a_rank_count = 0
-        stand_fields = ['power', 'speed', 'range', 'durability', 'precision', 'development']
+        stand_fields = [
+            "power",
+            "speed",
+            "range",
+            "durability",
+            "precision",
+            "development",
+        ]
         try:
-            if hasattr(self, 'stand'):
+            if hasattr(self, "stand"):
                 for field in stand_fields:
-                    if hasattr(self.stand, field) and getattr(self.stand, field) == 'A':
+                    if hasattr(self.stand, field) and getattr(self.stand, field) == "A":
                         a_rank_count += 1
         except Exception:
             pass
         if a_rank_count == 0 and self.coin_stats:
             for field in stand_fields:
-                if self.coin_stats.get(field) == 'A':
+                if self.coin_stats.get(field) == "A":
                     a_rank_count += 1
         expected_total_abilities = 3 + (a_rank_count * 2)
         if self.total_abilities_count != expected_total_abilities:
             raise ValidationError(
-                {'standard_abilities': f'A level 1 character must have exactly {expected_total_abilities} abilities (3 base + 2 per A-rank in Stand Coin).', 'total_abilities_count': self.total_abilities_count}
+                {
+                    "standard_abilities": f"A level 1 character must have exactly {expected_total_abilities} abilities (3 base + 2 per A-rank in Stand Coin).",
+                    "total_abilities_count": self.total_abilities_count,
+                }
             )
 
     def _validate_a_rank_abilities(self):
@@ -648,33 +801,39 @@ class Character(models.Model):
         # Ensure total_xp_spent is a multiple of 10
         if self.total_xp_spent % 10 != 0:
             raise ValidationError(
-                {'total_xp_spent': 'Total XP spent must be a multiple of 10 for advancements.'}
+                {
+                    "total_xp_spent": "Total XP spent must be a multiple of 10 for advancements."
+                }
             )
 
         # Calculate expected total XP from advancements
         expected_xp_from_advancements = (
-            self.heritage_points_gained * 5 +  # 5 XP per heritage point
-            self.stand_coin_points_gained * 10 + # 10 XP per stand coin point
-            self.action_dice_gained * 5  # 5 XP per action die
+            self.heritage_points_gained * 5  # 5 XP per heritage point
+            + self.stand_coin_points_gained * 10  # 10 XP per stand coin point
+            + self.action_dice_gained * 5  # 5 XP per action die
         )
 
         if self.total_xp_spent != expected_xp_from_advancements:
             raise ValidationError(
-                {'total_xp_spent': f'Total XP spent ({self.total_xp_spent}) does not match XP calculated from advancements ({expected_xp_from_advancements}).'}
+                {
+                    "total_xp_spent": f"Total XP spent ({self.total_xp_spent}) does not match XP calculated from advancements ({expected_xp_from_advancements})."
+                }
             )
 
         # Ensure gained values are non-negative
         if self.action_dice_gained < 0:
             raise ValidationError(
-                {'action_dice_gained': 'Action dice gained cannot be negative.'}
+                {"action_dice_gained": "Action dice gained cannot be negative."}
             )
         if self.stand_coin_points_gained < 0:
             raise ValidationError(
-                {'stand_coin_points_gained': 'Stand coin points gained cannot be negative.'}
+                {
+                    "stand_coin_points_gained": "Stand coin points gained cannot be negative."
+                }
             )
         if self.heritage_points_gained < 0:
             raise ValidationError(
-                {'heritage_points_gained': 'Heritage points gained cannot be negative.'}
+                {"heritage_points_gained": "Heritage points gained cannot be negative."}
             )
 
     def gain_xp(self, xp_amount, xp_type):
@@ -686,8 +845,10 @@ class Character(models.Model):
     def spend_xp_for_action_dice(self, xp_type, num_dice):
         xp_cost = num_dice * 5
         if self.xp_clocks.get(xp_type, 0) < xp_cost:
-            raise ValidationError(f'Not enough XP in {xp_type} to gain {num_dice} action dice.')
-        
+            raise ValidationError(
+                f"Not enough XP in {xp_type} to gain {num_dice} action dice."
+            )
+
         self.xp_clocks[xp_type] -= xp_cost
         self.total_xp_spent += xp_cost
         self.action_dice_gained += num_dice
@@ -696,8 +857,10 @@ class Character(models.Model):
     def spend_xp_for_stand_coin(self, xp_type, num_points):
         xp_cost = num_points * 10
         if self.xp_clocks.get(xp_type, 0) < xp_cost:
-            raise ValidationError(f'Not enough XP in {xp_type} to gain {num_points} Stand Coin points.')
-        
+            raise ValidationError(
+                f"Not enough XP in {xp_type} to gain {num_points} Stand Coin points."
+            )
+
         self.xp_clocks[xp_type] -= xp_cost
         self.total_xp_spent += xp_cost
         self.stand_coin_points_gained += num_points
@@ -706,8 +869,10 @@ class Character(models.Model):
     def spend_xp_for_heritage_point(self, xp_type, num_points):
         xp_cost = num_points * 5
         if self.xp_clocks.get(xp_type, 0) < xp_cost:
-            raise ValidationError(f'Not enough XP in {xp_type} to gain {num_points} Heritage points.')
-        
+            raise ValidationError(
+                f"Not enough XP in {xp_type} to gain {num_points} Heritage points."
+            )
+
         self.xp_clocks[xp_type] -= xp_cost
         self.total_xp_spent += xp_cost
         self.heritage_points_gained += num_points
@@ -715,43 +880,55 @@ class Character(models.Model):
 
     # Custom Ability Description (editable by GM and user)
     custom_ability_description = models.TextField(blank=True, null=True)
-    
+
     # Type of Custom Ability
     CUSTOM_ABILITY_CHOICES = [
-        ('single_with_3_uses', 'Single Ability with 3 Uses'),
-        ('three_separate_uses', 'Three Separate Abilities'),
+        ("single_with_3_uses", "Single Ability with 3 Uses"),
+        ("three_separate_uses", "Three Separate Abilities"),
     ]
     custom_ability_type = models.CharField(
-        max_length=32,
-        choices=CUSTOM_ABILITY_CHOICES,
-        default='single_with_3_uses'
+        max_length=32, choices=CUSTOM_ABILITY_CHOICES, default="single_with_3_uses"
     )
 
     # Standard Abilities chosen by user
-    standard_abilities = models.ManyToManyField(Ability, blank=True, related_name='characters_standard')
+    standard_abilities = models.ManyToManyField(
+        Ability, blank=True, related_name="characters_standard"
+    )
 
     # JSON field to store additional abilities based on "A" grade logic
     extra_custom_abilities = models.JSONField(default=list, blank=True, null=True)
-    development_temporary_ability = models.JSONField(default=None, null=True, blank=True, help_text="Temporary ability gained from A-rank Development Potential until the end of the session")
-    
+    development_temporary_ability = models.JSONField(
+        default=None,
+        null=True,
+        blank=True,
+        help_text="Temporary ability gained from A-rank Development Potential until the end of the session",
+    )
+
     # Faction reputation tracking - list of {name: str, rep: int} objects
     faction_reputation = models.JSONField(default=list, blank=True, null=True)
-    
+
     # GM settings for character creation locking
     gm_character_locked = models.BooleanField(default=False)
     gm_allowed_edit_fields = models.JSONField(default=dict, blank=True, null=True)
     gm_can_have_s_rank_stand_stats = models.BooleanField(default=False)
-    gm_locked_fields = models.JSONField(default=list, blank=True, help_text="List of fields locked by the GM (e.g., ['level', 'action_dots'])")
+    gm_locked_fields = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of fields locked by the GM (e.g., ['level', 'action_dots'])",
+    )
 
 
 class CharacterHistory(models.Model):
-    character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='history_entries')
+    character = models.ForeignKey(
+        Character, on_delete=models.CASCADE, related_name="history_entries"
+    )
     editor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
     changed_fields = models.JSONField()
-    
+
     def __str__(self):
         return f"Changes for {self.character.true_name} at {self.timestamp}"
+
 
 @receiver(post_save, sender=Character)
 def log_character_changes(sender, instance, created, **kwargs):
@@ -760,7 +937,9 @@ def log_character_changes(sender, instance, created, **kwargs):
         return
 
     try:
-        latest_history = CharacterHistory.objects.filter(character=instance).latest('timestamp')
+        latest_history = CharacterHistory.objects.filter(character=instance).latest(
+            "timestamp"
+        )
         old_data = latest_history.changed_fields
     except CharacterHistory.DoesNotExist:
         old_data = {}
@@ -773,48 +952,50 @@ def log_character_changes(sender, instance, created, **kwargs):
     for field_name, new_value in new_data.items():
         if old_data.get(field_name) != new_value:
             changed_fields[field_name] = {
-                'old': old_data.get(field_name),
-                'new': new_value
+                "old": old_data.get(field_name),
+                "new": new_value,
             }
 
     if changed_fields:
         CharacterHistory.objects.create(
-            character=instance,
-            changed_fields=changed_fields
+            character=instance, changed_fields=changed_fields
         )
-
 
 
 class Stand(models.Model):
     TYPE_CHOICES = [
-        ('COLONY', 'Colony Stand'),
-        ('TOOLBOUND', 'Tool Bound'),
-        ('PHENOMENA', 'Phenomena'),
-        ('AUTOMATIC', 'Automatic'),
-        ('FIGHTING', 'Fighting Spirit'),
-        ('SHARED', 'Shared'),
+        ("COLONY", "Colony Stand"),
+        ("TOOLBOUND", "Tool Bound"),
+        ("PHENOMENA", "Phenomena"),
+        ("AUTOMATIC", "Automatic"),
+        ("FIGHTING", "Fighting Spirit"),
+        ("SHARED", "Shared"),
     ]
 
     FORM_CHOICES = [
-        ('Humanoid','Humanoid'),
-        ('Non-Humanoid','Non-Humanoid'),
-        ('Phenomenon','Phenomenon'),
+        ("Humanoid", "Humanoid"),
+        ("Non-Humanoid", "Non-Humanoid"),
+        ("Phenomenon", "Phenomenon"),
     ]
     GRADE_CHOICES = [
-        ('S','S - Exceptional'),
-        ('A','A - Elite'),
-        ('B','B - Skilled'),
-        ('C','C - Average'),
-        ('D','D - Below Average'),
-        ('F','F - Flawed'),
+        ("S", "S - Exceptional"),
+        ("A", "A - Elite"),
+        ("B", "B - Skilled"),
+        ("C", "C - Average"),
+        ("D", "D - Below Average"),
+        ("F", "F - Flawed"),
     ]
 
-    character = models.OneToOneField('Character', on_delete=models.CASCADE, related_name='stand')
+    character = models.OneToOneField(
+        "Character", on_delete=models.CASCADE, related_name="stand"
+    )
 
     name = models.CharField(max_length=100)
     type = models.CharField(max_length=30, choices=TYPE_CHOICES)
     form = models.CharField(max_length=30, choices=FORM_CHOICES)
-    consciousness_level = models.CharField(max_length=1, choices=[(x,x) for x in 'ABCDEF'])
+    consciousness_level = models.CharField(
+        max_length=1, choices=[(x, x) for x in "ABCDEF"]
+    )
 
     power = models.CharField(max_length=1, choices=GRADE_CHOICES)
     speed = models.CharField(max_length=1, choices=GRADE_CHOICES)
@@ -824,11 +1005,17 @@ class Stand(models.Model):
     development = models.CharField(max_length=1, choices=GRADE_CHOICES)
 
     armor = models.IntegerField(default=0)
-    standard_ability = models.ForeignKey('Ability', on_delete=models.SET_NULL, null=True, blank=True, related_name='stand_default')
+    standard_ability = models.ForeignKey(
+        "Ability",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="stand_default",
+    )
 
 
 class StandAbility(models.Model):
-    stand = models.ForeignKey(Stand, on_delete=models.CASCADE, related_name='abilities')
+    stand = models.ForeignKey(Stand, on_delete=models.CASCADE, related_name="abilities")
 
     name = models.CharField(max_length=100)
     description = models.TextField()
@@ -839,82 +1026,105 @@ class StandAbility(models.Model):
 
 class HamonAbility(models.Model):
     """Hamon abilities for Hamon playbook users based on SRD."""
-    
+
     HAMON_TYPE_CHOICES = [
-        ('FOUNDATION', 'Foundations of Hamon'),
-        ('TRADITIONALIST', 'Traditionalist (Zeppeli Style)'),
-        ('ADAPTIVE_FLOW', 'Adaptive Flow (Joseph/Caesar Style)'),
-        ('CYBER_HAMONIST', 'Cyber-Hamonist'),
-        ('DARK_RESONANCE', 'Dark Resonance'),
-        ('BIO_HARMONICS', 'Bio-Harmonics'),
+        ("FOUNDATION", "Foundations of Hamon"),
+        ("TRADITIONALIST", "Traditionalist (Zeppeli Style)"),
+        ("ADAPTIVE_FLOW", "Adaptive Flow (Joseph/Caesar Style)"),
+        ("CYBER_HAMONIST", "Cyber-Hamonist"),
+        ("DARK_RESONANCE", "Dark Resonance"),
+        ("BIO_HARMONICS", "Bio-Harmonics"),
     ]
 
     HERITAGE_REQUIREMENTS = {
-        'CYBER_HAMONIST': 'Cyborg',
-        'DARK_RESONANCE': 'Vampire',
-        'BIO_HARMONICS': 'Pillar Man',
+        "CYBER_HAMONIST": "Cyborg",
+        "DARK_RESONANCE": "Vampire",
+        "BIO_HARMONICS": "Pillar Man",
     }
-    
+
     name = models.CharField(max_length=100)
     hamon_type = models.CharField(max_length=20, choices=HAMON_TYPE_CHOICES)
     description = models.TextField()
-    required_a_count = models.IntegerField(default=0, help_text="Minimum number of A-rank Coin stats required (0 for Foundation abilities)")
-    stress_cost = models.IntegerField(default=0, help_text="Stress cost to use this ability")
-    frequency = models.CharField(max_length=50, blank=True, help_text="Usage frequency (e.g., 'Once per score')")
-    
+    required_a_count = models.IntegerField(
+        default=0,
+        help_text="Minimum number of A-rank Coin stats required (0 for Foundation abilities)",
+    )
+    stress_cost = models.IntegerField(
+        default=0, help_text="Stress cost to use this ability"
+    )
+    frequency = models.CharField(
+        max_length=50, blank=True, help_text="Usage frequency (e.g., 'Once per score')"
+    )
+
     def __str__(self):
         return f"{self.name} ({self.get_hamon_type_display()})"
 
 
 class SpinAbility(models.Model):
     """Spin abilities for Spin playbook users based on SRD."""
-    
+
     SPIN_TYPE_CHOICES = [
-        ('FOUNDATION', 'Spin Foundations'),
-        ('CAVALIER', 'Cavalier'),
-        ('EXECUTIONER', 'Executioner'),
-        ('MEDICO', 'Medico'),
-        ('BALLBREAKER', 'Ballbreaker'),
+        ("FOUNDATION", "Spin Foundations"),
+        ("CAVALIER", "Cavalier"),
+        ("EXECUTIONER", "Executioner"),
+        ("MEDICO", "Medico"),
+        ("BALLBREAKER", "Ballbreaker"),
     ]
-    
+
     name = models.CharField(max_length=100)
     spin_type = models.CharField(max_length=20, choices=SPIN_TYPE_CHOICES)
     description = models.TextField()
-    required_a_count = models.IntegerField(default=0, help_text="Minimum number of A-rank Coin stats required (0 for Foundation abilities)")
-    stress_cost = models.IntegerField(default=0, help_text="Stress cost to use this ability")
-    frequency = models.CharField(max_length=50, blank=True, help_text="Usage frequency (e.g., 'Once per scene')")
-    
+    required_a_count = models.IntegerField(
+        default=0,
+        help_text="Minimum number of A-rank Coin stats required (0 for Foundation abilities)",
+    )
+    stress_cost = models.IntegerField(
+        default=0, help_text="Stress cost to use this ability"
+    )
+    frequency = models.CharField(
+        max_length=50, blank=True, help_text="Usage frequency (e.g., 'Once per scene')"
+    )
+
     def __str__(self):
         return f"{self.name} ({self.get_spin_type_display()})"
 
 
 class CharacterHamonAbility(models.Model):
     """Junction table for characters and their selected Hamon abilities."""
-    character = models.ForeignKey('Character', on_delete=models.CASCADE, related_name='hamon_abilities')
+
+    character = models.ForeignKey(
+        "Character", on_delete=models.CASCADE, related_name="hamon_abilities"
+    )
     hamon_ability = models.ForeignKey(HamonAbility, on_delete=models.CASCADE)
     acquired_at_creation = models.BooleanField(default=True)
-    
+
     class Meta:
-        unique_together = ('character', 'hamon_ability')
+        unique_together = ("character", "hamon_ability")
 
 
 class CharacterSpinAbility(models.Model):
     """Junction table for characters and their selected Spin abilities."""
-    character = models.ForeignKey('Character', on_delete=models.CASCADE, related_name='spin_abilities')
+
+    character = models.ForeignKey(
+        "Character", on_delete=models.CASCADE, related_name="spin_abilities"
+    )
     spin_ability = models.ForeignKey(SpinAbility, on_delete=models.CASCADE)
     acquired_at_creation = models.BooleanField(default=True)
-    
+
     class Meta:
-        unique_together = ('character', 'spin_ability')
+        unique_together = ("character", "spin_ability")
 
 
 class NPCHamonAbility(models.Model):
     """Junction table for NPCs and their selected Hamon abilities."""
-    npc = models.ForeignKey('NPC', on_delete=models.CASCADE, related_name='npc_hamon_abilities')
+
+    npc = models.ForeignKey(
+        "NPC", on_delete=models.CASCADE, related_name="npc_hamon_abilities"
+    )
     hamon_ability = models.ForeignKey(HamonAbility, on_delete=models.CASCADE)
 
     class Meta:
-        unique_together = ('npc', 'hamon_ability')
+        unique_together = ("npc", "hamon_ability")
 
     def __str__(self):
         return f"{self.npc.name} — {self.hamon_ability.name}"
@@ -922,11 +1132,14 @@ class NPCHamonAbility(models.Model):
 
 class NPCSpinAbility(models.Model):
     """Junction table for NPCs and their selected Spin abilities."""
-    npc = models.ForeignKey('NPC', on_delete=models.CASCADE, related_name='npc_spin_abilities')
+
+    npc = models.ForeignKey(
+        "NPC", on_delete=models.CASCADE, related_name="npc_spin_abilities"
+    )
     spin_ability = models.ForeignKey(SpinAbility, on_delete=models.CASCADE)
 
     class Meta:
-        unique_together = ('npc', 'spin_ability')
+        unique_together = ("npc", "spin_ability")
 
     def __str__(self):
         return f"{self.npc.name} — {self.spin_ability.name}"
@@ -934,89 +1147,158 @@ class NPCSpinAbility(models.Model):
 
 class ProgressClock(models.Model):
     """Progress clocks for tracking ongoing activities based on SRD."""
-    
+
     CLOCK_TYPE_CHOICES = [
-        ('DANGER', 'Danger'),
-        ('MISSION', 'Mission'),
-        ('RACING', 'Racing'),
-        ('LINKED', 'Linked'),
-        ('TUG_OF_WAR', 'Tug-of-War'),
-        ('PROJECT', 'Long-term Project'),
-        ('HEALING', 'Healing Clock'),
-        ('NPC_OPPONENT', 'NPC Opponent'),
-        ('COUNTDOWN', 'Countdown Clock'),
-        ('CUSTOM', 'Custom Clock'),
+        ("DANGER", "Danger"),
+        ("MISSION", "Mission"),
+        ("RACING", "Racing"),
+        ("LINKED", "Linked"),
+        ("TUG_OF_WAR", "Tug-of-War"),
+        ("PROJECT", "Long-term Project"),
+        ("HEALING", "Healing Clock"),
+        ("NPC_OPPONENT", "NPC Opponent"),
+        ("COUNTDOWN", "Countdown Clock"),
+        ("CUSTOM", "Custom Clock"),
     ]
-    
+
     name = models.CharField(max_length=100)
     clock_type = models.CharField(max_length=20, choices=CLOCK_TYPE_CHOICES)
     max_segments = models.IntegerField(
         default=4,
         help_text="Total number of segments (1-12)",
-        validators=[MinValueValidator(1), MaxValueValidator(12)]
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
     )
-    filled_segments = models.IntegerField(default=0, help_text="Currently filled segments")
+    filled_segments = models.IntegerField(
+        default=0, help_text="Currently filled segments"
+    )
     description = models.TextField(blank=True)
-    
+
     # Can be associated with campaigns, crews, characters, sessions, or NPCs
-    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
-    crew = models.ForeignKey(Crew, on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
-    character = models.ForeignKey('Character', on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
-    faction = models.ForeignKey(Faction, on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
-    session = models.ForeignKey('Session', on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
-    npc = models.ForeignKey(NPC, on_delete=models.CASCADE, null=True, blank=True, related_name='progress_clocks')
-    
+    campaign = models.ForeignKey(
+        Campaign,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="progress_clocks",
+    )
+    crew = models.ForeignKey(
+        Crew,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="progress_clocks",
+    )
+    character = models.ForeignKey(
+        "Character",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="progress_clocks",
+    )
+    faction = models.ForeignKey(
+        Faction,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="progress_clocks",
+    )
+    session = models.ForeignKey(
+        "Session",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="progress_clocks",
+    )
+    npc = models.ForeignKey(
+        NPC,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="progress_clocks",
+    )
+
     visible_to_players = models.BooleanField(default=False)
-    visible_to_party = models.BooleanField(default=False, help_text='For player clocks: when True, other players in campaign can see it')
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_progress_clocks')
+    visible_to_party = models.BooleanField(
+        default=False,
+        help_text="For player clocks: when True, other players in campaign can see it",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_progress_clocks",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     completed = models.BooleanField(default=False)
-    
+
     def __str__(self):
         return f"{self.name} ({self.filled_segments}/{self.max_segments})"
-    
+
     @property
     def progress_percentage(self):
-        return (self.filled_segments / self.max_segments) * 100 if self.max_segments > 0 else 0
+        return (
+            (self.filled_segments / self.max_segments) * 100
+            if self.max_segments > 0
+            else 0
+        )
 
 
 class ExperienceTracker(models.Model):
     """Track experience points and advancement based on SRD rules."""
-    
+
     XP_TRIGGER_CHOICES = [
-        ('BELIEFS', 'Express beliefs, drives, heritage, or background'),
-        ('STRUGGLE', 'Struggle with issues from vice or trauma'),
-        ('DESPERATE', 'Address a challenge with action rating 0'),
-        ('DESPERATE_ROLL', 'Desperate skill check'),
-        ('STANDOUT', 'Standout action or leadership'),
+        ("BELIEFS", "Express beliefs, drives, heritage, or background"),
+        ("STRUGGLE", "Struggle with issues from vice or trauma"),
+        ("DESPERATE", "Address a challenge with action rating 0"),
+        ("DESPERATE_ROLL", "Desperate skill check"),
+        ("STANDOUT", "Standout action or leadership"),
     ]
-    
-    character = models.ForeignKey('Character', on_delete=models.CASCADE, related_name='experience_entries')
-    session = models.ForeignKey('Session', on_delete=models.SET_NULL, null=True, blank=True, related_name='xp_entries')
-    roll = models.ForeignKey('Roll', on_delete=models.SET_NULL, null=True, blank=True, related_name='xp_entries')
+
+    character = models.ForeignKey(
+        "Character", on_delete=models.CASCADE, related_name="experience_entries"
+    )
+    session = models.ForeignKey(
+        "Session",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="xp_entries",
+    )
+    roll = models.ForeignKey(
+        "Roll",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="xp_entries",
+    )
     session_date = models.DateTimeField(auto_now_add=True)
     trigger = models.CharField(max_length=24, choices=XP_TRIGGER_CHOICES)
-    description = models.TextField(help_text="What did the character do to earn this XP?")
+    description = models.TextField(
+        help_text="What did the character do to earn this XP?"
+    )
     xp_gained = models.IntegerField(default=1)
-    
+
     def __str__(self):
         return f"{self.character.true_name} - {self.get_trigger_display()} ({self.xp_gained} XP)"
 
 
 class DowntimeActivity(models.Model):
     """Track downtime activities between scores based on SRD."""
-    
+
     ACTIVITY_TYPE_CHOICES = [
-        ('ACQUIRE_ASSET', 'Acquire Asset'),
-        ('LONG_TERM_PROJECT', 'Long-term Project'),
-        ('RECOVER', 'Recover'),
-        ('REDUCE_HEAT', 'Reduce Heat'),
-        ('TRAIN', 'Train'),
-        ('INDULGE_VICE', 'Indulge Vice'),
-        ('REDUCE_WANTED_LEVEL', 'Reduce Wanted Level'),
+        ("ACQUIRE_ASSET", "Acquire Asset"),
+        ("LONG_TERM_PROJECT", "Long-term Project"),
+        ("RECOVER", "Recover"),
+        ("REDUCE_HEAT", "Reduce Heat"),
+        ("TRAIN", "Train"),
+        ("INDULGE_VICE", "Indulge Vice"),
+        ("REDUCE_WANTED_LEVEL", "Reduce Wanted Level"),
     ]
-    
-    character = models.ForeignKey('Character', on_delete=models.CASCADE, related_name='downtime_activities')
+
+    character = models.ForeignKey(
+        "Character", on_delete=models.CASCADE, related_name="downtime_activities"
+    )
     activity_type = models.CharField(max_length=20, choices=ACTIVITY_TYPE_CHOICES)
     description = models.TextField()
     result = models.TextField(blank=True, help_text="What was the outcome?")
@@ -1024,69 +1306,95 @@ class DowntimeActivity(models.Model):
     harm_healed = models.IntegerField(default=0)
     progress_made = models.IntegerField(default=0, help_text="Progress ticks on clocks")
     created_at = models.DateTimeField(auto_now_add=True)
-    
+
     def __str__(self):
         return f"{self.character.true_name} - {self.get_activity_type_display()}"
 
 
 class Score(models.Model):
     """Track scores (jobs/missions) for crews based on SRD."""
-    
+
     SCORE_TYPE_CHOICES = [
-        ('ASSAULT', 'Assault'),
-        ('DECEPTION', 'Deception'),
-        ('STEALTH', 'Stealth'),
-        ('OCCULT', 'Occult'),
-        ('SOCIAL', 'Social'),
-        ('TRANSPORT', 'Transport'),
+        ("ASSAULT", "Assault"),
+        ("DECEPTION", "Deception"),
+        ("STEALTH", "Stealth"),
+        ("OCCULT", "Occult"),
+        ("SOCIAL", "Social"),
+        ("TRANSPORT", "Transport"),
     ]
-    
-    crew = models.ForeignKey(Crew, on_delete=models.CASCADE, related_name='scores')
+
+    crew = models.ForeignKey(Crew, on_delete=models.CASCADE, related_name="scores")
     name = models.CharField(max_length=100)
     score_type = models.CharField(max_length=20, choices=SCORE_TYPE_CHOICES)
     target = models.CharField(max_length=100, help_text="What/who is the target?")
     description = models.TextField()
-    
+
     rep_gained = models.IntegerField(default=0)
     coin_gained = models.IntegerField(default=0)
     heat_gained = models.IntegerField(default=0)
-    
+
     completed = models.BooleanField(default=False)
-    success_level = models.CharField(max_length=50, blank=True, help_text="How well did it go?")
+    success_level = models.CharField(
+        max_length=50, blank=True, help_text="How well did it go?"
+    )
     consequences = models.TextField(blank=True, help_text="What complications arose?")
-    
-    participants = models.ManyToManyField('Character', related_name='scores_participated')
+
+    participants = models.ManyToManyField(
+        "Character", related_name="scores_participated"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
-    
+
     def __str__(self):
         return f"{self.crew.name} - {self.name}"
 
 
 class Session(models.Model):
     """Tracks individual game sessions or episodes within a campaign."""
+
     STATUS_CHOICES = [
-        ('PLANNED', 'Planned'),
-        ('ACTIVE', 'Active'),
-        ('COMPLETED', 'Completed'),
+        ("PLANNED", "Planned"),
+        ("ACTIVE", "Active"),
+        ("COMPLETED", "Completed"),
     ]
 
-    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='sessions')
-    name = models.CharField(max_length=200, help_text="Title or name of the session/episode")
+    campaign = models.ForeignKey(
+        Campaign, on_delete=models.CASCADE, related_name="sessions"
+    )
+    name = models.CharField(
+        max_length=200, help_text="Title or name of the session/episode"
+    )
     session_date = models.DateTimeField(auto_now_add=True)
-    description = models.TextField(blank=True, help_text="Overall plot or story summary for the session")
+    description = models.TextField(
+        blank=True, help_text="Overall plot or story summary for the session"
+    )
     objective = models.TextField(blank=True, help_text="The main goal for this session")
-    planned_for_next_session = models.TextField(blank=True, help_text="Notes for the next session")
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PLANNED')
-    npcs_involved = models.ManyToManyField(NPC, blank=True, related_name='sessions_involved', through='SessionNPCInvolvement')
-    characters_involved = models.ManyToManyField(Character, blank=True, related_name='sessions_involved')
-    factions_involved = models.ManyToManyField(Faction, blank=True, related_name='sessions_involved')
+    planned_for_next_session = models.TextField(
+        blank=True, help_text="Notes for the next session"
+    )
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default="PLANNED")
+    npcs_involved = models.ManyToManyField(
+        NPC,
+        blank=True,
+        related_name="sessions_involved",
+        through="SessionNPCInvolvement",
+    )
+    characters_involved = models.ManyToManyField(
+        Character, blank=True, related_name="sessions_involved"
+    )
+    factions_involved = models.ManyToManyField(
+        Faction, blank=True, related_name="sessions_involved"
+    )
 
     # GM control: show position/effect to players on their sheets
     show_position_effect_to_players = models.BooleanField(default=True)
-    default_position = models.CharField(max_length=20, default='risky', blank=True)
-    default_effect = models.CharField(max_length=20, default='standard', blank=True)
-    roll_goal_label = models.CharField(max_length=300, blank=True, help_text='GM-set label for the current roll goal; copied to Roll on commit.')
+    default_position = models.CharField(max_length=20, default="risky", blank=True)
+    default_effect = models.CharField(max_length=20, default="standard", blank=True)
+    roll_goal_label = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text="GM-set label for the current roll goal; copied to Roll on commit.",
+    )
     devils_bargain_by_character = models.JSONField(
         default=dict,
         blank=True,
@@ -1096,8 +1404,14 @@ class Session(models.Model):
     # Score proposal fields
     proposed_score_target = models.CharField(max_length=200, blank=True, null=True)
     proposed_score_description = models.TextField(blank=True, null=True)
-    proposed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='proposed_scores')
-    votes = models.ManyToManyField(User, blank=True, related_name='voted_scores')
+    proposed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="proposed_scores",
+    )
+    votes = models.ManyToManyField(User, blank=True, related_name="voted_scores")
 
     def __str__(self):
         return f"{self.campaign.name} - {self.name} ({self.get_status_display()}) - {self.session_date.strftime('%Y-%m-%d')}"
@@ -1105,37 +1419,51 @@ class Session(models.Model):
 
 class SessionNPCInvolvement(models.Model):
     """Through model for Session.npcs_involved; GM controls whether NPC clocks are visible to players."""
-    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='npc_involvements')
-    npc = models.ForeignKey(NPC, on_delete=models.CASCADE, related_name='session_involvements')
+
+    session = models.ForeignKey(
+        Session, on_delete=models.CASCADE, related_name="npc_involvements"
+    )
+    npc = models.ForeignKey(
+        NPC, on_delete=models.CASCADE, related_name="session_involvements"
+    )
     show_clocks_to_players = models.BooleanField(default=False)
 
     class Meta:
-        unique_together = ('session', 'npc')
+        unique_together = ("session", "npc")
 
     def __str__(self):
         return f"{self.npc.name} in {self.session.name} (clocks={'on' if self.show_clocks_to_players else 'off'})"
 
 
 class FactionRelationship(models.Model):
-    source_faction = models.ForeignKey(Faction, on_delete=models.CASCADE, related_name='outgoing_relationships')
-    target_faction = models.ForeignKey(Faction, on_delete=models.CASCADE, related_name='incoming_relationships')
+    source_faction = models.ForeignKey(
+        Faction, on_delete=models.CASCADE, related_name="outgoing_relationships"
+    )
+    target_faction = models.ForeignKey(
+        Faction, on_delete=models.CASCADE, related_name="incoming_relationships"
+    )
     reputation_value = models.IntegerField(default=0)
     notes = models.TextField(blank=True)
 
     class Meta:
-        unique_together = ('source_faction', 'target_faction')
+        unique_together = ("source_faction", "target_faction")
 
     def __str__(self):
         return f"{self.source_faction.name} -> {self.target_faction.name}: {self.reputation_value}"
 
+
 class CrewFactionRelationship(models.Model):
-    crew = models.ForeignKey(Crew, on_delete=models.CASCADE, related_name='faction_relationships')
-    faction = models.ForeignKey(Faction, on_delete=models.CASCADE, related_name='crew_relationships')
+    crew = models.ForeignKey(
+        Crew, on_delete=models.CASCADE, related_name="faction_relationships"
+    )
+    faction = models.ForeignKey(
+        Faction, on_delete=models.CASCADE, related_name="crew_relationships"
+    )
     reputation_value = models.IntegerField(default=0)
     notes = models.TextField(blank=True)
 
     class Meta:
-        unique_together = ('crew', 'faction')
+        unique_together = ("crew", "faction")
 
     def __str__(self):
         return f"{self.crew.name} -> {self.faction.name}: {self.reputation_value}"
@@ -1143,19 +1471,33 @@ class CrewFactionRelationship(models.Model):
 
 class SessionEvent(models.Model):
     EVENT_TYPE_CHOICES = [
-        ('DICE_ROLL', 'Dice Roll'),
-        ('STRESS_CHANGE', 'Stress Change'),
-        ('HARM_APPLIED', 'Harm Applied'),
-        ('ITEM_ACQUIRED', 'Item Acquired'),
-        ('DEVILS_BARGAIN', 'Devil\'s Bargain'),
-        ('LOCATION_CHANGE', 'Location Change'),
-        ('ARMOR_EXPENDITURE', 'Armor Expenditure'), # New choice
-        ('OTHER', 'Other'),
+        ("DICE_ROLL", "Dice Roll"),
+        ("STRESS_CHANGE", "Stress Change"),
+        ("HARM_APPLIED", "Harm Applied"),
+        ("ITEM_ACQUIRED", "Item Acquired"),
+        ("DEVILS_BARGAIN", "Devil's Bargain"),
+        ("LOCATION_CHANGE", "Location Change"),
+        ("ARMOR_EXPENDITURE", "Armor Expenditure"),  # New choice
+        ("OTHER", "Other"),
     ]
 
-    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='events')
-    character = models.ForeignKey(Character, on_delete=models.CASCADE, null=True, blank=True, related_name='session_events')
-    npc = models.ForeignKey(NPC, on_delete=models.CASCADE, null=True, blank=True, related_name='session_events')
+    session = models.ForeignKey(
+        Session, on_delete=models.CASCADE, related_name="events"
+    )
+    character = models.ForeignKey(
+        Character,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="session_events",
+    )
+    npc = models.ForeignKey(
+        NPC,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="session_events",
+    )
     event_type = models.CharField(max_length=20, choices=EVENT_TYPE_CHOICES)
     details = models.JSONField(default=dict)
     timestamp = models.DateTimeField(auto_now_add=True)
@@ -1165,8 +1507,16 @@ class SessionEvent(models.Model):
 
 
 class XPHistory(models.Model):
-    character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='xp_history')
-    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='session_xp_history', null=True, blank=True)
+    character = models.ForeignKey(
+        Character, on_delete=models.CASCADE, related_name="xp_history"
+    )
+    session = models.ForeignKey(
+        Session,
+        on_delete=models.CASCADE,
+        related_name="session_xp_history",
+        null=True,
+        blank=True,
+    )
     amount = models.IntegerField()
     reason = models.TextField(blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
@@ -1174,20 +1524,42 @@ class XPHistory(models.Model):
     def __str__(self):
         return f"{self.character.true_name} gained {self.amount} XP ({self.reason}) on {self.timestamp.strftime('%Y-%m-%d')}"
 
+
 class StressHistory(models.Model):
-    character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='stress_history')
-    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='session_stress_history', null=True, blank=True)
-    amount = models.IntegerField(help_text="Change in stress (positive for gain, negative for relief)")
+    character = models.ForeignKey(
+        Character, on_delete=models.CASCADE, related_name="stress_history"
+    )
+    session = models.ForeignKey(
+        Session,
+        on_delete=models.CASCADE,
+        related_name="session_stress_history",
+        null=True,
+        blank=True,
+    )
+    amount = models.IntegerField(
+        help_text="Change in stress (positive for gain, negative for relief)"
+    )
     reason = models.TextField(blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"{self.character.true_name} stress changed by {self.amount} ({self.reason}) on {self.timestamp.strftime('%Y-%m-%d')}"
 
+
 class ChatMessage(models.Model):
-    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='chat_messages')
-    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='session_chat_messages', null=True, blank=True)
-    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
+    campaign = models.ForeignKey(
+        Campaign, on_delete=models.CASCADE, related_name="chat_messages"
+    )
+    session = models.ForeignKey(
+        Session,
+        on_delete=models.CASCADE,
+        related_name="session_chat_messages",
+        null=True,
+        blank=True,
+    )
+    sender = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="sent_messages"
+    )
     message = models.TextField()
     timestamp = models.DateTimeField(auto_now_add=True)
 
@@ -1197,46 +1569,67 @@ class ChatMessage(models.Model):
 
 class Roll(models.Model):
     """Dice roll record with position and effect for session/dice history."""
+
     ROLL_TYPE_CHOICES = [
-        ('ACTION', 'Action Roll'),
-        ('RESISTANCE', 'Resistance Roll'),
-        ('FORTUNE', 'Fortune Roll'),
-        ('CLEAR_STRESS', 'Clear Stress Roll'),
-        ('OTHER', 'Other'),
+        ("ACTION", "Action Roll"),
+        ("RESISTANCE", "Resistance Roll"),
+        ("FORTUNE", "Fortune Roll"),
+        ("CLEAR_STRESS", "Clear Stress Roll"),
+        ("OTHER", "Other"),
     ]
     POSITION_CHOICES = [
-        ('controlled', 'Controlled'),
-        ('risky', 'Risky'),
-        ('desperate', 'Desperate'),
+        ("controlled", "Controlled"),
+        ("risky", "Risky"),
+        ("desperate", "Desperate"),
     ]
     EFFECT_CHOICES = [
-        ('limited', 'Limited'),
-        ('standard', 'Standard'),
-        ('extreme', 'Extreme'),
+        ("limited", "Limited"),
+        ("standard", "Standard"),
+        ("extreme", "Extreme"),
     ]
     OUTCOME_CHOICES = [
-        ('CRITICAL_SUCCESS', 'Critical Success'),
-        ('FULL_SUCCESS', 'Full Success'),
-        ('PARTIAL_SUCCESS', 'Partial Success'),
-        ('FAILURE', 'Failure'),
-        ('BOTCH', 'Botch'),
+        ("CRITICAL_SUCCESS", "Critical Success"),
+        ("FULL_SUCCESS", "Full Success"),
+        ("PARTIAL_SUCCESS", "Partial Success"),
+        ("FAILURE", "Failure"),
+        ("BOTCH", "Botch"),
     ]
 
-    character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='rolls')
-    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='rolls')
-    roll_type = models.CharField(max_length=20, choices=ROLL_TYPE_CHOICES, default='ACTION')
+    character = models.ForeignKey(
+        Character, on_delete=models.CASCADE, related_name="rolls"
+    )
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name="rolls")
+    roll_type = models.CharField(
+        max_length=20, choices=ROLL_TYPE_CHOICES, default="ACTION"
+    )
     action_name = models.CharField(max_length=50, blank=True)
-    position = models.CharField(max_length=20, choices=POSITION_CHOICES, default='risky')
-    effect = models.CharField(max_length=20, choices=EFFECT_CHOICES, default='standard')
+    position = models.CharField(
+        max_length=20, choices=POSITION_CHOICES, default="risky"
+    )
+    effect = models.CharField(max_length=20, choices=EFFECT_CHOICES, default="standard")
     dice_pool = models.IntegerField(default=0)
-    results = models.JSONField(default=list, help_text='List of dice results')
+    results = models.JSONField(default=list, help_text="List of dice results")
     outcome = models.CharField(max_length=20, choices=OUTCOME_CHOICES)
     description = models.TextField(blank=True)
-    goal_label = models.CharField(max_length=300, blank=True, help_text='Goal or intent label for this roll (often from session roll_goal_label).')
-    group_action = models.ForeignKey(
-        'GroupAction', on_delete=models.SET_NULL, null=True, blank=True, related_name='rolls'
+    goal_label = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text="Goal or intent label for this roll (often from session roll_goal_label).",
     )
-    rolled_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='rolls_made')
+    group_action = models.ForeignKey(
+        "GroupAction",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="rolls",
+    )
+    rolled_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="rolls_made",
+    )
     timestamp = models.DateTimeField(auto_now_add=True)
 
     pool_action_rating = models.PositiveSmallIntegerField(default=0)
@@ -1247,7 +1640,7 @@ class Roll(models.Model):
     pool_assist_dice = models.PositiveSmallIntegerField(default=0)
     pool_bonus_dice = models.PositiveSmallIntegerField(default=0)
     roller_stress_spent = models.PositiveSmallIntegerField(
-        default=0, help_text='Stress spent by the rolling character (push, etc.).'
+        default=0, help_text="Stress spent by the rolling character (push, etc.)."
     )
     devil_bargain_consequence = models.CharField(max_length=500, blank=True)
 
@@ -1257,15 +1650,20 @@ class Roll(models.Model):
 
 class GroupAction(models.Model):
     """BitD-style group action: multiple rolls, leader pays 1 stress per failed participant roll."""
+
     STATUS_CHOICES = [
-        ('OPEN', 'Open'),
-        ('RESOLVED', 'Resolved'),
+        ("OPEN", "Open"),
+        ("RESOLVED", "Resolved"),
     ]
 
-    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='group_actions')
-    leader = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='led_group_actions')
+    session = models.ForeignKey(
+        Session, on_delete=models.CASCADE, related_name="group_actions"
+    )
+    leader = models.ForeignKey(
+        Character, on_delete=models.CASCADE, related_name="led_group_actions"
+    )
     goal_label = models.CharField(max_length=300, blank=True)
-    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default='OPEN')
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="OPEN")
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -1274,9 +1672,13 @@ class GroupAction(models.Model):
 
 class RollHistory(models.Model):
     """Links Roll to Campaign for campaign-level roll history."""
-    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='roll_history')
-    roll = models.OneToOneField(Roll, on_delete=models.CASCADE, related_name='history_entry')
+
+    campaign = models.ForeignKey(
+        Campaign, on_delete=models.CASCADE, related_name="roll_history"
+    )
+    roll = models.OneToOneField(
+        Roll, on_delete=models.CASCADE, related_name="history_entry"
+    )
 
     class Meta:
-        verbose_name_plural = 'Roll histories'
-
+        verbose_name_plural = "Roll histories"
