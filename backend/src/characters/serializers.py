@@ -1034,7 +1034,7 @@ class NPCSerializer(serializers.ModelSerializer):
     special_armor_charges = serializers.IntegerField(read_only=True)
     vulnerability_clock_max = serializers.IntegerField(read_only=True)
     harm_clock_current = serializers.IntegerField(read_only=True)
-    vulnerability_clock_current = serializers.IntegerField(read_only=True)
+    vulnerability_clock_current = serializers.IntegerField(required=False)
     image = serializers.FileField(required=False, allow_null=True)
 
     class Meta:
