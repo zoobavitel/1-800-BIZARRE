@@ -2,10 +2,10 @@ from django.contrib.auth.models import User
 from characters.models import Campaign, Character, NPC
 
 try:
-    zoob_user = User.objects.get(username="zoob")
-    print(f"User 'zoob' ID: {zoob_user.id}")
+    gm_user = User.objects.get(username="test_gm")
+    print(f"User 'test_gm' ID: {gm_user.id}")
 except User.DoesNotExist:
-    print("User 'zoob' not found.")
+    print("GM user not found.")
 
 try:
     campaign = Campaign.objects.get(name="A History of Bad Men")
@@ -29,4 +29,4 @@ try:
     mf_doom = NPC.objects.get(name="MF DOOM")
     print(f"NPC 'MF DOOM' ID: {mf_doom.id}")
 except NPC.DoesNotExist:
-    print("NPC 'MF DOOM' not found.") 
+    print("NPC 'MF DOOM' not found.")

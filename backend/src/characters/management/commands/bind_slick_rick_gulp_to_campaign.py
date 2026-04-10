@@ -8,7 +8,7 @@ class Command(BaseCommand):
         slick_rick_name = "Slick Rick"
         slick_rick_stand_name = "GULP"
         campaign_name = "New York State of Mind"
-        gm_username = "Pooj" # Assuming Pooj is the GM for this new campaign
+        gm_username = "slick_rick_player" # Replace with the actual GM username
 
         try:
             # Get the GM user (Pooj)

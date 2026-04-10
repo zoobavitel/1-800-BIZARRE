@@ -1,0 +1,39 @@
+# Gitleaks configuration for 1-800-BIZARRE
+# Extends the default ruleset with project-specific patterns.
+
+title = "1-800-BIZARRE Gitleaks Config"
+
+[extend]
+# Use the official gitleaks default rules as the base
+useDefault = true
+
+[[rules]]
+id = "django-auth-token"
+description = "Django REST Framework authentication token (40-char hex)"
+regex = '''(?i)(auth[\s_-]?token|authorization)[\"'\s:=]+[0-9a-f]{40}\b'''
+tags = ["secret", "django"]
+
+[[rules]]
+id = "hardcoded-password-assignment"
+description = "Hardcoded password string assigned in code"
+regex = '''set_password\([\"'][^\"']{6,}[\"']\)'''
+tags = ["secret", "password"]
+
+[[rules]]
+id = "fixture-hashed-password"
+description = "Django hashed password stored in a fixture file"
+regex = '''pbkdf2_sha256\$[0-9]+\$[A-Za-z0-9]+\$[A-Za-z0-9+/=]{40,}'''
+tags = ["secret", "fixture"]
+[rules.allowlist]
+# Placeholder hashes (all-x) used in sanitised test fixtures are fine
+regexes = ['''pbkdf2_sha256\$[0-9]+\$x{10,}\$x{40,}''']
+
+[allowlist]
+description = "Global allowlist"
+paths = [
+  # Lock files and vendored assets are never secrets
+  "package-lock.json",
+  "yarn.lock",
+  # Node modules
+  "node_modules",
+]
