@@ -1,0 +1,38 @@
+name: Black (autofix PR)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  autofix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Run black in write mode (no --check). This action sets output is_formatted=true if it changed files.
+      - name: Format backend/src with black
+        id: action_black
+        uses: rickstaa/action-black@v1
+        with:
+          black_args: "backend/src"
+          fail_on_error: "false"
+
+      - name: Create Pull Request
+        if: steps.action_black.outputs.is_formatted == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          title: "chore(black): format backend/src"
+          commit-message: "chore(black): format backend/src"
+          body: |
+            Automated Black formatting.
+
+            Triggered by: ${{ github.actor }}
+            Source SHA: ${{ github.sha }}
+          base: "master"
+          branch: "actions/black-format"
+          delete-branch: true
