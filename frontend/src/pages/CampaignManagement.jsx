@@ -257,6 +257,8 @@ function CampaignDetail({
   const [allNPCs, setAllNPCs] = useState([]);
   const [factionForm, setFactionForm] = useState(null);
   const [factionError, setFactionError] = useState(null);
+  const [crewForm, setCrewForm] = useState(null);
+  const [crewError, setCrewError] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [assignNpcId, setAssignNpcId] = useState("");
@@ -489,6 +491,67 @@ function CampaignDetail({
   const handleFactionDelete = async (factionId) => {
     try {
       await factionAPI.deleteFaction(factionId);
+      onRefresh();
+    } catch (err) {
+      setActionError(err.message);
+    }
+  };
+
+  const startCrewCreate = () =>
+    setCrewForm({
+      name: "",
+      description: "",
+      level: 0,
+      hold: "weak",
+      rep: 0,
+      wanted_level: 0,
+      coin: 0,
+    });
+  const startCrewEdit = (c) =>
+    setCrewForm({
+      id: c.id,
+      name: c.name,
+      description: c.description || "",
+      level: c.level,
+      hold: c.hold,
+      rep: c.rep,
+      wanted_level: c.wanted_level,
+      coin: c.coin,
+    });
+
+  const handleCrewSave = async () => {
+    setCrewError(null);
+    if (!crewForm.name.trim()) {
+      setCrewError("Crew name is required.");
+      return;
+    }
+    try {
+      if (crewForm.id) {
+        await crewAPI.patchCrew(crewForm.id, {
+          name: crewForm.name,
+          description: crewForm.description,
+          level: crewForm.level,
+          hold: crewForm.hold,
+          rep: crewForm.rep,
+          wanted_level: crewForm.wanted_level,
+          coin: crewForm.coin,
+        });
+      } else {
+        await crewAPI.createCrew({
+          ...crewForm,
+          campaign: campaign.id,
+        });
+      }
+      setCrewForm(null);
+      onRefresh();
+    } catch (err) {
+      setCrewError(err.message);
+    }
+  };
+
+  const handleCrewDelete = async (crewId) => {
+    try {
+      await crewAPI.deleteCrew(crewId);
       onRefresh();
     } catch (err) {
       setActionError(err.message);
@@ -1182,6 +1245,296 @@ function CampaignDetail({
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Crews (GM and campaign players) */}
+      {(isGM || campaign.players?.some((p) => p.id === user?.id)) && (
+        <div style={S.card}>
+          <span style={S.sectionLbl}>Crew</span>
+          {(campaign.crews || []).length === 0 && !crewForm && (
+            <div
+              style={{
+                color: "#6b7280",
+                fontSize: "12px",
+                marginBottom: "8px",
+              }}
+            >
+              No crew created yet.{" "}
+              {isGM && "Create one to share stats with all characters."}
+            </div>
+          )}
+          {(campaign.crews || []).map((c) => {
+            const isCrewMember = (c.members || []).some(
+              (m) => m.user_id === user?.id,
+            );
+            const canEdit = isGM || isCrewMember;
+            return (
+              <div
+                key={c.id}
+                style={{ padding: "8px 0", borderBottom: "1px solid #1f2937" }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <div>
+                    <span style={{ fontWeight: "bold", color: "#e5e7eb" }}>
+                      {c.name}
+                    </span>
+                    {c.proposed_name && (
+                      <span
+                        style={{
+                          color: "#f59e0b",
+                          fontSize: "11px",
+                          marginLeft: "8px",
+                        }}
+                      >
+                        (proposed: {c.proposed_name})
+                      </span>
+                    )}
+                  </div>
+                  <div style={S.row}>
+                    {canEdit && (
+                      <button
+                        onClick={() => startCrewEdit(c)}
+                        style={{
+                          ...S.btn,
+                          fontSize: "10px",
+                          padding: "2px 6px",
+                          background: "#374151",
+                          color: "#d1d5db",
+                        }}
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {isGM && (
+                      <button
+                        onClick={() => handleCrewDelete(c.id)}
+                        style={{
+                          ...S.btn,
+                          fontSize: "10px",
+                          padding: "2px 6px",
+                          background: "#7f1d1d",
+                          color: "#fca5a5",
+                        }}
+                      >
+                        Del
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "12px",
+                    fontSize: "11px",
+                    color: "#9ca3af",
+                    marginTop: "4px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span>Tier {c.level}</span>
+                  <span>Hold: {c.hold === "strong" ? "Strong" : "Weak"}</span>
+                  <span>Rep: {c.rep}</span>
+                  <span>Coin: {c.coin}</span>
+                  <span>Wanted: {c.wanted_level}</span>
+                  <span>XP: {c.xp}</span>
+                </div>
+                {c.description && (
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: "#6b7280",
+                      marginTop: "4px",
+                    }}
+                  >
+                    {c.description}
+                  </div>
+                )}
+                {(c.members || []).length > 0 && (
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: "#6b7280",
+                      marginTop: "4px",
+                    }}
+                  >
+                    Members:{" "}
+                    {(c.members || [])
+                      .map((m) => m.true_name || m.alias || `#${m.id}`)
+                      .join(", ")}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Crew form */}
+          {crewForm && (
+            <div
+              style={{
+                border: "1px solid #7c3aed",
+                borderRadius: "4px",
+                padding: "12px",
+                marginTop: "8px",
+                background: "#0d1117",
+              }}
+            >
+              <span style={S.lbl}>
+                {crewForm.id ? "EDIT CREW" : "CREATE CREW"}
+              </span>
+              {crewError && (
+                <div style={{ ...S.err, marginBottom: "8px" }}>{crewError}</div>
+              )}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "8px",
+                  marginBottom: "8px",
+                }}
+              >
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                    Name
+                  </span>
+                  <input
+                    style={S.inp}
+                    value={crewForm.name}
+                    onChange={(e) =>
+                      setCrewForm((p) => ({ ...p, name: e.target.value }))
+                    }
+                    placeholder="Crew name"
+                  />
+                </div>
+                <div>
+                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                    Tier
+                  </span>
+                  <input
+                    style={{ ...S.inp, width: "80px" }}
+                    type="number"
+                    value={crewForm.level}
+                    onChange={(e) =>
+                      setCrewForm((p) => ({
+                        ...p,
+                        level: parseInt(e.target.value, 10) || 0,
+                      }))
+                    }
+                  />
+                </div>
+                <div>
+                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                    Hold
+                  </span>
+                  <select
+                    style={S.select}
+                    value={crewForm.hold}
+                    onChange={(e) =>
+                      setCrewForm((p) => ({ ...p, hold: e.target.value }))
+                    }
+                  >
+                    <option value="weak">Weak</option>
+                    <option value="strong">Strong</option>
+                  </select>
+                </div>
+                <div>
+                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                    Rep
+                  </span>
+                  <input
+                    style={{ ...S.inp, width: "80px" }}
+                    type="number"
+                    value={crewForm.rep}
+                    onChange={(e) =>
+                      setCrewForm((p) => ({
+                        ...p,
+                        rep: parseInt(e.target.value, 10) || 0,
+                      }))
+                    }
+                  />
+                </div>
+                <div>
+                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                    Coin
+                  </span>
+                  <input
+                    style={{ ...S.inp, width: "80px" }}
+                    type="number"
+                    value={crewForm.coin}
+                    onChange={(e) =>
+                      setCrewForm((p) => ({
+                        ...p,
+                        coin: parseInt(e.target.value, 10) || 0,
+                      }))
+                    }
+                  />
+                </div>
+                <div>
+                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                    Wanted Level
+                  </span>
+                  <input
+                    style={{ ...S.inp, width: "80px" }}
+                    type="number"
+                    value={crewForm.wanted_level}
+                    onChange={(e) =>
+                      setCrewForm((p) => ({
+                        ...p,
+                        wanted_level: parseInt(e.target.value, 10) || 0,
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+              <div style={{ marginBottom: "8px" }}>
+                <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                  Description
+                </span>
+                <textarea
+                  style={{
+                    ...S.inp,
+                    height: "50px",
+                    resize: "vertical",
+                    border: "1px solid #374151",
+                    background: "#0d1117",
+                    padding: "6px",
+                  }}
+                  value={crewForm.description}
+                  onChange={(e) =>
+                    setCrewForm((p) => ({ ...p, description: e.target.value }))
+                  }
+                />
+              </div>
+              <div style={S.row}>
+                <button onClick={handleCrewSave} style={S.btnPrimary}>
+                  Save
+                </button>
+                <button
+                  onClick={() => {
+                    setCrewForm(null);
+                    setCrewError(null);
+                  }}
+                  style={S.btnGhost}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          {isGM && !crewForm && (
+            <button
+              onClick={startCrewCreate}
+              style={{ ...S.btnPrimary, marginTop: "8px" }}
+            >
+              + New Crew
+            </button>
+          )}
         </div>
       )}
 
