@@ -678,25 +678,14 @@ export default function CharacterPage({
         setNpcs(npcList);
         if (!npcTabsInitialized.current) {
           npcTabsInitialized.current = true;
-          if (npcList.length > 0) {
-            const tab = {
-              tabId: nextTabId++,
-              npcId: npcList[0].id,
-              npc: npcList[0],
-              label: npcList[0].name || "New NPC",
-            };
-            setNpcTabs([tab]);
-            setActiveNpcTabId(tab.tabId);
-          } else {
-            const tab = {
-              tabId: nextTabId++,
-              npcId: null,
-              npc: null,
-              label: "New NPC",
-            };
-            setNpcTabs([tab]);
-            setActiveNpcTabId(tab.tabId);
-          }
+          const tab = {
+            tabId: nextTabId++,
+            npcId: null,
+            npc: null,
+            label: "New NPC",
+          };
+          setNpcTabs([tab]);
+          setActiveNpcTabId(tab.tabId);
         }
       })
       .catch(() => setNpcs([]))
