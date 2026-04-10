@@ -1789,9 +1789,9 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [] }) => {
                                 color={isDefeated ? "#991b1b" : "#dc2626"}
                                 label="Vulnerability"
                                 sublabel={`${vulnFilled}/${vulnSegs}`}
-                                onClick={(f) =>
+                                onClick={(newFilled) =>
                                   setVulnFilled(
-                                    Math.min(Math.max(0, f), vulnSegs),
+                                    Math.min(Math.max(0, newFilled), vulnSegs),
                                   )
                                 }
                               />
