@@ -6665,3 +6665,23 @@ django.db.utils.OperationalError: no such column: characters_character.stash_slo
 [WARNING] 2026-04-10 15:29:41,044 django.request - Not Found: /api/npcs/1/apply-effect/
 [WARNING] 2026-04-10 15:29:57,513 django.request - Bad Request: /api/characters/1/roll-action/
 [WARNING] 2026-04-10 15:29:58,759 django.request - Forbidden: /api/site-stats/
+[WARNING] 2026-04-10 15:34:21,150 django.request - Unauthorized: /api/campaigns/1/events/
+[WARNING] 2026-04-10 15:34:22,078 django.request - Forbidden: /api/campaigns/1/events/
+[WARNING] 2026-04-10 15:34:28,674 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-04-10 15:34:29,918 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-04-10 15:34:31,165 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-04-10 15:34:35,226 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-04-10 15:34:39,913 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-10 15:34:40,540 django.request - Not Found: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-10 15:34:57,133 django.request - Bad Request: /api/characters/1/roll-action/
+[WARNING] 2026-04-10 15:34:58,502 django.request - Forbidden: /api/site-stats/
+[WARNING] 2026-04-10 15:35:29,183 django.request - Unauthorized: /api/campaigns/1/events/
+[WARNING] 2026-04-10 15:35:30,114 django.request - Forbidden: /api/campaigns/1/events/
+[WARNING] 2026-04-10 15:35:36,691 django.request - Not Found: /api/crews/1/approve-name/
+[WARNING] 2026-04-10 15:35:37,926 django.request - Not Found: /api/crews/1/
+[WARNING] 2026-04-10 15:35:39,165 django.request - Not Found: /api/crews/1/propose-name/
+[WARNING] 2026-04-10 15:35:43,199 django.request - Bad Request: /api/crews/1/approve-name/
+[WARNING] 2026-04-10 15:35:47,901 django.request - Bad Request: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-10 15:35:48,532 django.request - Not Found: /api/npcs/1/apply-effect/
+[WARNING] 2026-04-10 15:36:05,037 django.request - Bad Request: /api/characters/1/roll-action/
+[WARNING] 2026-04-10 15:36:06,278 django.request - Forbidden: /api/site-stats/

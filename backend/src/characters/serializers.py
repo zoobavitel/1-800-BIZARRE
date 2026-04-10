@@ -1074,10 +1074,12 @@ class NPCSerializer(serializers.ModelSerializer):
         if 'creator' not in validated_data:
             validated_data['creator'] = self.context['request'].user
         npc = super().create(validated_data)
-        for ability in hamon_ids:
-            NPCHamonAbility.objects.create(npc=npc, hamon_ability=ability)
-        for ability in spin_ids:
-            NPCSpinAbility.objects.create(npc=npc, spin_ability=ability)
+        NPCHamonAbility.objects.bulk_create(
+            [NPCHamonAbility(npc=npc, hamon_ability=ability) for ability in hamon_ids]
+        )
+        NPCSpinAbility.objects.bulk_create(
+            [NPCSpinAbility(npc=npc, spin_ability=ability) for ability in spin_ids]
+        )
         return npc
 
     def update(self, instance, validated_data):
@@ -1086,12 +1088,14 @@ class NPCSerializer(serializers.ModelSerializer):
         instance = super().update(instance, validated_data)
         if hamon_ids is not None:
             instance.npc_hamon_abilities.all().delete()
-            for ability in hamon_ids:
-                NPCHamonAbility.objects.create(npc=instance, hamon_ability=ability)
+            NPCHamonAbility.objects.bulk_create(
+                [NPCHamonAbility(npc=instance, hamon_ability=ability) for ability in hamon_ids]
+            )
         if spin_ids is not None:
             instance.npc_spin_abilities.all().delete()
-            for ability in spin_ids:
-                NPCSpinAbility.objects.create(npc=instance, spin_ability=ability)
+            NPCSpinAbility.objects.bulk_create(
+                [NPCSpinAbility(npc=instance, spin_ability=ability) for ability in spin_ids]
+            )
         return instance
 
 
