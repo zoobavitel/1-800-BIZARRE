@@ -715,6 +715,8 @@ export default function CharacterPage({
               : t,
           ),
         );
+        if (result.id && typeof window !== "undefined")
+          window.location.hash = `npcs/${result.id}`;
         const list = await npcAPI.getNPCs(campaignId);
         setNpcs(list || []);
         return result;
@@ -756,6 +758,8 @@ export default function CharacterPage({
       const existing = npcTabs.find((t) => t.npcId === npc.id);
       if (existing) {
         setActiveNpcTabId(existing.tabId);
+        if (typeof window !== "undefined")
+          window.location.hash = `npcs/${npc.id}`;
         return;
       }
       const tab = {
@@ -766,6 +770,8 @@ export default function CharacterPage({
       };
       setNpcTabs((prev) => [...prev, tab]);
       setActiveNpcTabId(tab.tabId);
+      if (typeof window !== "undefined")
+        window.location.hash = `npcs/${npc.id}`;
     },
     [npcTabs],
   );
