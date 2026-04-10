@@ -128,7 +128,7 @@ const HomePage = ({
     setLoading(true);
     setError(null);
     try {
-      const backendCharacters = await characterAPI.getCharacters();
+      const backendCharacters = await characterAPI.getCharacters({ mine: true });
       const frontendCharacters = (backendCharacters || []).map(
         transformBackendToFrontend,
       );
@@ -216,6 +216,15 @@ const HomePage = ({
 
   const handleEditNpc = (npcId) => {
     if (typeof onNavigateToNPC === "function" && npcId) onNavigateToNPC(npcId);
+  };
+
+  const handleDeleteNpc = async (npcId) => {
+    try {
+      await npcAPI.deleteNPC(npcId);
+      setNpcs((prev) => prev.filter((npc) => npc.id !== npcId));
+    } catch (err) {
+      console.error("Failed to delete NPC:", err);
+    }
   };
 
   const openRules = () => {
@@ -476,6 +485,14 @@ const HomePage = ({
                       onClick={() => handleEditNpc(npc.id)}
                     >
                       Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="p-card-btn"
+                      onClick={() => handleDeleteNpc(npc.id)}
+                      aria-label="Delete NPC"
+                    >
+                      ×
                     </button>
                   </div>
                 </div>
