@@ -9,7 +9,7 @@ alwaysApply: true
 ---
 
 ---
-description: Agent rules for jojo-ttrpg-platform
+description: Agent rules for 1-800-BIZARRE
 alwaysApply: true
 ---
 
@@ -26,14 +26,14 @@ alwaysApply: true
 - Prefer editing an existing plan over creating a duplicate
 
 ## Python Environment
-- Always use the project venv at `~/git/jojo-ttrpg-platform/.venv/bin/activate`
+- Always use the project venv at `~/git/1-800-BIZARRE/.venv/bin/activate`
 - Never run `python` or `pip` commands without activating this venv first
 - Never create or use a different venv for this project
 
 ## Agent Scope
 
 ### Allowed Paths
-- `~/git/jojo-ttrpg-platform/**` (project files)
+- `~/git/1-800-BIZARRE/**` (project files)
 - `~/.cursor/plans/**` (plan files)
 
 ### Restricted Paths

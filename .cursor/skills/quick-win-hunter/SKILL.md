@@ -1,6 +1,6 @@
 ---
 name: quick-win-hunter
-description: Scans ~/.cursor/plans/ and the jojo-ttrpg-platform repo for work items completable in roughly under fifty lines or under thirty minutes (TODOs, small plan items, obvious gaps). Use when the user asks for quick wins, low-hanging fruit, small tasks, a fast backlog, or something shippable in one short session.
+description: Scans ~/.cursor/plans/ and the 1-800-BIZARRE repo for work items completable in roughly under fifty lines or under thirty minutes (TODOs, small plan items, obvious gaps). Use when the user asks for quick wins, low-hanging fruit, small tasks, a fast backlog, or something shippable in one short session.
 ---
 
 # Quick win hunter
@@ -16,7 +16,7 @@ Produce a **prioritized list** of tasks that are likely **≤ ~50 lines changed*
    - Short bullets that imply a single file or one call site.
    - Explicit “small” or “trivial” notes; **skip** items that need design, migrations, or multi-service work unless clearly scoped to a tiny change.
 
-2. **Repo root** `~/git/jojo-ttrpg-platform` (or current workspace if that path is the project)
+2. **Repo root** `~/git/1-800-BIZARRE` (or current workspace if that path is the project)
    - `TODO`, `FIXME`, `HACK`, `XXX` (case-insensitive) in source and scripts; ignore `node_modules`, `venv`, `.git`, build artifacts, and large binary/sqlite backups unless the user cares.
    - **Linter-only** or **typing** fixes in one module.
    - **Copy/label** fixes, **single missing export**, **obvious typo** in API client vs backend field name (after a quick grep).
