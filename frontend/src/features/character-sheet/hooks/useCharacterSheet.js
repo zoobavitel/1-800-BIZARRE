@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
-import { createDefaultCharacter } from "../utils/characterUtils";
+import {
+  createDefaultCharacter,
+  traumaObjectToIds,
+} from "../utils/characterUtils";
 import {
   characterAPI,
   referenceAPI,
@@ -212,6 +215,25 @@ export const useCharacterSheet = (characterId, onSave) => {
           } catch (_) {
             /* transformFrontendToBackend will coerce string to null */
           }
+        }
+      }
+
+      // Resolve trauma checkbox object to list of IDs for the backend
+      if (
+        payloadCharacter.trauma &&
+        !Array.isArray(payloadCharacter.trauma)
+      ) {
+        try {
+          const traumasList = await referenceAPI.getTraumas();
+          payloadCharacter = {
+            ...payloadCharacter,
+            trauma: traumaObjectToIds(payloadCharacter.trauma, traumasList),
+          };
+        } catch (_) {
+          payloadCharacter = {
+            ...payloadCharacter,
+            trauma: traumaObjectToIds(payloadCharacter.trauma, []),
+          };
         }
       }
 
