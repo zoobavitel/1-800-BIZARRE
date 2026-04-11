@@ -118,6 +118,11 @@ export const DEFAULT_TRAUMA = Object.fromEntries(
   TRAUMA_KEYS.map((k) => [k, false]),
 );
 
+/** Fixture order srd_traumas.json pk 1..8 → sheet keys (for API `trauma` ID list fallback). */
+export const TRAUMA_PK_TO_KEY = Object.fromEntries(
+  TRAUMA_KEYS.map((k, i) => [i + 1, k]),
+);
+
 // Durability → stress max bonus and armor charges (PC/NPC sheet; index = stat value 0–5 for F–S)
 // S: +4 stress, 3 armor, resistance can reduce harm by 2 levels | A: +3, 3 | B: +2, 2 | C: +1, 1 | D: 0, 1 | F: -1, 0
 export const DUR_TABLE = [

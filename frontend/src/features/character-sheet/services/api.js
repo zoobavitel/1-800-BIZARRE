@@ -7,6 +7,7 @@ import {
   indexToGrade,
   DUR_TABLE,
   DEFAULT_TRAUMA,
+  TRAUMA_PK_TO_KEY,
 } from "../constants/srd";
 
 /** Backend Character.playbook values */
@@ -735,14 +736,31 @@ export const transformBackendToFrontend = (backendCharacter) => {
         .fill(false)
         .map((_, i) => i < filled);
     })(),
-    // Trauma: backend list of IDs; build checkbox object from trauma_details
+    // Trauma: prefer trauma_details; also merge raw `trauma` ID list when details are empty/out of sync
+    // (legacy DB values like string names made id__in match nothing; save+refetch then cleared the UI).
     trauma: (() => {
+      const base = { ...DEFAULT_TRAUMA };
       const details = backendCharacter.trauma_details || [];
-      const names = details.map((t) => (t.name || "").toUpperCase());
-      return {
-        ...DEFAULT_TRAUMA,
-        ...Object.fromEntries(names.map((n) => [n, true])),
-      };
+      for (const t of details) {
+        const k = (t.name || "").toUpperCase();
+        if (k in base) base[k] = true;
+      }
+      const raw = backendCharacter.trauma;
+      if (Array.isArray(raw)) {
+        for (const item of raw) {
+          let n = null;
+          if (typeof item === "number" && Number.isInteger(item) && item > 0) {
+            n = item;
+          } else if (typeof item === "string") {
+            const s = item.trim();
+            if (/^\d+$/.test(s)) n = parseInt(s, 10);
+          }
+          if (n == null) continue;
+          const key = TRAUMA_PK_TO_KEY[n];
+          if (key) base[key] = true;
+        }
+      }
+      return base;
     })(),
 
     // Armor
