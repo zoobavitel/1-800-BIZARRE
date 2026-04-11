@@ -589,14 +589,12 @@ const CharacterSheetWrapper = ({
     if (!Array.isArray(t)) return;
     const filtered = t.filter((k) => TRAUMA_KEYS.includes(k));
     setTrauma((prev) => {
+      if (prev.length !== filtered.length) return filtered;
       const sortedPrev = [...prev].sort();
       const sortedFiltered = [...filtered].sort();
-      if (
-        sortedPrev.length === sortedFiltered.length &&
-        sortedPrev.every((k, i) => k === sortedFiltered[i])
-      )
-        return prev;
-      return filtered;
+      return sortedPrev.every((k, i) => k === sortedFiltered[i])
+        ? prev
+        : filtered;
     });
   }, [character?.id, character?.trauma]);
 
