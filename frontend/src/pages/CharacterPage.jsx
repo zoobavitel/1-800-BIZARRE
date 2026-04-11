@@ -515,7 +515,16 @@ export default function CharacterPage({
   // ── Save character ───────────────────────────────────────────────────────
   const handleSaveCharacter = useCallback(
     async (payload) => {
-      const frontend = normalizeSheetPayloadToFrontend(payload, traumas);
+      // Ensure trauma reference data is available (mirrors heritage re-fetch fallback below).
+      // If the /traumas/ API call failed during initial load, traumas = [] and
+      // traumaObjectToIds would silently return [] — erasing all trauma selections.
+      let traumaList = normalizeListResponse(traumas);
+      if (!traumaList.length) {
+        const raw = await referenceAPI.getTraumas().catch(() => null);
+        traumaList = normalizeListResponse(raw);
+        if (traumaList.length) setTraumas(traumaList);
+      }
+      const frontend = normalizeSheetPayloadToFrontend(payload, traumaList);
       let heritageList = normalizeListResponse(heritages);
       if (!heritageList.length) {
         const raw = await referenceAPI.getHeritages().catch(() => null);
