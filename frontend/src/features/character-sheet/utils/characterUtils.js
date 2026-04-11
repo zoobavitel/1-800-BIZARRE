@@ -40,16 +40,7 @@ export const createDefaultCharacter = () => ({
     development: 1,
   },
   stress: Array(9).fill(false),
-  trauma: {
-    COLD: false,
-    HAUNTED: false,
-    OBSESSED: false,
-    PARANOID: false,
-    RECKLESS: false,
-    SOFT: false,
-    UNSTABLE: false,
-    VICIOUS: false,
-  },
+  trauma: [],
   armor: { armor: false, heavy: false, special: false },
   harmEntries: {
     level3: [""],
@@ -145,23 +136,6 @@ export const standardAbilities = [
   "Channel Force",
   "Requiem",
 ];
-
-/**
- * Convert sheet trauma checkbox object to list of Trauma IDs for backend.
- * @param {Record<string, boolean>} traumaObj - e.g. { COLD: true, HAUNTED: false, ... }
- * @param {Array<{ id: number, name: string }>} traumasList - from referenceAPI.getTraumas()
- * @returns {number[]} List of trauma IDs to send to API
- */
-export function traumaObjectToIds(traumaObj, traumasList = []) {
-  if (!traumaObj || typeof traumaObj !== "object") return [];
-  const nameToId = Object.fromEntries(
-    (traumasList || []).map((t) => [(t.name || "").toUpperCase(), t.id]),
-  );
-  return Object.entries(traumaObj)
-    .filter(([, checked]) => checked)
-    .map(([name]) => nameToId[name.toUpperCase()])
-    .filter((id) => id != null);
-}
 
 /**
  * Resolve sheet heritage to an integer PK for the API (strict FK; never send display names).

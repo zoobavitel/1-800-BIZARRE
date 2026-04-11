@@ -7,7 +7,6 @@ export {
   createDefaultCharacter,
   viceOptions,
   standardAbilities,
-  traumaObjectToIds,
   resolveHeritagePkForSave,
 } from "./utils/characterUtils";
 export * from "./services/api";
