@@ -182,6 +182,31 @@ describe("transformBackendToFrontend coin and crew stash", () => {
     expect(fe.stash[0]).toBe(true);
     expect(fe.stash[1]).toBe(false);
   });
+
+  test("maps trauma from trauma_details names", () => {
+    const fe = transformBackendToFrontend({
+      trauma: [7],
+      trauma_details: [{ id: 7, name: "Unstable", description: "" }],
+    });
+    expect(fe.trauma.UNSTABLE).toBe(true);
+    expect(fe.trauma.COLD).toBe(false);
+  });
+
+  test("falls back to raw trauma IDs when trauma_details is empty", () => {
+    const fe = transformBackendToFrontend({
+      trauma: [7],
+      trauma_details: [],
+    });
+    expect(fe.trauma.UNSTABLE).toBe(true);
+  });
+
+  test("accepts string trauma IDs from JSON", () => {
+    const fe = transformBackendToFrontend({
+      trauma: ["7"],
+      trauma_details: [],
+    });
+    expect(fe.trauma.UNSTABLE).toBe(true);
+  });
 });
 
 describe("transformFrontendToBackend stash_slots", () => {

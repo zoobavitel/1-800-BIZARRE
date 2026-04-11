@@ -1107,8 +1107,32 @@ class CharacterSerializer(serializers.ModelSerializer):
         return AbilitySerializer(obj.standard_abilities.all(), many=True).data
 
     def get_trauma_details(self, obj):
-        # obj.trauma is a list of Trauma IDs
-        traumas = Trauma.objects.filter(id__in=obj.trauma)
+        """Resolve Character.trauma JSON list to Trauma rows (integer PKs and legacy string names)."""
+        raw = getattr(obj, "trauma", None)
+        if not raw or not isinstance(raw, (list, tuple)):
+            return TraumaSerializer([], many=True).data
+
+        pks = []
+        for item in raw:
+            if isinstance(item, bool):
+                continue
+            if isinstance(item, int) and item > 0:
+                pks.append(item)
+            elif isinstance(item, float) and item > 0 and item == int(item):
+                pks.append(int(item))
+            elif isinstance(item, str):
+                s = item.strip()
+                if s.isdigit():
+                    pks.append(int(s))
+                else:
+                    tr = Trauma.objects.filter(name__iexact=s).first()
+                    if tr:
+                        pks.append(tr.pk)
+
+        if not pks:
+            return TraumaSerializer([], many=True).data
+
+        traumas = Trauma.objects.filter(id__in=pks).order_by("id")
         return TraumaSerializer(traumas, many=True).data
 
 
