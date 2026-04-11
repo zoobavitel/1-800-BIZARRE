@@ -8,7 +8,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         character_name = "Aya Funsami"
         campaign_name = "A History of Bad Men"
-        gm_username = "cnl_02" # Assuming the user who created Aya Funsami is the GM
+        gm_username = "test_gm" # Replace with the actual GM username for this campaign
 
         try:
             # Get the GM user
