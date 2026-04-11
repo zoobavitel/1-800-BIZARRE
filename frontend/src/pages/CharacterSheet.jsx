@@ -5478,6 +5478,67 @@ const CharacterSheetWrapper = ({
                                 </ul>
                               )}
                           </div>
+                          {ab.type === "custom" && (
+                            <button
+                              type="button"
+                              aria-label={`Edit ${ab.name || "ability"}`}
+                              onClick={() => {
+                                const customs = abilities.filter(
+                                  (a) => a.type === "custom",
+                                );
+                                const single = customs.find(
+                                  (a) => a.id === "custom-single" || a._uses,
+                                );
+                                if (single && single._uses) {
+                                  setCustomAbilityModal({
+                                    type: "single_with_3_uses",
+                                    name: single.name || "",
+                                    uses: [
+                                      ...(single._uses || []),
+                                      "",
+                                      "",
+                                      "",
+                                    ].slice(0, 3),
+                                    items: [
+                                      { name: "", description: "" },
+                                      { name: "", description: "" },
+                                      { name: "", description: "" },
+                                    ],
+                                  });
+                                } else {
+                                  const three = customs.filter((a) => !a._uses);
+                                  const items = three.length
+                                    ? three.map((a) => ({
+                                        name: a.name || "",
+                                        description: a.description || "",
+                                      }))
+                                    : [
+                                        { name: "", description: "" },
+                                        { name: "", description: "" },
+                                        { name: "", description: "" },
+                                      ];
+                                  while (items.length < 3)
+                                    items.push({ name: "", description: "" });
+                                  setCustomAbilityModal({
+                                    type: "three_separate_uses",
+                                    name: "",
+                                    uses: ["", "", ""],
+                                    items: items.slice(0, 3),
+                                  });
+                                }
+                              }}
+                              style={{
+                                color: "#60a5fa",
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                fontSize: "13px",
+                                marginRight: "2px",
+                              }}
+                            >
+                              ✏
+                            </button>
+                          )}
                           <button
                             type="button"
                             aria-label={`Remove ${ab.name || "ability"}`}
