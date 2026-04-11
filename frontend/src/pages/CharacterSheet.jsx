@@ -17,7 +17,7 @@ import {
   ACTION_DESC,
   RESISTANCE_ATTR_DESC,
   VICE_OPTIONS,
-  DEFAULT_TRAUMA,
+  TRAUMA_KEYS,
   DEVILS_BARGAIN_DETRIMENTS,
 } from "../features/character-sheet/constants/srd";
 import {
@@ -525,13 +525,11 @@ const CharacterSheetWrapper = ({
     character?.stressFilled || 0,
   );
 
-  // Trauma (object from API or DEFAULT_TRAUMA)
+  // Trauma (array of selected trauma names)
   const [trauma, setTrauma] = useState(
-    character?.trauma &&
-      typeof character.trauma === "object" &&
-      !Array.isArray(character.trauma)
-      ? { ...DEFAULT_TRAUMA, ...character.trauma }
-      : DEFAULT_TRAUMA,
+    Array.isArray(character?.trauma)
+      ? character.trauma.filter((k) => TRAUMA_KEYS.includes(k))
+      : [],
   );
 
   // FIX 4: Armor charges derived from Durability grade
@@ -588,12 +586,15 @@ const CharacterSheetWrapper = ({
 
   useEffect(() => {
     const t = character?.trauma;
-    if (!t || typeof t !== "object" || Array.isArray(t)) return;
+    if (!Array.isArray(t)) return;
+    const filtered = t.filter((k) => TRAUMA_KEYS.includes(k));
     setTrauma((prev) => {
-      const merged = { ...DEFAULT_TRAUMA, ...t };
-      return Object.keys(merged).every((k) => merged[k] === prev[k])
-        ? prev
-        : merged;
+      if (
+        prev.length === filtered.length &&
+        prev.every((k, i) => k === filtered[i])
+      )
+        return prev;
+      return filtered;
     });
   }, [character?.id, character?.trauma]);
 
@@ -2258,7 +2259,7 @@ const CharacterSheetWrapper = ({
                   <div
                     style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}
                   >
-                    {Object.entries(trauma).map(([t, checked]) => (
+                    {TRAUMA_KEYS.map((t) => (
                       <label
                         key={t}
                         style={{
@@ -2271,9 +2272,13 @@ const CharacterSheetWrapper = ({
                       >
                         <input
                           type="checkbox"
-                          checked={checked}
+                          checked={trauma.includes(t)}
                           onChange={() =>
-                            setTrauma((p) => ({ ...p, [t]: !p[t] }))
+                            setTrauma((p) =>
+                              p.includes(t)
+                                ? p.filter((k) => k !== t)
+                                : [...p, t],
+                            )
                           }
                         />
                         {t}

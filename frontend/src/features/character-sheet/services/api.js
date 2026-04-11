@@ -6,7 +6,6 @@ import {
   gradeToIndex,
   indexToGrade,
   DUR_TABLE,
-  DEFAULT_TRAUMA,
 } from "../constants/srd";
 
 /** Backend Character.playbook values */
@@ -735,15 +734,10 @@ export const transformBackendToFrontend = (backendCharacter) => {
         .fill(false)
         .map((_, i) => i < filled);
     })(),
-    // Trauma: backend list of IDs; build checkbox object from trauma_details
-    trauma: (() => {
-      const details = backendCharacter.trauma_details || [];
-      const names = details.map((t) => (t.name || "").toUpperCase());
-      return {
-        ...DEFAULT_TRAUMA,
-        ...Object.fromEntries(names.map((n) => [n, true])),
-      };
-    })(),
+    // Trauma: array of selected trauma names derived from trauma_details
+    trauma: (backendCharacter.trauma_details || []).map((t) =>
+      (t.name || "").toUpperCase(),
+    ),
 
     // Armor
     regularArmorUsed: 0, // derived from light_armor_used + heavy_armor_used if needed

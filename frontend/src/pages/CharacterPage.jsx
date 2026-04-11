@@ -22,7 +22,6 @@ import {
   transformBackendToFrontend,
   transformFrontendToBackend,
   createDefaultCharacter,
-  traumaObjectToIds,
   normalizeListResponse,
   resolveHeritagePkForSave,
   normalizeStashSlots,
@@ -137,7 +136,13 @@ function sortCharTabs(tabs) {
 // ---------------------------------------------------------------------------
 
 function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
-  const traumaIds = traumaObjectToIds(payload.trauma || {}, traumasList);
+  const traumaNames = Array.isArray(payload.trauma) ? payload.trauma : [];
+  const nameToId = Object.fromEntries(
+    (traumasList || []).map((t) => [(t.name || "").toUpperCase(), t.id]),
+  );
+  const traumaIds = traumaNames
+    .map((n) => nameToId[n.toUpperCase()])
+    .filter((id) => id != null);
   const harm = payload.harm || {
     level3: [""],
     level2: ["", ""],

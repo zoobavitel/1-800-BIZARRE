@@ -1,8 +1,5 @@
 import { useState, useEffect } from "react";
-import {
-  createDefaultCharacter,
-  traumaObjectToIds,
-} from "../utils/characterUtils";
+import { createDefaultCharacter } from "../utils/characterUtils";
 import {
   characterAPI,
   referenceAPI,
@@ -13,16 +10,7 @@ import {
 export const useCharacterSheet = (characterId, onSave) => {
   const [characterData, setCharacterData] = useState(createDefaultCharacter());
   const [stressBoxes, setStressBoxes] = useState(Array(9).fill(false));
-  const [traumaChecks, setTraumaChecks] = useState({
-    COLD: false,
-    HAUNTED: false,
-    OBSESSED: false,
-    PARANOID: false,
-    RECKLESS: false,
-    SOFT: false,
-    UNSTABLE: false,
-    VICIOUS: false,
-  });
+  const [traumaChecks, setTraumaChecks] = useState([]);
   const [armorUses, setArmorUses] = useState({
     armor: false,
     heavy: false,
@@ -125,16 +113,7 @@ export const useCharacterSheet = (characterId, onSave) => {
       setCharacterData(defaultChar);
       setStressBoxes(defaultChar.stress || Array(9).fill(false));
       setTraumaChecks(
-        defaultChar.trauma || {
-          COLD: false,
-          HAUNTED: false,
-          OBSESSED: false,
-          PARANOID: false,
-          RECKLESS: false,
-          SOFT: false,
-          UNSTABLE: false,
-          VICIOUS: false,
-        },
+        Array.isArray(defaultChar.trauma) ? defaultChar.trauma : [],
       );
       setArmorUses(
         defaultChar.armor || { armor: false, heavy: false, special: false },
@@ -218,22 +197,24 @@ export const useCharacterSheet = (characterId, onSave) => {
         }
       }
 
-      // Resolve trauma checkbox object to list of IDs for the backend
-      if (
-        payloadCharacter.trauma &&
-        !Array.isArray(payloadCharacter.trauma)
-      ) {
+      // Resolve trauma names to list of IDs for the backend
+      if (Array.isArray(payloadCharacter.trauma)) {
         try {
           const traumasList = await referenceAPI.getTraumas();
+          const nameToId = Object.fromEntries(
+            (traumasList || []).map((t) => [
+              (t.name || "").toUpperCase(),
+              t.id,
+            ]),
+          );
           payloadCharacter = {
             ...payloadCharacter,
-            trauma: traumaObjectToIds(payloadCharacter.trauma, traumasList),
+            trauma: payloadCharacter.trauma
+              .map((n) => nameToId[n.toUpperCase()])
+              .filter((id) => id != null),
           };
         } catch (_) {
-          payloadCharacter = {
-            ...payloadCharacter,
-            trauma: traumaObjectToIds(payloadCharacter.trauma, []),
-          };
+          payloadCharacter = { ...payloadCharacter, trauma: [] };
         }
       }
 
