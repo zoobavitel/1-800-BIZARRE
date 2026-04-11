@@ -138,6 +138,22 @@ export const standardAbilities = [
 ];
 
 /**
+ * Convert an array of selected trauma names to a list of Trauma IDs for the backend.
+ * @param {string[]} traumaNames - e.g. ["COLD", "HAUNTED"]
+ * @param {Array<{ id: number, name: string }>} traumasList - from referenceAPI.getTraumas()
+ * @returns {number[]} List of trauma IDs to send to API
+ */
+export function traumaNamesToIds(traumaNames, traumasList = []) {
+  if (!Array.isArray(traumaNames)) return [];
+  const nameToId = Object.fromEntries(
+    (traumasList || []).map((t) => [(t.name || "").toUpperCase(), t.id]),
+  );
+  return traumaNames
+    .map((n) => nameToId[n.toUpperCase()])
+    .filter((id) => id != null);
+}
+
+/**
  * Resolve sheet heritage to an integer PK for the API (strict FK; never send display names).
  * @param {*} heritageValue - from normalized sheet (number, digit string, name string, null, etc.)
  * @param {Array<{ id: number|string, name?: string }>} heritageList - from reference API (must be non-empty)

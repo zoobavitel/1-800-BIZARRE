@@ -1,5 +1,8 @@
 import { useState, useEffect } from "react";
-import { createDefaultCharacter } from "../utils/characterUtils";
+import {
+  createDefaultCharacter,
+  traumaNamesToIds,
+} from "../utils/characterUtils";
 import {
   characterAPI,
   referenceAPI,
@@ -201,17 +204,9 @@ export const useCharacterSheet = (characterId, onSave) => {
       if (Array.isArray(payloadCharacter.trauma)) {
         try {
           const traumasList = await referenceAPI.getTraumas();
-          const nameToId = Object.fromEntries(
-            (traumasList || []).map((t) => [
-              (t.name || "").toUpperCase(),
-              t.id,
-            ]),
-          );
           payloadCharacter = {
             ...payloadCharacter,
-            trauma: payloadCharacter.trauma
-              .map((n) => nameToId[n.toUpperCase()])
-              .filter((id) => id != null),
+            trauma: traumaNamesToIds(payloadCharacter.trauma, traumasList),
           };
         } catch (_) {
           payloadCharacter = { ...payloadCharacter, trauma: [] };
