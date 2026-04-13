@@ -24,6 +24,19 @@ export const PATCH_NOTES = [
   },
   {
     "date": "2026-04-10",
+    "date": "2026-04-13",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "redesign homepage color palette with new design tokens"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-04-11",
     "version": null,
     "sections": [
       {
@@ -80,6 +93,8 @@ export const PATCH_NOTES = [
           "Update Black action options in workflow",
           "Update source path in black.yml workflow",
           "Update Black workflow to use new configuration"
+          "Merge pull request #39 from zoobavitel/copilot/fix-character-sheet-width-issues",
+          "Merge pull request #36 from zoobavitel/copilot/remove-personal-information"
         ]
       },
       {
@@ -632,6 +647,7 @@ export const PATCH_NOTES = [
         "items": [
           "Add Account Settings page and integrate user profile management",
           "Add production deployment scripts and checklist"
+          "remove global overflow-x hidden, rely on responsive layout fixes"
         ]
       }
     ]

@@ -1455,6 +1455,8 @@ const CharacterSheetWrapper = ({
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
+      flexWrap: "wrap",
+      gap: "8px",
       borderBottom: "1px solid #4b5563",
       position: "sticky",
       top: 0,
@@ -1532,8 +1534,8 @@ const CharacterSheetWrapper = ({
       background: "#374151",
       color: "#d1d5db",
     },
-    g2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" },
-    g3: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px" },
+    g2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" },
+    g3: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" },
     warn: {
       background: "#7f1d1d",
       border: "1px solid #b91c1c",
@@ -1640,6 +1642,8 @@ const CharacterSheetWrapper = ({
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "8px",
                 marginBottom: "16px",
               }}
             >

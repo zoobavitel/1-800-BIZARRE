@@ -21,7 +21,15 @@ class NPCViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        qs = NPC.objects.all() if user.is_staff else NPC.objects.filter(Q(creator=user) | Q(campaign__gm=user)).distinct()
+        mine = self.request.query_params.get('mine', '').lower() in ('1', 'true')
+
+        if user.is_staff:
+            qs = NPC.objects.all()
+        elif mine:
+            qs = NPC.objects.filter(creator=user)
+        else:
+            qs = NPC.objects.filter(Q(creator=user) | Q(campaign__gm=user)).distinct()
+
         campaign_id = self.request.query_params.get('campaign')
         if campaign_id:
             qs = qs.filter(campaign_id=campaign_id)

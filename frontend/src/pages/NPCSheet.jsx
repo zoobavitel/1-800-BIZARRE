@@ -876,6 +876,8 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
+      flexWrap: "wrap",
+      gap: "8px",
       borderBottom: "2px solid #7c3aed",
       position: "sticky",
       top: 0,
@@ -925,8 +927,8 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
       border: "none",
       fontFamily: "monospace",
     },
-    g2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" },
-    g3: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" },
+    g2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "12px" },
+    g3: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" },
     ref: {
       background: "#0a0a14",
       border: "1px solid #1f1f3a",
@@ -1046,7 +1048,7 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
           <>
             {/* ── Identity Bar ── */}
             <div style={{ ...S.card, borderColor: "#4c1d95" }}>
-              <div style={{ display: "flex", gap: "16px", alignItems: "end" }}>
+              <div style={{ display: "flex", gap: "16px", alignItems: "flex-start", flexWrap: "wrap" }}>
                 {/* Portrait */}
                 <div
                   style={{
@@ -1124,10 +1126,11 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr auto",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
                     gap: "16px",
                     alignItems: "end",
                     flex: 1,
+                    minWidth: 0,
                   }}
                 >
                   <div>
@@ -2765,7 +2768,7 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
               <div style={{ marginTop: "8px" }}>
                 <span style={S.lbl}>CREW / FACTION</span>
                 <select
-                  style={S.sel}
+                  style={{ ...S.sel, width: "100%" }}
                   value={faction || ""}
                   onChange={(e) =>
                     setFaction(
