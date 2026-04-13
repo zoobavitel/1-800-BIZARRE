@@ -42,13 +42,13 @@ export function buildSessionsByMonth(campaigns, monthsBack = MONTHS_BACK) {
   return buckets.map(({ label, count }) => ({ label, count }));
 }
 
-/** Bar chart rows aligned with hero stat dots (green, amber, purple, orange, yellow). */
+/** Bar chart rows aligned with new palette: p1=purple, p2=gold, p3=burnt-orange, p4=warm-gold, green for sessions. */
 export function buildBarChartRows(heroStats) {
   return [
-    { name: "Campaigns", value: heroStats.activeCampaigns, fill: "#16a34a" },
-    { name: "Sessions", value: heroStats.sessionCount, fill: "#c8920a" },
-    { name: "Crews", value: heroStats.crewCount, fill: "#7c3aed" },
-    { name: "PCs", value: heroStats.pcCount, fill: "#d97b2a" },
-    { name: "NPCs", value: heroStats.npcCount, fill: "#e6b422" },
+    { name: "Campaigns", value: heroStats.activeCampaigns, fill: "#6c3989" },
+    { name: "Sessions", value: heroStats.sessionCount, fill: "#e8ca70" },
+    { name: "Crews", value: heroStats.crewCount, fill: "#b64200" },
+    { name: "PCs", value: heroStats.pcCount, fill: "#b38f27" },
+    { name: "NPCs", value: heroStats.npcCount, fill: "#a09060" },
   ];
 }

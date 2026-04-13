@@ -254,17 +254,22 @@ const HomePage = ({
               <span />
             </button>
             <a href="#/" className="logo" onClick={(e) => e.preventDefault()}>
-              1(800)BIZARRE
+              <span className="logo-part1">1(800)</span>
+              <span className="logo-part2">BIZARRE</span>
             </a>
           </div>
           <div className="header-right">
-            <button type="button" className="header-btn" onClick={onSearch}>
+            <button
+              type="button"
+              className="header-btn header-btn-ghost"
+              onClick={onSearch}
+            >
               Search
             </button>
             <div className="account-wrapper">
               <button
                 type="button"
-                className="header-btn"
+                className="header-btn header-btn-fill"
                 onClick={onOpenAccountMenu}
               >
                 Account
@@ -277,12 +282,20 @@ const HomePage = ({
       <section className="hero">
         <div className="hero-inner">
           <div className="hero-text">
-            <div className="vhs-badge fade-up d1">Now Playing</div>
+            <div className="vhs-badge fade-up d1">A Bizarre Adventure TTRPG</div>
             <h1 className="hero-title fade-up d2">
-              1(800)
+              <span className="hero-title-stand">STAND</span>
               <br />
-              <span className="accent">BIZARRE</span>
+              <span className="accent">PROUD.</span>
             </h1>
+            <div className="hero-pills fade-up d2">
+              <span className="pill pill-stand">Stand</span>
+              <span className="pill pill-hamon">Hamon</span>
+              <span className="pill pill-spin">Spin</span>
+            </div>
+            <p className="hero-subtext fade-up d2">
+              Forge your Stand. Write your fate.
+            </p>
             <div className="hero-cta fade-up d3">
               <button
                 type="button"
@@ -426,7 +439,7 @@ const HomePage = ({
                     </button>
                     <button
                       type="button"
-                      className="p-card-btn"
+                      className="p-card-btn p-card-btn-delete"
                       onClick={() => handleDeleteCharacter(character.id)}
                       aria-label="Delete character"
                     >
@@ -488,7 +501,7 @@ const HomePage = ({
                     </button>
                     <button
                       type="button"
-                      className="p-card-btn"
+                      className="p-card-btn p-card-btn-delete"
                       onClick={() => handleDeleteNpc(npc.id)}
                       aria-label="Delete NPC"
                     >
@@ -721,8 +734,11 @@ const HomePage = ({
       <footer className="site-footer">
         <div className="footer-inner">
           <span>
-            1(800)BIZARRE © {new Date().getFullYear()} — Based on Blades in the
-            Dark by John Harper (CC BY 3.0)
+            <span className="footer-logo">1(800)BIZARRE</span>
+            <span className="footer-copyright">
+              © {new Date().getFullYear()} — Based on Blades in the Dark by
+              John Harper (CC BY 3.0)
+            </span>
           </span>
           <div className="footer-links">
             <button
