@@ -92,7 +92,7 @@ export const PATCH_NOTES = [
           "Fix curly apostrophe syntax error in create_npc.py",
           "Update Black action options in workflow",
           "Update source path in black.yml workflow",
-          "Update Black workflow to use new configuration"
+          "Update Black workflow to use new configuration",
           "Merge pull request #39 from zoobavitel/copilot/fix-character-sheet-width-issues",
           "Merge pull request #36 from zoobavitel/copilot/remove-personal-information"
         ]
@@ -646,7 +646,7 @@ export const PATCH_NOTES = [
         "title": "Added",
         "items": [
           "Add Account Settings page and integrate user profile management",
-          "Add production deployment scripts and checklist"
+          "Add production deployment scripts and checklist",
           "remove global overflow-x hidden, rely on responsive layout fixes"
         ]
       }
