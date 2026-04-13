@@ -228,6 +228,7 @@ const App = () => {
   const [campaignPageId, setCampaignPageId] = useState(
     initialRoute.campaignPageId,
   );
+  const [campaignFactionId, setCampaignFactionId] = useState(null);
   const [npcPageId, setNpcPageId] = useState(initialRoute.npcPageId);
   const [abilityFilter, setAbilityFilter] = useState(
     initialRoute.abilityFilter,
@@ -269,6 +270,7 @@ const App = () => {
           : "character";
     } else if (page === "campaigns") {
       setCampaignPageId(payload?.campaignId ?? null);
+      setCampaignFactionId(payload?.factionId ?? null);
       setCharacterPageId(null);
       setAbilityFilter(null);
       window.location.hash =
@@ -395,8 +397,11 @@ const App = () => {
               onNavigateToCharacterOptions={() =>
                 handlePageChange("character-options")
               }
-              onNavigateToCampaign={(campaignId) =>
-                handlePageChange("campaigns", { campaignId })
+              onNavigateToCampaign={(campaignId, opts) =>
+                handlePageChange("campaigns", {
+                  campaignId,
+                  factionId: opts?.factionId ?? null,
+                })
               }
               onNavigateToRules={() => handlePageChange("rules")}
               onNavigateToPatchNotes={() => handlePageChange("patch-notes")}
@@ -425,6 +430,7 @@ const App = () => {
         {currentPage === "campaigns" && (
           <CampaignManagement
             initialCampaignId={campaignPageId}
+            initialFactionId={campaignFactionId}
             onNavigateToCharacter={(id) =>
               handlePageChange("character", { characterId: id })
             }

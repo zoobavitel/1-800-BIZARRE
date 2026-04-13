@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   campaignAPI,
   characterAPI,
@@ -248,6 +248,7 @@ function CampaignDetail({
   onManageSessions,
   onNavigateToCharacter,
   onNavigateToNPC,
+  initialFactionId = null,
 }) {
   const [inviteUsername, setInviteUsername] = useState("");
   const [inviteError, setInviteError] = useState(null);
@@ -262,6 +263,24 @@ function CampaignDetail({
   const [editForm, setEditForm] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [assignNpcId, setAssignNpcId] = useState("");
+
+  const factionEditFiredRef = useRef(false);
+  useEffect(() => {
+    if (
+      initialFactionId &&
+      campaign &&
+      Array.isArray(campaign.factions) &&
+      !factionForm &&
+      !factionEditFiredRef.current
+    ) {
+      const f = campaign.factions.find((fac) => fac.id === initialFactionId);
+      if (f) {
+        factionEditFiredRef.current = true;
+        startFactionEdit(f);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialFactionId, campaign]);
 
   useEffect(() => {
     characterAPI
@@ -3576,6 +3595,7 @@ function HarmEditor({ character, onSave }) {
 // ---------------------------------------------------------------------------
 export default function CampaignManagement({
   initialCampaignId = null,
+  initialFactionId = null,
   onNavigateToCharacter,
   onNavigateToNPC,
   onCampaignSelect,
@@ -3733,6 +3753,7 @@ export default function CampaignManagement({
             onManageSessions={() => setSessionView("list")}
             onNavigateToCharacter={onNavigateToCharacter}
             onNavigateToNPC={onNavigateToNPC}
+            initialFactionId={initialFactionId}
           />
         </div>
       </div>
