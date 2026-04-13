@@ -92,7 +92,7 @@ const barStyles = {
   },
 };
 
-function AppBar({ onHamburgerClick, onBack, pageTitle, rightContent }) {
+function AppBar({ onHamburgerClick, onBack, onHome, pageTitle, rightContent }) {
   return (
     <header style={barStyles.bar}>
       <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
@@ -109,9 +109,23 @@ function AppBar({ onHamburgerClick, onBack, pageTitle, rightContent }) {
             ← Back
           </button>
         )}
-        <span style={{ fontSize: "18px", fontWeight: "bold", color: "#fff" }}>
+        <button
+          type="button"
+          onClick={onHome}
+          style={{
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+            fontSize: "18px",
+            fontWeight: "bold",
+            color: "#fff",
+            fontFamily: "inherit",
+          }}
+          aria-label="Go to home"
+        >
           1(800) BIZARRE
-        </span>
+        </button>
         {pageTitle && (
           <>
             <span style={{ color: "#6b7280" }}>—</span>
@@ -351,6 +365,7 @@ const App = () => {
             <AppBar
               onHamburgerClick={toggleMenu}
               onBack={handleBack}
+              onHome={() => handlePageChange("home")}
               pageTitle={PAGE_TITLES[currentPage]}
             />
           )}
