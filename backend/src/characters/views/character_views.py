@@ -65,6 +65,16 @@ class CharacterViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    def perform_update(self, serializer):
+        # The CharacterSerializer marks `user` as read_only=True, so it will
+        # never be present in validated_data and ownership cannot change through
+        # the normal serializer path. This remains a defensive belt-and-
+        # suspenders guard: if a future refactor accidentally makes the field
+        # writable, force the original owner during save so both the database
+        # row and serializer.instance stay in sync for the response.
+        original_user_id = serializer.instance.user_id
+        serializer.save(user_id=original_user_id)
+
     def perform_destroy(self, instance):
         user = self.request.user
         if not user.is_staff and instance.user_id != user.id:
