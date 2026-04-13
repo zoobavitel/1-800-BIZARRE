@@ -249,6 +249,10 @@ const App = () => {
   }, []);
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [currentPage]);
+
+  useEffect(() => {
     parseHash();
   }, [parseHash]);
 
