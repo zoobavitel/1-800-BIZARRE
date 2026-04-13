@@ -113,7 +113,7 @@ const HomePage = ({
 
     setNpcsLoading(true);
     npcAPI
-      .getNPCs()
+      .getNPCs(undefined, { mine: true })
       .then((list) => setNpcs(Array.isArray(list) ? list : []))
       .catch(() => setNpcs([]))
       .finally(() => setNpcsLoading(false));
