@@ -72,6 +72,24 @@ const HomePage = ({
   const [crewCount, setCrewCount] = useState(0);
   const [siteStats, setSiteStats] = useState(null);
 
+  const loadCharacters = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const backendCharacters = await characterAPI.getCharacters({ mine: true });
+      const frontendCharacters = (backendCharacters || []).map(
+        transformBackendToFrontend,
+      );
+      setCharacters(frontendCharacters);
+    } catch (err) {
+      console.error("Failed to load characters:", err);
+      setError(err.message);
+      setCharacters([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!user) {
       setCharacters([]);
@@ -129,24 +147,6 @@ const HomePage = ({
       .then((list) => setCrewCount(Array.isArray(list) ? list.length : 0))
       .catch(() => setCrewCount(0));
   }, [user]);
-
-  const loadCharacters = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const backendCharacters = await characterAPI.getCharacters({ mine: true });
-      const frontendCharacters = (backendCharacters || []).map(
-        transformBackendToFrontend,
-      );
-      setCharacters(frontendCharacters);
-    } catch (err) {
-      console.error("Failed to load characters:", err);
-      setError(err.message);
-      setCharacters([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   const patchRows = useMemo(() => flattenPatchNotesPreview(PATCH_NOTES, 7), []);
 
