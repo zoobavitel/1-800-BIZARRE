@@ -46,6 +46,21 @@
   --font-display: "Bebas Neue", sans-serif;
   --font-heading: "Oswald", sans-serif;
   --font-mono: "Share Tech Mono", monospace;
+
+  /* Extra bg levels */
+  --bg3: #1a1028;       /* card border / button bg */
+  --bg4: #2a1640;       /* button border / inactive tint */
+
+  /* Font shorthand aliases used by newer components */
+  --font-d: var(--font-display);
+  --font-l: var(--font-heading);
+  --font-m: var(--font-mono);
+
+  /* Stripe aliases used by camp-accent */
+  --stripe-a: var(--stripe-1);
+  --stripe-b: var(--stripe-2);
+  --stripe-c: var(--stripe-3);
+  --stripe-d: var(--stripe-4);
   background: var(--black);
   color: var(--dark-text);
   font-family: var(--font-mono);
@@ -1349,4 +1364,356 @@
   .home-poc .quick-strip {
     grid-template-columns: 1fr;
   }
+}
+
+/* ══ SECTION HEADER ══ */
+.home-poc .section-hdr {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.home-poc .section-title {
+  font-family: var(--font-d);
+  font-size: 22px;
+  letter-spacing: .04em;
+  color: var(--cream);
+}
+.home-poc .section-more {
+  font-family: var(--font-l);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--p1);
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+.home-poc .section-more:hover { text-decoration: underline; }
+
+/* ══ FACTIONS ══ */
+.home-poc .faction-section {
+  background: var(--bg2);
+  padding: 28px;
+  border-top: 1px solid var(--bg3);
+}
+.home-poc .faction-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.home-poc .faction-card {
+  border: 1px solid var(--bg3);
+  padding: 14px;
+  cursor: pointer;
+  transition: all .18s;
+}
+.home-poc .faction-card:hover {
+  border-color: var(--p1);
+  background: var(--bg3);
+}
+.home-poc .fc-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.home-poc .fc-icon {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--p1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.home-poc .fc-name {
+  font-family: var(--font-l);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  color: var(--cream);
+}
+.home-poc .fc-rep {
+  font-size: 10px;
+  color: var(--cream-dim);
+  margin-bottom: 8px;
+}
+.home-poc .fc-heat {
+  display: flex;
+  gap: 3px;
+}
+.home-poc .fc-heat-pip {
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--p1);
+}
+.home-poc .fc-heat-pip.on {
+  background: var(--p1);
+}
+
+/* ══ CAMPAIGN CARDS — SECTION LABELS ══ */
+.home-poc .camp-section-label {
+  font-family: var(--font-m);
+  font-size: 11px;
+  color: var(--cream-dim);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  padding-top: 24px;
+}
+
+/* ══ CARD GRID ══ */
+.home-poc .camp-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+/* ══ BASE CARD ══ */
+.home-poc .camp-card {
+  background: var(--bg2);
+  border: 1px solid var(--bg3);
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+.home-poc .camp-card.inactive {
+  opacity: .55;
+  filter: saturate(0.2);
+}
+
+/* Top accent stripe */
+.home-poc .camp-accent {
+  height: 3px;
+  background: linear-gradient(to right,
+    var(--stripe-a) 0% 25%,
+    var(--stripe-b) 25% 50%,
+    var(--stripe-c) 50% 75%,
+    var(--stripe-d) 75% 100%
+  );
+}
+.home-poc .camp-card.inactive .camp-accent {
+  background: #888;
+}
+
+/* ══ PORTRAIT STRIP ══ */
+.home-poc .portraits {
+  display: flex;
+  gap: 3px;
+  padding: 10px 12px 0;
+}
+.home-poc .portrait {
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+  border: 1px solid var(--bg3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-family: var(--font-m);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.home-poc .portrait img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ══ CARD BODY ══ */
+.home-poc .camp-body {
+  padding: 10px 12px;
+}
+.home-poc .camp-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+.home-poc .camp-name {
+  font-family: var(--font-m);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--cream);
+  letter-spacing: .01em;
+  line-height: 1.2;
+}
+.home-poc .camp-card.inactive .camp-name {
+  color: var(--cream-dim);
+}
+
+/* Role badge */
+.home-poc .camp-role-badge {
+  font-family: var(--font-l);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  margin-left: 6px;
+  margin-top: 1px;
+}
+.home-poc .badge-gm {
+  background: rgba(232, 202, 112, .13);
+  color: var(--p4);
+  border: 1px solid rgba(179, 143, 39, .25);
+}
+.home-poc .badge-player {
+  background: rgba(108, 57, 137, .13);
+  color: var(--p1);
+  border: 1px solid rgba(108, 57, 137, .25);
+}
+.home-poc .badge-inactive {
+  background: var(--bg3);
+  color: var(--cream-dim);
+  border: 1px solid var(--bg4);
+}
+
+.home-poc .camp-meta {
+  font-family: var(--font-m);
+  font-size: 10px;
+  color: var(--cream-dim);
+  margin-bottom: 8px;
+}
+
+/* ══ STATS ROW ══ */
+.home-poc .camp-stats {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.home-poc .stat-pair {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.home-poc .stat-val {
+  font-family: var(--font-d);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--cream);
+  line-height: 1;
+}
+.home-poc .stat-lbl {
+  font-family: var(--font-l);
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--cream-dim);
+}
+
+.home-poc .camp-divider {
+  border: none;
+  border-top: 1px solid var(--bg3);
+  margin: 0 0 8px;
+}
+
+/* ══ ACTION BUTTONS ══ */
+.home-poc .camp-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.home-poc .camp-act-btn {
+  background: var(--bg3);
+  border: 1px solid var(--bg4);
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-family: var(--font-l);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  color: var(--cream-dim);
+  transition: all .15s;
+}
+.home-poc .camp-act-btn:hover {
+  border-color: var(--cream-dim);
+  color: var(--cream);
+}
+.home-poc .camp-act-btn.view:hover       { color: var(--p1); border-color: var(--p1); }
+.home-poc .camp-act-btn.deactivate:hover { color: var(--p2); border-color: var(--p2); }
+.home-poc .camp-act-btn.activate:hover   { color: var(--green); border-color: var(--green); }
+.home-poc .camp-act-btn.delete:hover     { color: var(--p3); border-color: var(--p3); }
+
+/* Status dot */
+.home-poc .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.home-poc .dot-active { background: var(--green); box-shadow: 0 0 5px var(--green); }
+.home-poc .dot-idle   { background: var(--cream-dim); }
+
+/* ══ PATCH NOTES ══ */
+.home-poc .patch-section {
+  background: var(--bg);
+  padding: 24px 28px;
+  border-top: 1px solid var(--bg3);
+}
+.home-poc .patch-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+}
+.home-poc .patch-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12px;
+}
+.home-poc .patch-ver {
+  font-family: var(--font-l);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  color: var(--p1);
+  flex-shrink: 0;
+  width: 52px;
+}
+.home-poc .patch-date {
+  color: var(--cream-dim);
+  width: 78px;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.home-poc .patch-note {
+  color: var(--cream-dim);
+}
+
+/* ══ FOOTER ══ */
+.home-poc .footer {
+  background: var(--bg);
+  padding: 18px 28px;
+  border-top: 1px solid var(--bg3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+}
+.home-poc .footer-logo {
+  font-family: var(--font-d);
+  font-size: 16px;
+  color: var(--cream-dim);
+  letter-spacing: .04em;
+}
+.home-poc .footer-logo span {
+  color: var(--p1);
+}
+.home-poc .footer-copy {
+  font-size: 10px;
+  color: var(--cream-dim);
+  opacity: .4;
 }
