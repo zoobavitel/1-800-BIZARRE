@@ -1103,6 +1103,38 @@
   border: 1px solid var(--red);
   font-weight: bold;
 }
+.home-poc .f-card-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.home-poc .f-card-actions {
+  display: flex;
+  gap: 4px;
+}
+.home-poc .f-card-btn {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid var(--bg3);
+  background: transparent;
+  color: var(--cream-dim);
+}
+.home-poc .f-card-btn:hover {
+  border-color: var(--p1);
+  color: var(--cream);
+}
+.home-poc .f-card-btn-delete:hover {
+  border-color: #c84040;
+  color: #c84040;
+  background: rgba(200, 64, 64, 0.08);
+}
 
 .home-poc .quick-strip {
   max-width: 1200px;
