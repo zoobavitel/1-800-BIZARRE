@@ -2,6 +2,7 @@
 .home-poc {
   /* ── Design tokens ───────────────────────────────── */
   --p1: #6c3989;        /* primary purple    */
+  --p1-rgb: 108 57 137; /* for rgba() usage  */
   --p2: #e8ca70;        /* gold              */
   --p3: #b64200;        /* burnt orange      */
   --p4: #b38f27;        /* warm dark gold    */
@@ -209,8 +210,8 @@
     -55deg,
     transparent,
     transparent 24px,
-    rgba(108, 57, 137, 0.06) 24px,
-    rgba(108, 57, 137, 0.06) 26px
+    rgba(var(--p1-rgb) / 0.06) 24px,
+    rgba(var(--p1-rgb) / 0.06) 26px
   );
   pointer-events: none;
 }
@@ -442,7 +443,7 @@
   background: #8a4aaa;
   color: #fff;
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(108, 57, 137, 0.35);
+  box-shadow: 0 6px 20px rgba(var(--p1-rgb) / 0.35);
 }
 .home-poc .btn-secondary {
   background: transparent;
