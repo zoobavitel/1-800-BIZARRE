@@ -399,6 +399,10 @@ const HomePage = ({
         </div>
       </section>
 
+      <div className="stripe-bar" aria-hidden="true">
+        <span /><span /><span /><span />
+      </div>
+
       <section className="split">
         <div className="split-left">
           <div className="split-label">Player</div>
