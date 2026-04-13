@@ -65,6 +65,17 @@ class CharacterViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+    def perform_update(self, serializer):
+        # Ensure the character's owner cannot be changed via any update path.
+        # The user field is read_only in the serializer, but this provides an
+        # explicit belt-and-suspenders guard at the view layer.
+        instance = serializer.instance
+        serializer.save()
+        # After save, if the user somehow changed (should never happen with
+        # read_only=True), restore the original owner.
+        if serializer.instance.user_id != instance.user_id:
+            Character.objects.filter(pk=instance.pk).update(user_id=instance.user_id)
+
     def perform_destroy(self, instance):
         user = self.request.user
         if not user.is_staff and instance.user_id != user.id:
