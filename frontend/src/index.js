@@ -249,6 +249,17 @@ const App = () => {
   }, []);
 
   useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [
+    currentPage,
+    characterPageId,
+    campaignPageId,
+    npcPageId,
+    abilityFilter,
+    rulesSection,
+  ]);
+
+  useEffect(() => {
     parseHash();
   }, [parseHash]);
 
