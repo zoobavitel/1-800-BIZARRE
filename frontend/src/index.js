@@ -259,6 +259,7 @@ const App = () => {
   }, [parseHash]);
 
   const handlePageChange = (page, payload) => {
+    window.scrollTo(0, 0);
     setCurrentPage(page);
     if (page === "character") {
       setCharacterPageId(payload?.characterId ?? null);
