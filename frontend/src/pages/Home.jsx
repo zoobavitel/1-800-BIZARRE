@@ -768,12 +768,6 @@ const HomePage = ({
         </div>
       </footer>
 
-      <div className="stripe-bar">
-        <span />
-        <span />
-        <span />
-        <span />
-      </div>
     </div>
   );
 };

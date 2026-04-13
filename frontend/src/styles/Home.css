@@ -1227,6 +1227,15 @@
 }
 
 .home-poc .site-footer {
+  border-top: 4px solid transparent;
+  border-image: linear-gradient(
+      to right,
+      var(--stripe-1) 0% 25%,
+      var(--stripe-2) 25% 50%,
+      var(--stripe-3) 50% 75%,
+      var(--stripe-4) 75% 100%
+    )
+    1;
   padding: 20px 24px;
   background: var(--bg);
 }
