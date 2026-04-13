@@ -239,13 +239,6 @@ const HomePage = ({
 
   return (
     <div className="home-poc">
-      <div className="stripe-bar">
-        <span />
-        <span />
-        <span />
-        <span />
-      </div>
-
       <header className="site-header">
         <div className="header-inner">
           <div className="header-left">
@@ -775,12 +768,6 @@ const HomePage = ({
         </div>
       </footer>
 
-      <div className="stripe-bar">
-        <span />
-        <span />
-        <span />
-        <span />
-      </div>
     </div>
   );
 };
