@@ -23,7 +23,6 @@ export const PATCH_NOTES = [
     ]
   },
   {
-    "date": "2026-04-10",
     "date": "2026-04-13",
     "version": null,
     "sections": [
