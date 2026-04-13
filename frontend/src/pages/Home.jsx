@@ -3,6 +3,7 @@ import "../styles/Home.css";
 import {
   characterAPI,
   campaignAPI,
+  factionAPI,
   npcAPI,
   crewAPI,
   siteStatsAPI,
@@ -230,6 +231,21 @@ const HomePage = ({
       setNpcs((prev) => prev.filter((npc) => npc.id !== npcId));
     } catch (err) {
       console.error("Failed to delete NPC:", err);
+    }
+  };
+
+  const handleDeleteFaction = async (factionId) => {
+    if (!window.confirm("Delete this faction?")) return;
+    try {
+      await factionAPI.deleteFaction(factionId);
+      setCampaignsLoading(true);
+      campaignAPI
+        .getCampaigns()
+        .then((list) => setCampaigns(Array.isArray(list) ? list : []))
+        .catch(() => setCampaigns([]))
+        .finally(() => setCampaignsLoading(false));
+    } catch (err) {
+      console.error("Failed to delete faction:", err);
     }
   };
 
@@ -662,10 +678,37 @@ const HomePage = ({
                     </span>
                   </div>
                 </div>
-                <div
-                  className={`f-card-status ${factionStatusClass(f.reputation)}`}
-                >
-                  {factionStatusLabel(f.reputation)}
+                <div className="f-card-right">
+                  <div
+                    className={`f-card-status ${factionStatusClass(f.reputation)}`}
+                  >
+                    {factionStatusLabel(f.reputation)}
+                  </div>
+                  <div className="f-card-actions">
+                    <button
+                      type="button"
+                      className="f-card-btn f-card-btn-edit"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onNavigateToCampaign?.(
+                          primaryCampaignForFactions.id,
+                          { factionId: f.id },
+                        );
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="f-card-btn f-card-btn-delete"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteFaction(f.id);
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
