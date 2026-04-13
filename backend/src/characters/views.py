@@ -376,6 +376,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.is_superuser:
             return Character.objects.all()
+        mine = self.request.query_params.get('mine', '').lower() in ('1', 'true')
+        if mine:
+            return Character.objects.filter(user=user)
         return Character.objects.filter(
             Q(user=user) | Q(campaign__gm=user)
         ).distinct()
@@ -1089,6 +1092,9 @@ class NPCViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        mine = self.request.query_params.get('mine', '').lower() in ('1', 'true')
+        if mine:
+            return NPC.objects.filter(creator=user)
         # Allow users to see NPCs they created or NPCs in campaigns they GM
         return NPC.objects.filter(Q(creator=user) | Q(campaign__gm=user)).distinct()
 
