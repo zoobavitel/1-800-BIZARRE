@@ -4,6 +4,18 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-04-13",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "redesign homepage color palette with new design tokens"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-04-11",
     "version": null,
     "sections": [
