@@ -50,6 +50,10 @@
   font-size: 18px;
   letter-spacing: 0.06em;
   color: var(--hm-cream, #eadeb7);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
 }
 .hm-poc .nav-close {
   background: none;

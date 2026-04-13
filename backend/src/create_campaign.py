@@ -1,16 +1,18 @@
 from django.contrib.auth.models import User
 from characters.models import Campaign
 
-# Get the GM user
-zoob = User.objects.get(username="zoob")
+# Get the GM user (replace 'test_gm' with the actual GM username for your deployment)
+gm = User.objects.get(username="test_gm")
 
 # Create the campaign
-campaign, created = Campaign.objects.get_or_create(name="A History of Bad Men", defaults={"gm": zoob, "description": "A JoJo adventure."})
+campaign, created = Campaign.objects.get_or_create(
+    name="A History of Bad Men", defaults={"gm": gm, "description": "A JoJo adventure."}
+)
 if not created:
-    campaign.gm = zoob
+    campaign.gm = gm
     campaign.save()
-    print("Campaign already existed, GM reassigned to zoob.")
+    print("Campaign already existed, GM reassigned.")
 else:
-    print("Campaign created with zoob as GM.")
+    print("Campaign created.")
 
-print(f"Campaign ID: {campaign.id}") 
+print(f"Campaign ID: {campaign.id}")

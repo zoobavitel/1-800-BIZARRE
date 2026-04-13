@@ -513,10 +513,13 @@ export function buildMultipartOrJson(data) {
 
 // NPC API functions (GM / campaign NPCs)
 export const npcAPI = {
-  getNPCs: (campaignId) =>
-    campaignId
-      ? apiRequest(`/npcs/?campaign=${campaignId}`)
-      : apiRequest("/npcs/"),
+  getNPCs: (campaignId, { mine } = {}) => {
+    const params = new URLSearchParams();
+    if (campaignId) params.set("campaign", campaignId);
+    if (mine) params.set("mine", "true");
+    const query = params.toString();
+    return apiRequest(query ? `/npcs/?${query}` : "/npcs/");
+  },
   getNPC: (id) => apiRequest(`/npcs/${id}/`),
   createNPC: (data) => {
     const { multipart, body } = buildMultipartOrJson(data);
