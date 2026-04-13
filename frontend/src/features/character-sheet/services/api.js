@@ -746,7 +746,7 @@ export const transformBackendToFrontend = (backendCharacter) => {
       const details = backendCharacter.trauma_details || [];
       for (const t of details) {
         const k = (t.name || "").toUpperCase();
-        if (k in base) base[k] = true;
+        if (Object.prototype.hasOwnProperty.call(base, k)) base[k] = true;
       }
       const raw = backendCharacter.trauma;
       if (Array.isArray(raw)) {

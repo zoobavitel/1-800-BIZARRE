@@ -1,6 +1,7 @@
 import json
 import time
 
+from django.db.models.functions import Lower
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from django.contrib.auth.models import User
@@ -1113,6 +1114,7 @@ class CharacterSerializer(serializers.ModelSerializer):
             return TraumaSerializer([], many=True).data
 
         pks = []
+        string_names = []
         for item in raw:
             if isinstance(item, bool):
                 continue
@@ -1125,9 +1127,20 @@ class CharacterSerializer(serializers.ModelSerializer):
                 if s.isdigit():
                     pks.append(int(s))
                 else:
-                    tr = Trauma.objects.filter(name__iexact=s).first()
-                    if tr:
-                        pks.append(tr.pk)
+                    string_names.append(s)
+
+        if string_names:
+            lower_names = [s.lower() for s in string_names]
+            name_map = {
+                tr.name.lower(): tr.pk
+                for tr in Trauma.objects.annotate(
+                    name_lower=Lower("name")
+                ).filter(name_lower__in=lower_names)
+            }
+            for s in string_names:
+                pk = name_map.get(s.lower())
+                if pk:
+                    pks.append(pk)
 
         if not pks:
             return TraumaSerializer([], many=True).data
