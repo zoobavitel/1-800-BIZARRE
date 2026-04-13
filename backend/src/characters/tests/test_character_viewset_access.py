@@ -72,13 +72,25 @@ class CharacterViewSetQuerysetTests(TestCase):
         self.assertNotIn(self.pc_at_my_table.id, ids)
 
     def test_gm_updating_player_character_does_not_change_ownership(self):
-        """A GM can update a player's character sheet but must not become the owner."""
+        """A GM PATCH that attempts to set a new owner must leave ownership unchanged."""
         self.client.force_authenticate(user=self.gm_player)
         url = f'/api/characters/{self.pc_at_my_table.id}/'
-        payload = {'true_name': 'Updated by GM', 'heritage': self.heritage.id}
+        # Explicitly attempt to transfer ownership to the GM via the `user` field.
+        payload = {
+            'true_name': 'Updated by GM',
+            'heritage': self.heritage.id,
+            'user': self.gm_player.id,
+        }
         response = self.client.patch(url, payload, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.pc_at_my_table.refresh_from_db()
         # Ownership must still belong to the original player, not the GM.
         self.assertEqual(self.pc_at_my_table.user_id, self.player.id)
         self.assertNotEqual(self.pc_at_my_table.user_id, self.gm_player.id)
+        # The response payload must also reflect the original owner.
+        if 'user' in response.data:
+            self.assertEqual(response.data['user'], self.player.id)
+        elif 'user_id' in response.data:
+            self.assertEqual(response.data['user_id'], self.player.id)
+        else:
+            self.fail('Character detail response must include owner as "user" or "user_id".')
