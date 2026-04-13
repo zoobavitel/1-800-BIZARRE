@@ -685,6 +685,7 @@ export const authAPI = {
 export const transformBackendToFrontend = (backendCharacter) => {
   return {
     id: backendCharacter.id,
+    user_id: backendCharacter.user ?? null,
     name: backendCharacter.true_name || "",
     standName: backendCharacter.stand_name || "",
     heritage: backendCharacter.heritage ?? null,

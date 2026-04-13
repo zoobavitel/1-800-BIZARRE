@@ -1382,6 +1382,16 @@ const CharacterSheetWrapper = ({
       )
         return;
       const payload = buildPayload();
+      // Never create a new character via autosave when viewing a character that
+      // belongs to another user. A null id with a known owner means the character
+      // data came from someone else's sheet — creating it would assign ownership
+      // to the currently logged-in user (e.g. a GM claiming a player's character).
+      if (
+        !payload.id &&
+        character?.user_id != null &&
+        character.user_id !== user?.id
+      )
+        return;
       // Skip save if payload matches last saved (prevents loop from server response overwriting fields)
       const { lastModified, imageFile: _img, ...rest } = payload;
       const payloadKey = JSON.stringify(rest);

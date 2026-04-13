@@ -309,7 +309,7 @@ export default function CharacterPage({
   const syncOpenSheetsFromServer = useCallback(async () => {
     const [c, chars] = await Promise.all([
       campaignAPI.getCampaigns().catch(() => []),
-      characterAPI.getCharacters().catch(() => []),
+      characterAPI.getCharacters({ mine: true }).catch(() => []),
     ]);
     setCampaigns(c || []);
     const front = (chars || []).map(transformBackendToFrontend);
@@ -368,7 +368,7 @@ export default function CharacterPage({
     setCharactersLoading(true);
     setCharactersError(null);
     try {
-      const list = await characterAPI.getCharacters();
+      const list = await characterAPI.getCharacters({ mine: true });
       const front = (list || []).map(transformBackendToFrontend);
       setCharacters(front);
       return front;

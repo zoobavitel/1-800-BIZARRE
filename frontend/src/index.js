@@ -315,7 +315,7 @@ const App = () => {
 
   const loadMenuCharacters = useCallback(async () => {
     try {
-      const list = await characterAPI.getCharacters();
+      const list = await characterAPI.getCharacters({ mine: true });
       const front = (list || []).map(transformBackendToFrontend);
       setMenuCharacters(front);
     } catch {
