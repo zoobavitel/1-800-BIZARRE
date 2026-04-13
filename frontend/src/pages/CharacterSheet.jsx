@@ -1388,7 +1388,8 @@ const CharacterSheetWrapper = ({
       // to the currently logged-in user (e.g. a GM claiming a player's character).
       if (
         !payload.id &&
-        character?.user_id != null &&
+        character?.user_id !== null &&
+        character?.user_id !== undefined &&
         character.user_id !== user?.id
       )
         return;
