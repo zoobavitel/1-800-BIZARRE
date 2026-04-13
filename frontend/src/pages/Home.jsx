@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import "../styles/Home.css";
 import {
   characterAPI,
@@ -73,8 +73,14 @@ const HomePage = ({
   const [siteStats, setSiteStats] = useState(null);
 
   useEffect(() => {
+    if (!user) {
+      setCharacters([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     loadCharacters();
-  }, []);
+  }, [user, loadCharacters]);
 
   useEffect(() => {
     if (!user) {
@@ -124,7 +130,7 @@ const HomePage = ({
       .catch(() => setCrewCount(0));
   }, [user]);
 
-  const loadCharacters = async () => {
+  const loadCharacters = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -140,7 +146,7 @@ const HomePage = ({
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const patchRows = useMemo(() => flattenPatchNotesPreview(PATCH_NOTES, 7), []);
 
