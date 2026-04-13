@@ -73,8 +73,15 @@ const HomePage = ({
   const [siteStats, setSiteStats] = useState(null);
 
   useEffect(() => {
+    if (!user) {
+      setCharacters([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
     loadCharacters();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   useEffect(() => {
     if (!user) {
