@@ -592,6 +592,15 @@ export default function CharacterPage({
           }
         }
         const savedFrontend = transformBackendToFrontend(saved);
+        const traumaFromPayload =
+          payload.trauma &&
+          typeof payload.trauma === "object" &&
+          !Array.isArray(payload.trauma)
+            ? {
+                ...createDefaultCharacter().trauma,
+                ...payload.trauma,
+              }
+            : null;
         // Preserve crew from payload: backend has crew as read_only FK, so it returns '' when we send a string.
         // Without this merge, character.crew becomes '' after save, causing a perceived "change" and save loop.
         const merged = {
@@ -615,6 +624,11 @@ export default function CharacterPage({
             saved && Object.prototype.hasOwnProperty.call(saved, "coin_boxes")
               ? savedFrontend.coin
               : (frontend.coin ?? savedFrontend.coin),
+          // Same class of bug as coin: if trauma_details is omitted on PUT/POST body, checkboxes would clear after save.
+          trauma:
+            saved && Object.prototype.hasOwnProperty.call(saved, "trauma_details")
+              ? savedFrontend.trauma
+              : (traumaFromPayload ?? savedFrontend.trauma),
           stash:
             stashMerged !== null
               ? stashMerged

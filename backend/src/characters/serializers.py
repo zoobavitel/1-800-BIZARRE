@@ -1,6 +1,7 @@
 import json
 import time
 
+from django.db.models.functions import Lower
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from django.contrib.auth.models import User
@@ -1107,8 +1108,44 @@ class CharacterSerializer(serializers.ModelSerializer):
         return AbilitySerializer(obj.standard_abilities.all(), many=True).data
 
     def get_trauma_details(self, obj):
-        # obj.trauma is a list of Trauma IDs
-        traumas = Trauma.objects.filter(id__in=obj.trauma)
+        """Resolve Character.trauma JSON list to Trauma rows (integer PKs and legacy string names)."""
+        raw = getattr(obj, "trauma", None)
+        if not raw or not isinstance(raw, (list, tuple)):
+            return TraumaSerializer([], many=True).data
+
+        pks = []
+        string_names = []
+        for item in raw:
+            if isinstance(item, bool):
+                continue
+            if isinstance(item, int) and item > 0:
+                pks.append(item)
+            elif isinstance(item, float) and item > 0 and item == int(item):
+                pks.append(int(item))
+            elif isinstance(item, str):
+                s = item.strip()
+                if s.isdigit():
+                    pks.append(int(s))
+                else:
+                    string_names.append(s)
+
+        if string_names:
+            lower_names = [s.lower() for s in string_names]
+            name_map = {
+                tr.name.lower(): tr.pk
+                for tr in Trauma.objects.annotate(
+                    name_lower=Lower("name")
+                ).filter(name_lower__in=lower_names)
+            }
+            for s in string_names:
+                pk = name_map.get(s.lower())
+                if pk:
+                    pks.append(pk)
+
+        if not pks:
+            return TraumaSerializer([], many=True).data
+
+        traumas = Trauma.objects.filter(id__in=pks).order_by("id")
         return TraumaSerializer(traumas, many=True).data
 
 
