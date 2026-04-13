@@ -4,14 +4,32 @@
  */
 export const PATCH_NOTES = [
   {
-    "date": "2026-04-10",
+    "date": "2026-04-13",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "redesign homepage color palette with new design tokens"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-04-11",
     "version": null,
     "sections": [
       {
         "title": "Other",
         "items": [
-          "Add GitHub Actions workflow for Black autofix",
-          "Merge pull request #17 from zoobavitel/copilot/fix-new-npc-button-functionality"
+          "Merge pull request #39 from zoobavitel/copilot/fix-character-sheet-width-issues",
+          "Merge pull request #36 from zoobavitel/copilot/remove-personal-information"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "remove global overflow-x hidden, rely on responsive layout fixes"
         ]
       }
     ]

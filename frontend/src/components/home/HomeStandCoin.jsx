@@ -192,8 +192,8 @@ export default function HomeStandCoin() {
           cx={CX}
           cy={CY}
           r={R_OUTER}
-          fill="var(--light-bg-card, #e0d4ab)"
-          stroke="var(--light-text)"
+          fill="var(--bg2, #0d0814)"
+          stroke="var(--p1)"
           strokeWidth="3"
         />
         {gradeRings.map(({ g, r }) => (
@@ -203,9 +203,9 @@ export default function HomeStandCoin() {
             cy={CY}
             r={r}
             fill="none"
-            stroke="var(--light-text)"
+            stroke="rgba(255,255,255,0.25)"
             strokeWidth="0.35"
-            opacity={0.22}
+            opacity={0.6}
           />
         ))}
 
@@ -220,19 +220,19 @@ export default function HomeStandCoin() {
                 y1={CY}
                 x2={xe}
                 y2={ye}
-                stroke="var(--light-text)"
+                stroke="rgba(255,255,255,0.25)"
                 strokeWidth="0.6"
-                opacity={0.35}
+                opacity={0.8}
               />
             );
           })}
           <polygon
             points={polygonPoints()}
-            fill="var(--stripe-3)"
-            fillOpacity={0.38}
-            stroke="var(--stripe-2)"
+            fill="var(--p1)"
+            fillOpacity={0.45}
+            stroke="var(--p2)"
             strokeWidth="1.2"
-            strokeOpacity={0.85}
+            strokeOpacity={0.9}
           />
         </g>
 
@@ -247,9 +247,9 @@ export default function HomeStandCoin() {
               y1={iy}
               x2={ox}
               y2={oy}
-              stroke="var(--light-text)"
+              stroke="rgba(255,255,255,0.45)"
               strokeWidth={t % 2 === 0 ? 1.1 : 0.5}
-              opacity={0.55}
+              opacity={0.7}
             />
           );
         })}
@@ -268,11 +268,11 @@ export default function HomeStandCoin() {
                 dominantBaseline="middle"
                 transform={`rotate(${deg}, ${lx}, ${ly})`}
                 className="home-stand-coin-label"
-                fill="var(--light-text)"
+                fill="rgba(255,255,255,0.75)"
                 style={{
                   fontSize: 7.5,
-                  fontFamily: "var(--font-heading)",
-                  fontWeight: 700,
+                  fontFamily: "var(--font-mono)",
+                  fontWeight: 400,
                 }}
               >
                 {s.label.toUpperCase()}
@@ -282,7 +282,7 @@ export default function HomeStandCoin() {
                 y={polar(CX, CY, R_LABEL - 12, a)[1]}
                 textAnchor="middle"
                 dominantBaseline="middle"
-                fill="var(--orange)"
+                fill="var(--p2)"
                 style={{
                   fontSize: 9,
                   fontFamily: "var(--font-display)",
@@ -314,9 +314,9 @@ export default function HomeStandCoin() {
                     )[1]
                   }
                   r={4}
-                  fill="var(--orange)"
+                  fill="var(--p2)"
                   fillOpacity={0.9}
-                  stroke="var(--light-text)"
+                  stroke="rgba(255,255,255,0.6)"
                   strokeWidth="0.75"
                 />
               )}
@@ -330,8 +330,8 @@ export default function HomeStandCoin() {
             <path
               key={`hit-${s.key}`}
               d={wedgePath(i)}
-              fill={isHot ? "var(--orange)" : "#1a1610"}
-              fillOpacity={isHot ? 0.14 : 0.001}
+              fill={isHot ? "var(--p1)" : "#0d0814"}
+              fillOpacity={isHot ? 0.25 : 0.001}
               stroke="none"
               style={{ cursor: "pointer" }}
               role="button"

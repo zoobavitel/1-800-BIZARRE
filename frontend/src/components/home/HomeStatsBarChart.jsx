@@ -12,11 +12,11 @@ import {
 
 const CHART_FONT = "'Share Tech Mono', monospace";
 const TICK = {
-  fill: "rgba(234, 222, 183, 0.55)",
+  fill: "rgba(255, 255, 255, 0.25)",
   fontSize: 8,
   fontFamily: CHART_FONT,
 };
-const GRID = { stroke: "rgba(234, 222, 183, 0.12)" };
+const GRID = { stroke: "rgba(255, 255, 255, 0.1)" };
 
 /**
  * @param {{ name: string, value: number, fill: string }[]} data
@@ -48,7 +48,7 @@ export default function HomeStatsBarChart({ data = [], loading = false }) {
                 dataKey="name"
                 tick={TICK}
                 tickLine={false}
-                axisLine={{ stroke: "rgba(234,222,183,0.2)" }}
+                axisLine={{ stroke: "rgba(255,255,255,0.15)" }}
                 interval={0}
                 angle={-35}
                 textAnchor="end"
@@ -57,18 +57,18 @@ export default function HomeStatsBarChart({ data = [], loading = false }) {
               <YAxis
                 tick={TICK}
                 tickLine={false}
-                axisLine={{ stroke: "rgba(234,222,183,0.2)" }}
+                axisLine={{ stroke: "rgba(255,255,255,0.15)" }}
                 allowDecimals={false}
                 width={28}
               />
               <Tooltip
                 contentStyle={{
-                  background: "#1a1610",
-                  border: "1px solid rgba(234,222,183,0.25)",
+                  background: "#0d0814",
+                  border: "1px solid rgba(108, 57, 137, 0.4)",
                   borderRadius: 0,
                   fontSize: 10,
                   fontFamily: CHART_FONT,
-                  color: "#eadeb7",
+                  color: "#f0e6c8",
                 }}
                 labelFormatter={(label) => label}
                 formatter={(value) => [value, "Count"]}
