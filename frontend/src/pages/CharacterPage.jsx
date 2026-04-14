@@ -448,6 +448,16 @@ export default function CharacterPage({
 
   const handleCloseCharTab = useCallback(
     (tabId) => {
+      const tab = charTabs.find((t) => t.tabId === tabId);
+      if (tab && tab.characterId === null) {
+        if (
+          !window.confirm(
+            "Discard this unsaved character? Any changes will be lost.",
+          )
+        ) {
+          return;
+        }
+      }
       setCharTabs((prev) => {
         const filtered = prev.filter((t) => t.tabId !== tabId);
         if (filtered.length === 0) {
@@ -465,7 +475,7 @@ export default function CharacterPage({
         return filtered;
       });
     },
-    [activeCharTabId],
+    [activeCharTabId, charTabs],
   );
 
   const updateActiveCharTab = useCallback(
@@ -764,6 +774,14 @@ export default function CharacterPage({
 
   const handleCloseNpcTab = useCallback(
     (tabId) => {
+      const tab = npcTabs.find((t) => t.tabId === tabId);
+      if (tab && tab.npcId === null) {
+        if (
+          !window.confirm("Discard this unsaved NPC? Any changes will be lost.")
+        ) {
+          return;
+        }
+      }
       setNpcTabs((prev) => {
         if (prev.length <= 1) return prev;
         const filtered = prev.filter((t) => t.tabId !== tabId);
@@ -773,7 +791,7 @@ export default function CharacterPage({
         return filtered;
       });
     },
-    [activeNpcTabId],
+    [activeNpcTabId, npcTabs],
   );
 
   const handleOpenExistingNpc = useCallback(

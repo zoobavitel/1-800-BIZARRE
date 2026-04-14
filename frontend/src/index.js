@@ -269,6 +269,10 @@ const App = () => {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, [parseHash]);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [currentPage]);
+
   const handlePageChange = (page, payload) => {
     setCurrentPage(page);
     if (page === "character") {
