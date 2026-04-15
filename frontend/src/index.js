@@ -44,16 +44,16 @@ const PAGE_TITLES = {
 
 const barStyles = {
   bar: {
-    background: "var(--bg-header)",
+    background: "#1f2937",
     padding: "8px 16px",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    borderBottom: "1px solid var(--border)",
+    borderBottom: "1px solid #4b5563",
     position: "sticky",
     top: 0,
     zIndex: 20,
-    fontFamily: "inherit",
+    fontFamily: "'Roboto Mono', 'Consolas', monospace",
     fontSize: "13px",
   },
   hamburger: {
@@ -64,16 +64,16 @@ const barStyles = {
     height: "36px",
     border: "none",
     borderRadius: "4px",
-    background: "var(--bg-card)",
-    color: "var(--text-secondary)",
+    background: "#374151",
+    color: "#9ca3af",
     cursor: "pointer",
   },
   back: {
     padding: "6px 12px",
-    border: "1px solid var(--border)",
+    border: "1px solid #4b5563",
     borderRadius: "4px",
     background: "transparent",
-    color: "var(--text-secondary)",
+    color: "#9ca3af",
     cursor: "pointer",
     fontFamily: "monospace",
     fontSize: "12px",
@@ -86,8 +86,8 @@ const barStyles = {
     height: "36px",
     border: "none",
     borderRadius: "4px",
-    background: "var(--bg-card)",
-    color: "var(--text-secondary)",
+    background: "#374151",
+    color: "#9ca3af",
     cursor: "pointer",
   },
 };
@@ -119,7 +119,7 @@ function AppBar({ onHamburgerClick, onBack, onHome, pageTitle, rightContent }) {
             padding: 0,
             fontSize: "18px",
             fontWeight: "bold",
-            color: "var(--text-primary)",
+            color: "#fff",
             fontFamily: "inherit",
           }}
           aria-label="Go to home"
@@ -128,8 +128,8 @@ function AppBar({ onHamburgerClick, onBack, onHome, pageTitle, rightContent }) {
         </button>
         {pageTitle && (
           <>
-            <span style={{ color: "var(--text-secondary)" }}>—</span>
-            <span style={{ color: "var(--text-secondary)", fontSize: "14px" }}>
+            <span style={{ color: "#6b7280" }}>—</span>
+            <span style={{ color: "#9ca3af", fontSize: "14px" }}>
               {pageTitle}
             </span>
           </>
@@ -356,14 +356,7 @@ const App = () => {
 
   return (
     <ProtectedRoute>
-      <div
-        style={{
-          background: "var(--bg-page)",
-          color: "var(--text-primary)",
-          minHeight: "100vh",
-          fontFamily: "inherit",
-        }}
-      >
+      <div>
         <HamburgerMenu
           open={menuOpen}
           onToggle={toggleMenu}
