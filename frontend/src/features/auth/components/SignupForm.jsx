@@ -24,16 +24,16 @@ const SignupForm = ({ onSwitchToLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
 
-  const isLiveSite =
+  const isRemoteSite =
     typeof window !== "undefined" &&
-    window.location.origin.includes("github.io");
+    !["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
 
   useEffect(() => {
     injectStyles();
     const stored = getStoredApiBaseUrl();
     setServerUrl(stored);
-    if (isLiveSite) setShowServerUrl(true);
-  }, [isLiveSite]);
+    if (isRemoteSite) setShowServerUrl(true);
+  }, [isRemoteSite]);
 
   const { signup, error, clearError } = useAuth();
 
@@ -78,7 +78,7 @@ const SignupForm = ({ onSwitchToLogin }) => {
     if (!getApiBaseUrl()) {
       setValidationErrors({
         serverUrl:
-          "Set the game server URL under Game server (required on github.io; locally http://127.0.0.1:8000/api).",
+          "Set the game server URL under Game server (required on remote hosts; locally use http://127.0.0.1:8000/api).",
       });
       setShowServerUrl(true);
       return;
@@ -230,7 +230,7 @@ const SignupForm = ({ onSwitchToLogin }) => {
             }}
           >
             {error}
-            {error.includes("Could not reach game server") && isLiveSite && (
+            {error.includes("Could not reach game server") && isRemoteSite && (
               <p
                 style={{
                   marginTop: 8,
@@ -252,7 +252,7 @@ const SignupForm = ({ onSwitchToLogin }) => {
           style={{ display: "flex", flexDirection: "column", gap: 20 }}
         >
           {/* Live-site warning */}
-          {isLiveSite && !serverUrl && (
+          {isRemoteSite && !serverUrl && (
             <div
               style={{
                 padding: "10px 14px",
@@ -307,7 +307,7 @@ const SignupForm = ({ onSwitchToLogin }) => {
               >
                 ▶
               </span>
-              Game server {isLiveSite ? "(required here)" : "(optional)"}
+              Game server {isRemoteSite ? "(required here)" : "(optional)"}
             </button>
 
             {showServerUrl && (
@@ -340,7 +340,7 @@ const SignupForm = ({ onSwitchToLogin }) => {
                     lineHeight: 1.5,
                   }}
                 >
-                  {isLiveSite
+                  {isRemoteSite
                     ? "Paste the URL your host sends (must include /api)."
                     : "Leave blank to use http://127.0.0.1:8000/api (local dev)."}
                 </p>
