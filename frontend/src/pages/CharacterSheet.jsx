@@ -285,7 +285,8 @@ const CharacterSheetWrapper = ({
 
   // Identity
   const [charData, setCharData] = useState({
-    name: character?.name || "",
+    // Unsaved drafts should start truly blank even if upstream placeholders exist.
+    name: character?.id ? (character?.name || "") : "",
     standName: character?.standName || "",
     heritage: resolveHeritageId(character?.heritage),
     background: character?.background || "",
@@ -424,7 +425,7 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     setCharData((prev) => {
       const patch = {};
-      const n = character?.name ?? "";
+      const n = character?.id ? (character?.name ?? "") : "";
       if (n && !(prev.name || "").trim()) patch.name = n;
       const sn = character?.standName ?? "";
       if (sn && !(prev.standName || "").trim()) patch.standName = sn;
