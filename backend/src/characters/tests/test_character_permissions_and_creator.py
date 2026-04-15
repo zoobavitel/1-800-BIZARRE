@@ -17,6 +17,7 @@ class CharacterPermissionsAndCreatorTests(TestCase):
         self.other = User.objects.create_user(username="other", password="testpass123")
 
         self.campaign = Campaign.objects.create(name="Table", gm=self.gm)
+        self.campaign.players.add(self.other)
         self.character = Character.objects.create(
             user=self.owner,
             campaign=self.campaign,
