@@ -523,8 +523,7 @@ export default function CharacterPage({
   );
 
   // ── Save character ───────────────────────────────────────────────────────
-  const handleSaveCharacter = useCallback(
-    async (payload) => {
+  async function handleSaveCharacter(payload) {
       // Ensure trauma reference data is available (mirrors heritage re-fetch fallback below).
       // If the /traumas/ API call failed during initial load, traumas = [] and
       // traumaObjectToIds would silently return [] — erasing all trauma selections.
@@ -652,16 +651,7 @@ export default function CharacterPage({
         console.error("Save character failed:", err);
         throw err;
       }
-    },
-    [
-      traumas,
-      heritages,
-      loadCharacters,
-      updateActiveCharTab,
-      charTabs,
-      activeCharTabId,
-    ],
-  );
+  }
 
   const handleSwitchCharacter = useCallback(
     (character) => {
