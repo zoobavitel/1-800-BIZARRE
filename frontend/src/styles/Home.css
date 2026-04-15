@@ -1152,6 +1152,21 @@
   grid-template-columns: repeat(4, 1fr);
   gap: 2px;
 }
+
+.home-poc .home-stats-section {
+  background: var(--black);
+  padding: 0 24px 24px;
+}
+.home-poc .home-stats-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+.home-poc .home-stats-inner .hero-art {
+  width: 100%;
+  max-width: none;
+  justify-self: stretch;
+}
+
 .home-poc .qa {
   padding: 24px 18px;
   background: var(--dark-bg-card);
