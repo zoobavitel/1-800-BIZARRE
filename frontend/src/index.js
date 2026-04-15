@@ -1,5 +1,5 @@
 import "./styles/global.css";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import ReactDOM from "react-dom/client";
 import { Menu } from "lucide-react";
 import Home from "./pages/Home.jsx";
@@ -248,6 +248,10 @@ const App = () => {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [menuCharacters, setMenuCharacters] = useState([]);
   const [rulesSection, setRulesSection] = useState(initialRoute.rulesSection);
+  const navigationGuardRef = useRef(null);
+  const setNavigationGuard = useCallback((guardFn) => {
+    navigationGuardRef.current = typeof guardFn === "function" ? guardFn : null;
+  }, []);
 
   const parseHash = useCallback(() => {
     const s = routeStateFromHash(window.location.hash.substring(1));
@@ -284,7 +288,11 @@ const App = () => {
     window.scrollTo(0, 0);
   }, [currentPage]);
 
-  const handlePageChange = (page, payload) => {
+  const handlePageChange = async (page, payload) => {
+    if (navigationGuardRef.current) {
+      const ok = await navigationGuardRef.current();
+      if (!ok) return;
+    }
     setCurrentPage(page);
     if (page === "character") {
       setCharacterPageId(payload?.characterId ?? null);
@@ -431,7 +439,10 @@ const App = () => {
           </>
         )}
         {currentPage === "character" && (
-          <CharacterPage initialCharacterId={characterPageId} />
+          <CharacterPage
+            initialCharacterId={characterPageId}
+            onRegisterNavigationGuard={setNavigationGuard}
+          />
         )}
         {currentPage === "character-options" && (
           <CharacterOptionsPage
@@ -445,6 +456,7 @@ const App = () => {
             initialCharacterId={null}
             initialNpcId={npcPageId}
             preferNpcMode
+            onRegisterNavigationGuard={setNavigationGuard}
           />
         )}
         {currentPage === "campaigns" && (
