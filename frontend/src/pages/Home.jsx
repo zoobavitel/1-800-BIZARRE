@@ -50,6 +50,40 @@ function factionStatusLabel(rep) {
   return "Friendly";
 }
 
+function isPlaceholderNewCharacter(character) {
+  if (!character) return false;
+  const name = String(character.name || "").trim().toLowerCase();
+  if (name !== "new character") return false;
+
+  const hasStandName = String(character.standName || "").trim() !== "";
+  const hasHeritage = character.heritage != null && String(character.heritage) !== "";
+  const hasBackground = String(character.background || "").trim() !== "";
+  const hasLook = String(character.look || "").trim() !== "";
+  const hasVice = String(character.vice || "").trim() !== "";
+  const hasCrew = String(character.crew || "").trim() !== "";
+  const hasAbilities = Array.isArray(character.abilities) && character.abilities.length > 0;
+  const hasClocks = Array.isArray(character.clocks) && character.clocks.length > 0;
+  const hasActionDots = Object.values(character.actionRatings || {}).some(
+    (v) => Number(v) > 0,
+  );
+  const hasStress = Number(character.stressFilled || 0) > 0;
+  const hasXp = Object.values(character.xp || {}).some((v) => Number(v) > 0);
+
+  return !(
+    hasStandName ||
+    hasHeritage ||
+    hasBackground ||
+    hasLook ||
+    hasVice ||
+    hasCrew ||
+    hasAbilities ||
+    hasClocks ||
+    hasActionDots ||
+    hasStress ||
+    hasXp
+  );
+}
+
 const HomePage = ({
   onToggleMenu,
   onSearch,
@@ -159,7 +193,7 @@ const HomePage = ({
       (acc, c) => acc + (Array.isArray(c.sessions) ? c.sessions.length : 0),
       0,
     );
-    const pcCount = characters.length;
+    const pcCount = characters.filter((c) => !isPlaceholderNewCharacter(c)).length;
     const npcCount = npcs.length;
     return {
       activeCampaigns,
@@ -168,7 +202,7 @@ const HomePage = ({
       pcCount,
       npcCount,
     };
-  }, [campaigns, characters.length, npcs.length, crewCount]);
+  }, [campaigns, characters, npcs.length, crewCount]);
 
   const sessionsByMonth = useMemo(
     () => buildSessionsByMonth(campaigns),
