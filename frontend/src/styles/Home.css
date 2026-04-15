@@ -11,11 +11,11 @@
   --cream: #f0e6c8;     /* cream             */
   --cream-dim: #a09060; /* muted gold        */
 
-  /* Stripe sequence: a=purple, b=gold, c=burnt-orange, d=warm-gold */
-  --stripe-1: var(--p1);
-  --stripe-2: var(--p2);
-  --stripe-3: var(--p3);
-  --stripe-4: var(--p4);
+  /* Stripe sequence: yellow → orange → red → purple */
+  --stripe-1: var(--p2);
+  --stripe-2: var(--p3);
+  --stripe-3: var(--red);
+  --stripe-4: var(--p1);
 
   /* Semantic shorthands (keep existing rules working) */
   --black: var(--bg);
