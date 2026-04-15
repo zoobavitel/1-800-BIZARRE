@@ -4,20 +4,24 @@ const S = {
   page: {
     fontFamily: "monospace",
     fontSize: "13px",
-    background: "#000",
-    color: "#fff",
+    background: "var(--bg-page)",
+    color: "var(--text-primary)",
     minHeight: "100vh",
   },
   hdr: {
-    background: "#1f2937",
+    background: "var(--bg-header)",
     padding: "8px 16px",
-    borderBottom: "1px solid #4b5563",
+    borderBottom: "1px solid var(--border)",
     position: "sticky",
     top: 0,
     zIndex: 10,
   },
   content: { padding: "16px", maxWidth: "1000px", margin: "0 auto" },
-  emptyState: { textAlign: "center", padding: "48px 16px", color: "#6b7280" },
+  emptyState: {
+    textAlign: "center",
+    padding: "48px 16px",
+    color: "var(--text-secondary)",
+  },
 };
 
 export default function NotificationsPage({ onBack }) {
@@ -30,10 +34,10 @@ export default function NotificationsPage({ onBack }) {
               onClick={onBack}
               style={{
                 padding: "6px 12px",
-                border: "1px solid #4b5563",
+                border: "1px solid var(--border)",
                 borderRadius: "4px",
                 background: "transparent",
-                color: "#9ca3af",
+                color: "var(--text-secondary)",
                 cursor: "pointer",
                 fontFamily: "monospace",
                 fontSize: "12px",

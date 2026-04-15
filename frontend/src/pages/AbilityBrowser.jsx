@@ -5,14 +5,14 @@ const S = {
   page: {
     fontFamily: "monospace",
     fontSize: "13px",
-    background: "#000",
-    color: "#fff",
+    background: "var(--bg-page)",
+    color: "var(--text-primary)",
     minHeight: "100vh",
   },
   content: { padding: "16px", maxWidth: "1000px", margin: "0 auto" },
   card: {
-    background: "#111827",
-    border: "1px solid #374151",
+    background: "var(--bg-card)",
+    border: "1px solid var(--border)",
     borderRadius: "4px",
     padding: "12px",
     marginBottom: "8px",
@@ -26,9 +26,9 @@ const S = {
     fontFamily: "monospace",
   },
   searchInput: {
-    background: "#0d1117",
-    color: "#fff",
-    border: "1px solid #374151",
+    background: "var(--bg-card)",
+    color: "var(--text-primary)",
+    border: "1px solid var(--border)",
     borderRadius: "4px",
     padding: "6px 10px",
     fontFamily: "monospace",
@@ -44,17 +44,21 @@ const S = {
     fontSize: "10px",
     fontWeight: "bold",
     background: color,
-    color: "#fff",
+    color: "var(--text-primary)",
     marginLeft: "6px",
   }),
-  emptyState: { textAlign: "center", padding: "48px 16px", color: "#6b7280" },
+  emptyState: {
+    textAlign: "center",
+    padding: "48px 16px",
+    color: "var(--text-secondary)",
+  },
   categoryHeader: {
     fontSize: "14px",
     fontWeight: "bold",
     textTransform: "uppercase",
     letterSpacing: "1px",
-    color: "#d1d5db",
-    borderBottom: "1px solid #374151",
+    color: "var(--text-primary)",
+    borderBottom: "1px solid var(--border)",
     paddingBottom: "6px",
     marginTop: "20px",
     marginBottom: "10px",
@@ -62,10 +66,10 @@ const S = {
 };
 
 const TYPE_COLORS = {
-  standard: "#1d4ed8",
-  hamon: "#b45309",
-  spin: "#7c3aed",
-  heritage: "#059669",
+  standard: "var(--hftf-warm-gold)",
+  hamon: "var(--hftf-burnt)",
+  spin: "var(--hftf-purple)",
+  heritage: "var(--hftf-gold)",
 };
 
 const CATEGORY_ORDER = [
@@ -217,31 +221,49 @@ export default function AbilityBrowser({ initialFilter }) {
         style={{ display: "flex", alignItems: "center", marginBottom: "4px" }}
       >
         <span style={{ fontWeight: "bold", fontSize: "13px" }}>{a.name}</span>
-        <span style={S.tag(TYPE_COLORS[a.type] || "#374151")}>{a.type}</span>
+        <span style={S.tag(TYPE_COLORS[a.type] || "var(--border)")}>{a.type}</span>
         {a.category && showCategories && categoryFilter !== "all" && (
           <span
-            style={{ fontSize: "10px", color: "#6b7280", marginLeft: "8px" }}
+            style={{
+              fontSize: "10px",
+              color: "var(--text-secondary)",
+              marginLeft: "8px",
+            }}
           >
             {CATEGORY_LABELS[a.category] || a.category}
           </span>
         )}
         {a.playbook && (
           <span
-            style={{ fontSize: "10px", color: "#6b7280", marginLeft: "8px" }}
+            style={{
+              fontSize: "10px",
+              color: "var(--text-secondary)",
+              marginLeft: "8px",
+            }}
           >
             {a.playbook}
           </span>
         )}
         {a.prerequisite && (
           <span
-            style={{ fontSize: "10px", color: "#f59e0b", marginLeft: "8px" }}
+            style={{
+              fontSize: "10px",
+              color: "var(--hftf-gold)",
+              marginLeft: "8px",
+            }}
           >
             Req: {a.prerequisite}
           </span>
         )}
       </div>
       {a.description && (
-        <div style={{ fontSize: "12px", color: "#9ca3af", lineHeight: "1.5" }}>
+        <div
+          style={{
+            fontSize: "12px",
+            color: "var(--text-secondary)",
+            lineHeight: "1.5",
+          }}
+        >
           {a.description}
         </div>
       )}
@@ -255,7 +277,13 @@ export default function AbilityBrowser({ initialFilter }) {
       >
         <span style={{ fontWeight: "bold", fontSize: "13px" }}>{h.name}</span>
         <span style={S.tag(TYPE_COLORS.heritage)}>Heritage</span>
-        <span style={{ fontSize: "11px", color: "#6b7280", marginLeft: "8px" }}>
+        <span
+          style={{
+            fontSize: "11px",
+            color: "var(--text-secondary)",
+            marginLeft: "8px",
+          }}
+        >
           {h.base_hp ?? 0} HP base
         </span>
       </div>
@@ -263,7 +291,7 @@ export default function AbilityBrowser({ initialFilter }) {
         <div
           style={{
             fontSize: "12px",
-            color: "#9ca3af",
+            color: "var(--text-secondary)",
             lineHeight: "1.5",
             marginBottom: "10px",
           }}
@@ -280,7 +308,7 @@ export default function AbilityBrowser({ initialFilter }) {
               style={{
                 marginBottom: "6px",
                 paddingLeft: "8px",
-                borderLeft: "2px solid #059669",
+                borderLeft: "2px solid var(--hftf-gold)",
               }}
             >
               <div
@@ -294,16 +322,16 @@ export default function AbilityBrowser({ initialFilter }) {
                 <span style={{ fontWeight: "600", fontSize: "12px" }}>
                   {b.name}
                 </span>
-                <span style={{ fontSize: "10px", color: "#059669" }}>
+                <span style={{ fontSize: "10px", color: "var(--hftf-gold)" }}>
                   -{b.hp_cost} HP
                 </span>
-                {b.required && <span style={S.tag("#dc2626")}>Required</span>}
+                {b.required && <span style={S.tag("var(--hftf-burnt)")}>Required</span>}
               </div>
               {b.description && (
                 <div
                   style={{
                     fontSize: "11px",
-                    color: "#9ca3af",
+                    color: "var(--text-secondary)",
                     lineHeight: "1.4",
                   }}
                 >
@@ -323,7 +351,7 @@ export default function AbilityBrowser({ initialFilter }) {
               style={{
                 marginBottom: "6px",
                 paddingLeft: "8px",
-                borderLeft: "2px solid #7c3aed",
+                borderLeft: "2px solid var(--hftf-purple)",
               }}
             >
               <div
@@ -337,16 +365,16 @@ export default function AbilityBrowser({ initialFilter }) {
                 <span style={{ fontWeight: "600", fontSize: "12px" }}>
                   {d.name}
                 </span>
-                <span style={{ fontSize: "10px", color: "#7c3aed" }}>
+                <span style={{ fontSize: "10px", color: "var(--hftf-purple)" }}>
                   +{d.hp_value} HP
                 </span>
-                {d.required && <span style={S.tag("#dc2626")}>Required</span>}
+                {d.required && <span style={S.tag("var(--hftf-burnt)")}>Required</span>}
               </div>
               {d.description && (
                 <div
                   style={{
                     fontSize: "11px",
-                    color: "#9ca3af",
+                    color: "var(--text-secondary)",
                     lineHeight: "1.4",
                   }}
                 >
@@ -392,9 +420,10 @@ export default function AbilityBrowser({ initialFilter }) {
                 style={{
                   ...S.btn,
                   background:
-                    filter === t ? TYPE_COLORS[t] || "#374151" : "transparent",
-                  color: filter === t ? "#fff" : "#9ca3af",
-                  border: `1px solid ${filter === t ? "transparent" : "#4b5563"}`,
+                    filter === t ? TYPE_COLORS[t] || "var(--border)" : "transparent",
+                  color:
+                    filter === t ? "var(--text-primary)" : "var(--text-secondary)",
+                  border: `1px solid ${filter === t ? "transparent" : "var(--border)"}`,
                   textTransform: "uppercase",
                 }}
               >
@@ -421,9 +450,12 @@ export default function AbilityBrowser({ initialFilter }) {
                 fontSize: "11px",
                 padding: "4px 10px",
                 background:
-                  categoryFilter === "all" ? "#374151" : "transparent",
-                color: categoryFilter === "all" ? "#fff" : "#6b7280",
-                border: `1px solid ${categoryFilter === "all" ? "transparent" : "#374151"}`,
+                  categoryFilter === "all" ? "var(--bg-card)" : "transparent",
+                color:
+                  categoryFilter === "all"
+                    ? "var(--text-primary)"
+                    : "var(--text-secondary)",
+                border: `1px solid ${categoryFilter === "all" ? "transparent" : "var(--border)"}`,
               }}
             >
               All Categories
@@ -437,9 +469,12 @@ export default function AbilityBrowser({ initialFilter }) {
                   fontSize: "11px",
                   padding: "4px 10px",
                   background:
-                    categoryFilter === cat ? "#374151" : "transparent",
-                  color: categoryFilter === cat ? "#fff" : "#6b7280",
-                  border: `1px solid ${categoryFilter === cat ? "transparent" : "#374151"}`,
+                    categoryFilter === cat ? "var(--bg-card)" : "transparent",
+                  color:
+                    categoryFilter === cat
+                      ? "var(--text-primary)"
+                      : "var(--text-secondary)",
+                  border: `1px solid ${categoryFilter === cat ? "transparent" : "var(--border)"}`,
                 }}
               >
                 {CATEGORY_LABELS[cat]}
@@ -451,12 +486,12 @@ export default function AbilityBrowser({ initialFilter }) {
         {error && (
           <div
             style={{
-              background: "#7f1d1d",
-              border: "1px solid #b91c1c",
+              background: "color-mix(in srgb, var(--hftf-burnt) 24%, transparent)",
+              border: "1px solid var(--hftf-burnt)",
               borderRadius: "4px",
               padding: "8px 12px",
               fontSize: "12px",
-              color: "#fca5a5",
+              color: "var(--text-primary)",
               marginBottom: "12px",
             }}
           >
@@ -507,7 +542,7 @@ export default function AbilityBrowser({ initialFilter }) {
         <div
           style={{
             fontSize: "11px",
-            color: "#4b5563",
+            color: "var(--text-secondary)",
             textAlign: "center",
             marginTop: "16px",
           }}

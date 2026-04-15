@@ -4,22 +4,22 @@ const S = {
   page: {
     fontFamily: "monospace",
     fontSize: "13px",
-    background: "#000",
-    color: "#fff",
+    background: "var(--bg-page)",
+    color: "var(--text-primary)",
     minHeight: "100vh",
   },
   hdr: {
-    background: "#1f2937",
+    background: "var(--bg-header)",
     padding: "8px 16px",
-    borderBottom: "1px solid #4b5563",
+    borderBottom: "1px solid var(--border)",
     position: "sticky",
     top: 0,
     zIndex: 10,
   },
   content: { padding: "16px", maxWidth: "800px", margin: "0 auto" },
   card: {
-    background: "#111827",
-    border: "1px solid #374151",
+    background: "var(--bg-card)",
+    border: "1px solid var(--border)",
     borderRadius: "4px",
     padding: "16px",
     marginBottom: "16px",
@@ -27,11 +27,11 @@ const S = {
   sectionTitle: {
     fontSize: "12px",
     fontWeight: "bold",
-    color: "#e07b39",
+    color: "var(--hftf-burnt)",
     marginBottom: "8px",
   },
-  text: { color: "#9ca3af", lineHeight: 1.6, fontSize: "13px" },
-  link: { color: "#e07b39", textDecoration: "underline" },
+  text: { color: "var(--text-secondary)", lineHeight: 1.6, fontSize: "13px" },
+  link: { color: "var(--hftf-burnt)", textDecoration: "underline" },
 };
 
 export default function LicensesPage({ onBack }) {
@@ -44,10 +44,10 @@ export default function LicensesPage({ onBack }) {
               onClick={onBack}
               style={{
                 padding: "6px 12px",
-                border: "1px solid #4b5563",
+                border: "1px solid var(--border)",
                 borderRadius: "4px",
                 background: "transparent",
-                color: "#9ca3af",
+                color: "var(--text-secondary)",
                 cursor: "pointer",
                 fontFamily: "monospace",
                 fontSize: "12px",

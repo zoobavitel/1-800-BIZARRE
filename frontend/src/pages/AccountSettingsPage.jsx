@@ -7,14 +7,14 @@ const S = {
   page: {
     fontFamily: "monospace",
     fontSize: "13px",
-    background: "#000",
-    color: "#fff",
+    background: "var(--bg-page)",
+    color: "var(--text-primary)",
     minHeight: "100vh",
   },
   hdr: {
-    background: "#1f2937",
+    background: "var(--bg-header)",
     padding: "8px 16px",
-    borderBottom: "1px solid #4b5563",
+    borderBottom: "1px solid var(--border)",
     position: "sticky",
     top: 0,
     zIndex: 10,
@@ -26,20 +26,20 @@ const S = {
     fontWeight: "bold",
     textTransform: "uppercase",
     letterSpacing: "1px",
-    color: "#e2e8f0",
-    borderBottom: "1px solid #374151",
+    color: "var(--text-primary)",
+    borderBottom: "1px solid var(--border)",
     paddingBottom: "8px",
     marginBottom: "16px",
   },
   card: {
-    background: "#111827",
-    border: "1px solid #374151",
+    background: "var(--bg-card)",
+    border: "1px solid var(--border)",
     borderRadius: "4px",
     padding: "12px",
     marginBottom: "8px",
   },
   lbl: {
-    color: "#f87171",
+    color: "var(--hftf-burnt)",
     fontSize: "11px",
     fontWeight: "bold",
     marginBottom: "4px",
@@ -47,9 +47,9 @@ const S = {
   },
   inp: {
     background: "transparent",
-    color: "#fff",
+    color: "var(--text-primary)",
     border: "none",
-    borderBottom: "1px solid #4b5563",
+    borderBottom: "1px solid var(--border)",
     padding: "6px 10px",
     width: "100%",
     fontFamily: "monospace",
@@ -58,9 +58,9 @@ const S = {
     boxSizing: "border-box",
   },
   textarea: {
-    background: "#111827",
-    color: "#fff",
-    border: "1px solid #374151",
+    background: "var(--bg-card)",
+    color: "var(--text-primary)",
+    border: "1px solid var(--border)",
     borderRadius: "4px",
     padding: "8px 10px",
     width: "100%",
@@ -76,8 +76,8 @@ const S = {
     borderRadius: "11px",
     border: "none",
     cursor: "pointer",
-    background: on ? "#4f8ef7" : "#374151",
-    color: "#fff" /* inner knob */,
+    background: on ? "var(--accent)" : "var(--border)",
+    color: "var(--text-primary)" /* inner knob */,
   }),
   btn: {
     padding: "8px 16px",
@@ -86,17 +86,17 @@ const S = {
     cursor: "pointer",
     border: "none",
     fontFamily: "monospace",
-    background: "#7c3aed",
-    color: "#fff",
+    background: "var(--accent)",
+    color: "var(--text-primary)",
   },
   tab: (active) => ({
     padding: "6px 14px",
     borderRadius: "4px",
     fontSize: "12px",
     cursor: "pointer",
-    border: `1px solid ${active ? "#4b5563" : "#374151"}`,
-    background: active ? "#374151" : "transparent",
-    color: active ? "#fff" : "#9ca3af",
+    border: `1px solid ${active ? "var(--hftf-purple)" : "var(--border)"}`,
+    background: active ? "var(--bg-card)" : "transparent",
+    color: active ? "var(--text-primary)" : "var(--text-secondary)",
     fontFamily: "monospace",
   }),
 };
@@ -154,10 +154,10 @@ export default function AccountSettingsPage({ onBack }) {
               onClick={onBack}
               style={{
                 padding: "6px 12px",
-                border: "1px solid #4b5563",
+                border: "1px solid var(--border)",
                 borderRadius: "4px",
                 background: "transparent",
-                color: "#9ca3af",
+                color: "var(--text-secondary)",
                 cursor: "pointer",
                 fontFamily: "monospace",
                 fontSize: "12px",
@@ -215,7 +215,7 @@ export default function AccountSettingsPage({ onBack }) {
                     width: "18px",
                     height: "18px",
                     borderRadius: "50%",
-                    background: "#fff",
+                    background: "var(--hftf-cream)",
                     marginLeft: showAvatars ? "20px" : "2px",
                     marginTop: "2px",
                     transition: "margin-left 0.2s",
@@ -245,7 +245,7 @@ export default function AccountSettingsPage({ onBack }) {
                     width: "18px",
                     height: "18px",
                     borderRadius: "50%",
-                    background: "#fff",
+                    background: "var(--hftf-cream)",
                     marginLeft: showSignatures ? "20px" : "2px",
                     marginTop: "2px",
                     transition: "margin-left 0.2s",
@@ -280,7 +280,7 @@ export default function AccountSettingsPage({ onBack }) {
         <section style={S.section}>
           <h2 style={S.sectionTitle}>Notification Settings</h2>
           <div style={S.card}>
-            <div style={{ color: "#9ca3af", fontSize: "12px" }}>
+            <div style={{ color: "var(--text-secondary)", fontSize: "12px" }}>
               Notification settings will be available in a future update.
             </div>
           </div>
@@ -295,7 +295,10 @@ export default function AccountSettingsPage({ onBack }) {
               style={{
                 marginLeft: "12px",
                 fontSize: "12px",
-                color: saveMessage === "Saved" ? "#34d399" : "#f87171",
+                color:
+                  saveMessage === "Saved"
+                    ? "var(--hftf-warm-gold)"
+                    : "var(--hftf-burnt)",
               }}
             >
               {saveMessage}

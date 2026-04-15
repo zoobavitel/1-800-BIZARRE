@@ -7,14 +7,14 @@ const S = {
   page: {
     fontFamily: "monospace",
     fontSize: "13px",
-    background: "#000",
-    color: "#fff",
+    background: "var(--bg-page)",
+    color: "var(--text-primary)",
     minHeight: "100vh",
   },
   hdr: {
-    background: "#1f2937",
+    background: "var(--bg-header)",
     padding: "8px 16px",
-    borderBottom: "1px solid #4b5563",
+    borderBottom: "1px solid var(--border)",
     position: "sticky",
     top: 0,
     zIndex: 10,
@@ -23,10 +23,10 @@ const S = {
   searchInput: {
     width: "100%",
     padding: "10px 14px 10px 40px",
-    background: "#111827",
-    border: "1px solid #374151",
+    background: "var(--bg-card)",
+    border: "1px solid var(--border)",
     borderRadius: "4px",
-    color: "#fff",
+    color: "var(--text-primary)",
     fontSize: "14px",
     fontFamily: "monospace",
     outline: "none",
@@ -46,16 +46,16 @@ const S = {
     fontSize: "11px",
     fontWeight: "bold",
     cursor: "pointer",
-    border: `1px solid ${active ? "#4b5563" : "#374151"}`,
-    background: active ? "#374151" : "transparent",
-    color: active ? "#fff" : "#9ca3af",
+    border: `1px solid ${active ? "var(--border)" : "var(--border)"}`,
+    background: active ? "var(--bg-card)" : "transparent",
+    color: active ? "var(--text-primary)" : "var(--text-secondary)",
     fontFamily: "monospace",
     textTransform: "uppercase",
     letterSpacing: "0.05em",
   }),
   card: {
-    background: "#111827",
-    border: "1px solid #374151",
+    background: "var(--bg-card)",
+    border: "1px solid var(--border)",
     borderRadius: "4px",
     padding: "12px",
     marginBottom: "8px",
@@ -63,8 +63,12 @@ const S = {
     transition: "border-color 0.15s, background 0.15s",
   },
   cardTitle: { fontWeight: "bold", fontSize: "14px", marginBottom: "4px" },
-  cardSubtitle: { fontSize: "12px", color: "#9ca3af", marginBottom: "4px" },
-  cardDesc: { fontSize: "11px", color: "#6b7280", lineHeight: 1.4 },
+  cardSubtitle: {
+    fontSize: "12px",
+    color: "var(--text-secondary)",
+    marginBottom: "4px",
+  },
+  cardDesc: { fontSize: "11px", color: "var(--text-secondary)", lineHeight: 1.4 },
   tag: (color) => ({
     display: "inline-block",
     padding: "1px 6px",
@@ -72,10 +76,14 @@ const S = {
     fontSize: "9px",
     fontWeight: "bold",
     background: color,
-    color: "#fff",
+    color: "var(--text-primary)",
     marginRight: "6px",
   }),
-  emptyState: { textAlign: "center", padding: "48px 16px", color: "#6b7280" },
+  emptyState: {
+    textAlign: "center",
+    padding: "48px 16px",
+    color: "var(--text-secondary)",
+  },
 };
 
 const CATEGORIES = [
@@ -197,10 +205,10 @@ export default function SearchPage({
                 onClick={onBack}
                 style={{
                   padding: "6px 12px",
-                  border: "1px solid #4b5563",
+                  border: "1px solid var(--border)",
                   borderRadius: "4px",
                   background: "transparent",
-                  color: "#9ca3af",
+                  color: "var(--text-secondary)",
                   cursor: "pointer",
                   fontFamily: "monospace",
                   fontSize: "12px",
@@ -265,7 +273,7 @@ export default function SearchPage({
                     marginBottom: "4px",
                   }}
                 >
-                  <span style={S.tag(TYPE_COLORS[r.type] || "#4b5563")}>
+                  <span style={S.tag(TYPE_COLORS[r.type] || "var(--accent)")}>
                     {r.type?.toUpperCase()}
                   </span>
                   <span style={S.cardTitle}>{r.title}</span>
