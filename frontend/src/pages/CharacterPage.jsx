@@ -254,6 +254,7 @@ export default function CharacterPage({
   initialCharacterId = null,
   initialNpcId = null,
   preferNpcMode = false,
+  onRegisterNavigationGuard = null,
 }) {
   const { user } = useAuth();
   const [mode, setMode] = useState(
@@ -268,6 +269,7 @@ export default function CharacterPage({
   // ── Character tab state ──────────────────────────────────────────────────
   const [charTabs, setCharTabs] = useState([]);
   const [activeCharTabId, setActiveCharTabId] = useState(null);
+  const [charTabUnsavedMeta, setCharTabUnsavedMeta] = useState({});
   const charTabsInitialized = useRef(false);
   const charTabsRef = useRef(charTabs);
   /** Bumps when remote sync completes so CharacterSheet refetches session rolls. */
@@ -494,13 +496,20 @@ export default function CharacterPage({
     (tabId) => {
       const tab = charTabs.find((t) => t.tabId === tabId);
       if (tab && tab.characterId === null) {
-        if (
+        const meta = charTabUnsavedMeta[tabId];
+        if (meta?.isDirty) {
+          if (
+            !window.confirm(
+              "Discard this unsaved character and close the tab?\n\nPress OK to discard, or Cancel to stay here.",
+            )
+          )
+            return;
+        } else if (
           !window.confirm(
             "Discard this unsaved character? Any changes will be lost.",
           )
-        ) {
+        )
           return;
-        }
       }
       setCharTabs((prev) => {
         const filtered = prev.filter((t) => t.tabId !== tabId);
@@ -518,8 +527,13 @@ export default function CharacterPage({
         }
         return filtered;
       });
+      setCharTabUnsavedMeta((prev) => {
+        const next = { ...prev };
+        delete next[tabId];
+        return next;
+      });
     },
-    [activeCharTabId, charTabs],
+    [activeCharTabId, charTabs, charTabUnsavedMeta],
   );
 
   const updateActiveCharTab = useCallback(
@@ -708,14 +722,45 @@ export default function CharacterPage({
   );
 
   const handleSwitchCharacter = useCallback(
-    (character) => {
+    async (character) => {
+      if (!(mode === MODES.CHARACTER)) return;
+      const activeTab = charTabs.find((t) => t.tabId === activeCharTabId);
+      const activeMeta =
+        activeCharTabId != null ? charTabUnsavedMeta[activeCharTabId] : null;
+      if (activeTab?.characterId == null && activeMeta?.isDirty) {
+        const saveNow = window.confirm(
+          "This new character has unsaved changes.\n\nPress OK to save now.\nPress Cancel for discard options.",
+        );
+        if (saveNow) {
+          try {
+            await handleSaveCharacter(activeMeta.payload);
+          } catch {
+            window.alert("Couldn't save the character. Please fix errors and try again.");
+            return;
+          }
+        } else if (
+          !window.confirm(
+            "Discard this unsaved character and continue?\n\nPress OK to discard, or Cancel to stay here.",
+          )
+        ) {
+          return;
+        }
+      }
       if (!character) {
         handleCreateNewCharacterTab();
         return;
       }
       openCharacterInTab(character);
     },
-    [handleCreateNewCharacterTab, openCharacterInTab],
+    [
+      mode,
+      charTabs,
+      activeCharTabId,
+      charTabUnsavedMeta,
+      handleSaveCharacter,
+      handleCreateNewCharacterTab,
+      openCharacterInTab,
+    ],
   );
 
   // ── NPC logic: when initialNpcId is set (e.g. from #npcs/123), fetch and open that NPC
@@ -1290,6 +1335,14 @@ export default function CharacterPage({
             onCrewNameUpdated={handleCrewNameUpdated}
             onCampaignRefresh={refreshCampaigns}
             sessionDataPollTick={sheetPollTick}
+            onDraftMetaChange={(meta) => {
+              const tabId = activeCharTab?.tabId;
+              if (tabId == null) return;
+              setCharTabUnsavedMeta((prev) => ({
+                ...prev,
+                [tabId]: meta,
+              }));
+            }}
           />
         ))}
 
