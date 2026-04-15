@@ -1252,8 +1252,43 @@ export default function CharacterPage({
             </>
           )}
 
-          {mode === MODES.NPC && npcs.length > 0 && (
+          {mode === MODES.NPC && (
             <>
+              {characters.length > 0 && (
+                <select
+                  style={{
+                    background: "#1f2937",
+                    color: "#9ca3af",
+                    border: "1px solid #4b5563",
+                    padding: "4px 8px",
+                    fontSize: "11px",
+                    fontFamily: "monospace",
+                    borderRadius: "4px",
+                  }}
+                  value=""
+                  onChange={(e) => {
+                    const char = characters.find(
+                      (c) => c.id === parseInt(e.target.value),
+                    );
+                    if (char) {
+                      void guardUnsavedCharacterNavigation(() => {
+                        setMode(MODES.CHARACTER);
+                        openCharacterInTab(char);
+                        if (typeof window !== "undefined") {
+                          window.location.hash = `character/${char.id}`;
+                        }
+                      });
+                    }
+                  }}
+                >
+                  <option value="">Open character...</option>
+                  {characters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name || c.standName || "New Character"}
+                    </option>
+                  ))}
+                </select>
+              )}
               <select
                 style={{
                   background: "#1f2937",
