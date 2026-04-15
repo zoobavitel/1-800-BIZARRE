@@ -18,6 +18,27 @@ const TICK = {
 };
 const GRID = { stroke: "rgba(255, 255, 255, 0.1)" };
 
+function CountOnlyTooltip({ active, payload }) {
+  if (!active || !Array.isArray(payload) || payload.length === 0) return null;
+  const value = payload[0]?.value;
+  return (
+    <div
+      style={{
+        background: "#0d0814",
+        border: "1px solid rgba(108, 57, 137, 0.4)",
+        borderRadius: 0,
+        fontSize: 10,
+        fontFamily: CHART_FONT,
+        color: "#f0e6c8",
+        padding: "8px 10px",
+      }}
+    >
+      <div style={{ color: "rgba(255, 255, 255, 0.7)" }}>Count</div>
+      <div style={{ marginTop: 2, fontSize: 12, fontWeight: 700 }}>{value}</div>
+    </div>
+  );
+}
+
 /**
  * @param {{ name: string, value: number, fill: string }[]} data
  */
@@ -61,21 +82,10 @@ export default function HomeStatsBarChart({ data = [], loading = false }) {
                 allowDecimals={false}
                 width={28}
               />
-              <Tooltip
-                contentStyle={{
-                  background: "#0d0814",
-                  border: "1px solid rgba(108, 57, 137, 0.4)",
-                  borderRadius: 0,
-                  fontSize: 10,
-                  fontFamily: CHART_FONT,
-                  color: "#f0e6c8",
-                }}
-                labelFormatter={(label) => label}
-                formatter={(value) => [value, "Count"]}
-              />
+              <Tooltip content={<CountOnlyTooltip />} />
               <Bar dataKey="value" radius={[1, 1, 0, 0]} isAnimationActive>
-                {(data || []).map((entry, i) => (
-                  <Cell key={`cell-${entry.name}-${i}`} fill={entry.fill} />
+                {(data || []).map((entry) => (
+                  <Cell key={`cell-${entry.name}`} fill={entry.fill} />
                 ))}
               </Bar>
             </BarChart>
