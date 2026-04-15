@@ -1289,6 +1289,24 @@ export default function CharacterPage({
                   ))}
                 </select>
               )}
+              <button
+                type="button"
+                onClick={handleDeleteActiveCharacter}
+                title="Delete the character open in the active tab (permanent)"
+                style={{
+                  background: "#450a0a",
+                  color: "#fecaca",
+                  border: "1px solid #991b1b",
+                  padding: "4px 10px",
+                  fontSize: "11px",
+                  fontFamily: "monospace",
+                  borderRadius: "4px",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Delete character
+              </button>
               <select
                 style={{
                   background: "#1f2937",
