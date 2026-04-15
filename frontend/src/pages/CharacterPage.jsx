@@ -1348,7 +1348,7 @@ export default function CharacterPage({
 
       {/* ── NPC mode ── */}
       {mode === MODES.NPC && (
-        <div style={PAGE_STYLES.content}>
+        <div style={{ width: "100%" }}>
           {npcsLoading ? (
             <div
               style={{ padding: "24px", textAlign: "center", color: "#9ca3af" }}
