@@ -1,7 +1,6 @@
 import "./styles/global.css";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import ReactDOM from "react-dom/client";
-import { Menu } from "lucide-react";
 import Home from "./pages/Home.jsx";
 import CharacterPage from "./pages/CharacterPage.jsx";
 import ResponsiveTest from "./pages/ResponsiveTest.jsx";
@@ -58,15 +57,30 @@ const barStyles = {
   },
   hamburger: {
     display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: "34px",
-    height: "34px",
+    flexDirection: "column",
+    gap: "5px",
     border: "none",
-    borderRadius: "2px",
     background: "transparent",
-    color: "var(--hftf-text-cream)",
     cursor: "pointer",
+    padding: "8px",
+    zIndex: 1001,
+  },
+  hamburgerLine: {
+    display: "block",
+    height: "2px",
+    transition: "all 0.3s ease",
+  },
+  hamburgerLine1: {
+    width: "22px",
+    background: "var(--hftf-gold)",
+  },
+  hamburgerLine2: {
+    width: "18px",
+    background: "#c0392b",
+  },
+  hamburgerLine3: {
+    width: "14px",
+    background: "var(--hftf-purple)",
   },
   back: {
     padding: "5px 12px",
@@ -104,7 +118,15 @@ function AppBar({ onHamburgerClick, onBack, onHome, pageTitle, rightContent }) {
           aria-label="Open menu"
           style={barStyles.hamburger}
         >
-          <Menu style={{ width: 20, height: 20 }} />
+          <span
+            style={{ ...barStyles.hamburgerLine, ...barStyles.hamburgerLine1 }}
+          />
+          <span
+            style={{ ...barStyles.hamburgerLine, ...barStyles.hamburgerLine2 }}
+          />
+          <span
+            style={{ ...barStyles.hamburgerLine, ...barStyles.hamburgerLine3 }}
+          />
         </button>
         {onBack && (
           <button type="button" onClick={onBack} style={barStyles.back}>
