@@ -686,6 +686,7 @@ export const transformBackendToFrontend = (backendCharacter) => {
   return {
     id: backendCharacter.id,
     user_id: backendCharacter.user ?? null,
+    creator_username: backendCharacter.creator_username || "",
     name: backendCharacter.true_name || "",
     standName: backendCharacter.stand_name || "",
     heritage: backendCharacter.heritage ?? null,

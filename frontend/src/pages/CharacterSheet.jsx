@@ -256,6 +256,14 @@ const CharacterSheetWrapper = ({
   sessionDataPollTick = 0,
 }) => {
   const { user } = useAuth();
+  const ownerUsername =
+    character?.creator_username || character?.user_username || character?.username || "";
+  const ownerLabel = ownerUsername
+    ? `Created by ${ownerUsername}`
+    : character?.user_id
+      ? `Created by user #${character.user_id}`
+      : "Created by unknown";
+  const canEditSheet = !character?.id || isGM || character?.user_id === user?.id;
   const [activeMode, setActiveMode] = useState("CHARACTER MODE");
   const charCampaign = campaigns?.find((c) => c.id === character?.campaign);
   const activeSessionId =
@@ -1441,7 +1449,7 @@ const CharacterSheetWrapper = ({
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
-      if (savingRef.current || !onSave) return;
+      if (savingRef.current || !onSave || !canEditSheet) return;
       if (heritagesLoading || heritages.length === 0) return;
       if (
         typeof charData.heritage !== "number" ||
@@ -1516,6 +1524,7 @@ const CharacterSheetWrapper = ({
     selectedBenefits,
     selectedDetriments,
     character?.id,
+    canEditSheet,
     heritages,
     heritagesLoading,
   ]);
@@ -1716,6 +1725,25 @@ const CharacterSheetWrapper = ({
         {/* ══════════════════════════════════ CHARACTER MODE ══════════════════════════════════ */}
         {activeMode === "CHARACTER MODE" && (
           <>
+            {!canEditSheet && (
+              <div
+                style={{
+                  ...S.card,
+                  marginBottom: "12px",
+                  borderColor: "#92400e",
+                  color: "#fcd34d",
+                  fontSize: "12px",
+                }}
+              >
+                Read-only: only the character owner or campaign GM can edit this sheet.
+              </div>
+            )}
+            <div
+              style={{
+                opacity: canEditSheet ? 1 : 0.78,
+                pointerEvents: canEditSheet ? "auto" : "none",
+              }}
+            >
             {/* Character bar */}
             <div
               style={{
@@ -1748,6 +1776,9 @@ const CharacterSheetWrapper = ({
                     「{charData.standName}」
                   </span>
                 )}
+                <span style={{ color: "#9ca3af", fontSize: "11px" }}>
+                  {ownerLabel}
+                </span>
               </div>
               <div
                 style={{
@@ -7266,6 +7297,7 @@ const CharacterSheetWrapper = ({
                   ))}
                 </div>
               </div>
+            </div>
             </div>
           </>
         )}
