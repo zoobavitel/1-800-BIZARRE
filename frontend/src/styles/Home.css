@@ -213,6 +213,8 @@
   padding: 48px 24px 40px;
   position: relative;
   overflow: hidden;
+  border-bottom: 1px solid var(--light-border);
+  box-shadow: inset 0 -3px 0 rgba(var(--p1-rgb) / 0.2);
 }
 .home-poc .hero::before {
   content: "";
