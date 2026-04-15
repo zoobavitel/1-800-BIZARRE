@@ -343,7 +343,7 @@ const HomePage = ({
               <span className="pill pill-spin">Spin</span>
             </div>
             <p className="hero-subtext fade-up d2">
-              Fate is a roundabout journey. 
+              Fate is truly a very long roundabout path...
             </p>
             <div className="hero-cta fade-up d3">
               <button
