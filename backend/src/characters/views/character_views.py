@@ -24,10 +24,12 @@ from ..serializers import CharacterSerializer
 
 
 def _character_queryset_for_user(user):
-    """Own PCs plus characters in campaigns this user GMs (staff sees all)."""
+    """Own PCs plus campaign-visible PCs for this user (staff sees all)."""
     if user.is_staff:
         return Character.objects.all()
-    return Character.objects.filter(Q(user=user) | Q(campaign__gm=user)).distinct()
+    return Character.objects.filter(
+        Q(user=user) | Q(campaign__gm=user) | Q(campaign__players=user)
+    ).distinct()
 
 
 # Backward-compatible name for code that imported the old detail-only helper.
@@ -43,11 +45,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if self.request.query_params.get("mine") == "true":
-            return (
-                Character.objects.filter(user=user)
-                if not user.is_staff
-                else Character.objects.all()
-            )
+            return Character.objects.filter(user=user)
         return _character_queryset_for_user(user)
 
     def create(self, request, *args, **kwargs):
@@ -66,6 +64,15 @@ class CharacterViewSet(viewsets.ModelViewSet):
         serializer.save(user=self.request.user)
 
     def perform_update(self, serializer):
+        instance = serializer.instance
+        user = self.request.user
+        is_owner = instance.user_id == user.id
+        is_gm = instance.campaign_id and instance.campaign.gm_id == user.id
+        if not (user.is_staff or is_owner or is_gm):
+            raise PermissionDenied(
+                "You may only edit your own characters unless you are the campaign GM."
+            )
+
         # The CharacterSerializer marks `user` as read_only=True, so it will
         # never be present in validated_data and ownership cannot change through
         # the normal serializer path. This remains a defensive belt-and-
@@ -77,7 +84,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         user = self.request.user
-        if not user.is_staff and instance.user_id != user.id:
+        is_owner = instance.user_id == user.id
+        is_gm = instance.campaign_id and instance.campaign.gm_id == user.id
+        if not (user.is_staff or is_owner or is_gm):
             raise PermissionDenied("You may only delete your own characters.")
         instance.delete()
 
@@ -194,6 +203,12 @@ class CharacterViewSet(viewsets.ModelViewSet):
     def update_field(self, request, pk=None):
         """Update a specific field on a character."""
         character = self.get_object()
+        is_owner = character.user_id == request.user.id
+        is_gm = character.campaign_id and character.campaign.gm_id == request.user.id
+        if not (request.user.is_staff or is_owner or is_gm):
+            raise PermissionDenied(
+                "You may only edit your own characters unless you are the campaign GM."
+            )
         field_name = request.data.get("field")
         value = request.data.get("value")
 

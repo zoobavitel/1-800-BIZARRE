@@ -23,10 +23,10 @@ class NPCViewSet(viewsets.ModelViewSet):
         user = self.request.user
         mine = self.request.query_params.get('mine', '').lower() in ('1', 'true')
 
-        if user.is_staff:
-            qs = NPC.objects.all()
-        elif mine:
+        if mine:
             qs = NPC.objects.filter(creator=user)
+        elif user.is_staff:
+            qs = NPC.objects.all()
         else:
             qs = NPC.objects.filter(Q(creator=user) | Q(campaign__gm=user)).distinct()
 
