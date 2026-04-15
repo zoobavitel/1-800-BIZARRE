@@ -4,20 +4,49 @@
  */
 export const PATCH_NOTES = [
   {
-    "date": "2026-04-11",
+    "date": "2026-04-15",
     "version": null,
     "sections": [
       {
         "title": "Other",
         "items": [
-          "Merge pull request #38 from zoobavitel/copilot/fix-trauma-selections-save-issue",
-          "Add edit button for custom abilities on character sheet"
+          "Track characters merge migrations (0040–0044) for deploy parity",
+          "Merge pull request #57 from zoobavitel/cursor/ownership-visibility-perms-3143",
+          "Fix permission test setup to exercise 403 path",
+          "Enforce character ownership permissions and creator visibility",
+          "Merge pull request #54 from zoobavitel/cursor/fix-postcss-startup-271c",
+          "Add caveman always-on snippet to Cursor rules",
+          "Sort patch notes newest-first in preview and full page",
+          "Make standalone home stats panel span section width",
+          "Remove duplicate sticky header from patch notes page",
+          "Make home bar chart tooltip emphasize numeric counts",
+          "Remove duplicate sticky header from licenses page",
+          "Move home stats panel out of hero section",
+          "Update home hero subtitle roundabout path copy",
+          "Exclude blank New Character entries from PC stats",
+          "Use home-style hamburger icon across all pages",
+          "Show delete character action in NPC mode toolbar",
+          "Add open character dropdown to NPC mode toolbar",
+          "Allow NPC sheet to render at full page width",
+          "Remove sticky header bar from search page",
+          "Keep new character name field blank by default",
+          "Guard unsaved new character drafts before navigation",
+          "Set home hamburger bars to yellow red purple",
+          "Use shared home-style navbar on all pages",
+          "Define app shell surface tokens to prevent header bleed",
+          "Reorder stripe palette to yellow-orange-red-purple",
+          "Apply global HFTF palette across app shell",
+          "Widen hero stats panel and remove session/crew rows",
+          "Add divider between hero and lower sections",
+          "Allow 127.0.0.1 frontend origin in CORS",
+          "Fix auth API default for remote frontend hosts",
+          "Fix formatting in contributing guidelines"
         ]
       },
       {
         "title": "Fixed",
         "items": [
-          "add trauma reference data re-fetch fallback in handleSaveCharacter"
+          "define unsaved-character navigation guards"
         ]
       }
     ]
@@ -27,9 +56,67 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Other",
+        "items": [
+          "Merge pull request #53 from zoobavitel/copilot/fix-character-center-alignment",
+          "Update hero subtext on Home page",
+          "Merge pull request #52 from zoobavitel/copilot/fix-game-rules-scroll-behavior",
+          "Expand scroll-reset effect to cover all route params",
+          "Reset window scroll position on page navigation",
+          "Merge pull request #50 from zoobavitel/copilot/fix-character-sheet-ownership",
+          "Merge pull request #51 from zoobavitel/copilot/add-edit-delete-buttons-home-faction-cards",
+          "Add Edit & Delete buttons to Home page faction cards",
+          "Merge pull request #49 from zoobavitel/copilot/remove-second-striped-bar-homepage",
+          "Initial plan",
+          "Restore footer top stripe; remove stripe-bar div after footer",
+          "Remove striped border-image from site-footer top edge",
+          "Remove top stripe-bar from homepage, keep the one below the footer",
+          "Merge pull request #48 from zoobavitel/copilot/fix-persist-trauma-checkboxes",
+          "Merge pull request #47 from zoobavitel/copilot/fix-load-characters-order",
+          "Merge pull request #40 from zoobavitel/fix/trauma-checkbox-sync",
+          "Initial plan",
+          "Merge branch 'master' into fix/trauma-checkbox-sync",
+          "Merge pull request #46 from zoobavitel/copilot/fix-patch-notes-display-issue",
+          "Merge pull request #45 from zoobavitel/copilot/update-home-page-characters-section",
+          "Merge pull request #44 from zoobavitel/copilot/apply-css-faction-section",
+          "Add faction, camp-card, patch-notes, footer CSS to Home.css",
+          "Merge pull request #43 from zoobavitel/copilot/update-ui-elements-styles",
+          "Merge pull request #42 from zoobavitel/copilot/fix-incorrect-character-visibility",
+          "Merge pull request #41 from zoobavitel/copilot/add-navigation-back-to-home"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "move scroll-to-top into currentPage effect to cover all navigation paths",
+          "scroll to top on page nav; prompt before discarding unsaved character/NPC tabs",
+          "sync perform_update ownership guard; strengthen ownership test",
+          "address code review comments - strict null check, clearer guard comment",
+          "prevent GM from claiming ownership of player character sheets",
+          "restore patchNotes.js accidentally truncated by build in shallow clone",
+          "resolve no-use-before-define lint error for loadCharacters",
+          "move loadCharacters before useEffect to fix no-use-before-define",
+          "move loadCharacters before useEffect to fix no-use-before-define",
+          "deduplicate date key, hasOwnProperty guard, batch trauma name lookup",
+          "add missing commas at lines 95 and 649",
+          "make characters section reload on user change and clear on logout",
+          "fetch full git history in deploy-github-pages so patch notes generate correctly",
+          "use --p1-rgb token for semi-transparent purple rgba values",
+          "apply mine filter in correct viewset files and make params composable",
+          "filter home page to only show owned characters and NPCs"
+        ]
+      },
+      {
+        "title": "Refactored",
+        "items": [
+          "wrap loadCharacters in useCallback and add it to effect deps"
+        ]
+      },
+      {
         "title": "Added",
         "items": [
-          "redesign homepage color palette with new design tokens"
+          "redesign homepage color palette with new design tokens",
+          "make AppBar logo clickable to go home; fix nav-logo button background in hamburger drawer"
         ]
       }
     ]
@@ -39,9 +126,35 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Fixed",
+        "items": [
+          "persist trauma checkboxes after save/refetch",
+          "remove global overflow-x hidden, rely on responsive layout fixes",
+          "mobile layout responsiveness for CharacterSheet and NPCSheet",
+          "add trauma reference data re-fetch fallback in handleSaveCharacter"
+        ]
+      },
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #39 from zoobavitel/copilot/fix-character-sheet-width-issues",
+          "Merge pull request #36 from zoobavitel/copilot/remove-personal-information",
+          "Merge pull request #38 from zoobavitel/copilot/fix-trauma-selections-save-issue",
+          "Add edit button for custom abilities on character sheet"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-04-10",
+    "version": null,
+    "sections": [
+      {
         "title": "Other",
         "items": [
           "Merge pull request #37 from zoobavitel/copilot/add-edit-character-abilities-button",
+          "security: address code review feedback on PII removal",
+          "security: remove PII, add gitleaks scanning, add SECURITY.md",
           "Merge pull request #35 from zoobavitel/copilot/discuss-npc-deletion-issues",
           "Merge pull request #33 from zoobavitel/copilot/remove-conflict-clocks-on-npc-creation",
           "Merge pull request #32 from zoobavitel/copilot/fix-npc-level-display",
@@ -91,9 +204,7 @@ export const PATCH_NOTES = [
           "Fix curly apostrophe syntax error in create_npc.py",
           "Update Black action options in workflow",
           "Update source path in black.yml workflow",
-          "Update Black workflow to use new configuration",
-          "Merge pull request #39 from zoobavitel/copilot/fix-character-sheet-width-issues",
-          "Merge pull request #36 from zoobavitel/copilot/remove-personal-information"
+          "Update Black workflow to use new configuration"
         ]
       },
       {
@@ -283,11 +394,7 @@ export const PATCH_NOTES = [
           "Merge pull request #2 from zoobavitel/fix/ci-migration-and-frontend-tests",
           "Update patch notes with recent changes",
           "Refactor heritage handling in character sheet and API transformation",
-          "Update README to include new subagent documentation for feature branches",
-          "Update README to include new subagent documentation for feature branches",
-          "Update character serializers to accept heritage display names and enhance error handling",
-          "Update README and enhance error handling in authentication views",
-          "Enhance CI/CD workflow for frontend and backend testing"
+          "Update README to include new subagent documentation for feature branches"
         ]
       },
       {
@@ -303,350 +410,6 @@ export const PATCH_NOTES = [
         "title": "Maintenance",
         "items": [
           "restore backend/src/db.sqlite3 to match master (drop stray migrate diff)"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-03-31",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Update production settings and deployment configurations",
-          "Enhance CI configuration and update production settings"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-03-27",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Update character management features and enhance logging"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-03-26",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Enhance SKILL.md with integration test instructions for ngrok",
-          "Update debug.log with additional warning entries and refresh db.sqlite3",
-          "Update debug.log with additional warning entries for crew and NPC actions",
-          "ci(frontend): run lint from root (script lives in workspace root)",
-          "ci(integration): install deps with root npm ci (workspace lockfile)",
-          "Enhance character management features and update logging",
-          "Update database and enhance character management features",
-          "Update database and enhance character management features",
-          "Update agent descriptions and enhance character management features",
-          "Update database and logging features",
-          "Update database, logging, and character management features"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "store hashed passwords in example_campaign fixture",
-          "align jack_rice fixture with Character/Stand schema",
-          "resolve characters test module clash and npm cache path"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-03-25",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Refactor agent rules and enhance character management features",
-          "Update logging and backup procedures; enhance character update handling"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-03-23",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Update database and log files; enhance character model and API interactions"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-03-18",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Update database and log files; enhance character model and campaign management features",
-          "Update database and log files; enhance character model and UI",
-          "Update database and log files; enhance character sheet UI"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "Enhance NPC and session management with new features",
-          "Enhance character and session management with XP tracking and new features"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-03-17",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "Enhance user profile and character management with new fields and features"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-02-27",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "Enhance NPC management with faction integration and campaign filtering",
-          "Implement ClockManager component for enhanced campaign clock management",
-          "Update character sheet to include heritage benefits and detriments",
-          "Enhance character sheet and campaign management with new features",
-          "Add Session Records Modal and enhance session management in CampaignManagement",
-          "Add Roll and RollHistory models for session tracking; update character heritage handling in frontend",
-          "Introduce showcased NPCs and progress clocks for enhanced gameplay mechanics",
-          "Update development scripts and enhance character options in frontend"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Update database and log files; add warnings for bad requests",
-          "Update LoginForm and SignupForm components; refactor styles and structure"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-02-26",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "Enhance campaign navigation and management in frontend",
-          "Refactor Home component layout and enhance header styling",
-          "Enhance AbilityBrowser and Home components with heritage functionality",
-          "Enhance campaign management features and UI",
-          "Enhance character models and serializers with new features"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Enhance LoginForm with design tokens and animations",
-          "Update database and debug logs; refactor CharacterPage tab management",
-          "Update character heritage, benefits, and detriments fixtures"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-02-24",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "Update CampaignSerializer and enhance frontend navigation",
-          "Refactor HamburgerMenu and update CharacterPage structure",
-          "Integrate react-burger-menu for enhanced navigation",
-          "Update settings and documentation for ngrok integration",
-          "Enhance API base URL handling for ngrok and local development"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "Add new log entry for file change monitoring"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-02-23",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "Improve server URL handling in authentication forms and API services",
-          "Enhance authentication forms and API integration",
-          "Update dependencies and enhance character serialization",
-          "Add CurrentUserView and enhance user authentication flow",
-          "Introduce faction management and enhance campaign integration"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "Update dependencies and modify package configurations",
-          "Add additional log entry for file change monitoring",
-          "Refine deploy script and update documentation for GitHub Pages",
-          "Update CI/CD workflow and homepage URL"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "Update homepage URL and modify deploy script in package.json"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "update"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2025-07-21",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Update debug log with additional info and clean up binary cache files",
-          "Clean up cache files",
-          "Clean up cache files and debug log"
-        ]
-      },
-      {
-        "title": "Refactored",
-        "items": [
-          "Update project branding from JoJo TTRPG to 1-800-BIZARRE across documentation and codebase"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2025-07-15",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "Add harm clock max parameter to NPC creation and update NPC model for configurable harm clock",
-          "Implement NPC creation command and enhance NPC mechanics with new attributes"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2025-07-14",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "Enhance character management and UI with new features",
-          "Remove deprecated files and components to streamline the codebase"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2025-07-13",
-    "version": null,
-    "sections": [
-      {
-        "title": "Maintenance",
-        "items": [
-          "Update package dependencies and remove unused files"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "Update frontend and backend dependencies, enhance session management, and refine character models"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2025-07-07",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Implement session and faction management models"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2025-07-03",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "Update backend documentation and character creation logic",
-          "Remove deprecated files and components for a cleaner codebase"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2025-06-17",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "Add attribute rolling functionality with inline result display",
-          "Enhance Clock component with customizable color and click handling"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Refactor code structure and remove redundant sections for improved readability and maintainability"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2025-06-11",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "Add Account Settings page and integrate user profile management",
-          "Add production deployment scripts and checklist",
-          "remove global overflow-x hidden, rely on responsive layout fixes"
         ]
       }
     ]

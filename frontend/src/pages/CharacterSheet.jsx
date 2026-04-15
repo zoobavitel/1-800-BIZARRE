@@ -183,6 +183,9 @@ const CLOCK_TYPE_OPTIONS = [
 
 function hasMeaningfulDraftChanges(payload) {
   if (!payload || payload.id) return false;
+  const callsign =
+    String(payload.name || "").trim() !== "" ||
+    String(payload.standName || "").trim() !== "";
   const textFields = [
     payload.name,
     payload.standName,
@@ -223,16 +226,14 @@ function hasMeaningfulDraftChanges(payload) {
   if (Array.isArray(payload.stash) && payload.stash.some(Boolean)) return true;
   if (Array.isArray(payload.abilities) && payload.abilities.length > 0) return true;
   if (Array.isArray(payload.clocks) && payload.clocks.length > 0) return true;
-  if (
-    Array.isArray(payload.selected_benefits) &&
-    payload.selected_benefits.length > 0
-  )
-    return true;
-  if (
-    Array.isArray(payload.selected_detriments) &&
-    payload.selected_detriments.length > 0
-  )
-    return true;
+  // Heritage auto-applies required benefits/detriments; without a callsign that is
+  // not "user intent" and must not count as dirty (avoids autosave + ghost PCs).
+  const benefitsHit =
+    (Array.isArray(payload.selected_benefits) &&
+      payload.selected_benefits.length > 0) ||
+    (Array.isArray(payload.selected_detriments) &&
+      payload.selected_detriments.length > 0);
+  if (benefitsHit) return callsign;
   return false;
 }
 
@@ -256,8 +257,18 @@ const CharacterSheetWrapper = ({
   sessionDataPollTick = 0,
 }) => {
   const { user } = useAuth();
+  const fromApi = String(
+    character?.creator_username ||
+      character?.user_username ||
+      character?.username ||
+      "",
+  ).trim();
+  const currentUserIsImpliedOwner =
+    Boolean(user?.username) &&
+    (character?.user_id === user?.id ||
+      (!character?.id && character?.user_id == null));
   const ownerUsername =
-    character?.creator_username || character?.user_username || character?.username || "";
+    fromApi || (currentUserIsImpliedOwner ? String(user.username).trim() : "");
   const ownerLabel = ownerUsername
     ? `Created by ${ownerUsername}`
     : character?.user_id
@@ -2900,8 +2911,13 @@ const CharacterSheetWrapper = ({
                       const benefitCost = benefits
                         .filter((b) => selectedBenefits.includes(b.id))
                         .reduce((s, b) => s + (b.hp_cost || 0), 0);
+                      // Optional detriments only: required ones are baked into base_hp (SRD);
+                      // their hp_value in data is descriptive, not extra budget.
                       const detrimentGain = detriments
-                        .filter((d) => selectedDetriments.includes(d.id))
+                        .filter(
+                          (d) =>
+                            selectedDetriments.includes(d.id) && !d.required,
+                        )
                         .reduce((s, d) => s + (d.hp_value || 0), 0);
                       const hpRemaining = baseHp + detrimentGain - benefitCost;
                       const toggleBenefit = (id) => {
@@ -2966,14 +2982,17 @@ const CharacterSheetWrapper = ({
                               color: hpRemaining >= 0 ? "#86efac" : "#fca5a5",
                             }}
                           >
-                            HP budget: {baseHp} base + {detrimentGain}{" "}
-                            (detriments) − {benefitCost} (benefits) ={" "}
-                            {hpRemaining} remaining
+                            Heritage Points: {baseHp} base
+                            {detrimentGain > 0
+                              ? ` + ${detrimentGain} (optional detriments)`
+                              : ""}{" "}
+                            − {benefitCost} (benefits) = {hpRemaining}{" "}
+                            remaining
                           </div>
                           {hpRemaining < 0 && (
                             <div style={{ ...S.warn, marginBottom: "8px" }}>
-                              HP budget exceeded. Add detriments or remove
-                              benefits.
+                              Heritage Points budget exceeded. Take optional
+                              detriments or remove benefits.
                             </div>
                           )}
                           <div
@@ -3074,7 +3093,7 @@ const CharacterSheetWrapper = ({
                                       {b.hp_cost != null && b.hp_cost > 0 && (
                                         <span style={{ color: "#f59e0b" }}>
                                           {" "}
-                                          ({b.hp_cost} HP)
+                                          ({b.hp_cost} Heritage Points)
                                         </span>
                                       )}
                                       {b.required && (
@@ -3202,10 +3221,12 @@ const CharacterSheetWrapper = ({
                                       >
                                         {d.name}
                                       </span>
-                                      {d.hp_value != null && d.hp_value > 0 && (
+                                      {!d.required &&
+                                        d.hp_value != null &&
+                                        d.hp_value > 0 && (
                                         <span style={{ color: "#34d399" }}>
                                           {" "}
-                                          (+{d.hp_value} HP)
+                                          (+{d.hp_value} Heritage Points)
                                         </span>
                                       )}
                                       {d.required && (

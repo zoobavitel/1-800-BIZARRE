@@ -730,12 +730,14 @@ class CharacterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("You must pick a Heritage.")
 
         base_hp = heritage.base_hp + bonus_hp
-        gain = sum(d.hp_value for d in detriments)
+        # Required detriments do not add budget on top of base_hp (SRD); only
+        # optional detriments grant extra Heritage Points.
+        gain = sum(d.hp_value for d in detriments if not d.required)
         cost = sum(b.hp_cost for b in benefits)
 
         if base_hp + gain < cost:
             raise serializers.ValidationError(
-                f"HP budget exceeded (base {base_hp} + detriments {gain} < benefits {cost})."
+                f"Heritage Points budget exceeded (base {base_hp} + optional detriments {gain} < benefits {cost})."
             )
 
         # Ensure required benefits/detriments are selected

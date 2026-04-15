@@ -209,6 +209,34 @@ describe("transformBackendToFrontend coin and crew stash", () => {
   });
 });
 
+describe("transformBackendToFrontend owner fields", () => {
+  test("maps numeric user PK to user_id", () => {
+    const fe = transformBackendToFrontend({ user: 42 });
+    expect(fe.user_id).toBe(42);
+  });
+
+  test("maps user_id when user key is absent", () => {
+    const fe = transformBackendToFrontend({ user_id: 7 });
+    expect(fe.user_id).toBe(7);
+  });
+
+  test("maps nested user object to user_id and creator_username", () => {
+    const fe = transformBackendToFrontend({
+      user: { id: 3, username: "alice" },
+    });
+    expect(fe.user_id).toBe(3);
+    expect(fe.creator_username).toBe("alice");
+  });
+
+  test("prefers explicit creator_username over nested user.username", () => {
+    const fe = transformBackendToFrontend({
+      user: { id: 3, username: "alice" },
+      creator_username: "AliceDisplay",
+    });
+    expect(fe.creator_username).toBe("AliceDisplay");
+  });
+});
+
 describe("transformFrontendToBackend stash_slots", () => {
   test("sends stash_slots when not in a crew", () => {
     const out = transformFrontendToBackend(
