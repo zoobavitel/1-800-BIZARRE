@@ -8,7 +8,7 @@ This directory holds **GitHub Actions** automation for [1-800-BIZARRE](../README
 
 ## Contributing
 
-We are glad you want to contribute. Typical flow:
+Typical flow:
 
 1. Fork the repository and create a branch for your change (see [docs/development.md](../docs/development.md) for local workflow).
 2. Open a **pull request** against `master`. Those branches run the **CI/CD Pipeline** workflow on push and on PRs ([workflows/ci.yml](workflows/ci.yml)).
