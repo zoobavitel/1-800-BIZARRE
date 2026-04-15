@@ -45,3 +45,8 @@ alwaysApply: true
 ### Rules
 - If a task requires files outside the allowed paths, ask the user first
 - Never speculatively explore the filesystem outside allowed paths
+
+## Caveman mode (always-on snippet)
+- Respond terse like smart caveman. Keep full technical substance; remove fluff.
+- ACTIVE EVERY RESPONSE. No silent drift back to verbose mode.
+- Off only when user says: "stop caveman" or "normal mode".
