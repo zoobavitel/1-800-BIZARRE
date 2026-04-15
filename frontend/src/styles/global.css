@@ -1,25 +1,52 @@
-/* Theme variables - dark (default) and light */
+/* Global HFTF-style theme tokens */
 [data-theme="dark"],
 :root {
-  --bg-page: #000000;
-  --bg-header: #1f2937;
-  --bg-card: #111827;
-  --text-primary: #ffffff;
-  --text-secondary: #9ca3af;
-  --accent: #7c3aed;
-  --accent-hover: #6d28d9;
-  --border: #4b5563;
+  --font-display: "Bebas Neue", "Oswald", "Arial Narrow", sans-serif;
+  --font-heading: "Oswald", "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-mono: "Share Tech Mono", "Roboto Mono", "Consolas", monospace;
+  --font-body: "Rajdhani", "Segoe UI", "Helvetica Neue", sans-serif;
+
+  --hftf-black: #000000;
+  --hftf-deep: #0d0814;
+  --hftf-panel: #1a1028;
+  --hftf-border: #2a1640;
+  --hftf-purple: #6c3989;
+  --hftf-purple-hover: #8a4aaa;
+  --hftf-gold: #e8ca70;
+  --hftf-gold-muted: #a09060;
+  --hftf-orange: #b64200;
+  --hftf-text-cream: #f0e6c8;
+  --hftf-text-dim: #c8b792;
+
+  /* Existing semantic aliases kept for compatibility */
+  --bg-page: var(--hftf-black);
+  --bg-header: var(--hftf-deep);
+  --bg-card: var(--hftf-panel);
+  --text-primary: var(--hftf-text-cream);
+  --text-secondary: var(--hftf-gold-muted);
+  --accent: var(--hftf-purple);
+  --accent-hover: var(--hftf-purple-hover);
+  --border: var(--hftf-border);
+
+  /* Hamburger menu token bridge */
+  --hm-dark-border: var(--hftf-border);
+  --hm-dark-text: var(--hftf-text-cream);
+  --hm-cream: var(--hftf-text-cream);
+  --hm-font-mono: var(--font-mono);
+  --hm-font-display: var(--font-display);
+  --hm-font-heading: var(--font-heading);
 }
 
 [data-theme="light"] {
-  --bg-page: #f3f4f6;
-  --bg-header: #ffffff;
-  --bg-card: #ffffff;
-  --text-primary: #111827;
-  --text-secondary: #6b7280;
-  --accent: #7c3aed;
-  --accent-hover: #6d28d9;
-  --border: #d1d5db;
+  /* Keep HFTF brand colors while brightening surfaces */
+  --bg-page: #ede3c7;
+  --bg-header: #f5ecd2;
+  --bg-card: #efe5cb;
+  --text-primary: #1a0e2e;
+  --text-secondary: #5a4070;
+  --accent: #6c3989;
+  --accent-hover: #8a4aaa;
+  --border: #d0c4a4;
 }
 
 html,
@@ -27,4 +54,17 @@ body {
   margin: 0;
   padding: 0;
   background: var(--bg-page);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
 }
