@@ -132,6 +132,50 @@ function sortCharTabs(tabs) {
   });
 }
 
+function isUnsavedCharacterDirty(tab) {
+  if (!tab || tab.characterId != null) return false;
+  const character = tab.character || {};
+  const textFields = [
+    character.name,
+    character.standName,
+    character.background,
+    character.look,
+    character.vice,
+    character.viceDetails,
+    character.crew,
+    character.personal_crew_name,
+    character.playbook,
+    character.image_url,
+  ];
+  if (textFields.some((value) => String(value ?? "").trim().length > 0)) {
+    return true;
+  }
+  if (Array.isArray(character.abilities) && character.abilities.length > 0) {
+    return true;
+  }
+  if (Array.isArray(character.clocks) && character.clocks.length > 0) return true;
+  if (Array.isArray(character.coin) && character.coin.some(Boolean)) return true;
+  if (Array.isArray(character.stash) && character.stash.some(Boolean)) return true;
+  if ((character.actionRatings && Object.keys(character.actionRatings).length > 0) ||
+      (character.standStats && Object.keys(character.standStats).length > 0)) {
+    return true;
+  }
+  if (typeof character.stressFilled === "number" && character.stressFilled > 0) {
+    return true;
+  }
+  if (typeof character.healingClock === "number" && character.healingClock > 0) {
+    return true;
+  }
+  if (Array.isArray(character.trauma) && character.trauma.length > 0) return true;
+  if (
+    character.armor &&
+    (character.armor.armor || character.armor.heavy || character.armor.special)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------------------
 // Payload normalizer
 // ---------------------------------------------------------------------------
@@ -941,6 +985,48 @@ export default function CharacterPage({
     }
   }, [activeNpcTab, activeNpcTabId]);
 
+  const saveActiveUnsavedCharacter = useCallback(async () => {
+    const tab = charTabs.find((t) => t.tabId === activeCharTabId);
+    if (!isUnsavedCharacterDirty(tab)) return true;
+    try {
+      await handleSaveCharacter(tab.character || createDefaultCharacter());
+      return true;
+    } catch (error) {
+      console.error("Auto-save for unsaved character failed:", error);
+      window.alert(
+        "Could not save this unsaved character. Please save manually before navigating away.",
+      );
+      return false;
+    }
+  }, [activeCharTabId, charTabs, handleSaveCharacter]);
+
+  const guardUnsavedCharacterNavigation = useCallback(
+    async (onContinue, options = {}) => {
+      const { allowSave = true, discardMessage } = options;
+      const tab = charTabs.find((t) => t.tabId === activeCharTabId);
+      if (!isUnsavedCharacterDirty(tab)) {
+        onContinue?.();
+        return true;
+      }
+      const savePrompt =
+        "This character tab has unsaved changes. Press OK to save before continuing, or Cancel to choose whether to discard changes.";
+      if (allowSave && window.confirm(savePrompt)) {
+        const saved = await saveActiveUnsavedCharacter();
+        if (!saved) return false;
+        onContinue?.();
+        return true;
+      }
+      const discardConfirmed = window.confirm(
+        discardMessage ||
+          "Discard this unsaved character? Any changes will be lost.",
+      );
+      if (!discardConfirmed) return false;
+      onContinue?.();
+      return true;
+    },
+    [activeCharTabId, charTabs, saveActiveUnsavedCharacter],
+  );
+
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={PAGE_STYLES.page}>
@@ -970,10 +1056,12 @@ export default function CharacterPage({
           <button
             type="button"
             onClick={() => {
-              setMode(MODES.NPC);
-              const id = activeNpcTab?.npcId ?? activeNpcTab?.npc?.id;
-              if (typeof window !== "undefined")
-                window.location.hash = id ? `npcs/${id}` : "npcs";
+              void guardUnsavedCharacterNavigation(() => {
+                setMode(MODES.NPC);
+                const id = activeNpcTab?.npcId ?? activeNpcTab?.npc?.id;
+                if (typeof window !== "undefined")
+                  window.location.hash = id ? `npcs/${id}` : "npcs";
+              });
             }}
             style={PAGE_STYLES.modeBtn(mode === MODES.NPC)}
           >
@@ -988,7 +1076,12 @@ export default function CharacterPage({
                 <button
                   key={tab.tabId}
                   type="button"
-                  onClick={() => setActiveCharTabId(tab.tabId)}
+                  onClick={() => {
+                    if (tab.tabId === activeCharTabId) return;
+                    void guardUnsavedCharacterNavigation(() =>
+                      setActiveCharTabId(tab.tabId),
+                    );
+                  }}
                   style={TAB_STYLES.tab(tab.tabId === activeCharTabId)}
                 >
                   <span>{charTabLabel(tab)}</span>
@@ -1006,7 +1099,11 @@ export default function CharacterPage({
               ))}
               <button
                 type="button"
-                onClick={handleCreateNewCharacterTab}
+                onClick={() => {
+                  void guardUnsavedCharacterNavigation(() =>
+                    handleCreateNewCharacterTab(),
+                  );
+                }}
                 style={TAB_STYLES.addBtn}
               >
                 + New Character
@@ -1075,7 +1172,11 @@ export default function CharacterPage({
                   const char = characters.find(
                     (c) => c.id === parseInt(e.target.value),
                   );
-                  if (char) openCharacterInTab(char);
+                  if (char) {
+                    void guardUnsavedCharacterNavigation(() =>
+                      openCharacterInTab(char),
+                    );
+                  }
                 }}
               >
                 <option value="">Open character...</option>
