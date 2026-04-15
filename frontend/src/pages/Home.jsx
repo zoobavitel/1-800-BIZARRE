@@ -343,7 +343,7 @@ const HomePage = ({
               <span className="pill pill-spin">Spin</span>
             </div>
             <p className="hero-subtext fade-up d2">
-              Fate is truly a very long roundabout path...
+              Fate is truly a very long, roundabout path...
             </p>
             <div className="hero-cta fade-up d3">
               <button
@@ -364,53 +364,6 @@ const HomePage = ({
           </div>
           <div className="hero-coin-column fade-up d3">
             <HomeStandCoin />
-          </div>
-          <div className="hero-art fade-up d3">
-            <div className="hero-art-ghost">VOL.1</div>
-            <div className="hero-stats">
-              <div className="hero-stats-title">Live Stats</div>
-              <div className="hero-stat-row">
-                <span className="hero-stat-label">
-                  <span className="hero-stat-dot hero-stat-dot-green" />
-                  Campaigns
-                </span>
-                <span className="hero-stat-value">
-                  {heroStats.activeCampaigns} active
-                </span>
-              </div>
-              <div className="hero-stat-row">
-                <span className="hero-stat-label">
-                  <span className="hero-stat-dot hero-stat-dot-orange" />
-                  PCs / NPCs
-                </span>
-                <span className="hero-stat-value">
-                  {heroStats.pcCount} / {heroStats.npcCount}
-                </span>
-              </div>
-              <div className="hero-stat-row hero-stat-row-tall">
-                <span className="hero-stat-label">Stand / Hamon / Spin</span>
-                <span className="hero-stat-value hero-stat-value-compact">
-                  {playbookLine}
-                </span>
-              </div>
-              <div className="hero-stat-row hero-stat-row-tall">
-                <span className="hero-stat-label">Top heritages</span>
-                <span className="hero-stat-value hero-stat-value-compact">
-                  {topHeritagesLine}
-                </span>
-              </div>
-            </div>
-            <HomeSessionLineChart
-              data={sessionsByMonth}
-              loading={chartsLoading}
-            />
-            <HomeStatsBarChart data={barChartRows} loading={chartsLoading} />
-            <div className="hero-art-label">
-              <div className="hero-art-label-title">STAND USERS</div>
-              <div className="hero-art-label-sub">
-                A Bizarre Adventure TTRPG
-              </div>
-            </div>
           </div>
         </div>
       </section>
@@ -766,6 +719,58 @@ const HomePage = ({
           <div className="qa-arrow">→</div>
         </button>
       </div>
+
+      <section className="home-stats-section">
+        <div className="home-stats-inner">
+          <div className="hero-art fade-up d3">
+            <div className="hero-art-ghost">VOL.1</div>
+            <div className="hero-stats">
+              <div className="hero-stats-title">Live Stats</div>
+              <div className="hero-stat-row">
+                <span className="hero-stat-label">
+                  <span className="hero-stat-dot hero-stat-dot-green" />
+                  Campaigns
+                </span>
+                <span className="hero-stat-value">
+                  {heroStats.activeCampaigns} active
+                </span>
+              </div>
+              <div className="hero-stat-row">
+                <span className="hero-stat-label">
+                  <span className="hero-stat-dot hero-stat-dot-orange" />
+                  PCs / NPCs
+                </span>
+                <span className="hero-stat-value">
+                  {heroStats.pcCount} / {heroStats.npcCount}
+                </span>
+              </div>
+              <div className="hero-stat-row hero-stat-row-tall">
+                <span className="hero-stat-label">Stand / Hamon / Spin</span>
+                <span className="hero-stat-value hero-stat-value-compact">
+                  {playbookLine}
+                </span>
+              </div>
+              <div className="hero-stat-row hero-stat-row-tall">
+                <span className="hero-stat-label">Top heritages</span>
+                <span className="hero-stat-value hero-stat-value-compact">
+                  {topHeritagesLine}
+                </span>
+              </div>
+            </div>
+            <HomeSessionLineChart
+              data={sessionsByMonth}
+              loading={chartsLoading}
+            />
+            <HomeStatsBarChart data={barChartRows} loading={chartsLoading} />
+            <div className="hero-art-label">
+              <div className="hero-art-label-title">STAND USERS</div>
+              <div className="hero-art-label-sub">
+                A Bizarre Adventure TTRPG
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="patch-section">
         <div className="patch-header">
