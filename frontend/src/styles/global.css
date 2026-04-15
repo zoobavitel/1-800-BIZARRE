@@ -78,3 +78,36 @@ select,
 textarea {
   font-family: inherit;
 }
+
+/* AppBar hamburger matches Home icon globally */
+.appbar-hamburger {
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  z-index: 1001;
+}
+
+.appbar-hamburger span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  transition: all 0.3s ease;
+}
+
+.appbar-hamburger span:nth-child(1) {
+  background: var(--hftf-gold);
+}
+
+.appbar-hamburger span:nth-child(2) {
+  background: #c0392b;
+  width: 18px;
+}
+
+.appbar-hamburger span:nth-child(3) {
+  background: var(--hftf-purple);
+  width: 14px;
+}
