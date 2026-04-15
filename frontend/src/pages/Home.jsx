@@ -11,7 +11,10 @@ import {
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import { PATCH_NOTES } from "../data/patchNotes";
-import { flattenPatchNotesPreview } from "../utils/patchNotesPreview";
+import {
+  flattenPatchNotesPreview,
+  sortPatchNotesEntries,
+} from "../utils/patchNotesPreview";
 import {
   buildSessionsByMonth,
   buildBarChartRows,
@@ -183,7 +186,10 @@ const HomePage = ({
       .catch(() => setCrewCount(0));
   }, [user]);
 
-  const patchRows = useMemo(() => flattenPatchNotesPreview(PATCH_NOTES, 7), []);
+  const patchRows = useMemo(
+    () => flattenPatchNotesPreview(sortPatchNotesEntries(PATCH_NOTES), 7),
+    [],
+  );
 
   const heroStats = useMemo(() => {
     const activeCampaigns = (campaigns || []).filter(

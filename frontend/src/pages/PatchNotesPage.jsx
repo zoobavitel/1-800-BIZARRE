@@ -1,5 +1,6 @@
 import React from "react";
 import { PATCH_NOTES } from "../data/patchNotes";
+import { sortPatchNotesEntries } from "../utils/patchNotesPreview";
 
 const S = {
   page: {
@@ -45,15 +46,17 @@ const S = {
 };
 
 export default function PatchNotesPage() {
+  const orderedPatchNotes = sortPatchNotesEntries(PATCH_NOTES);
+
   return (
     <div style={S.page}>
       <div style={S.content}>
-        {PATCH_NOTES.length === 0 ? (
+        {orderedPatchNotes.length === 0 ? (
           <div style={S.emptyState}>
             No patch notes yet. Patch notes are generated from git commits.
           </div>
         ) : (
-          PATCH_NOTES.map((entry, i) => (
+          orderedPatchNotes.map((entry, i) => (
             <div key={entry.date + i} style={S.card}>
               <div style={S.cardHeader}>
                 <span style={S.date}>{entry.date}</span>
