@@ -346,24 +346,6 @@ const HomePage = ({
               </div>
               <div className="hero-stat-row">
                 <span className="hero-stat-label">
-                  <span className="hero-stat-dot hero-stat-dot-amber" />
-                  Sessions
-                </span>
-                <span className="hero-stat-value">
-                  {heroStats.sessionCount} played
-                </span>
-              </div>
-              <div className="hero-stat-row">
-                <span className="hero-stat-label">
-                  <span className="hero-stat-dot hero-stat-dot-purple" />
-                  Crews
-                </span>
-                <span className="hero-stat-value">
-                  {heroStats.crewCount} formed
-                </span>
-              </div>
-              <div className="hero-stat-row">
-                <span className="hero-stat-label">
                   <span className="hero-stat-dot hero-stat-dot-orange" />
                   PCs / NPCs
                 </span>

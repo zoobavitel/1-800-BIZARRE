@@ -477,7 +477,7 @@
   grid-column: 3;
   justify-self: end;
   align-self: center;
-  width: 340px;
+  width: 400px;
   position: relative;
   background: var(--light-text);
   overflow: hidden;
@@ -1371,7 +1371,7 @@
     margin-inline: auto;
   }
   .home-poc .hero-art {
-    width: 280px;
+    width: 320px;
     margin-inline: auto;
   }
   .home-poc .split {
@@ -1393,7 +1393,7 @@
     font-size: 48px;
   }
   .home-poc .hero-art {
-    width: 240px;
+    width: 280px;
   }
   .home-poc .quick-strip {
     grid-template-columns: 1fr;
