@@ -606,6 +606,7 @@ class CharacterSerializer(serializers.ModelSerializer):
         write_only=True,
     )
     user = serializers.PrimaryKeyRelatedField(read_only=True)
+    creator_username = serializers.CharField(source="user.username", read_only=True)
     heritage_details = HeritageSerializer(source="heritage", read_only=True)
     # nested vice info
     vice_info = ViceSerializer(source="vice", read_only=True)
