@@ -145,14 +145,14 @@
   transition: all 0.3s ease;
 }
 .home-poc .hamburger span:nth-child(1) {
-  background: var(--stripe-1);
+  background: var(--p2);
 }
 .home-poc .hamburger span:nth-child(2) {
-  background: var(--stripe-2);
+  background: var(--red);
   width: 18px;
 }
 .home-poc .hamburger span:nth-child(3) {
-  background: var(--stripe-3);
+  background: var(--p1);
   width: 14px;
 }
 .home-poc .hamburger.open span:nth-child(1) {
