@@ -11,7 +11,10 @@ import {
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import { PATCH_NOTES } from "../data/patchNotes";
-import { flattenPatchNotesPreview } from "../utils/patchNotesPreview";
+import {
+  flattenPatchNotesPreview,
+  sortPatchNotesEntries,
+} from "../utils/patchNotesPreview";
 import {
   buildSessionsByMonth,
   buildBarChartRows,
@@ -48,6 +51,40 @@ function factionStatusLabel(rep) {
   if (r === 0) return "Neutral";
   if (r >= 2) return "Allied";
   return "Friendly";
+}
+
+function isPlaceholderNewCharacter(character) {
+  if (!character) return false;
+  const name = String(character.name || "").trim().toLowerCase();
+  if (name !== "new character") return false;
+
+  const hasStandName = String(character.standName || "").trim() !== "";
+  const hasHeritage = character.heritage != null && String(character.heritage) !== "";
+  const hasBackground = String(character.background || "").trim() !== "";
+  const hasLook = String(character.look || "").trim() !== "";
+  const hasVice = String(character.vice || "").trim() !== "";
+  const hasCrew = String(character.crew || "").trim() !== "";
+  const hasAbilities = Array.isArray(character.abilities) && character.abilities.length > 0;
+  const hasClocks = Array.isArray(character.clocks) && character.clocks.length > 0;
+  const hasActionDots = Object.values(character.actionRatings || {}).some(
+    (v) => Number(v) > 0,
+  );
+  const hasStress = Number(character.stressFilled || 0) > 0;
+  const hasXp = Object.values(character.xp || {}).some((v) => Number(v) > 0);
+
+  return !(
+    hasStandName ||
+    hasHeritage ||
+    hasBackground ||
+    hasLook ||
+    hasVice ||
+    hasCrew ||
+    hasAbilities ||
+    hasClocks ||
+    hasActionDots ||
+    hasStress ||
+    hasXp
+  );
 }
 
 const HomePage = ({
@@ -149,7 +186,10 @@ const HomePage = ({
       .catch(() => setCrewCount(0));
   }, [user]);
 
-  const patchRows = useMemo(() => flattenPatchNotesPreview(PATCH_NOTES, 7), []);
+  const patchRows = useMemo(
+    () => flattenPatchNotesPreview(sortPatchNotesEntries(PATCH_NOTES), 7),
+    [],
+  );
 
   const heroStats = useMemo(() => {
     const activeCampaigns = (campaigns || []).filter(
@@ -159,7 +199,7 @@ const HomePage = ({
       (acc, c) => acc + (Array.isArray(c.sessions) ? c.sessions.length : 0),
       0,
     );
-    const pcCount = characters.length;
+    const pcCount = characters.filter((c) => !isPlaceholderNewCharacter(c)).length;
     const npcCount = npcs.length;
     return {
       activeCampaigns,
@@ -168,7 +208,7 @@ const HomePage = ({
       pcCount,
       npcCount,
     };
-  }, [campaigns, characters.length, npcs.length, crewCount]);
+  }, [campaigns, characters, npcs.length, crewCount]);
 
   const sessionsByMonth = useMemo(
     () => buildSessionsByMonth(campaigns),
@@ -309,7 +349,7 @@ const HomePage = ({
               <span className="pill pill-spin">Spin</span>
             </div>
             <p className="hero-subtext fade-up d2">
-              Fate is a roundabout journey. 
+              Fate is truly a very long, roundabout path...
             </p>
             <div className="hero-cta fade-up d3">
               <button
@@ -330,71 +370,6 @@ const HomePage = ({
           </div>
           <div className="hero-coin-column fade-up d3">
             <HomeStandCoin />
-          </div>
-          <div className="hero-art fade-up d3">
-            <div className="hero-art-ghost">VOL.1</div>
-            <div className="hero-stats">
-              <div className="hero-stats-title">Live Stats</div>
-              <div className="hero-stat-row">
-                <span className="hero-stat-label">
-                  <span className="hero-stat-dot hero-stat-dot-green" />
-                  Campaigns
-                </span>
-                <span className="hero-stat-value">
-                  {heroStats.activeCampaigns} active
-                </span>
-              </div>
-              <div className="hero-stat-row">
-                <span className="hero-stat-label">
-                  <span className="hero-stat-dot hero-stat-dot-amber" />
-                  Sessions
-                </span>
-                <span className="hero-stat-value">
-                  {heroStats.sessionCount} played
-                </span>
-              </div>
-              <div className="hero-stat-row">
-                <span className="hero-stat-label">
-                  <span className="hero-stat-dot hero-stat-dot-purple" />
-                  Crews
-                </span>
-                <span className="hero-stat-value">
-                  {heroStats.crewCount} formed
-                </span>
-              </div>
-              <div className="hero-stat-row">
-                <span className="hero-stat-label">
-                  <span className="hero-stat-dot hero-stat-dot-orange" />
-                  PCs / NPCs
-                </span>
-                <span className="hero-stat-value">
-                  {heroStats.pcCount} / {heroStats.npcCount}
-                </span>
-              </div>
-              <div className="hero-stat-row hero-stat-row-tall">
-                <span className="hero-stat-label">Stand / Hamon / Spin</span>
-                <span className="hero-stat-value hero-stat-value-compact">
-                  {playbookLine}
-                </span>
-              </div>
-              <div className="hero-stat-row hero-stat-row-tall">
-                <span className="hero-stat-label">Top heritages</span>
-                <span className="hero-stat-value hero-stat-value-compact">
-                  {topHeritagesLine}
-                </span>
-              </div>
-            </div>
-            <HomeSessionLineChart
-              data={sessionsByMonth}
-              loading={chartsLoading}
-            />
-            <HomeStatsBarChart data={barChartRows} loading={chartsLoading} />
-            <div className="hero-art-label">
-              <div className="hero-art-label-title">STAND USERS</div>
-              <div className="hero-art-label-sub">
-                A Bizarre Adventure TTRPG
-              </div>
-            </div>
           </div>
         </div>
       </section>
@@ -750,6 +725,58 @@ const HomePage = ({
           <div className="qa-arrow">→</div>
         </button>
       </div>
+
+      <section className="home-stats-section">
+        <div className="home-stats-inner">
+          <div className="hero-art fade-up d3">
+            <div className="hero-art-ghost">VOL.1</div>
+            <div className="hero-stats">
+              <div className="hero-stats-title">Live Stats</div>
+              <div className="hero-stat-row">
+                <span className="hero-stat-label">
+                  <span className="hero-stat-dot hero-stat-dot-green" />
+                  Campaigns
+                </span>
+                <span className="hero-stat-value">
+                  {heroStats.activeCampaigns} active
+                </span>
+              </div>
+              <div className="hero-stat-row">
+                <span className="hero-stat-label">
+                  <span className="hero-stat-dot hero-stat-dot-orange" />
+                  PCs / NPCs
+                </span>
+                <span className="hero-stat-value">
+                  {heroStats.pcCount} / {heroStats.npcCount}
+                </span>
+              </div>
+              <div className="hero-stat-row hero-stat-row-tall">
+                <span className="hero-stat-label">Stand / Hamon / Spin</span>
+                <span className="hero-stat-value hero-stat-value-compact">
+                  {playbookLine}
+                </span>
+              </div>
+              <div className="hero-stat-row hero-stat-row-tall">
+                <span className="hero-stat-label">Top heritages</span>
+                <span className="hero-stat-value hero-stat-value-compact">
+                  {topHeritagesLine}
+                </span>
+              </div>
+            </div>
+            <HomeSessionLineChart
+              data={sessionsByMonth}
+              loading={chartsLoading}
+            />
+            <HomeStatsBarChart data={barChartRows} loading={chartsLoading} />
+            <div className="hero-art-label">
+              <div className="hero-art-label-title">STAND USERS</div>
+              <div className="hero-art-label-sub">
+                A Bizarre Adventure TTRPG
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="patch-section">
         <div className="patch-header">

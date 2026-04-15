@@ -24,16 +24,16 @@ const LoginForm = ({ onSwitchToSignup }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [urlError, setUrlError] = useState("");
 
-  const isLiveSite =
+  const isRemoteSite =
     typeof window !== "undefined" &&
-    window.location.origin.includes("github.io");
+    !["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
 
   useEffect(() => {
     injectStyles();
     const stored = getStoredApiBaseUrl();
     setServerUrl(stored);
-    if (isLiveSite) setShowServerUrl(true);
-  }, [isLiveSite]);
+    if (isRemoteSite) setShowServerUrl(true);
+  }, [isRemoteSite]);
 
   const { login, error, clearError } = useAuth();
 
@@ -51,7 +51,7 @@ const LoginForm = ({ onSwitchToSignup }) => {
     setApiBaseUrl(serverUrl.trim() || null);
     if (!getApiBaseUrl()) {
       setUrlError(
-        "Set the game server URL below (required on github.io). Locally use http://127.0.0.1:8000/api unless your host shared a tunnel URL.",
+        "Set the game server URL below when running on a remote host. Locally use http://127.0.0.1:8000/api unless your host shared a tunnel URL.",
       );
       setShowServerUrl(true);
       return;
@@ -161,7 +161,7 @@ const LoginForm = ({ onSwitchToSignup }) => {
           style={{ display: "flex", flexDirection: "column", gap: 20 }}
         >
           {/* Live-site warning */}
-          {isLiveSite && !serverUrl && (
+          {isRemoteSite && !serverUrl && (
             <div
               style={{
                 padding: "10px 14px",
@@ -198,7 +198,7 @@ const LoginForm = ({ onSwitchToSignup }) => {
               }}
             >
               {error}
-              {error.includes("Could not reach game server") && isLiveSite && (
+              {error.includes("Could not reach game server") && isRemoteSite && (
                 <p style={{ marginTop: 6, marginBottom: 0, fontSize: 12 }}>
                   Enter the host's URL above: <strong>https://</strong>
                   their-ngrok-url
@@ -241,7 +241,7 @@ const LoginForm = ({ onSwitchToSignup }) => {
               >
                 ▶
               </span>
-              Game server {isLiveSite ? "(required here)" : "(optional)"}
+              Game server {isRemoteSite ? "(required here)" : "(optional)"}
             </button>
 
             {showServerUrl && (
@@ -274,7 +274,7 @@ const LoginForm = ({ onSwitchToSignup }) => {
                     lineHeight: 1.5,
                   }}
                 >
-                  {isLiveSite
+                  {isRemoteSite
                     ? "Paste the URL your host sends (must include /api). This site has no baked-in API host."
                     : "Leave blank to use http://127.0.0.1:8000/api (local dev). When playing remotely, use the host’s tunnel URL."}
                 </p>

@@ -1,5 +1,6 @@
 import React from "react";
 import { PATCH_NOTES } from "../data/patchNotes";
+import { sortPatchNotesEntries } from "../utils/patchNotesPreview";
 
 const S = {
   page: {
@@ -8,14 +9,6 @@ const S = {
     background: "#000",
     color: "#fff",
     minHeight: "100vh",
-  },
-  hdr: {
-    background: "#1f2937",
-    padding: "8px 16px",
-    borderBottom: "1px solid #4b5563",
-    position: "sticky",
-    top: 0,
-    zIndex: 10,
   },
   content: { padding: "16px", maxWidth: "800px", margin: "0 auto" },
   card: {
@@ -52,40 +45,18 @@ const S = {
   emptyState: { textAlign: "center", padding: "48px 16px", color: "#6b7280" },
 };
 
-export default function PatchNotesPage({ onBack }) {
+export default function PatchNotesPage() {
+  const orderedPatchNotes = sortPatchNotesEntries(PATCH_NOTES);
+
   return (
     <div style={S.page}>
-      <div style={S.hdr}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          {onBack && (
-            <button
-              onClick={onBack}
-              style={{
-                padding: "6px 12px",
-                border: "1px solid #4b5563",
-                borderRadius: "4px",
-                background: "transparent",
-                color: "#9ca3af",
-                cursor: "pointer",
-                fontFamily: "monospace",
-                fontSize: "12px",
-              }}
-            >
-              ← Back
-            </button>
-          )}
-          <span style={{ fontSize: "18px", fontWeight: "bold" }}>
-            1(800) BIZARRE — PATCH NOTES
-          </span>
-        </div>
-      </div>
       <div style={S.content}>
-        {PATCH_NOTES.length === 0 ? (
+        {orderedPatchNotes.length === 0 ? (
           <div style={S.emptyState}>
             No patch notes yet. Patch notes are generated from git commits.
           </div>
         ) : (
-          PATCH_NOTES.map((entry, i) => (
+          orderedPatchNotes.map((entry, i) => (
             <div key={entry.date + i} style={S.card}>
               <div style={S.cardHeader}>
                 <span style={S.date}>{entry.date}</span>

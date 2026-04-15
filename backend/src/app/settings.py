@@ -131,6 +131,7 @@ LOGGING = {
 # 🔐 CORS settings
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
+    "http://127.0.0.1:3000",
     "http://192.168.1.251:3000",  # Add your real LAN IP here if needed
     "https://zoobavitel.github.io",  # GitHub Pages frontend
 ]

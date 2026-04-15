@@ -9,11 +9,23 @@ const STORAGE_KEY = "apiBaseUrl";
 /** Explicit REACT_APP_API_URL in .env wins. Otherwise dev uses localhost; production has no default (github.io must use Server URL / localStorage). */
 const envApi = process.env.REACT_APP_API_URL;
 const hasEnvApi = typeof envApi === "string" && envApi.trim() !== "";
-const DEFAULT_BASE = hasEnvApi
-  ? envApi.trim().replace(/\/+$/, "")
-  : process.env.NODE_ENV === "production"
-    ? ""
-    : "http://localhost:8000/api";
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+
+function getRuntimeDefaultBase() {
+  if (hasEnvApi) return envApi.trim().replace(/\/+$/, "");
+  if (typeof window === "undefined") {
+    return process.env.NODE_ENV === "production" ? "" : "http://localhost:8000/api";
+  }
+
+  const { protocol, hostname } = window.location;
+  if (LOCAL_HOSTS.has(hostname)) {
+    return "http://localhost:8000/api";
+  }
+
+  // Cloud preview and custom domains often serve the frontend from the same host.
+  // Defaulting to host:8000 removes the need to manually enter the server URL.
+  return `${protocol}//${hostname}:8000/api`;
+}
 
 /** Force https for ngrok (avoids SSL_ERROR_RX_RECORD_TOO_LONG from http://). */
 function ensureHttpsForNgrok(url) {
@@ -43,7 +55,7 @@ export function getApiBaseUrl() {
   if (stored && stored.trim() !== "") {
     return normalizeBaseUrl(stored);
   }
-  return DEFAULT_BASE;
+  return getRuntimeDefaultBase();
 }
 
 /** Throws if no API base is configured (empty production default and no localStorage). */
