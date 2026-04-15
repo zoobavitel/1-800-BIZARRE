@@ -27,6 +27,11 @@
   --accent: var(--hftf-purple);
   --accent-hover: var(--hftf-purple-hover);
   --border: var(--hftf-border);
+  --surface-1: var(--bg-header);
+  --surface-2: var(--bg-card);
+  --surface-border: var(--border);
+  --text-muted: var(--text-secondary);
+  --text-dim: var(--hftf-gold-muted);
 
   /* Hamburger menu token bridge */
   --hm-dark-border: var(--hftf-border);
@@ -47,6 +52,11 @@
   --accent: #6c3989;
   --accent-hover: #8a4aaa;
   --border: #d0c4a4;
+  --surface-1: var(--bg-header);
+  --surface-2: var(--bg-card);
+  --surface-border: var(--border);
+  --text-muted: var(--text-secondary);
+  --text-dim: #8d7a54;
 }
 
 html,
