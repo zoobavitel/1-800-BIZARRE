@@ -683,10 +683,20 @@ export const authAPI = {
 
 // Data transformation helpers
 export const transformBackendToFrontend = (backendCharacter) => {
+  const rawUser = backendCharacter.user;
+  const resolvedUserId =
+    rawUser != null && typeof rawUser === "object"
+      ? rawUser.id ?? null
+      : rawUser ?? backendCharacter.user_id ?? null;
+  const resolvedCreatorUsername =
+    (backendCharacter.creator_username || "").trim() ||
+    (rawUser != null && typeof rawUser === "object"
+      ? String(rawUser.username || "").trim()
+      : "");
   return {
     id: backendCharacter.id,
-    user_id: backendCharacter.user ?? null,
-    creator_username: backendCharacter.creator_username || "",
+    user_id: resolvedUserId,
+    creator_username: resolvedCreatorUsername,
     name: backendCharacter.true_name || "",
     standName: backendCharacter.stand_name || "",
     heritage: backendCharacter.heritage ?? null,

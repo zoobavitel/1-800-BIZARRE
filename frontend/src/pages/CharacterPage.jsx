@@ -660,6 +660,9 @@ export default function CharacterPage({
           }
         }
         const savedFrontend = transformBackendToFrontend(saved);
+        const ownerFromTab = charTabs.find(
+          (t) => t.tabId === activeCharTabId,
+        )?.character;
         const traumaFromPayload =
           payload.trauma &&
           typeof payload.trauma === "object" &&
@@ -673,6 +676,11 @@ export default function CharacterPage({
         // Without this merge, character.crew becomes '' after save, causing a perceived "change" and save loop.
         const merged = {
           ...savedFrontend,
+          user_id: savedFrontend.user_id ?? ownerFromTab?.user_id,
+          creator_username:
+            savedFrontend.creator_username ||
+            ownerFromTab?.creator_username ||
+            "",
           crew: payload.crew ?? savedFrontend.crew,
           crewId: payload.crewId ?? savedFrontend.crewId,
           image: savedFrontend.image,
@@ -912,11 +920,25 @@ export default function CharacterPage({
   const sheetCharacter = useMemo(() => {
     const base = activeCharTab?.character ?? createDefaultCharacter();
     const tid = activeCharTab?.characterId;
-    if (tid != null && base.id == null) {
-      return { ...base, id: tid };
+    let out =
+      tid != null && base.id == null ? { ...base, id: tid } : { ...base };
+    const cid = out.id ?? tid ?? null;
+    const noCreatorLabel = !String(out.creator_username || "").trim();
+    if (cid != null && noCreatorLabel) {
+      const fromList = characters.find((c) => c.id === cid);
+      if (fromList) {
+        out = {
+          ...out,
+          user_id: fromList.user_id ?? out.user_id,
+          creator_username:
+            String(fromList.creator_username || "").trim() ||
+            out.creator_username ||
+            "",
+        };
+      }
     }
-    return base;
-  }, [activeCharTab]);
+    return out;
+  }, [activeCharTab, characters]);
 
   const campaignIdForRealtime = useMemo(() => {
     const c = sheetCharacter?.campaign;
@@ -1032,9 +1054,16 @@ export default function CharacterPage({
 
   const saveActiveUnsavedCharacter = useCallback(async () => {
     const tab = charTabs.find((t) => t.tabId === activeCharTabId);
-    if (!isUnsavedCharacterDirty(tab)) return true;
+    const meta = charTabUnsavedMeta[activeCharTabId];
+    const dirty =
+      isUnsavedCharacterDirty(tab) || Boolean(meta?.isDirty);
+    if (!dirty) return true;
+    const toSave =
+      meta?.isDirty && meta.payload
+        ? meta.payload
+        : tab?.character || createDefaultCharacter();
     try {
-      await handleSaveCharacter(tab.character || createDefaultCharacter());
+      await handleSaveCharacter(toSave);
       return true;
     } catch (error) {
       console.error("Auto-save for unsaved character failed:", error);
@@ -1043,13 +1072,16 @@ export default function CharacterPage({
       );
       return false;
     }
-  }, [activeCharTabId, charTabs, handleSaveCharacter]);
+  }, [activeCharTabId, charTabs, charTabUnsavedMeta, handleSaveCharacter]);
 
   const guardUnsavedCharacterNavigation = useCallback(
     async (onContinue, options = {}) => {
       const { allowSave = true, discardMessage } = options;
       const tab = charTabs.find((t) => t.tabId === activeCharTabId);
-      if (!isUnsavedCharacterDirty(tab)) {
+      const meta = charTabUnsavedMeta[activeCharTabId];
+      const dirty =
+        isUnsavedCharacterDirty(tab) || Boolean(meta?.isDirty);
+      if (!dirty) {
         onContinue?.();
         return true;
       }
@@ -1069,8 +1101,22 @@ export default function CharacterPage({
       onContinue?.();
       return true;
     },
-    [activeCharTabId, charTabs, saveActiveUnsavedCharacter],
+    [activeCharTabId, charTabs, charTabUnsavedMeta, saveActiveUnsavedCharacter],
   );
+
+  // Prompt / block in-app navigation (home, NPC route, etc.) when a PC tab has
+  // live sheet edits that are not reflected on the tab snapshot alone.
+  useEffect(() => {
+    if (!onRegisterNavigationGuard) return undefined;
+    const guard = async () => {
+      if (mode !== MODES.CHARACTER) return true;
+      return guardUnsavedCharacterNavigation(() => {});
+    };
+    onRegisterNavigationGuard(guard);
+    return () => {
+      onRegisterNavigationGuard(null);
+    };
+  }, [mode, onRegisterNavigationGuard, guardUnsavedCharacterNavigation]);
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -1289,24 +1335,6 @@ export default function CharacterPage({
                   ))}
                 </select>
               )}
-              <button
-                type="button"
-                onClick={handleDeleteActiveCharacter}
-                title="Delete the character open in the active tab (permanent)"
-                style={{
-                  background: "#450a0a",
-                  color: "#fecaca",
-                  border: "1px solid #991b1b",
-                  padding: "4px 10px",
-                  fontSize: "11px",
-                  fontFamily: "monospace",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Delete character
-              </button>
               <select
                 style={{
                   background: "#1f2937",
