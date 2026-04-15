@@ -1,7 +1,6 @@
 import "./styles/global.css";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import ReactDOM from "react-dom/client";
-import { Menu } from "lucide-react";
 import Home from "./pages/Home.jsx";
 import CharacterPage from "./pages/CharacterPage.jsx";
 import ResponsiveTest from "./pages/ResponsiveTest.jsx";
@@ -44,39 +43,56 @@ const PAGE_TITLES = {
 
 const barStyles = {
   bar: {
-    background: "#1f2937",
-    padding: "8px 16px",
+    background: "var(--hftf-black)",
+    padding: "10px 24px",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    borderBottom: "1px solid #4b5563",
+    borderBottom: "1px solid var(--hftf-border)",
     position: "sticky",
     top: 0,
-    zIndex: 20,
-    fontFamily: "'Roboto Mono', 'Consolas', monospace",
+    zIndex: 100,
+    fontFamily: "var(--font-mono)",
     fontSize: "13px",
   },
   hamburger: {
     display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: "36px",
-    height: "36px",
+    flexDirection: "column",
+    gap: "5px",
     border: "none",
-    borderRadius: "4px",
-    background: "#374151",
-    color: "#9ca3af",
+    background: "transparent",
     cursor: "pointer",
+    padding: "8px",
+    zIndex: 1001,
+  },
+  hamburgerLine: {
+    display: "block",
+    height: "2px",
+    transition: "all 0.3s ease",
+  },
+  hamburgerLine1: {
+    width: "22px",
+    background: "var(--hftf-gold)",
+  },
+  hamburgerLine2: {
+    width: "18px",
+    background: "#c0392b",
+  },
+  hamburgerLine3: {
+    width: "14px",
+    background: "var(--hftf-purple)",
   },
   back: {
-    padding: "6px 12px",
-    border: "1px solid #4b5563",
-    borderRadius: "4px",
+    padding: "5px 12px",
+    border: "1px solid var(--hftf-border)",
+    borderRadius: 0,
     background: "transparent",
-    color: "#9ca3af",
+    color: "var(--hftf-gold-muted)",
     cursor: "pointer",
-    fontFamily: "monospace",
-    fontSize: "12px",
+    fontFamily: "var(--font-heading)",
+    fontSize: "10px",
+    letterSpacing: "0.1em",
+    textTransform: "uppercase",
   },
   actionBtn: {
     display: "flex",
@@ -86,8 +102,8 @@ const barStyles = {
     height: "36px",
     border: "none",
     borderRadius: "4px",
-    background: "#374151",
-    color: "#9ca3af",
+    background: "var(--hftf-panel)",
+    color: "var(--hftf-text-cream)",
     cursor: "pointer",
   },
 };
@@ -102,7 +118,15 @@ function AppBar({ onHamburgerClick, onBack, onHome, pageTitle, rightContent }) {
           aria-label="Open menu"
           style={barStyles.hamburger}
         >
-          <Menu style={{ width: 20, height: 20 }} />
+          <span
+            style={{ ...barStyles.hamburgerLine, ...barStyles.hamburgerLine1 }}
+          />
+          <span
+            style={{ ...barStyles.hamburgerLine, ...barStyles.hamburgerLine2 }}
+          />
+          <span
+            style={{ ...barStyles.hamburgerLine, ...barStyles.hamburgerLine3 }}
+          />
         </button>
         {onBack && (
           <button type="button" onClick={onBack} style={barStyles.back}>
@@ -117,19 +141,28 @@ function AppBar({ onHamburgerClick, onBack, onHome, pageTitle, rightContent }) {
             border: "none",
             cursor: "pointer",
             padding: 0,
-            fontSize: "18px",
-            fontWeight: "bold",
-            color: "#fff",
-            fontFamily: "inherit",
+            fontSize: "26px",
+            fontWeight: 400,
+            color: "var(--hftf-text-cream)",
+            fontFamily: "var(--font-display)",
+            letterSpacing: "0.06em",
           }}
           aria-label="Go to home"
         >
-          1(800) BIZARRE
+          <span style={{ color: "var(--hftf-purple)" }}>1(800)</span>
+          <span style={{ color: "var(--hftf-text-cream)" }}>BIZARRE</span>
         </button>
         {pageTitle && (
           <>
-            <span style={{ color: "#6b7280" }}>—</span>
-            <span style={{ color: "#9ca3af", fontSize: "14px" }}>
+            <span style={{ color: "var(--hftf-gold-muted)" }}>—</span>
+            <span
+              style={{
+                color: "var(--hftf-gold-muted)",
+                fontSize: "11px",
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+              }}
+            >
               {pageTitle}
             </span>
           </>
@@ -237,6 +270,10 @@ const App = () => {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [menuCharacters, setMenuCharacters] = useState([]);
   const [rulesSection, setRulesSection] = useState(initialRoute.rulesSection);
+  const navigationGuardRef = useRef(null);
+  const setNavigationGuard = useCallback((guardFn) => {
+    navigationGuardRef.current = typeof guardFn === "function" ? guardFn : null;
+  }, []);
 
   const parseHash = useCallback(() => {
     const s = routeStateFromHash(window.location.hash.substring(1));
@@ -273,7 +310,11 @@ const App = () => {
     window.scrollTo(0, 0);
   }, [currentPage]);
 
-  const handlePageChange = (page, payload) => {
+  const handlePageChange = async (page, payload) => {
+    if (navigationGuardRef.current) {
+      const ok = await navigationGuardRef.current();
+      if (!ok) return;
+    }
     setCurrentPage(page);
     if (page === "character") {
       setCharacterPageId(payload?.characterId ?? null);
@@ -372,13 +413,7 @@ const App = () => {
           onLogout={logout}
         />
 
-        {currentPage !== "home" &&
-          currentPage !== "search" &&
-          currentPage !== "notifications" &&
-          currentPage !== "messages" &&
-          currentPage !== "account-settings" &&
-          currentPage !== "patch-notes" &&
-          currentPage !== "licenses" && (
+        {currentPage !== "home" && (
             <AppBar
               onHamburgerClick={toggleMenu}
               onBack={handleBack}
@@ -426,7 +461,10 @@ const App = () => {
           </>
         )}
         {currentPage === "character" && (
-          <CharacterPage initialCharacterId={characterPageId} />
+          <CharacterPage
+            initialCharacterId={characterPageId}
+            onRegisterNavigationGuard={setNavigationGuard}
+          />
         )}
         {currentPage === "character-options" && (
           <CharacterOptionsPage
@@ -440,6 +478,7 @@ const App = () => {
             initialCharacterId={null}
             initialNpcId={npcPageId}
             preferNpcMode
+            onRegisterNavigationGuard={setNavigationGuard}
           />
         )}
         {currentPage === "campaigns" && (

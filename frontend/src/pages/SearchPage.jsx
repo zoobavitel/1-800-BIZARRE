@@ -102,7 +102,6 @@ const TYPE_COLORS = {
 };
 
 export default function SearchPage({
-  onBack,
   onNavigateToCharacter,
   onNavigateToCampaign,
   onNavigateToAbilities,
@@ -183,38 +182,6 @@ export default function SearchPage({
 
   return (
     <div style={S.page}>
-      <div style={S.hdr}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            {onBack && (
-              <button
-                onClick={onBack}
-                style={{
-                  padding: "6px 12px",
-                  border: "1px solid #4b5563",
-                  borderRadius: "4px",
-                  background: "transparent",
-                  color: "#9ca3af",
-                  cursor: "pointer",
-                  fontFamily: "monospace",
-                  fontSize: "12px",
-                }}
-              >
-                ← Back
-              </button>
-            )}
-            <span style={{ fontSize: "18px", fontWeight: "bold" }}>
-              1(800)BIZARRE — SEARCH
-            </span>
-          </div>
-        </div>
-      </div>
       <div style={S.content}>
         <div style={S.searchWrapper}>
           <SearchIcon size={18} style={S.searchIcon} />

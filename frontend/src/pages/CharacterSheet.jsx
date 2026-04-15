@@ -181,6 +181,61 @@ const CLOCK_TYPE_OPTIONS = [
   { value: "COUNTDOWN", label: "Countdown" },
 ];
 
+function hasMeaningfulDraftChanges(payload) {
+  if (!payload || payload.id) return false;
+  const textFields = [
+    payload.name,
+    payload.standName,
+    payload.background,
+    payload.look,
+    payload.vice,
+    payload.viceDetails,
+    payload.crew,
+    payload.image_url,
+  ];
+  if (textFields.some((v) => String(v ?? "").trim() !== "")) return true;
+  if (payload.imageFile) return true;
+  if (payload.campaign != null && payload.campaign !== "") return true;
+  if ((payload.playbook || "Stand") !== "Stand") return true;
+  if ((payload.stressFilled || 0) > 0) return true;
+  if ((payload.regularArmorUsed || 0) > 0) return true;
+  if (Boolean(payload.specialArmorUsed)) return true;
+  if ((payload.healingClock || 0) > 0) return true;
+  if ((payload.coinFilled || 0) > 0) return true;
+  if (Object.values(payload.xp || {}).some((v) => (Number(v) || 0) > 0))
+    return true;
+  if (Object.values(payload.actionRatings || {}).some((v) => (Number(v) || 0) > 0))
+    return true;
+  if (
+    Object.entries(payload.standStats || {}).some(
+      ([, v]) => (Number(v) || 0) !== 1,
+    )
+  )
+    return true;
+  if (Object.values(payload.trauma || {}).some(Boolean)) return true;
+  const harm = payload.harm || {};
+  if (
+    Object.values(harm).some(
+      (arr) => Array.isArray(arr) && arr.some((x) => String(x || "").trim() !== ""),
+    )
+  )
+    return true;
+  if (Array.isArray(payload.stash) && payload.stash.some(Boolean)) return true;
+  if (Array.isArray(payload.abilities) && payload.abilities.length > 0) return true;
+  if (Array.isArray(payload.clocks) && payload.clocks.length > 0) return true;
+  if (
+    Array.isArray(payload.selected_benefits) &&
+    payload.selected_benefits.length > 0
+  )
+    return true;
+  if (
+    Array.isArray(payload.selected_detriments) &&
+    payload.selected_detriments.length > 0
+  )
+    return true;
+  return false;
+}
+
 const CharacterSheetWrapper = ({
   character,
   onClose,
@@ -196,6 +251,7 @@ const CharacterSheetWrapper = ({
   onRetryHeritages,
   isGM = false,
   onCampaignRefresh,
+  onDraftMetaChange,
   /** Incremented when CharacterPage finishes a remote sync (poll, SSE, visibility) so session rolls refetch. */
   sessionDataPollTick = 0,
 }) => {
@@ -229,7 +285,8 @@ const CharacterSheetWrapper = ({
 
   // Identity
   const [charData, setCharData] = useState({
-    name: character?.name || "",
+    // Unsaved drafts should start truly blank even if upstream placeholders exist.
+    name: character?.id ? (character?.name || "") : "",
     standName: character?.standName || "",
     heritage: resolveHeritageId(character?.heritage),
     background: character?.background || "",
@@ -368,7 +425,7 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     setCharData((prev) => {
       const patch = {};
-      const n = character?.name ?? "";
+      const n = character?.id ? (character?.name ?? "") : "";
       if (n && !(prev.name || "").trim()) patch.name = n;
       const sn = character?.standName ?? "";
       if (sn && !(prev.standName || "").trim()) patch.standName = sn;
@@ -1366,6 +1423,16 @@ const CharacterSheetWrapper = ({
     selectedDetriments,
   ]);
 
+  useEffect(() => {
+    if (!onDraftMetaChange) return;
+    const payload = buildPayload();
+    onDraftMetaChange({
+      payload,
+      isNewCharacter: !payload.id,
+      isDirty: hasMeaningfulDraftChanges(payload),
+    });
+  }, [onDraftMetaChange, buildPayload]);
+
   // Debounced auto-save
   useEffect(() => {
     if (!mountedRef.current) {
@@ -1393,6 +1460,9 @@ const CharacterSheetWrapper = ({
         character.user_id !== user?.id
       )
         return;
+      if (!payload.id && !hasMeaningfulDraftChanges(payload)) {
+        return;
+      }
       // Skip save if payload matches last saved (prevents loop from server response overwriting fields)
       const { lastModified, imageFile: _img, ...rest } = payload;
       const payloadKey = JSON.stringify(rest);
