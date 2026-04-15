@@ -44,15 +44,15 @@ const PAGE_TITLES = {
 
 const barStyles = {
   bar: {
-    background: "var(--surface-1)",
-    padding: "8px 16px",
+    background: "var(--hftf-black)",
+    padding: "10px 24px",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    borderBottom: "1px solid var(--surface-border)",
+    borderBottom: "1px solid var(--hftf-border)",
     position: "sticky",
     top: 0,
-    zIndex: 20,
+    zIndex: 100,
     fontFamily: "var(--font-mono)",
     fontSize: "13px",
   },
@@ -60,23 +60,25 @@ const barStyles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    width: "36px",
-    height: "36px",
+    width: "34px",
+    height: "34px",
     border: "none",
-    borderRadius: "4px",
-    background: "var(--surface-2)",
-    color: "var(--text-muted)",
+    borderRadius: "2px",
+    background: "transparent",
+    color: "var(--hftf-text-cream)",
     cursor: "pointer",
   },
   back: {
-    padding: "6px 12px",
-    border: "1px solid var(--surface-border)",
-    borderRadius: "4px",
+    padding: "5px 12px",
+    border: "1px solid var(--hftf-border)",
+    borderRadius: 0,
     background: "transparent",
-    color: "var(--text-muted)",
+    color: "var(--hftf-gold-muted)",
     cursor: "pointer",
-    fontFamily: "var(--font-mono)",
-    fontSize: "12px",
+    fontFamily: "var(--font-heading)",
+    fontSize: "10px",
+    letterSpacing: "0.1em",
+    textTransform: "uppercase",
   },
   actionBtn: {
     display: "flex",
@@ -86,8 +88,8 @@ const barStyles = {
     height: "36px",
     border: "none",
     borderRadius: "4px",
-    background: "var(--surface-2)",
-    color: "var(--text-muted)",
+    background: "var(--hftf-panel)",
+    color: "var(--hftf-text-cream)",
     cursor: "pointer",
   },
 };
@@ -117,19 +119,28 @@ function AppBar({ onHamburgerClick, onBack, onHome, pageTitle, rightContent }) {
             border: "none",
             cursor: "pointer",
             padding: 0,
-            fontSize: "18px",
-            fontWeight: "bold",
-            color: "var(--text-primary)",
-            fontFamily: "inherit",
+            fontSize: "26px",
+            fontWeight: 400,
+            color: "var(--hftf-text-cream)",
+            fontFamily: "var(--font-display)",
+            letterSpacing: "0.06em",
           }}
           aria-label="Go to home"
         >
-          1(800) BIZARRE
+          <span style={{ color: "var(--hftf-purple)" }}>1(800)</span>
+          <span style={{ color: "var(--hftf-text-cream)" }}>BIZARRE</span>
         </button>
         {pageTitle && (
           <>
-            <span style={{ color: "var(--text-dim)" }}>—</span>
-            <span style={{ color: "var(--text-muted)", fontSize: "14px" }}>
+            <span style={{ color: "var(--hftf-gold-muted)" }}>—</span>
+            <span
+              style={{
+                color: "var(--hftf-gold-muted)",
+                fontSize: "11px",
+                letterSpacing: "0.12em",
+                textTransform: "uppercase",
+              }}
+            >
               {pageTitle}
             </span>
           </>
@@ -372,13 +383,7 @@ const App = () => {
           onLogout={logout}
         />
 
-        {currentPage !== "home" &&
-          currentPage !== "search" &&
-          currentPage !== "notifications" &&
-          currentPage !== "messages" &&
-          currentPage !== "account-settings" &&
-          currentPage !== "patch-notes" &&
-          currentPage !== "licenses" && (
+        {currentPage !== "home" && (
             <AppBar
               onHamburgerClick={toggleMenu}
               onBack={handleBack}
