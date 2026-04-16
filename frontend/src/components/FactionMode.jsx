@@ -246,17 +246,40 @@ const CharacterSheetWrapper = ({
                 )}
               </div>
             )}
-            <select
-              id="faction-active-mode"
-              name="activeMode"
-              value={activeMode}
-              onChange={(e) => setActiveMode(e.target.value)}
-              className="bg-gray-600 text-white border border-gray-500 px-2 py-1 text-xs"
+            <div
+              className="flex items-center font-mono text-xs font-bold"
+              role="group"
+              aria-label="Sheet mode"
             >
-              <option>CHARACTER MODE</option>
-              <option>CREW MODE</option>
-              <option>FACTION MODE</option>
-            </select>
+              {[
+                { mode: "CHARACTER MODE", activeClass: "bg-teal-600 border-teal-700 text-white" },
+                { mode: "CREW MODE", activeClass: "bg-purple-600 border-purple-700 text-white" },
+                { mode: "FACTION MODE", activeClass: "bg-amber-700 border-amber-800 text-white" },
+              ].map(({ mode, activeClass }, i, arr) => {
+                const isActive = activeMode === mode;
+                const rounded =
+                  i === 0
+                    ? "rounded-l"
+                    : i === arr.length - 1
+                      ? "rounded-r"
+                      : "";
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    id={i === 0 ? "faction-active-mode-character" : undefined}
+                    onClick={() => setActiveMode(mode)}
+                    className={`border px-3 py-1 tracking-wide -ml-px first:ml-0 ${rounded} ${
+                      isActive
+                        ? activeClass
+                        : "border-gray-600 bg-gray-900 text-gray-400 hover:text-gray-200"
+                    }`}
+                  >
+                    {mode.replace(" MODE", "")}
+                  </button>
+                );
+              })}
+            </div>
             <button
               onClick={handleSave}
               className="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-xs font-bold"

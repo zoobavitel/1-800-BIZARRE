@@ -228,7 +228,7 @@ As you can see, many skills overlap with others. This is by design. As a player,
 
 This represents how **naturally powerful or versatile** the race is compared to a standard human.
 
-Some detriments are **mandatory** and provide **free HP** to balance strong racial benefits **(this is your base HP).**
+Some detriments are **mandatory**. Required detriments (and required benefits) are obligatory picks that define the heritage; **they do not grant HP and are not folded into Base HP for budgeting.**
 
 **Optional Detriments Let Players Customize for More HP.**
 
@@ -512,7 +512,7 @@ Stats are graded S(special)/A(4)/B(3)/C(2)/D(1)/F(0)
 **Player Stats:**
 
 **\- Power: Determines physical destructive power**   
-S: World Ending threat   
+S: World-ending threat   
 A: Can demolish large buildings and city blocks with ease  
 B: Can destroy reinforced structures and thick concrete barriers   
 C: Can shatter stone and heavy structural materials   
