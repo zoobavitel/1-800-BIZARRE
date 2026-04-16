@@ -22,7 +22,8 @@ const mapApiFactionToUi = (f) => ({
   notes: f.notes || "",
 });
 
-const CharacterSheetWrapper = ({
+/** GM campaign factions UI — not the player character sheet (PCs use crew, not factions). */
+const GmFactionsTool = ({
   character,
   onClose,
   onSave,
@@ -30,7 +31,6 @@ const CharacterSheetWrapper = ({
   onSwitchCharacter,
   allCharacters = [],
 }) => {
-  const [activeMode, setActiveMode] = useState("FACTION MODE");
   const [navOpen, setNavOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState({
     gameRules: false,
@@ -165,16 +165,13 @@ const CharacterSheetWrapper = ({
   }, [selectedCampaignId, campaigns]);
 
   const handleSave = () => {
-    if (activeMode === "FACTION MODE") {
-      // Save faction data
-      const updatedFactionData = {
-        ...factionData,
-        lastModified: new Date().toISOString(),
-      };
+    const updatedFactionData = {
+      ...factionData,
+      lastModified: new Date().toISOString(),
+    };
 
-      console.log("Saving faction data:", updatedFactionData);
-      alert("Faction data saved! (Check console for details)");
-    }
+    console.log("Saving faction data:", updatedFactionData);
+    alert("Faction data saved! (Check console for details)");
   };
 
   return (
@@ -183,7 +180,7 @@ const CharacterSheetWrapper = ({
         {/* Header */}
         <header className="bg-gray-800 px-4 py-2 flex items-center justify-between border-b border-gray-600 sticky top-0 z-10">
           <div className="text-xl font-bold text-white cursor-pointer">
-            1(800)BIZARRE - {activeMode}
+            1(800)BIZARRE — GM FACTIONS
           </div>
           <div className="flex items-center space-x-4">
             {isAuthenticated && (
@@ -246,40 +243,6 @@ const CharacterSheetWrapper = ({
                 )}
               </div>
             )}
-            <div
-              className="flex items-center font-mono text-xs font-bold"
-              role="group"
-              aria-label="Sheet mode"
-            >
-              {[
-                { mode: "CHARACTER MODE", activeClass: "bg-teal-600 border-teal-700 text-white" },
-                { mode: "CREW MODE", activeClass: "bg-purple-600 border-purple-700 text-white" },
-                { mode: "FACTION MODE", activeClass: "bg-amber-700 border-amber-800 text-white" },
-              ].map(({ mode, activeClass }, i, arr) => {
-                const isActive = activeMode === mode;
-                const rounded =
-                  i === 0
-                    ? "rounded-l"
-                    : i === arr.length - 1
-                      ? "rounded-r"
-                      : "";
-                return (
-                  <button
-                    key={mode}
-                    type="button"
-                    id={i === 0 ? "faction-active-mode-character" : undefined}
-                    onClick={() => setActiveMode(mode)}
-                    className={`border px-3 py-1 tracking-wide -ml-px first:ml-0 ${rounded} ${
-                      isActive
-                        ? activeClass
-                        : "border-gray-600 bg-gray-900 text-gray-400 hover:text-gray-200"
-                    }`}
-                  >
-                    {mode.replace(" MODE", "")}
-                  </button>
-                );
-              })}
-            </div>
             <button
               onClick={handleSave}
               className="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-xs font-bold"
@@ -296,32 +259,16 @@ const CharacterSheetWrapper = ({
         </header>
 
         <div className="p-4">
-          {/* Debug indicator */}
-          <div className="mb-2 text-xs text-gray-400">
-            Active Mode: {activeMode} | Try switching modes and interacting with
-            factions!
+          <div className="mb-3 text-xs text-gray-500 max-w-3xl">
+            Player characters belong to a{" "}
+            <span className="text-gray-300 font-semibold">crew</span>, not to
+            factions. This screen is for GM-facing{" "}
+            <span className="text-gray-300 font-semibold">campaign factions</span>{" "}
+            (clocks, status, wars). Use the character sheet for PCs and crew mode
+            for the crew sheet.
           </div>
 
-          {activeMode === "CHARACTER MODE" && (
-            <div className="text-center py-20">
-              <h2 className="text-2xl text-white mb-4">Character Mode</h2>
-              <p className="text-gray-400">
-                Switch to FACTION MODE to see the faction management system!
-              </p>
-            </div>
-          )}
-
-          {activeMode === "CREW MODE" && (
-            <div className="text-center py-20">
-              <h2 className="text-2xl text-white mb-4">Crew Mode</h2>
-              <p className="text-gray-400">
-                Switch to FACTION MODE to see the faction management system!
-              </p>
-            </div>
-          )}
-
-          {activeMode === "FACTION MODE" && (
-            <div className="faction-sheet">
+          <div className="faction-sheet">
               {/* Header */}
               <div className="mb-4">
                 <div className="flex items-center justify-between flex-wrap gap-2">
@@ -1273,7 +1220,6 @@ const CharacterSheetWrapper = ({
                 </div>
               </div>
             </div>
-          )}
         </div>
       </div>
     </div>
@@ -1284,7 +1230,7 @@ const CharacterSheetWrapper = ({
 const FactionModeDemo = () => {
   return (
     <div className="w-full h-screen">
-      <CharacterSheetWrapper />
+      <GmFactionsTool />
     </div>
   );
 };
