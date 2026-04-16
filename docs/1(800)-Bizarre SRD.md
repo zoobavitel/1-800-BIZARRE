@@ -224,7 +224,7 @@ As you can see, many skills overlap with others. This is by design. As a player,
 
 **HERITAGE**
 
-**Every Heritage Starts with a Base HP Value**
+**Every Heritage Starts with a Base Heritage Point Value.**
 
 This represents how **naturally powerful or versatile** the race is compared to a standard human.
 
