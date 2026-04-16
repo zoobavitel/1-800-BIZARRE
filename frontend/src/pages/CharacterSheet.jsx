@@ -1692,14 +1692,6 @@ const CharacterSheetWrapper = ({
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <select
-            value={activeMode}
-            onChange={(e) => setActiveMode(e.target.value)}
-            style={S.sel}
-          >
-            <option>CHARACTER MODE</option>
-            <option>CREW MODE</option>
-          </select>
           {saveStatus === "saving" && (
             <span style={{ fontSize: "11px", color: "#fbbf24" }}>
               Saving...
@@ -1734,6 +1726,61 @@ const CharacterSheetWrapper = ({
             </button>
           )}
         </div>
+      </div>
+
+      {/* ── Mode toggle (player sheet: CHARACTER vs CREW) ── */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          gap: 0,
+          background: "#0d0d1a",
+          borderBottom: "1px solid #2d1f52",
+          padding: "6px 0",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setActiveMode("CHARACTER MODE")}
+          style={{
+            padding: "6px 24px",
+            fontSize: "12px",
+            fontFamily: "monospace",
+            fontWeight: "bold",
+            border: "1px solid",
+            borderColor:
+              activeMode === "CHARACTER MODE" ? "#0f7662" : "#4b2d8f",
+            cursor: "pointer",
+            letterSpacing: "0.08em",
+            background:
+              activeMode === "CHARACTER MODE" ? "#0d9488" : "#1a0533",
+            color: activeMode === "CHARACTER MODE" ? "#fff" : "#9ca3af",
+            borderRadius: "4px 0 0 4px",
+          }}
+        >
+          CHARACTER MODE
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveMode("CREW MODE")}
+          style={{
+            padding: "6px 24px",
+            fontSize: "12px",
+            fontFamily: "monospace",
+            fontWeight: "bold",
+            border: "1px solid",
+            borderColor:
+              activeMode === "CREW MODE" ? "#5b21b6" : "#4b2d8f",
+            cursor: "pointer",
+            letterSpacing: "0.08em",
+            background:
+              activeMode === "CREW MODE" ? "#7c3aed" : "#1a0533",
+            color: activeMode === "CREW MODE" ? "#fff" : "#9ca3af",
+            borderRadius: "0 4px 4px 0",
+          }}
+        >
+          CREW MODE
+        </button>
       </div>
 
       <div style={{ padding: "16px", maxWidth: "1400px", margin: "0 auto" }}>
