@@ -157,7 +157,6 @@ const ProgressClock = ({
 
 // ─── CharacterSheetWrapper ────────────────────────────────────────────────────
 
-const CLOCK_SEGMENT_OPTIONS = Array.from({ length: 12 }, (_, i) => i + 1);
 const CATEGORY_LABELS = {
   aggression: "Aggression",
   endurance: "Endurance",
@@ -168,18 +167,6 @@ const CATEGORY_LABELS = {
   adaptability: "Adaptability",
   stand_nature: "Stand Nature",
 };
-const CLOCK_TYPE_OPTIONS = [
-  { value: "CUSTOM", label: "Custom" },
-  { value: "DANGER", label: "Danger" },
-  { value: "MISSION", label: "Mission" },
-  { value: "RACING", label: "Racing" },
-  { value: "LINKED", label: "Linked" },
-  { value: "TUG_OF_WAR", label: "Tug-of-War" },
-  { value: "PROJECT", label: "Long-term Project" },
-  { value: "HEALING", label: "Healing" },
-  { value: "NPC_OPPONENT", label: "NPC Opponent" },
-  { value: "COUNTDOWN", label: "Countdown" },
-];
 
 function hasMeaningfulDraftChanges(payload) {
   if (!payload || payload.id) return false;
@@ -272,13 +259,6 @@ const CharacterSheetWrapper = ({
       ? charCampaign?.active_session?.id
       : null);
   const characterId = character?.id;
-  const [showCreateClock, setShowCreateClock] = useState(false);
-  const [createClockName, setCreateClockName] = useState("");
-  const [createClockSegments, setCreateClockSegments] = useState(4);
-  const [createClockType, setCreateClockType] = useState("CUSTOM");
-  const [createClockVisibleToParty, setCreateClockVisibleToParty] =
-    useState(false);
-  const [creatingClock, setCreatingClock] = useState(false);
 
   // Resolve heritage: backend sends ID; new tabs may have null until heritages load
   const resolveHeritageId = (h) => {
@@ -1797,7 +1777,8 @@ const CharacterSheetWrapper = ({
                   fontSize: "12px",
                 }}
               >
-                Read-only: only the character owner or campaign GM can edit this sheet.
+                Read-only: only the character owner or the referee can edit this
+                sheet.
               </div>
             )}
             <div
@@ -3465,7 +3446,8 @@ const CharacterSheetWrapper = ({
                         marginTop: "2px",
                       }}
                     >
-                      Player max: A(4) — S-rank is GM-assigned only
+                      Player max: A(4) — S-rank is assigned by the table, not at
+                      creation
                     </div>
                     <div
                       style={{
@@ -3502,7 +3484,7 @@ const CharacterSheetWrapper = ({
                     </div>
                   </div>
 
-                  {/* GM to Players — consolidated section for GM-revealed info */}
+                  {/* Session info the table shares with this sheet (wanted, clocks, position/effect when enabled). */}
                   {charCampaign && activeSessionId && (
                     <div
                       style={{
@@ -3513,7 +3495,7 @@ const CharacterSheetWrapper = ({
                         borderLeftColor: "#7c3aed",
                       }}
                     >
-                      <span style={S.lbl}>GM TO PLAYERS</span>
+                      <span style={S.lbl}>SESSION</span>
                       <div
                         style={{
                           display: "flex",
@@ -4039,175 +4021,6 @@ const CharacterSheetWrapper = ({
                             None
                           </span>
                         )}
-                        {!isGM && charCampaign?.id && activeSessionId && (
-                          <div style={{ marginTop: "8px" }}>
-                            {!showCreateClock ? (
-                              <button
-                                onClick={() => setShowCreateClock(true)}
-                                style={{
-                                  fontSize: "11px",
-                                  padding: "4px 8px",
-                                  background: "#374151",
-                                  border: "1px solid #4b5563",
-                                  borderRadius: "4px",
-                                  color: "#e5e7eb",
-                                  cursor: "pointer",
-                                }}
-                              >
-                                + Create clock
-                              </button>
-                            ) : (
-                              <div
-                                style={{
-                                  background: "#0d1117",
-                                  padding: "10px",
-                                  borderRadius: "4px",
-                                  border: "1px solid #374151",
-                                  marginTop: "4px",
-                                }}
-                              >
-                                <input
-                                  value={createClockName}
-                                  onChange={(e) =>
-                                    setCreateClockName(e.target.value)
-                                  }
-                                  placeholder="Clock name"
-                                  style={{
-                                    ...S.inp,
-                                    marginBottom: "6px",
-                                    fontSize: "12px",
-                                    width: "100%",
-                                  }}
-                                />
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    gap: "8px",
-                                    marginBottom: "6px",
-                                    flexWrap: "wrap",
-                                  }}
-                                >
-                                  <select
-                                    value={createClockSegments}
-                                    onChange={(e) =>
-                                      setCreateClockSegments(
-                                        Math.min(
-                                          12,
-                                          Math.max(
-                                            1,
-                                            parseInt(e.target.value, 10) || 4,
-                                          ),
-                                        ),
-                                      )
-                                    }
-                                    style={{ ...S.inp, fontSize: "11px" }}
-                                  >
-                                    {CLOCK_SEGMENT_OPTIONS.map((n) => (
-                                      <option key={n} value={n}>
-                                        {n} segments
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <select
-                                    value={createClockType}
-                                    onChange={(e) =>
-                                      setCreateClockType(e.target.value)
-                                    }
-                                    style={{ ...S.inp, fontSize: "11px" }}
-                                  >
-                                    {CLOCK_TYPE_OPTIONS.map((o) => (
-                                      <option key={o.value} value={o.value}>
-                                        {o.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <label
-                                  style={{
-                                    fontSize: "11px",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "6px",
-                                    marginBottom: "8px",
-                                  }}
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={createClockVisibleToParty}
-                                    onChange={(e) =>
-                                      setCreateClockVisibleToParty(
-                                        e.target.checked,
-                                      )
-                                    }
-                                  />
-                                  Visible to party
-                                </label>
-                                <div style={{ display: "flex", gap: "8px" }}>
-                                  <button
-                                    onClick={async () => {
-                                      setCreatingClock(true);
-                                      try {
-                                        await progressClockAPI.createProgressClock(
-                                          {
-                                            campaign: charCampaign.id,
-                                            session: activeSessionId,
-                                            character: characterId,
-                                            name:
-                                              createClockName.trim() ||
-                                              "New Clock",
-                                            clock_type: createClockType,
-                                            max_segments: createClockSegments,
-                                            visible_to_party:
-                                              createClockVisibleToParty,
-                                          },
-                                        );
-                                        setCreateClockName("");
-                                        setCreateClockSegments(4);
-                                        setCreateClockType("CUSTOM");
-                                        setCreateClockVisibleToParty(false);
-                                        setShowCreateClock(false);
-                                        onCampaignRefresh?.();
-                                      } finally {
-                                        setCreatingClock(false);
-                                      }
-                                    }}
-                                    disabled={creatingClock}
-                                    style={{
-                                      fontSize: "11px",
-                                      padding: "4px 10px",
-                                      background: "#4b5563",
-                                      border: "none",
-                                      borderRadius: "4px",
-                                      color: "#fff",
-                                      cursor: creatingClock
-                                        ? "not-allowed"
-                                        : "pointer",
-                                    }}
-                                  >
-                                    {creatingClock ? "Creating..." : "Create"}
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setShowCreateClock(false);
-                                      setCreateClockName("");
-                                    }}
-                                    style={{
-                                      fontSize: "11px",
-                                      padding: "4px 10px",
-                                      background: "transparent",
-                                      border: "1px solid #4b5563",
-                                      borderRadius: "4px",
-                                      color: "#9ca3af",
-                                      cursor: "pointer",
-                                    }}
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        )}
                       </div>
                     </div>
                   )}
@@ -4597,8 +4410,8 @@ const CharacterSheetWrapper = ({
                             marginBottom: "12px",
                           }}
                         >
-                          Position and effect are hidden — ask your GM before
-                          rolling.
+                          Position and effect are hidden for this session — check
+                          with the table before rolling.
                         </div>
                       )}
                       <div style={{ marginBottom: "12px" }}>
@@ -4926,7 +4739,7 @@ const CharacterSheetWrapper = ({
                                 if (!on) setPendingDevilsBargain(null);
                               }}
                             />
-                            Devil&apos;s bargain (+1d, GM-determined
+                            Devil&apos;s bargain (+1d, table-determined
                             consequence)
                           </label>
                           {rollModal.devil_bargain_dice &&
@@ -4947,7 +4760,7 @@ const CharacterSheetWrapper = ({
                                   marginBottom: "4px",
                                 }}
                               >
-                                GM consequence (you must confirm)
+                                Table consequence (you must confirm)
                               </div>
                               <div
                                 style={{
@@ -5011,8 +4824,8 @@ const CharacterSheetWrapper = ({
                                 <span
                                   style={{ fontSize: "11px", color: "#f87171" }}
                                 >
-                                  Describe the consequence, or ask your GM to
-                                  set one in the session.
+                                  Describe the consequence, or ask the referee to
+                                  set one for the session.
                                 </span>
                               )}
                             </div>
@@ -5275,7 +5088,7 @@ const CharacterSheetWrapper = ({
                                 }}
                               >
                                 Consequence reduced by 1 level (or fully negated
-                                at GM discretion).
+                                at the table&apos;s discretion).
                               </div>
                               <button
                                 onClick={() => {
@@ -5452,7 +5265,7 @@ const CharacterSheetWrapper = ({
                                   color: "#fff",
                                 }}
                               >
-                                Resolve (GM)
+                                Resolve
                               </button>
                             )}
                           </div>
@@ -7017,7 +6830,7 @@ const CharacterSheetWrapper = ({
                     </button>
                   </div>
 
-                  {/* GM Clocks — visible on player sheets when GM has shared clocks */}
+                  {/* Shared campaign clocks the table exposes to players (read-only here unless you are the referee). */}
                   {charCampaign?.progress_clocks?.length > 0 &&
                     (() => {
                       const gmClocks = (
@@ -7029,7 +6842,7 @@ const CharacterSheetWrapper = ({
                       if (gmClocks.length === 0) return null;
                       return (
                         <div style={{ marginBottom: "14px" }}>
-                          <span style={S.lbl}>GM CLOCKS</span>
+                          <span style={S.lbl}>SHARED CLOCKS</span>
                           <div
                             style={{
                               display: "flex",
