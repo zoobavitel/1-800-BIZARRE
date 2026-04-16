@@ -1547,7 +1547,7 @@ const CharacterSheetWrapper = ({
       justifyContent: "space-between",
       flexWrap: "wrap",
       gap: "8px",
-      borderBottom: "1px solid #4b5563",
+      borderBottom: "2px solid #6b7280",
       position: "sticky",
       top: 0,
       zIndex: 10,
@@ -1667,14 +1667,29 @@ const CharacterSheetWrapper = ({
         ? "#eab308"
         : "#6b7280";
 
+  const playerHeaderSubtitle =
+    activeMode === "CHARACTER MODE"
+      ? "PLAYER — CHARACTER SHEET"
+      : "PLAYER — CREW SHEET";
+
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div style={S.page}>
       {/* ── Header ── */}
       <div style={S.hdr}>
-        <div style={{ fontSize: "18px", fontWeight: "bold" }}>
-          1(800)BIZARRE — {activeMode}
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <span
+            style={{ fontSize: "18px", fontWeight: "bold", color: "#e5e7eb" }}
+          >
+            1(800)BIZARRE
+          </span>
+          <span style={{ color: "#9ca3af", fontSize: "14px" }}>◆</span>
+          <span
+            style={{ fontSize: "14px", color: "#9ca3af", fontWeight: "bold" }}
+          >
+            {playerHeaderSubtitle}
+          </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <select
