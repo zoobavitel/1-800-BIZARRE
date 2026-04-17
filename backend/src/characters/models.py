@@ -116,6 +116,12 @@ class Faction(models.Model):
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     avatar = models.ImageField(upload_to="avatars/", null=True, blank=True)
+    avatar_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="External image URL for profile picture (no file upload).",
+    )
     signature = models.TextField(blank=True, default="")
     display_title = models.CharField(max_length=100, blank=True, default="")
     show_avatars = models.BooleanField(default=True)

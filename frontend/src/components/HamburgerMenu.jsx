@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { Menu, X } from "lucide-react";
 import { useAuth } from "../features/auth";
-import { useTheme } from "../features/theme/ThemeContext";
 import "./HamburgerMenu.css";
 
 const RULES_MECHANICS = [
@@ -40,7 +39,6 @@ export default function HamburgerMenu({
   onLogout,
 }) {
   const { user } = useAuth();
-  const { theme, setTheme } = useTheme();
   const [expanded, setExpanded] = useState({
     play: true,
     rules: false,
@@ -75,8 +73,6 @@ export default function HamburgerMenu({
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const isDark = theme === "dark";
-
   const drawer = (
     <div className="hm-poc">
       <div
@@ -105,20 +101,6 @@ export default function HamburgerMenu({
           >
             ×
           </button>
-        </div>
-
-        <div className="nav-toggle-row">
-          <button
-            type="button"
-            className={`toggle-track${isDark ? "" : " off"}`}
-            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            onClick={() => setTheme(isDark ? "light" : "dark")}
-          >
-            <span className="toggle-knob" />
-          </button>
-          <span className="toggle-label">
-            {isDark ? "Dark Mode" : "Light Mode"}
-          </span>
         </div>
 
         <div className="nav-section">

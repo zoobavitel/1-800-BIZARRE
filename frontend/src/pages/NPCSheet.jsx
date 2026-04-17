@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { referenceAPI, factionAPI } from "../features/character-sheet";
+import NpcsStandCoin from "../components/NpcsStandCoin";
 
 // ─── SRD Data Tables ──────────────────────────────────────────────────────────
 
@@ -293,60 +294,6 @@ const ArmorTracker = ({ label, max, used, onChange, color }) => {
     </div>
   );
 };
-
-// ─── GradeSelector ────────────────────────────────────────────────────────────
-
-const GradeSelector = ({ value, onChange, label, infoLine }) => (
-  <div
-    style={{
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      marginBottom: "8px",
-    }}
-  >
-    <div style={{ minWidth: "90px" }}>
-      <div
-        style={{
-          fontSize: "11px",
-          color: "#d1d5db",
-          fontWeight: "bold",
-          textTransform: "uppercase",
-        }}
-      >
-        {label}
-      </div>
-      {infoLine && (
-        <div style={{ fontSize: "10px", color: "#6b7280", marginTop: "1px" }}>
-          {infoLine}
-        </div>
-      )}
-    </div>
-    <div style={{ display: "flex", gap: "3px" }}>
-      {GRADES.map((g) => (
-        <button
-          key={g}
-          onClick={() => onChange(g)}
-          style={{
-            width: "28px",
-            height: "28px",
-            border: "1px solid",
-            borderColor: value === g ? "#a78bfa" : "#374151",
-            background: value === g ? "#4c1d95" : "#1f2937",
-            color: value === g ? "#e9d5ff" : "#6b7280",
-            fontWeight: value === g ? "bold" : "normal",
-            fontSize: "11px",
-            cursor: "pointer",
-            fontFamily: "monospace",
-            borderRadius: "3px",
-          }}
-        >
-          {g}
-        </button>
-      ))}
-    </div>
-  </div>
-);
 
 // ─── NPCSheet ─────────────────────────────────────────────────────────────────
 
@@ -704,6 +651,37 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
   const rangeInfo = RANGE_TABLE[stats.range];
   const precInfo = PRECISION_TABLE[stats.precision];
   const devInfo = DEV_TABLE[stats.development];
+
+  const standCoinReadouts = useMemo(
+    () => ({
+      power: `Lv${POWER_TABLE[stats.power].harm} harm · ${POWER_TABLE[stats.power].pos}`,
+      speed: `${SPEED_TABLE[stats.speed].base} base · ${SPEED_TABLE[stats.speed].greater} greater${SPEED_TABLE[stats.speed].note ? ` · ${SPEED_TABLE[stats.speed].note}` : ""}`,
+      range: `${RANGE_TABLE[stats.range].base} · ${RANGE_TABLE[stats.range].greater} greater · ${RANGE_TABLE[stats.range].lesser} lesser`,
+      durability:
+        isDurS
+          ? "⚠ S-DUR: No vulnerability clock — alternative win conditions required"
+          : `${vulnSegs}-seg clock · ${regArmorMax} regular · ${specArmorMax} special`,
+      precision: `Partial → ${PRECISION_TABLE[stats.precision].partial}`,
+      development: DEV_TABLE[stats.development].split("—")[0].trim(),
+    }),
+    [stats, isDurS, vulnSegs, regArmorMax, specArmorMax],
+  );
+
+  const bumpStandCoinGrade = useCallback((key, delta) => {
+    setStats((p) => {
+      const idx = GRADES.indexOf(p[key]);
+      const ni = Math.max(0, Math.min(GRADES.length - 1, idx + delta));
+      const next = GRADES[ni];
+      if (next === p[key]) return p;
+      if (key === "durability") {
+        queueMicrotask(() => {
+          setRegularUsed(0);
+          setSpecialUsed(0);
+        });
+      }
+      return { ...p, [key]: next };
+    });
+  }, []);
 
   // ── Clock helpers ─────────────────────────────────────────────────────────────
 
@@ -1378,56 +1356,10 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
                     </span>
                   </div>
 
-                  <GradeSelector
-                    value={stats.power}
-                    onChange={(v) => setStats((p) => ({ ...p, power: v }))}
-                    label="Power"
-                    infoLine={`Lv${POWER_TABLE[stats.power].harm} harm · ${POWER_TABLE[stats.power].pos}`}
-                  />
-
-                  <GradeSelector
-                    value={stats.speed}
-                    onChange={(v) => setStats((p) => ({ ...p, speed: v }))}
-                    label="Speed"
-                    infoLine={`${SPEED_TABLE[stats.speed].base} base · ${SPEED_TABLE[stats.speed].greater} greater${SPEED_TABLE[stats.speed].note ? ` · ${SPEED_TABLE[stats.speed].note}` : ""}`}
-                  />
-
-                  <GradeSelector
-                    value={stats.range}
-                    onChange={(v) => setStats((p) => ({ ...p, range: v }))}
-                    label="Range"
-                    infoLine={`${RANGE_TABLE[stats.range].base} · ${RANGE_TABLE[stats.range].greater} greater · ${RANGE_TABLE[stats.range].lesser} lesser`}
-                  />
-
-                  <GradeSelector
-                    value={stats.durability}
-                    onChange={(v) => {
-                      setStats((p) => ({ ...p, durability: v }));
-                      setRegularUsed(0);
-                      setSpecialUsed(0);
-                    }}
-                    label="Durability"
-                    infoLine={
-                      isDurS
-                        ? "⚠ S-DUR: No vulnerability clock — alternative win conditions required"
-                        : `${vulnSegs}-seg clock · ${regArmorMax} regular · ${specArmorMax} special`
-                    }
-                  />
-
-                  <GradeSelector
-                    value={stats.precision}
-                    onChange={(v) => setStats((p) => ({ ...p, precision: v }))}
-                    label="Precision"
-                    infoLine={`Partial → ${PRECISION_TABLE[stats.precision].partial}`}
-                  />
-
-                  <GradeSelector
-                    value={stats.development}
-                    onChange={(v) =>
-                      setStats((p) => ({ ...p, development: v }))
-                    }
-                    label="Development"
-                    infoLine={DEV_TABLE[stats.development].split("—")[0].trim()}
+                  <NpcsStandCoin
+                    grades={stats}
+                    readouts={standCoinReadouts}
+                    onStep={bumpStandCoinGrade}
                   />
                 </div>
 

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { authAPI } from "../features/auth/services/authService";
-import { useTheme } from "../features/theme/ThemeContext";
+import { authAPI, useAuth } from "../features/auth";
 
 // Dark mode format (same as Character Sheet, Character Options)
 const S = {
@@ -10,14 +9,6 @@ const S = {
     background: "#000",
     color: "#fff",
     minHeight: "100vh",
-  },
-  hdr: {
-    background: "#1f2937",
-    padding: "8px 16px",
-    borderBottom: "1px solid #4b5563",
-    position: "sticky",
-    top: 0,
-    zIndex: 10,
   },
   content: { padding: "16px", maxWidth: "800px", margin: "0 auto" },
   section: { marginBottom: "32px" },
@@ -89,20 +80,12 @@ const S = {
     background: "#7c3aed",
     color: "#fff",
   },
-  tab: (active) => ({
-    padding: "6px 14px",
-    borderRadius: "4px",
-    fontSize: "12px",
-    cursor: "pointer",
-    border: `1px solid ${active ? "#4b5563" : "#374151"}`,
-    background: active ? "#374151" : "transparent",
-    color: active ? "#fff" : "#9ca3af",
-    fontFamily: "monospace",
-  }),
 };
 
-export default function AccountSettingsPage({ onBack }) {
-  const { theme, setTheme } = useTheme();
+export default function AccountSettingsPage() {
+  const { user } = useAuth();
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [avatarPreviewError, setAvatarPreviewError] = useState(false);
   const [signature, setSignature] = useState("");
   const [showAvatars, setShowAvatars] = useState(true);
   const [showSignatures, setShowSignatures] = useState(true);
@@ -111,31 +94,35 @@ export default function AccountSettingsPage({ onBack }) {
   const [saveMessage, setSaveMessage] = useState(null);
 
   useEffect(() => {
+    setAvatarPreviewError(false);
+  }, [avatarUrl]);
+
+  useEffect(() => {
     authAPI
       .getProfile()
       .then((p) => {
         if (p) {
+          setAvatarUrl(p.avatar_url ?? "");
           setSignature(p.signature ?? "");
           setDisplayTitle(p.display_title ?? "");
           setShowAvatars(p.show_avatars !== false);
           setShowSignatures(p.show_signatures !== false);
-          if (p.theme && (p.theme === "dark" || p.theme === "light"))
-            setTheme(p.theme);
         }
       })
       .catch(() => {});
-  }, [setTheme]);
+  }, []);
 
   const handleSave = async () => {
     setSaving(true);
     setSaveMessage(null);
     try {
       await authAPI.updateProfile({
+        avatar_url: avatarUrl.trim(),
         signature,
         display_title: displayTitle,
         show_avatars: showAvatars,
         show_signatures: showSignatures,
-        theme,
+        theme: "dark",
       });
       setSaveMessage("Saved");
     } catch (err) {
@@ -147,33 +134,80 @@ export default function AccountSettingsPage({ onBack }) {
 
   return (
     <div style={S.page}>
-      <div style={S.hdr}>
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          {onBack && (
-            <button
-              onClick={onBack}
-              style={{
-                padding: "6px 12px",
-                border: "1px solid #4b5563",
-                borderRadius: "4px",
-                background: "transparent",
-                color: "#9ca3af",
-                cursor: "pointer",
-                fontFamily: "monospace",
-                fontSize: "12px",
-              }}
-            >
-              ← Back
-            </button>
-          )}
-          <span style={{ fontSize: "18px", fontWeight: "bold" }}>
-            1(800)BIZARRE — ACCOUNT SETTINGS
-          </span>
-        </div>
-      </div>
       <div style={S.content}>
         <section style={S.section}>
           <h2 style={S.sectionTitle}>Profile</h2>
+          <div style={S.card}>
+            <label style={S.lbl}>Username</label>
+            <div style={{ color: "#e5e7eb", fontSize: "14px", wordBreak: "break-all" }}>
+              {(user?.username && String(user.username).trim()) || "—"}
+            </div>
+          </div>
+          <div style={S.card}>
+            <label style={S.lbl}>Profile picture URL</label>
+            <p style={{ margin: "0 0 8px", color: "#9ca3af", fontSize: "11px" }}>
+              Paste a direct link to an image (https://…). File upload is not
+              supported here.
+            </p>
+            <input
+              style={S.inp}
+              type="url"
+              inputMode="url"
+              autoComplete="off"
+              value={avatarUrl}
+              onChange={(e) => setAvatarUrl(e.target.value)}
+              placeholder="https://example.com/avatar.png"
+            />
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "14px",
+                marginTop: "12px",
+              }}
+            >
+              <div
+                style={{
+                  width: "72px",
+                  height: "72px",
+                  flexShrink: 0,
+                  borderRadius: "4px",
+                  border: "1px solid #374151",
+                  background: "#0f172a",
+                  overflow: "hidden",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#6b7280",
+                  fontSize: "10px",
+                  textAlign: "center",
+                  padding: "4px",
+                }}
+              >
+                {avatarUrl.trim() && !avatarPreviewError ? (
+                  <img
+                    src={avatarUrl.trim()}
+                    alt=""
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                    }}
+                    referrerPolicy="no-referrer"
+                    onError={() => setAvatarPreviewError(true)}
+                    onLoad={() => setAvatarPreviewError(false)}
+                  />
+                ) : avatarUrl.trim() && avatarPreviewError ? (
+                  "Invalid URL or image blocked"
+                ) : (
+                  "Preview"
+                )}
+              </div>
+              <span style={{ color: "#9ca3af", fontSize: "11px" }}>
+                Preview updates as you type a valid image URL.
+              </span>
+            </div>
+          </div>
           <div style={S.card}>
             <label style={S.lbl}>Signature</label>
             <textarea
@@ -259,20 +293,45 @@ export default function AccountSettingsPage({ onBack }) {
         <section style={S.section}>
           <h2 style={S.sectionTitle}>Theme / Appearance</h2>
           <div style={S.card}>
-            <label style={S.lbl}>Color theme</label>
-            <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
-              <button
-                style={S.tab(theme === "dark")}
-                onClick={() => setTheme("dark")}
-              >
-                Dark mode
-              </button>
-              <button
-                style={S.tab(theme === "light")}
-                onClick={() => setTheme("light")}
-              >
-                Light mode
-              </button>
+            <label style={S.lbl}>HFTF</label>
+            <p style={{ margin: "0 0 10px", color: "#9ca3af", fontSize: "11px" }}>
+              Same palette as the home page: deep black, purple accent, gold and
+              cream highlights.
+            </p>
+            <div
+              style={{
+                display: "flex",
+                height: "6px",
+                width: "100%",
+                maxWidth: "320px",
+                borderRadius: "2px",
+                overflow: "hidden",
+                marginBottom: "12px",
+              }}
+              aria-hidden
+            >
+              <div style={{ flex: 1, background: "var(--hftf-gold)" }} />
+              <div style={{ flex: 1, background: "var(--hftf-orange)" }} />
+              <div style={{ flex: 1, background: "#c0392b" }} />
+              <div style={{ flex: 1, background: "var(--hftf-purple)" }} />
+            </div>
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "8px 16px",
+                borderRadius: "4px",
+                border: "1px solid var(--hftf-border)",
+                background: "var(--hftf-deep)",
+                color: "var(--hftf-text-cream)",
+                fontFamily: 'var(--font-heading, "Oswald", sans-serif)',
+                fontSize: "13px",
+                fontWeight: 600,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+              }}
+            >
+              HFTF
             </div>
           </div>
         </section>

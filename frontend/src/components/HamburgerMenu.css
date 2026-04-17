@@ -68,45 +68,6 @@
   color: var(--hm-cream, #eadeb7);
 }
 
-.hm-poc .nav-toggle-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 20px;
-  border-bottom: 1px solid var(--hm-dark-border, #1e1e1e);
-}
-.hm-poc .toggle-track {
-  width: 34px;
-  height: 18px;
-  border-radius: 9px;
-  background: #7c3aed;
-  cursor: pointer;
-  position: relative;
-  border: none;
-  padding: 0;
-  flex-shrink: 0;
-}
-.hm-poc .toggle-track.off {
-  background: var(--hm-dark-border, #1e1e1e);
-}
-.hm-poc .toggle-knob {
-  position: absolute;
-  top: 2px;
-  left: 17px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #fff;
-  transition: left 0.2s;
-}
-.hm-poc .toggle-track.off .toggle-knob {
-  left: 2px;
-}
-.hm-poc .toggle-label {
-  font-size: 11px;
-  color: #8a7e6e;
-}
-
 .hm-poc .nav-section {
   border-bottom: 1px solid var(--hm-dark-border, #1e1e1e);
 }

@@ -511,13 +511,9 @@ const App = () => {
             }
           />
         )}
-        {currentPage === "notifications" && (
-          <NotificationsPage onBack={handleBack} />
-        )}
-        {currentPage === "messages" && <MessagesPage onBack={handleBack} />}
-        {currentPage === "account-settings" && (
-          <AccountSettingsPage onBack={handleBack} />
-        )}
+        {currentPage === "notifications" && <NotificationsPage />}
+        {currentPage === "messages" && <MessagesPage />}
+        {currentPage === "account-settings" && <AccountSettingsPage />}
         {currentPage === "patch-notes" && (
           <PatchNotesPage onBack={handleBack} />
         )}
