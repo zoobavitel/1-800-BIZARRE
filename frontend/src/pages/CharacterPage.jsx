@@ -1485,6 +1485,7 @@ export default function CharacterPage({
                   campaigns={campaigns}
                   isGM={true}
                   onFactionChange={refreshCampaigns}
+                  onCampaignRefresh={refreshCampaigns}
                 />
               </div>
             ))

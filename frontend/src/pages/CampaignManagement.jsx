@@ -2761,7 +2761,14 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
     const inv = invByNpc[npcId];
     const next = inv
       ? npcInvolvements.filter((i) => i.npc !== npcId)
-      : [...npcInvolvements, { npc: npcId, show_clocks_to_players: false }];
+      : [
+          ...npcInvolvements,
+          {
+            npc: npcId,
+            show_clocks_to_players: false,
+            show_vulnerability_clock_to_players: false,
+          },
+        ];
     try {
       const updated = await sessionAPI.patchSession(session.id, {
         npc_involvements: next,
@@ -2775,9 +2782,40 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
   const toggleShowClocks = async (npcId) => {
     const inv = invByNpc[npcId];
     if (!inv) return;
+    const next = npcInvolvements.map((i) => {
+      if (i.npc !== npcId) return i;
+      const showClocks = !i.show_clocks_to_players;
+      return {
+        ...i,
+        show_clocks_to_players: showClocks,
+        show_vulnerability_clock_to_players: showClocks
+          ? true
+          : i.show_vulnerability_clock_to_players ?? false,
+      };
+    });
+    try {
+      const updated = await sessionAPI.patchSession(session.id, {
+        npc_involvements: next,
+      });
+      setSessionData(updated);
+      onRefresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+  const toggleShowVulnerabilityClock = async (npcId) => {
+    const inv = invByNpc[npcId];
+    if (!inv) return;
     const next = npcInvolvements.map((i) =>
       i.npc === npcId
-        ? { ...i, show_clocks_to_players: !i.show_clocks_to_players }
+        ? {
+            ...i,
+            show_vulnerability_clock_to_players:
+              i.show_clocks_to_players
+                ? true
+                : !(i.show_vulnerability_clock_to_players ?? false),
+            show_clocks_to_players: i.show_clocks_to_players ?? false,
+          }
         : i,
     );
     try {
@@ -2790,6 +2828,8 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
       setError(e.message);
     }
   };
+  const isVulnerabilityVisibleToPlayers = (inv) =>
+    !!inv?.show_clocks_to_players || !!inv?.show_vulnerability_clock_to_players;
 
   const [coinEdits, setCoinEdits] = useState({});
   const handleCrewCoinChange = async (crewId, coin) => {
@@ -3312,23 +3352,45 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
                     <span>{npc.name || npc.true_name || `NPC ${npc.id}`}</span>
                   </label>
                   {inSession && (
-                    <label
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "4px",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                        color: "#9ca3af",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={inv.show_clocks_to_players}
-                        onChange={() => toggleShowClocks(npc.id)}
-                      />
-                      <span>Show clocks to players</span>
-                    </label>
+                    <>
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          cursor: "pointer",
+                          fontSize: "12px",
+                          color: "#9ca3af",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={!!inv.show_clocks_to_players}
+                          onChange={() => toggleShowClocks(npc.id)}
+                        />
+                        <span>Show clocks to players</span>
+                      </label>
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          cursor: inv.show_clocks_to_players
+                            ? "not-allowed"
+                            : "pointer",
+                          fontSize: "12px",
+                          color: "#9ca3af",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isVulnerabilityVisibleToPlayers(inv)}
+                          disabled={!!inv.show_clocks_to_players}
+                          onChange={() => toggleShowVulnerabilityClock(npc.id)}
+                        />
+                        <span>Show vulnerability to players</span>
+                      </label>
+                    </>
                   )}
                 </div>
               );
