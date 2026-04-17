@@ -1436,12 +1436,19 @@ class SessionNPCInvolvement(models.Model):
         NPC, on_delete=models.CASCADE, related_name="session_involvements"
     )
     show_clocks_to_players = models.BooleanField(default=False)
+    show_vulnerability_clock_to_players = models.BooleanField(default=False)
 
     class Meta:
         unique_together = ("session", "npc")
 
     def __str__(self):
-        return f"{self.npc.name} in {self.session.name} (clocks={'on' if self.show_clocks_to_players else 'off'})"
+        parts = []
+        if self.show_clocks_to_players:
+            parts.append("all_clocks")
+        if self.show_vulnerability_clock_to_players:
+            parts.append("vuln")
+        vis = "+".join(parts) if parts else "off"
+        return f"{self.npc.name} in {self.session.name} ({vis})"
 
 
 class FactionRelationship(models.Model):

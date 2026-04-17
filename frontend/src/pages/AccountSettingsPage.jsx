@@ -145,9 +145,17 @@ export default function AccountSettingsPage() {
           </div>
           <div style={S.card}>
             <label style={S.lbl}>Profile picture URL</label>
-            <p style={{ margin: "0 0 8px", color: "#9ca3af", fontSize: "11px" }}>
-              Paste a direct link to an image (https://…). File upload is not
-              supported here.
+            <p
+              style={{
+                margin: "0 0 8px",
+                color: "#9ca3af",
+                fontSize: "11px",
+                lineHeight: 1.45,
+              }}
+            >
+              Use a direct image URL (https://…). File upload is not supported
+              here. Recommended: square image (1:1), up to 1024x1024 and 2 MB.
+              Best results at 256x256 in WebP, PNG, or JPEG.
             </p>
             <input
               style={S.inp}
