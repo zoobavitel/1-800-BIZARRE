@@ -149,10 +149,14 @@ class CrewSerializer(serializers.ModelSerializer):
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+    username = serializers.CharField(source="user.username", read_only=True)
+
     class Meta:
         model = UserProfile
         fields = [
+            "username",
             "avatar",
+            "avatar_url",
             "signature",
             "display_title",
             "show_avatars",
@@ -189,6 +193,7 @@ class UserSerializer(serializers.ModelSerializer):
 
         for field in [
             "avatar",
+            "avatar_url",
             "signature",
             "display_title",
             "show_avatars",

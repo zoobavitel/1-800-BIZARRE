@@ -1,86 +1,24 @@
 import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Bell, MessageSquare, Settings, LogOut } from "lucide-react";
-
-const C = {
-  bgSidebar: "#0f1623",
-  bgHover: "#1e2d3d",
-  border: "#1f2d40",
-  textPrimary: "#e2e8f0",
-  textSecondary: "#94a3b8",
-  textDanger: "#e57373",
-};
-
-const styles = {
-  overlay: {
-    position: "fixed",
-    inset: 0,
-    zIndex: 999,
-    background: "rgba(0,0,0,0.55)",
-    backdropFilter: "blur(2px)",
-  },
-  sidebar: {
-    position: "fixed",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    width: "232px",
-    zIndex: 1000,
-    background: C.bgSidebar,
-    borderLeft: `1px solid ${C.border}`,
-    display: "flex",
-    flexDirection: "column",
-    overflowY: "auto",
-    fontFamily: "'Roboto Mono', 'Consolas', monospace",
-    transition: "transform 0.22s cubic-bezier(.4,0,.2,1)",
-    boxShadow: "-4px 0 24px rgba(0,0,0,0.5)",
-  },
-  section: { padding: "10px 14px 4px" },
-  sectionHeader: {
-    fontSize: "10px",
-    fontWeight: "bold",
-    letterSpacing: "0.08em",
-    textTransform: "uppercase",
-    color: C.textSecondary,
-    marginBottom: "8px",
-    padding: "0 2px",
-  },
-  item: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    width: "100%",
-    padding: "10px 12px",
-    background: "transparent",
-    border: "none",
-    borderRadius: "4px",
-    color: C.textPrimary,
-    fontSize: "13px",
-    cursor: "pointer",
-    fontFamily: "inherit",
-    textAlign: "left",
-    transition: "background 0.12s",
-  },
-  itemDanger: {
-    color: C.textDanger,
-  },
-};
+import "./UserMenu.css";
 
 function MenuItem({ icon: Icon, label, onClick, danger }) {
-  const [hovered, setHovered] = React.useState(false);
   return (
     <button
-      style={{
-        ...styles.item,
-        ...(danger ? styles.itemDanger : {}),
-        background: hovered ? C.bgHover : "transparent",
-      }}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      type="button"
+      className={`um-item${danger ? " um-item--danger" : ""}`}
       onClick={onClick}
     >
-      {Icon && <Icon size={18} style={{ flexShrink: 0 }} />}
-      {label}
+      {Icon && (
+        <Icon
+          size={16}
+          strokeWidth={2}
+          className="um-item-icon"
+          aria-hidden
+        />
+      )}
+      <span>{label}</span>
     </button>
   );
 }
@@ -107,37 +45,39 @@ export default function UserMenu({
   };
 
   const panel = (
-    <>
+    <div className="um-hftf">
       {open && (
-        <div style={styles.overlay} onClick={onClose} aria-hidden="true" />
+        <div
+          className="um-overlay"
+          onClick={onClose}
+          onKeyDown={(e) => e.key === "Escape" && onClose?.()}
+          aria-hidden="true"
+        />
       )}
       <div
-        style={{
-          ...styles.sidebar,
-          transform: open ? "translateX(0)" : "translateX(100%)",
-        }}
+        className={`um-drawer${open ? " um-drawer--open" : ""}`}
         role="dialog"
+        aria-modal={open ? "true" : undefined}
         aria-label="User menu"
       >
-        <div
-          style={{
-            padding: "16px 14px",
-            borderBottom: `1px solid ${C.border}`,
-          }}
-        >
-          <div
-            style={{
-              fontSize: "11px",
-              fontWeight: "bold",
-              color: C.textSecondary,
-              letterSpacing: "0.05em",
-            }}
-          >
-            USER MENU
+        <div className="um-drawer-top">
+          <div className="um-drawer-brand">
+            <span className="um-drawer-brand-mark" aria-hidden="true">
+              ◇
+            </span>
+            <span className="um-drawer-brand-text">User menu</span>
           </div>
+          <button
+            type="button"
+            className="um-drawer-close"
+            aria-label="Close menu"
+            onClick={onClose}
+          >
+            ×
+          </button>
         </div>
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>Account</div>
+        <div className="um-body">
+          <div className="um-section-label">Account</div>
           <MenuItem
             icon={Bell}
             label="Notifications"
@@ -164,7 +104,7 @@ export default function UserMenu({
           />
         </div>
       </div>
-    </>
+    </div>
   );
 
   return typeof document !== "undefined"

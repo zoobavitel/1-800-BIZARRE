@@ -1,5 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { authAPI } from "../auth/services/authService";
+import React, { createContext, useContext, useEffect } from "react";
 
 const ThemeContext = createContext();
 
@@ -11,46 +10,23 @@ export const useTheme = () => {
   return context;
 };
 
-const getStoredTheme = () => {
-  if (typeof localStorage !== "undefined") {
-    const stored = localStorage.getItem("theme");
-    if (stored === "dark" || stored === "light") return stored;
-  }
-  return "dark";
-};
+/** Single shipped theme: HFTF (same tokens as home / `data-theme="dark"`). */
+const HFTF_THEME = "dark";
 
 export const ThemeProvider = ({ children }) => {
-  const [theme, setThemeState] = useState(getStoredTheme);
-
   useEffect(() => {
     if (typeof document !== "undefined") {
-      document.documentElement.dataset.theme = theme;
-      localStorage.setItem("theme", theme);
+      document.documentElement.dataset.theme = HFTF_THEME;
+      localStorage.setItem("theme", HFTF_THEME);
     }
-  }, [theme]);
-
-  const setTheme = (newTheme) => {
-    setThemeState(newTheme);
-  };
-
-  // Load theme from profile when user is authenticated (has token)
-  useEffect(() => {
-    if (!localStorage.getItem("authToken")) return;
-    authAPI
-      .getProfile()
-      .then((profile) => {
-        if (
-          profile?.theme &&
-          (profile.theme === "dark" || profile.theme === "light")
-        ) {
-          setThemeState(profile.theme);
-        }
-      })
-      .catch(() => {});
   }, []);
 
+  const setTheme = () => {
+    /* Kept for call sites; app palette is fixed HFTF. */
+  };
+
   return (
-    <ThemeContext.Provider value={{ theme, setTheme }}>
+    <ThemeContext.Provider value={{ theme: HFTF_THEME, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );

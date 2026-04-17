@@ -452,8 +452,16 @@ export default function CharacterPage({
           setActiveCharTabId(tab.tabId);
           return;
         } catch {
-          // Fall through to blank sheet (e.g. no access or invalid id)
+          // Fall through (e.g. no access or invalid id)
         }
+      }
+      // #npcs mounts a fresh CharacterPage with preferNpcMode — do not seed a PC
+      // tab until the user opens CHARACTERS (avoids phantom "New Character" /
+      // autosave when they only wanted NPCs).
+      if (preferNpcMode) {
+        setCharTabs([]);
+        setActiveCharTabId(null);
+        return;
       }
       const blank = {
         tabId: nextTabId++,
@@ -464,6 +472,20 @@ export default function CharacterPage({
       setActiveCharTabId(blank.tabId);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** When charTabs was left empty (NPC-first mount), add one blank tab before showing PC mode. */
+  const seedEmptyCharacterTabs = useCallback(() => {
+    setCharTabs((prev) => {
+      if (prev.length > 0) return prev;
+      const blank = {
+        tabId: nextTabId++,
+        characterId: null,
+        character: createDefaultCharacter(),
+      };
+      setActiveCharTabId(blank.tabId);
+      return [blank];
+    });
   }, []);
 
   // ── Character tab handlers ───────────────────────────────────────────────
@@ -814,6 +836,15 @@ export default function CharacterPage({
       .finally(() => setNpcsLoading(false));
   }, [mode, campaignId, initialNpcId]);
 
+  // NPC list for the toolbar "Open NPC…" while in character mode (no loading gate).
+  useEffect(() => {
+    if (mode !== MODES.CHARACTER) return;
+    npcAPI
+      .getNPCs(campaignId)
+      .then((list) => setNpcs(list || []))
+      .catch(() => {});
+  }, [mode, campaignId]);
+
   const handleSaveNpc = useCallback(
     async (npcData) => {
       try {
@@ -999,36 +1030,32 @@ export default function CharacterPage({
       !window.confirm("Delete this NPC permanently? This cannot be undone.")
     )
       return;
+    const filtered = npcTabs.filter((t) => (t.npcId ?? t.npc?.id) !== id);
     try {
       await npcAPI.deleteNPC(id);
       setNpcs((prev) => prev.filter((n) => n.id !== id));
-      setNpcTabs((prev) => {
-        const filtered = prev.filter((t) => (t.npcId ?? t.npc?.id) !== id);
-        if (filtered.length === 0) {
-          // No NPC tabs remain — land on a blank character sheet so the user
-          // can start fresh or navigate elsewhere via the hamburger menu.
-          // A blank NPCSheet must not be created here because its init effects
-          // trigger auto-save immediately, causing the delete/re-create cycle.
-          setActiveNpcTabId(null);
-          setMode(MODES.CHARACTER);
-          if (typeof window !== "undefined") window.location.hash = "character";
-          return [];
-        }
-        const nextActive = filtered.some((t) => t.tabId === activeNpcTabId)
-          ? activeNpcTabId
-          : filtered[filtered.length - 1].tabId;
-        setActiveNpcTabId(nextActive);
-        const nextTab = filtered.find((t) => t.tabId === nextActive);
-        const nextHashId = nextTab?.npcId ?? nextTab?.npc?.id;
-        if (typeof window !== "undefined") {
-          window.location.hash = nextHashId ? `npcs/${nextHashId}` : "npcs";
-        }
-        return filtered;
-      });
+      if (filtered.length === 0) {
+        setNpcTabs([]);
+        setActiveNpcTabId(null);
+        seedEmptyCharacterTabs();
+        setMode(MODES.CHARACTER);
+        if (typeof window !== "undefined") window.location.hash = "character";
+        return;
+      }
+      const nextActive = filtered.some((t) => t.tabId === activeNpcTabId)
+        ? activeNpcTabId
+        : filtered[filtered.length - 1].tabId;
+      setNpcTabs(filtered);
+      setActiveNpcTabId(nextActive);
+      const nextTab = filtered.find((t) => t.tabId === nextActive);
+      const nextHashId = nextTab?.npcId ?? nextTab?.npc?.id;
+      if (typeof window !== "undefined") {
+        window.location.hash = nextHashId ? `npcs/${nextHashId}` : "npcs";
+      }
     } catch (e) {
       window.alert(e.message || "Failed to delete NPC");
     }
-  }, [activeNpcTab, activeNpcTabId]);
+  }, [activeNpcTab, activeNpcTabId, npcTabs, seedEmptyCharacterTabs]);
 
   const saveActiveUnsavedCharacter = useCallback(async () => {
     const tab = charTabs.find((t) => t.tabId === activeCharTabId);
@@ -1072,6 +1099,25 @@ export default function CharacterPage({
     [activeCharTabId, charTabs, saveActiveUnsavedCharacter],
   );
 
+  const handleOpenNpcFromCharacterToolbar = useCallback(
+    (npc) => {
+      void guardUnsavedCharacterNavigation(() => {
+        const path =
+          (typeof window !== "undefined" && window.location.hash.slice(1)) || "";
+        const onNpcRoute = path === "npcs" || path.startsWith("npcs/");
+        if (onNpcRoute) {
+          setMode(MODES.NPC);
+          handleOpenExistingNpc(npc);
+          return;
+        }
+        if (typeof window !== "undefined") {
+          window.location.hash = `npcs/${npc.id}`;
+        }
+      });
+    },
+    [guardUnsavedCharacterNavigation, handleOpenExistingNpc],
+  );
+
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={PAGE_STYLES.page}>
@@ -1088,11 +1134,17 @@ export default function CharacterPage({
           <button
             type="button"
             onClick={() => {
+              const hadCharTabs = charTabs.length > 0;
+              const hashId = hadCharTabs
+                ? activeCharTab?.characterId ?? activeCharTab?.character?.id
+                : null;
+              seedEmptyCharacterTabs();
               setMode(MODES.CHARACTER);
-              const id =
-                activeCharTab?.characterId ?? activeCharTab?.character?.id;
-              if (typeof window !== "undefined")
-                window.location.hash = id ? `character/${id}` : "character";
+              if (typeof window !== "undefined") {
+                window.location.hash = hashId
+                  ? `character/${hashId}`
+                  : "character";
+              }
             }}
             style={PAGE_STYLES.modeBtn(mode === MODES.CHARACTER)}
           >
@@ -1200,8 +1252,39 @@ export default function CharacterPage({
             </span>
           )}
 
-          {mode === MODES.CHARACTER && characters.length > 0 && (
+          {mode === MODES.CHARACTER && (
             <>
+              {characters.length > 0 && (
+                <select
+                  style={{
+                    background: "#1f2937",
+                    color: "#9ca3af",
+                    border: "1px solid #4b5563",
+                    padding: "4px 8px",
+                    fontSize: "11px",
+                    fontFamily: "monospace",
+                    borderRadius: "4px",
+                  }}
+                  value=""
+                  onChange={(e) => {
+                    const char = characters.find(
+                      (c) => c.id === parseInt(e.target.value, 10),
+                    );
+                    if (char) {
+                      void guardUnsavedCharacterNavigation(() =>
+                        openCharacterInTab(char),
+                      );
+                    }
+                  }}
+                >
+                  <option value="">Open character...</option>
+                  {characters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name || c.standName || "New Character"}
+                    </option>
+                  ))}
+                </select>
+              )}
               <select
                 style={{
                   background: "#1f2937",
@@ -1214,41 +1297,39 @@ export default function CharacterPage({
                 }}
                 value=""
                 onChange={(e) => {
-                  const char = characters.find(
-                    (c) => c.id === parseInt(e.target.value),
+                  const npc = npcs.find(
+                    (n) => n.id === parseInt(e.target.value, 10),
                   );
-                  if (char) {
-                    void guardUnsavedCharacterNavigation(() =>
-                      openCharacterInTab(char),
-                    );
-                  }
+                  if (npc) handleOpenNpcFromCharacterToolbar(npc);
                 }}
               >
-                <option value="">Open character...</option>
-                {characters.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name || c.standName || "New Character"}
+                <option value="">Open NPC...</option>
+                {npcs.map((n) => (
+                  <option key={n.id} value={n.id}>
+                    {n.name || "New NPC"}
                   </option>
                 ))}
               </select>
-              <button
-                type="button"
-                onClick={handleDeleteActiveCharacter}
-                title="Delete the character open in the active tab (permanent)"
-                style={{
-                  background: "#450a0a",
-                  color: "#fecaca",
-                  border: "1px solid #991b1b",
-                  padding: "4px 10px",
-                  fontSize: "11px",
-                  fontFamily: "monospace",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Delete character
-              </button>
+              {characters.length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleDeleteActiveCharacter}
+                  title="Delete the character open in the active tab (permanent)"
+                  style={{
+                    background: "#450a0a",
+                    color: "#fecaca",
+                    border: "1px solid #991b1b",
+                    padding: "4px 10px",
+                    fontSize: "11px",
+                    fontFamily: "monospace",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Delete character
+                </button>
+              )}
             </>
           )}
 
