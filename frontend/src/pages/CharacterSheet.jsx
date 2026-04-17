@@ -2941,10 +2941,16 @@ const CharacterSheetWrapper = ({
                       const detriments = currentHeritage.detriments || [];
                       const baseHp = currentHeritage.base_hp ?? 0;
                       const benefitCost = benefits
-                        .filter((b) => selectedBenefits.includes(b.id))
+                        .filter(
+                          (b) =>
+                            selectedBenefits.includes(b.id) && !b.required,
+                        )
                         .reduce((s, b) => s + (b.hp_cost || 0), 0);
                       const detrimentGain = detriments
-                        .filter((d) => selectedDetriments.includes(d.id))
+                        .filter(
+                          (d) =>
+                            selectedDetriments.includes(d.id) && !d.required,
+                        )
                         .reduce((s, d) => s + (d.hp_value || 0), 0);
                       const hpRemaining = baseHp + detrimentGain - benefitCost;
                       const toggleBenefit = (id) => {
@@ -3010,13 +3016,13 @@ const CharacterSheetWrapper = ({
                             }}
                           >
                             HP budget: {baseHp} base + {detrimentGain}{" "}
-                            (detriments) − {benefitCost} (benefits) ={" "}
-                            {hpRemaining} remaining
+                            (optional detriments) − {benefitCost} (optional
+                            benefits) = {hpRemaining} remaining
                           </div>
                           {hpRemaining < 0 && (
                             <div style={{ ...S.warn, marginBottom: "8px" }}>
-                              HP budget exceeded. Add detriments or remove
-                              benefits.
+                              HP budget exceeded. Take optional detriments or
+                              remove optional benefits.
                             </div>
                           )}
                           <div
@@ -3114,7 +3120,9 @@ const CharacterSheetWrapper = ({
                                       >
                                         {b.name}
                                       </span>
-                                      {b.hp_cost != null && b.hp_cost > 0 && (
+                                      {!b.required &&
+                                        b.hp_cost != null &&
+                                        b.hp_cost > 0 && (
                                         <span style={{ color: "#f59e0b" }}>
                                           {" "}
                                           ({b.hp_cost} HP)
@@ -3245,7 +3253,9 @@ const CharacterSheetWrapper = ({
                                       >
                                         {d.name}
                                       </span>
-                                      {d.hp_value != null && d.hp_value > 0 && (
+                                      {!d.required &&
+                                        d.hp_value != null &&
+                                        d.hp_value > 0 && (
                                         <span style={{ color: "#34d399" }}>
                                           {" "}
                                           (+{d.hp_value} HP)
