@@ -87,6 +87,30 @@ function isPlaceholderNewCharacter(character) {
   );
 }
 
+function getUserDisplayName(person) {
+  const username = person?.username;
+  return typeof username === "string" && username.trim()
+    ? username.trim()
+    : "Unknown";
+}
+
+function getUserAvatarSrc(person) {
+  const profile = person?.profile;
+  const avatar = typeof profile?.avatar === "string" ? profile.avatar.trim() : "";
+  if (avatar) return avatar;
+  const avatarUrl =
+    typeof profile?.avatar_url === "string" ? profile.avatar_url.trim() : "";
+  return avatarUrl || null;
+}
+
+function getInitials(text) {
+  const cleaned = typeof text === "string" ? text.trim() : "";
+  if (!cleaned) return "?";
+  const parts = cleaned.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+}
+
 const HomePage = ({
   onToggleMenu,
   onSearch,
@@ -524,10 +548,12 @@ const HomePage = ({
           ) : (
             campaigns.map((campaign) => {
               const isGm = user && campaign.gm?.id === user.id;
-              const role = isGm ? "GM" : "Player";
               const playerCount = Array.isArray(campaign.players)
                 ? campaign.players.length
                 : 0;
+              const players = Array.isArray(campaign.players) ? campaign.players : [];
+              const gmName = getUserDisplayName(campaign.gm);
+              const gmAvatarSrc = getUserAvatarSrc(campaign.gm);
               const myChar = (campaign.campaign_characters || []).find(
                 (cc) => cc.user_id === user?.id,
               );
@@ -535,6 +561,8 @@ const HomePage = ({
               const sessionCount = Array.isArray(campaign.sessions)
                 ? campaign.sessions.length
                 : 0;
+              const visiblePlayers = players.slice(0, 5);
+              const extraPlayers = Math.max(players.length - visiblePlayers.length, 0);
               const live = campaign.active_session_detail;
               const inactive = campaign.is_active === false;
 
@@ -557,11 +585,19 @@ const HomePage = ({
                       >
                         {inactive ? "Inactive" : "Active"}
                       </span>
-                      <span
-                        className={`g-badge ${isGm ? "g-badge-gm" : "g-badge-player"}`}
-                      >
-                        {role}
+                    </div>
+                  </div>
+                  <div className="g-card-gm-row">
+                    <span className="g-card-gm-label">GM</span>
+                    <div className={`g-card-gm-chip${isGm ? " is-self" : ""}`}>
+                      <span className="g-card-user-avatar" aria-hidden="true">
+                        {gmAvatarSrc ? (
+                          <img src={gmAvatarSrc} alt="" />
+                        ) : (
+                          getInitials(gmName)
+                        )}
                       </span>
+                      <span className="g-card-user-name">{gmName}</span>
                     </div>
                   </div>
                   <div className="g-card-desc">
@@ -582,6 +618,33 @@ const HomePage = ({
                         <span className="g-card-stat-val g-card-stat-accent">
                           {playingAs}
                         </span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="g-card-player-list">
+                    {visiblePlayers.length === 0 ? (
+                      <span className="g-card-player-empty">No players yet</span>
+                    ) : (
+                      visiblePlayers.map((player) => {
+                        const playerName = getUserDisplayName(player);
+                        const playerAvatarSrc = getUserAvatarSrc(player);
+                        return (
+                          <span key={player.id || playerName} className="g-card-player-chip">
+                            <span className="g-card-user-avatar" aria-hidden="true">
+                              {playerAvatarSrc ? (
+                                <img src={playerAvatarSrc} alt="" />
+                              ) : (
+                                getInitials(playerName)
+                              )}
+                            </span>
+                            <span className="g-card-user-name">{playerName}</span>
+                          </span>
+                        );
+                      })
+                    )}
+                    {extraPlayers > 0 && (
+                      <span className="g-card-player-chip g-card-player-chip-more">
+                        +{extraPlayers} more
                       </span>
                     )}
                   </div>
