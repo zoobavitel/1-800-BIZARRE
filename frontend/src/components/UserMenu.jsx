@@ -58,6 +58,7 @@ export default function UserMenu({
         className={`um-drawer${open ? " um-drawer--open" : ""}`}
         role="dialog"
         aria-modal={open ? "true" : undefined}
+        aria-hidden={open ? undefined : "true"}
         aria-label="User menu"
       >
         <div className="um-drawer-top">
