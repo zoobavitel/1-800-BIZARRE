@@ -2,11 +2,11 @@
  * @jest-environment jsdom
  */
 
+import { authAPI } from "./authService";
+
 jest.mock("../../../config/apiConfig", () => ({
   requireApiBaseUrl: () => "http://localhost:8000/api",
 }));
-
-import { authAPI } from "./authService";
 
 describe("authAPI", () => {
   const originalFetch = global.fetch;
