@@ -95,7 +95,7 @@ class DetrimentBenefitModelTest(TestCase):
         self.assertFalse(self.human.benefits.filter(required=True).exists())
     
     def test_vampire_required_detriments(self):
-        """Test Vampire required detriments provide +3 free HP."""
+        """Required detriments may still store hp_value in fixtures; HP budgeting ignores them."""
         vampire_detriments = [
             {'name': 'Sunlight Weakness', 'hp_value': 2, 'required': True,
              'description': 'Takes Level 4 Harm per minute in direct sunlight.'},
@@ -107,8 +107,12 @@ class DetrimentBenefitModelTest(TestCase):
             Detriment.objects.create(heritage=self.vampire, **det_data)
         
         required_detriments = self.vampire.detriments.filter(required=True)
-        total_free_hp = sum(det.hp_value for det in required_detriments)
-        self.assertEqual(total_free_hp, 3)
+        self.assertEqual(required_detriments.count(), 2)
+        self.assertTrue(all(d.required for d in required_detriments))
+        self.assertEqual(
+            sum(d.hp_value for d in required_detriments if not d.required),
+            0,
+        )
 
 
 class CampaignModelTest(TestCase):

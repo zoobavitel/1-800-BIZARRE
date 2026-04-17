@@ -294,9 +294,11 @@ export default function AbilityBrowser({ initialFilter }) {
                 <span style={{ fontWeight: "600", fontSize: "12px" }}>
                   {b.name}
                 </span>
-                <span style={{ fontSize: "10px", color: "#059669" }}>
-                  -{b.hp_cost} HP
-                </span>
+                {!b.required && b.hp_cost > 0 && (
+                  <span style={{ fontSize: "10px", color: "#059669" }}>
+                    -{b.hp_cost} HP
+                  </span>
+                )}
                 {b.required && <span style={S.tag("#dc2626")}>Required</span>}
               </div>
               {b.description && (
@@ -337,9 +339,11 @@ export default function AbilityBrowser({ initialFilter }) {
                 <span style={{ fontWeight: "600", fontSize: "12px" }}>
                   {d.name}
                 </span>
-                <span style={{ fontSize: "10px", color: "#7c3aed" }}>
-                  +{d.hp_value} HP
-                </span>
+                {!d.required && d.hp_value > 0 && (
+                  <span style={{ fontSize: "10px", color: "#7c3aed" }}>
+                    +{d.hp_value} HP
+                  </span>
+                )}
                 {d.required && <span style={S.tag("#dc2626")}>Required</span>}
               </div>
               {d.description && (
