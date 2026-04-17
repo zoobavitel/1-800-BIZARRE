@@ -269,8 +269,11 @@ class SessionSerializer(serializers.ModelSerializer):
             for item in npc_involvements_data:
                 npc_id = item.get("npc") if isinstance(item, dict) else item
                 if isinstance(item, dict):
-                    show = item.get("show_clocks_to_players", False)
-                    show_vuln = item.get("show_vulnerability_clock_to_players", False)
+                    show = bool(item.get("show_clocks_to_players", False))
+                    show_vuln = bool(
+                        show
+                        or item.get("show_vulnerability_clock_to_players", False)
+                    )
                 else:
                     show = False
                     show_vuln = False
@@ -311,8 +314,11 @@ class SessionSerializer(serializers.ModelSerializer):
             for item in npc_involvements_data:
                 npc_id = item.get("npc") if isinstance(item, dict) else item
                 if isinstance(item, dict):
-                    show = item.get("show_clocks_to_players", False)
-                    show_vuln = item.get("show_vulnerability_clock_to_players", False)
+                    show = bool(item.get("show_clocks_to_players", False))
+                    show_vuln = bool(
+                        show
+                        or item.get("show_vulnerability_clock_to_players", False)
+                    )
                 else:
                     show = False
                     show_vuln = False
@@ -1446,8 +1452,8 @@ class CampaignSerializer(serializers.ModelSerializer):
             "filled_segments",
             "completed",
         )
-        progress_clocks_full = list(npc.progress_clocks.all().values(*clock_fields))
         if viewer_is_gm_or_staff:
+            progress_clocks_full = list(npc.progress_clocks.all().values(*clock_fields))
             return {
                 "id": npc.id,
                 "name": npc.name,
@@ -1462,6 +1468,9 @@ class CampaignSerializer(serializers.ModelSerializer):
             }
         show_all = inv.show_clocks_to_players
         show_vuln = inv.show_clocks_to_players or inv.show_vulnerability_clock_to_players
+        progress_clocks = (
+            list(npc.progress_clocks.all().values(*clock_fields)) if show_all else []
+        )
         return {
             "id": npc.id,
             "name": npc.name,
@@ -1474,7 +1483,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             "vulnerability_clock_max": npc.vulnerability_clock_max if show_vuln else 0,
             "conflict_clocks": (npc.conflict_clocks or []) if show_all else [],
             "alt_clocks": (npc.alt_clocks or []) if show_all else [],
-            "progress_clocks": progress_clocks_full if show_all else [],
+            "progress_clocks": progress_clocks,
         }
 
     def get_active_session_detail(self, obj):

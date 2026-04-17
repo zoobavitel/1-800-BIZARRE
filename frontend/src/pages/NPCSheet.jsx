@@ -378,7 +378,7 @@ const NPCSheet = ({
     return () => {
       cancelled = true;
     };
-  }, [isGM, activeSessionId, campaigns]);
+  }, [isGM, activeSessionId]);
 
   const sessionInvolvementForNpc = useMemo(() => {
     const id = npc?.id;
@@ -397,7 +397,7 @@ const NPCSheet = ({
           npc: i.npc,
           show_clocks_to_players: !!i.show_clocks_to_players,
           show_vulnerability_clock_to_players: !!(
-            i.show_vulnerability_clock_to_players ?? false
+            i.show_clocks_to_players || i.show_vulnerability_clock_to_players
           ),
         }));
         const updated = await sessionAPI.patchSession(activeSessionId, {
@@ -418,6 +418,9 @@ const NPCSheet = ({
 
   const toggleVulnerabilityVisibleToPlayers = useCallback(async () => {
     if (!sessionInvolvementForNpc || !activeSessionDetail?.npc_involvements) {
+      return;
+    }
+    if (sessionInvolvementForNpc.show_clocks_to_players) {
       return;
     }
     const id = npc?.id;
@@ -2477,15 +2480,23 @@ const NPCSheet = ({
                                     display: "flex",
                                     alignItems: "flex-start",
                                     gap: "6px",
-                                    cursor: vulnRevealSaving ? "wait" : "pointer",
+                                    cursor:
+                                      vulnRevealSaving ||
+                                      !!sessionInvolvementForNpc.show_clocks_to_players
+                                        ? "not-allowed"
+                                        : "pointer",
                                   }}
                                 >
                                   <input
                                     type="checkbox"
                                     checked={
+                                      !!sessionInvolvementForNpc.show_clocks_to_players ||
                                       !!sessionInvolvementForNpc.show_vulnerability_clock_to_players
                                     }
-                                    disabled={vulnRevealSaving}
+                                    disabled={
+                                      vulnRevealSaving ||
+                                      !!sessionInvolvementForNpc.show_clocks_to_players
+                                    }
                                     onChange={() =>
                                       void toggleVulnerabilityVisibleToPlayers()
                                     }
