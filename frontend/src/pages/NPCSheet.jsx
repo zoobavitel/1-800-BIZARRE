@@ -1,5 +1,9 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { referenceAPI, factionAPI } from "../features/character-sheet";
+import {
+  referenceAPI,
+  factionAPI,
+  sessionAPI,
+} from "../features/character-sheet";
 import NpcsStandCoin from "../components/NpcsStandCoin";
 
 // ─── SRD Data Tables ──────────────────────────────────────────────────────────
@@ -297,7 +301,15 @@ const ArmorTracker = ({ label, max, used, onChange, color }) => {
 
 // ─── NPCSheet ─────────────────────────────────────────────────────────────────
 
-const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactionChange }) => {
+const NPCSheet = ({
+  npc,
+  onSave,
+  onClose,
+  campaigns = [],
+  isGM = false,
+  onFactionChange,
+  onCampaignRefresh,
+}) => {
   const [activeMode, setActiveMode] = useState("NPC");
 
   const [name, setName] = useState(npc?.name || "");
@@ -321,12 +333,114 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
   }, [npc?.id, npc?.faction, npc?.faction_id]);
 
   const campaignId = typeof campaign === "object" ? campaign?.id : campaign;
+  const activeCampaign = useMemo(
+    () =>
+      campaignId != null
+        ? campaigns?.find((c) => c.id === campaignId) ?? null
+        : null,
+    [campaigns, campaignId],
+  );
+  const activeSessionId = useMemo(() => {
+    const raw = activeCampaign?.active_session;
+    if (raw == null) return null;
+    return typeof raw === "object" ? raw.id : raw;
+  }, [activeCampaign]);
   const baseCampaignFactions = useMemo(
     () =>
       (campaignId != null && campaigns?.find((c) => c.id === campaignId))
         ?.factions || [],
     [campaignId, campaigns],
   );
+
+  const [activeSessionDetail, setActiveSessionDetail] = useState(null);
+  const [activeSessionLoading, setActiveSessionLoading] = useState(false);
+  const [vulnRevealSaving, setVulnRevealSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isGM || activeSessionId == null) {
+      setActiveSessionDetail(null);
+      setActiveSessionLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setActiveSessionLoading(true);
+    sessionAPI
+      .getSession(activeSessionId)
+      .then((data) => {
+        if (!cancelled) setActiveSessionDetail(data);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveSessionDetail(null);
+      })
+      .finally(() => {
+        if (!cancelled) setActiveSessionLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isGM, activeSessionId]);
+
+  const sessionInvolvementForNpc = useMemo(() => {
+    const id = npc?.id;
+    if (id == null || !activeSessionDetail?.npc_involvements) return null;
+    return (
+      activeSessionDetail.npc_involvements.find((i) => i.npc === id) ?? null
+    );
+  }, [npc?.id, activeSessionDetail]);
+
+  const patchNpcInvolvementFlags = useCallback(
+    async (nextInvolvements) => {
+      if (activeSessionId == null) return;
+      setVulnRevealSaving(true);
+      try {
+        const normalized = (nextInvolvements || []).map((i) => ({
+          npc: i.npc,
+          show_clocks_to_players: !!i.show_clocks_to_players,
+          show_vulnerability_clock_to_players: !!(
+            i.show_clocks_to_players || i.show_vulnerability_clock_to_players
+          ),
+        }));
+        const updated = await sessionAPI.patchSession(activeSessionId, {
+          npc_involvements: normalized,
+        });
+        setActiveSessionDetail(updated);
+        if (typeof onCampaignRefresh === "function") {
+          onCampaignRefresh();
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setVulnRevealSaving(false);
+      }
+    },
+    [activeSessionId, onCampaignRefresh],
+  );
+
+  const toggleVulnerabilityVisibleToPlayers = useCallback(async () => {
+    if (!sessionInvolvementForNpc || !activeSessionDetail?.npc_involvements) {
+      return;
+    }
+    if (sessionInvolvementForNpc.show_clocks_to_players) {
+      return;
+    }
+    const id = npc?.id;
+    const next = activeSessionDetail.npc_involvements.map((i) =>
+      i.npc === id
+        ? {
+            ...i,
+            show_vulnerability_clock_to_players: !(
+              i.show_vulnerability_clock_to_players ?? false
+            ),
+          }
+        : i,
+    );
+    await patchNpcInvolvementFlags(next);
+  }, [
+    sessionInvolvementForNpc,
+    activeSessionDetail,
+    npc?.id,
+    patchNpcInvolvementFlags,
+  ]);
 
   // Optimistically track factions created inline (not yet in the campaigns prop)
   const [localExtraFactions, setLocalExtraFactions] = useState([]);
@@ -2331,6 +2445,70 @@ const NPCSheet = ({ npc, onSave, onClose, campaigns = [], isGM = false, onFactio
                             </div>
                           );
                         })()}
+                        {isGM && campaignId && npc?.id && vulnSegs > 0 && (
+                          <div
+                            style={{
+                              marginTop: "10px",
+                              maxWidth: "260px",
+                              textAlign: "left",
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                            }}
+                          >
+                            {activeSessionLoading && (
+                              <div>Loading session…</div>
+                            )}
+                            {!activeSessionLoading && activeSessionId == null && (
+                              <div>
+                                Set an active session for this campaign to control
+                                player visibility.
+                              </div>
+                            )}
+                            {!activeSessionLoading &&
+                              activeSessionId != null &&
+                              !sessionInvolvementForNpc && (
+                                <div>
+                                  Add this NPC to the active session in Campaign
+                                  Management to show its vulnerability clock on player
+                                  character sheets.
+                                </div>
+                              )}
+                            {!activeSessionLoading &&
+                              sessionInvolvementForNpc && (
+                                <label
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "flex-start",
+                                    gap: "6px",
+                                    cursor:
+                                      vulnRevealSaving ||
+                                      !!sessionInvolvementForNpc.show_clocks_to_players
+                                        ? "not-allowed"
+                                        : "pointer",
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={
+                                      !!sessionInvolvementForNpc.show_clocks_to_players ||
+                                      !!sessionInvolvementForNpc.show_vulnerability_clock_to_players
+                                    }
+                                    disabled={
+                                      vulnRevealSaving ||
+                                      !!sessionInvolvementForNpc.show_clocks_to_players
+                                    }
+                                    onChange={() =>
+                                      void toggleVulnerabilityVisibleToPlayers()
+                                    }
+                                  />
+                                  <span>
+                                    Show vulnerability clock on player character
+                                    sheets (active session)
+                                  </span>
+                                </label>
+                              )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Armor charges */}

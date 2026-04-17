@@ -1,6 +1,7 @@
 import json
 import time
 
+from django.db.models import Q
 from django.db.models.functions import Lower
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
@@ -217,10 +218,11 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 
 class SessionNPCInvolvementWriteSerializer(serializers.Serializer):
-    """For PATCH: {npc: id, show_clocks_to_players: bool}"""
+    """For PATCH: {npc: id, show_clocks_to_players: bool, show_vulnerability_clock_to_players: bool}"""
 
     npc = serializers.PrimaryKeyRelatedField(queryset=NPC.objects.all())
     show_clocks_to_players = serializers.BooleanField(default=False)
+    show_vulnerability_clock_to_players = serializers.BooleanField(default=False)
 
 
 class SessionSerializer(serializers.ModelSerializer):
@@ -242,9 +244,13 @@ class SessionSerializer(serializers.ModelSerializer):
         return list(obj.npcs_involved.values_list("id", flat=True))
 
     def get_npc_involvements(self, obj):
-        """Return [{npc: id, show_clocks_to_players: bool}, ...] for GM controls."""
+        """Return involvement rows for GM session controls."""
         return [
-            {"npc": inv.npc_id, "show_clocks_to_players": inv.show_clocks_to_players}
+            {
+                "npc": inv.npc_id,
+                "show_clocks_to_players": inv.show_clocks_to_players,
+                "show_vulnerability_clock_to_players": inv.show_vulnerability_clock_to_players,
+            }
             for inv in obj.npc_involvements.select_related("npc").order_by("npc__name")
         ]
 
@@ -262,14 +268,21 @@ class SessionSerializer(serializers.ModelSerializer):
             instance.npc_involvements.all().delete()
             for item in npc_involvements_data:
                 npc_id = item.get("npc") if isinstance(item, dict) else item
-                show = (
-                    item.get("show_clocks_to_players", False)
-                    if isinstance(item, dict)
-                    else False
-                )
+                if isinstance(item, dict):
+                    show = bool(item.get("show_clocks_to_players", False))
+                    show_vuln = bool(
+                        show
+                        or item.get("show_vulnerability_clock_to_players", False)
+                    )
+                else:
+                    show = False
+                    show_vuln = False
                 npc = NPC.objects.get(pk=npc_id) if isinstance(npc_id, int) else npc_id
                 SessionNPCInvolvement.objects.create(
-                    session=instance, npc=npc, show_clocks_to_players=show
+                    session=instance,
+                    npc=npc,
+                    show_clocks_to_players=show,
+                    show_vulnerability_clock_to_players=show_vuln,
                 )
         elif npcs_involved_data is not None:
             existing = {inv.npc_id: inv for inv in instance.npc_involvements.all()}
@@ -280,7 +293,10 @@ class SessionSerializer(serializers.ModelSerializer):
                 SessionNPCInvolvement.objects.get_or_create(
                     session=instance,
                     npc_id=npc_id,
-                    defaults={"show_clocks_to_players": False},
+                    defaults={
+                        "show_clocks_to_players": False,
+                        "show_vulnerability_clock_to_players": False,
+                    },
                 )
             for npc_id in list(existing.keys()):
                 if npc_id not in new_ids:
@@ -297,21 +313,31 @@ class SessionSerializer(serializers.ModelSerializer):
         if npc_involvements_data is not None:
             for item in npc_involvements_data:
                 npc_id = item.get("npc") if isinstance(item, dict) else item
-                show = (
-                    item.get("show_clocks_to_players", False)
-                    if isinstance(item, dict)
-                    else False
-                )
+                if isinstance(item, dict):
+                    show = bool(item.get("show_clocks_to_players", False))
+                    show_vuln = bool(
+                        show
+                        or item.get("show_vulnerability_clock_to_players", False)
+                    )
+                else:
+                    show = False
+                    show_vuln = False
                 npc = NPC.objects.get(pk=npc_id) if isinstance(npc_id, int) else npc_id
                 SessionNPCInvolvement.objects.create(
-                    session=instance, npc=npc, show_clocks_to_players=show
+                    session=instance,
+                    npc=npc,
+                    show_clocks_to_players=show,
+                    show_vulnerability_clock_to_players=show_vuln,
                 )
         elif npcs_involved_data is not None:
             for npc_id in npcs_involved_data:
                 SessionNPCInvolvement.objects.get_or_create(
                     session=instance,
                     npc_id=npc_id,
-                    defaults={"show_clocks_to_players": False},
+                    defaults={
+                        "show_clocks_to_players": False,
+                        "show_vulnerability_clock_to_players": False,
+                    },
                 )
         return instance
 
@@ -476,7 +502,11 @@ class SessionRecordsSerializer(serializers.ModelSerializer):
 
     def get_npc_involvements(self, obj):
         return [
-            {"npc": inv.npc_id, "show_clocks_to_players": inv.show_clocks_to_players}
+            {
+                "npc": inv.npc_id,
+                "show_clocks_to_players": inv.show_clocks_to_players,
+                "show_vulnerability_clock_to_players": inv.show_vulnerability_clock_to_players,
+            }
             for inv in obj.npc_involvements.select_related("npc").order_by("npc__name")
         ]
 
@@ -1412,39 +1442,76 @@ class CampaignSerializer(serializers.ModelSerializer):
         invitations = obj.invitations.filter(status="pending")
         return CampaignInvitationSerializer(invitations, many=True).data
 
+    def _npc_row_for_active_session_detail(self, npc, inv, viewer_is_gm_or_staff):
+        """Build session NPC clock payload; strip hidden clocks for non-GM viewers."""
+        clock_fields = (
+            "id",
+            "name",
+            "clock_type",
+            "max_segments",
+            "filled_segments",
+            "completed",
+        )
+        if viewer_is_gm_or_staff:
+            progress_clocks_full = list(npc.progress_clocks.all().values(*clock_fields))
+            return {
+                "id": npc.id,
+                "name": npc.name,
+                "stand_name": npc.stand_name or "",
+                "harm_clock_current": npc.harm_clock_current,
+                "harm_clock_max": npc.harm_clock_max,
+                "vulnerability_clock_current": npc.vulnerability_clock_current,
+                "vulnerability_clock_max": npc.vulnerability_clock_max,
+                "conflict_clocks": npc.conflict_clocks or [],
+                "alt_clocks": npc.alt_clocks or [],
+                "progress_clocks": progress_clocks_full,
+            }
+        show_all = inv.show_clocks_to_players
+        show_vuln = inv.show_clocks_to_players or inv.show_vulnerability_clock_to_players
+        progress_clocks = (
+            list(npc.progress_clocks.all().values(*clock_fields)) if show_all else []
+        )
+        return {
+            "id": npc.id,
+            "name": npc.name,
+            "stand_name": npc.stand_name or "",
+            "harm_clock_current": npc.harm_clock_current if show_all else 0,
+            "harm_clock_max": npc.harm_clock_max if show_all else 0,
+            "vulnerability_clock_current": (
+                npc.vulnerability_clock_current if show_vuln else 0
+            ),
+            "vulnerability_clock_max": npc.vulnerability_clock_max if show_vuln else 0,
+            "conflict_clocks": (npc.conflict_clocks or []) if show_all else [],
+            "alt_clocks": (npc.alt_clocks or []) if show_all else [],
+            "progress_clocks": progress_clocks,
+        }
+
     def get_active_session_detail(self, obj):
         if not obj.active_session_id:
             return None
         s = obj.active_session
-        involvements = s.npc_involvements.filter(
-            show_clocks_to_players=True
-        ).select_related("npc")
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        viewer_is_gm_or_staff = bool(
+            user
+            and getattr(user, "is_authenticated", False)
+            and (getattr(user, "is_staff", False) or obj.gm_id == user.id)
+        )
+        base_qs = s.npc_involvements.select_related("npc")
+        if viewer_is_gm_or_staff:
+            involvements = base_qs.order_by("npc__name")
+        else:
+            involvements = base_qs.filter(
+                Q(show_clocks_to_players=True)
+                | Q(show_vulnerability_clock_to_players=True)
+            ).order_by("npc__name")
         session_npcs_with_clocks = []
         for inv in involvements:
             npc = inv.npc
-            clocks = list(
-                npc.progress_clocks.all().values(
-                    "id",
-                    "name",
-                    "clock_type",
-                    "max_segments",
-                    "filled_segments",
-                    "completed",
-                )
-            )
             session_npcs_with_clocks.append(
-                {
-                    "id": npc.id,
-                    "name": npc.name,
-                    "stand_name": npc.stand_name or "",
-                    "harm_clock_current": npc.harm_clock_current,
-                    "harm_clock_max": npc.harm_clock_max,
-                    "vulnerability_clock_current": npc.vulnerability_clock_current,
-                    "vulnerability_clock_max": npc.vulnerability_clock_max,
-                    "conflict_clocks": npc.conflict_clocks or [],
-                    "alt_clocks": npc.alt_clocks or [],
-                    "progress_clocks": clocks,
-                }
+                self._npc_row_for_active_session_detail(
+                    npc, inv, viewer_is_gm_or_staff
+                )
             )
         return {
             "id": s.id,
@@ -1472,8 +1539,6 @@ class CampaignSerializer(serializers.ModelSerializer):
         ]
 
     def get_progress_clocks(self, obj):
-        from django.db.models import Q
-
         request = self.context.get("request")
         if not request or not request.user:
             return []
