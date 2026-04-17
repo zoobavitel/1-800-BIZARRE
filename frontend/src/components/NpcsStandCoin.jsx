@@ -82,7 +82,7 @@ export default function NpcsStandCoin({ grades, readouts, onStep }) {
 
   const activeKey = pinned ?? hovered;
   const activeMeta = STAT_ORDER.find((s) => s.key === activeKey) ?? null;
-  const activeGrade = activeMeta ? grades[activeMeta.key] : null;
+  const activeGrade = activeMeta ? grades[activeMeta.key] ?? "D" : null;
   const activeBlurb = activeMeta ? readouts[activeMeta.key] ?? "" : "";
 
   useEffect(() => {
@@ -164,7 +164,9 @@ export default function NpcsStandCoin({ grades, readouts, onStep }) {
         userSelect: "none",
       }}
     >
-      <span style={SR_ONLY}>{announce}</span>
+      <span style={SR_ONLY} role="status" aria-live="polite" aria-atomic="true">
+        {announce}
+      </span>
       <div
         style={{
           width: "100%",
@@ -380,6 +382,7 @@ export default function NpcsStandCoin({ grades, readouts, onStep }) {
 
         {STAT_ORDER.map((s, i) => {
           const isHot = hovered === s.key || pinned === s.key;
+          const g = grades[s.key] ?? "D";
           return (
             <path
               key={`hit-${s.key}`}
@@ -390,7 +393,7 @@ export default function NpcsStandCoin({ grades, readouts, onStep }) {
               style={{ cursor: "pointer" }}
               role="button"
               tabIndex={0}
-              aria-label={`${s.label}, grade ${grades[s.key]}. Left-click to raise, right-click to lower.`}
+              aria-label={`${s.label}, grade ${g}. Left-click to raise, right-click to lower.`}
               onMouseEnter={() => setHovered(s.key)}
               onMouseLeave={() => setHovered(null)}
               onFocus={() => setHovered(s.key)}
