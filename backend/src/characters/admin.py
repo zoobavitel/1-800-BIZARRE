@@ -88,7 +88,15 @@ class NPCAdmin(admin.ModelAdmin):
             'fields': ('stand_description', 'stand_appearance', 'stand_manifestation', 'special_traits')
         }),
         ('Additional Details', {
-            'fields': ('purveyor', 'notes', 'items', 'contacts', 'faction_status', 'inventory')
+            'fields': (
+                'purveyor',
+                'notes',
+                'inventory_notes',
+                'items',
+                'contacts',
+                'faction_status',
+                'inventory',
+            )
         }),
     )
 

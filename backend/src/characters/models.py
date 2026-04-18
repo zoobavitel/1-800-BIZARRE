@@ -2,7 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.utils import timezone
 import json
@@ -326,6 +326,7 @@ class NPC(models.Model):
     # New fields for Alonzo Fortuna
     purveyor = models.CharField(max_length=100, blank=True)
     notes = models.TextField(blank=True)
+    inventory_notes = models.TextField(blank=True)
     items = models.JSONField(default=list, blank=True)
     contacts = models.JSONField(default=list, blank=True)
     faction_status = models.JSONField(default=dict, blank=True)
@@ -939,36 +940,93 @@ class CharacterHistory(models.Model):
         return f"Changes for {self.character.true_name} at {self.timestamp}"
 
 
+class CampaignAuditLog(models.Model):
+    """GM-visible audit trail for campaign-scoped actions (e.g. progress clocks)."""
+
+    campaign = models.ForeignKey(
+        Campaign, on_delete=models.CASCADE, related_name="audit_logs"
+    )
+    actor = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True, related_name="campaign_audit_actions"
+    )
+    timestamp = models.DateTimeField(auto_now_add=True)
+    action = models.CharField(max_length=32)
+    payload = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-timestamp"]
+
+    def __str__(self):
+        return f"{self.action} @ {self.timestamp}"
+
+
+def _character_scalar_snapshot(character):
+    """Serialize concrete scalar fields for history diffing."""
+    snap = {}
+    for field in character._meta.concrete_fields:
+        if field.primary_key:
+            continue
+        name = field.name
+        if field.many_to_many:
+            continue
+        internal = field.get_internal_type()
+        try:
+            if internal in ("ForeignKey", "OneToOneField"):
+                snap[name] = str(getattr(character, field.attname))
+            elif internal == "JSONField":
+                snap[name] = json.dumps(
+                    getattr(character, name), sort_keys=True, default=str
+                )
+            else:
+                val = getattr(character, name)
+                if hasattr(val, "isoformat"):
+                    snap[name] = val.isoformat()
+                else:
+                    snap[name] = "" if val is None else str(val)
+        except Exception:
+            snap[name] = ""
+    return snap
+
+
+@receiver(pre_save, sender=Character)
+def character_presave_snapshot(sender, instance, **kwargs):
+    if not instance.pk:
+        instance._history_prev_snapshot = None
+        return
+    try:
+        prev = Character.objects.get(pk=instance.pk)
+    except Character.DoesNotExist:
+        instance._history_prev_snapshot = None
+        return
+    instance._history_prev_snapshot = _character_scalar_snapshot(prev)
+
+
 @receiver(post_save, sender=Character)
 def log_character_changes(sender, instance, created, **kwargs):
     if created:
-        # Don't log creation as a change
         return
 
-    try:
-        latest_history = CharacterHistory.objects.filter(character=instance).latest(
-            "timestamp"
-        )
-        old_data = latest_history.changed_fields
-    except CharacterHistory.DoesNotExist:
-        old_data = {}
+    from .history_context import get_character_history_editor
 
-    new_data = {}
-    for field in instance._meta.fields:
-        new_data[field.name] = str(getattr(instance, field.name))
-
+    prev = getattr(instance, "_history_prev_snapshot", None)
+    if prev is None:
+        prev = {}
+    new_snap = _character_scalar_snapshot(instance)
     changed_fields = {}
-    for field_name, new_value in new_data.items():
-        if old_data.get(field_name) != new_value:
-            changed_fields[field_name] = {
-                "old": old_data.get(field_name),
-                "new": new_value,
-            }
+    for field_name, new_value in new_snap.items():
+        old_value = prev.get(field_name)
+        if old_value != new_value:
+            changed_fields[field_name] = {"old": old_value, "new": new_value}
 
     if changed_fields:
         CharacterHistory.objects.create(
-            character=instance, changed_fields=changed_fields
+            character=instance,
+            editor=get_character_history_editor(),
+            changed_fields=changed_fields,
         )
+
+    if hasattr(instance, "_history_prev_snapshot"):
+        del instance._history_prev_snapshot
 
 
 class Stand(models.Model):
