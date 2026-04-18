@@ -21,6 +21,7 @@ from ..roll_helpers import (
     normalize_position,
 )
 from ..serializers import CharacterSerializer
+from ..history_context import bind_character_history_editor, reset_character_history_editor
 
 
 def _character_queryset_for_user(user):
@@ -61,7 +62,12 @@ class CharacterViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        user = self.request.user
+        token = bind_character_history_editor(user)
+        try:
+            serializer.save(user=user)
+        finally:
+            reset_character_history_editor(token)
 
     def perform_update(self, serializer):
         instance = serializer.instance
@@ -80,7 +86,11 @@ class CharacterViewSet(viewsets.ModelViewSet):
         # writable, force the original owner during save so both the database
         # row and serializer.instance stay in sync for the response.
         original_user_id = serializer.instance.user_id
-        serializer.save(user_id=original_user_id)
+        token = bind_character_history_editor(user)
+        try:
+            serializer.save(user_id=original_user_id)
+        finally:
+            reset_character_history_editor(token)
 
     def perform_destroy(self, instance):
         user = self.request.user

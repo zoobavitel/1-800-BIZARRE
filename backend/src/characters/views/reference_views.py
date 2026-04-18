@@ -3,7 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from ..models import (
     Heritage, Vice, Ability, Stand, StandAbility, HamonAbility, SpinAbility,
-    Trauma, CharacterHistory, Character, ExperienceTracker
+    Trauma, CharacterHistory, Character, ExperienceTracker, Campaign,
 )
 from ..serializers import (
     HeritageSerializer, ViceSerializer, AbilitySerializer, StandSerializer,
@@ -66,11 +66,31 @@ class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = CharacterHistorySerializer
 
     def get_queryset(self):
-        # Filter history based on user permissions
         user = self.request.user
+        campaign_id = self.request.query_params.get("campaign")
+        qs = CharacterHistory.objects.all().select_related(
+            "character", "character__campaign", "editor"
+        )
         if user.is_staff:
-            return CharacterHistory.objects.all()
-        return CharacterHistory.objects.filter(character__user=user)
+            base = qs
+        elif campaign_id:
+            try:
+                cid = int(campaign_id)
+            except (TypeError, ValueError):
+                return CharacterHistory.objects.none()
+            campaign = Campaign.objects.filter(pk=cid).first()
+            if not campaign or campaign.gm_id != user.id:
+                return CharacterHistory.objects.none()
+            base = qs.filter(character__campaign_id=cid)
+        elif Campaign.objects.filter(gm=user).exists():
+            base = qs.filter(character__campaign__gm=user)
+        else:
+            base = qs.filter(character__user=user)
+
+        character_id = self.request.query_params.get("character")
+        if character_id:
+            base = base.filter(character_id=character_id)
+        return base.order_by("-timestamp")
 
 
 class ExperienceTrackerViewSet(viewsets.ReadOnlyModelViewSet):

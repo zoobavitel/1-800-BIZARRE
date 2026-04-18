@@ -4,8 +4,33 @@ from rest_framework.permissions import IsAuthenticated
 
 from ..models import (
     Claim, CrewSpecialAbility, CrewPlaybook, CrewUpgrade,
-    Character, XPHistory, StressHistory, ChatMessage, ProgressClock
+    Character, XPHistory, StressHistory, ChatMessage, ProgressClock,
+    CampaignAuditLog,
 )
+
+
+def _log_progress_clock_audit(clock, user, action, extra=None):
+    if not clock.campaign_id:
+        return
+    payload = {
+        "clock_id": clock.id,
+        "name": clock.name,
+        "filled_segments": clock.filled_segments,
+        "max_segments": clock.max_segments,
+        "visible_to_party": clock.visible_to_party,
+        "visible_to_players": clock.visible_to_players,
+        "npc_id": clock.npc_id,
+        "character_id": clock.character_id,
+        "session_id": clock.session_id,
+    }
+    if extra:
+        payload["extra"] = extra
+    CampaignAuditLog.objects.create(
+        campaign_id=clock.campaign_id,
+        actor=user if getattr(user, "is_authenticated", False) else None,
+        action=action,
+        payload=payload,
+    )
 from ..serializers import (
     ClaimSerializer, CrewSpecialAbilitySerializer, CrewPlaybookSerializer,
     CrewUpgradeSerializer, XPHistorySerializer, StressHistorySerializer,
@@ -112,49 +137,87 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
-        campaign = serializer.validated_data.get('campaign')
+        from rest_framework.exceptions import PermissionDenied
+
+        campaign = serializer.validated_data.get("campaign")
         user = self.request.user
         is_gm = campaign and campaign.gm_id == user.id
         if not campaign and not user.is_staff:
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied('Campaign is required to create progress clocks.')
+            raise PermissionDenied("Campaign is required to create progress clocks.")
         if campaign and not is_gm and not user.is_staff:
             in_campaign = (
-                campaign.players.filter(id=user.id).exists() or
-                campaign.characters.filter(user_id=user.id).exists()
+                campaign.players.filter(id=user.id).exists()
+                or campaign.characters.filter(user_id=user.id).exists()
             )
             if not in_campaign:
-                from rest_framework.exceptions import PermissionDenied
-                raise PermissionDenied('Only campaign members can create progress clocks.')
-            serializer.save(created_by=user)
+                raise PermissionDenied("Only campaign members can create progress clocks.")
+            clock = serializer.save(created_by=user)
         else:
-            serializer.save()
+            clock = serializer.save()
+        _log_progress_clock_audit(clock, user, "clock_created")
 
     def perform_update(self, serializer):
+        from rest_framework.exceptions import PermissionDenied
+
         obj = serializer.instance
         user = self.request.user
         is_gm = obj.campaign and obj.campaign.gm_id == user.id
-        if not is_gm and not user.is_staff:
-            if obj.created_by_id != user.id:
-                from rest_framework.exceptions import PermissionDenied
-                raise PermissionDenied('Only the creator or GM can update this clock.')
-            data = serializer.validated_data
-            if 'visible_to_players' in data and data.get('visible_to_players') != obj.visible_to_players:
-                from rest_framework.exceptions import PermissionDenied
-                raise PermissionDenied('Only the GM can change visible_to_players.')
         if not obj.campaign and not user.is_staff:
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied('Only staff can update clocks without a campaign.')
+            raise PermissionDenied("Only staff can update clocks without a campaign.")
+
+        data = serializer.validated_data
+        party_tick_keys = frozenset({"filled_segments"})
+
+        if user.is_staff or is_gm:
+            pass
+        else:
+            campaign = obj.campaign
+            in_campaign = (
+                campaign.players.filter(id=user.id).exists()
+                or campaign.characters.filter(user_id=user.id).exists()
+            )
+            if (
+                obj.visible_to_party
+                and in_campaign
+                and set(data.keys()) <= party_tick_keys
+            ):
+                pass
+            elif obj.created_by_id == user.id:
+                if "visible_to_players" in data and data.get(
+                    "visible_to_players"
+                ) != obj.visible_to_players:
+                    raise PermissionDenied(
+                        "Only the GM can change visible_to_players."
+                    )
+            else:
+                raise PermissionDenied("Only the creator or GM can update this clock.")
+
+        before = {
+            "filled_segments": obj.filled_segments,
+            "max_segments": obj.max_segments,
+            "name": obj.name,
+            "visible_to_party": obj.visible_to_party,
+            "visible_to_players": obj.visible_to_players,
+            "completed": obj.completed,
+        }
         serializer.save()
+        _log_progress_clock_audit(serializer.instance, user, "clock_updated", {"before": before})
 
     def perform_destroy(self, instance):
+        from rest_framework.exceptions import PermissionDenied
+
         user = self.request.user
         is_gm = instance.campaign and instance.campaign.gm_id == user.id
         if not is_gm and not user.is_staff:
             if instance.created_by_id != user.id:
-                from rest_framework.exceptions import PermissionDenied
-                raise PermissionDenied('Only the creator or GM can delete this clock.')
+                raise PermissionDenied("Only the creator or GM can delete this clock.")
         if not instance.campaign and not user.is_staff:
-            from rest_framework.exceptions import PermissionDenied
-            raise PermissionDenied('Only staff can delete clocks without a campaign.')
+            raise PermissionDenied("Only staff can delete clocks without a campaign.")
+        snap = {
+            "filled_segments": instance.filled_segments,
+            "max_segments": instance.max_segments,
+            "name": instance.name,
+            "clock_id": instance.id,
+        }
+        _log_progress_clock_audit(instance, user, "clock_deleted", {"before": snap})
         instance.delete()

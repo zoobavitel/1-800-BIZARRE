@@ -325,12 +325,20 @@ const NPCSheet = ({
   }, [npc?.id, npc?.name]);
   const [role, setRole] = useState(npc?.role || "");
   const [notes, setNotes] = useState(npc?.notes || "");
+  const [inventoryNotes, setInventoryNotes] = useState(
+    npc?.inventory_notes ?? "",
+  );
   const [campaign, setCampaign] = useState(npc?.campaign || "");
   const [faction, setFaction] = useState(npc?.faction ?? npc?.faction_id ?? "");
 
   useEffect(() => {
     setFaction(npc?.faction ?? npc?.faction_id ?? "");
   }, [npc?.id, npc?.faction, npc?.faction_id]);
+
+  useEffect(() => {
+    setNotes(npc?.notes || "");
+    setInventoryNotes(npc?.inventory_notes ?? "");
+  }, [npc?.id, npc?.notes, npc?.inventory_notes]);
 
   const campaignId = typeof campaign === "object" ? campaign?.id : campaign;
   const activeCampaign = useMemo(
@@ -378,7 +386,7 @@ const NPCSheet = ({
     return () => {
       cancelled = true;
     };
-  }, [isGM, activeSessionId]);
+  }, [isGM, activeSessionId, campaigns]);
 
   const sessionInvolvementForNpc = useMemo(() => {
     const id = npc?.id;
@@ -393,13 +401,16 @@ const NPCSheet = ({
       if (activeSessionId == null) return;
       setVulnRevealSaving(true);
       try {
-        const normalized = (nextInvolvements || []).map((i) => ({
-          npc: i.npc,
-          show_clocks_to_players: !!i.show_clocks_to_players,
-          show_vulnerability_clock_to_players: !!(
-            i.show_clocks_to_players || i.show_vulnerability_clock_to_players
-          ),
-        }));
+        const normalized = (nextInvolvements || []).map((i) => {
+          const showAll = !!i.show_clocks_to_players;
+          const rawVuln = !!(i.show_vulnerability_clock_to_players ?? false);
+          return {
+            npc: i.npc,
+            show_clocks_to_players: showAll,
+            // Match serializers._normalize_npc_involvement_clock_flags: full clocks ⇒ vuln visible.
+            show_vulnerability_clock_to_players: showAll || rawVuln,
+          };
+        });
         const updated = await sessionAPI.patchSession(activeSessionId, {
           npc_involvements: normalized,
         });
@@ -846,6 +857,7 @@ const NPCSheet = ({
       stand_name: standName,
       role,
       notes,
+      inventory_notes: inventoryNotes,
       heritage: heritage || null,
       playbook,
       stand_coin_stats: {
@@ -877,6 +889,7 @@ const NPCSheet = ({
       standName,
       role,
       notes,
+      inventoryNotes,
       heritage,
       playbook,
       stats,
@@ -936,6 +949,7 @@ const NPCSheet = ({
     standName,
     role,
     notes,
+    inventoryNotes,
     heritage,
     playbook,
     stats,
@@ -2834,6 +2848,28 @@ const NPCSheet = ({
                     }}
                   />
                 </div>
+                {/* Inventory (free text) */}
+                <div style={S.card}>
+                  <span style={S.lbl}>INVENTORY</span>
+                  <textarea
+                    value={inventoryNotes}
+                    onChange={(e) => setInventoryNotes(e.target.value)}
+                    placeholder="Gear, valuables, evidence, vehicles, anything they carry…"
+                    style={{
+                      width: "100%",
+                      height: "120px",
+                      background: "#0a0a14",
+                      color: "#d1d5db",
+                      border: "1px solid #2d1f52",
+                      padding: "8px",
+                      fontFamily: "monospace",
+                      fontSize: "12px",
+                      resize: "vertical",
+                      boxSizing: "border-box",
+                      outline: "none",
+                    }}
+                  />
+                </div>
               </div>
             </div>
           </>
@@ -3345,7 +3381,7 @@ const NPCSheet = ({
 
             {/* Inventory */}
             <div style={S.card}>
-              <span style={S.lbl}>INVENTORY / ASSETS</span>
+              <span style={S.lbl}>INVENTORY</span>
               <div
                 style={{
                   display: "flex",

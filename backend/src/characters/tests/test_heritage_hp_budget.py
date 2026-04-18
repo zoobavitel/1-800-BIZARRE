@@ -180,3 +180,35 @@ class HeritageHpBudgetSerializerTests(TestCase):
         )
         # base 2 + bonus 3 = 5 >= optional cost 5
         self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_partial_patch_omitting_benefits_uses_instance_m2m(self):
+        """PATCH without selected_benefits/detriments must use instance M2M for validation."""
+        serializer = CharacterSerializer(
+            instance=self.char,
+            data={"stress": 1},
+            partial=True,
+            context={"request": self._request()},
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_explicit_empty_selected_benefits_still_requires_required(self):
+        """Explicit [] must not fall back to instance (client clearing picks)."""
+        serializer = CharacterSerializer(
+            instance=self.char,
+            data={
+                "heritage": self.heritage.id,
+                "selected_benefits": [],
+                "selected_detriments": [
+                    self.det_req_a.id,
+                    self.det_req_b.id,
+                ],
+            },
+            partial=True,
+            context={"request": self._request()},
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("non_field_errors", serializer.errors)
+        self.assertIn(
+            "Missing required benefits",
+            str(serializer.errors["non_field_errors"][0]),
+        )
