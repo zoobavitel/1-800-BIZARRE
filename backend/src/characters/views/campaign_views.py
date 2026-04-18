@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import connection, models
 from django.contrib.auth.models import User
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -20,6 +20,40 @@ from ..serializers import (
     ShowcasedNPCSerializer,
     InvitableUserSerializer,
 )
+
+
+def _gm_history_character_row(h):
+    changed = h.changed_fields or {}
+    keys = sorted(changed.keys())
+    label = ", ".join(keys[:14])
+    if len(keys) > 14:
+        label += "…"
+    return {
+        "type": "character",
+        "timestamp": h.timestamp.isoformat(),
+        "id": h.id,
+        "character_id": h.character_id,
+        "character_name": h.character.true_name,
+        "actor_username": h.editor.username if h.editor_id else None,
+        "summary": f"Sheet: {label or 'update'}",
+        "detail": {"changed_fields": changed},
+    }
+
+
+def _gm_history_clock_row(a):
+    payload = a.payload or {}
+    cname = payload.get("name") or "Clock"
+    verb = a.action.replace("_", " ")
+    return {
+        "type": "clock",
+        "timestamp": a.timestamp.isoformat(),
+        "id": a.id,
+        "character_id": None,
+        "character_name": None,
+        "actor_username": a.actor.username if a.actor_id else None,
+        "summary": f"Clock {verb}: {cname}",
+        "detail": payload,
+    }
 
 
 class CampaignViewSet(viewsets.ModelViewSet):
@@ -278,6 +312,13 @@ class CampaignViewSet(viewsets.ModelViewSet):
             )
 
         character_id = request.query_params.get("character")
+        character_filter_id = None
+        if character_id not in (None, ""):
+            try:
+                character_filter_id = int(character_id)
+            except (TypeError, ValueError):
+                character_filter_id = None
+
         kind = (request.query_params.get("kind") or "all").lower()
         try:
             page = max(1, int(request.query_params.get("page", 1)))
@@ -285,64 +326,96 @@ class CampaignViewSet(viewsets.ModelViewSet):
         except ValueError:
             page, page_size = 1, 50
 
-        rows = []
-        if kind in ("all", "sheet"):
-            ch_qs = CharacterHistory.objects.filter(
-                character__campaign=campaign
-            ).select_related("character", "editor")
-            if character_id:
-                ch_qs = ch_qs.filter(character_id=character_id)
-            for h in ch_qs.order_by("-timestamp")[:400]:
-                keys = sorted(h.changed_fields.keys())
-                label = ", ".join(keys[:14])
-                if len(keys) > 14:
-                    label += "…"
-                rows.append(
-                    {
-                        "type": "character",
-                        "timestamp": h.timestamp.isoformat(),
-                        "sort_key": h.timestamp,
-                        "id": h.id,
-                        "character_id": h.character_id,
-                        "character_name": h.character.true_name,
-                        "actor_username": (
-                            h.editor.username if h.editor_id else None
-                        ),
-                        "summary": f"Sheet: {label or 'update'}",
-                        "detail": {"changed_fields": h.changed_fields},
-                    }
-                )
-
-        if kind in ("all", "clocks"):
-            aud_qs = CampaignAuditLog.objects.filter(campaign=campaign).select_related(
-                "actor"
-            )
-            for a in aud_qs.order_by("-timestamp")[:400]:
-                payload = a.payload or {}
-                cname = payload.get("name") or "Clock"
-                verb = a.action.replace("_", " ")
-                rows.append(
-                    {
-                        "type": "clock",
-                        "timestamp": a.timestamp.isoformat(),
-                        "sort_key": a.timestamp,
-                        "id": a.id,
-                        "character_id": None,
-                        "character_name": None,
-                        "actor_username": (
-                            a.actor.username if a.actor_id else None
-                        ),
-                        "summary": f"Clock {verb}: {cname}",
-                        "detail": payload,
-                    }
-                )
-
-        rows.sort(key=lambda r: r["sort_key"], reverse=True)
-        for r in rows:
-            r.pop("sort_key", None)
-        total = len(rows)
         start = (page - 1) * page_size
-        page_rows = rows[start : start + page_size]
+
+        ch_qs = CharacterHistory.objects.filter(character__campaign=campaign)
+        if character_filter_id is not None:
+            ch_qs = ch_qs.filter(character_id=character_filter_id)
+        aud_qs = CampaignAuditLog.objects.filter(campaign=campaign)
+
+        if kind == "sheet":
+            total = ch_qs.count()
+            page_qs = (
+                ch_qs.select_related("character", "editor")
+                .order_by("-timestamp")[start : start + page_size]
+            )
+            page_rows = [_gm_history_character_row(h) for h in page_qs]
+        elif kind == "clocks":
+            total = aud_qs.count()
+            page_qs = aud_qs.select_related("actor").order_by("-timestamp")[
+                start : start + page_size
+            ]
+            page_rows = [_gm_history_clock_row(a) for a in page_qs]
+        elif kind == "all":
+            # Merge by timestamp across both sources; LIMIT/OFFSET on UNION (not a 400-row cap).
+            qn = connection.ops.quote_name
+            ch_tbl = qn(CharacterHistory._meta.db_table)
+            char_tbl = qn(Character._meta.db_table)
+            aud_tbl = qn(CampaignAuditLog._meta.db_table)
+
+            part_ch = (
+                f"SELECT 'character' AS row_type, ch.id AS row_id, ch.timestamp AS ts "
+                f"FROM {ch_tbl} ch "
+                f"INNER JOIN {char_tbl} c ON ch.character_id = c.id "
+                f"WHERE c.campaign_id = %s"
+            )
+            union_params = [campaign.id]
+            if character_filter_id is not None:
+                part_ch += " AND ch.character_id = %s"
+                union_params.append(character_filter_id)
+
+            part_aud = (
+                f"SELECT 'clock' AS row_type, aud.id AS row_id, aud.timestamp AS ts "
+                f"FROM {aud_tbl} aud "
+                f"WHERE aud.campaign_id = %s"
+            )
+            union_params.append(campaign.id)
+
+            inner_union = f"({part_ch}) UNION ALL ({part_aud})"
+            count_sql = f"SELECT COUNT(*) FROM ({inner_union}) AS merged_count"
+            page_sql = (
+                f"SELECT row_type, row_id, ts FROM ({inner_union}) AS merged "
+                f"ORDER BY ts DESC LIMIT %s OFFSET %s"
+            )
+
+            with connection.cursor() as cursor:
+                cursor.execute(count_sql, union_params)
+                total = cursor.fetchone()[0]
+                cursor.execute(
+                    page_sql, union_params + [page_size, start]
+                )
+                merged_rows = cursor.fetchall()
+
+            char_ids = [rid for rt, rid, _ts in merged_rows if rt == "character"]
+            clock_ids = [rid for rt, rid, _ts in merged_rows if rt == "clock"]
+
+            hist_by_id = {
+                h.id: h
+                for h in CharacterHistory.objects.filter(id__in=char_ids).select_related(
+                    "character", "editor"
+                )
+            }
+            aud_by_id = {
+                a.id: a
+                for a in CampaignAuditLog.objects.filter(id__in=clock_ids).select_related(
+                    "actor"
+                )
+            }
+
+            page_rows = []
+            for row_type, row_id, _ts in merged_rows:
+                if row_type == "character":
+                    h = hist_by_id.get(row_id)
+                    if h:
+                        page_rows.append(_gm_history_character_row(h))
+                else:
+                    a = aud_by_id.get(row_id)
+                    if a:
+                        page_rows.append(_gm_history_clock_row(a))
+        else:
+            total = 0
+            page_rows = []
+
         return Response(
             {
                 "count": total,

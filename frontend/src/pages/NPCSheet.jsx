@@ -338,7 +338,7 @@ const NPCSheet = ({
   useEffect(() => {
     setNotes(npc?.notes || "");
     setInventoryNotes(npc?.inventory_notes ?? "");
-  }, [npc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [npc?.id, npc?.notes, npc?.inventory_notes]);
 
   const campaignId = typeof campaign === "object" ? campaign?.id : campaign;
   const activeCampaign = useMemo(
@@ -401,13 +401,16 @@ const NPCSheet = ({
       if (activeSessionId == null) return;
       setVulnRevealSaving(true);
       try {
-        const normalized = (nextInvolvements || []).map((i) => ({
-          npc: i.npc,
-          show_clocks_to_players: !!i.show_clocks_to_players,
-          show_vulnerability_clock_to_players: !!(
-            i.show_vulnerability_clock_to_players ?? false
-          ),
-        }));
+        const normalized = (nextInvolvements || []).map((i) => {
+          const showAll = !!i.show_clocks_to_players;
+          const rawVuln = !!(i.show_vulnerability_clock_to_players ?? false);
+          return {
+            npc: i.npc,
+            show_clocks_to_players: showAll,
+            // Match serializers._normalize_npc_involvement_clock_flags: full clocks ⇒ vuln visible.
+            show_vulnerability_clock_to_players: showAll || rawVuln,
+          };
+        });
         const updated = await sessionAPI.patchSession(activeSessionId, {
           npc_involvements: normalized,
         });
