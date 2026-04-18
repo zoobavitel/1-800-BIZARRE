@@ -226,6 +226,11 @@ class SessionNPCInvolvementWriteSerializer(serializers.Serializer):
     show_vulnerability_clock_to_players = serializers.BooleanField(default=False)
 
 
+def _normalize_npc_involvement_clock_flags(show_all, show_vuln):
+    """Full clocks to players implies vulnerability clock visibility (matches read-side)."""
+    return show_all, show_all or show_vuln
+
+
 class SessionSerializer(serializers.ModelSerializer):
     npcs_involved = serializers.SerializerMethodField()
     npc_involvements = serializers.SerializerMethodField()
@@ -274,6 +279,9 @@ class SessionSerializer(serializers.ModelSerializer):
                     show_vuln = bool(
                         item.get("show_vulnerability_clock_to_players", False)
                     )
+                    show, show_vuln = _normalize_npc_involvement_clock_flags(
+                        show, show_vuln
+                    )
                 else:
                     show = False
                     show_vuln = False
@@ -317,6 +325,9 @@ class SessionSerializer(serializers.ModelSerializer):
                     show = bool(item.get("show_clocks_to_players", False))
                     show_vuln = bool(
                         item.get("show_vulnerability_clock_to_players", False)
+                    )
+                    show, show_vuln = _normalize_npc_involvement_clock_flags(
+                        show, show_vuln
                     )
                 else:
                     show = False
