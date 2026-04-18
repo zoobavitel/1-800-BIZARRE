@@ -226,9 +226,13 @@ class SessionNPCInvolvementWriteSerializer(serializers.Serializer):
     show_vulnerability_clock_to_players = serializers.BooleanField(default=False)
 
 
-def _normalize_npc_involvement_clock_flags(show_all, show_vuln):
-    """Full clocks to players implies vulnerability clock visibility (matches read-side)."""
-    return show_all, show_all or show_vuln
+def _normalize_npc_involvement_clock_flags(show_all, raw_show_vuln_from_client):
+    """Persist the same rule as player read-side: full clocks ⇒ vuln visible.
+
+    `raw_show_vuln_from_client` must be the payload flag only (not pre-OR'd with
+    show_all); this applies the invariant exactly once: show_all ∨ raw.
+    """
+    return show_all, show_all or raw_show_vuln_from_client
 
 
 class SessionSerializer(serializers.ModelSerializer):
@@ -276,11 +280,11 @@ class SessionSerializer(serializers.ModelSerializer):
                 npc_id = item.get("npc") if isinstance(item, dict) else item
                 if isinstance(item, dict):
                     show = bool(item.get("show_clocks_to_players", False))
-                    show_vuln = bool(
+                    raw_vuln = bool(
                         item.get("show_vulnerability_clock_to_players", False)
                     )
                     show, show_vuln = _normalize_npc_involvement_clock_flags(
-                        show, show_vuln
+                        show, raw_vuln
                     )
                 else:
                     show = False
@@ -323,11 +327,11 @@ class SessionSerializer(serializers.ModelSerializer):
                 npc_id = item.get("npc") if isinstance(item, dict) else item
                 if isinstance(item, dict):
                     show = bool(item.get("show_clocks_to_players", False))
-                    show_vuln = bool(
+                    raw_vuln = bool(
                         item.get("show_vulnerability_clock_to_players", False)
                     )
                     show, show_vuln = _normalize_npc_involvement_clock_flags(
-                        show, show_vuln
+                        show, raw_vuln
                     )
                 else:
                     show = False
@@ -1594,14 +1598,20 @@ class CampaignSerializer(serializers.ModelSerializer):
                     npc, inv, viewer_is_gm_or_staff
                 )
             )
-        session_number = (
-            Session.objects.filter(campaign=obj)
-            .filter(
-                Q(session_date__lt=s.session_date)
-                | Q(session_date=s.session_date, pk__lte=s.pk)
+        # session_date is auto_now_add but guard None for robustness and ORM edge cases.
+        if s.session_date is None:
+            session_number = Session.objects.filter(
+                campaign=obj, pk__lte=s.pk
+            ).count()
+        else:
+            session_number = (
+                Session.objects.filter(campaign=obj)
+                .filter(
+                    Q(session_date__lt=s.session_date)
+                    | Q(session_date=s.session_date, pk__lte=s.pk)
+                )
+                .count()
             )
-            .count()
-        )
         return {
             "id": s.id,
             "name": s.name,
