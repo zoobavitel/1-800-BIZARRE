@@ -62,7 +62,12 @@ class CharacterViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        user = self.request.user
+        token = bind_character_history_editor(user)
+        try:
+            serializer.save(user=user)
+        finally:
+            reset_character_history_editor(token)
 
     def perform_update(self, serializer):
         instance = serializer.instance
