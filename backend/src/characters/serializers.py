@@ -44,6 +44,7 @@ from .models import (
     ProgressClock,
     Roll,
     GroupAction,
+    CampaignAuditLog,
 )
 
 # ── NPC level computation (mirrors NPCSheet.jsx formula) ─────────────────────
@@ -271,8 +272,7 @@ class SessionSerializer(serializers.ModelSerializer):
                 if isinstance(item, dict):
                     show = bool(item.get("show_clocks_to_players", False))
                     show_vuln = bool(
-                        show
-                        or item.get("show_vulnerability_clock_to_players", False)
+                        item.get("show_vulnerability_clock_to_players", False)
                     )
                 else:
                     show = False
@@ -316,8 +316,7 @@ class SessionSerializer(serializers.ModelSerializer):
                 if isinstance(item, dict):
                     show = bool(item.get("show_clocks_to_players", False))
                     show_vuln = bool(
-                        show
-                        or item.get("show_vulnerability_clock_to_players", False)
+                        item.get("show_vulnerability_clock_to_players", False)
                     )
                 else:
                     show = False
@@ -512,11 +511,44 @@ class SessionRecordsSerializer(serializers.ModelSerializer):
 
 
 class CharacterHistorySerializer(serializers.ModelSerializer):
-    editor = serializers.StringRelatedField()
+    character_true_name = serializers.CharField(
+        source="character.true_name", read_only=True
+    )
+    editor_username = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterHistory
-        fields = ["id", "character", "editor", "timestamp", "changed_fields"]
+        fields = [
+            "id",
+            "character",
+            "character_true_name",
+            "editor",
+            "editor_username",
+            "timestamp",
+            "changed_fields",
+        ]
+
+    def get_editor_username(self, obj):
+        return obj.editor.username if obj.editor_id else None
+
+
+class CampaignAuditLogSerializer(serializers.ModelSerializer):
+    actor_username = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CampaignAuditLog
+        fields = [
+            "id",
+            "campaign",
+            "actor",
+            "actor_username",
+            "timestamp",
+            "action",
+            "payload",
+        ]
+
+    def get_actor_username(self, obj):
+        return obj.actor.username if obj.actor_id else None
 
 
 class BenefitSerializer(serializers.ModelSerializer):
@@ -757,9 +789,29 @@ class CharacterSerializer(serializers.ModelSerializer):
         if spin_ids and playbook_val != "SPIN":
             raise serializers.ValidationError("Spin abilities require playbook SPIN.")
         heritage = data.get("heritage") or getattr(self.instance, "heritage", None)
-        benefits = data.get("selected_benefits", [])
-        detriments = data.get("selected_detriments", [])
-        bonus_hp = data.get("bonus_hp_from_xp", 0)
+        # Partial PATCH: merge M2M from instance when keys omitted.
+        if "selected_benefits" in data:
+            benefits = data["selected_benefits"]
+        elif self.instance:
+            benefits = list(self.instance.selected_benefits.all())
+        else:
+            benefits = []
+
+        if "selected_detriments" in data:
+            detriments = data["selected_detriments"]
+        elif self.instance:
+            detriments = list(self.instance.selected_detriments.all())
+        else:
+            detriments = []
+
+        if "bonus_hp_from_xp" in data:
+            bonus_hp = data["bonus_hp_from_xp"]
+            if bonus_hp is None:
+                bonus_hp = 0
+        elif self.instance:
+            bonus_hp = self.instance.bonus_hp_from_xp or 0
+        else:
+            bonus_hp = 0
 
         if not heritage:
             raise serializers.ValidationError("You must pick a Heritage.")
@@ -1344,6 +1396,8 @@ class ProgressClockSerializer(serializers.ModelSerializer):
         source="get_clock_type_display", read_only=True
     )
     created_by = serializers.PrimaryKeyRelatedField(read_only=True, allow_null=True)
+    created_by_username = serializers.SerializerMethodField()
+    created_by_character_name = serializers.SerializerMethodField()
     max_segments = serializers.IntegerField(min_value=1, max_value=12, default=4)
 
     class Meta:
@@ -1365,9 +1419,25 @@ class ProgressClockSerializer(serializers.ModelSerializer):
             "visible_to_players",
             "visible_to_party",
             "created_by",
+            "created_by_username",
+            "created_by_character_name",
             "created_at",
             "completed",
         ]
+
+    def get_created_by_username(self, obj):
+        u = getattr(obj, "created_by", None)
+        return u.username if u else None
+
+    def get_created_by_character_name(self, obj):
+        if not obj.created_by_id or not obj.campaign_id:
+            return None
+        ch = (
+            obj.campaign.characters.filter(user_id=obj.created_by_id)
+            .only("true_name")
+            .first()
+        )
+        return ch.true_name if ch else None
 
 
 class CampaignInvitationSerializer(serializers.ModelSerializer):
@@ -1513,9 +1583,19 @@ class CampaignSerializer(serializers.ModelSerializer):
                     npc, inv, viewer_is_gm_or_staff
                 )
             )
+        session_number = (
+            Session.objects.filter(campaign=obj)
+            .filter(
+                Q(session_date__lt=s.session_date)
+                | Q(session_date=s.session_date, pk__lte=s.pk)
+            )
+            .count()
+        )
         return {
             "id": s.id,
             "name": s.name,
+            "session_number": session_number,
+            "session_date": s.session_date,
             "description": s.description,
             "objective": s.objective,
             "show_position_effect_to_players": getattr(
@@ -1641,6 +1721,7 @@ class NPCSerializer(serializers.ModelSerializer):
             "vulnerability_clock_max",
             "purveyor",
             "notes",
+            "inventory_notes",
             "items",
             "contacts",
             "faction_status",

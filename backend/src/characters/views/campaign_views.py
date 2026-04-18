@@ -5,7 +5,15 @@ from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from ..models import Campaign, CampaignInvitation, Character, ShowcasedNPC, NPC
+from ..models import (
+    Campaign,
+    CampaignAuditLog,
+    CampaignInvitation,
+    Character,
+    CharacterHistory,
+    NPC,
+    ShowcasedNPC,
+)
 from ..serializers import (
     CampaignSerializer,
     CampaignInvitationSerializer,
@@ -257,6 +265,91 @@ class CampaignViewSet(viewsets.ModelViewSet):
         return Response(
             ShowcasedNPCSerializer(showcased).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=["get"], url_path="gm-history")
+    def gm_history(self, request, pk=None):
+        """Merged character sheet + progress-clock audit for the GM (paginated)."""
+        campaign = self.get_object()
+        if campaign.gm != request.user and not request.user.is_staff:
+            return Response(
+                {"error": "Only the GM can view campaign history."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        character_id = request.query_params.get("character")
+        kind = (request.query_params.get("kind") or "all").lower()
+        try:
+            page = max(1, int(request.query_params.get("page", 1)))
+            page_size = min(100, max(1, int(request.query_params.get("page_size", 50))))
+        except ValueError:
+            page, page_size = 1, 50
+
+        rows = []
+        if kind in ("all", "sheet"):
+            ch_qs = CharacterHistory.objects.filter(
+                character__campaign=campaign
+            ).select_related("character", "editor")
+            if character_id:
+                ch_qs = ch_qs.filter(character_id=character_id)
+            for h in ch_qs.order_by("-timestamp")[:400]:
+                keys = sorted(h.changed_fields.keys())
+                label = ", ".join(keys[:14])
+                if len(keys) > 14:
+                    label += "…"
+                rows.append(
+                    {
+                        "type": "character",
+                        "timestamp": h.timestamp.isoformat(),
+                        "sort_key": h.timestamp,
+                        "id": h.id,
+                        "character_id": h.character_id,
+                        "character_name": h.character.true_name,
+                        "actor_username": (
+                            h.editor.username if h.editor_id else None
+                        ),
+                        "summary": f"Sheet: {label or 'update'}",
+                        "detail": {"changed_fields": h.changed_fields},
+                    }
+                )
+
+        if kind in ("all", "clocks"):
+            aud_qs = CampaignAuditLog.objects.filter(campaign=campaign).select_related(
+                "actor"
+            )
+            for a in aud_qs.order_by("-timestamp")[:400]:
+                payload = a.payload or {}
+                cname = payload.get("name") or "Clock"
+                verb = a.action.replace("_", " ")
+                rows.append(
+                    {
+                        "type": "clock",
+                        "timestamp": a.timestamp.isoformat(),
+                        "sort_key": a.timestamp,
+                        "id": a.id,
+                        "character_id": None,
+                        "character_name": None,
+                        "actor_username": (
+                            a.actor.username if a.actor_id else None
+                        ),
+                        "summary": f"Clock {verb}: {cname}",
+                        "detail": payload,
+                    }
+                )
+
+        rows.sort(key=lambda r: r["sort_key"], reverse=True)
+        for r in rows:
+            r.pop("sort_key", None)
+        total = len(rows)
+        start = (page - 1) * page_size
+        page_rows = rows[start : start + page_size]
+        return Response(
+            {
+                "count": total,
+                "page": page,
+                "page_size": page_size,
+                "results": page_rows,
+            }
         )
 
 
