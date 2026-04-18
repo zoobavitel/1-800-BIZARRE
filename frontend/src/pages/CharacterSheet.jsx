@@ -11,6 +11,7 @@ import {
   MAX_CREATION_DOTS,
   MAX_DOTS_PER_ACTION_CREATION,
   PC_STAT_DESC,
+  STAND_STAT_KEYS,
   DUR_TABLE,
   DEV_SESSION_XP,
   ACTION_ATTR,
@@ -20,6 +21,7 @@ import {
   DEFAULT_TRAUMA,
   DEVILS_BARGAIN_DETRIMENTS,
 } from "../features/character-sheet/constants/srd";
+import NpcsStandCoin from "../components/NpcsStandCoin";
 import {
   characterAPI,
   campaignAPI,
@@ -259,6 +261,10 @@ const CharacterSheetWrapper = ({
       ? charCampaign?.active_session?.id
       : null);
   const characterId = character?.id;
+
+  const maxStandGradeIndex =
+    character?.gm_can_have_s_rank_stand_stats === true ? 5 : 4;
+  const pcStandCoinMaxLetter = maxStandGradeIndex === 5 ? "S" : "A";
 
   // Resolve heritage: backend sends ID; new tabs may have null until heritages load
   const resolveHeritageId = (h) => {
@@ -959,21 +965,66 @@ const CharacterSheetWrapper = ({
     setActionRatings((p) => ({ ...p, [action]: p[action] + 1 }));
   };
 
-  // FIX 2: Hard cap at A(4) — S is GM-only
-  const incrementStat = (stat) => {
-    if (standStats[stat] >= 4) return;
-    setStandStats((p) => ({ ...p, [stat]: p[stat] + 1 }));
-  };
+  // FIX 2: Hard cap at A by default; S only when gm_can_have_s_rank_stand_stats
+  const incrementStat = useCallback(
+    (stat) => {
+      setStandStats((p) => {
+        if (p[stat] >= maxStandGradeIndex) return p;
+        return { ...p, [stat]: p[stat] + 1 };
+      });
+    },
+    [maxStandGradeIndex],
+  );
 
   // FIX 3: Prevent all-F — at least one stat must stay D or higher
-  const decrementStat = (stat) => {
-    if (standStats[stat] <= 0) return;
-    const allWouldBeF = Object.entries(standStats).every(([k, v]) =>
-      k === stat ? v - 1 === 0 : v === 0,
-    );
-    if (allWouldBeF) return;
-    setStandStats((p) => ({ ...p, [stat]: p[stat] - 1 }));
-  };
+  const decrementStat = useCallback((stat) => {
+    setStandStats((p) => {
+      if (p[stat] <= 0) return p;
+      const allWouldBeF = Object.entries(p).every(([k, v]) =>
+        k === stat ? v - 1 === 0 : v === 0,
+      );
+      if (allWouldBeF) return p;
+      return { ...p, [stat]: p[stat] - 1 };
+    });
+  }, []);
+
+  const standCoinGrades = useMemo(() => {
+    const out = {};
+    for (const k of STAND_STAT_KEYS) {
+      const raw = Math.max(
+        0,
+        Math.min(maxStandGradeIndex, Number(standStats[k]) || 0),
+      );
+      out[k] = INDEX_TO_GRADE(raw);
+    }
+    return out;
+  }, [standStats, maxStandGradeIndex]);
+
+  const pcStandCoinReadouts = useMemo(() => {
+    const out = {};
+    for (const k of STAND_STAT_KEYS) {
+      const val = Math.max(0, Number(standStats[k]) || 0);
+      const rows = PC_STAT_DESC[k] || [];
+      const safeIdx = Math.min(val, Math.max(0, rows.length - 1));
+      let text = rows[safeIdx] ?? "";
+      if (k === "durability" && val === 4) {
+        text += " · Resistance reduces harm 2 levels";
+      }
+      if (k === "precision" && val === 4) {
+        text += " · 5s also count as success";
+      }
+      out[k] = text;
+    }
+    return out;
+  }, [standStats]);
+
+  const bumpStandCoinGrade = useCallback(
+    (key, delta) => {
+      if (delta === 1) incrementStat(key);
+      else if (delta === -1) decrementStat(key);
+    },
+    [incrementStat, decrementStat],
+  );
 
   const toggleXP = (track, idx) => {
     const maxVals = {
@@ -3304,160 +3355,76 @@ const CharacterSheetWrapper = ({
                   <div style={{ marginBottom: "16px" }}>
                     <div
                       style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "baseline",
-                        marginBottom: "6px",
+                        background: "#0d0d1a",
+                        border: "1px solid #2d1f52",
+                        borderRadius: "4px",
+                        padding: "12px",
+                        marginBottom: "12px",
                       }}
                     >
-                      <span style={S.lbl}>STAND COIN STATS</span>
-                      <span
+                      <div
                         style={{
-                          fontSize: "11px",
-                          color:
-                            totalStandPoints > 6
-                              ? "#f87171"
-                              : totalStandPoints === 6
-                                ? "#34d399"
-                                : "#6b7280",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "baseline",
+                          marginBottom: "10px",
                         }}
                       >
-                        {totalStandPoints}/6 pts
-                      </span>
-                    </div>
-
-                    {totalStandPoints > 6 && (
-                      <div style={{ ...S.warn, marginBottom: "8px" }}>
-                        Over budget by {totalStandPoints - 6} point
-                        {totalStandPoints - 6 > 1 ? "s" : ""} — reduce a stat
+                        <span
+                          style={{
+                            color: "#a78bfa",
+                            fontSize: "11px",
+                            fontWeight: "bold",
+                            marginBottom: "4px",
+                            display: "block",
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                          }}
+                        >
+                          Stand Coin Stats
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            color:
+                              totalStandPoints > 6
+                                ? "#f87171"
+                                : totalStandPoints === 6
+                                  ? "#34d399"
+                                  : "#6b7280",
+                          }}
+                        >
+                          {totalStandPoints}/6 pts
+                        </span>
                       </div>
-                    )}
 
-                    {Object.entries(standStats).map(([stat, val]) => {
-                      const canDec =
-                        val > 0 &&
-                        !Object.entries(standStats).every(([k, v]) =>
-                          k === stat ? val - 1 === 0 : v === 0,
-                        );
-                      const canInc = val < 4;
-                      const desc = PC_STAT_DESC[stat]?.[val];
-                      return (
-                        <div key={stat} style={{ marginBottom: "10px" }}>
-                          <div
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              fontSize: "12px",
-                            }}
-                          >
-                            <span
-                              style={{
-                                color: "#d1d5db",
-                                fontWeight: "bold",
-                                width: "90px",
-                                textTransform: "uppercase",
-                              }}
-                            >
-                              {stat}
-                            </span>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "6px",
-                              }}
-                            >
-                              <button
-                                onClick={() => decrementStat(stat)}
-                                disabled={!canDec}
-                                style={{
-                                  ...S.btn,
-                                  background: canDec ? "#dc2626" : "#374151",
-                                  color: "#fff",
-                                  width: "20px",
-                                  height: "20px",
-                                  padding: 0,
-                                  opacity: canDec ? 1 : 0.4,
-                                }}
-                              >
-                                −
-                              </button>
-                              <span
-                                style={{
-                                  width: "18px",
-                                  textAlign: "center",
-                                  fontWeight: "bold",
-                                }}
-                              >
-                                {val}
-                              </span>
-                              <button
-                                onClick={() => incrementStat(stat)}
-                                disabled={!canInc}
-                                style={{
-                                  ...S.btn,
-                                  background: canInc ? "#16a34a" : "#374151",
-                                  color: "#fff",
-                                  width: "20px",
-                                  height: "20px",
-                                  padding: 0,
-                                  opacity: canInc ? 1 : 0.4,
-                                }}
-                              >
-                                +
-                              </button>
-                              <span
-                                style={{
-                                  width: "14px",
-                                  color: "#9ca3af",
-                                  fontSize: "11px",
-                                }}
-                              >
-                                {GRADE[val]}
-                              </span>
-                            </div>
-                          </div>
-                          {/* Stat description snippet */}
-                          {desc && (
-                            <div
-                              style={{
-                                fontSize: "10px",
-                                color: "#6b7280",
-                                marginTop: "2px",
-                                paddingLeft: "90px",
-                                lineHeight: "1.4",
-                              }}
-                            >
-                              {desc}
-                              {/* Extra inline notes for specific stats */}
-                              {stat === "durability" && val === 4 && (
-                                <span style={{ color: "#f59e0b" }}>
-                                  {" "}
-                                  · Resistance reduces harm 2 levels
-                                </span>
-                              )}
-                              {stat === "precision" && val === 4 && (
-                                <span style={{ color: "#a78bfa" }}>
-                                  {" "}
-                                  · 5s also count as success
-                                </span>
-                              )}
-                            </div>
-                          )}
+                      {totalStandPoints > 6 && (
+                        <div style={{ ...S.warn, marginBottom: "8px" }}>
+                          Over budget by {totalStandPoints - 6} point
+                          {totalStandPoints - 6 > 1 ? "s" : ""} — reduce a stat
                         </div>
-                      );
-                    })}
+                      )}
 
-                    <div
-                      style={{
-                        fontSize: "10px",
-                        color: "#4b5563",
-                        marginTop: "2px",
-                      }}
-                    >
-                      Player max: A(4) — S-rank is assigned by the table, not at
-                      creation
+                      <NpcsStandCoin
+                        variant="pc"
+                        pcMaxGrade={pcStandCoinMaxLetter}
+                        grades={standCoinGrades}
+                        readouts={pcStandCoinReadouts}
+                        onStep={bumpStandCoinGrade}
+                      />
+
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#4b5563",
+                          marginTop: "8px",
+                          lineHeight: 1.45,
+                        }}
+                      >
+                        {maxStandGradeIndex >= 5
+                          ? "S-rank is enabled for this character by the GM. Hover or focus a wedge to see grade rules."
+                          : "Player max is A unless the GM enables S-rank for this character. Hover or focus a wedge to see grade rules."}
+                      </div>
                     </div>
                     <div
                       style={{
@@ -3711,58 +3678,62 @@ const CharacterSheetWrapper = ({
                                     </span>
                                   </div>
                                 )}
-                                {(npc.conflict_clocks || []).map((clk) => (
-                                  <div
-                                    key={clk.id || clk.name}
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "6px",
-                                      marginBottom: "2px",
-                                    }}
-                                  >
-                                    <ProgressClock
-                                      size={32}
-                                      segments={clk.segments || 4}
-                                      filled={clk.filled || 0}
-                                    />
-                                    <span
-                                      style={{
-                                        fontSize: "10px",
-                                        color: "#6b7280",
-                                      }}
-                                    >
-                                      {clk.name || "Conflict"} {clk.filled || 0}
-                                      /{clk.segments || 4}
-                                    </span>
-                                  </div>
-                                ))}
-                                {(npc.alt_clocks || []).map((clk) => (
-                                  <div
-                                    key={clk.id || clk.name}
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "6px",
-                                      marginBottom: "2px",
-                                    }}
-                                  >
-                                    <ProgressClock
-                                      size={32}
-                                      segments={clk.segments || 4}
-                                      filled={clk.filled || 0}
-                                    />
-                                    <span
-                                      style={{
-                                        fontSize: "10px",
-                                        color: "#6b7280",
-                                      }}
-                                    >
-                                      {clk.name || "Alt"} {clk.filled || 0}/
-                                      {clk.segments || 4}
-                                    </span>
-                                  </div>
-                                ))}
+                                {(npc.conflict_clocks || []).length > 0
+                                  ? (npc.conflict_clocks || []).map((clk) => (
+                                      <div
+                                        key={clk.id || clk.name}
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "6px",
+                                          marginBottom: "2px",
+                                        }}
+                                      >
+                                        <ProgressClock
+                                          size={32}
+                                          segments={clk.segments || 4}
+                                          filled={clk.filled || 0}
+                                        />
+                                        <span
+                                          style={{
+                                            fontSize: "10px",
+                                            color: "#6b7280",
+                                          }}
+                                        >
+                                          {clk.name || "Conflict"}{" "}
+                                          {clk.filled || 0}/{clk.segments || 4}
+                                        </span>
+                                      </div>
+                                    ))
+                                  : null}
+                                {(npc.alt_clocks || []).length > 0
+                                  ? (npc.alt_clocks || []).map((clk) => (
+                                      <div
+                                        key={clk.id || clk.name}
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "6px",
+                                          marginBottom: "2px",
+                                        }}
+                                      >
+                                        <ProgressClock
+                                          size={32}
+                                          segments={clk.segments || 4}
+                                          filled={clk.filled || 0}
+                                        />
+                                        <span
+                                          style={{
+                                            fontSize: "10px",
+                                            color: "#6b7280",
+                                          }}
+                                        >
+                                          {clk.name || "Alt"} {clk.filled || 0}/
+                                          {clk.segments || 4}
+                                        </span>
+                                      </div>
+                                    ))
+                                  : null}
                               </div>
                             ))}
                           </div>
@@ -7123,6 +7094,25 @@ const CharacterSheetWrapper = ({
                       }}
                     />
                   </div>
+                  {/* Inventory */}
+                  <div>
+                    <span style={S.lbl}>INVENTORY</span>
+                    <textarea
+                      placeholder="Inventory…"
+                      style={{
+                        width: "100%",
+                        height: "80px",
+                        background: "#0d1117",
+                        color: "#fff",
+                        border: "1px solid #374151",
+                        padding: "8px",
+                        fontFamily: "monospace",
+                        fontSize: "12px",
+                        resize: "vertical",
+                        boxSizing: "border-box",
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -7516,11 +7506,13 @@ const CharacterSheetWrapper = ({
             >
               Choose ONE path. A new Stand ability is automatically included
               either way.
-              {levelUpChoice === "stat" && standStats[levelUpStat] === 3 && (
-                <div style={{ ...S.green, marginTop: "6px" }}>
-                  ★ This stat will hit A-rank — ability auto-unlocked!
-                </div>
-              )}
+              {levelUpChoice === "stat" &&
+                standStats[levelUpStat] === maxStandGradeIndex - 1 && (
+                  <div style={{ ...S.green, marginTop: "6px" }}>
+                    ★ This stat will hit {GRADE[maxStandGradeIndex]}-rank —
+                    ability auto-unlocked!
+                  </div>
+                )}
             </div>
 
             <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
@@ -7553,9 +7545,15 @@ const CharacterSheetWrapper = ({
                   style={{ ...S.sel, width: "100%" }}
                 >
                   {Object.entries(standStats).map(([stat, val]) => (
-                    <option key={stat} value={stat} disabled={val >= 4}>
+                    <option
+                      key={stat}
+                      value={stat}
+                      disabled={val >= maxStandGradeIndex}
+                    >
                       {stat.toUpperCase()} — {GRADE[val]}
-                      {val < 4 ? ` → ${GRADE[val + 1]}` : " (MAX — A)"}
+                      {val < maxStandGradeIndex
+                        ? ` → ${GRADE[val + 1]}`
+                        : ` (MAX — ${GRADE[maxStandGradeIndex]})`}
                     </option>
                   ))}
                 </select>

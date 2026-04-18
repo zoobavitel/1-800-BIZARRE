@@ -891,6 +891,10 @@ export const transformBackendToFrontend = (backendCharacter) => {
     // Progress clocks
     clocks: backendCharacter.progress_clocks || [],
 
+    gm_can_have_s_rank_stand_stats: Boolean(
+      backendCharacter.gm_can_have_s_rank_stand_stats,
+    ),
+
     // Additional backend fields
     campaign: backendCharacter.campaign,
     playbook: playbookToDisplay(backendCharacter.playbook),
@@ -1104,6 +1108,13 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     ...(hasLinkedCrew(frontendCharacter.crewId)
       ? {}
       : { stash_slots: normalizeStashSlots(frontendCharacter.stash) }),
+
+    ...(typeof frontendCharacter.gm_can_have_s_rank_stand_stats === "boolean"
+      ? {
+          gm_can_have_s_rank_stand_stats:
+            frontendCharacter.gm_can_have_s_rank_stand_stats,
+        }
+      : {}),
 
     // Solo / no campaign crew: stored on Character; cleared when linked to a Crew
     personal_crew_name:

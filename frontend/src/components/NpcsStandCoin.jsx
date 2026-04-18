@@ -72,8 +72,16 @@ const BG2 = "#0d0814";
  * @param {{ power: string, speed: string, range: string, durability: string, precision: string, development: string }} props.grades
  * @param {Record<string, string>} props.readouts — per-stat summary under the coin
  * @param {(statKey: string, delta: 1 | -1) => void} props.onStep
+ * @param {"npc" | "pc"} [props.variant="npc"] — PC adjusts default copy (grade cap A vs S).
+ * @param {"A" | "S"} [props.pcMaxGrade="A"] — when variant is "pc", hints and aria use this as top grade.
  */
-export default function NpcsStandCoin({ grades, readouts, onStep }) {
+export default function NpcsStandCoin({
+  grades,
+  readouts,
+  onStep,
+  variant = "npc",
+  pcMaxGrade = "A",
+}) {
   const reactId = useId().replace(/:/g, "");
   const clipId = `npc-stand-coin-clip-${reactId}`;
   const rootRef = useRef(null);
@@ -146,9 +154,25 @@ export default function NpcsStandCoin({ grades, readouts, onStep }) {
     [bump],
   );
 
+  const topLetter = variant === "pc" ? pcMaxGrade : "S";
+  const idleAnnounce =
+    "Stand coin: left-click a wedge to raise its grade; right-click to lower. Shift+Enter or Shift+Space lowers.";
+  const emptyStateLines =
+    variant === "pc"
+      ? `Left-click a segment to raise its grade (F→${topLetter}). Right-click to lower. Shift+Enter / Shift+Space on a focused wedge lowers one step.`
+      : "Left-click a segment to raise its grade (F→S). Right-click to lower. Shift+Enter / Shift+Space on a focused wedge lowers one step.";
+  const svgDefaultAria =
+    variant === "pc"
+      ? `Stand coin: six stats, grades F through ${topLetter}`
+      : "Stand coin: six stats, grades F through S";
+  const wedgeSuffix =
+    variant === "pc"
+      ? ` Maximum grade ${topLetter} for this character.`
+      : "";
+
   const announce = activeMeta
     ? `${activeMeta.label}, grade ${activeGrade}. ${activeBlurb}`
-    : "Stand coin: left-click a wedge to raise its grade; right-click to lower. Shift+Enter or Shift+Space lowers.";
+    : idleAnnounce;
 
   return (
     <div
@@ -185,8 +209,7 @@ export default function NpcsStandCoin({ grades, readouts, onStep }) {
       >
         {!activeMeta ? (
           <span style={{ fontSize: "10px", lineHeight: 1.4, color: "#6b7280" }}>
-            Left-click a segment to raise its grade (F→S). Right-click to lower.
-            Shift+Enter / Shift+Space on a focused wedge lowers one step.
+            {emptyStateLines}
           </span>
         ) : (
           <>
@@ -230,7 +253,7 @@ export default function NpcsStandCoin({ grades, readouts, onStep }) {
       <svg
         viewBox="0 0 200 200"
         role="img"
-        aria-label="Stand coin: six stats, grades F through S"
+        aria-label={svgDefaultAria}
         style={{
           width: "100%",
           maxWidth: "240px",
@@ -393,7 +416,7 @@ export default function NpcsStandCoin({ grades, readouts, onStep }) {
               style={{ cursor: "pointer" }}
               role="button"
               tabIndex={0}
-              aria-label={`${s.label}, grade ${g}. Left-click to raise, right-click to lower.`}
+              aria-label={`${s.label}, grade ${g}. Left-click to raise, right-click to lower.${wedgeSuffix}`}
               onMouseEnter={() => setHovered(s.key)}
               onMouseLeave={() => setHovered(null)}
               onFocus={() => setHovered(s.key)}
