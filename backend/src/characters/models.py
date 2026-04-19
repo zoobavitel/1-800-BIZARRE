@@ -1432,6 +1432,11 @@ class Session(models.Model):
         max_length=200, help_text="Title or name of the session/episode"
     )
     session_date = models.DateTimeField(auto_now_add=True)
+    proposed_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Optional planned calendar date for this session.",
+    )
     description = models.TextField(
         blank=True, help_text="Overall plot or story summary for the session"
     )

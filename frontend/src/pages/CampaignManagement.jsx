@@ -248,6 +248,7 @@ function CampaignDetail({
   onManageSessions,
   onNavigateToCharacter,
   onNavigateToNPC,
+  onCampaignDeleted,
   initialFactionId = null,
 }) {
   const [inviteUsername, setInviteUsername] = useState("");
@@ -344,6 +345,23 @@ function CampaignDetail({
         await campaignAPI.activateCampaign(campaign.id);
       }
       onRefresh();
+    } catch (err) {
+      setActionError(err.message);
+    }
+  };
+
+  const handleDeleteCampaign = async () => {
+    if (
+      !window.confirm(
+        `Permanently delete "${campaign.name}"? Sessions, clocks, and other campaign data will be removed. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setActionError(null);
+    try {
+      await campaignAPI.deleteCampaign(campaign.id);
+      onCampaignDeleted?.();
     } catch (err) {
       setActionError(err.message);
     }
@@ -708,6 +726,9 @@ function CampaignDetail({
                     style={campaign.is_active ? S.btnDanger : S.btnSuccess}
                   >
                     {campaign.is_active ? "Deactivate" : "Activate"}
+                  </button>
+                  <button onClick={handleDeleteCampaign} style={S.btnDanger}>
+                    Delete
                   </button>
                 </div>
               )}
@@ -2512,7 +2533,10 @@ function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
                     <div style={{ fontSize: "11px", color: "#9ca3af" }}>
                       {s.session_date
                         ? new Date(s.session_date).toLocaleDateString()
-                        : "N/A"}{" "}
+                        : "N/A"}
+                      {s.proposed_date
+                        ? ` · Planned ${new Date(`${s.proposed_date}T12:00:00`).toLocaleDateString()}`
+                        : ""}{" "}
                       · {s.status || "PLANNED"}
                     </div>
                   </div>
@@ -2565,6 +2589,7 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
   const [fortuneRolling, setFortuneRolling] = useState(false);
   const [error, setError] = useState(null);
   const [wantedStars, setWantedStars] = useState(campaign?.wanted_stars ?? 0);
+  const [proposedDateInput, setProposedDateInput] = useState("");
 
   useEffect(() => {
     if (!session?.id) return;
@@ -2599,6 +2624,17 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
     setWantedStars(campaign?.wanted_stars ?? 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id, campaign?.id, campaign?.wanted_stars]);
+
+  useEffect(() => {
+    const p = sessionData?.proposed_date;
+    if (p == null || p === "") {
+      setProposedDateInput("");
+    } else {
+      setProposedDateInput(
+        typeof p === "string" ? p.slice(0, 10) : "",
+      );
+    }
+  }, [sessionData?.id, sessionData?.proposed_date]);
 
   const campaignChars =
     campaign?.campaign_characters ||
@@ -2638,6 +2674,49 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
       await campaignAPI.patchCampaign(campaign.id, {
         active_session: session.id,
       });
+      onRefresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const activeSessionId =
+    campaign?.active_session?.id ?? campaign?.active_session ?? null;
+  const isCurrentActiveSession =
+    activeSessionId != null && Number(activeSessionId) === Number(session.id);
+
+  const handleClearActiveSession = async () => {
+    if (!isCurrentActiveSession) return;
+    try {
+      await campaignAPI.patchCampaign(campaign.id, { active_session: null });
+      onRefresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleSaveProposedDate = async () => {
+    setError(null);
+    try {
+      const value = proposedDateInput.trim() || null;
+      const updated = await sessionAPI.patchSession(session.id, {
+        proposed_date: value,
+      });
+      setSessionData((prev) => ({ ...prev, ...updated }));
+      onRefresh();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
+  const handleClearProposedDate = async () => {
+    setError(null);
+    try {
+      const updated = await sessionAPI.patchSession(session.id, {
+        proposed_date: null,
+      });
+      setProposedDateInput("");
+      setSessionData((prev) => ({ ...prev, ...updated }));
       onRefresh();
     } catch (e) {
       setError(e.message);
@@ -2861,9 +2940,95 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
         <span style={S.sectionLbl}>
           Session: {sessionData?.name || session?.name || "Unnamed"}
         </span>
-        <button onClick={handleSetActiveSession} style={S.btnPrimary}>
-          Set as current session (enable for players)
-        </button>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "8px",
+            alignItems: "center",
+            marginTop: "8px",
+          }}
+        >
+          {isCurrentActiveSession ? (
+            <>
+              <span style={{ fontSize: "12px", color: "#a78bfa" }}>
+                This session is live for players (character sheets).
+              </span>
+              <button
+                type="button"
+                onClick={handleClearActiveSession}
+                style={S.btnGhost}
+              >
+                Clear as current session
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSetActiveSession}
+              style={S.btnPrimary}
+            >
+              Set as current session (enable for players)
+            </button>
+          )}
+        </div>
+        <div
+          style={{
+            marginTop: "12px",
+            paddingTop: "12px",
+            borderTop: "1px solid #374151",
+          }}
+        >
+          <div style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "6px" }}>
+            Proposed session date (when you plan to play)
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "8px",
+              alignItems: "center",
+            }}
+          >
+            <input
+              type="date"
+              value={proposedDateInput}
+              onChange={(e) => setProposedDateInput(e.target.value)}
+              style={{
+                fontFamily: "monospace",
+                fontSize: "12px",
+                background: "#0d1117",
+                color: "#fff",
+                border: "1px solid #374151",
+                borderRadius: "4px",
+                padding: "6px 8px",
+                outline: "none",
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleSaveProposedDate}
+              style={S.btnGhost}
+            >
+              Save date
+            </button>
+            {(sessionData?.proposed_date || proposedDateInput) && (
+              <button
+                type="button"
+                onClick={handleClearProposedDate}
+                style={{ ...S.btnGhost, fontSize: "11px" }}
+              >
+                Clear date
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: "10px", color: "#6b7280", marginTop: "6px" }}>
+            Record created:{" "}
+            {sessionData?.session_date
+              ? new Date(sessionData.session_date).toLocaleString()
+              : "—"}
+          </div>
+        </div>
       </div>
 
       {/* Position & Effect + dice history toggle (GM control) */}
@@ -3816,6 +3981,13 @@ export default function CampaignManagement({
             onNavigateToCharacter={onNavigateToCharacter}
             onNavigateToNPC={onNavigateToNPC}
             initialFactionId={initialFactionId}
+            onCampaignDeleted={async () => {
+              setSelectedCampaignId(null);
+              setSessionView(null);
+              setSelectedSession(null);
+              onCampaignSelect?.(null);
+              await loadCampaigns();
+            }}
           />
         </div>
       </div>
