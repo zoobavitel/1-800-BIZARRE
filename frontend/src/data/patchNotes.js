@@ -8,6 +8,12 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Added",
+        "items": [
+          "delete, session scheduling, NPC clock scope"
+        ]
+      },
+      {
         "title": "Other",
         "items": [
           "Merge pull request #61 from zoobavitel/feature/sheet-updates",
@@ -384,18 +390,6 @@ export const PATCH_NOTES = [
         "title": "Other",
         "items": [
           "Merge pull request #7 from zoobavitel/feature/bizarrepoc-homepage"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-04",
-    "version": null,
-    "sections": [
-      {
-        "title": "Maintenance",
-        "items": [
-          "update dependencies and enhance HomePage with new charts"
         ]
       }
     ]

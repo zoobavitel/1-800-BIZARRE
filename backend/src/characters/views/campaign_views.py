@@ -151,6 +151,98 @@ class CampaignViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @action(detail=True, methods=["post"], url_path="withdraw-invitation")
+    def withdraw_invitation(self, request, pk=None):
+        campaign = self.get_object()
+        if campaign.gm != request.user and not request.user.is_staff:
+            return Response(
+                {"error": "Only the GM can withdraw invitations."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        inv_id = request.data.get("invitation_id")
+        if inv_id is None:
+            return Response(
+                {"error": "invitation_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            inv_id = int(inv_id)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "invitation_id must be an integer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            inv = CampaignInvitation.objects.get(
+                id=inv_id, campaign=campaign, status="pending"
+            )
+        except CampaignInvitation.DoesNotExist:
+            return Response(
+                {"error": "Invitation not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        inv.delete()
+        return Response({"status": "Invitation withdrawn."})
+
+    @action(detail=True, methods=["post"], url_path="remove-player")
+    def remove_player(self, request, pk=None):
+        campaign = self.get_object()
+        if campaign.gm != request.user and not request.user.is_staff:
+            return Response(
+                {"error": "Only the GM can remove players."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        user_id = request.data.get("user_id")
+        if user_id is None:
+            return Response(
+                {"error": "user_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            user_id = int(user_id)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "user_id must be an integer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if user_id == campaign.gm_id:
+            return Response(
+                {"error": "Cannot remove the GM from the campaign."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        target = User.objects.filter(id=user_id).first()
+        if not target:
+            return Response(
+                {"error": "User not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        in_players = campaign.players.filter(id=user_id).exists()
+        has_chars = Character.objects.filter(
+            campaign=campaign, user_id=user_id
+        ).exists()
+        if not in_players and not has_chars:
+            return Response(
+                {"error": "That user is not in this campaign."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        for ch in Character.objects.filter(campaign=campaign, user_id=user_id).select_related(
+            "crew"
+        ):
+            update_fields = ["campaign"]
+            ch.campaign = None
+            if ch.crew_id and ch.crew.campaign_id == campaign.id:
+                ch.crew = None
+                update_fields.append("crew")
+            if ch.personal_crew_name:
+                ch.personal_crew_name = ""
+                update_fields.append("personal_crew_name")
+            ch.save(update_fields=update_fields)
+        campaign.players.remove(target)
+        return Response(
+            {"status": f'Removed "{target.username}" from the campaign.'},
+            status=status.HTTP_200_OK,
+        )
+
     @action(detail=True, methods=["get"], url_path="invitable-users")
     def invitable_users(self, request, pk=None):
         campaign = self.get_object()
@@ -257,23 +349,37 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        is_gm = campaign.gm == request.user or request.user.is_staff
         try:
-            character = Character.objects.get(
-                id=character_id, user=request.user, campaign=campaign
-            )
+            if is_gm:
+                character = Character.objects.select_related("crew").get(
+                    id=character_id, campaign=campaign
+                )
+            else:
+                character = Character.objects.select_related("crew").get(
+                    id=character_id, user=request.user, campaign=campaign
+                )
         except Character.DoesNotExist:
             return Response(
                 {"error": "Character not found in this campaign."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        update_fields = ["campaign"]
         character.campaign = None
-        character.save(update_fields=["campaign"])
+        if character.crew_id and character.crew.campaign_id == campaign.id:
+            character.crew = None
+            update_fields.append("crew")
+        if character.personal_crew_name:
+            character.personal_crew_name = ""
+            update_fields.append("personal_crew_name")
+        character.save(update_fields=update_fields)
+        char_user = character.user
         remaining = Character.objects.filter(
-            campaign=campaign, user=request.user
+            campaign=campaign, user=char_user
         ).exists()
-        if not remaining and request.user != campaign.gm:
-            campaign.players.remove(request.user)
+        if not remaining and char_user != campaign.gm:
+            campaign.players.remove(char_user)
         return Response(
             {"status": f'Character "{character.true_name}" removed from campaign.'}
         )
