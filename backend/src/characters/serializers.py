@@ -235,6 +235,16 @@ def _normalize_npc_involvement_clock_flags(show_all, raw_show_vuln_from_client):
     return show_all, show_all or raw_show_vuln_from_client
 
 
+def _ensure_npc_belongs_to_session_campaign(npc, session_campaign_id):
+    """Session NPCs must belong to the same campaign as the session."""
+    if session_campaign_id is None:
+        return
+    if npc.campaign_id != session_campaign_id:
+        raise serializers.ValidationError(
+            "Each NPC in session npc_involvements must belong to this session's campaign."
+        )
+
+
 class SessionSerializer(serializers.ModelSerializer):
     npcs_involved = serializers.SerializerMethodField()
     npc_involvements = serializers.SerializerMethodField()
@@ -275,7 +285,7 @@ class SessionSerializer(serializers.ModelSerializer):
         instance.save()
 
         if npc_involvements_data is not None:
-            instance.npc_involvements.all().delete()
+            involvement_rows = []
             for item in npc_involvements_data:
                 npc_id = item.get("npc") if isinstance(item, dict) else item
                 if isinstance(item, dict):
@@ -290,6 +300,10 @@ class SessionSerializer(serializers.ModelSerializer):
                     show = False
                     show_vuln = False
                 npc = NPC.objects.get(pk=npc_id) if isinstance(npc_id, int) else npc_id
+                _ensure_npc_belongs_to_session_campaign(npc, instance.campaign_id)
+                involvement_rows.append((npc, show, show_vuln))
+            instance.npc_involvements.all().delete()
+            for npc, show, show_vuln in involvement_rows:
                 SessionNPCInvolvement.objects.create(
                     session=instance,
                     npc=npc,
@@ -299,6 +313,11 @@ class SessionSerializer(serializers.ModelSerializer):
         elif npcs_involved_data is not None:
             existing = {inv.npc_id: inv for inv in instance.npc_involvements.all()}
             new_ids = set(npcs_involved_data)
+            for npc_id in new_ids:
+                if npc_id in existing:
+                    continue
+                npc = NPC.objects.get(pk=npc_id)
+                _ensure_npc_belongs_to_session_campaign(npc, instance.campaign_id)
             for npc_id in new_ids:
                 if npc_id in existing:
                     continue
@@ -323,6 +342,7 @@ class SessionSerializer(serializers.ModelSerializer):
         validated_data.pop("npc_involvements", None)
         instance = super().create(validated_data)
         if npc_involvements_data is not None:
+            involvement_rows = []
             for item in npc_involvements_data:
                 npc_id = item.get("npc") if isinstance(item, dict) else item
                 if isinstance(item, dict):
@@ -337,6 +357,9 @@ class SessionSerializer(serializers.ModelSerializer):
                     show = False
                     show_vuln = False
                 npc = NPC.objects.get(pk=npc_id) if isinstance(npc_id, int) else npc_id
+                _ensure_npc_belongs_to_session_campaign(npc, instance.campaign_id)
+                involvement_rows.append((npc, show, show_vuln))
+            for npc, show, show_vuln in involvement_rows:
                 SessionNPCInvolvement.objects.create(
                     session=instance,
                     npc=npc,
@@ -344,6 +367,9 @@ class SessionSerializer(serializers.ModelSerializer):
                     show_vulnerability_clock_to_players=show_vuln,
                 )
         elif npcs_involved_data is not None:
+            for npc_id in npcs_involved_data:
+                npc = NPC.objects.get(pk=npc_id)
+                _ensure_npc_belongs_to_session_campaign(npc, instance.campaign_id)
             for npc_id in npcs_involved_data:
                 SessionNPCInvolvement.objects.get_or_create(
                     session=instance,
@@ -488,6 +514,7 @@ class SessionRecordsSerializer(serializers.ModelSerializer):
             "campaign",
             "name",
             "session_date",
+            "proposed_date",
             "description",
             "objective",
             "planned_for_next_session",
@@ -1575,6 +1602,8 @@ class CampaignSerializer(serializers.ModelSerializer):
         if not obj.active_session_id:
             return None
         s = obj.active_session
+        if s.campaign_id != obj.id:
+            return None
         request = self.context.get("request")
         user = getattr(request, "user", None) if request else None
         viewer_is_gm_or_staff = bool(
@@ -1583,6 +1612,8 @@ class CampaignSerializer(serializers.ModelSerializer):
             and (getattr(user, "is_staff", False) or obj.gm_id == user.id)
         )
         base_qs = s.npc_involvements.select_related("npc")
+        if not viewer_is_gm_or_staff:
+            base_qs = base_qs.filter(npc__campaign_id=obj.id)
         if viewer_is_gm_or_staff:
             involvements = base_qs.order_by("npc__name")
         else:
@@ -1617,6 +1648,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             "name": s.name,
             "session_number": session_number,
             "session_date": s.session_date,
+            "proposed_date": s.proposed_date.isoformat() if s.proposed_date else None,
             "description": s.description,
             "objective": s.objective,
             "show_position_effect_to_players": getattr(
@@ -1635,7 +1667,12 @@ class CampaignSerializer(serializers.ModelSerializer):
     def get_sessions(self, obj):
         sessions = obj.sessions.all().order_by("-session_date")[:50]
         return [
-            {"id": s.id, "name": s.name, "session_date": s.session_date}
+            {
+                "id": s.id,
+                "name": s.name,
+                "session_date": s.session_date,
+                "proposed_date": s.proposed_date.isoformat() if s.proposed_date else None,
+            }
             for s in sessions
         ]
 
@@ -1648,6 +1685,9 @@ class CampaignSerializer(serializers.ModelSerializer):
         if is_gm or request.user.is_staff:
             return ProgressClockSerializer(clocks, many=True).data
         user = request.user
+        clocks = clocks.filter(
+            Q(npc__isnull=True) | Q(npc__campaign_id=obj.id)
+        )
         showcased_npc_ids = list(obj.showcased_npcs.values_list("npc_id", flat=True))
         campaign_player_ids = list(obj.players.values_list("id", flat=True)) + list(
             obj.characters.values_list("user_id", flat=True).distinct()

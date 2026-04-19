@@ -1,7 +1,9 @@
+from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.db import connection, models
 from django.contrib.auth.models import User
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -20,6 +22,7 @@ from ..serializers import (
     ShowcasedNPCSerializer,
     InvitableUserSerializer,
 )
+from ..services.campaign_service import CampaignService
 
 
 def _gm_history_character_row(h):
@@ -89,6 +92,12 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
         return super().partial_update(request, *args, **kwargs)
+
+    def perform_destroy(self, instance):
+        try:
+            CampaignService.delete_campaign(instance, self.request.user)
+        except DjangoPermissionDenied:
+            raise PermissionDenied(detail="Only the GM can delete this campaign.")
 
     @action(detail=True, methods=["post"], url_path="invite")
     def invite_player(self, request, pk=None):
