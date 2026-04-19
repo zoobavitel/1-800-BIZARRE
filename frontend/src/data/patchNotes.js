@@ -8,19 +8,22 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
-        "title": "Added",
-        "items": [
-          "delete, session scheduling, NPC clock scope"
-        ]
-      },
-      {
         "title": "Other",
         "items": [
+          "Merge pull request #63 from zoobavitel/feature/campaign-delete-session-qol-npc-clock-scope",
+          "Merge pull request #62 from zoobavitel/feature/campaign-delete-session-qol-npc-clock-scope",
           "Merge pull request #61 from zoobavitel/feature/sheet-updates",
           "Enhance campaign views and NPC sheet functionality",
           "Refactor character view creation process",
           "Update NPC involvement clock flags handling",
           "Add normalization function for NPC involvement clock flags"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "GM remove players and withdraw invites",
+          "delete, session scheduling, NPC clock scope"
         ]
       }
     ]
@@ -354,8 +357,7 @@ export const PATCH_NOTES = [
           "Merge pull request #11 from zoobavitel/fix/character-delete-empty-response-and-home-errors",
           "Merge remote-tracking branch 'origin/master' into fix/character-delete-empty-response-and-home-errors",
           "Merge pull request #10 from zoobavitel/feature/home-campaign-invites",
-          "Merge pull request #9 from zoobavitel/cursor/srd-potency-doc-sync",
-          "Merge pull request #8 from zoobavitel/feature/bizarrepoc-homepage"
+          "Merge pull request #9 from zoobavitel/cursor/srd-potency-doc-sync"
         ]
       },
       {
@@ -363,8 +365,7 @@ export const PATCH_NOTES = [
         "items": [
           "update patch notes and backend debug log",
           "update local db.sqlite3 snapshot",
-          "refresh game-rules-srd and patch notes; update local db and debug log",
-          "update database and log warnings"
+          "refresh game-rules-srd and patch notes; update local db and debug log"
         ]
       },
       {
@@ -378,18 +379,6 @@ export const PATCH_NOTES = [
         "items": [
           "sync rules mirrors with SRD (potency removal, preemptive resistance)",
           "drop Power-vs-Durability potency ladder; expand skills preemptive resistance"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-05",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #7 from zoobavitel/feature/bizarrepoc-homepage"
         ]
       }
     ]

@@ -264,6 +264,7 @@ function CampaignDetail({
   const [editForm, setEditForm] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [assignNpcId, setAssignNpcId] = useState("");
+  const [gmBulkRemoveCharId, setGmBulkRemoveCharId] = useState("");
 
   const factionEditFiredRef = useRef(false);
   useEffect(() => {
@@ -304,6 +305,10 @@ function CampaignDetail({
         .catch(() => setInvitableUsers([]));
     }
   }, [isGM, campaign?.id]);
+
+  useEffect(() => {
+    setGmBulkRemoveCharId("");
+  }, [campaign?.id]);
 
   const availableToAssign = isGM
     ? myCharacters.filter(
@@ -382,8 +387,10 @@ function CampaignDetail({
     try {
       await campaignAPI.unassignCharacter(campaign.id, characterId);
       onRefresh();
+      return true;
     } catch (err) {
       setActionError(err.message);
+      return false;
     }
   };
 
@@ -1052,6 +1059,86 @@ function CampaignDetail({
               </div>
             ))}
           </>
+        )}
+
+        {isGM && (
+          <div
+            style={{
+              marginTop: "12px",
+              paddingTop: "12px",
+              borderTop: "1px solid #374151",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "11px",
+                color: "#60a5fa",
+                fontWeight: "bold",
+                display: "block",
+                marginBottom: "8px",
+              }}
+            >
+              REMOVE CHARACTER FROM CAMPAIGN
+            </span>
+            {(campaign.campaign_characters || []).length === 0 ? (
+              <div style={{ fontSize: "11px", color: "#6b7280" }}>
+                No PCs are assigned yet. Use &quot;Assign Character to Campaign&quot;
+                below; after a PC is in the campaign, pick them here to unassign.
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                  alignItems: "center",
+                }}
+              >
+                <select
+                  style={{ ...S.select, minWidth: "200px" }}
+                  value={gmBulkRemoveCharId}
+                  onChange={(e) => setGmBulkRemoveCharId(e.target.value)}
+                >
+                  <option value="">Select a character…</option>
+                  {(campaign.campaign_characters || []).map((ch) => (
+                    <option key={ch.id} value={String(ch.id)}>
+                      {ch.true_name || ch.alias || "Unnamed"}
+                      {ch.username ? ` (${ch.username})` : ""}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={!gmBulkRemoveCharId}
+                  onClick={async () => {
+                    const id = parseInt(gmBulkRemoveCharId, 10);
+                    if (!Number.isFinite(id)) return;
+                    const ch = (campaign.campaign_characters || []).find(
+                      (c) => Number(c.id) === id,
+                    );
+                    const label =
+                      ch?.true_name || ch?.alias || `Character #${id}`;
+                    if (
+                      !window.confirm(
+                        `Remove "${label}" from this campaign? The PC will be unassigned (same as the row Remove action).`,
+                      )
+                    ) {
+                      return;
+                    }
+                    const ok = await handleUnassignCharacter(id);
+                    if (ok) setGmBulkRemoveCharId("");
+                  }}
+                  style={{
+                    ...S.btnGhost,
+                    opacity: gmBulkRemoveCharId ? 1 : 0.45,
+                    cursor: gmBulkRemoveCharId ? "pointer" : "not-allowed",
+                  }}
+                >
+                  Remove selected PC
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
