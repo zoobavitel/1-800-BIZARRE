@@ -16,10 +16,10 @@ import {
   sortPatchNotesEntries,
 } from "../utils/patchNotesPreview";
 import {
-  buildSessionsByMonth,
+  buildSessionScatterPoints,
   buildBarChartRows,
 } from "../utils/homeChartData";
-import HomeSessionLineChart from "../components/home/HomeSessionLineChart";
+import HomeSessionScatterChart from "../components/home/HomeSessionScatterChart";
 import HomeStatsBarChart from "../components/home/HomeStatsBarChart";
 import HomeStandCoin from "../components/home/HomeStandCoin";
 
@@ -234,8 +234,8 @@ const HomePage = ({
     };
   }, [campaigns, characters, npcs.length, crewCount]);
 
-  const sessionsByMonth = useMemo(
-    () => buildSessionsByMonth(campaigns),
+  const sessionScatter = useMemo(
+    () => buildSessionScatterPoints(campaigns),
     [campaigns],
   );
   const barChartRows = useMemo(() => buildBarChartRows(heroStats), [heroStats]);
@@ -826,8 +826,8 @@ const HomePage = ({
                 </span>
               </div>
             </div>
-            <HomeSessionLineChart
-              data={sessionsByMonth}
+            <HomeSessionScatterChart
+              data={sessionScatter}
               loading={chartsLoading}
             />
             <HomeStatsBarChart data={barChartRows} loading={chartsLoading} />

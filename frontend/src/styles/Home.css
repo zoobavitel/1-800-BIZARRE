@@ -595,6 +595,9 @@
 .home-poc .home-chart-line {
   padding-top: 10px;
 }
+.home-poc .home-chart-scatter {
+  padding-top: 10px;
+}
 .home-poc .home-chart-title {
   font-family: var(--font-heading);
   font-size: 9px;
