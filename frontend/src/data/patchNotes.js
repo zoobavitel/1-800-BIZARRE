@@ -4,6 +4,43 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-04-18",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #61 from zoobavitel/feature/sheet-updates",
+          "Enhance campaign views and NPC sheet functionality",
+          "Refactor character view creation process",
+          "Update NPC involvement clock flags handling",
+          "Add normalization function for NPC involvement clock flags"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-04-17",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Enhance NPC and Character models with inventory notes and campaign audit logging",
+          "Merge pull request #60 from zoobavitel/release/1.0.1",
+          "Fix review-thread issues for session NPC visibility toggles",
+          "Release 1.0.1: NPC vulnerability visibility on PC sheets and account settings",
+          "Enhance HomePage UI with user display name and avatar features",
+          "Merge pull request #59 from zoobavitel/feature/npc-stand-coin-avatar-migration",
+          "Address PR review accessibility feedback for NPC coin and user menu",
+          "Fix auth service test import order for lint.",
+          "Add avatar_url migration and NPC stand coin UI.",
+          "uh"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-04-16",
     "version": null,
     "sections": [
@@ -358,69 +395,7 @@ export const PATCH_NOTES = [
       {
         "title": "Maintenance",
         "items": [
-          "update dependencies and enhance HomePage with new charts",
-          "update database and enhance frontend styles"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-03",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #6 from zoobavitel/feature/realtime-sheet-sync"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "implement campaign events streaming and enhance character page synchronization"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-01",
-    "version": null,
-    "sections": [
-      {
-        "title": "Refactored",
-        "items": [
-          "update patch notes and improve character page logic",
-          "update patch notes and enhance character page logic"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "add coin boxes and stash slots to character and crew models",
-          "add resolveHeritagePkForSave function and enhance character page"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #5 from zoobavitel/fix/character-sheet-heritage-save",
-          "Merge pull request #4 from zoobavitel/fix/character-sheet-heritage-save",
-          "ci: use Node 24 action runtimes (checkout v5, setup-node v5, setup-python v6)",
-          "Merge pull request #3 from zoobavitel/fix/character-sheet-heritage-save"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "enhance heritage loading and error handling",
-          "update database seeding logic and enhance heritage error handling",
-          "improve heritage error message on CharacterPage"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "restore backend/src/db.sqlite3 to match master (drop stray migrate diff)"
+          "update dependencies and enhance HomePage with new charts"
         ]
       }
     ]
