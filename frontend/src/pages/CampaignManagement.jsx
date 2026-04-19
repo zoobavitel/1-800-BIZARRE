@@ -387,6 +387,40 @@ function CampaignDetail({
     }
   };
 
+  const handleRemovePlayerFromCampaign = async (userId, username) => {
+    if (
+      !window.confirm(
+        `Remove ${username} from this campaign? Their character(s) will be unassigned from the campaign (and campaign crew, if any).`,
+      )
+    ) {
+      return;
+    }
+    setActionError(null);
+    try {
+      await campaignAPI.removePlayer(campaign.id, userId);
+      onRefresh();
+    } catch (err) {
+      setActionError(err.message);
+    }
+  };
+
+  const handleWithdrawInvitation = async (invitationId, username) => {
+    if (
+      !window.confirm(
+        `Withdraw the pending invitation for ${username || "this user"}?`,
+      )
+    ) {
+      return;
+    }
+    setActionError(null);
+    try {
+      await campaignAPI.withdrawInvitation(campaign.id, invitationId);
+      onRefresh();
+    } catch (err) {
+      setActionError(err.message);
+    }
+  };
+
   const handleAssignNPC = async () => {
     if (!assignNpcId) return;
     setActionError(null);
@@ -858,11 +892,35 @@ function CampaignDetail({
                       borderBottom: "1px solid #1f2937",
                     }}
                   >
-                    <div style={{ ...S.row, marginBottom: "4px" }}>
+                    <div
+                      style={{
+                        ...S.row,
+                        marginBottom: "4px",
+                        flexWrap: "wrap",
+                        gap: "6px",
+                      }}
+                    >
                       <span style={{ fontWeight: "bold", color: "#d1d5db" }}>
                         {p.username}
                       </span>
                       <RoleBadge role="Player" />
+                      {isGM && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleRemovePlayerFromCampaign(p.id, p.username)
+                          }
+                          style={{
+                            ...S.btn,
+                            fontSize: "10px",
+                            padding: "2px 8px",
+                            background: "#7f1d1d",
+                            color: "#fca5a5",
+                          }}
+                        >
+                          Remove from campaign
+                        </button>
+                      )}
                     </div>
                     {p.characters.length === 0 ? (
                       <div
@@ -922,7 +980,8 @@ function CampaignDetail({
                               View
                             </button>
                           )}
-                          {p.id === user?.id && (
+                          {((isGM && p.id !== campaign.gm?.id) ||
+                            p.id === user?.id) && (
                             <button
                               onClick={() => handleUnassignCharacter(ch.id)}
                               style={{
@@ -961,11 +1020,35 @@ function CampaignDetail({
                   fontSize: "12px",
                   color: "#9ca3af",
                   paddingLeft: "12px",
-                  marginTop: "2px",
+                  marginTop: "6px",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  gap: "8px",
                 }}
               >
-                {inv.invited_user?.username} (invited by{" "}
-                {inv.invited_by?.username})
+                <span>
+                  {inv.invited_user?.username} (invited by{" "}
+                  {inv.invited_by?.username})
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleWithdrawInvitation(
+                      inv.id,
+                      inv.invited_user?.username,
+                    )
+                  }
+                  style={{
+                    ...S.btn,
+                    fontSize: "10px",
+                    padding: "2px 8px",
+                    background: "#78350f",
+                    color: "#fcd34d",
+                  }}
+                >
+                  Withdraw invitation
+                </button>
               </div>
             ))}
           </>

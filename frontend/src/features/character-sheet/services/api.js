@@ -340,6 +340,16 @@ export const campaignAPI = {
       method: "POST",
       body: JSON.stringify({ username }),
     }),
+  withdrawInvitation: (campaignId, invitationId) =>
+    apiRequest(`/campaigns/${campaignId}/withdraw-invitation/`, {
+      method: "POST",
+      body: JSON.stringify({ invitation_id: invitationId }),
+    }),
+  removePlayer: (campaignId, userId) =>
+    apiRequest(`/campaigns/${campaignId}/remove-player/`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId }),
+    }),
   getInvitableUsers: (campaignId, search) =>
     apiRequest(
       search
