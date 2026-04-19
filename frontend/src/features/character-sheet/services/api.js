@@ -333,6 +333,8 @@ export const campaignAPI = {
       method: "PATCH",
       body: JSON.stringify(campaignData),
     }),
+  deleteCampaign: (id) =>
+    apiRequest(`/campaigns/${id}/`, { method: "DELETE" }),
   invitePlayer: (id, username) =>
     apiRequest(`/campaigns/${id}/invite/`, {
       method: "POST",

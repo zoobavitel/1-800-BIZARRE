@@ -132,6 +132,9 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
                             | Q(created_by_id=user.id)
                             | Q(visible_to_party=True, created_by_id__in=campaign_player_ids)
                         )
+                        qs = qs.filter(
+                            Q(npc__isnull=True) | Q(npc__campaign_id=campaign_id)
+                        )
                 except Campaign.DoesNotExist:
                     pass
         return qs
