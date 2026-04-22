@@ -3470,39 +3470,68 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
             No characters in campaign.
           </div>
         ) : (
-          campaignChars.map((ch) => {
-            const lr = lastRollByCharacter[ch.id];
-            return (
-              <div
-                key={ch.id}
-                style={{
-                  fontSize: "12px",
-                  padding: "6px 0",
-                  borderBottom: "1px solid #1f2937",
-                }}
-              >
-                <strong style={{ color: "#e5e7eb" }}>
-                  {ch.true_name || ch.name}
-                </strong>
-                {lr ? (
-                  <span style={{ color: "#9ca3af" }}>
-                    {" "}
-                    — {lr.action_name} ·{" "}
-                    {[].concat(lr.results || []).join(", ")} → {lr.outcome}
-                    {(lr.description || "").trim() ? (
-                      <span style={{ color: "#6b7280" }}>
-                        {" "}
-                        · {(lr.description || "").slice(0, 140)}
-                        {(lr.description || "").length > 140 ? "…" : ""}
-                      </span>
-                    ) : null}
-                  </span>
-                ) : (
-                  <span style={{ color: "#6b7280" }}> — No rolls yet.</span>
-                )}
-              </div>
-            );
-          })
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "12px",
+              alignItems: "flex-start",
+            }}
+          >
+            {campaignChars.map((ch) => {
+              const lr = lastRollByCharacter[ch.id];
+              return (
+                <div
+                  key={ch.id}
+                  style={{
+                    fontSize: "12px",
+                    boxSizing: "border-box",
+                    flex: "1 1 260px",
+                    minWidth: "240px",
+                    padding: "8px 10px",
+                    border: "1px solid #374151",
+                    borderRadius: "4px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: "8px",
+                      alignItems: "flex-start",
+                    }}
+                  >
+                    <strong
+                      style={{
+                        color: "#e5e7eb",
+                        flex: "0 0 auto",
+                        maxWidth: "40%",
+                      }}
+                    >
+                      {ch.true_name || ch.name}
+                    </strong>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {lr ? (
+                        <span style={{ color: "#9ca3af" }}>
+                          {lr.action_name} ·{" "}
+                          {[].concat(lr.results || []).join(", ")} →{" "}
+                          {lr.outcome}
+                          {(lr.description || "").trim() ? (
+                            <span style={{ color: "#6b7280" }}>
+                              {" "}
+                              · {(lr.description || "").slice(0, 140)}
+                              {(lr.description || "").length > 140 ? "…" : ""}
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : (
+                        <span style={{ color: "#6b7280" }}>No rolls yet.</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
@@ -3535,13 +3564,22 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
         {campaignChars.length === 0 ? (
           <div style={{ color: "#6b7280" }}>No characters in campaign.</div>
         ) : (
-          campaignChars.map((ch) => (
-            <HarmEditor
-              key={ch.id}
-              character={ch}
-              onSave={(data) => handlePatchCharacterHarm(ch.id, data)}
-            />
-          ))
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "12px",
+              alignItems: "flex-start",
+            }}
+          >
+            {campaignChars.map((ch) => (
+              <HarmEditor
+                key={ch.id}
+                character={ch}
+                onSave={(data) => handlePatchCharacterHarm(ch.id, data)}
+              />
+            ))}
+          </div>
         )}
       </div>
 
@@ -3851,7 +3889,16 @@ function HarmEditor({ character, onSave }) {
     </div>
   );
   return (
-    <div style={{ padding: "8px 0", borderBottom: "1px solid #1f2937" }}>
+    <div
+      style={{
+        boxSizing: "border-box",
+        flex: "1 1 280px",
+        minWidth: "240px",
+        padding: "8px 10px",
+        border: "1px solid #374151",
+        borderRadius: "4px",
+      }}
+    >
       <div style={{ fontWeight: "bold", marginBottom: "4px" }}>
         {character.true_name || character.alias || "Unnamed"}
       </div>
