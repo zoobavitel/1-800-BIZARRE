@@ -461,6 +461,16 @@ export const crewAPI = {
     apiRequest(`/crews/${id}/approve-name/`, { method: "POST" }),
 };
 
+/** Crew sheet change history (scalar field diffs); ?crew=<id> */
+export const crewHistoryAPI = {
+  list: (params = {}) => {
+    const qs = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v != null && v !== ""),
+    ).toString();
+    return apiRequest(`/crew-history/${qs ? `?${qs}` : ""}`);
+  },
+};
+
 // Multipart request helper (for file uploads)
 const apiRequestMultipart = async (endpoint, formData, method = "POST") => {
   const token = localStorage.getItem("authToken");

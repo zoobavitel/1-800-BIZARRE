@@ -246,9 +246,19 @@ class CharacterViewSet(viewsets.ModelViewSet):
         character = self.get_object()
         action_name = request.data.get("action")
         session_id = request.data.get("session_id")
-        push_effect = request.data.get("push_effect", False)
-        push_dice = request.data.get("push_dice", False)
-        devil_bargain_dice = request.data.get("devil_bargain_dice", False)
+
+        def _as_bool(v):
+            if v is True:
+                return True
+            if v is False or v is None:
+                return False
+            if isinstance(v, str):
+                return v.strip().lower() in ("1", "true", "yes", "on")
+            return bool(v)
+
+        push_effect = _as_bool(request.data.get("push_effect", False))
+        push_dice = _as_bool(request.data.get("push_dice", False))
+        devil_bargain_dice = _as_bool(request.data.get("devil_bargain_dice", False))
         devil_bargain_note = request.data.get("devil_bargain_note", "")
         devil_bargain_confirmed = bool(
             request.data.get("devil_bargain_confirmed", False)
@@ -296,6 +306,17 @@ class CharacterViewSet(viewsets.ModelViewSet):
             if not action_name:
                 return Response(
                     {"error": "Action name is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if sum([push_effect, push_dice, devil_bargain_dice]) > 1:
+                return Response(
+                    {
+                        "error": (
+                            "Choose only one of: push for +1 effect, push for +1d, "
+                            "or devil's bargain."
+                        )
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 

@@ -4,6 +4,31 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-04-22",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "improve character display and harm editor layout in CampaignManagement",
+          "enhance user profile update and validation"
+        ]
+      },
+      {
+        "title": "Refactored",
+        "items": [
+          "replace line chart with scatter chart for session data visualization"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "update session date handling and UI"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-04-18",
     "version": null,
     "sections": [
@@ -356,29 +381,20 @@ export const PATCH_NOTES = [
           "Add hero Stand Coin, centered layout; update patch notes and db",
           "Merge pull request #11 from zoobavitel/fix/character-delete-empty-response-and-home-errors",
           "Merge remote-tracking branch 'origin/master' into fix/character-delete-empty-response-and-home-errors",
-          "Merge pull request #10 from zoobavitel/feature/home-campaign-invites",
-          "Merge pull request #9 from zoobavitel/cursor/srd-potency-doc-sync"
+          "Merge pull request #10 from zoobavitel/feature/home-campaign-invites"
         ]
       },
       {
         "title": "Maintenance",
         "items": [
           "update patch notes and backend debug log",
-          "update local db.sqlite3 snapshot",
-          "refresh game-rules-srd and patch notes; update local db and debug log"
+          "update local db.sqlite3 snapshot"
         ]
       },
       {
         "title": "Fixed",
         "items": [
           "DELETE 204 empty body; Home delete shows errors"
-        ]
-      },
-      {
-        "title": "Documentation",
-        "items": [
-          "sync rules mirrors with SRD (potency removal, preemptive resistance)",
-          "drop Power-vs-Durability potency ladder; expand skills preemptive resistance"
         ]
       }
     ]

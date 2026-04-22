@@ -40,6 +40,8 @@ from .models import (
     StressHistory,
     ChatMessage,
     Faction,
+    CrewFactionRelationship,
+    CrewHistory,
     ShowcasedNPC,
     ProgressClock,
     Roll,
@@ -105,6 +107,7 @@ class CrewSerializer(serializers.ModelSerializer):
     proposed_by = serializers.PrimaryKeyRelatedField(read_only=True)
     approved_by = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
     image = serializers.FileField(required=False)
+    faction_relationships = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = Crew
@@ -114,6 +117,7 @@ class CrewSerializer(serializers.ModelSerializer):
             "campaign",
             "playbook",
             "description",
+            "notes",
             "image",
             "xp",
             "xp_track_size",
@@ -121,6 +125,7 @@ class CrewSerializer(serializers.ModelSerializer):
             "level",
             "hold",
             "rep",
+            "turf",
             "wanted_level",
             "coin",
             "stash",
@@ -131,7 +136,100 @@ class CrewSerializer(serializers.ModelSerializer):
             "proposed_name",
             "proposed_by",
             "approved_by",
+            "faction_relationships",
         ]
+
+    def get_faction_relationships(self, obj):
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        qs = CrewFactionRelationship.objects.filter(crew=obj).select_related(
+            "faction"
+        )
+        show_all = bool(user and getattr(user, "is_staff", False))
+        if user and getattr(user, "is_authenticated", False) and obj.campaign_id:
+            if obj.campaign.gm_id == user.id:
+                show_all = True
+        out = []
+        for rel in qs:
+            fac = rel.faction
+            if not show_all and not getattr(fac, "visible_to_players", True):
+                continue
+            out.append(
+                {
+                    "id": rel.id,
+                    "faction_id": fac.id,
+                    "faction_name": fac.name,
+                    "reputation_value": rel.reputation_value,
+                    "notes": rel.notes or "",
+                    "visible_to_players": getattr(fac, "visible_to_players", True),
+                }
+            )
+        return out
+
+    def update(self, instance, validated_data):
+        rel_in = self.initial_data.get("faction_relationships")
+        instance = super().update(instance, validated_data)
+        if rel_in is None:
+            return instance
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        if not user or not getattr(user, "is_authenticated", False):
+            raise serializers.ValidationError(
+                {"faction_relationships": "Authentication required."}
+            )
+        if not (getattr(user, "is_staff", False) or instance.campaign.gm_id == user.id):
+            raise serializers.ValidationError(
+                {
+                    "faction_relationships": (
+                        "Only the campaign GM may update faction reputation links."
+                    )
+                }
+            )
+        if not isinstance(rel_in, list):
+            raise serializers.ValidationError(
+                {
+                    "faction_relationships": (
+                        "Expected a list of objects with faction_id and reputation_value."
+                    )
+                }
+            )
+        self._sync_crew_faction_links(instance, rel_in)
+        return instance
+
+    @staticmethod
+    def _sync_crew_faction_links(crew, rows):
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            fid = row.get("faction_id") if "faction_id" in row else row.get("faction")
+            if fid is None:
+                continue
+            try:
+                fid_int = int(fid)
+            except (TypeError, ValueError):
+                continue
+            if row.get("delete"):
+                CrewFactionRelationship.objects.filter(
+                    crew=crew, faction_id=fid_int
+                ).delete()
+                continue
+            if not Faction.objects.filter(
+                pk=fid_int, campaign_id=crew.campaign_id
+            ).exists():
+                continue
+            rep = int(row.get("reputation_value", 0))
+            rep = max(-3, min(3, rep))
+            notes = row.get("notes")
+            if notes is None:
+                notes = ""
+            CrewFactionRelationship.objects.update_or_create(
+                crew=crew,
+                faction_id=fid_int,
+                defaults={
+                    "reputation_value": rep,
+                    "notes": str(notes)[:500],
+                },
+            )
 
     def validate_stash_slots(self, value):
         if value is None:
@@ -571,6 +669,26 @@ class CharacterHistorySerializer(serializers.ModelSerializer):
             "id",
             "character",
             "character_true_name",
+            "editor",
+            "editor_username",
+            "timestamp",
+            "changed_fields",
+        ]
+
+    def get_editor_username(self, obj):
+        return obj.editor.username if obj.editor_id else None
+
+
+class CrewHistorySerializer(serializers.ModelSerializer):
+    crew_name = serializers.CharField(source="crew.name", read_only=True)
+    editor_username = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CrewHistory
+        fields = [
+            "id",
+            "crew",
+            "crew_name",
             "editor",
             "editor_username",
             "timestamp",
@@ -1386,6 +1504,7 @@ class FactionSerializer(serializers.ModelSerializer):
             "contacts",
             "faction_status",
             "crew_notes",
+            "visible_to_players",
             "npcs",
         ]
 

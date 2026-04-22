@@ -3,12 +3,14 @@ from rest_framework.permissions import IsAuthenticated
 
 from ..models import (
     Heritage, Vice, Ability, Stand, StandAbility, HamonAbility, SpinAbility,
-    Trauma, CharacterHistory, Character, ExperienceTracker, Campaign,
+    Trauma, CharacterHistory, CrewHistory, Character, ExperienceTracker, Campaign,
+    Crew,
 )
 from ..serializers import (
     HeritageSerializer, ViceSerializer, AbilitySerializer, StandSerializer,
     StandAbilitySerializer, HamonAbilitySerializer, SpinAbilitySerializer,
-    TraumaSerializer, CharacterHistorySerializer, ExperienceTrackerSerializer
+    TraumaSerializer, CharacterHistorySerializer, CrewHistorySerializer,
+    ExperienceTrackerSerializer,
 )
 
 
@@ -90,6 +92,36 @@ class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
         character_id = self.request.query_params.get("character")
         if character_id:
             base = base.filter(character_id=character_id)
+        return base.order_by("-timestamp")
+
+
+class CrewHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+    """Audit of crew sheet scalar changes; filter with ?crew=<id>."""
+
+    permission_classes = [IsAuthenticated]
+    serializer_class = CrewHistorySerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = CrewHistory.objects.all().select_related(
+            "crew", "crew__campaign", "editor"
+        )
+        if user.is_staff:
+            base = qs
+        else:
+            member_crew_ids = Crew.objects.filter(
+                members__user=user
+            ).values_list("id", flat=True)
+            gm_crew_ids = Crew.objects.filter(campaign__gm=user).values_list(
+                "id", flat=True
+            )
+            allowed = set(member_crew_ids) | set(gm_crew_ids)
+            if not allowed:
+                return CrewHistory.objects.none()
+            base = qs.filter(crew_id__in=allowed)
+        crew_id = self.request.query_params.get("crew")
+        if crew_id:
+            base = base.filter(crew_id=crew_id)
         return base.order_by("-timestamp")
 
 

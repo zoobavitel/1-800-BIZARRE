@@ -26,6 +26,8 @@ import {
   characterAPI,
   campaignAPI,
   crewAPI,
+  crewHistoryAPI,
+  factionAPI,
   rollAPI,
   progressClockAPI,
   referenceAPI,
@@ -40,6 +42,76 @@ import {
   HistoryBranchIcon,
 } from "../components/position-effect/PositionEffectIndicators";
 import { computeActionPoolBreakdown } from "../features/character-sheet/utils/actionDicePool";
+
+const CREW_HISTORY_FIELD_KEYS = new Set([
+  "name",
+  "rep",
+  "turf",
+  "level",
+  "hold",
+  "wanted_level",
+  "coin",
+  "description",
+  "notes",
+  "stash",
+  "upgrade_progress",
+  "xp",
+  "advancement_points",
+  "stash_slots",
+  "proposed_name",
+]);
+
+function upgradesToProgress(upgrades) {
+  const p = {};
+  if (!upgrades) return p;
+  Object.entries(upgrades.lair || {}).forEach(([k, v]) => {
+    p[`lair_${k}`] = !!v;
+  });
+  Object.entries(upgrades.training || {}).forEach(([k, v]) => {
+    p[`training_${k}`] = !!v;
+  });
+  return p;
+}
+
+function progressToUpgrades(progress) {
+  const base = {
+    lair: {
+      carriage: false,
+      boat: false,
+      hidden: false,
+      quarters: false,
+      secure: false,
+      vault: false,
+      workshop: false,
+    },
+    training: {
+      insight: false,
+      prowess: false,
+      resolve: false,
+      personal: false,
+      mastery: false,
+    },
+  };
+  if (!progress || typeof progress !== "object") return base;
+  Object.entries(progress).forEach(([key, val]) => {
+    const parts = key.split("_");
+    if (parts.length >= 2) {
+      const group = parts[0];
+      const rest = parts.slice(1).join("_");
+      if (group === "lair" && rest in base.lair) base.lair[rest] = !!val;
+      if (group === "training" && rest in base.training)
+        base.training[rest] = !!val;
+    }
+  });
+  return base;
+}
+
+function reputationTierLabel(v) {
+  const n = Number(v) || 0;
+  if (n <= -2) return "Hostile";
+  if (n >= 2) return "Allied";
+  return "Neutral";
+}
 
 // ─── Dice pool (pre-roll preview) ─────────────────────────────────────────────
 
@@ -885,7 +957,6 @@ const CharacterSheetWrapper = ({
 
   // Crew
   const [crewData, setCrewData] = useState({
-    reputation: "",
     rep: 0,
     turf: 0,
     hold: "strong",
@@ -914,6 +985,95 @@ const CharacterSheetWrapper = ({
     },
     notes: "",
   });
+  const [crewFactionLinks, setCrewFactionLinks] = useState([]);
+  const [crewHistoryEntries, setCrewHistoryEntries] = useState([]);
+  const crewHydratedRef = useRef(false);
+
+  const buildCrewPatchPayload = useCallback(() => {
+    return {
+      rep: crewData.rep,
+      turf: crewData.turf,
+      level: crewData.tier,
+      wanted_level: crewData.wanted,
+      coin: crewData.coin,
+      hold: crewData.hold,
+      description: crewData.description,
+      notes: crewData.notes,
+      upgrade_progress: upgradesToProgress(crewData.upgrades),
+    };
+  }, [crewData]);
+
+  useEffect(() => {
+    if (activeMode !== "CREW MODE" || !charData.crewId) {
+      crewHydratedRef.current = false;
+      return undefined;
+    }
+    const cid = charData.crewId;
+    let cancelled = false;
+    crewHydratedRef.current = false;
+    crewAPI
+      .getCrew(cid)
+      .then((d) => {
+        if (cancelled) return;
+        setCrewData((p) => ({
+          ...p,
+          rep: Math.min(6, Math.max(0, Number(d.rep) || 0)),
+          turf: Math.min(6, Math.max(0, Number(d.turf) || 0)),
+          tier: Math.min(4, Math.max(0, Number(d.level) || 0)),
+          wanted: Math.min(5, Math.max(0, Number(d.wanted_level) || 0)),
+          coin: Math.min(4, Math.max(0, Number(d.coin) || 0)),
+          hold: d.hold === "weak" || d.hold === "strong" ? d.hold : p.hold,
+          description: d.description ?? "",
+          notes: d.notes ?? "",
+          upgrades: progressToUpgrades(d.upgrade_progress),
+          specialAbilities: (d.special_abilities || []).map((a) => ({
+            name: a.name,
+            description: a.description || "",
+          })),
+        }));
+        setCrewFactionLinks(d.faction_relationships || []);
+        crewHydratedRef.current = true;
+      })
+      .catch(() => {
+        if (!cancelled) setCrewFactionLinks([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMode, charData.crewId]);
+
+  useEffect(() => {
+    if (activeMode !== "CREW MODE" || !charData.crewId) return;
+    crewHistoryAPI
+      .list({ crew: charData.crewId })
+      .then((rows) => {
+        const list = Array.isArray(rows) ? rows : rows?.results || [];
+        setCrewHistoryEntries(list);
+      })
+      .catch(() => setCrewHistoryEntries([]));
+  }, [activeMode, charData.crewId]);
+
+  useEffect(() => {
+    if (!crewHydratedRef.current || !charData.crewId) return undefined;
+    const t = setTimeout(() => {
+      crewAPI
+        .patchCrew(charData.crewId, buildCrewPatchPayload())
+        .catch(() => {});
+    }, 900);
+    return () => clearTimeout(t);
+  }, [
+    charData.crewId,
+    buildCrewPatchPayload,
+    crewData.rep,
+    crewData.turf,
+    crewData.tier,
+    crewData.wanted,
+    crewData.coin,
+    crewData.hold,
+    crewData.description,
+    crewData.notes,
+    crewData.upgrades,
+  ]);
 
   // ─── Derived Values ──────────────────────────────────────────────────────────
 
@@ -1102,9 +1262,7 @@ const CharacterSheetWrapper = ({
   const [groupActionErr, setGroupActionErr] = useState(null);
   const [rollGoalDraft, setRollGoalDraft] = useState("");
   const [assistHelperId, setAssistHelperId] = useState("");
-  const [pendingPushDice, setPendingPushDice] = useState(false);
   const [showDevilsBargainModal, setShowDevilsBargainModal] = useState(false);
-  const [pendingDevilsBargain, setPendingDevilsBargain] = useState(null);
   const [devilBargainConfirmed, setDevilBargainConfirmed] = useState(false);
   const [expandedActionInfo, setExpandedActionInfo] = useState(null);
   const [campaignAssignStatus, setCampaignAssignStatus] = useState(null);
@@ -1208,6 +1366,61 @@ const CharacterSheetWrapper = ({
     characterId,
   ]);
 
+  const rollPushMode = useMemo(() => {
+    if (rollModal.devil_bargain_dice) return "devil";
+    if (rollModal.push_effect) return "push_effect";
+    if (rollModal.push_dice) return "push_dice";
+    return "none";
+  }, [
+    rollModal.devil_bargain_dice,
+    rollModal.push_effect,
+    rollModal.push_dice,
+  ]);
+
+  const applyRollPushMode = useCallback(
+    (mode) => {
+      setDevilBargainConfirmed(false);
+      setRollModal((prev) => {
+        if (mode === "none") {
+          return {
+            ...prev,
+            push_effect: false,
+            push_dice: false,
+            devil_bargain_dice: false,
+            devil_bargain_note: "",
+          };
+        }
+        if (mode === "push_effect") {
+          return {
+            ...prev,
+            push_effect: true,
+            push_dice: false,
+            devil_bargain_dice: false,
+            devil_bargain_note: "",
+          };
+        }
+        if (mode === "push_dice") {
+          return {
+            ...prev,
+            push_effect: false,
+            push_dice: true,
+            devil_bargain_dice: false,
+            devil_bargain_note: "",
+          };
+        }
+        const gm = gmDevilBargainText;
+        return {
+          ...prev,
+          push_effect: false,
+          push_dice: false,
+          devil_bargain_dice: true,
+          devil_bargain_note: gm || prev.devil_bargain_note || "",
+        };
+      });
+    },
+    [gmDevilBargainText],
+  );
+
   const rollPoolPreview = useMemo(() => {
     if (!rollPending) return null;
     const { action_rating, attribute_dice, basePool } =
@@ -1238,14 +1451,13 @@ const CharacterSheetWrapper = ({
   ]);
 
   const handleRollWithSession = async () => {
-    if (!rollPending || !characterId || !activeSessionId) return;
+    if (!rollPending || !characterId) return;
     setRollApiError(null);
     const asd = charCampaign?.active_session_detail;
     try {
       const goalFromDraft = (rollGoalDraft || "").trim();
-      const res = await characterAPI.rollAction(characterId, {
+      const payload = {
         action: rollPending.actionName.toLowerCase(),
-        session_id: activeSessionId,
         push_effect: rollModal.push_effect,
         push_dice: rollModal.push_dice,
         devil_bargain_dice: rollModal.devil_bargain_dice,
@@ -1261,11 +1473,17 @@ const CharacterSheetWrapper = ({
         ability_bonuses: abilityBonusAudit.length
           ? abilityBonusAudit
           : undefined,
-        group_action_id: activeGroupAction?.id || undefined,
         assist_helper_id: assistHelperId
           ? parseInt(assistHelperId, 10)
           : undefined,
-      });
+      };
+      if (activeSessionId) {
+        payload.session_id = activeSessionId;
+        if (activeGroupAction?.id) {
+          payload.group_action_id = activeGroupAction.id;
+        }
+      }
+      const res = await characterAPI.rollAction(characterId, payload);
       setDiceResult({
         action: rollPending.actionName,
         dice: res.dice_results || [],
@@ -1298,8 +1516,6 @@ const CharacterSheetWrapper = ({
       setRollPending(null);
       setRollGoalDraft("");
       setAssistHelperId("");
-      setPendingPushDice(false);
-      setPendingDevilsBargain(null);
       setDevilBargainConfirmed(false);
       setRollModal((p) => ({
         ...p,
@@ -1307,10 +1523,12 @@ const CharacterSheetWrapper = ({
         devil_bargain_note: "",
       }));
       setRollAbilityBoost({});
-      rollAPI
-        .getRolls({ session: activeSessionId, character: characterId })
-        .then(setSessionRolls)
-        .catch(() => {});
+      if (activeSessionId) {
+        rollAPI
+          .getRolls({ session: activeSessionId, character: characterId })
+          .then(setSessionRolls)
+          .catch(() => {});
+      }
     } catch (e) {
       setRollApiError(e.message);
     }
@@ -1323,7 +1541,7 @@ const CharacterSheetWrapper = ({
     isResistance = false,
     isDesperateAction = false,
   ) => {
-    if (activeSessionId && characterId && !isResistance) {
+    if (characterId && !isResistance) {
       setRollPending({ actionName, diceCount, isDesperateAction });
       setRollAbilityBoost({});
       setDevilBargainConfirmed(false);
@@ -1334,9 +1552,9 @@ const CharacterSheetWrapper = ({
       setAssistHelperId("");
       setRollModal({
         push_effect: false,
-        push_dice: pendingPushDice,
-        devil_bargain_dice: !!pendingDevilsBargain,
-        devil_bargain_note: pendingDevilsBargain || "",
+        push_dice: false,
+        devil_bargain_dice: false,
+        devil_bargain_note: "",
       });
       setRollApiError(null);
       return;
@@ -4284,7 +4502,7 @@ const CharacterSheetWrapper = ({
                   </div>
 
                   {/* Action roll — dice pool preview (session) or roll result; same slot under action ratings */}
-                  {rollPending && activeSessionId && characterId && (
+                  {rollPending && characterId && (
                     <div
                       style={{
                         background: "#1f2937",
@@ -4621,51 +4839,55 @@ const CharacterSheetWrapper = ({
                           </div>
                         </div>
                       )}
-                      <div style={{ marginBottom: "12px" }}>
-                        <label
+                      <fieldset
+                        style={{
+                          border: "none",
+                          margin: 0,
+                          padding: 0,
+                          marginBottom: "12px",
+                        }}
+                      >
+                        <legend
                           style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "6px",
-                            fontSize: "12px",
-                            cursor: "pointer",
+                            fontSize: "11px",
+                            color: "#9ca3af",
+                            marginBottom: "6px",
+                            padding: 0,
                           }}
                         >
-                          <input
-                            type="checkbox"
-                            checked={rollModal.push_effect}
-                            onChange={(e) =>
-                              setRollModal((p) => ({
-                                ...p,
-                                push_effect: e.target.checked,
-                              }))
-                            }
-                          />
-                          Push for +1 effect (2 stress)
-                        </label>
-                        <label
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "6px",
-                            fontSize: "12px",
-                            cursor: "pointer",
-                            marginTop: "4px",
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={rollModal.push_dice}
-                            onChange={(e) => {
-                              setRollModal((p) => ({
-                                ...p,
-                                push_dice: e.target.checked,
-                              }));
-                              setPendingPushDice(e.target.checked);
+                          Push / devil&apos;s bargain (choose at most one)
+                        </legend>
+                        {[
+                          ["none", "None"],
+                          ["push_effect", "Push for +1 effect (2 stress)"],
+                          ["push_dice", "Push for +1d (2 stress)"],
+                          [
+                            "devil",
+                            "Devil's bargain (+1d, table-determined consequence)",
+                          ],
+                        ].map(([value, label]) => (
+                          <label
+                            key={value}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              fontSize: "12px",
+                              cursor: "pointer",
+                              marginTop: value === "none" ? 0 : "4px",
                             }}
-                          />
-                          Push for +1d (2 stress)
-                        </label>
+                          >
+                            <input
+                              type="radio"
+                              name="rollPushMode"
+                              checked={rollPushMode === value}
+                              onChange={() => applyRollPushMode(value)}
+                            />
+                            {label}
+                          </label>
+                        ))}
+                      </fieldset>
+                      <div style={{ marginBottom: "12px" }}>
                         <div style={{ marginTop: "8px" }}>
                           <span
                             style={{
@@ -4691,38 +4913,6 @@ const CharacterSheetWrapper = ({
                           </select>
                         </div>
                         <div style={{ marginTop: "10px" }}>
-                          <label
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "6px",
-                              fontSize: "12px",
-                              cursor: "pointer",
-                            }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={rollModal.devil_bargain_dice}
-                              onChange={(e) => {
-                                const on = e.target.checked;
-                                const gm = gmDevilBargainText;
-                                setDevilBargainConfirmed(false);
-                                setRollModal((p) => ({
-                                  ...p,
-                                  devil_bargain_dice: on,
-                                  devil_bargain_note: on
-                                    ? gm ||
-                                      p.devil_bargain_note ||
-                                      pendingDevilsBargain ||
-                                      ""
-                                    : "",
-                                }));
-                                if (!on) setPendingDevilsBargain(null);
-                              }}
-                            />
-                            Devil&apos;s bargain (+1d, table-determined
-                            consequence)
-                          </label>
                           {rollModal.devil_bargain_dice &&
                           gmDevilBargainText ? (
                             <div
@@ -4805,8 +4995,9 @@ const CharacterSheetWrapper = ({
                                 <span
                                   style={{ fontSize: "11px", color: "#f87171" }}
                                 >
-                                  Describe the consequence, or ask the referee to
-                                  set one for the session.
+                                  Describe the consequence below, or ask the
+                                  referee to set one when you have an active
+                                  session.
                                 </span>
                               )}
                             </div>
@@ -4875,8 +5066,6 @@ const CharacterSheetWrapper = ({
                             setRollAbilityBoost({});
                             setRollGoalDraft("");
                             setAssistHelperId("");
-                            setPendingPushDice(false);
-                            setPendingDevilsBargain(null);
                             setDevilBargainConfirmed(false);
                             setRollModal({
                               push_effect: false,
@@ -6896,72 +7085,6 @@ const CharacterSheetWrapper = ({
                       );
                     })()}
 
-                  {/* Bonus Dice — Push Yourself & Devil's Bargain buttons */}
-                  <div style={{ fontSize: "12px", marginBottom: "12px" }}>
-                    <span style={S.lbl}>BONUS DICE</span>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "8px",
-                        marginTop: "4px",
-                        flexWrap: "wrap",
-                        alignItems: "center",
-                      }}
-                    >
-                      <button
-                        onClick={() => setPendingPushDice((p) => !p)}
-                        style={{
-                          ...S.btn,
-                          padding: "6px 12px",
-                          fontSize: "11px",
-                          background: pendingPushDice ? "#166534" : "#374151",
-                          borderColor: pendingPushDice ? "#22c55e" : "#4b5563",
-                          color: "#fff",
-                        }}
-                        title="2 Stress for +1d on next roll"
-                      >
-                        PUSH YOURSELF {pendingPushDice && "✓"}
-                      </button>
-                      <span style={{ color: "#6b7280", fontSize: "11px" }}>
-                        — or —
-                      </span>
-                      <button
-                        onClick={() => setShowDevilsBargainModal(true)}
-                        style={{
-                          ...S.btn,
-                          padding: "6px 12px",
-                          fontSize: "11px",
-                          background: pendingDevilsBargain
-                            ? "#7c3aed"
-                            : "#374151",
-                          borderColor: pendingDevilsBargain
-                            ? "#a78bfa"
-                            : "#4b5563",
-                          color: "#fff",
-                        }}
-                        title="Choose a detriment for +1d on next roll"
-                      >
-                        DEVIL'S BARGAIN{" "}
-                        {pendingDevilsBargain
-                          ? `(${pendingDevilsBargain})`
-                          : ""}
-                      </button>
-                    </div>
-                    <div
-                      style={{
-                        color: "#9ca3af",
-                        marginTop: "6px",
-                        fontSize: "11px",
-                        lineHeight: 1.4,
-                      }}
-                    >
-                      Shortcuts for your next{" "}
-                      <strong style={{ color: "#d1d5db" }}>dice pool</strong>{" "}
-                      (click 🎲 on an action). Assist is set in the pool, not
-                      here.
-                    </div>
-                  </div>
-
                   {/* Devil's Bargain modal (above dice pool overlay when both open) */}
                   {showDevilsBargainModal && (
                     <div
@@ -7016,7 +7139,6 @@ const CharacterSheetWrapper = ({
                               key={detriment}
                               type="button"
                               onClick={() => {
-                                setPendingDevilsBargain(detriment);
                                 if (rollPending) {
                                   setRollModal((p) => ({
                                     ...p,
@@ -7042,7 +7164,6 @@ const CharacterSheetWrapper = ({
                               const c = prompt("Custom detriment:");
                               if (c?.trim()) {
                                 const t = c.trim();
-                                setPendingDevilsBargain(t);
                                 if (rollPending) {
                                   setRollModal((p) => ({
                                     ...p,
@@ -7194,17 +7315,227 @@ const CharacterSheetWrapper = ({
                     placeholder="Crew Name"
                   />
                 </div>
-                <div>
-                  <span style={S.lbl}>REPUTATION</span>
-                  <input
-                    style={S.inp}
-                    value={crewData.reputation}
-                    onChange={(e) =>
-                      setCrewData((p) => ({ ...p, reputation: e.target.value }))
-                    }
-                    placeholder="Crew Reputation"
-                  />
+              </div>
+              <div
+                style={{
+                  marginTop: "12px",
+                  paddingTop: "12px",
+                  borderTop: "1px solid #374151",
+                }}
+              >
+                <span style={S.lbl}>FACTION REPUTATION</span>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "#9ca3af",
+                    marginTop: "4px",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Standing with campaign factions (-3 hostile, 0 neutral, +3
+                  allied). Hidden factions are GM-only until revealed.
                 </div>
+                {crewFactionLinks.length === 0 ? (
+                  <div style={{ fontSize: "12px", color: "#6b7280" }}>
+                    No linked factions yet.
+                    {isGM && campaignId
+                      ? " Create a faction for the campaign, then link it to this crew."
+                      : ""}
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                    }}
+                  >
+                    {crewFactionLinks.map((row) => (
+                      <div
+                        key={row.id}
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                          gap: "10px",
+                          fontSize: "12px",
+                          background: "#111827",
+                          padding: "8px",
+                          borderRadius: "6px",
+                          border: "1px solid #374151",
+                        }}
+                      >
+                        <span style={{ fontWeight: 600, color: "#e5e7eb" }}>
+                          {row.faction_name}
+                        </span>
+                        <span style={{ color: "#9ca3af" }}>
+                          {row.reputation_value}{" "}
+                          <span style={{ color: "#6b7280" }}>
+                            ({reputationTierLabel(row.reputation_value)})
+                          </span>
+                        </span>
+                        {isGM && charData.crewId ? (
+                          <>
+                            <label
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                fontSize: "11px",
+                              }}
+                            >
+                              Rep
+                              <input
+                                type="number"
+                                min={-3}
+                                max={3}
+                                defaultValue={row.reputation_value}
+                                key={`${row.id}-${row.reputation_value}`}
+                                style={{
+                                  width: "52px",
+                                  background: "#0d1117",
+                                  color: "#fff",
+                                  border: "1px solid #4b5563",
+                                  borderRadius: "4px",
+                                  padding: "2px 4px",
+                                }}
+                                onBlur={(e) => {
+                                  const v = Math.min(
+                                    3,
+                                    Math.max(
+                                      -3,
+                                      parseInt(e.target.value, 10) || 0,
+                                    ),
+                                  );
+                                  crewAPI
+                                    .patchCrew(charData.crewId, {
+                                      faction_relationships: [
+                                        {
+                                          faction_id: row.faction_id,
+                                          reputation_value: v,
+                                        },
+                                      ],
+                                    })
+                                    .then(() =>
+                                      crewAPI.getCrew(charData.crewId).then((d) => {
+                                        setCrewFactionLinks(
+                                          d.faction_relationships || [],
+                                        );
+                                      }),
+                                    )
+                                    .catch(() => {});
+                                }}
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              style={{
+                                ...S.btn,
+                                fontSize: "10px",
+                                padding: "2px 8px",
+                              }}
+                              onClick={() => {
+                                factionAPI
+                                  .patchFaction(row.faction_id, {
+                                    visible_to_players: !row.visible_to_players,
+                                  })
+                                  .then(() =>
+                                    crewAPI.getCrew(charData.crewId).then((d) => {
+                                      setCrewFactionLinks(
+                                        d.faction_relationships || [],
+                                      );
+                                    }),
+                                  )
+                                  .catch(() => {});
+                              }}
+                            >
+                              {row.visible_to_players
+                                ? "Hide from players"
+                                : "Reveal to players"}
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {isGM && campaignId && charData.crewId ? (
+                  <div
+                    style={{
+                      marginTop: "10px",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "8px",
+                      alignItems: "center",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      style={{ ...S.btn, fontSize: "11px" }}
+                      onClick={() => {
+                        const name = prompt("New faction name?");
+                        if (!name?.trim()) return;
+                        factionAPI
+                          .createFaction({
+                            campaign: parseInt(String(campaignId), 10),
+                            name: name.trim(),
+                            visible_to_players: false,
+                          })
+                              .then((created) => {
+                            const fid = created?.id ?? created?.pk;
+                            if (!fid) return;
+                            return crewAPI
+                              .patchCrew(charData.crewId, {
+                                faction_relationships: [
+                                  {
+                                    faction_id: fid,
+                                    reputation_value: 0,
+                                  },
+                                ],
+                              })
+                              .then(() =>
+                                crewAPI
+                                  .getCrew(charData.crewId)
+                                  .then((crewRes) => {
+                                    setCrewFactionLinks(
+                                      crewRes.faction_relationships || [],
+                                    );
+                                  }),
+                              );
+                          })
+                          .catch(() => {});
+                      }}
+                    >
+                      + Create hidden faction and link
+                    </button>
+                    <button
+                      type="button"
+                      style={{ ...S.btn, fontSize: "11px" }}
+                      onClick={() => {
+                        const raw = prompt(
+                          "Link existing faction: enter faction ID",
+                        );
+                        if (!raw?.trim()) return;
+                        const fid = parseInt(raw.trim(), 10);
+                        if (!Number.isFinite(fid)) return;
+                        crewAPI
+                          .patchCrew(charData.crewId, {
+                            faction_relationships: [
+                              { faction_id: fid, reputation_value: 0 },
+                            ],
+                          })
+                          .then(() =>
+                            crewAPI.getCrew(charData.crewId).then((d) => {
+                              setCrewFactionLinks(d.faction_relationships || []);
+                            }),
+                          )
+                          .catch(() => {});
+                      }}
+                    >
+                      Link faction by ID
+                    </button>
+                  </div>
+                ) : null}
               </div>
               <div
                 style={{
@@ -7282,6 +7613,80 @@ const CharacterSheetWrapper = ({
                 ))}
               </div>
             </div>
+            {charData.crewId ? (
+              <div
+                style={{
+                  ...S.card,
+                  marginBottom: "12px",
+                  maxHeight: "220px",
+                  overflow: "auto",
+                }}
+              >
+                <span style={S.lbl}>CREW MODIFICATION HISTORY</span>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "#6b7280",
+                    marginTop: "4px",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Saved changes to this crew (name, rep, turf, tier, wanted,
+                  coin, notes, upgrades, etc.).
+                </div>
+                {crewHistoryEntries.length === 0 ? (
+                  <div style={{ fontSize: "12px", color: "#6b7280" }}>
+                    No history entries yet.
+                  </div>
+                ) : (
+                  <ul
+                    style={{
+                      margin: 0,
+                      paddingLeft: "18px",
+                      fontSize: "11px",
+                      color: "#d1d5db",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {crewHistoryEntries.map((entry) => {
+                      const cf = entry.changed_fields || {};
+                      const keys = Object.keys(cf).filter((k) =>
+                        CREW_HISTORY_FIELD_KEYS.has(k),
+                      );
+                      if (!keys.length) return null;
+                      const when = entry.timestamp
+                        ? new Date(entry.timestamp).toLocaleString()
+                        : "";
+                      return (
+                        <li key={entry.id} style={{ marginBottom: "8px" }}>
+                          <div style={{ color: "#9ca3af" }}>
+                            {when}
+                            {entry.editor_username
+                              ? ` · ${entry.editor_username}`
+                              : ""}
+                          </div>
+                          {keys.map((k) => {
+                            const ch = cf[k] || {};
+                            return (
+                              <div key={k}>
+                                <strong>{k}</strong>:{" "}
+                                <span style={{ color: "#fca5a5" }}>
+                                  {String(ch.old ?? "")}
+                                </span>{" "}
+                                →{" "}
+                                <span style={{ color: "#86efac" }}>
+                                  {String(ch.new ?? "")}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            ) : null}
             <div style={S.g3}>
               <div style={S.card}>
                 <span style={S.lbl}>SPECIAL ABILITIES</span>
