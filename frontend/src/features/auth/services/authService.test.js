@@ -20,10 +20,10 @@ describe("authAPI", () => {
     global.fetch = originalFetch;
   });
 
-  test("updateProfile sends body nested under profile", async () => {
+  test("updateProfile sends flat body for UserProfileSerializer", async () => {
     global.fetch.mockResolvedValue({
       ok: true,
-      json: async () => ({ id: 1, username: "tester", profile: { theme: "dark" } }),
+      json: async () => ({ username: "tester", theme: "dark" }),
     });
 
     await authAPI.updateProfile({
@@ -37,11 +37,9 @@ describe("authAPI", () => {
     expect(url).toBe("http://localhost:8000/api/user-profiles/update/");
     expect(init.method).toBe("PUT");
     expect(JSON.parse(init.body)).toEqual({
-      profile: {
-        signature: "—",
-        theme: "dark",
-        display_title: "GM",
-      },
+      signature: "—",
+      theme: "dark",
+      display_title: "GM",
     });
   });
 
