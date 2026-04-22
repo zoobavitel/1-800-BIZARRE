@@ -257,7 +257,6 @@ class SessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Session
         fields = "__all__"
-        read_only_fields = ["session_date"]
 
     def get_npcs_involved(self, obj):
         """Return list of NPC ids for backward compatibility."""

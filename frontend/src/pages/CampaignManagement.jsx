@@ -2672,7 +2672,7 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
   const [fortuneRolling, setFortuneRolling] = useState(false);
   const [error, setError] = useState(null);
   const [wantedStars, setWantedStars] = useState(campaign?.wanted_stars ?? 0);
-  const [proposedDateInput, setProposedDateInput] = useState("");
+  const [sessionDateInput, setSessionDateInput] = useState("");
 
   useEffect(() => {
     if (!session?.id) return;
@@ -2709,15 +2709,21 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
   }, [session?.id, campaign?.id, campaign?.wanted_stars]);
 
   useEffect(() => {
-    const p = sessionData?.proposed_date;
-    if (p == null || p === "") {
-      setProposedDateInput("");
-    } else {
-      setProposedDateInput(
-        typeof p === "string" ? p.slice(0, 10) : "",
-      );
+    const raw = sessionData?.session_date;
+    if (!raw) {
+      setSessionDateInput("");
+      return;
     }
-  }, [sessionData?.id, sessionData?.proposed_date]);
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) {
+      setSessionDateInput("");
+      return;
+    }
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    setSessionDateInput(`${year}-${month}-${day}`);
+  }, [sessionData?.id, sessionData?.session_date]);
 
   const campaignChars =
     campaign?.campaign_characters ||
@@ -2778,27 +2784,21 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
     }
   };
 
-  const handleSaveProposedDate = async () => {
+  const handleSaveSessionDate = async () => {
     setError(null);
-    try {
-      const value = proposedDateInput.trim() || null;
-      const updated = await sessionAPI.patchSession(session.id, {
-        proposed_date: value,
-      });
-      setSessionData((prev) => ({ ...prev, ...updated }));
-      onRefresh();
-    } catch (e) {
-      setError(e.message);
+    if (!sessionDateInput) {
+      setError("Pick a session date first.");
+      return;
     }
-  };
-
-  const handleClearProposedDate = async () => {
-    setError(null);
     try {
+      const [yearStr, monthStr, dayStr] = sessionDateInput.split("-");
+      const year = Number(yearStr);
+      const month = Number(monthStr);
+      const day = Number(dayStr);
+      const value = new Date(year, month - 1, day, 12, 0, 0, 0).toISOString();
       const updated = await sessionAPI.patchSession(session.id, {
-        proposed_date: null,
+        session_date: value,
       });
-      setProposedDateInput("");
       setSessionData((prev) => ({ ...prev, ...updated }));
       onRefresh();
     } catch (e) {
@@ -3063,7 +3063,7 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
           }}
         >
           <div style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "6px" }}>
-            Proposed session date (when you plan to play)
+            Session date (editable)
           </div>
           <div
             style={{
@@ -3075,8 +3075,8 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
           >
             <input
               type="date"
-              value={proposedDateInput}
-              onChange={(e) => setProposedDateInput(e.target.value)}
+              value={sessionDateInput}
+              onChange={(e) => setSessionDateInput(e.target.value)}
               style={{
                 fontFamily: "monospace",
                 fontSize: "12px",
@@ -3090,23 +3090,14 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
             />
             <button
               type="button"
-              onClick={handleSaveProposedDate}
+              onClick={handleSaveSessionDate}
               style={S.btnGhost}
             >
               Save date
             </button>
-            {(sessionData?.proposed_date || proposedDateInput) && (
-              <button
-                type="button"
-                onClick={handleClearProposedDate}
-                style={{ ...S.btnGhost, fontSize: "11px" }}
-              >
-                Clear date
-              </button>
-            )}
           </div>
           <div style={{ fontSize: "10px", color: "#6b7280", marginTop: "6px" }}>
-            Record created:{" "}
+            Created at:{" "}
             {sessionData?.session_date
               ? new Date(sessionData.session_date).toLocaleString()
               : "—"}
