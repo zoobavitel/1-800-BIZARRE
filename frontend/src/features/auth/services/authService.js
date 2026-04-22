@@ -69,11 +69,11 @@ export const authAPI = {
       Array.isArray(data) ? data[0] : (data?.results?.[0] ?? data),
     ),
 
-  // Update current user's profile (nested under `profile` per UserSerializer)
+  // Update current user's profile (flat body matches UserProfileSerializer on PUT /user-profiles/update/)
   updateProfile: (profileData) =>
     apiRequest("/user-profiles/update/", {
       method: "PUT",
-      body: JSON.stringify({ profile: profileData }),
+      body: JSON.stringify(profileData),
     }),
 
   // Logout (clear token)

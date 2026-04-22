@@ -170,6 +170,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "notification_preferences",
         ]
 
+    def validate_avatar_url(self, value):
+        s = (value or "").strip()
+        if not s:
+            return ""
+        if not s.startswith("https://"):
+            raise serializers.ValidationError("Use an HTTPS image URL.")
+        return s
+
 
 class InvitableUserSerializer(serializers.ModelSerializer):
     """Lightweight serializer for invitable users list (id, username only)."""
