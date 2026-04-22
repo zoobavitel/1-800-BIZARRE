@@ -89,6 +89,10 @@ class Faction(models.Model):
         max_length=10, choices=[("weak", "Weak"), ("strong", "Strong")], default="weak"
     )
     reputation = models.IntegerField(default=0)
+    visible_to_players = models.BooleanField(
+        default=True,
+        help_text="When false, crew reputation with this faction is hidden from players until the GM reveals it.",
+    )
 
     # Shared faction data — all NPCs in this faction share these fields
     inventory = models.JSONField(
@@ -188,6 +192,7 @@ class Crew(models.Model):
         CrewPlaybook, on_delete=models.SET_NULL, null=True, blank=True
     )
     description = models.TextField(blank=True)
+    notes = models.TextField(blank=True, help_text="Crew sheet notes (player-facing).")
     image = models.FileField(upload_to="crew_images/", blank=True, null=True)
     xp = models.IntegerField(default=0)
     xp_track_size = models.IntegerField(default=8)
@@ -208,6 +213,10 @@ class Crew(models.Model):
     )
 
     rep = models.IntegerField(default=0)
+    turf = models.IntegerField(
+        default=0,
+        help_text="Crew turf track (0–6), Blades-style.",
+    )
     wanted_level = models.IntegerField(default=0)
 
     coin = models.IntegerField(default=0)
@@ -940,6 +949,21 @@ class CharacterHistory(models.Model):
         return f"Changes for {self.character.true_name} at {self.timestamp}"
 
 
+class CrewHistory(models.Model):
+    crew = models.ForeignKey(
+        Crew, on_delete=models.CASCADE, related_name="history_entries"
+    )
+    editor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    changed_fields = models.JSONField()
+
+    class Meta:
+        ordering = ["-timestamp"]
+
+    def __str__(self):
+        return f"Crew changes for {self.crew.name} at {self.timestamp}"
+
+
 class CampaignAuditLog(models.Model):
     """GM-visible audit trail for campaign-scoped actions (e.g. progress clocks)."""
 
@@ -1027,6 +1051,75 @@ def log_character_changes(sender, instance, created, **kwargs):
 
     if hasattr(instance, "_history_prev_snapshot"):
         del instance._history_prev_snapshot
+
+
+def _crew_scalar_snapshot(crew):
+    """Serialize concrete scalar fields on Crew for history diffing."""
+    snap = {}
+    for field in crew._meta.concrete_fields:
+        if field.primary_key:
+            continue
+        name = field.name
+        if field.many_to_many:
+            continue
+        internal = field.get_internal_type()
+        try:
+            if internal in ("ForeignKey", "OneToOneField"):
+                snap[name] = str(getattr(crew, field.attname))
+            elif internal == "JSONField":
+                snap[name] = json.dumps(
+                    getattr(crew, name), sort_keys=True, default=str
+                )
+            else:
+                val = getattr(crew, name)
+                if hasattr(val, "isoformat"):
+                    snap[name] = val.isoformat()
+                else:
+                    snap[name] = "" if val is None else str(val)
+        except Exception:
+            snap[name] = ""
+    return snap
+
+
+@receiver(pre_save, sender=Crew)
+def crew_presave_snapshot(sender, instance, **kwargs):
+    if not instance.pk:
+        instance._crew_history_prev_snapshot = None
+        return
+    try:
+        prev = Crew.objects.get(pk=instance.pk)
+    except Crew.DoesNotExist:
+        instance._crew_history_prev_snapshot = None
+        return
+    instance._crew_history_prev_snapshot = _crew_scalar_snapshot(prev)
+
+
+@receiver(post_save, sender=Crew)
+def log_crew_changes(sender, instance, created, **kwargs):
+    if created:
+        return
+
+    from .history_context import get_character_history_editor
+
+    prev = getattr(instance, "_crew_history_prev_snapshot", None)
+    if prev is None:
+        prev = {}
+    new_snap = _crew_scalar_snapshot(instance)
+    changed_fields = {}
+    for field_name, new_value in new_snap.items():
+        old_value = prev.get(field_name)
+        if old_value != new_value:
+            changed_fields[field_name] = {"old": old_value, "new": new_value}
+
+    if changed_fields:
+        CrewHistory.objects.create(
+            crew=instance,
+            editor=get_character_history_editor(),
+            changed_fields=changed_fields,
+        )
+
+    if hasattr(instance, "_crew_history_prev_snapshot"):
+        del instance._crew_history_prev_snapshot
 
 
 class Stand(models.Model):
