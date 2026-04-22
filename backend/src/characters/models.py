@@ -1431,7 +1431,7 @@ class Session(models.Model):
     name = models.CharField(
         max_length=200, help_text="Title or name of the session/episode"
     )
-    session_date = models.DateTimeField(auto_now_add=True)
+    session_date = models.DateTimeField(default=timezone.now)
     proposed_date = models.DateField(
         null=True,
         blank=True,
