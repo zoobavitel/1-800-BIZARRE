@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
+          "add CrewHistory model and related functionality",
           "improve character display and harm editor layout in CampaignManagement",
           "enhance user profile update and validation"
         ]
@@ -380,8 +381,7 @@ export const PATCH_NOTES = [
           "Stop tracking backend/src/db.sqlite3 (local dev DB)",
           "Add hero Stand Coin, centered layout; update patch notes and db",
           "Merge pull request #11 from zoobavitel/fix/character-delete-empty-response-and-home-errors",
-          "Merge remote-tracking branch 'origin/master' into fix/character-delete-empty-response-and-home-errors",
-          "Merge pull request #10 from zoobavitel/feature/home-campaign-invites"
+          "Merge remote-tracking branch 'origin/master' into fix/character-delete-empty-response-and-home-errors"
         ]
       },
       {

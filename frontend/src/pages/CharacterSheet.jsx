@@ -34,6 +34,7 @@ import {
   experienceTrackerAPI,
   xpHistoryAPI,
   groupActionAPI,
+  characterHistoryAPI,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -111,6 +112,49 @@ function reputationTierLabel(v) {
   if (n <= -2) return "Hostile";
   if (n >= 2) return "Allied";
   return "Neutral";
+}
+
+const HISTORY_FIELD_LABELS = {
+  true_name: "Name",
+  stand_name: "Stand name",
+  appearance: "Look",
+  background_note: "Background",
+  inventory: "Inventory",
+  stress: "Stress",
+  trauma: "Trauma",
+  armor_charges: "Armor",
+  regular_armor_used: "Armor spent",
+  special_armor_used: "Special armor spent",
+  harm_clock_current: "Healing clock",
+  harm_level1_name: "Harm Lv1",
+  harm_level1_slot2_name: "Harm Lv1 (slot 2)",
+  harm_level2_name: "Harm Lv2",
+  harm_level2_slot2_name: "Harm Lv2 (slot 2)",
+  harm_level3_name: "Harm Lv3",
+  harm_level4_name: "Harm Lv4",
+  coin_stats: "Stand coin stats",
+  heritage: "Heritage",
+  selected_benefits: "Heritage benefits",
+  selected_detriments: "Heritage detriments",
+  level: "Level",
+  crew: "Crew",
+  action_dots: "Action dots",
+  xp_clocks: "XP tracks",
+};
+
+function historyFieldLabel(key) {
+  return HISTORY_FIELD_LABELS[key] || key.replace(/_/g, " ");
+}
+
+function stringifyValue(v) {
+  if (v == null) return "";
+  if (typeof v === "string" || typeof v === "number" || typeof v === "boolean")
+    return String(v);
+  try {
+    return JSON.stringify(v);
+  } catch (_err) {
+    return String(v);
+  }
 }
 
 // ─── Dice pool (pre-roll preview) ─────────────────────────────────────────────
@@ -1250,8 +1294,14 @@ const CharacterSheetWrapper = ({
   const [rollAbilityBoost, setRollAbilityBoost] = useState({});
   const [rollApiError, setRollApiError] = useState(null);
   const [sessionRolls, setSessionRolls] = useState([]);
-  const [showPositionEffect, setShowPositionEffect] = useState(false);
-  const [showDiceHistoryPanel, setShowDiceHistoryPanel] = useState(false);
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  const [historyMode, setHistoryMode] = useState("session");
+  const [historyCollapsed, setHistoryCollapsed] = useState(false);
+  const [historyRows, setHistoryRows] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
+  const [historySessionId, setHistorySessionId] = useState(null);
+  const [historyCharacterFilter, setHistoryCharacterFilter] = useState("all");
   const [showXpHistoryModal, setShowXpHistoryModal] = useState(false);
   const [xpTimelineLoading, setXpTimelineLoading] = useState(false);
   const [xpTimelineError, setXpTimelineError] = useState(null);
@@ -1273,13 +1323,17 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     if (activeSessionId && characterId) {
       rollAPI
-        .getRolls({ session: activeSessionId, character: characterId })
+        .getRolls({ session: activeSessionId })
         .then(setSessionRolls)
         .catch(() => setSessionRolls([]));
     } else {
       setSessionRolls([]);
     }
   }, [activeSessionId, characterId, sessionDataPollTick]);
+
+  useEffect(() => {
+    setHistorySessionId(activeSessionId || null);
+  }, [activeSessionId]);
 
   useEffect(() => {
     if (!showXpHistoryModal || !characterId) return;
@@ -1309,6 +1363,159 @@ const CharacterSheetWrapper = ({
       .catch((e) => setXpTimelineError(e.message))
       .finally(() => setXpTimelineLoading(false));
   }, [showXpHistoryModal, characterId]);
+
+  useEffect(() => {
+    if (!showHistoryPanel) return;
+    if (!characterId) {
+      setHistoryRows([]);
+      return;
+    }
+    setHistoryLoading(true);
+    setHistoryError(null);
+    const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
+    if (historyMode === "sheet") {
+      characterHistoryAPI
+        .list({
+          character: characterId,
+          ...(charCampaign?.id ? { campaign: charCampaign.id } : {}),
+        })
+        .then((res) => {
+          const rows = asArray(res)
+            .map((entry) => {
+              const changed = entry.changed_fields || {};
+              const details = Object.keys(changed).map((k) => ({
+                key: k,
+                label: historyFieldLabel(k),
+                oldValue: stringifyValue(changed[k]?.old),
+                newValue: stringifyValue(changed[k]?.new),
+              }));
+              return {
+                key: `sheet-${entry.id}`,
+                timestamp: entry.timestamp,
+                actor: entry.editor_username || "system",
+                type: "sheet_edit",
+                sessionTag: "Out of session",
+                details,
+              };
+            })
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          setHistoryRows(rows);
+        })
+        .catch((e) => setHistoryError(e.message))
+        .finally(() => setHistoryLoading(false));
+      return;
+    }
+
+    if (!historySessionId) {
+      setHistoryRows([]);
+      setHistoryLoading(false);
+      return;
+    }
+    Promise.all([
+      rollAPI.getRolls({ session: historySessionId }).catch(() => []),
+      sessionAPI.getSession(historySessionId).catch(() => null),
+      progressClockAPI
+        .getProgressClocks({
+          session: historySessionId,
+          ...(charCampaign?.id ? { campaign: charCampaign.id } : {}),
+        })
+        .catch(() => []),
+    ])
+      .then(([rollsRes, sessionRes, clocksRes]) => {
+        const rows = [];
+        asArray(rollsRes).forEach((r) => {
+          rows.push({
+            key: `roll-${r.id}`,
+            timestamp: r.timestamp,
+            actor: r.rolled_by_username || r.character_name || "unknown",
+            characterId: r.character,
+            type: "roll",
+            rollType: r.roll_type,
+            text:
+              (r.roll_type || "").toUpperCase() === "FORTUNE" &&
+              !r.fortune_reveal_outcome
+                ? `${r.action_name || "Fortune"} (redacted)`
+                : `${r.action_name || "Roll"} · ${[]
+                    .concat(r.results || [])
+                    .join(", ")} → ${r.outcome || ""}`,
+            modifiers: [
+              r.position ? `Pos ${r.position}` : null,
+              r.effect ? `Eff ${r.effect}` : null,
+              r.push_for_dice ? "Push(+1d)" : null,
+              r.push_for_effect ? "Push(+effect)" : null,
+              r.uses_devil_bargain ? "Devil's bargain" : null,
+              r.roller_stress_spent ? `Stress ${r.roller_stress_spent}` : null,
+            ].filter(Boolean),
+          });
+        });
+
+        const events = (sessionRes?.events || []).map((evt) => ({
+          key: `evt-${evt.id}`,
+          timestamp: evt.timestamp,
+          actor: "session",
+          characterId: evt.character || null,
+          type: "event",
+          text: `${evt.event_type}: ${stringifyValue(evt.details)}`,
+          modifiers: [],
+        }));
+        rows.push(...events);
+
+        const stressRows = (sessionRes?.stress_history || []).map((s) => ({
+          key: `stress-${s.id}`,
+          timestamp: s.timestamp,
+          actor: "stress",
+          characterId: s.character || null,
+          type: "stress",
+          text: `Stress ${s.amount > 0 ? "+" : ""}${s.amount} (${s.reason || "update"})`,
+          modifiers: [],
+        }));
+        rows.push(...stressRows);
+
+        const xpRows = (sessionRes?.xp_entries || []).map((x) => ({
+          key: `xp-${x.id}`,
+          timestamp: x.session_date || sessionRes?.session_date,
+          actor: "xp",
+          characterId: x.character || null,
+          type: "xp",
+          text: `XP +${x.xp_gained} (${x.trigger_display || x.trigger || "trigger"})`,
+          modifiers: [],
+        }));
+        rows.push(...xpRows);
+
+        asArray(clocksRes).forEach((clk) => {
+          rows.push({
+            key: `clock-${clk.id}`,
+            timestamp: clk.updated_at || clk.created_at || sessionRes?.session_date,
+            actor:
+              clk.created_by_username ||
+              clk.created_by_character_name ||
+              "clock",
+            characterId: null,
+            type: "clock",
+            text: `Clock ${clk.name}: ${clk.filled_segments}/${clk.max_segments}`,
+            modifiers: [clk.visible_to_party ? "Shared party" : "Private"],
+          });
+        });
+
+        const filtered =
+          historyCharacterFilter === "all"
+            ? rows
+            : rows.filter(
+                (r) => String(r.characterId || "") === String(historyCharacterFilter),
+              );
+        filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        setHistoryRows(filtered);
+      })
+      .catch((e) => setHistoryError(e.message))
+      .finally(() => setHistoryLoading(false));
+  }, [
+    showHistoryPanel,
+    historyMode,
+    historySessionId,
+    historyCharacterFilter,
+    characterId,
+    charCampaign?.id,
+  ]);
 
   const desperateActionRollCount = useMemo(
     () =>
@@ -1525,7 +1732,7 @@ const CharacterSheetWrapper = ({
       setRollAbilityBoost({});
       if (activeSessionId) {
         rollAPI
-          .getRolls({ session: activeSessionId, character: characterId })
+        .getRolls({ session: activeSessionId })
           .then(setSessionRolls)
           .catch(() => {});
       }
@@ -1620,7 +1827,7 @@ const CharacterSheetWrapper = ({
     if (name && !isNaN(segs) && segs >= 1 && segs <= 12)
       setClocks((p) => [
         ...p,
-        { id: Date.now(), name, segments: segs, filled: 0 },
+        { id: Date.now(), name, segments: segs, filled: 0, visible_to_party: false },
       ]);
   };
 
@@ -2110,17 +2317,17 @@ const CharacterSheetWrapper = ({
                   <div
                     style={{ display: "flex", alignItems: "center", gap: 8 }}
                   >
-                    {activeSessionId && (
+                    {characterId && (
                       <button
                         type="button"
-                        onClick={() => setShowDiceHistoryPanel((x) => !x)}
+                        onClick={() => setShowHistoryPanel((x) => !x)}
                         title={
-                          showDiceHistoryPanel
-                            ? "Hide dice history"
-                            : "Show dice history"
+                          showHistoryPanel
+                            ? "Hide history"
+                            : "Show character/session history"
                         }
                         style={{
-                          background: showDiceHistoryPanel
+                          background: showHistoryPanel
                             ? "#312e81"
                             : "#1f2937",
                           border: "1px solid #4b5563",
@@ -2187,7 +2394,7 @@ const CharacterSheetWrapper = ({
                       </div>
                     </div>
                   </div>
-                  {showDiceHistoryPanel && activeSessionId && (
+                  {showHistoryPanel && (
                     <div
                       style={{
                         background: "#111827",
@@ -2195,66 +2402,164 @@ const CharacterSheetWrapper = ({
                         borderRadius: 8,
                         padding: 10,
                         minWidth: 260,
-                        maxWidth: 360,
+                        maxWidth: 520,
+                        maxHeight: 320,
+                        overflowY: "auto",
                         fontSize: 11,
                       }}
                     >
                       <div
                         style={{
-                          color: "#a78bfa",
-                          fontWeight: "bold",
-                          marginBottom: 6,
-                        }}
-                      >
-                        Session dice
-                      </div>
-                      <div style={{ color: "#9ca3af", marginBottom: 6 }}>
-                        Desperate action rolls (this session):{" "}
-                        <span style={{ color: "#f97316", fontWeight: "bold" }}>
-                          {desperateActionRollCount}
-                        </span>
-                      </div>
-                      <label
-                        style={{
                           display: "flex",
+                          justifyContent: "space-between",
                           alignItems: "center",
-                          gap: 6,
                           marginBottom: 8,
-                          cursor: "pointer",
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          checked={showPositionEffect}
-                          onChange={(e) =>
-                            setShowPositionEffect(e.target.checked)
-                          }
-                        />
-                        Show position &amp; effect
-                      </label>
-                      {sessionRolls.length === 0 ? (
-                        <div style={{ color: "#6b7280" }}>
-                          No rolls this session.
+                        <div style={{ color: "#a78bfa", fontWeight: "bold" }}>
+                          History
                         </div>
-                      ) : (
-                        sessionRolls.slice(0, 10).map((r) => (
+                        <button
+                          type="button"
+                          onClick={() => setHistoryCollapsed((v) => !v)}
+                          style={{
+                            ...S.btn,
+                            padding: "2px 8px",
+                            fontSize: 10,
+                            background: "#1f2937",
+                          }}
+                        >
+                          {historyCollapsed ? "Expand" : "Collapse"}
+                        </button>
+                      </div>
+                      {!historyCollapsed && (
+                        <>
                           <div
-                            key={r.id}
                             style={{
-                              padding: "4px 0",
-                              borderBottom: "1px solid #1f2937",
+                              display: "flex",
+                              gap: 6,
+                              marginBottom: 8,
                             }}
                           >
-                            {r.action_name} ·{" "}
-                            {[].concat(r.results || []).join(", ")} →{" "}
-                            {r.outcome || ""}
-                            {showPositionEffect && (r.position || r.effect) && (
-                              <span style={{ color: "#6b7280", marginLeft: 6 }}>
-                                ({r.position || ""}, {r.effect || ""})
-                              </span>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => setHistoryMode("sheet")}
+                              style={{
+                                ...S.btn,
+                                fontSize: 10,
+                                padding: "4px 8px",
+                                background:
+                                  historyMode === "sheet" ? "#312e81" : "#1f2937",
+                              }}
+                            >
+                              Character Sheet History
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setHistoryMode("session")}
+                              style={{
+                                ...S.btn,
+                                fontSize: 10,
+                                padding: "4px 8px",
+                                background:
+                                  historyMode === "session" ? "#312e81" : "#1f2937",
+                              }}
+                            >
+                              Session History
+                            </button>
                           </div>
-                        ))
+                          {historyMode === "session" && (
+                            <div
+                              style={{
+                                display: "grid",
+                                gridTemplateColumns: "1fr 1fr",
+                                gap: 6,
+                                marginBottom: 8,
+                              }}
+                            >
+                              <select
+                                value={historySessionId || ""}
+                                onChange={(e) =>
+                                  setHistorySessionId(
+                                    e.target.value ? Number(e.target.value) : null,
+                                  )
+                                }
+                                style={{ ...S.sel, fontSize: 10, padding: "2px 6px" }}
+                              >
+                                <option value="">No session</option>
+                                {(charCampaign?.sessions || []).map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name || `Session ${s.id}`}
+                                  </option>
+                                ))}
+                              </select>
+                              <select
+                                value={historyCharacterFilter}
+                                onChange={(e) =>
+                                  setHistoryCharacterFilter(e.target.value)
+                                }
+                                style={{ ...S.sel, fontSize: 10, padding: "2px 6px" }}
+                              >
+                                <option value="all">All players</option>
+                                {(charCampaign?.campaign_characters || []).map((pc) => (
+                                  <option key={pc.id} value={pc.id}>
+                                    {pc.true_name || pc.name || `PC ${pc.id}`}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                          {historyLoading ? (
+                            <div style={{ color: "#6b7280" }}>Loading history…</div>
+                          ) : historyError ? (
+                            <div style={{ color: "#fca5a5" }}>{historyError}</div>
+                          ) : historyRows.length === 0 ? (
+                            <div style={{ color: "#6b7280" }}>
+                              No history entries.
+                            </div>
+                          ) : (
+                            historyRows.slice(0, 120).map((row) => (
+                              <div
+                                key={row.key}
+                                style={{
+                                  padding: "6px 0",
+                                  borderBottom: "1px solid #1f2937",
+                                }}
+                              >
+                                <div style={{ color: "#9ca3af", fontSize: 10 }}>
+                                  {row.timestamp
+                                    ? new Date(row.timestamp).toLocaleString()
+                                    : "No timestamp"}{" "}
+                                  · {row.actor || "unknown"}
+                                </div>
+                                {row.text ? (
+                                  <div style={{ color: "#d1d5db" }}>{row.text}</div>
+                                ) : null}
+                                {Array.isArray(row.details) &&
+                                  row.details.map((d) => (
+                                    <div
+                                      key={`${row.key}-${d.key}`}
+                                      style={{ fontSize: 10, color: "#d1d5db" }}
+                                    >
+                                      <strong>{d.label}</strong>:{" "}
+                                      <span style={{ color: "#fca5a5" }}>
+                                        {d.oldValue || "∅"}
+                                      </span>{" "}
+                                      →{" "}
+                                      <span style={{ color: "#86efac" }}>
+                                        {d.newValue || "∅"}
+                                      </span>
+                                    </div>
+                                  ))}
+                                {row.modifiers?.length ? (
+                                  <div style={{ fontSize: 10, color: "#a78bfa" }}>
+                                    {row.modifiers.join(" · ")}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ))
+                          )}
+                        </>
                       )}
                     </div>
                   )}
@@ -3718,83 +4023,6 @@ const CharacterSheetWrapper = ({
                           ))}
                         </div>
                       </div>
-                      {charCampaign?.active_session_detail
-                        ?.show_position_effect_to_players !== false && (
-                        <div style={{ marginBottom: "8px" }}>
-                          <span style={{ fontSize: "11px", color: "#9ca3af" }}>
-                            Position & Effect:{" "}
-                          </span>
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: "8px",
-                              marginTop: "4px",
-                              flexWrap: "wrap",
-                            }}
-                          >
-                            <span
-                              style={{
-                                padding: "4px 8px",
-                                borderRadius: "4px",
-                                fontSize: "11px",
-                                fontWeight: "bold",
-                                background: (() => {
-                                  const p = (
-                                    charCampaign?.active_session_detail
-                                      ?.default_position || "risky"
-                                  ).toLowerCase();
-                                  return p === "controlled"
-                                    ? "#166534"
-                                    : p === "desperate"
-                                      ? "#991b1b"
-                                      : "#854d0e";
-                                })(),
-                                color: "#fff",
-                                border: "1px solid",
-                                borderColor: (() => {
-                                  const p = (
-                                    charCampaign?.active_session_detail
-                                      ?.default_position || "risky"
-                                  ).toLowerCase();
-                                  return p === "controlled"
-                                    ? "#22c55e"
-                                    : p === "desperate"
-                                      ? "#dc2626"
-                                      : "#eab308";
-                                })(),
-                              }}
-                            >
-                              {(
-                                charCampaign?.active_session_detail
-                                  ?.default_position || "Risky"
-                              ).replace(/^./, (c) => c.toUpperCase())}
-                            </span>
-                            <span
-                              style={{
-                                padding: "4px 8px",
-                                borderRadius: "4px",
-                                fontSize: "11px",
-                                background: "#374151",
-                                color: "#d1d5db",
-                              }}
-                            >
-                              {(() => {
-                                const e = (
-                                  charCampaign?.active_session_detail
-                                    ?.default_effect || "standard"
-                                ).toLowerCase();
-                                const label =
-                                  e === "extreme" || e === "greater"
-                                    ? "Extreme"
-                                    : e === "limited"
-                                      ? "Limited"
-                                      : "Standard";
-                                return `${label} effect`;
-                              })()}
-                            </span>
-                          </div>
-                        </div>
-                      )}
                       {(
                         charCampaign?.active_session_detail
                           ?.session_npcs_with_clocks || []
@@ -3846,6 +4074,54 @@ const CharacterSheetWrapper = ({
                                     {npc.stand_name}
                                   </div>
                                 )}
+                                {npc.stand_coin_stats &&
+                                  Object.keys(npc.stand_coin_stats).length > 0 && (
+                                    <div
+                                      style={{
+                                        fontSize: "10px",
+                                        color: "#a78bfa",
+                                        marginBottom: "4px",
+                                      }}
+                                    >
+                                      Stand{" "}
+                                      {Object.entries(npc.stand_coin_stats)
+                                        .map(([k, v]) => `${k[0]}:${v}`)
+                                        .join(" · ")}
+                                    </div>
+                                  )}
+                                {Array.isArray(npc.abilities) &&
+                                  npc.abilities.length > 0 && (
+                                    <div
+                                      style={{
+                                        marginBottom: "6px",
+                                        padding: "4px 6px",
+                                        border: "1px solid #374151",
+                                        borderRadius: "4px",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          fontSize: "10px",
+                                          color: "#9ca3af",
+                                          marginBottom: "2px",
+                                        }}
+                                      >
+                                        Abilities
+                                      </div>
+                                      {(npc.abilities || []).slice(0, 6).map((ab) => (
+                                        <div
+                                          key={ab.id || ab.name}
+                                          style={{
+                                            fontSize: "10px",
+                                            color: "#d1d5db",
+                                            lineHeight: 1.35,
+                                          }}
+                                        >
+                                          {ab.name || "Ability"}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                 {npc.vulnerability_clock_max > 0 && (
                                   <div
                                     style={{
@@ -4008,6 +4284,56 @@ const CharacterSheetWrapper = ({
                                         {npc.stand_name}
                                       </div>
                                     )}
+                                    {npc.stand_coin_stats &&
+                                      Object.keys(npc.stand_coin_stats).length > 0 && (
+                                        <div
+                                          style={{
+                                            fontSize: "10px",
+                                            color: "#a78bfa",
+                                            marginBottom: "4px",
+                                          }}
+                                        >
+                                          Stand{" "}
+                                          {Object.entries(npc.stand_coin_stats)
+                                            .map(([k, v]) => `${k[0]}:${v}`)
+                                            .join(" · ")}
+                                        </div>
+                                      )}
+                                    {Array.isArray(npc.abilities) &&
+                                      npc.abilities.length > 0 && (
+                                        <div
+                                          style={{
+                                            marginBottom: "6px",
+                                            padding: "4px 6px",
+                                            border: "1px solid #374151",
+                                            borderRadius: "4px",
+                                          }}
+                                        >
+                                          <div
+                                            style={{
+                                              fontSize: "10px",
+                                              color: "#9ca3af",
+                                              marginBottom: "2px",
+                                            }}
+                                          >
+                                            Abilities
+                                          </div>
+                                          {(npc.abilities || [])
+                                            .slice(0, 6)
+                                            .map((ab) => (
+                                              <div
+                                                key={ab.id || ab.name}
+                                                style={{
+                                                  fontSize: "10px",
+                                                  color: "#d1d5db",
+                                                  lineHeight: 1.35,
+                                                }}
+                                              >
+                                                {ab.name || "Ability"}
+                                              </div>
+                                            ))}
+                                        </div>
+                                      )}
                                     {npc.vulnerability_clock_max > 0 && (
                                       <div
                                         style={{
@@ -4150,7 +4476,11 @@ const CharacterSheetWrapper = ({
                         <span style={{ fontSize: "11px", color: "#9ca3af" }}>
                           Clocks:{" "}
                         </span>
-                        {(charCampaign.progress_clocks || []).length > 0 ? (
+                        {(charCampaign.progress_clocks || []).filter((clk) => {
+                          const creator = Number(clk.created_by);
+                          const gmId = Number(charCampaign?.gm);
+                          return creator && creator === gmId;
+                        }).length > 0 ? (
                           <div
                             style={{
                               display: "flex",
@@ -4160,7 +4490,13 @@ const CharacterSheetWrapper = ({
                               marginTop: "4px",
                             }}
                           >
-                            {(charCampaign.progress_clocks || []).map((clk) => {
+                            {(charCampaign.progress_clocks || [])
+                              .filter((clk) => {
+                                const creator = Number(clk.created_by);
+                                const gmId = Number(charCampaign?.gm);
+                                return creator && creator === gmId;
+                              })
+                              .map((clk) => {
                               const canEdit =
                                 isGM || clk.created_by === user?.id;
                               return (
@@ -6968,6 +7304,35 @@ const CharacterSheetWrapper = ({
                           <div style={{ fontSize: "10px", color: "#6b7280" }}>
                             {clk.filled}/{clk.segments}
                           </div>
+                          <label
+                            style={{
+                              display: "flex",
+                              justifyContent: "center",
+                              alignItems: "center",
+                              gap: "4px",
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              marginTop: "2px",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!!clk.visible_to_party}
+                              onChange={(e) =>
+                                setClocks((p) =>
+                                  p.map((c) =>
+                                    c.id === clk.id
+                                      ? {
+                                          ...c,
+                                          visible_to_party: e.target.checked,
+                                        }
+                                      : c,
+                                  ),
+                                )
+                              }
+                            />
+                            Shared party
+                          </label>
                           <button
                             onClick={() =>
                               setClocks((p) => p.filter((c) => c.id !== clk.id))
@@ -7000,19 +7365,26 @@ const CharacterSheetWrapper = ({
                     </button>
                   </div>
 
-                  {/* Shared campaign clocks the table exposes to players (read-only here unless you are the referee). */}
+                  {/* Shared party clocks (player/crew-authored clocks; GM-created clocks live in SESSION > Clocks). */}
                   {charCampaign?.progress_clocks?.length > 0 &&
                     (() => {
-                      const gmClocks = (
-                        charCampaign.progress_clocks || []
-                      ).filter(
-                        (clk) =>
-                          clk.created_by == null && clk.visible_to_players,
-                      );
-                      if (gmClocks.length === 0) return null;
+                      const gmId = Number(charCampaign?.gm);
+                      const partyClocks = (charCampaign.progress_clocks || [])
+                        .filter((clk) => {
+                          const creator = Number(clk.created_by);
+                          return creator && creator !== gmId;
+                        })
+                        .filter((clk) => {
+                          if (isGM) return true;
+                          return (
+                            Number(clk.created_by) === Number(user?.id) ||
+                            !!clk.visible_to_party
+                          );
+                        });
+                      if (partyClocks.length === 0) return null;
                       return (
                         <div style={{ marginBottom: "14px" }}>
-                          <span style={S.lbl}>SHARED CLOCKS</span>
+                          <span style={S.lbl}>Shared party clocks</span>
                           <div
                             style={{
                               display: "flex",
@@ -7021,8 +7393,9 @@ const CharacterSheetWrapper = ({
                               marginTop: "6px",
                             }}
                           >
-                            {gmClocks.map((clk) => {
-                              const canEdit = isGM;
+                            {partyClocks.map((clk) => {
+                              const canEdit =
+                                isGM || Number(clk.created_by) === Number(user?.id);
                               return (
                                 <div
                                   key={clk.id}
@@ -7077,6 +7450,33 @@ const CharacterSheetWrapper = ({
                                   >
                                     {clk.filled_segments}/{clk.max_segments}
                                   </div>
+                                  <label
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      gap: 4,
+                                      marginTop: 4,
+                                      fontSize: "10px",
+                                      color: "#9ca3af",
+                                      cursor: canEdit ? "pointer" : "default",
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={!!clk.visible_to_party}
+                                      disabled={!canEdit}
+                                      onChange={(e) => {
+                                        progressClockAPI
+                                          .updateProgressClock(clk.id, {
+                                            visible_to_party: e.target.checked,
+                                          })
+                                          .then(() => onCampaignRefresh?.())
+                                          .catch(() => {});
+                                      }}
+                                    />
+                                    Shared party
+                                  </label>
                                 </div>
                               );
                             })}

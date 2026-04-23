@@ -38,7 +38,7 @@ class RollViewSet(viewsets.ModelViewSet):
         return qs.order_by('-timestamp')
 
     def partial_update(self, request, *args, **kwargs):
-        """GM-only: update position and effect on a roll."""
+        """GM-only: update roll fields (position/effect and fortune visibility controls)."""
         roll = self.get_object()
         campaign = roll.session.campaign
         if campaign.gm_id != request.user.id and not request.user.is_staff:
@@ -55,6 +55,10 @@ class RollViewSet(viewsets.ModelViewSet):
             ne = normalize_effect(effect)
             if ne in ('limited', 'standard', 'extreme'):
                 updates['effect'] = ne
+        if 'fortune_reveal_outcome' in request.data:
+            updates['fortune_reveal_outcome'] = bool(request.data.get('fortune_reveal_outcome'))
+        if 'fortune_public_label' in request.data:
+            updates['fortune_public_label'] = str(request.data.get('fortune_public_label') or '').strip()[:120]
         if updates:
             for k, v in updates.items():
                 setattr(roll, k, v)

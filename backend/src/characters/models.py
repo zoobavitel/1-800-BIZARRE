@@ -1593,6 +1593,14 @@ class SessionNPCInvolvement(models.Model):
     )
     show_clocks_to_players = models.BooleanField(default=False)
     show_vulnerability_clock_to_players = models.BooleanField(default=False)
+    show_harm_clock_to_players = models.BooleanField(default=False)
+    revealed_conflict_clock_names = models.JSONField(default=list, blank=True)
+    revealed_alt_clock_names = models.JSONField(default=list, blank=True)
+    revealed_progress_clock_ids = models.JSONField(default=list, blank=True)
+    show_stand_coin_to_players = models.BooleanField(default=False)
+    revealed_stand_coin_stats = models.JSONField(default=list, blank=True)
+    show_all_abilities_to_players = models.BooleanField(default=False)
+    revealed_ability_names = models.JSONField(default=list, blank=True)
 
     class Meta:
         unique_together = ("session", "npc")
@@ -1601,8 +1609,14 @@ class SessionNPCInvolvement(models.Model):
         parts = []
         if self.show_clocks_to_players:
             parts.append("all_clocks")
+        if self.show_harm_clock_to_players:
+            parts.append("harm")
         if self.show_vulnerability_clock_to_players:
             parts.append("vuln")
+        if self.show_stand_coin_to_players:
+            parts.append("stand")
+        if self.show_all_abilities_to_players or self.revealed_ability_names:
+            parts.append("abilities")
         vis = "+".join(parts) if parts else "off"
         return f"{self.npc.name} in {self.session.name} ({vis})"
 
@@ -1815,6 +1829,15 @@ class Roll(models.Model):
         default=0, help_text="Stress spent by the rolling character (push, etc.)."
     )
     devil_bargain_consequence = models.CharField(max_length=500, blank=True)
+    fortune_reveal_outcome = models.BooleanField(
+        default=False,
+        help_text="When false, non-GMs only see that a fortune roll happened.",
+    )
+    fortune_public_label = models.CharField(
+        max_length=120,
+        blank=True,
+        help_text="Optional public-facing label explaining what the fortune roll was for.",
+    )
 
     def __str__(self):
         return f"{self.character.true_name} - {self.action_name} ({self.outcome})"
