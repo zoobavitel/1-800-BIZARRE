@@ -330,6 +330,24 @@ class SessionNPCInvolvementWriteSerializer(serializers.Serializer):
     npc = serializers.PrimaryKeyRelatedField(queryset=NPC.objects.all())
     show_clocks_to_players = serializers.BooleanField(default=False)
     show_vulnerability_clock_to_players = serializers.BooleanField(default=False)
+    show_harm_clock_to_players = serializers.BooleanField(default=False)
+    revealed_conflict_clock_names = serializers.ListField(
+        child=serializers.CharField(), required=False, default=list
+    )
+    revealed_alt_clock_names = serializers.ListField(
+        child=serializers.CharField(), required=False, default=list
+    )
+    revealed_progress_clock_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False, default=list
+    )
+    show_stand_coin_to_players = serializers.BooleanField(default=False)
+    revealed_stand_coin_stats = serializers.ListField(
+        child=serializers.CharField(), required=False, default=list
+    )
+    show_all_abilities_to_players = serializers.BooleanField(default=False)
+    revealed_ability_names = serializers.ListField(
+        child=serializers.CharField(), required=False, default=list
+    )
 
 
 def _normalize_npc_involvement_clock_flags(show_all, raw_show_vuln_from_client):
@@ -339,6 +357,23 @@ def _normalize_npc_involvement_clock_flags(show_all, raw_show_vuln_from_client):
     show_all); this applies the invariant exactly once: show_all ∨ raw.
     """
     return show_all, show_all or raw_show_vuln_from_client
+
+
+def _normalized_list(raw, cast=None):
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for item in raw:
+        if cast is int:
+            try:
+                out.append(int(item))
+            except (TypeError, ValueError):
+                continue
+        else:
+            s = str(item).strip()
+            if s:
+                out.append(s)
+    return out
 
 
 def _ensure_npc_belongs_to_session_campaign(npc, session_campaign_id):
@@ -375,6 +410,14 @@ class SessionSerializer(serializers.ModelSerializer):
                 "npc": inv.npc_id,
                 "show_clocks_to_players": inv.show_clocks_to_players,
                 "show_vulnerability_clock_to_players": inv.show_vulnerability_clock_to_players,
+                "show_harm_clock_to_players": inv.show_harm_clock_to_players,
+                "revealed_conflict_clock_names": inv.revealed_conflict_clock_names or [],
+                "revealed_alt_clock_names": inv.revealed_alt_clock_names or [],
+                "revealed_progress_clock_ids": inv.revealed_progress_clock_ids or [],
+                "show_stand_coin_to_players": inv.show_stand_coin_to_players,
+                "revealed_stand_coin_stats": inv.revealed_stand_coin_stats or [],
+                "show_all_abilities_to_players": inv.show_all_abilities_to_players,
+                "revealed_ability_names": inv.revealed_ability_names or [],
             }
             for inv in obj.npc_involvements.select_related("npc").order_by("npc__name")
         ]
@@ -401,19 +444,62 @@ class SessionSerializer(serializers.ModelSerializer):
                     show, show_vuln = _normalize_npc_involvement_clock_flags(
                         show, raw_vuln
                     )
+                    show_harm = bool(item.get("show_harm_clock_to_players", False))
+                    revealed_conflict = _normalized_list(
+                        item.get("revealed_conflict_clock_names")
+                    )
+                    revealed_alt = _normalized_list(
+                        item.get("revealed_alt_clock_names")
+                    )
+                    revealed_progress_ids = _normalized_list(
+                        item.get("revealed_progress_clock_ids"), cast=int
+                    )
+                    show_stand = bool(item.get("show_stand_coin_to_players", False))
+                    revealed_stand = _normalized_list(
+                        item.get("revealed_stand_coin_stats")
+                    )
+                    show_all_abilities = bool(
+                        item.get("show_all_abilities_to_players", False)
+                    )
+                    revealed_abilities = _normalized_list(
+                        item.get("revealed_ability_names")
+                    )
                 else:
                     show = False
                     show_vuln = False
+                    show_harm = False
+                    revealed_conflict = []
+                    revealed_alt = []
+                    revealed_progress_ids = []
+                    show_stand = False
+                    revealed_stand = []
+                    show_all_abilities = False
+                    revealed_abilities = []
                 npc = NPC.objects.get(pk=npc_id) if isinstance(npc_id, int) else npc_id
                 _ensure_npc_belongs_to_session_campaign(npc, instance.campaign_id)
-                involvement_rows.append((npc, show, show_vuln))
+                involvement_rows.append(
+                    (
+                        npc,
+                        {
+                            "show_clocks_to_players": show,
+                            "show_vulnerability_clock_to_players": show_vuln,
+                            "show_harm_clock_to_players": show_harm,
+                            "revealed_conflict_clock_names": revealed_conflict,
+                            "revealed_alt_clock_names": revealed_alt,
+                            "revealed_progress_clock_ids": revealed_progress_ids,
+                            "show_stand_coin_to_players": show_stand,
+                            "revealed_stand_coin_stats": revealed_stand,
+                            "show_all_abilities_to_players": show_all_abilities,
+                            "revealed_ability_names": revealed_abilities,
+                        },
+                    )
+                )
             instance.npc_involvements.all().delete()
-            for npc, show, show_vuln in involvement_rows:
+            for npc, defaults in involvement_rows:
                 SessionNPCInvolvement.objects.create(
                     session=instance,
                     npc=npc,
-                    show_clocks_to_players=show,
-                    show_vulnerability_clock_to_players=show_vuln,
+                    **defaults,
                 )
         elif npcs_involved_data is not None:
             existing = {inv.npc_id: inv for inv in instance.npc_involvements.all()}
@@ -432,6 +518,14 @@ class SessionSerializer(serializers.ModelSerializer):
                     defaults={
                         "show_clocks_to_players": False,
                         "show_vulnerability_clock_to_players": False,
+                        "show_harm_clock_to_players": False,
+                        "revealed_conflict_clock_names": [],
+                        "revealed_alt_clock_names": [],
+                        "revealed_progress_clock_ids": [],
+                        "show_stand_coin_to_players": False,
+                        "revealed_stand_coin_stats": [],
+                        "show_all_abilities_to_players": False,
+                        "revealed_ability_names": [],
                     },
                 )
             for npc_id in list(existing.keys()):
@@ -458,18 +552,61 @@ class SessionSerializer(serializers.ModelSerializer):
                     show, show_vuln = _normalize_npc_involvement_clock_flags(
                         show, raw_vuln
                     )
+                    show_harm = bool(item.get("show_harm_clock_to_players", False))
+                    revealed_conflict = _normalized_list(
+                        item.get("revealed_conflict_clock_names")
+                    )
+                    revealed_alt = _normalized_list(
+                        item.get("revealed_alt_clock_names")
+                    )
+                    revealed_progress_ids = _normalized_list(
+                        item.get("revealed_progress_clock_ids"), cast=int
+                    )
+                    show_stand = bool(item.get("show_stand_coin_to_players", False))
+                    revealed_stand = _normalized_list(
+                        item.get("revealed_stand_coin_stats")
+                    )
+                    show_all_abilities = bool(
+                        item.get("show_all_abilities_to_players", False)
+                    )
+                    revealed_abilities = _normalized_list(
+                        item.get("revealed_ability_names")
+                    )
                 else:
                     show = False
                     show_vuln = False
+                    show_harm = False
+                    revealed_conflict = []
+                    revealed_alt = []
+                    revealed_progress_ids = []
+                    show_stand = False
+                    revealed_stand = []
+                    show_all_abilities = False
+                    revealed_abilities = []
                 npc = NPC.objects.get(pk=npc_id) if isinstance(npc_id, int) else npc_id
                 _ensure_npc_belongs_to_session_campaign(npc, instance.campaign_id)
-                involvement_rows.append((npc, show, show_vuln))
-            for npc, show, show_vuln in involvement_rows:
+                involvement_rows.append(
+                    (
+                        npc,
+                        {
+                            "show_clocks_to_players": show,
+                            "show_vulnerability_clock_to_players": show_vuln,
+                            "show_harm_clock_to_players": show_harm,
+                            "revealed_conflict_clock_names": revealed_conflict,
+                            "revealed_alt_clock_names": revealed_alt,
+                            "revealed_progress_clock_ids": revealed_progress_ids,
+                            "show_stand_coin_to_players": show_stand,
+                            "revealed_stand_coin_stats": revealed_stand,
+                            "show_all_abilities_to_players": show_all_abilities,
+                            "revealed_ability_names": revealed_abilities,
+                        },
+                    )
+                )
+            for npc, defaults in involvement_rows:
                 SessionNPCInvolvement.objects.create(
                     session=instance,
                     npc=npc,
-                    show_clocks_to_players=show,
-                    show_vulnerability_clock_to_players=show_vuln,
+                    **defaults,
                 )
         elif npcs_involved_data is not None:
             for npc_id in npcs_involved_data:
@@ -482,6 +619,14 @@ class SessionSerializer(serializers.ModelSerializer):
                     defaults={
                         "show_clocks_to_players": False,
                         "show_vulnerability_clock_to_players": False,
+                        "show_harm_clock_to_players": False,
+                        "revealed_conflict_clock_names": [],
+                        "revealed_alt_clock_names": [],
+                        "revealed_progress_clock_ids": [],
+                        "show_stand_coin_to_players": False,
+                        "revealed_stand_coin_stats": [],
+                        "show_all_abilities_to_players": False,
+                        "revealed_ability_names": [],
                     },
                 )
         return instance
@@ -578,6 +723,8 @@ class RollSerializer(serializers.ModelSerializer):
             "pool_bonus_dice",
             "roller_stress_spent",
             "devil_bargain_consequence",
+            "fortune_reveal_outcome",
+            "fortune_public_label",
         ]
         read_only_fields = ["timestamp", "rolled_by"]
 
@@ -590,6 +737,43 @@ class RollSerializer(serializers.ModelSerializer):
         from .models import ExperienceTracker
 
         return ExperienceTracker.objects.filter(roll=obj).exists()
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        is_gm = bool(
+            user
+            and getattr(user, "is_authenticated", False)
+            and (
+                getattr(user, "is_staff", False)
+                or instance.session.campaign.gm_id == user.id
+            )
+        )
+        if (
+            (instance.roll_type or "").upper() == "FORTUNE"
+            and not is_gm
+            and not instance.fortune_reveal_outcome
+        ):
+            data["results"] = []
+            data["outcome"] = ""
+            data["dice_pool"] = 0
+            data["position"] = ""
+            data["effect"] = ""
+            data["pool_action_rating"] = 0
+            data["pool_attribute_dice"] = 0
+            data["push_for_effect"] = False
+            data["push_for_dice"] = False
+            data["uses_devil_bargain"] = False
+            data["pool_assist_dice"] = 0
+            data["pool_bonus_dice"] = 0
+            data["roller_stress_spent"] = 0
+            data["devil_bargain_consequence"] = ""
+            public_label = (instance.fortune_public_label or "").strip()
+            data["action_name"] = public_label or "Fortune"
+            data["goal_label"] = public_label or ""
+            data["description"] = public_label or "GM fortune roll"
+        return data
 
 
 class SessionRecordsSerializer(serializers.ModelSerializer):
@@ -1696,6 +1880,8 @@ class CampaignSerializer(serializers.ModelSerializer):
                 "id": npc.id,
                 "name": npc.name,
                 "stand_name": npc.stand_name or "",
+                "stand_coin_stats": npc.stand_coin_stats or {},
+                "abilities": npc.abilities or [],
                 "harm_clock_current": npc.harm_clock_current,
                 "harm_clock_max": npc.harm_clock_max,
                 "vulnerability_clock_current": npc.vulnerability_clock_current,
@@ -1703,25 +1889,93 @@ class CampaignSerializer(serializers.ModelSerializer):
                 "conflict_clocks": npc.conflict_clocks or [],
                 "alt_clocks": npc.alt_clocks or [],
                 "progress_clocks": progress_clocks_full,
+                "show_clocks_to_players": inv.show_clocks_to_players,
+                "show_vulnerability_clock_to_players": inv.show_vulnerability_clock_to_players,
+                "show_harm_clock_to_players": inv.show_harm_clock_to_players,
+                "show_stand_coin_to_players": inv.show_stand_coin_to_players,
+                "show_all_abilities_to_players": inv.show_all_abilities_to_players,
+                "revealed_conflict_clock_names": inv.revealed_conflict_clock_names or [],
+                "revealed_alt_clock_names": inv.revealed_alt_clock_names or [],
+                "revealed_progress_clock_ids": inv.revealed_progress_clock_ids or [],
+                "revealed_stand_coin_stats": inv.revealed_stand_coin_stats or [],
+                "revealed_ability_names": inv.revealed_ability_names or [],
             }
         show_all = inv.show_clocks_to_players
         show_vuln = inv.show_clocks_to_players or inv.show_vulnerability_clock_to_players
-        progress_clocks = (
-            list(npc.progress_clocks.all().values(*clock_fields)) if show_all else []
+        show_harm = show_all or inv.show_harm_clock_to_players
+        revealed_conflict = set(inv.revealed_conflict_clock_names or [])
+        revealed_alt = set(inv.revealed_alt_clock_names or [])
+        revealed_progress_ids = set(inv.revealed_progress_clock_ids or [])
+        base_progress = list(npc.progress_clocks.all().values(*clock_fields))
+        if show_all:
+            progress_clocks = base_progress
+        else:
+            progress_clocks = [
+                c for c in base_progress if int(c.get("id") or 0) in revealed_progress_ids
+            ]
+        conflict_clocks = (
+            npc.conflict_clocks
+            if show_all
+            else [
+                c
+                for c in (npc.conflict_clocks or [])
+                if str(c.get("name") or "") in revealed_conflict
+            ]
+        )
+        alt_clocks = (
+            npc.alt_clocks
+            if show_all
+            else [
+                c
+                for c in (npc.alt_clocks or [])
+                if str(c.get("name") or "") in revealed_alt
+            ]
+        )
+        stand_stats = {}
+        if inv.show_stand_coin_to_players:
+            revealed_stats = [str(k).upper() for k in (inv.revealed_stand_coin_stats or [])]
+            if revealed_stats:
+                for key in revealed_stats:
+                    if key in (npc.stand_coin_stats or {}):
+                        stand_stats[key] = npc.stand_coin_stats.get(key)
+            else:
+                stand_stats = npc.stand_coin_stats or {}
+        abilities = []
+        if inv.show_all_abilities_to_players:
+            abilities = npc.abilities or []
+        elif inv.revealed_ability_names:
+            allowed = {str(name).strip().lower() for name in inv.revealed_ability_names}
+            abilities = [
+                ab
+                for ab in (npc.abilities or [])
+                if str((ab or {}).get("name", "")).strip().lower() in allowed
+            ]
+        player_visible = bool(
+            show_all
+            or show_vuln
+            or show_harm
+            or conflict_clocks
+            or alt_clocks
+            or progress_clocks
+            or stand_stats
+            or abilities
         )
         return {
             "id": npc.id,
             "name": npc.name,
             "stand_name": npc.stand_name or "",
-            "harm_clock_current": npc.harm_clock_current if show_all else 0,
-            "harm_clock_max": npc.harm_clock_max if show_all else 0,
+            "stand_coin_stats": stand_stats,
+            "abilities": abilities,
+            "harm_clock_current": npc.harm_clock_current if show_harm else 0,
+            "harm_clock_max": npc.harm_clock_max if show_harm else 0,
             "vulnerability_clock_current": (
                 npc.vulnerability_clock_current if show_vuln else 0
             ),
             "vulnerability_clock_max": npc.vulnerability_clock_max if show_vuln else 0,
-            "conflict_clocks": (npc.conflict_clocks or []) if show_all else [],
-            "alt_clocks": (npc.alt_clocks or []) if show_all else [],
+            "conflict_clocks": conflict_clocks or [],
+            "alt_clocks": alt_clocks or [],
             "progress_clocks": progress_clocks,
+            "_player_visible": player_visible,
         }
 
     def get_active_session_detail(self, obj):
@@ -1740,21 +1994,17 @@ class CampaignSerializer(serializers.ModelSerializer):
         base_qs = s.npc_involvements.select_related("npc")
         if not viewer_is_gm_or_staff:
             base_qs = base_qs.filter(npc__campaign_id=obj.id)
-        if viewer_is_gm_or_staff:
-            involvements = base_qs.order_by("npc__name")
-        else:
-            involvements = base_qs.filter(
-                Q(show_clocks_to_players=True)
-                | Q(show_vulnerability_clock_to_players=True)
-            ).order_by("npc__name")
+        involvements = base_qs.order_by("npc__name")
         session_npcs_with_clocks = []
         for inv in involvements:
             npc = inv.npc
-            session_npcs_with_clocks.append(
-                self._npc_row_for_active_session_detail(
-                    npc, inv, viewer_is_gm_or_staff
-                )
+            row = self._npc_row_for_active_session_detail(
+                npc, inv, viewer_is_gm_or_staff
             )
+            if not viewer_is_gm_or_staff and not row.pop("_player_visible", False):
+                continue
+            row.pop("_player_visible", None)
+            session_npcs_with_clocks.append(row)
         # session_date is auto_now_add but guard None for robustness and ORM edge cases.
         if s.session_date is None:
             session_number = Session.objects.filter(

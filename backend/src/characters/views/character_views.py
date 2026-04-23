@@ -263,6 +263,12 @@ class CharacterViewSet(viewsets.ModelViewSet):
         devil_bargain_confirmed = bool(
             request.data.get("devil_bargain_confirmed", False)
         )
+        fortune_reveal_outcome = bool(
+            request.data.get("fortune_reveal_outcome", False)
+        )
+        fortune_public_label = str(
+            request.data.get("fortune_public_label", "") or ""
+        ).strip()
         roll_type = request.data.get("roll_type", "ACTION")
         bonus_dice = int(request.data.get("bonus_dice") or 0)
         ability_effect_steps = int(request.data.get("ability_effect_steps") or 0)
@@ -542,6 +548,12 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 pool_bonus_dice=rp_bonus,
                 roller_stress_spent=rp_stress,
                 devil_bargain_consequence=rp_devil_txt,
+                fortune_reveal_outcome=(
+                    fortune_reveal_outcome if roll_type.upper() == "FORTUNE" else False
+                ),
+                fortune_public_label=(
+                    fortune_public_label if roll_type.upper() == "FORTUNE" else ""
+                ),
             )
             RollHistory.objects.create(campaign=session.campaign, roll=roll)
 

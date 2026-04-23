@@ -648,6 +648,20 @@ export const xpHistoryAPI = {
   },
 };
 
+export const characterHistoryAPI = {
+  list: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return apiRequest(`/character-history/${qs ? "?" + qs : ""}`);
+  },
+};
+
+export const gmHistoryAPI = {
+  listCampaign: (campaignId, params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return apiRequest(`/campaigns/${campaignId}/gm-history/${qs ? "?" + qs : ""}`);
+  },
+};
+
 export const groupActionAPI = {
   list: (params = {}) => {
     const qs = new URLSearchParams(params).toString();
