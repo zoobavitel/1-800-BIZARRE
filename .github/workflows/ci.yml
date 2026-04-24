@@ -11,14 +11,13 @@ on:
     branches: [master]
   workflow_dispatch:
     inputs:
-      deploy_lxc:
-        description: "After tests, deploy to LXC (CT 103) via pve2"
-        type: boolean
-        default: false
-      manual_signoff:
-        description: "Confirm manual release checks completed"
-        type: boolean
-        default: false
+      lxc_action:
+        description: "LXC: run CI only, or deploy to CT 103 on master via pve2. Choosing deploy confirms manual release checks are complete."
+        type: choice
+        options:
+          - none
+          - deploy
+        default: none
 
 permissions:
   contents: read
@@ -190,28 +189,27 @@ jobs:
           cd backend/src
           python manage.py runserver 127.0.0.1:8000 --noreload &
           BACKEND_PID=$!
-          trap 'kill $BACKEND_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -sf "http://127.0.0.1:8000/" >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -sf "http://127.0.0.1:8000/" >/dev/null
           cd ../../frontend
           npm start &
           FRONTEND_PID=$!
-          trap 'kill $FRONTEND_PID 2>/dev/null || true' EXIT
+          trap 'kill $BACKEND_PID 2>/dev/null || true; kill $FRONTEND_PID 2>/dev/null || true' EXIT
           cd ..
+          for i in $(seq 1 60); do
+            if curl -sf "http://127.0.0.1:3000/" >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -sf "http://127.0.0.1:3000/" >/dev/null
           node scripts/perf/api-latency-check.mjs
           node scripts/perf/lighthouse-budget-check.mjs
-
-  manual-signoff:
-    needs: [automated-ui-smoke]
-    runs-on: ubuntu-latest
-    if: |
-      github.event_name == 'workflow_dispatch' &&
-      github.event.inputs.deploy_lxc == 'true'
-    steps:
-      - name: Require manual signoff confirmation
-        run: |
-          if [ "${{ github.event.inputs.manual_signoff }}" != "true" ]; then
-            echo "manual_signoff input must be true for deploy_lxc."
-            exit 1
-          fi
 
   deploy-github-pages:
     needs: [automated-ui-smoke]
@@ -246,11 +244,11 @@ jobs:
           force_orphan: true
 
   deploy-lxc:
-    needs: [manual-signoff]
+    needs: [automated-ui-smoke]
     runs-on: ubuntu-latest
     if: |
       github.event_name == 'workflow_dispatch' &&
-      github.event.inputs.deploy_lxc == 'true' &&
+      github.event.inputs.lxc_action == 'deploy' &&
       github.ref == 'refs/heads/master'
     steps:
       - name: Connect runner to Tailscale
