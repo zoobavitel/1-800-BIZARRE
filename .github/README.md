@@ -89,7 +89,7 @@ After **integration tests** pass, job `deploy-github-pages` runs only on pushes 
 
 ### Optional LXC / SSH deploy (`deploy-lxc`)
 
-Manual **workflow_dispatch** with input **`deploy_lxc`** set to **true** (still only on `main` / `master`). Requires secrets **`LXC_SSH_HOST`**, **`LXC_SSH_USER`**, **`LXC_SSH_KEY`**, and a host **reachable from GitHub’s runners** (not only a private LAN IP unless you use Tailscale, port forwarding, or a self-hosted runner).
+Manual **workflow_dispatch** with input **`lxc_action`** set to **`deploy`** (still only on `main` / `master`). Choosing deploy is the signoff that manual release checks are done. Requires secrets **`LXC_SSH_HOST`**, **`LXC_SSH_USER`**, **`LXC_SSH_KEY`**, and a host **reachable from GitHub’s runners** (not only a private LAN IP unless you use Tailscale, port forwarding, or a self-hosted runner).
 
 **Note:** GitHub-hosted runners cannot reach arbitrary private networks. See the comment block at the top of [workflows/ci.yml](workflows/ci.yml) and [deploy/bizarre-api/README.md](../deploy/bizarre-api/README.md) for manual deploy steps.
 
