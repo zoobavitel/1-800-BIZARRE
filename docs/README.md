@@ -13,6 +13,7 @@ The primary purpose of this directory is to:
 ## Key Contents
 
 *   `codebase/`: File- and module-level map of scripts, backend, and frontend ([codebase/README.md](codebase/README.md)) — implementation index; complements narrative docs below.
+*   `TEST_PYRAMID.md`: Test taxonomy, command matrix, CI gates, and coverage expectations for unit/integration/automated-ui/manual layers.
 *   `backend_documentation.md`: Comprehensive documentation on the backend's architecture, core functionalities (e.g., character creation, crew consensus, NPC differences), and API endpoints.
 *   `SRD_INTEGRATION.md`: Details how the Standard Reference Document (SRD) is integrated into the platform, covering data loading, backend validation, and test coverage.
 *   `INTERACTION_SUMMARY.md`: A log of the interactions and tasks performed during the current chat session, serving as a historical record of development decisions and progress.

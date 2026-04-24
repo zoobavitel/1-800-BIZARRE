@@ -4,6 +4,18 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-04-23",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "enhance SessionNPCInvolvement and Roll models with new fields"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-04-22",
     "version": null,
     "sections": [
@@ -389,12 +401,6 @@ export const PATCH_NOTES = [
         "items": [
           "update patch notes and backend debug log",
           "update local db.sqlite3 snapshot"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "DELETE 204 empty body; Home delete shows errors"
         ]
       }
     ]
