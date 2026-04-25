@@ -4,6 +4,19 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-04-24",
+    "version": null,
+    "sections": [
+      {
+        "title": "Maintenance",
+        "items": [
+          "update CI workflow and README for LXC deployment",
+          "update package versions and enhance CI workflow"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-04-23",
     "version": null,
     "sections": [
@@ -392,15 +405,13 @@ export const PATCH_NOTES = [
           "Merge pull request #12 from zoobavitel/fix/character-delete-empty-response-and-home-errors",
           "Stop tracking backend/src/db.sqlite3 (local dev DB)",
           "Add hero Stand Coin, centered layout; update patch notes and db",
-          "Merge pull request #11 from zoobavitel/fix/character-delete-empty-response-and-home-errors",
-          "Merge remote-tracking branch 'origin/master' into fix/character-delete-empty-response-and-home-errors"
+          "Merge pull request #11 from zoobavitel/fix/character-delete-empty-response-and-home-errors"
         ]
       },
       {
         "title": "Maintenance",
         "items": [
-          "update patch notes and backend debug log",
-          "update local db.sqlite3 snapshot"
+          "update patch notes and backend debug log"
         ]
       }
     ]
