@@ -1565,6 +1565,14 @@ class Session(models.Model):
         blank=True,
         help_text="Map of character id (string) to GM-written devil's bargain consequence; player must confirm before rolling with +1d.",
     )
+    position_effect_by_character = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Map of character id (string) to {position, effect} for this session; "
+            "overrides default_position/default_effect for that PC's action rolls when set."
+        ),
+    )
 
     # Score proposal fields
     proposed_score_target = models.CharField(max_length=200, blank=True, null=True)

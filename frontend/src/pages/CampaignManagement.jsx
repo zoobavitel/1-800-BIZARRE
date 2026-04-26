@@ -15,6 +15,7 @@ import {
   HistoryBranchIcon,
 } from "../components/position-effect/PositionEffectIndicators";
 import { useAuth } from "../features/auth";
+import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
 
 const S = {
   page: {
@@ -2652,7 +2653,14 @@ function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
 // ---------------------------------------------------------------------------
 // Session Detail View (GM-only)
 // ---------------------------------------------------------------------------
-function SessionDetail({ campaign, session, onBack, onRefresh }) {
+function SessionDetail({
+  campaign,
+  session,
+  onBack,
+  onRefresh,
+  onNavigateToCharacter,
+  onNavigateToNPC,
+}) {
   const [sessionData, setSessionData] = useState(session);
   const [rolls, setRolls] = useState([]);
   const [clocks, setClocks] = useState([]);
@@ -2915,84 +2923,6 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
     }
   };
 
-  const npcInvolvements = sessionData?.npc_involvements || [];
-  const invByNpc = Object.fromEntries(
-    (npcInvolvements || []).map((i) => [i.npc, i]),
-  );
-  const toggleNpcInvolved = async (npcId) => {
-    const inv = invByNpc[npcId];
-    const next = inv
-      ? npcInvolvements.filter((i) => i.npc !== npcId)
-      : [
-          ...npcInvolvements,
-          {
-            npc: npcId,
-            show_clocks_to_players: false,
-            show_vulnerability_clock_to_players: false,
-          },
-        ];
-    try {
-      const updated = await sessionAPI.patchSession(session.id, {
-        npc_involvements: next,
-      });
-      setSessionData(updated);
-      onRefresh();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-  const toggleShowClocks = async (npcId) => {
-    const inv = invByNpc[npcId];
-    if (!inv) return;
-    const next = npcInvolvements.map((i) => {
-      if (i.npc !== npcId) return i;
-      const showClocks = !i.show_clocks_to_players;
-      return {
-        ...i,
-        show_clocks_to_players: showClocks,
-        show_vulnerability_clock_to_players: showClocks
-          ? true
-          : i.show_vulnerability_clock_to_players ?? false,
-      };
-    });
-    try {
-      const updated = await sessionAPI.patchSession(session.id, {
-        npc_involvements: next,
-      });
-      setSessionData(updated);
-      onRefresh();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-  const toggleShowVulnerabilityClock = async (npcId) => {
-    const inv = invByNpc[npcId];
-    if (!inv) return;
-    const next = npcInvolvements.map((i) =>
-      i.npc === npcId
-        ? {
-            ...i,
-            show_vulnerability_clock_to_players:
-              i.show_clocks_to_players
-                ? true
-                : !(i.show_vulnerability_clock_to_players ?? false),
-            show_clocks_to_players: i.show_clocks_to_players ?? false,
-          }
-        : i,
-    );
-    try {
-      const updated = await sessionAPI.patchSession(session.id, {
-        npc_involvements: next,
-      });
-      setSessionData(updated);
-      onRefresh();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-  const isVulnerabilityVisibleToPlayers = (inv) =>
-    !!inv?.show_clocks_to_players || !!inv?.show_vulnerability_clock_to_players;
-
   const [coinEdits, setCoinEdits] = useState({});
   const handleCrewCoinChange = async (crewId, coin) => {
     const val = parseInt(coin, 10) || 0;
@@ -3104,6 +3034,21 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
           </div>
         </div>
       </div>
+
+      <SessionGMManagementPanels
+        S={S}
+        session={session}
+        sessionData={sessionData}
+        setSessionData={setSessionData}
+        campaign={campaign}
+        campaignNPCs={campaignNPCs}
+        characters={characters}
+        clocks={clocks}
+        onRefresh={onRefresh}
+        setError={setError}
+        onNavigateToCharacter={onNavigateToCharacter}
+        onNavigateToNPC={onNavigateToNPC}
+      />
 
       {/* Position & Effect + dice history toggle (GM control) */}
       <div style={S.card}>
@@ -3586,96 +3531,6 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
       {/* Goals */}
       <GoalsEditor sessionData={sessionData} onSave={handleUpdateSession} />
 
-      {/* NPCs used */}
-      <div style={S.card}>
-        <span style={S.sectionLbl}>NPCs Used</span>
-        {campaignNPCs.length === 0 ? (
-          <div style={{ color: "#6b7280" }}>No NPCs in campaign.</div>
-        ) : (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-              marginTop: "8px",
-            }}
-          >
-            {campaignNPCs.map((npc) => {
-              const inv = invByNpc[npc.id];
-              const inSession = !!inv;
-              return (
-                <div
-                  key={npc.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "12px",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <label
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "4px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={inSession}
-                      onChange={() => toggleNpcInvolved(npc.id)}
-                    />
-                    <span>{npc.name || npc.true_name || `NPC ${npc.id}`}</span>
-                  </label>
-                  {inSession && (
-                    <>
-                      <label
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "4px",
-                          cursor: "pointer",
-                          fontSize: "12px",
-                          color: "#9ca3af",
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={!!inv.show_clocks_to_players}
-                          onChange={() => toggleShowClocks(npc.id)}
-                        />
-                        <span>Show clocks to players</span>
-                      </label>
-                      <label
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "4px",
-                          cursor: inv.show_clocks_to_players
-                            ? "not-allowed"
-                            : "pointer",
-                          fontSize: "12px",
-                          color: "#9ca3af",
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isVulnerabilityVisibleToPlayers(inv)}
-                          disabled={!!inv.show_clocks_to_players}
-                          onChange={() => toggleShowVulnerabilityClock(npc.id)}
-                        />
-                        <span>Show vulnerability to players</span>
-                      </label>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
       {/* Coin (crew-level) */}
       <div style={S.card}>
         <span style={S.sectionLbl}>Coin</span>
@@ -4061,6 +3916,8 @@ export default function CampaignManagement({
               setSelectedSession(null);
             }}
             onRefresh={refreshSelected}
+            onNavigateToCharacter={onNavigateToCharacter}
+            onNavigateToNPC={onNavigateToNPC}
           />
         </div>
       </div>

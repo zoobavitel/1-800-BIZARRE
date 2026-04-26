@@ -51,7 +51,14 @@ export const createDefaultCharacter = () => ({
     VICIOUS: false,
   },
   armor: { armor: false, heavy: false, special: false },
+  harm: {
+    level4: [""],
+    level3: [""],
+    level2: ["", ""],
+    level1: ["", ""],
+  },
   harmEntries: {
+    level4: [""],
     level3: [""],
     level2: ["", ""],
     level1: ["", ""],

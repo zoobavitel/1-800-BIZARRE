@@ -52,6 +52,7 @@ export interface TraumaChecks {
 }
 
 export interface HarmEntries {
+  level4: string[];
   level3: string[];
   level2: string[];
   level1: string[];

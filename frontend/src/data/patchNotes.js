@@ -4,6 +4,18 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-04-25",
+    "version": null,
+    "sections": [
+      {
+        "title": "Maintenance",
+        "items": [
+          "update patch notes and package-lock.json"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-04-24",
     "version": null,
     "sections": [
@@ -404,8 +416,7 @@ export const PATCH_NOTES = [
         "items": [
           "Merge pull request #12 from zoobavitel/fix/character-delete-empty-response-and-home-errors",
           "Stop tracking backend/src/db.sqlite3 (local dev DB)",
-          "Add hero Stand Coin, centered layout; update patch notes and db",
-          "Merge pull request #11 from zoobavitel/fix/character-delete-empty-response-and-home-errors"
+          "Add hero Stand Coin, centered layout; update patch notes and db"
         ]
       },
       {
