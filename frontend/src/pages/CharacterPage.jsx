@@ -27,6 +27,8 @@ import {
   resolveHeritagePkForSave,
   normalizeStashSlots,
   isImageUploadPayload,
+  normalizeHarmObject,
+  EMPTY_HARM_SHAPE,
 } from "../features/character-sheet";
 import { subscribeCampaignEvents } from "../features/character-sheet/services/campaignEvents";
 import { useAuth } from "../features/auth";
@@ -182,11 +184,9 @@ function isUnsavedCharacterDirty(tab) {
 
 function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
   const traumaIds = traumaObjectToIds(payload.trauma || {}, traumasList);
-  const harm = payload.harm || {
-    level3: [""],
-    level2: ["", ""],
-    level1: ["", ""],
-  };
+  const harm = normalizeHarmObject(
+    payload.harm || payload.harmEntries || EMPTY_HARM_SHAPE,
+  );
   const coinFilled =
     typeof payload.coinFilled === "number" &&
     Number.isFinite(payload.coinFilled)
@@ -215,11 +215,8 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
       heavy: payload.specialArmorUsed === true,
       special: payload.specialArmorUsed === true,
     },
-    harmEntries: {
-      level3: Array.isArray(harm.level3) ? harm.level3 : [""],
-      level2: Array.isArray(harm.level2) ? harm.level2 : ["", ""],
-      level1: Array.isArray(harm.level1) ? harm.level1 : ["", ""],
-    },
+    harmEntries: harm,
+    harm,
     coin: Array(4)
       .fill(false)
       .map((_, i) => i < coinFilled),
@@ -517,8 +514,8 @@ export default function CharacterPage({
   const handleCloseCharTab = useCallback(
     (tabId) => {
       const tab = charTabs.find((t) => t.tabId === tabId);
+      const meta = charTabUnsavedMeta[tabId];
       if (tab && tab.characterId === null) {
-        const meta = charTabUnsavedMeta[tabId];
         if (meta?.isDirty) {
           if (
             !window.confirm(
@@ -529,6 +526,13 @@ export default function CharacterPage({
         } else if (
           !window.confirm(
             "Discard this unsaved character? Any changes will be lost.",
+          )
+        )
+          return;
+      } else if (tab?.characterId != null && meta?.isDirty) {
+        if (
+          !window.confirm(
+            "Close this tab and discard unsaved changes to this character?\n\nPress OK to discard, or Cancel to stay here.",
           )
         )
           return;
@@ -682,6 +686,16 @@ export default function CharacterPage({
           }
         }
         const savedFrontend = transformBackendToFrontend(saved);
+        const serverEchoesFullHarm =
+          saved &&
+          Object.prototype.hasOwnProperty.call(saved, "harm_level1_slot2_used");
+        const mergedHarm = serverEchoesFullHarm
+          ? normalizeHarmObject(savedFrontend.harm)
+          : normalizeHarmObject({
+              ...EMPTY_HARM_SHAPE,
+              ...savedFrontend.harm,
+              ...frontend.harm,
+            });
         const traumaFromPayload =
           payload.trauma &&
           typeof payload.trauma === "object" &&
@@ -708,6 +722,8 @@ export default function CharacterPage({
             payload.personal_crew_name ??
             savedFrontend.personal_crew_name ??
             "",
+          harm: mergedHarm,
+          harmEntries: mergedHarm,
           // If API omits coin_boxes on the response, normalizeCoinBoxes(undefined) is all false and the sheet reverts.
           // Prefer the payload we just saved when the server did not echo coin_boxes (undefined). null is a valid echo.
           coin:
@@ -749,9 +765,12 @@ export default function CharacterPage({
       const activeTab = charTabs.find((t) => t.tabId === activeCharTabId);
       const activeMeta =
         activeCharTabId != null ? charTabUnsavedMeta[activeCharTabId] : null;
-      if (activeTab?.characterId == null && activeMeta?.isDirty) {
+      if (activeMeta?.isDirty) {
+        const isNew = activeTab?.characterId == null;
         const saveNow = window.confirm(
-          "This new character has unsaved changes.\n\nPress OK to save now.\nPress Cancel for discard options.",
+          isNew
+            ? "This new character has unsaved changes.\n\nPress OK to save now.\nPress Cancel for discard options."
+            : "This character has unsaved changes.\n\nPress OK to save now.\nPress Cancel for discard options.",
         );
         if (saveNow) {
           try {
@@ -762,7 +781,9 @@ export default function CharacterPage({
           }
         } else if (
           !window.confirm(
-            "Discard this unsaved character and continue?\n\nPress OK to discard, or Cancel to stay here.",
+            isNew
+              ? "Discard this unsaved character and continue?\n\nPress OK to discard, or Cancel to stay here."
+              : "Discard unsaved changes and continue?\n\nPress OK to discard, or Cancel to stay here.",
           )
         ) {
           return;
@@ -1076,28 +1097,107 @@ export default function CharacterPage({
     async (onContinue, options = {}) => {
       const { allowSave = true, discardMessage } = options;
       const tab = charTabs.find((t) => t.tabId === activeCharTabId);
-      if (!isUnsavedCharacterDirty(tab)) {
+      const meta = activeCharTabId != null ? charTabUnsavedMeta[activeCharTabId] : null;
+      const hasDraft =
+        !!meta?.isDirty || isUnsavedCharacterDirty(tab);
+      if (!hasDraft) {
         onContinue?.();
         return true;
       }
-      const savePrompt =
-        "This character tab has unsaved changes. Press OK to save before continuing, or Cancel to choose whether to discard changes.";
+      const isNew = tab?.characterId == null;
+      const savePrompt = isNew
+        ? "This new character has unsaved changes. Press OK to save before continuing, or Cancel to choose whether to discard changes."
+        : "This character has unsaved changes. Press OK to save before continuing, or Cancel to stay or discard.";
       if (allowSave && window.confirm(savePrompt)) {
-        const saved = await saveActiveUnsavedCharacter();
-        if (!saved) return false;
-        onContinue?.();
-        return true;
+        try {
+          if (isNew) {
+            const saved = await saveActiveUnsavedCharacter();
+            if (!saved) return false;
+          } else {
+            await handleSaveCharacter(meta?.payload || tab?.character);
+          }
+          onContinue?.();
+          return true;
+        } catch {
+          window.alert("Save failed. Fix errors or stay on the page.");
+          return false;
+        }
       }
       const discardConfirmed = window.confirm(
         discardMessage ||
-          "Discard this unsaved character? Any changes will be lost.",
+          (isNew
+            ? "Discard this unsaved character? Any changes will be lost."
+            : "Discard unsaved changes?"),
       );
       if (!discardConfirmed) return false;
       onContinue?.();
       return true;
     },
-    [activeCharTabId, charTabs, saveActiveUnsavedCharacter],
+    [
+      activeCharTabId,
+      charTabs,
+      charTabUnsavedMeta,
+      saveActiveUnsavedCharacter,
+      handleSaveCharacter,
+    ],
   );
+
+  useEffect(() => {
+    if (!onRegisterNavigationGuard) return undefined;
+    const runGuard = async () => {
+      if (mode !== MODES.CHARACTER) return true;
+      const meta =
+        activeCharTabId != null ? charTabUnsavedMeta[activeCharTabId] : null;
+      const tab = charTabs.find((t) => t.tabId === activeCharTabId);
+      const hasDraft =
+        !!meta?.isDirty || isUnsavedCharacterDirty(tab);
+      if (!hasDraft) return true;
+      const isNew = tab?.characterId == null;
+      const savePrompt = isNew
+        ? "Save the new character before leaving this app section?\n\nOK — save and go.\nCancel — stay or discard."
+        : "Save character changes before leaving this app section?\n\nOK — save and go.\nCancel — stay or discard.";
+      if (window.confirm(savePrompt)) {
+        try {
+          if (isNew) {
+            const ok = await saveActiveUnsavedCharacter();
+            if (!ok) return false;
+          } else {
+            await handleSaveCharacter(meta?.payload || tab?.character);
+          }
+          return true;
+        } catch {
+          window.alert("Save failed.");
+          return false;
+        }
+      }
+      return window.confirm(
+        isNew
+          ? "Leave without saving? This new character will be lost if you have not saved."
+          : "Leave without saving your latest edits?",
+      );
+    };
+    onRegisterNavigationGuard(() => runGuard());
+    return () => onRegisterNavigationGuard(null);
+  }, [
+    onRegisterNavigationGuard,
+    mode,
+    activeCharTabId,
+    charTabUnsavedMeta,
+    charTabs,
+    saveActiveUnsavedCharacter,
+    handleSaveCharacter,
+  ]);
+
+  useEffect(() => {
+    const dirty = Object.values(charTabUnsavedMeta).some((m) => m?.isDirty);
+    if (!dirty || typeof window === "undefined") return undefined;
+    const onBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [charTabUnsavedMeta]);
 
   const handleOpenNpcFromCharacterToolbar = useCallback(
     (npc) => {

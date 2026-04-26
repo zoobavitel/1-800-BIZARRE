@@ -9,7 +9,7 @@ describe("actionDicePool", () => {
     expect(attributeGroupForAction("HUNT")).toEqual(INSIGHT_ACTIONS);
   });
 
-  test("computeActionPoolBreakdown: rating + attribute dice", () => {
+  test("computeActionPoolBreakdown: action rating only (no attribute group dice)", () => {
     const ratings = {
       HUNT: 2,
       STUDY: 0,
@@ -26,8 +26,7 @@ describe("actionDicePool", () => {
     };
     const b = computeActionPoolBreakdown("HUNT", ratings);
     expect(b.action_rating).toBe(2);
-    // survey has a dot → +1 attribute die for insight
-    expect(b.attribute_dice).toBe(2);
-    expect(b.basePool).toBe(4);
+    expect(b.attribute_dice).toBe(0);
+    expect(b.basePool).toBe(2);
   });
 });

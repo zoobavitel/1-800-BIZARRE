@@ -130,6 +130,20 @@ class SessionRollLoopIntegrationTests(TestCase):
         self.assertEqual(rolled.data["effect"], "standard")
         self.assertIsNotNone(rolled.data["roll_id"])
 
+    def test_roll_action_uses_per_character_position_effect_map(self):
+        self.session.position_effect_by_character = {
+            str(self.player.id): {"position": "controlled", "effect": "extreme"},
+        }
+        self.session.save(update_fields=["position_effect_by_character"])
+        rolled = self.client.post(
+            f"/api/characters/{self.player.id}/roll-action/",
+            {"action": "hunt", "session_id": self.session.id},
+            format="json",
+        )
+        self.assertEqual(rolled.status_code, status.HTTP_200_OK, rolled.data)
+        self.assertEqual(rolled.data["position"], "controlled")
+        self.assertEqual(rolled.data["effect"], "extreme")
+
     def test_roll_action_requires_action_for_action_rolls(self):
         rolled = self.client.post(
             f"/api/characters/{self.player.id}/roll-action/",

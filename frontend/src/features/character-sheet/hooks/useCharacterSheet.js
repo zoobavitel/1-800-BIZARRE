@@ -29,6 +29,7 @@ export const useCharacterSheet = (characterId, onSave) => {
     special: false,
   });
   const [harmEntries, setHarmEntries] = useState({
+    level4: [""],
     level3: [""],
     level2: ["", ""],
     level1: ["", ""],
@@ -141,6 +142,7 @@ export const useCharacterSheet = (characterId, onSave) => {
       );
       setHarmEntries(
         defaultChar.harmEntries || {
+          level4: [""],
           level3: [""],
           level2: ["", ""],
           level1: ["", ""],

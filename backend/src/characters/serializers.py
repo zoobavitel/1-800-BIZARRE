@@ -2037,6 +2037,10 @@ class CampaignSerializer(serializers.ModelSerializer):
                 s, "devils_bargain_by_character", None
             )
             or {},
+            "position_effect_by_character": getattr(
+                s, "position_effect_by_character", None
+            )
+            or {},
             "session_npcs_with_clocks": session_npcs_with_clocks,
         }
 

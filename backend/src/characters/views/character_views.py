@@ -296,8 +296,21 @@ class CharacterViewSet(viewsets.ModelViewSet):
         position = normalize_position(request.data.get("position"))
         effect = normalize_effect(request.data.get("effect") or "standard")
         if session and roll_type.upper() == "ACTION":
-            position = normalize_position(session.default_position)
-            effect = normalize_effect(session.default_effect)
+            pe_map = getattr(session, "position_effect_by_character", None) or {}
+            if not isinstance(pe_map, dict):
+                pe_map = {}
+            key = str(character.id)
+            entry = pe_map.get(key) or pe_map.get(character.id)
+            if isinstance(entry, dict) and entry:
+                position = normalize_position(
+                    entry.get("position") or session.default_position
+                )
+                effect = normalize_effect(
+                    entry.get("effect") or session.default_effect
+                )
+            else:
+                position = normalize_position(session.default_position)
+                effect = normalize_effect(session.default_effect)
             gl = (getattr(session, "roll_goal_label", None) or "").strip()
             if gl and not goal_label:
                 goal_label = gl
@@ -393,30 +406,11 @@ class CharacterViewSet(viewsets.ModelViewSet):
             else:
                 action_rating = action_dots.get(action_name.lower(), 0) or 0
 
-            # Attribute dice: each action in same attribute with dots > 0 adds 1
-            insight_actions = ["hunt", "study", "survey", "tinker"]
-            prowess_actions = ["finesse", "prowl", "skirmish", "wreck"]
-            resolve_actions = ["bizarre", "command", "consort", "sway"]
+            # Base action pool: action rating only (no extra dice from other
+            # actions in the same attribute).
+            attribute_dice = 0
 
-            def get_dots(action):
-                if isinstance(action_dots.get("insight"), dict):
-                    for group in action_dots.values():
-                        if isinstance(group, dict) and action in group:
-                            return group.get(action, 0) or 0
-                return action_dots.get(action, 0) or 0
-
-            attr_group = (
-                insight_actions
-                if action_name.lower() in insight_actions
-                else (
-                    prowess_actions
-                    if action_name.lower() in prowess_actions
-                    else resolve_actions
-                )
-            )
-            attribute_dice = len([a for a in attr_group if get_dots(a) > 0])
-
-            dice_pool = action_rating + attribute_dice
+            dice_pool = action_rating
             if push_dice:
                 dice_pool += 1
             if devil_bargain_dice:
@@ -514,6 +508,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 rp_devil_txt = ""
             else:
                 rp_ar = action_rating
+                # Historical rolls may have pool_attribute_dice > 0; new rolls use 0
+                # (action pool = action rating only, not other actions in attribute).
                 rp_ad = attribute_dice
                 rp_pe = push_effect
                 rp_pd = push_dice

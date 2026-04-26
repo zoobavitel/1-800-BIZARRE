@@ -67,9 +67,9 @@ class RollActionAssistTests(TestCase):
         )
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
         self.assertEqual(r.data['rating'], 1)
-        # action_rating 1 + attribute_dice 1 (another insight action with dots would add more) + assist 1
-        self.assertEqual(r.data['attribute_dice'], 1)
-        self.assertEqual(r.data['total_dice'], 3)
+        # action_rating 1 + assist 1 (no attribute-group bonus dice)
+        self.assertEqual(r.data['attribute_dice'], 0)
+        self.assertEqual(r.data['total_dice'], 2)
         self.assertEqual(r.data['assist_helper_id'], self.helper.id)
         self.helper.refresh_from_db()
         self.assertEqual(self.helper.stress, 4)

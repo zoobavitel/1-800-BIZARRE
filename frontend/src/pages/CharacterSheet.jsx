@@ -35,6 +35,8 @@ import {
   xpHistoryAPI,
   groupActionAPI,
   characterHistoryAPI,
+  sessionAPI,
+  normalizeHarmObject,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -378,6 +380,16 @@ const CharacterSheetWrapper = ({
       : null);
   const characterId = character?.id;
 
+  /** GM Session bulk editor: per-PC position/effect for this session (overrides defaults). */
+  const sessionOverridePositionEffect = useMemo(() => {
+    const asd = charCampaign?.active_session_detail;
+    if (!asd || characterId == null) return null;
+    const m = asd.position_effect_by_character;
+    if (!m || typeof m !== "object") return null;
+    const row = m[String(characterId)] ?? m[characterId];
+    return row && typeof row === "object" ? row : null;
+  }, [charCampaign?.active_session_detail, characterId]);
+
   const maxStandGradeIndex =
     character?.gm_can_have_s_rank_stand_stats === true ? 5 : 4;
   const pcStandCoinMaxLetter = maxStandGradeIndex === 5 ? "S" : "A";
@@ -428,6 +440,14 @@ const CharacterSheetWrapper = ({
   const mountedRef = useRef(false);
   const savingRef = useRef(false);
   const lastSavedPayloadRef = useRef(null);
+
+  useEffect(() => {
+    lastSavedPayloadRef.current = null;
+  }, [character?.id]);
+
+  useEffect(() => {
+    lastSavedPayloadRef.current = null;
+  }, [sessionDataPollTick]);
 
   const handleFileSelect = useCallback((e) => {
     const file = e.target.files?.[0];
@@ -709,14 +729,9 @@ const CharacterSheetWrapper = ({
     character?.specialArmorUsed || false,
   );
 
-  // Harm (API can send harm or harmEntries)
-  const [harm, setHarm] = useState(
-    character?.harm ||
-      character?.harmEntries || {
-        level3: [""],
-        level2: ["", ""],
-        level1: ["", ""],
-      },
+  // Harm (API can send harm or harmEntries; always keep L1/L2×2, L3, L4)
+  const [harm, setHarm] = useState(() =>
+    normalizeHarmObject(character?.harm || character?.harmEntries),
   );
   const [healingClock, setHealingClock] = useState(
     character?.healingClock ?? 0,
@@ -768,11 +783,12 @@ const CharacterSheetWrapper = ({
     const h = character?.harm || character?.harmEntries;
     if (!h || typeof h !== "object") return;
     setHarm((prev) => {
-      const levels = ["level1", "level2", "level3"];
+      const next = normalizeHarmObject(h);
+      const levels = ["level4", "level3", "level2", "level1"];
       const same = levels.every(
-        (lv) => JSON.stringify(prev[lv]) === JSON.stringify(h[lv]),
+        (lv) => JSON.stringify(prev[lv]) === JSON.stringify(next[lv]),
       );
-      return same ? prev : { ...prev, ...h };
+      return same ? prev : { ...prev, ...next };
     });
   }, [character?.id, character?.harm, character?.harmEntries]);
 
@@ -1293,7 +1309,6 @@ const CharacterSheetWrapper = ({
   });
   const [rollAbilityBoost, setRollAbilityBoost] = useState({});
   const [rollApiError, setRollApiError] = useState(null);
-  const [sessionRolls, setSessionRolls] = useState([]);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [historyMode, setHistoryMode] = useState("session");
   const [historyCollapsed, setHistoryCollapsed] = useState(false);
@@ -1319,17 +1334,6 @@ const CharacterSheetWrapper = ({
   const [campaignAssignError, setCampaignAssignError] = useState(null);
   const harmLevel3Used =
     ((harm?.level3?.[0] ?? "")?.toString?.()?.trim?.() ?? "") !== "";
-
-  useEffect(() => {
-    if (activeSessionId && characterId) {
-      rollAPI
-        .getRolls({ session: activeSessionId })
-        .then(setSessionRolls)
-        .catch(() => setSessionRolls([]));
-    } else {
-      setSessionRolls([]);
-    }
-  }, [activeSessionId, characterId, sessionDataPollTick]);
 
   useEffect(() => {
     setHistorySessionId(activeSessionId || null);
@@ -1517,16 +1521,6 @@ const CharacterSheetWrapper = ({
     charCampaign?.id,
   ]);
 
-  const desperateActionRollCount = useMemo(
-    () =>
-      (sessionRolls || []).filter(
-        (r) =>
-          (r.roll_type || "") === "ACTION" &&
-          (r.position || "").toLowerCase() === "desperate",
-      ).length,
-    [sessionRolls],
-  );
-
   const helpCandidates = useMemo(() => {
     const roster = charCampaign?.campaign_characters || [];
     const same = roster.filter(
@@ -1630,8 +1624,10 @@ const CharacterSheetWrapper = ({
 
   const rollPoolPreview = useMemo(() => {
     if (!rollPending) return null;
-    const { action_rating, attribute_dice, basePool } =
-      computeActionPoolBreakdown(rollPending.actionName, actionRatings);
+    const { action_rating, basePool } = computeActionPoolBreakdown(
+      rollPending.actionName,
+      actionRatings,
+    );
     let mod = 0;
     if (rollModal.push_dice) mod += 1;
     if (rollModal.devil_bargain_dice) mod += 1;
@@ -1641,7 +1637,6 @@ const CharacterSheetWrapper = ({
       (rollModal.push_effect ? 2 : 0) + (rollModal.push_dice ? 2 : 0);
     return {
       action_rating,
-      attribute_dice,
       basePool,
       mod,
       total: basePool + mod,
@@ -1704,11 +1699,21 @@ const CharacterSheetWrapper = ({
         stressCost: res.stress_spent || null,
         zeroDice: (res.dice_results || []).length === 0,
         isDesperateAction:
-          (res.position || asd?.default_position || "").toLowerCase() ===
-          "desperate",
+          (
+            res.position ||
+            sessionOverridePositionEffect?.position ||
+            asd?.default_position ||
+            ""
+          ).toLowerCase() === "desperate",
         isCritical: (res.dice_results || []).filter((d) => d === 6).length >= 2,
-        position: res.position || asd?.default_position,
-        effect: res.effect || asd?.default_effect,
+        position:
+          res.position ||
+          sessionOverridePositionEffect?.position ||
+          asd?.default_position,
+        effect:
+          res.effect ||
+          sessionOverridePositionEffect?.effect ||
+          asd?.default_effect,
         xpGained: res.xp_gained || 0,
       });
       if (res.xp_gained > 0 && res.xp_track) {
@@ -1730,12 +1735,6 @@ const CharacterSheetWrapper = ({
         devil_bargain_note: "",
       }));
       setRollAbilityBoost({});
-      if (activeSessionId) {
-        rollAPI
-        .getRolls({ session: activeSessionId })
-          .then(setSessionRolls)
-          .catch(() => {});
-      }
     } catch (e) {
       setRollApiError(e.message);
     }
@@ -1890,10 +1889,18 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     if (!onDraftMetaChange) return;
     const payload = buildPayload();
+    const { lastModified, imageFile: _if, ...rest } = payload;
+    const payloadKey = JSON.stringify(rest);
+    if (payload.id && lastSavedPayloadRef.current == null) {
+      lastSavedPayloadRef.current = payloadKey;
+    }
+    const isDirty = !payload.id
+      ? hasMeaningfulDraftChanges(payload)
+      : payloadKey !== (lastSavedPayloadRef.current ?? "");
     onDraftMetaChange({
       payload,
       isNewCharacter: !payload.id,
-      isDirty: hasMeaningfulDraftChanges(payload),
+      isDirty,
     });
   }, [onDraftMetaChange, buildPayload]);
 
@@ -3021,6 +3028,7 @@ const CharacterSheetWrapper = ({
                     <div style={{ flex: 1 }}>
                       <span style={S.lbl}>HARM</span>
                       {[
+                        { key: "level4", label: "FATAL", count: 1 },
                         { key: "level3", label: "NEED HELP", count: 1 },
                         { key: "level2", label: "-1D", count: 2 },
                         { key: "level1", label: "LESS EFFECT", count: 2 },
@@ -3054,14 +3062,15 @@ const CharacterSheetWrapper = ({
                                 fontSize: "11px",
                               }}
                               placeholder={`Lv${key.slice(-1)} harm`}
-                              value={harm[key][idx]}
+                              value={harm[key]?.[idx] ?? ""}
                               onChange={(e) =>
-                                setHarm((p) => ({
-                                  ...p,
-                                  [key]: p[key].map((v, i) =>
-                                    i === idx ? e.target.value : v,
-                                  ),
-                                }))
+                                setHarm((p) => {
+                                  const row = Array.isArray(p[key])
+                                    ? [...p[key]]
+                                    : Array(count).fill("");
+                                  row[idx] = e.target.value;
+                                  return { ...p, [key]: row };
+                                })
                               }
                             />
                           </div>
@@ -4912,8 +4921,10 @@ const CharacterSheetWrapper = ({
                             </div>
                             <PositionStack
                               activePosition={
+                                sessionOverridePositionEffect?.position ||
                                 charCampaign?.active_session_detail
-                                  ?.default_position || "risky"
+                                  ?.default_position ||
+                                "risky"
                               }
                               readOnly
                             />
@@ -4930,8 +4941,10 @@ const CharacterSheetWrapper = ({
                             </div>
                             <EffectShapes
                               activeEffect={
+                                sessionOverridePositionEffect?.effect ||
                                 charCampaign?.active_session_detail
-                                  ?.default_effect || "standard"
+                                  ?.default_effect ||
+                                "standard"
                               }
                               readOnly
                             />
@@ -5005,12 +5018,8 @@ const CharacterSheetWrapper = ({
                             Your dice pool
                           </div>
                           <DicePoolStrip
-                            label="Action rating (dots in this action)"
+                            label="Action rating (dice in this action only)"
                             count={rollPoolPreview.action_rating}
-                          />
-                          <DicePoolStrip
-                            label="Attribute dice (any dot in this attribute)"
-                            count={rollPoolPreview.attribute_dice}
                           />
                           {rollModal.push_dice ? (
                             <DicePoolStrip

@@ -717,6 +717,52 @@ export const authAPI = {
   },
 };
 
+// --- Harm (full slot coverage: L1/L2 ×2, L3, L4 + slot2 fields on backend) ---
+function harmSlotFromBackend(used, name) {
+  if (!used) return "";
+  return name == null ? "" : String(name);
+}
+
+function harmSlotToBackend(text) {
+  const t = String(text ?? "").trim();
+  return { used: t !== "", name: t };
+}
+
+const EMPTY_HARM_SHAPE = {
+  level4: [""],
+  level3: [""],
+  level2: ["", ""],
+  level1: ["", ""],
+};
+
+/** @param {Record<string,unknown>|undefined} fe */
+function pickHarmArrays(fe) {
+  const src = fe.harm != null ? fe.harm : fe.harmEntries || {};
+  const l1 = Array.isArray(src.level1) ? src.level1 : ["", ""];
+  const l2 = Array.isArray(src.level2) ? src.level2 : ["", ""];
+  const l3 = Array.isArray(src.level3) ? src.level3 : [""];
+  const l4 = Array.isArray(src.level4) ? src.level4 : [""];
+  return {
+    level1: [l1[0] ?? "", l1[1] ?? ""],
+    level2: [l2[0] ?? "", l2[1] ?? ""],
+    level3: [l3[0] ?? ""],
+    level4: [l4[0] ?? ""],
+  };
+}
+
+/** Stable full harm object for spread merges / UI defaults. */
+export function normalizeHarmObject(h) {
+  const p = pickHarmArrays({ harm: h, harmEntries: h });
+  return {
+    level4: [...p.level4],
+    level3: [...p.level3],
+    level2: [...p.level2],
+    level1: [...p.level1],
+  };
+}
+
+export { EMPTY_HARM_SHAPE };
+
 // Data transformation helpers
 export const transformBackendToFrontend = (backendCharacter) => {
   return {
@@ -813,43 +859,73 @@ export const transformBackendToFrontend = (backendCharacter) => {
       special: false,
     },
 
-    // Harm: backend has level1/2/3_used + _name (single); frontend uses arrays
+    // Harm: backend has two boxes for L1/L2 + L3 severe + L4 fatal; frontend uses arrays
     harm: {
+      level4: [
+        harmSlotFromBackend(
+          backendCharacter.harm_level4_used,
+          backendCharacter.harm_level4_name,
+        ),
+      ],
       level3: [
-        backendCharacter.harm_level3_used
-          ? backendCharacter.harm_level3_name || ""
-          : "",
+        harmSlotFromBackend(
+          backendCharacter.harm_level3_used,
+          backendCharacter.harm_level3_name,
+        ),
       ],
       level2: [
-        backendCharacter.harm_level2_used
-          ? backendCharacter.harm_level2_name || ""
-          : "",
-        "",
+        harmSlotFromBackend(
+          backendCharacter.harm_level2_used,
+          backendCharacter.harm_level2_name,
+        ),
+        harmSlotFromBackend(
+          backendCharacter.harm_level2_slot2_used,
+          backendCharacter.harm_level2_slot2_name,
+        ),
       ],
       level1: [
-        backendCharacter.harm_level1_used
-          ? backendCharacter.harm_level1_name || ""
-          : "",
-        "",
+        harmSlotFromBackend(
+          backendCharacter.harm_level1_used,
+          backendCharacter.harm_level1_name,
+        ),
+        harmSlotFromBackend(
+          backendCharacter.harm_level1_slot2_used,
+          backendCharacter.harm_level1_slot2_name,
+        ),
       ],
     },
     harmEntries: {
+      level4: [
+        harmSlotFromBackend(
+          backendCharacter.harm_level4_used,
+          backendCharacter.harm_level4_name,
+        ),
+      ],
       level3: [
-        backendCharacter.harm_level3_used
-          ? backendCharacter.harm_level3_name || ""
-          : "",
+        harmSlotFromBackend(
+          backendCharacter.harm_level3_used,
+          backendCharacter.harm_level3_name,
+        ),
       ],
       level2: [
-        backendCharacter.harm_level2_used
-          ? backendCharacter.harm_level2_name || ""
-          : "",
-        "",
+        harmSlotFromBackend(
+          backendCharacter.harm_level2_used,
+          backendCharacter.harm_level2_name,
+        ),
+        harmSlotFromBackend(
+          backendCharacter.harm_level2_slot2_used,
+          backendCharacter.harm_level2_slot2_name,
+        ),
       ],
       level1: [
-        backendCharacter.harm_level1_used
-          ? backendCharacter.harm_level1_name || ""
-          : "",
-        "",
+        harmSlotFromBackend(
+          backendCharacter.harm_level1_used,
+          backendCharacter.harm_level1_name,
+        ),
+        harmSlotFromBackend(
+          backendCharacter.harm_level1_slot2_used,
+          backendCharacter.harm_level1_slot2_name,
+        ),
       ],
     },
 
@@ -1031,34 +1107,30 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     light_armor_used: frontendCharacter.armor.armor,
     heavy_armor_used: frontendCharacter.armor.heavy,
 
-    // Harm (first slot per level; backend has single name per level)
-    harm_level3_used:
-      (frontendCharacter.harmEntries?.level3?.[0] ??
-        frontendCharacter.harm?.level3?.[0] ??
-        "") !== "",
-    harm_level3_name:
-      (frontendCharacter.harmEntries?.level3?.[0] ??
-        frontendCharacter.harm?.level3?.[0] ??
-        "") ||
-      "",
-    harm_level2_used:
-      (frontendCharacter.harmEntries?.level2?.[0] ??
-        frontendCharacter.harm?.level2?.[0] ??
-        "") !== "",
-    harm_level2_name:
-      (frontendCharacter.harmEntries?.level2?.[0] ??
-        frontendCharacter.harm?.level2?.[0] ??
-        "") ||
-      "",
-    harm_level1_used:
-      (frontendCharacter.harmEntries?.level1?.[0] ??
-        frontendCharacter.harm?.level1?.[0] ??
-        "") !== "",
-    harm_level1_name:
-      (frontendCharacter.harmEntries?.level1?.[0] ??
-        frontendCharacter.harm?.level1?.[0] ??
-        "") ||
-      "",
+    // Harm — full L1/L2 two-slot + L3 + L4; `used` follows trimmed non-empty text
+    ...(() => {
+      const H = pickHarmArrays(frontendCharacter);
+      const s1a = harmSlotToBackend(H.level1[0]);
+      const s1b = harmSlotToBackend(H.level1[1]);
+      const s2a = harmSlotToBackend(H.level2[0]);
+      const s2b = harmSlotToBackend(H.level2[1]);
+      const s3 = harmSlotToBackend(H.level3[0]);
+      const s4 = harmSlotToBackend(H.level4[0]);
+      return {
+        harm_level1_used: s1a.used,
+        harm_level1_name: s1a.name,
+        harm_level1_slot2_used: s1b.used,
+        harm_level1_slot2_name: s1b.name,
+        harm_level2_used: s2a.used,
+        harm_level2_name: s2a.name,
+        harm_level2_slot2_used: s2b.used,
+        harm_level2_slot2_name: s2b.name,
+        harm_level3_used: s3.used,
+        harm_level3_name: s3.name,
+        harm_level4_used: s4.used,
+        harm_level4_name: s4.name,
+      };
+    })(),
 
     // XP clocks
     xp_clocks: frontendCharacter.xp,
