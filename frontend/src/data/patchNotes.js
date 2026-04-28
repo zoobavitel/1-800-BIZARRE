@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Fixed",
         "items": [
+          "enhance HomeStandCoin component layout and accessibility",
           "center stand coin in hero"
         ]
       },
@@ -437,8 +438,7 @@ export const PATCH_NOTES = [
       {
         "title": "Other",
         "items": [
-          "Fix CI: stash_slots migration; coin readout height; patch notes",
-          "Site stats API, stash slots & portrait uploads; sheet/home fixes"
+          "Fix CI: stash_slots migration; coin readout height; patch notes"
         ]
       }
     ]
