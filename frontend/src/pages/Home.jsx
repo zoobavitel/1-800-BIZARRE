@@ -22,6 +22,7 @@ import {
 import HomeSessionScatterChart from "../components/home/HomeSessionScatterChart";
 import HomeStatsBarChart from "../components/home/HomeStatsBarChart";
 import HomeStandCoin from "../components/home/HomeStandCoin";
+import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 
 function tierRoman(level) {
   const n = Number(level);
@@ -313,10 +314,6 @@ const HomePage = ({
     }
   };
 
-  const openRules = () => {
-    if (typeof onNavigateToRules === "function") onNavigateToRules();
-  };
-
   return (
     <div className="home-poc">
       <header className="site-header">
@@ -376,20 +373,20 @@ const HomePage = ({
               Fate is truly a very long, roundabout path...
             </p>
             <div className="hero-cta fade-up d3">
-              <button
-                type="button"
+              <a
+                href={buildRouteHref("character")}
                 className="btn btn-primary"
-                onClick={handleCreateCharacter}
+                onClick={(e) => handleSpaNavClick(e, handleCreateCharacter)}
               >
                 + Create Character
-              </button>
-              <button
-                type="button"
+              </a>
+              <a
+                href={buildRouteHref("rules")}
                 className="btn btn-secondary"
-                onClick={openRules}
+                onClick={(e) => handleSpaNavClick(e, onNavigateToRules)}
               >
                 Game Rules
-              </button>
+              </a>
             </div>
           </div>
           <div className="hero-coin-column fade-up d3">
@@ -444,13 +441,15 @@ const HomePage = ({
                     </div>
                   </div>
                   <div className="p-card-actions">
-                    <button
-                      type="button"
+                    <a
+                      href={buildRouteHref("character", { characterId: character.id })}
                       className="p-card-btn p-card-btn-primary"
-                      onClick={() => handleEditCharacter(character)}
+                      onClick={(e) =>
+                        handleSpaNavClick(e, () => handleEditCharacter(character))
+                      }
                     >
                       Edit
-                    </button>
+                    </a>
                     <button
                       type="button"
                       className="p-card-btn p-card-btn-delete"
@@ -506,13 +505,13 @@ const HomePage = ({
                     </div>
                   </div>
                   <div className="p-card-actions">
-                    <button
-                      type="button"
+                    <a
+                      href={buildRouteHref("npcs", { npcId: npc.id })}
                       className="p-card-btn p-card-btn-primary p-card-btn-npc"
-                      onClick={() => handleEditNpc(npc.id)}
+                      onClick={(e) => handleSpaNavClick(e, () => handleEditNpc(npc.id))}
                     >
                       Edit
-                    </button>
+                    </a>
                     <button
                       type="button"
                       className="p-card-btn p-card-btn-delete"
@@ -567,15 +566,14 @@ const HomePage = ({
               const inactive = campaign.is_active === false;
 
               return (
-                <div
+                <a
                   key={campaign.id}
+                  href={buildRouteHref("campaigns", { campaignId: campaign.id })}
                   className={`g-card${inactive ? " g-card-inactive" : ""}`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handleManageCampaign(campaign.id)}
-                  onKeyDown={(e) =>
-                    e.key === "Enter" && handleManageCampaign(campaign.id)
+                  onClick={(e) =>
+                    handleSpaNavClick(e, () => handleManageCampaign(campaign.id))
                   }
+                  style={{ textDecoration: "none", color: "inherit" }}
                 >
                   <div className="g-card-header">
                     <div className="g-card-name">{campaign.name || "—"}</div>
@@ -654,7 +652,7 @@ const HomePage = ({
                       open campaign to join
                     </div>
                   )}
-                </div>
+                </a>
               );
             })
           )}
@@ -755,38 +753,50 @@ const HomePage = ({
       </section>
 
       <div className="quick-strip">
-        <button type="button" className="qa" onClick={handleCreateCharacter}>
+        <a
+          href={buildRouteHref("character")}
+          className="qa"
+          onClick={(e) => handleSpaNavClick(e, handleCreateCharacter)}
+          style={{ textDecoration: "none", color: "inherit" }}
+        >
           <div className="qa-icon">+</div>
           <div className="qa-title">Create Character</div>
           <div className="qa-desc">Build your next Stand user.</div>
           <div className="qa-arrow">→</div>
-        </button>
-        <button
-          type="button"
+        </a>
+        <a
+          href={buildRouteHref("campaigns")}
           className="qa"
-          onClick={() => onNavigateToCampaign?.(null)}
+          onClick={(e) => handleSpaNavClick(e, () => onNavigateToCampaign?.(null))}
+          style={{ textDecoration: "none", color: "inherit" }}
         >
           <div className="qa-icon">☆</div>
           <div className="qa-title">Join Campaign</div>
           <div className="qa-desc">Find other bizarre individuals.</div>
           <div className="qa-arrow">→</div>
-        </button>
-        <button type="button" className="qa" onClick={openRules}>
+        </a>
+        <a
+          href={buildRouteHref("rules")}
+          className="qa"
+          onClick={(e) => handleSpaNavClick(e, onNavigateToRules)}
+          style={{ textDecoration: "none", color: "inherit" }}
+        >
           <div className="qa-icon">♦</div>
           <div className="qa-title">Game Rules</div>
           <div className="qa-desc">Master the SRD mechanics.</div>
           <div className="qa-arrow">→</div>
-        </button>
-        <button
-          type="button"
+        </a>
+        <a
+          href={buildRouteHref("campaigns")}
           className="qa"
-          onClick={() => onNavigateToCampaign?.(null)}
+          onClick={(e) => handleSpaNavClick(e, () => onNavigateToCampaign?.(null))}
+          style={{ textDecoration: "none", color: "inherit" }}
         >
           <div className="qa-icon">✎</div>
           <div className="qa-title">Create Campaign</div>
           <div className="qa-desc">Run your own bizarre adventure.</div>
           <div className="qa-arrow">→</div>
-        </button>
+        </a>
       </div>
 
       <section className="home-stats-section">
@@ -844,13 +854,13 @@ const HomePage = ({
       <section className="patch-section">
         <div className="patch-header">
           <span className="patch-header-title">Recent Changes</span>
-          <button
-            type="button"
+          <a
+            href={buildRouteHref("patch-notes")}
             className="patch-header-link"
-            onClick={() => onNavigateToPatchNotes?.()}
+            onClick={(e) => handleSpaNavClick(e, onNavigateToPatchNotes)}
           >
             View all patch notes →
-          </button>
+          </a>
         </div>
         <div className="patch-list">
           {patchRows.map((row, i) => (
@@ -873,20 +883,20 @@ const HomePage = ({
             </span>
           </span>
           <div className="footer-links">
-            <button
-              type="button"
+            <a
+              href={buildRouteHref("licenses")}
               className="footer-link"
-              onClick={() => onNavigateToLicenses?.()}
+              onClick={(e) => handleSpaNavClick(e, onNavigateToLicenses)}
             >
               Licenses
-            </button>
-            <button
-              type="button"
+            </a>
+            <a
+              href={buildRouteHref("patch-notes")}
               className="footer-link"
-              onClick={() => onNavigateToPatchNotes?.()}
+              onClick={(e) => handleSpaNavClick(e, onNavigateToPatchNotes)}
             >
               Patch Notes
-            </button>
+            </a>
             <button
               type="button"
               className="footer-link"

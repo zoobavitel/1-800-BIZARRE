@@ -5,6 +5,7 @@ import {
   npcAPI,
   characterAPI,
 } from "../../features/character-sheet/services/api";
+import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import NpcsStandCoin from "../NpcsStandCoin";
 import { PositionStack, EffectShapes } from "../position-effect/PositionEffectIndicators";
 
@@ -261,13 +262,15 @@ export default function SessionGMManagementPanels({
                     <div style={{ fontSize: 10, color: "#9ca3af" }}>
                       {npc.stand_name || "—"}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => onNavigateToNPC?.(npc.id)}
+                    <a
+                      href={buildRouteHref("npcs", { npcId: npc.id })}
+                      onClick={(e) =>
+                        handleSpaNavClick(e, () => onNavigateToNPC?.(npc.id))
+                      }
                       style={{ ...S.btn, fontSize: 10, marginTop: 4 }}
                     >
                       Full sheet
-                    </button>
+                    </a>
                   </div>
                 </div>
                 <div style={{ display: "flex", justifyContent: "center" }}>
@@ -490,13 +493,15 @@ export default function SessionGMManagementPanels({
                   />
                   <div>
                     <div style={{ fontWeight: "bold" }}>{name}</div>
-                    <button
-                      type="button"
-                      onClick={() => onNavigateToCharacter?.(full.id)}
+                    <a
+                      href={buildRouteHref("character", { characterId: full.id })}
+                      onClick={(e) =>
+                        handleSpaNavClick(e, () => onNavigateToCharacter?.(full.id))
+                      }
                       style={{ ...S.btn, fontSize: 10, marginTop: 4 }}
                     >
                       Open sheet
-                    </button>
+                    </a>
                   </div>
                 </div>
                 <div style={{ display: "flex", justifyContent: "center" }}>

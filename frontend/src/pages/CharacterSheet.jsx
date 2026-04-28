@@ -45,6 +45,10 @@ import {
   HistoryBranchIcon,
 } from "../components/position-effect/PositionEffectIndicators";
 import { computeActionPoolBreakdown } from "../features/character-sheet/utils/actionDicePool";
+import {
+  buildXpRequirementSnapshot,
+  formatAttrTally,
+} from "../features/character-sheet/utils/xpRequirements";
 
 const CREW_HISTORY_FIELD_KEYS = new Set([
   "name",
@@ -1321,6 +1325,8 @@ const CharacterSheetWrapper = ({
   const [xpTimelineLoading, setXpTimelineLoading] = useState(false);
   const [xpTimelineError, setXpTimelineError] = useState(null);
   const [xpTimelineRows, setXpTimelineRows] = useState([]);
+  const [xpReqTracker, setXpReqTracker] = useState([]);
+  const [xpReqRolls, setXpReqRolls] = useState([]);
   const [activeGroupAction, setActiveGroupAction] = useState(null);
   const [groupGoalDraft, setGroupGoalDraft] = useState("");
   const [groupBusy, setGroupBusy] = useState(false);
@@ -1334,6 +1340,41 @@ const CharacterSheetWrapper = ({
   const [campaignAssignError, setCampaignAssignError] = useState(null);
   const harmLevel3Used =
     ((harm?.level3?.[0] ?? "")?.toString?.()?.trim?.() ?? "") !== "";
+
+  const xpReqSnapshot = useMemo(
+    () =>
+      buildXpRequirementSnapshot({
+        sessionId: activeSessionId,
+        characterId,
+        trackerEntries: xpReqTracker,
+        rolls: xpReqRolls,
+      }),
+    [activeSessionId, characterId, xpReqTracker, xpReqRolls],
+  );
+
+  useEffect(() => {
+    if (!characterId) {
+      setXpReqTracker([]);
+      return;
+    }
+    const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
+    experienceTrackerAPI
+      .list({ character: characterId })
+      .then((r) => setXpReqTracker(asArray(r)))
+      .catch(() => setXpReqTracker([]));
+  }, [characterId, sessionDataPollTick]);
+
+  useEffect(() => {
+    if (!characterId || !activeSessionId) {
+      setXpReqRolls([]);
+      return;
+    }
+    const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
+    rollAPI
+      .getRolls({ session: activeSessionId })
+      .then((r) => setXpReqRolls(asArray(r)))
+      .catch(() => setXpReqRolls([]));
+  }, [characterId, activeSessionId, sessionDataPollTick]);
 
   useEffect(() => {
     setHistorySessionId(activeSessionId || null);
@@ -3445,17 +3486,165 @@ const CharacterSheetWrapper = ({
                   <div
                     style={{
                       marginTop: "10px",
+                      padding: "10px",
+                      background: "#0d1117",
+                      borderRadius: "6px",
+                      border: "1px solid #374151",
                       fontSize: "11px",
                       color: "#9ca3af",
-                      lineHeight: "1.7",
+                      lineHeight: "1.6",
                     }}
                   >
-                    <span style={S.lbl}>MARK XP WHEN YOU…</span>
-                    🔷 Make a desperate action roll — +1 XP in that attribute
-                    <br />
-                    🔷 Express beliefs, drives, heritage, or background
-                    <br />
-                    🔷 Struggle with your vice, trauma, or crew entanglements
+                    <div style={{ marginBottom: "8px" }}>
+                      <span style={S.lbl}>XP REQUIREMENTS (SRD)</span>
+                    </div>
+                    {!xpReqSnapshot.hasActiveSession && (
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          color: "#9ca3af",
+                        }}
+                      >
+                        No active session — requirement progress and desperate-roll
+                        tallies will show once the GM starts a session for this
+                        campaign and rolls or XP entries are logged.
+                      </div>
+                    )}
+                    {xpReqSnapshot.hasActiveSession && (
+                      <>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: "8px",
+                            padding: "4px 0",
+                            borderBottom: "1px solid #1f2937",
+                          }}
+                        >
+                          <div>
+                            <span style={{ color: "#e5e7eb" }}>
+                              Desperate action rolls
+                            </span>
+                            <span
+                              style={{
+                                marginLeft: "6px",
+                                fontSize: "10px",
+                                color: "#6b7280",
+                              }}
+                            >
+                              (auto, +1 XP / roll to that attribute)
+                            </span>
+                            <div
+                              style={{ fontSize: "10px", color: "#6b7280", marginTop: "2px" }}
+                            >
+                              This session: {xpReqSnapshot.desperateRolls.count} —{" "}
+                              {xpReqSnapshot.desperateRolls.count === 0
+                                ? "no desperate action rolls yet"
+                                : formatAttrTally(
+                                    xpReqSnapshot.desperateRolls.byAttribute,
+                                  )}
+                            </div>
+                            {xpReqSnapshot.desperateTrackerNote > 0 && (
+                              <div
+                                style={{ fontSize: "10px", color: "#a78bfa", marginTop: "2px" }}
+                              >
+                                Logged in tracker: up to +{xpReqSnapshot.desperateTrackerNote}{" "}
+                                (desperate / rating-0; max 2 shown)
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {[
+                          {
+                            label: "Playbook or standout (end of session, max 2)",
+                            v: xpReqSnapshot.playbook,
+                          },
+                          {
+                            label:
+                              "Beliefs, drives, heritage, or background (end of session, max 2)",
+                            v: xpReqSnapshot.beliefs,
+                          },
+                          {
+                            label:
+                              "Struggle: vice, trauma, entanglements (end of session, max 2)",
+                            v: xpReqSnapshot.struggle,
+                          },
+                        ].map((row) => (
+                          <div
+                            key={row.label}
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: "8px",
+                              padding: "5px 0",
+                              borderBottom: "1px solid #1f2937",
+                            }}
+                          >
+                            <span style={{ color: "#d1d5db" }}>{row.label}</span>
+                            <span
+                              style={{
+                                fontFamily: "monospace",
+                                color: "#e5e7eb",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {row.v} / 2
+                            </span>
+                          </div>
+                        ))}
+                        {xpReqSnapshot.beliefs === 0 &&
+                          xpReqSnapshot.struggle === 0 &&
+                          xpReqSnapshot.playbook === 0 &&
+                          xpReqSnapshot.desperateRolls.count === 0 &&
+                          xpReqSnapshot.desperateTrackerNote === 0 && (
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                color: "#6b7280",
+                                marginTop: "8px",
+                              }}
+                            >
+                              No session XP events yet — keep playing; this fills as
+                              your group logs rolls and (at end of session) reviews
+                              story beats.
+                            </div>
+                          )}
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#6b7280",
+                            marginTop: "8px",
+                          }}
+                        >
+                          <span style={S.lbl}>MARK XP WHEN YOU…</span> (same
+                          SRD) — make a{" "}
+                          <strong style={{ color: "#9ca3af" }}>desperate</strong>{" "}
+                          action roll; express{" "}
+                          <strong style={{ color: "#9ca3af" }}>beliefs, drives, heritage, or background</strong>; struggle with your{" "}
+                          <strong style={{ color: "#9ca3af" }}>vice, trauma, or crew</strong>{" "}
+                          entanglements; plus playbook / standout at end of session.
+                        </div>
+                        <details
+                          style={{ marginTop: "8px", fontSize: "10px", color: "#6b7280" }}
+                        >
+                          <summary style={{ cursor: "pointer", userSelect: "none" }}>
+                            Desperate roll → attribute (+1) · end-of-session (max 2 each)
+                          </summary>
+                          <p style={{ margin: "6px 0 0" }}>
+                            <strong>Desperate rolls:</strong> +1 XP in the roll&apos;s
+                            attribute: Insight (Hunt, Study, Survey, Tinker), Prowess
+                            (Finesse, Prowl, Skirmish, Wreck), Resolve (Bizarre, Command, Consort, Sway).
+                            {" "}
+                            <strong>End of session:</strong> table review for
+                            beliefs / struggle / playbook, up to 2 XP in each
+                            category; you may place that XP on any track when you
+                            spend it. Numbers here come from the experience tracker
+                            (this session) and your desperate rolls in the dice log.
+                          </p>
+                        </details>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>

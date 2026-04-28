@@ -16,6 +16,7 @@ import {
 } from "../components/position-effect/PositionEffectIndicators";
 import { useAuth } from "../features/auth";
 import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
+import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 
 const S = {
   page: {
@@ -836,8 +837,11 @@ function CampaignDetail({
                           </span>
                         )}
                         {typeof onNavigateToCharacter === "function" && (
-                          <button
-                            onClick={() => onNavigateToCharacter(ch.id)}
+                          <a
+                            href={buildRouteHref("character", { characterId: ch.id })}
+                            onClick={(e) =>
+                              handleSpaNavClick(e, () => onNavigateToCharacter(ch.id))
+                            }
                             style={{
                               ...S.btn,
                               fontSize: "10px",
@@ -847,7 +851,7 @@ function CampaignDetail({
                             }}
                           >
                             View
-                          </button>
+                          </a>
                         )}
                         {user?.id === campaign.gm?.id && (
                           <button
@@ -968,8 +972,11 @@ function CampaignDetail({
                             </span>
                           )}
                           {typeof onNavigateToCharacter === "function" && (
-                            <button
-                              onClick={() => onNavigateToCharacter(ch.id)}
+                            <a
+                              href={buildRouteHref("character", { characterId: ch.id })}
+                              onClick={(e) =>
+                                handleSpaNavClick(e, () => onNavigateToCharacter(ch.id))
+                              }
                               style={{
                                 ...S.btn,
                                 fontSize: "10px",
@@ -979,7 +986,7 @@ function CampaignDetail({
                               }}
                             >
                               View
-                            </button>
+                            </a>
                           )}
                           {((isGM && p.id !== campaign.gm?.id) ||
                             p.id === user?.id) && (
@@ -1206,8 +1213,11 @@ function CampaignDetail({
                   )}
                   {typeof onNavigateToNPC === "function" && (
                     <>
-                      <button
-                        onClick={() => onNavigateToNPC(npc.id)}
+                      <a
+                        href={buildRouteHref("npcs", { npcId: npc.id })}
+                        onClick={(e) =>
+                          handleSpaNavClick(e, () => onNavigateToNPC(npc.id))
+                        }
                         style={{
                           ...S.btn,
                           fontSize: "10px",
@@ -1217,7 +1227,7 @@ function CampaignDetail({
                         }}
                       >
                         View
-                      </button>
+                      </a>
                       <button
                         onClick={() => {
                           const url = `${window.location.origin}${window.location.pathname}#npcs/${npc.id}`;

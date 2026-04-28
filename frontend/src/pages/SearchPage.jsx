@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Search as SearchIcon } from "lucide-react";
 import { searchAPI } from "../features/character-sheet/services/api";
+import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 
 // Dark mode format (same as Character Sheet, Character Options)
 const S = {
@@ -180,6 +181,24 @@ export default function SearchPage({
     }
   };
 
+  const getResultHref = (r) => {
+    if (r.type === "character") return buildRouteHref("character", { characterId: r.id });
+    if (r.type === "campaign") return buildRouteHref("campaigns", { campaignId: r.id });
+    if (r.type === "heritage") return buildRouteHref("abilities", { filter: "heritage" });
+    if (["ability", "hamon_ability", "spin_ability", "stand_ability"].includes(r.type)) {
+      const filter =
+        r.type === "hamon_ability"
+          ? "hamon"
+          : r.type === "spin_ability"
+            ? "spin"
+            : r.type === "stand_ability"
+              ? "standard"
+              : "all";
+      return buildRouteHref("abilities", { filter });
+    }
+    return "#";
+  };
+
   return (
     <div style={S.page}>
       <div style={S.content}>
@@ -217,13 +236,11 @@ export default function SearchPage({
         {!loading && filteredResults.length > 0 && (
           <div>
             {filteredResults.map((r) => (
-              <div
+              <a
                 key={`${r.type}-${r.id}`}
+                href={getResultHref(r)}
                 style={S.card}
-                onClick={() => handleResultClick(r)}
-                onKeyDown={(e) => e.key === "Enter" && handleResultClick(r)}
-                role="button"
-                tabIndex={0}
+                onClick={(e) => handleSpaNavClick(e, () => handleResultClick(r))}
               >
                 <div
                   style={{
@@ -239,7 +256,7 @@ export default function SearchPage({
                 </div>
                 {r.subtitle && <div style={S.cardSubtitle}>{r.subtitle}</div>}
                 {r.description && <div style={S.cardDesc}>{r.description}</div>}
-              </div>
+              </a>
             ))}
           </div>
         )}
