@@ -4,6 +4,18 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-04-26",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "add position effect mapping for session actions"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-04-25",
     "version": null,
     "sections": [
@@ -415,8 +427,7 @@ export const PATCH_NOTES = [
         "title": "Other",
         "items": [
           "Merge pull request #12 from zoobavitel/fix/character-delete-empty-response-and-home-errors",
-          "Stop tracking backend/src/db.sqlite3 (local dev DB)",
-          "Add hero Stand Coin, centered layout; update patch notes and db"
+          "Stop tracking backend/src/db.sqlite3 (local dev DB)"
         ]
       },
       {

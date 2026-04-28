@@ -23,6 +23,7 @@ import {
   characterAPI,
   transformBackendToFrontend,
 } from "./features/character-sheet";
+import { buildRouteHref, buildRouteHash, handleSpaNavClick } from "./utils/spaNavigation";
 
 const PAGE_TITLES = {
   home: "HOME",
@@ -133,9 +134,9 @@ function AppBar({ onHamburgerClick, onBack, onHome, pageTitle, rightContent }) {
             ← Back
           </button>
         )}
-        <button
-          type="button"
-          onClick={onHome}
+        <a
+          href={buildRouteHref("home")}
+          onClick={(e) => handleSpaNavClick(e, onHome)}
           style={{
             background: "none",
             border: "none",
@@ -146,12 +147,13 @@ function AppBar({ onHamburgerClick, onBack, onHome, pageTitle, rightContent }) {
             color: "var(--hftf-text-cream)",
             fontFamily: "var(--font-display)",
             letterSpacing: "0.06em",
+            textDecoration: "none",
           }}
           aria-label="Go to home"
         >
           <span style={{ color: "var(--hftf-purple)" }}>1(800)</span>
           <span style={{ color: "var(--hftf-text-cream)" }}>BIZARRE</span>
-        </button>
+        </a>
         {pageTitle && (
           <>
             <span style={{ color: "var(--hftf-gold-muted)" }}>—</span>
@@ -320,50 +322,44 @@ const App = () => {
       setCharacterPageId(payload?.characterId ?? null);
       setCampaignPageId(null);
       setAbilityFilter(null);
-      window.location.hash =
-        payload?.characterId != null
-          ? `character/${payload.characterId}`
-          : "character";
+      window.location.hash = buildRouteHash(page, payload);
     } else if (page === "campaigns") {
       setCampaignPageId(payload?.campaignId ?? null);
       setCampaignFactionId(payload?.factionId ?? null);
       setCharacterPageId(null);
       setAbilityFilter(null);
-      window.location.hash =
-        payload?.campaignId != null
-          ? `campaigns/${payload.campaignId}`
-          : "campaigns";
+      window.location.hash = buildRouteHash(page, payload);
     } else if (page === "abilities") {
       setCharacterPageId(null);
       setCampaignPageId(null);
       const filter = payload?.filter || null;
       setAbilityFilter(filter);
-      window.location.hash = filter ? `abilities-${filter}` : "abilities";
+      window.location.hash = buildRouteHash(page, { filter });
     } else if (page === "character-options") {
       setCharacterPageId(null);
       setCampaignPageId(null);
       setAbilityFilter(null);
-      window.location.hash = "character-options";
+      window.location.hash = buildRouteHash(page, payload);
     } else if (page === "rules") {
       setCharacterPageId(null);
       setCampaignPageId(null);
       setAbilityFilter(null);
       const section = payload?.section || null;
       setRulesSection(section);
-      window.location.hash = section ? `rules-${section}` : "rules";
+      window.location.hash = buildRouteHash(page, { section });
     } else if (page === "npcs") {
       setCharacterPageId(null);
       setCampaignPageId(null);
       const npcId = payload?.npcId ?? null;
       setNpcPageId(npcId);
-      window.location.hash = npcId != null ? `npcs/${npcId}` : "npcs";
+      window.location.hash = buildRouteHash(page, { npcId });
     } else {
       setCharacterPageId(null);
       setCampaignPageId(null);
       setNpcPageId(null);
       setAbilityFilter(null);
       setRulesSection(null);
-      window.location.hash = page === "home" ? "" : page;
+      window.location.hash = buildRouteHash(page, payload);
     }
   };
 
