@@ -1055,6 +1055,7 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     vice_details:
       frontendCharacter.viceDetails ?? frontendCharacter.vice_details ?? "",
     image_url: frontendCharacter.image_url ?? "",
+    ...(frontendCharacter.image === null ? { image: null } : {}),
 
     // Action dots
     action_dots: {

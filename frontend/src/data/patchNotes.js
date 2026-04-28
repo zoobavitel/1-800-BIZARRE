@@ -8,6 +8,18 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Fixed",
+        "items": [
+          "center stand coin in hero"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "update patch notes for SPA routing utilities"
+        ]
+      },
+      {
         "title": "Added",
         "items": [
           "implement SPA routing utilities and refactor navigation components"
@@ -427,24 +439,6 @@ export const PATCH_NOTES = [
         "items": [
           "Fix CI: stash_slots migration; coin readout height; patch notes",
           "Site stats API, stash slots & portrait uploads; sheet/home fixes"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-07",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #12 from zoobavitel/fix/character-delete-empty-response-and-home-errors"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "update patch notes and backend debug log"
         ]
       }
     ]

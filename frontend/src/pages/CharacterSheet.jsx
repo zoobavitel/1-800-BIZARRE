@@ -305,7 +305,6 @@ function hasMeaningfulDraftChanges(payload) {
     payload.image_url,
   ];
   if (textFields.some((v) => String(v ?? "").trim() !== "")) return true;
-  if (payload.imageFile) return true;
   if (payload.campaign != null && payload.campaign !== "") return true;
   if ((payload.playbook || "Stand") !== "Stand") return true;
   if ((payload.stressFilled || 0) > 0) return true;
@@ -430,12 +429,11 @@ const CharacterSheetWrapper = ({
   });
 
   // Portrait state
-  const [imageFile, setImageFile] = useState(null);
   const [imageUrl, setImageUrl] = useState(character?.image_url || "");
   const [imagePreview, setImagePreview] = useState(
     character?.image || character?.image_url || "",
   );
-  const fileInputRef = useRef(null);
+  const [removeImageRequested, setRemoveImageRequested] = useState(false);
 
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState(null);
@@ -453,20 +451,20 @@ const CharacterSheetWrapper = ({
     lastSavedPayloadRef.current = null;
   }, [sessionDataPollTick]);
 
-  const handleFileSelect = useCallback((e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
+  const handleImageUrlPrompt = useCallback(() => {
+    const url = prompt("Paste image URL (https://...)");
+    const next = String(url || "").trim();
+    if (next) {
+      setImageUrl(next);
+      setImagePreview(next);
+      setRemoveImageRequested(false);
+    }
   }, []);
 
-  const handleImageUrlPrompt = useCallback(() => {
-    const url = prompt("Paste image URL:");
-    if (url) {
-      setImageUrl(url);
-      setImagePreview(url);
-      setImageFile(null);
-    }
+  const handleRemovePortrait = useCallback(() => {
+    setImageUrl("");
+    setImagePreview("");
+    setRemoveImageRequested(true);
   }, []);
 
   // Sync crew/crewId when character changes (e.g. from parent after crew name update)
@@ -579,10 +577,10 @@ const CharacterSheetWrapper = ({
 
   // Portrait: sync from server/merged character; do not clobber while a file upload is pending
   useEffect(() => {
-    if (imageFile) return;
     setImageUrl(character?.image_url || "");
     setImagePreview(character?.image || character?.image_url || "");
-  }, [character?.id, character?.image, character?.image_url, imageFile]);
+    setRemoveImageRequested(false);
+  }, [character?.id, character?.image, character?.image_url]);
 
   // Sync heritage when heritages load (e.g. new char has heritage: 'Human' string)
   useEffect(() => {
@@ -955,6 +953,10 @@ const CharacterSheetWrapper = ({
   );
 
   const [clocks, setClocks] = useState(character?.clocks || []);
+  const [clockEditorOpen, setClockEditorOpen] = useState(false);
+  const [newClockName, setNewClockName] = useState("");
+  const [newClockSegments, setNewClockSegments] = useState(4);
+  const [newClockShared, setNewClockShared] = useState(false);
   const [customAbilityModal, setCustomAbilityModal] = useState(null); // { type, name, uses, items } or null
   const [playbook, setPlaybook] = useState(character?.playbook || "Stand");
   // Standard ability picker (Option A: searchable dropdown + preview)
@@ -1862,13 +1864,24 @@ const CharacterSheetWrapper = ({
   };
 
   const addClock = () => {
-    const name = prompt("Clock name:");
-    const segs = parseInt(prompt("Segments (1-12):") || "4", 10);
-    if (name && !isNaN(segs) && segs >= 1 && segs <= 12)
-      setClocks((p) => [
-        ...p,
-        { id: Date.now(), name, segments: segs, filled: 0, visible_to_party: false },
-      ]);
+    const name = String(newClockName || "").trim();
+    const segs = Number(newClockSegments);
+    if (!name || !Number.isFinite(segs)) return;
+    const boundedSegments = Math.max(1, Math.min(12, Math.round(segs)));
+    setClocks((p) => [
+      ...p,
+      {
+        id: Date.now(),
+        name,
+        segments: boundedSegments,
+        filled: 0,
+        visible_to_party: !!newClockShared,
+      },
+    ]);
+    setNewClockName("");
+    setNewClockSegments(4);
+    setNewClockShared(false);
+    setClockEditorOpen(false);
   };
 
   const buildPayload = useCallback(() => {
@@ -1897,7 +1910,7 @@ const CharacterSheetWrapper = ({
       playbook,
       campaign: campaignId || null,
       image_url: imageUrl,
-      ...(imageFile ? { imageFile } : {}),
+      ...(removeImageRequested ? { image: null } : {}),
       id: backendId,
       lastModified: new Date().toISOString(),
       selected_benefits: selectedBenefits,
@@ -1921,7 +1934,7 @@ const CharacterSheetWrapper = ({
     playbook,
     campaignId,
     imageUrl,
-    imageFile,
+    removeImageRequested,
     character?.id,
     selectedBenefits,
     selectedDetriments,
@@ -1930,7 +1943,7 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     if (!onDraftMetaChange) return;
     const payload = buildPayload();
-    const { lastModified, imageFile: _if, ...rest } = payload;
+    const { lastModified, ...rest } = payload;
     const payloadKey = JSON.stringify(rest);
     if (payload.id && lastSavedPayloadRef.current == null) {
       lastSavedPayloadRef.current = payloadKey;
@@ -1976,7 +1989,7 @@ const CharacterSheetWrapper = ({
         return;
       }
       // Skip save if payload matches last saved (prevents loop from server response overwriting fields)
-      const { lastModified, imageFile: _img, ...rest } = payload;
+      const { lastModified, ...rest } = payload;
       const payloadKey = JSON.stringify(rest);
       if (lastSavedPayloadRef.current === payloadKey) {
         return;
@@ -1986,9 +1999,7 @@ const CharacterSheetWrapper = ({
       try {
         await onSave(payload);
         lastSavedPayloadRef.current = payloadKey;
-        if (payload.imageFile) {
-          setImageFile(null);
-        }
+        if (removeImageRequested) setRemoveImageRequested(false);
         setSaveStatus("saved");
         setSaveErrorMessage(null);
         setTimeout(
@@ -2024,7 +2035,7 @@ const CharacterSheetWrapper = ({
     playbook,
     campaignId,
     imageUrl,
-    imageFile,
+    removeImageRequested,
     selectedBenefits,
     selectedDetriments,
     character?.id,
@@ -2077,6 +2088,8 @@ const CharacterSheetWrapper = ({
       borderBottom: "1px solid #4b5563",
       padding: "2px 4px",
       width: "100%",
+      minWidth: 0,
+      maxWidth: "100%",
       fontFamily: "monospace",
       fontSize: "13px",
       outline: "none",
@@ -2633,6 +2646,7 @@ const CharacterSheetWrapper = ({
                       display: "flex",
                       gap: "16px",
                       alignItems: "start",
+                      flexWrap: "wrap",
                     }}
                   >
                     {/* Portrait */}
@@ -2675,25 +2689,6 @@ const CharacterSheetWrapper = ({
                         )}
                       </div>
                       <div style={{ display: "flex", gap: "4px" }}>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          onChange={handleFileSelect}
-                          style={{ display: "none" }}
-                        />
-                        <button
-                          onClick={() => fileInputRef.current?.click()}
-                          style={{
-                            ...S.btn,
-                            fontSize: "9px",
-                            padding: "2px 6px",
-                            background: "#1f2937",
-                            color: "#9ca3af",
-                          }}
-                        >
-                          Upload
-                        </button>
                         <button
                           onClick={handleImageUrlPrompt}
                           style={{
@@ -2706,11 +2701,29 @@ const CharacterSheetWrapper = ({
                         >
                           URL
                         </button>
+                        <button
+                          onClick={handleRemovePortrait}
+                          style={{
+                            ...S.btn,
+                            fontSize: "9px",
+                            padding: "2px 6px",
+                            background: "#1f2937",
+                            color: "#9ca3af",
+                          }}
+                        >
+                          Remove
+                        </button>
                       </div>
                     </div>
                     {/* Identity fields */}
-                    <div style={{ flex: 1 }}>
-                      <div style={S.g2}>
+                    <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(0, 1fr))",
+                          gap: "8px",
+                        }}
+                      >
                         <div>
                           <span style={S.lbl}>NAME</span>
                           <input
@@ -2769,7 +2782,8 @@ const CharacterSheetWrapper = ({
                       <div
                         style={{
                           display: "grid",
-                          gridTemplateColumns: "1fr 1fr 1fr",
+                          gridTemplateColumns:
+                            "repeat(auto-fit, minmax(0, 1fr))",
                           gap: "8px",
                           marginTop: "8px",
                         }}
@@ -7548,19 +7562,104 @@ const CharacterSheetWrapper = ({
                         </div>
                       ))}
                     </div>
-                    <button
-                      onClick={addClock}
-                      style={{
-                        ...S.btn,
-                        border: "2px dashed #374151",
-                        background: "transparent",
-                        color: "#6b7280",
-                        width: "100%",
-                        padding: "6px",
-                      }}
-                    >
-                      + Add Clock
-                    </button>
+                    {!clockEditorOpen ? (
+                      <button
+                        onClick={() => setClockEditorOpen(true)}
+                        style={{
+                          ...S.btn,
+                          border: "2px dashed #374151",
+                          background: "transparent",
+                          color: "#6b7280",
+                          width: "100%",
+                          padding: "6px",
+                        }}
+                      >
+                        + Add Clock
+                      </button>
+                    ) : (
+                      <div
+                        style={{
+                          border: "1px solid #374151",
+                          borderRadius: "6px",
+                          padding: "10px",
+                          background: "#0b1220",
+                          display: "grid",
+                          gap: "8px",
+                        }}
+                      >
+                        <div>
+                          <span style={S.lbl}>Clock name</span>
+                          <input
+                            style={S.inp}
+                            value={newClockName}
+                            onChange={(e) => setNewClockName(e.target.value)}
+                            placeholder="e.g. Infiltrate estate"
+                            maxLength={64}
+                          />
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                          <div>
+                            <span style={S.lbl}>Segments</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={12}
+                              style={S.inp}
+                              value={newClockSegments}
+                              onChange={(e) =>
+                                setNewClockSegments(
+                                  Math.max(1, Math.min(12, Number(e.target.value) || 1)),
+                                )
+                              }
+                            />
+                          </div>
+                          <div style={{ display: "flex", alignItems: "end" }}>
+                            <label
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                fontSize: "12px",
+                                color: "#9ca3af",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={newClockShared}
+                                onChange={(e) => setNewClockShared(e.target.checked)}
+                              />
+                              Shared party
+                            </label>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                          <button
+                            onClick={() => {
+                              setClockEditorOpen(false);
+                              setNewClockName("");
+                              setNewClockSegments(4);
+                              setNewClockShared(false);
+                            }}
+                            style={S.btnGhost}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={addClock}
+                            disabled={!String(newClockName || "").trim()}
+                            style={{
+                              ...S.btnPrimary,
+                              opacity: String(newClockName || "").trim() ? 1 : 0.5,
+                              cursor: String(newClockName || "").trim()
+                                ? "pointer"
+                                : "not-allowed",
+                            }}
+                          >
+                            Create clock
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Shared party clocks (player/crew-authored clocks; GM-created clocks live in SESSION > Clocks). */}

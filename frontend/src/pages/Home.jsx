@@ -424,7 +424,19 @@ const HomePage = ({
             </p>
           ) : (
             characters.map((character) => (
-              <div key={character.id} className="p-card" role="presentation">
+              <div
+                key={character.id}
+                className="p-card"
+                role="button"
+                tabIndex={0}
+                onClick={() => handleEditCharacter(character)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleEditCharacter(character);
+                  }
+                }}
+              >
                 <div className="p-card-stripe" />
                 <div className="p-card-body">
                   <div className="p-card-info">
@@ -444,16 +456,20 @@ const HomePage = ({
                     <a
                       href={buildRouteHref("character", { characterId: character.id })}
                       className="p-card-btn p-card-btn-primary"
-                      onClick={(e) =>
-                        handleSpaNavClick(e, () => handleEditCharacter(character))
-                      }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSpaNavClick(e, () => handleEditCharacter(character));
+                      }}
                     >
                       Edit
                     </a>
                     <button
                       type="button"
                       className="p-card-btn p-card-btn-delete"
-                      onClick={() => handleDeleteCharacter(character.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteCharacter(character.id);
+                      }}
                       aria-label="Delete character"
                     >
                       ×
