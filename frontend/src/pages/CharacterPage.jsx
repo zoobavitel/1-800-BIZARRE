@@ -240,6 +240,9 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
     selected_detriments: payload.selected_detriments ?? [],
     image_url: payload.image_url ?? "",
     imageFile: payload.imageFile,
+    image: Object.prototype.hasOwnProperty.call(payload || {}, "image")
+      ? payload.image
+      : undefined,
   };
 }
 

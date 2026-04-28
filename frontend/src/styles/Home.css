@@ -262,11 +262,18 @@
 .home-poc .home-stand-coin {
   position: relative;
   width: 100%;
-  max-width: 260px;
+  max-width: 420px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
+}
+.home-poc .home-stand-coin-main {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
 }
 .home-poc .home-stand-coin-sr {
   position: absolute;
@@ -360,11 +367,12 @@
   max-width: 220px;
 }
 .home-poc .home-stand-coin-svg {
-  width: 100%;
+  width: min(280px, 100%);
   height: auto;
   display: block;
   border-radius: 50%;
   box-shadow: 0 8px 28px rgba(26, 22, 16, 0.12);
+  justify-self: center;
 }
 .home-poc .home-stand-coin-svg path[role="button"]:focus {
   outline: none;
@@ -1473,8 +1481,20 @@
   }
   .home-poc .hero-coin-column {
     width: 100%;
-    max-width: 300px;
+    max-width: 360px;
     margin-inline: auto;
+  }
+  .home-poc .home-stand-coin-main {
+    grid-template-columns: minmax(0, 1fr) 132px;
+    align-items: center;
+    gap: 8px;
+  }
+  .home-poc .home-stand-coin-readout {
+    width: 132px;
+  }
+  .home-poc .home-stand-coin-readout-hint,
+  .home-poc .home-stand-coin-readout-blurb {
+    max-width: 112px;
   }
   .home-poc .hero-metrics {
     padding: 0 16px 28px;
