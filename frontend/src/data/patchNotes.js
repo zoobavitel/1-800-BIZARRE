@@ -4,6 +4,18 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-04-28",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "implement SPA routing utilities and refactor navigation components"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-04-26",
     "version": null,
     "sections": [
@@ -426,8 +438,7 @@ export const PATCH_NOTES = [
       {
         "title": "Other",
         "items": [
-          "Merge pull request #12 from zoobavitel/fix/character-delete-empty-response-and-home-errors",
-          "Stop tracking backend/src/db.sqlite3 (local dev DB)"
+          "Merge pull request #12 from zoobavitel/fix/character-delete-empty-response-and-home-errors"
         ]
       },
       {

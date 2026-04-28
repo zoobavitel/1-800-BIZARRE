@@ -1,0 +1,48 @@
+---
+description: High-signal review checks for critical bugs before PRs
+alwaysApply: false
+---
+
+# Review Context
+
+Use this rule when running `/review` or Ask-mode PR/code review.
+
+## Severity bar
+
+Only report:
+- data loss or corruption
+- crash-worthy defects in normal flows
+- auth/permission bypass
+- security vulnerabilities with concrete exploit path
+- major user-facing breakage
+
+Ignore style issues, minor edge cases, and speculative concerns.
+
+## Codebase risk map
+
+Prioritize analysis depth for:
+- `backend/src/characters/**`
+- `frontend/src/pages/CharacterSheet.jsx`
+- `frontend/src/pages/CampaignManagement.jsx`
+
+Trace full caller/callee path before reporting.
+
+## Mechanics consistency
+
+If change touches rolls, sessions, XP, stress, assist, group actions, position/effect, or advancement:
+- cross-check behavior against `docs/1(800)-Bizarre SRD.md`
+- call out intentional deviations explicitly
+
+## Test expectations
+
+When backend/API behavior changes, ensure regression coverage is present or recommended:
+- Django tests in `backend/src/characters/test_*.py` or related app tests
+- Frontend tests in `frontend/src/**/*.test.*` where behavior is UI/API-contract visible
+
+## Required finding format
+
+For each finding include:
+1. Trigger scenario
+2. Root cause and path
+3. Impact
+4. Minimal fix recommendation
