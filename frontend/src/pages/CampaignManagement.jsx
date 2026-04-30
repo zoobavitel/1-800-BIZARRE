@@ -2845,15 +2845,6 @@ function SessionDetail({
     }
   };
 
-  const handlePatchCharacterHarm = async (charId, harmData) => {
-    try {
-      await characterAPI.patchCharacter(charId, harmData);
-      onRefresh();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
   const handleUpdateSession = async (data) => {
     try {
       const updated = await sessionAPI.patchSession(session.id, data);
@@ -3118,28 +3109,9 @@ function SessionDetail({
             Dice history
           </button>
         </div>
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            marginTop: "8px",
-            cursor: "pointer",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={sessionData?.show_position_effect_to_players !== false}
-            onChange={(e) =>
-              handleUpdateSession({
-                show_position_effect_to_players: e.target.checked,
-              })
-            }
-          />
-          <span>
-            Show position & effect to players on their character sheets
-          </span>
-        </label>
+        <div style={{ marginTop: "8px", fontSize: "12px", color: "#9ca3af" }}>
+          Position & effect are always shown to players.
+        </div>
         <div
           style={{
             display: "flex",
@@ -3276,12 +3248,15 @@ function SessionDetail({
               />{" "}
               Show position & effect on rows
             </label>
-            {rolls.length === 0 ? (
+            {rolls.filter((r) => (r.roll_type || "").toUpperCase() === "ACTION")
+              .length === 0 ? (
               <div style={{ color: "#6b7280", fontSize: "12px" }}>
                 No rolls for this session.
               </div>
             ) : (
-              rolls.map((r) => (
+              rolls
+                .filter((r) => (r.roll_type || "").toUpperCase() === "ACTION")
+                .map((r) => (
                 <DiceHistoryRow
                   key={r.id}
                   roll={r}
@@ -3290,7 +3265,7 @@ function SessionDetail({
                   onGrantXP={handleGrantXP}
                   isGM
                 />
-              ))
+                ))
             )}
             <div
               style={{
@@ -3448,31 +3423,6 @@ function SessionDetail({
         </div>
       </div>
 
-      {/* Harm for players */}
-      <div style={S.card}>
-        <span style={S.sectionLbl}>Harm for Players</span>
-        {campaignChars.length === 0 ? (
-          <div style={{ color: "#6b7280" }}>No characters in campaign.</div>
-        ) : (
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "12px",
-              alignItems: "flex-start",
-            }}
-          >
-            {campaignChars.map((ch) => (
-              <HarmEditor
-                key={ch.id}
-                character={ch}
-                onSave={(data) => handlePatchCharacterHarm(ch.id, data)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* Goals */}
       <GoalsEditor sessionData={sessionData} onSave={handleUpdateSession} />
 
@@ -3625,114 +3575,6 @@ function GoalsEditor({ sessionData, onSave }) {
       </div>
       <button onClick={() => onSave(form)} style={S.btnPrimary}>
         Save goals
-      </button>
-    </div>
-  );
-}
-
-function HarmEditor({ character, onSave }) {
-  const [harm, setHarm] = useState({
-    harm_level1_used: character.harm_level1_used ?? false,
-    harm_level1_name: character.harm_level1_name || "",
-    harm_level1_slot2_used: character.harm_level1_slot2_used ?? false,
-    harm_level1_slot2_name: character.harm_level1_slot2_name || "",
-    harm_level2_used: character.harm_level2_used ?? false,
-    harm_level2_name: character.harm_level2_name || "",
-    harm_level2_slot2_used: character.harm_level2_slot2_used ?? false,
-    harm_level2_slot2_name: character.harm_level2_slot2_name || "",
-    harm_level3_used: character.harm_level3_used ?? false,
-    harm_level3_name: character.harm_level3_name || "",
-    harm_level4_used: character.harm_level4_used ?? false,
-    harm_level4_name: character.harm_level4_name || "",
-  });
-  useEffect(() => {
-    setHarm({
-      harm_level1_used: character.harm_level1_used ?? false,
-      harm_level1_name: character.harm_level1_name || "",
-      harm_level1_slot2_used: character.harm_level1_slot2_used ?? false,
-      harm_level1_slot2_name: character.harm_level1_slot2_name || "",
-      harm_level2_used: character.harm_level2_used ?? false,
-      harm_level2_name: character.harm_level2_name || "",
-      harm_level2_slot2_used: character.harm_level2_slot2_used ?? false,
-      harm_level2_slot2_name: character.harm_level2_slot2_name || "",
-      harm_level3_used: character.harm_level3_used ?? false,
-      harm_level3_name: character.harm_level3_name || "",
-      harm_level4_used: character.harm_level4_used ?? false,
-      harm_level4_name: character.harm_level4_name || "",
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [character.id]);
-  const save = () => onSave(harm);
-  const renderSlot = (usedKey, nameKey, levelLabel) => (
-    <div
-      key={usedKey}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-        marginTop: "4px",
-      }}
-    >
-      <input
-        type="checkbox"
-        checked={harm[usedKey]}
-        onChange={(e) =>
-          setHarm((p) => ({ ...p, [usedKey]: e.target.checked }))
-        }
-      />
-      <input
-        style={{ ...S.inp, flex: 1, maxWidth: "200px" }}
-        placeholder={levelLabel}
-        value={harm[nameKey]}
-        onChange={(e) => setHarm((p) => ({ ...p, [nameKey]: e.target.value }))}
-      />
-    </div>
-  );
-  return (
-    <div
-      style={{
-        boxSizing: "border-box",
-        flex: "1 1 280px",
-        minWidth: "240px",
-        padding: "8px 10px",
-        border: "1px solid #374151",
-        borderRadius: "4px",
-      }}
-    >
-      <div style={{ fontWeight: "bold", marginBottom: "4px" }}>
-        {character.true_name || character.alias || "Unnamed"}
-      </div>
-      {/* Level 1: 2 slots */}
-      {renderSlot(
-        "harm_level1_used",
-        "harm_level1_name",
-        "Level 1 harm (slot 1)",
-      )}
-      {renderSlot(
-        "harm_level1_slot2_used",
-        "harm_level1_slot2_name",
-        "Level 1 harm (slot 2)",
-      )}
-      {/* Level 2: 2 slots */}
-      {renderSlot(
-        "harm_level2_used",
-        "harm_level2_name",
-        "Level 2 harm (slot 1)",
-      )}
-      {renderSlot(
-        "harm_level2_slot2_used",
-        "harm_level2_slot2_name",
-        "Level 2 harm (slot 2)",
-      )}
-      {/* Level 3: 1 slot */}
-      {renderSlot("harm_level3_used", "harm_level3_name", "Level 3 harm")}
-      {/* Level 4: 1 slot */}
-      {renderSlot("harm_level4_used", "harm_level4_name", "Level 4 harm")}
-      <button
-        onClick={save}
-        style={{ ...S.btn, marginTop: "6px", fontSize: "10px" }}
-      >
-        Save harm
       </button>
     </div>
   );

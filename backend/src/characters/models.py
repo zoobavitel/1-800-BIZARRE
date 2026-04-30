@@ -1560,6 +1560,11 @@ class Session(models.Model):
         blank=True,
         help_text="GM-set label for the current roll goal; copied to Roll on commit.",
     )
+    roll_goal_by_character = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Map of character id (string) to GM-set roll goal label for that player.",
+    )
     devils_bargain_by_character = models.JSONField(
         default=dict,
         blank=True,

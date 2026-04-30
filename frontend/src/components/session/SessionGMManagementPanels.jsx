@@ -1,6 +1,7 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   sessionAPI,
+  rollAPI,
   resolveMediaUrl,
   npcAPI,
   characterAPI,
@@ -100,6 +101,11 @@ export default function SessionGMManagementPanels({
   const [showAddNpc, setShowAddNpc] = useState(false);
   const [saving, setSaving] = useState(false);
   const [localNpcPatch, setLocalNpcPatch] = useState({});
+  const [sessionRolls, setSessionRolls] = useState([]);
+  const [harmDraftByChar, setHarmDraftByChar] = useState({});
+  const [goalAssignCharId, setGoalAssignCharId] = useState("");
+  const [goalAssignDraft, setGoalAssignDraft] = useState("");
+  const [goalAssignMode, setGoalAssignMode] = useState("global");
 
   const npcInvolvements = useMemo(
     () => sessionData?.npc_involvements || [],
@@ -203,6 +209,46 @@ export default function SessionGMManagementPanels({
   const peMap = sessionData?.position_effect_by_character || {};
   const defaultPos = sessionData?.default_position || "risky";
   const defaultEff = sessionData?.default_effect || "standard";
+  const goalMap = useMemo(
+    () => sessionData?.roll_goal_by_character || {},
+    [sessionData?.roll_goal_by_character],
+  );
+
+  useEffect(() => {
+    rollAPI
+      .getRolls({ session: session.id })
+      .then((rows) => setSessionRolls(Array.isArray(rows) ? rows : rows?.results || []))
+      .catch(() => setSessionRolls([]));
+  }, [session.id]);
+
+  useEffect(() => {
+    const next = {};
+    (campaignChars || []).forEach((ch) => {
+      const full = (characters || []).find((c) => c.id === ch.id) || ch;
+      const l1a = (full.harm_level1_name || "").toString();
+      const l1b = (full.harm_level1_slot2_name || "").toString();
+      const l2a = (full.harm_level2_name || "").toString();
+      const l2b = (full.harm_level2_slot2_name || "").toString();
+      const l3 = (full.harm_level3_name || "").toString();
+      const l4 = (full.harm_level4_name || "").toString();
+      next[ch.id] = { l1a, l1b, l2a, l2b, l3, l4 };
+    });
+    setHarmDraftByChar(next);
+  }, [campaignChars, characters]);
+
+  useEffect(() => {
+    const first = campaignChars?.[0]?.id;
+    if (!goalAssignCharId && first != null) {
+      setGoalAssignCharId(String(first));
+    }
+  }, [campaignChars, goalAssignCharId]);
+
+  useEffect(() => {
+    if (!goalAssignCharId) return;
+    const v =
+      goalMap[String(goalAssignCharId)] ?? goalMap[goalAssignCharId] ?? "";
+    setGoalAssignDraft(String(v || ""));
+  }, [goalAssignCharId, goalMap]);
 
   const handleNpcStandStep = (npc, key, delta) => {
     const g = rawStandToGrades(npc.stand_coin_stats);
@@ -566,87 +612,279 @@ export default function SessionGMManagementPanels({
         </p>
         <div style={{ marginBottom: 10, maxWidth: 420 }}>
           <div style={lbl}>Roll goal label (players see in roll pool)</div>
-          <input
-            style={{ ...S.inp, width: "100%" }}
-            value={sessionData?.roll_goal_label ?? ""}
-            onChange={(e) =>
-              setSessionData((p) => ({
-                ...p,
-                roll_goal_label: e.target.value,
-              }))
-            }
-            onBlur={(e) => {
-              const value = e.target.value;
-              setSaving(true);
-              sessionAPI
-                .patchSession(session.id, { roll_goal_label: value })
-                .then((updated) => {
-                  setSessionData(updated);
-                  onRefresh();
-                })
-                .catch((err) => setError(err.message || "Save failed"))
-                .finally(() => setSaving(false));
-            }}
-            placeholder="e.g. Quietly open the service door"
-          />
+          <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+            <button
+              type="button"
+              onClick={() => setGoalAssignMode("global")}
+              style={{
+                ...S.btn,
+                fontSize: 10,
+                background: goalAssignMode === "global" ? "#4338ca" : "#1f2937",
+                color: goalAssignMode === "global" ? "#fff" : "#9ca3af",
+              }}
+            >
+              Global
+            </button>
+            <button
+              type="button"
+              onClick={() => setGoalAssignMode("individual")}
+              style={{
+                ...S.btn,
+                fontSize: 10,
+                background:
+                  goalAssignMode === "individual" ? "#4338ca" : "#1f2937",
+                color: goalAssignMode === "individual" ? "#fff" : "#9ca3af",
+              }}
+            >
+              Individual
+            </button>
+          </div>
+          {goalAssignMode === "global" ? (
+            <div style={{ display: "grid", gap: 6 }}>
+              <input
+                style={{ ...S.inp, width: "100%" }}
+                value={sessionData?.roll_goal_label ?? ""}
+                onChange={(e) =>
+                  setSessionData((p) => ({
+                    ...p,
+                    roll_goal_label: e.target.value,
+                  }))
+                }
+                onBlur={(e) => {
+                  const value = e.target.value || "";
+                  setSaving(true);
+                  sessionAPI
+                    .patchSession(session.id, { roll_goal_label: value })
+                    .then((updated) => {
+                      setSessionData(updated);
+                      onRefresh();
+                    })
+                    .catch((err) => setError(err.message || "Save failed"))
+                    .finally(() => setSaving(false));
+                }}
+                placeholder="e.g. Quietly open the service door"
+              />
+              <div style={{ fontSize: 10, color: "#6b7280" }}>
+                Applies to everyone unless a per-player label is set.
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 6 }}>
+              <select
+                style={{ ...S.select, width: "100%" }}
+                value={goalAssignCharId}
+                onChange={(e) => setGoalAssignCharId(e.target.value)}
+              >
+                <option value="">Choose player</option>
+                {(campaignChars || []).map((ch) => (
+                  <option key={ch.id} value={String(ch.id)}>
+                    {ch.true_name || ch.name || `PC ${ch.id}`}
+                  </option>
+                ))}
+              </select>
+              <input
+                style={{ ...S.inp, width: "100%" }}
+                value={goalAssignDraft}
+                onChange={(e) => setGoalAssignDraft(e.target.value)}
+                onBlur={(e) => {
+                  const cid = String(goalAssignCharId || "").trim();
+                  if (!cid) return;
+                  const value = (e.target.value || "").trim();
+                  const next = { ...(goalMap || {}) };
+                  if (!value) delete next[cid];
+                  else next[cid] = value;
+                  setSaving(true);
+                  sessionAPI
+                    .patchSession(session.id, { roll_goal_by_character: next })
+                    .then((updated) => {
+                      setSessionData(updated);
+                      onRefresh();
+                    })
+                    .catch((err) => setError(err.message || "Save failed"))
+                    .finally(() => setSaving(false));
+                }}
+                placeholder="e.g. Quietly open the service door"
+              />
+              <div style={{ fontSize: 10, color: "#6b7280" }}>
+                Assigned per selected player; this prepopulates their roll goal
+                field in character sheet.
+              </div>
+            </div>
+          )}
         </div>
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-            <thead>
-              <tr style={{ color: "#9ca3af" }}>
-                <th style={{ textAlign: "left", padding: 4 }}>PC</th>
-                <th style={{ padding: 4 }}>Position</th>
-                <th style={{ padding: 4 }}>Effect</th>
-                <th style={{ padding: 4 }}>Reset</th>
-              </tr>
-            </thead>
-            <tbody>
-              {campaignChars.map((ch) => {
-                const id = ch.id;
-                const row = peMap[String(id)] || peMap[id] || null;
-                const pos = row?.position || defaultPos;
-                const eff = row?.effect || defaultEff;
-                return (
-                  <tr key={id} style={{ borderTop: "1px solid #374151" }}>
-                    <td style={{ padding: 6 }}>{ch.true_name || ch.name || id}</td>
-                    <td style={{ padding: 4 }}>
-                      <PositionStack
-                        activePosition={pos}
-                        readOnly={saving}
-                        onSelect={(value) =>
-                          mergePosEffect({
-                            [id]: { position: value, effect: eff },
-                          })
-                        }
-                      />
-                    </td>
-                    <td style={{ padding: 4 }}>
-                      <EffectShapes
-                        activeEffect={eff}
-                        readOnly={saving}
-                        onSelect={(value) =>
-                          mergePosEffect({
-                            [id]: { position: pos, effect: value },
-                          })
-                        }
-                      />
-                    </td>
-                    <td style={{ padding: 4 }}>
-                      <button
-                        type="button"
-                        onClick={() => mergePosEffect({ [id]: null })}
-                        style={{ ...S.btnGhost, fontSize: 10 }}
-                        disabled={saving}
-                        title="Use session default for this PC"
-                      >
-                        Reset
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div style={{ display: "grid", gap: 10 }}>
+          {campaignChars.map((ch) => {
+            const id = ch.id;
+            const row = peMap[String(id)] || peMap[id] || null;
+            const pos = row?.position || defaultPos;
+            const eff = row?.effect || defaultEff;
+            return (
+              <div
+                key={id}
+                style={{
+                  border: "1px solid #374151",
+                  borderRadius: 8,
+                  padding: 10,
+                  background: "#0b1220",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 8,
+                    gap: 8,
+                  }}
+                >
+                  <strong style={{ color: "#e5e7eb", fontSize: 12 }}>
+                    {ch.true_name || ch.name || id}
+                  </strong>
+                  <button
+                    type="button"
+                    onClick={() => mergePosEffect({ [id]: null })}
+                    style={{ ...S.btnGhost, fontSize: 10 }}
+                    disabled={saving}
+                    title="Use session default for this PC"
+                  >
+                    Reset
+                  </button>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 18,
+                    flexWrap: "wrap",
+                    alignItems: "flex-start",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                    <PositionStack
+                      activePosition={pos}
+                      readOnly={saving}
+                      onSelect={(value) =>
+                        mergePosEffect({
+                          [id]: { position: value, effect: eff },
+                        })
+                      }
+                    />
+                    <EffectShapes
+                      activeEffect={eff}
+                      readOnly={saving}
+                      onSelect={(value) =>
+                        mergePosEffect({
+                          [id]: { position: pos, effect: value },
+                        })
+                      }
+                    />
+                  </div>
+                  <div style={{ minWidth: 220, flex: "1 1 220px" }}>
+                    <div style={lbl}>Recent rolls</div>
+                    <div
+                      style={{
+                        border: "1px solid #374151",
+                        borderRadius: 6,
+                        padding: 8,
+                        background: "#0d1117",
+                        maxHeight: 120,
+                        overflow: "auto",
+                        fontSize: 10,
+                        color: "#9ca3af",
+                      }}
+                    >
+                      {(sessionRolls || [])
+                        .filter(
+                          (r) =>
+                            String(r.character) === String(id) &&
+                            String((r.roll_type || "").toUpperCase()) === "ACTION" &&
+                            String((r.action_name || "").toUpperCase()) !== "FORTUNE",
+                        )
+                        .slice(0, 5).length === 0 ? (
+                        <div>—</div>
+                      ) : (
+                        (sessionRolls || [])
+                          .filter(
+                            (r) =>
+                              String(r.character) === String(id) &&
+                              String((r.roll_type || "").toUpperCase()) === "ACTION" &&
+                              String((r.action_name || "").toUpperCase()) !== "FORTUNE",
+                          )
+                          .slice(0, 5)
+                          .map((r) => (
+                            <div key={r.id} style={{ marginBottom: 4 }}>
+                              {(r.action_name || "action").toUpperCase()} ·{" "}
+                              {(r.results || []).join(", ")} →{" "}
+                              {(r.outcome || "").replace(/_/g, " ")}
+                            </div>
+                          ))
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ minWidth: 220, flex: "1 1 220px" }}>
+                    <div style={lbl}>Harm (compact)</div>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 6,
+                        fontSize: 10,
+                      }}
+                    >
+                      {[
+                        ["l1a", "L1A"],
+                        ["l1b", "L1B"],
+                        ["l2a", "L2A"],
+                        ["l2b", "L2B"],
+                        ["l3", "L3"],
+                        ["l4", "L4"],
+                      ].map(([key, label]) => (
+                        <input
+                          key={key}
+                          value={harmDraftByChar[id]?.[key] || ""}
+                          onChange={(e) =>
+                            setHarmDraftByChar((prev) => ({
+                              ...prev,
+                              [id]: { ...(prev[id] || {}), [key]: e.target.value },
+                            }))
+                          }
+                          onBlur={async () => {
+                            const d = harmDraftByChar[id] || {};
+                            const payload = {
+                              harm_level1_name: d.l1a || "",
+                              harm_level1_used: !!(d.l1a || "").trim(),
+                              harm_level1_slot2_name: d.l1b || "",
+                              harm_level1_slot2_used: !!(d.l1b || "").trim(),
+                              harm_level2_name: d.l2a || "",
+                              harm_level2_used: !!(d.l2a || "").trim(),
+                              harm_level2_slot2_name: d.l2b || "",
+                              harm_level2_slot2_used: !!(d.l2b || "").trim(),
+                              harm_level3_name: d.l3 || "",
+                              harm_level3_used: !!(d.l3 || "").trim(),
+                              harm_level4_name: d.l4 || "",
+                              harm_level4_used: !!(d.l4 || "").trim(),
+                            };
+                            try {
+                              await characterAPI.patchCharacter(id, payload);
+                              onRefresh();
+                            } catch (e) {
+                              setError(e.message || "Failed to save harm");
+                            }
+                          }}
+                          placeholder={label}
+                          style={{
+                            ...S.inp,
+                            fontSize: 10,
+                            padding: "4px 6px",
+                            minWidth: 0,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </>

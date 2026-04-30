@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
+          "add action_name field to GroupAction model and update related serializers and views",
           "enhance NPC routing and campaign management"
         ]
       }
@@ -433,12 +434,6 @@ export const PATCH_NOTES = [
         "title": "Maintenance",
         "items": [
           "add prettier formatting GitHub Action with config and scripts"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "per-section SRD pages, split script, and rules nav layout"
         ]
       }
     ]

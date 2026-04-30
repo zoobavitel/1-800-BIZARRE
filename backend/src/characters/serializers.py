@@ -2041,6 +2041,8 @@ class CampaignSerializer(serializers.ModelSerializer):
             "default_position": getattr(s, "default_position", "risky") or "risky",
             "default_effect": getattr(s, "default_effect", "standard") or "standard",
             "roll_goal_label": getattr(s, "roll_goal_label", "") or "",
+            "roll_goal_by_character": getattr(s, "roll_goal_by_character", None)
+            or {},
             "devils_bargain_by_character": getattr(
                 s, "devils_bargain_by_character", None
             )

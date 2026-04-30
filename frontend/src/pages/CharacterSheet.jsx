@@ -120,6 +120,41 @@ function reputationTierLabel(v) {
   return "Neutral";
 }
 
+function computeResistanceSummary(diceResults) {
+  const sorted = (Array.isArray(diceResults) ? diceResults : [])
+    .map((n) => Number(n))
+    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 6);
+  const highest = sorted.length ? Math.max(...sorted) : 0;
+  const sixes = sorted.filter((d) => d === 6).length;
+  const isCritical = sixes >= 2;
+  const stressCost = isCritical ? -1 : Math.max(0, 6 - highest);
+  const outcome = isCritical
+    ? "CRITICAL_SUCCESS"
+    : highest >= 6
+      ? "FULL_SUCCESS"
+      : highest >= 4
+        ? "PARTIAL_SUCCESS"
+        : "FAILURE";
+  return { highest, isCritical, stressCost, outcome };
+}
+
+const VICE_OVERINDULGE_CHOICES = [
+  { value: "", label: "If overindulged, record outcome…" },
+  {
+    value: "trouble",
+    label: "Attract trouble (extra entanglement)",
+  },
+  { value: "brag", label: "Brag about exploits (+2 heat)" },
+  {
+    value: "lost",
+    label: "Lost (weeks away; alt PC; return fully healed)",
+  },
+  {
+    value: "tapped",
+    label: "Tapped (purveyor cuts you off)",
+  },
+];
+
 const HISTORY_FIELD_LABELS = {
   true_name: "Name",
   stand_name: "Stand name",
@@ -1057,6 +1092,8 @@ const CharacterSheetWrapper = ({
 
   // Dice result
   const [diceResult, setDiceResult] = useState(null);
+  /** { dice, highest, dicePool, wouldOverindulge, stressBefore, applied?, overindulge? } */
+  const [viceRollResult, setViceRollResult] = useState(null);
 
   // Crew
   const [crewData, setCrewData] = useState({
@@ -1233,6 +1270,35 @@ const CharacterSheetWrapper = ({
   const getAttributeDice = (actions) =>
     actions.filter((a) => actionRatings[a] > 0).length;
 
+  const viceAttributeDice = useMemo(() => {
+    const groups = [
+      { key: "INSIGHT", actions: ["HUNT", "STUDY", "SURVEY", "TINKER"] },
+      { key: "PROWESS", actions: ["FINESSE", "PROWL", "SKIRMISH", "WRECK"] },
+      { key: "RESOLVE", actions: ["BIZARRE", "COMMAND", "CONSORT", "SWAY"] },
+    ];
+    return groups.map((g) => ({
+      ...g,
+      dice: g.actions.filter((a) => (actionRatings[a] ?? 0) > 0).length,
+    }));
+  }, [actionRatings]);
+
+  const viceDicePool = useMemo(() => {
+    const vals = viceAttributeDice.map((g) => g.dice);
+    return vals.length ? Math.min(...vals) : 0;
+  }, [viceAttributeDice]);
+
+  const viceLowestLabels = useMemo(() => {
+    return viceAttributeDice
+      .filter((g) => g.dice === viceDicePool)
+      .map((g) => g.key)
+      .join(", ");
+  }, [viceAttributeDice, viceDicePool]);
+
+  const traumaMarkedCount = useMemo(
+    () => Object.values(trauma || {}).filter(Boolean).length,
+    [trauma],
+  );
+
   // ─── Handlers ────────────────────────────────────────────────────────────────
 
   // FIX 1: Creation-mode dot clicks — hard cap 7 total / max 2 per action
@@ -1375,12 +1441,31 @@ const CharacterSheetWrapper = ({
   const [rollApiError, setRollApiError] = useState(null);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [historyMode, setHistoryMode] = useState("session");
-  const [historyCollapsed, setHistoryCollapsed] = useState(false);
   const [historyRows, setHistoryRows] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState(null);
+  const [historyWriteError, setHistoryWriteError] = useState(null);
   const [historySessionId, setHistorySessionId] = useState(null);
   const [historyCharacterFilter, setHistoryCharacterFilter] = useState("all");
+  const [historyRefreshTick, setHistoryRefreshTick] = useState(0);
+  const [showHistoryManualModal, setShowHistoryManualModal] = useState(false);
+  const [historyManualSaving, setHistoryManualSaving] = useState(false);
+  const [historyManual, setHistoryManual] = useState({
+    rollType: "ACTION",
+    sessionId: "",
+    action: "bizarre",
+    dice: "4,5",
+    outcome: "FULL_SUCCESS",
+    position: "risky",
+    effect: "standard",
+    resistanceHarmTarget: "",
+    pushDice: false,
+    pushEffect: false,
+    devil: false,
+    helpDie: false,
+    groupAction: false,
+    groupActionId: "",
+  });
   const [showXpHistoryModal, setShowXpHistoryModal] = useState(false);
   const [xpTimelineLoading, setXpTimelineLoading] = useState(false);
   const [xpTimelineError, setXpTimelineError] = useState(null);
@@ -1405,8 +1490,48 @@ const CharacterSheetWrapper = ({
   const [expandedActionInfo, setExpandedActionInfo] = useState(null);
   const [campaignAssignStatus, setCampaignAssignStatus] = useState(null);
   const [campaignAssignError, setCampaignAssignError] = useState(null);
+  const [resistanceHarmTarget, setResistanceHarmTarget] = useState("");
+  const [resistanceApplyErr, setResistanceApplyErr] = useState(null);
   const harmLevel3Used =
     ((harm?.level3?.[0] ?? "")?.toString?.()?.trim?.() ?? "") !== "";
+
+  const filledHarmOptions = useMemo(() => {
+    const levels = [
+      ["level1", "Level 1"],
+      ["level2", "Level 2"],
+      ["level3", "Level 3"],
+      ["level4", "Level 4"],
+    ];
+    const out = [];
+    levels.forEach(([level, label]) => {
+      const slots = Array.isArray(harm?.[level]) ? harm[level] : [];
+      slots.forEach((value, idx) => {
+        if (String(value || "").trim()) {
+          out.push({
+            value: `${level}:${idx}`,
+            label: `${label}${slots.length > 1 ? String.fromCharCode(65 + idx) : ""} — ${String(value).trim()}`,
+          });
+        }
+      });
+    });
+    return out;
+  }, [harm]);
+
+  const clearHarmSlot = useCallback((target) => {
+    const [level, idxRaw] = String(target || "").split(":");
+    const idx = parseInt(String(idxRaw || ""), 10);
+    if (!level || !Number.isFinite(idx)) return false;
+    let changed = false;
+    setHarm((prev) => {
+      const row = Array.isArray(prev?.[level]) ? [...prev[level]] : [];
+      if (!row.length || idx < 0 || idx >= row.length) return prev;
+      if (!String(row[idx] || "").trim()) return prev;
+      row[idx] = "";
+      changed = true;
+      return { ...prev, [level]: row };
+    });
+    return changed;
+  }, []);
 
   const xpReqSnapshot = useMemo(
     () =>
@@ -1445,7 +1570,28 @@ const CharacterSheetWrapper = ({
 
   useEffect(() => {
     setHistorySessionId(activeSessionId || null);
+    setHistoryManual((p) => ({
+      ...p,
+      sessionId: activeSessionId ? String(activeSessionId) : "",
+    }));
   }, [activeSessionId]);
+
+  useEffect(() => {
+    if (isGM) return;
+    if (characterId == null) return;
+    setHistoryCharacterFilter(String(characterId));
+  }, [isGM, characterId, showHistoryPanel, historyMode]);
+
+  useEffect(() => {
+    if (!showHistoryPanel) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setShowHistoryPanel(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showHistoryPanel]);
 
   useEffect(() => {
     if (!showXpHistoryModal || !characterId) return;
@@ -1627,6 +1773,7 @@ const CharacterSheetWrapper = ({
     historyCharacterFilter,
     characterId,
     charCampaign?.id,
+    historyRefreshTick,
   ]);
 
   const helpCandidates = useMemo(() => {
@@ -1786,6 +1933,19 @@ const CharacterSheetWrapper = ({
     characterId,
   ]);
 
+  const assignedRollGoalLabel = useMemo(() => {
+    const asd = charCampaign?.active_session_detail;
+    const map = asd?.roll_goal_by_character;
+    if (map && characterId != null) {
+      const perChar = String(map[String(characterId)] ?? map[characterId] ?? "").trim();
+      if (perChar) return perChar;
+    }
+    return String(asd?.roll_goal_label || "").trim();
+  }, [
+    charCampaign?.active_session_detail,
+    characterId,
+  ]);
+
   const rollPushMode = useMemo(() => {
     if (rollModal.devil_bargain_dice) return "devil";
     if (rollModal.push_effect) return "push_effect";
@@ -1900,7 +2060,7 @@ const CharacterSheetWrapper = ({
         bonus_dice: bonusDiceFromAbilities,
         ability_effect_steps: abilityEffectSteps,
         goal_label:
-          goalFromDraft || (asd?.roll_goal_label || "").trim() || undefined,
+          goalFromDraft || assignedRollGoalLabel || undefined,
         ability_bonuses: abilityBonusAudit.length
           ? abilityBonusAudit
           : undefined,
@@ -2003,7 +2163,7 @@ const CharacterSheetWrapper = ({
       setRollAbilityBoost({});
       setDevilBargainConfirmed(false);
       const asdGoal = (
-        charCampaign?.active_session_detail?.roll_goal_label || ""
+        assignedRollGoalLabel || ""
       ).trim();
       setRollGoalDraft(asdGoal);
       setAssistHelperId("");
@@ -2064,6 +2224,8 @@ const CharacterSheetWrapper = ({
       isDesperateAction,
       isCritical,
     });
+    setResistanceApplyErr(null);
+    setResistanceHarmTarget("");
 
     if (isDesperateAction && !isResistance) {
       const attr = ACTION_ATTR[actionName];
@@ -2666,15 +2828,29 @@ const CharacterSheetWrapper = ({
                   {showHistoryPanel && (
                     <div
                       style={{
+                        position: "fixed",
+                        inset: 0,
+                        background: "rgba(0,0,0,0.62)",
+                        zIndex: 125,
+                        display: "flex",
+                        alignItems: "flex-start",
+                        justifyContent: "center",
+                        paddingTop: "80px",
+                      }}
+                      onClick={() => setShowHistoryPanel(false)}
+                    >
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      style={{
                         background: "#111827",
                         border: "1px solid #374151",
                         borderRadius: 8,
                         padding: 10,
-                        minWidth: 260,
-                        maxWidth: 520,
-                        maxHeight: 320,
+                        width: "min(680px, 92vw)",
+                        maxHeight: "70vh",
                         overflowY: "auto",
                         fontSize: 11,
+                        boxShadow: "0 14px 40px rgba(0,0,0,0.55)",
                       }}
                     >
                       <div
@@ -2688,22 +2864,25 @@ const CharacterSheetWrapper = ({
                         <div style={{ color: "#a78bfa", fontWeight: "bold" }}>
                           History
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setHistoryCollapsed((v) => !v)}
+                        <div
                           style={{
-                            ...S.btn,
-                            padding: "2px 8px",
-                            fontSize: 10,
-                            background: "#4338ca",
-                            color: "#f9fafb",
-                            border: "1px solid #818cf8",
+                            display: "flex",
+                            gap: 8,
+                            alignItems: "center",
                           }}
                         >
-                          {historyCollapsed ? "Expand" : "Collapse"}
-                        </button>
+                          <span style={{ fontSize: 10, color: "#9ca3af" }}>
+                            Press Esc to exit view
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowHistoryPanel(false)}
+                            style={{ ...S.btn, padding: "2px 8px", fontSize: 10 }}
+                          >
+                            Close
+                          </button>
+                        </div>
                       </div>
-                      {!historyCollapsed && (
                         <>
                           <div
                             style={{
@@ -2739,52 +2918,558 @@ const CharacterSheetWrapper = ({
                                 fontSize: 10,
                                 padding: "4px 8px",
                                 background:
-                                  historyMode === "session" ? "#312e81" : "#1f2937",
+                                  historyMode === "session" ? "#4338ca" : "#1f2937",
+                                color:
+                                  historyMode === "session" ? "#f9fafb" : "#d1d5db",
+                                border:
+                                  historyMode === "session"
+                                    ? "1px solid #818cf8"
+                                    : "1px solid #374151",
                               }}
                             >
                               Session History
                             </button>
                           </div>
                           {historyMode === "session" && (
-                            <div
-                              style={{
-                                display: "grid",
-                                gridTemplateColumns: "1fr 1fr",
-                                gap: 6,
-                                marginBottom: 8,
-                              }}
-                            >
-                              <select
-                                value={historySessionId || ""}
-                                onChange={(e) =>
-                                  setHistorySessionId(
-                                    e.target.value ? Number(e.target.value) : null,
-                                  )
-                                }
-                                style={{ ...S.sel, fontSize: 10, padding: "2px 6px" }}
+                            <>
+                              <div
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "1fr 1fr",
+                                  gap: 6,
+                                  marginBottom: 8,
+                                }}
                               >
-                                <option value="">No session</option>
-                                {(charCampaign?.sessions || []).map((s) => (
-                                  <option key={s.id} value={s.id}>
-                                    {s.name || `Session ${s.id}`}
-                                  </option>
-                                ))}
-                              </select>
-                              <select
-                                value={historyCharacterFilter}
-                                onChange={(e) =>
-                                  setHistoryCharacterFilter(e.target.value)
-                                }
-                                style={{ ...S.sel, fontSize: 10, padding: "2px 6px" }}
+                                <select
+                                  value={historySessionId || ""}
+                                  onChange={(e) =>
+                                    setHistorySessionId(
+                                      e.target.value ? Number(e.target.value) : null,
+                                    )
+                                  }
+                                  style={{ ...S.sel, fontSize: 10, padding: "2px 6px" }}
+                                >
+                                  <option value="">No session</option>
+                                  {(charCampaign?.sessions || []).map((s) => (
+                                    <option key={s.id} value={s.id}>
+                                      {s.name || `Session ${s.id}`}
+                                    </option>
+                                  ))}
+                                </select>
+                                <select
+                                  value={historyCharacterFilter}
+                                  onChange={(e) =>
+                                    setHistoryCharacterFilter(e.target.value)
+                                  }
+                                  disabled={!isGM}
+                                  style={{ ...S.sel, fontSize: 10, padding: "2px 6px" }}
+                                >
+                                  {isGM ? (
+                                    <option value="all">All players</option>
+                                  ) : null}
+                                  {(charCampaign?.campaign_characters || [])
+                                    .filter((pc) =>
+                                      isGM
+                                        ? true
+                                        : String(pc.id) === String(characterId),
+                                    )
+                                    .map((pc) => (
+                                    <option key={pc.id} value={pc.id}>
+                                      {pc.true_name || pc.name || `PC ${pc.id}`}
+                                    </option>
+                                    ))}
+                                </select>
+                              </div>
+                              <div
+                                style={{
+                                  marginBottom: 8,
+                                }}
                               >
-                                <option value="all">All players</option>
-                                {(charCampaign?.campaign_characters || []).map((pc) => (
-                                  <option key={pc.id} value={pc.id}>
-                                    {pc.true_name || pc.name || `PC ${pc.id}`}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setShowHistoryManualModal((v) => !v)
+                                  }
+                                  style={{
+                                    ...S.btn,
+                                    fontSize: 10,
+                                    background: "#4338ca",
+                                    color: "#fff",
+                                  }}
+                                >
+                                  Manual record…
+                                </button>
+                                {showHistoryManualModal && (
+                                  <div
+                                    style={{
+                                      marginTop: 8,
+                                      background: "#0d1117",
+                                      border: "1px solid #374151",
+                                      borderRadius: 8,
+                                      padding: 10,
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        color: "#a78bfa",
+                                        fontWeight: "bold",
+                                        fontSize: 12,
+                                        marginBottom: 8,
+                                      }}
+                                    >
+                                      Manual history record
+                                    </div>
+                                    <div
+                                      style={{
+                                        display: "grid",
+                                        gridTemplateColumns: "1fr 1fr",
+                                        gap: 6,
+                                      }}
+                                    >
+                                      <select
+                                        value={historyManual.rollType}
+                                        onChange={(e) =>
+                                          setHistoryManual((p) => ({
+                                            ...p,
+                                            rollType: e.target.value,
+                                          }))
+                                        }
+                                        style={{
+                                          ...S.sel,
+                                          fontSize: 10,
+                                          padding: "2px 6px",
+                                        }}
+                                      >
+                                        <option value="ACTION">Action</option>
+                                        <option value="RESISTANCE">
+                                          Resistance
+                                        </option>
+                                      </select>
+                                      <select
+                                        value={historyManual.sessionId}
+                                        onChange={(e) =>
+                                          setHistoryManual((p) => ({
+                                            ...p,
+                                            sessionId: e.target.value,
+                                          }))
+                                        }
+                                        style={{
+                                          ...S.sel,
+                                          fontSize: 10,
+                                          padding: "2px 6px",
+                                        }}
+                                      >
+                                        <option value="">Session</option>
+                                        {(charCampaign?.sessions || []).map((s) => (
+                                          <option
+                                            key={s.id}
+                                            value={String(s.id)}
+                                          >
+                                            {s.name || `Session ${s.id}`}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      {historyManual.rollType === "RESISTANCE" ? (
+                                        <select
+                                          value={historyManual.action}
+                                          onChange={(e) =>
+                                            setHistoryManual((p) => ({
+                                              ...p,
+                                              action: e.target.value,
+                                            }))
+                                          }
+                                          style={{
+                                            ...S.sel,
+                                            fontSize: 10,
+                                            padding: "2px 6px",
+                                          }}
+                                        >
+                                          <option value="insight">Insight</option>
+                                          <option value="prowess">Prowess</option>
+                                          <option value="resolve">Resolve</option>
+                                        </select>
+                                      ) : (
+                                        <input
+                                          value={historyManual.action}
+                                          onChange={(e) =>
+                                            setHistoryManual((p) => ({
+                                              ...p,
+                                              action: e.target.value,
+                                            }))
+                                          }
+                                          style={{
+                                            ...S.inp,
+                                            fontSize: 10,
+                                            padding: "2px 6px",
+                                          }}
+                                          placeholder="Action"
+                                        />
+                                      )}
+                                      <input
+                                        value={historyManual.dice}
+                                        onChange={(e) =>
+                                          setHistoryManual((p) => ({
+                                            ...p,
+                                            dice: e.target.value,
+                                          }))
+                                        }
+                                        style={{
+                                          ...S.inp,
+                                          fontSize: 10,
+                                          padding: "2px 6px",
+                                        }}
+                                        placeholder="Dice e.g. 6,4"
+                                      />
+                                      {historyManual.rollType === "RESISTANCE" ? (
+                                        <>
+                                          <select
+                                            value={historyManual.resistanceHarmTarget}
+                                            onChange={(e) =>
+                                              setHistoryManual((p) => ({
+                                                ...p,
+                                                resistanceHarmTarget:
+                                                  e.target.value,
+                                              }))
+                                            }
+                                            style={{
+                                              ...S.sel,
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                            }}
+                                          >
+                                            <option value="">
+                                              Harm to reduce…
+                                            </option>
+                                            {filledHarmOptions.map((opt) => (
+                                              <option
+                                                key={opt.value}
+                                                value={opt.value}
+                                              >
+                                                {opt.label}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <div
+                                            style={{
+                                              ...S.inp,
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                              color: "#d1d5db",
+                                              display: "flex",
+                                              alignItems: "center",
+                                            }}
+                                          >
+                                            Stress = 6 - highest die
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <select
+                                            value={historyManual.outcome}
+                                            onChange={(e) =>
+                                              setHistoryManual((p) => ({
+                                                ...p,
+                                                outcome: e.target.value,
+                                              }))
+                                            }
+                                            style={{
+                                              ...S.sel,
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                            }}
+                                          >
+                                            <option value="CRITICAL_SUCCESS">
+                                              Critical
+                                            </option>
+                                            <option value="FULL_SUCCESS">
+                                              Full
+                                            </option>
+                                            <option value="PARTIAL_SUCCESS">
+                                              Partial
+                                            </option>
+                                            <option value="FAILURE">
+                                              Failure
+                                            </option>
+                                          </select>
+                                          <select
+                                            value={historyManual.position}
+                                            onChange={(e) =>
+                                              setHistoryManual((p) => ({
+                                                ...p,
+                                                position: e.target.value,
+                                              }))
+                                            }
+                                            style={{
+                                              ...S.sel,
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                            }}
+                                          >
+                                            <option value="controlled">
+                                              Controlled
+                                            </option>
+                                            <option value="risky">Risky</option>
+                                            <option value="desperate">
+                                              Desperate
+                                            </option>
+                                          </select>
+                                          <select
+                                            value={historyManual.effect}
+                                            onChange={(e) =>
+                                              setHistoryManual((p) => ({
+                                                ...p,
+                                                effect: e.target.value,
+                                              }))
+                                            }
+                                            style={{
+                                              ...S.sel,
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                            }}
+                                          >
+                                            <option value="limited">
+                                              Limited
+                                            </option>
+                                            <option value="standard">
+                                              Standard
+                                            </option>
+                                            <option value="extreme">
+                                              Extreme
+                                            </option>
+                                          </select>
+                                        </>
+                                      )}
+                                    </div>
+                                    {historyManual.rollType !== "RESISTANCE" && (
+                                      <div
+                                        style={{
+                                          marginTop: 6,
+                                          display: "flex",
+                                          gap: 8,
+                                          flexWrap: "wrap",
+                                          fontSize: 10,
+                                        }}
+                                      >
+                                        {[
+                                          ["pushDice", "Push +1d"],
+                                          ["pushEffect", "Push +effect"],
+                                          ["devil", "Devil's bargain"],
+                                          ["helpDie", "Help +1d"],
+                                          ["groupAction", "Group action"],
+                                        ].map(([k, label]) => (
+                                          <label
+                                            key={k}
+                                            style={{ display: "flex", gap: 4 }}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={!!historyManual[k]}
+                                              onChange={(e) =>
+                                                setHistoryManual((p) => ({
+                                                  ...p,
+                                                  [k]: e.target.checked,
+                                                }))
+                                              }
+                                            />
+                                            <span>{label}</span>
+                                          </label>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {historyManual.rollType !== "RESISTANCE" &&
+                                    historyManual.groupAction ? (
+                                      <input
+                                        value={historyManual.groupActionId}
+                                        onChange={(e) =>
+                                          setHistoryManual((p) => ({
+                                            ...p,
+                                            groupActionId: e.target.value,
+                                          }))
+                                        }
+                                        style={{
+                                          ...S.inp,
+                                          marginTop: 6,
+                                          fontSize: 10,
+                                          padding: "2px 6px",
+                                          width: 120,
+                                        }}
+                                        placeholder="Group action id"
+                                      />
+                                    ) : null}
+                                    <div
+                                      style={{
+                                        marginTop: 8,
+                                        display: "flex",
+                                        gap: 8,
+                                        alignItems: "center",
+                                      }}
+                                    >
+                                      <button
+                                        type="button"
+                                        disabled={historyManualSaving}
+                                        onClick={async () => {
+                                          try {
+                                            setHistoryWriteError(null);
+                                            const sid = parseInt(
+                                              String(historyManual.sessionId || ""),
+                                              10,
+                                            );
+                                            if (!sid || !characterId) return;
+                                            const diceResults = String(
+                                              historyManual.dice || "",
+                                            )
+                                              .split(/[\s,]+/)
+                                              .map((n) => parseInt(n.trim(), 10))
+                                              .filter(
+                                                (n) =>
+                                                  Number.isFinite(n) &&
+                                                  n >= 1 &&
+                                                  n <= 6,
+                                              );
+                                            if (!diceResults.length) {
+                                              setHistoryWriteError(
+                                                "Enter at least one die result (1-6).",
+                                              );
+                                              return;
+                                            }
+                                            const isResistanceManual =
+                                              String(
+                                                historyManual.rollType ||
+                                                  "ACTION",
+                                              ).toUpperCase() ===
+                                              "RESISTANCE";
+                                            const resistanceSummary =
+                                              computeResistanceSummary(
+                                                diceResults,
+                                              );
+                                            if (
+                                              isResistanceManual &&
+                                              !historyManual.resistanceHarmTarget
+                                            ) {
+                                              setHistoryWriteError(
+                                                "Choose which harm slot this resistance roll reduces.",
+                                              );
+                                              return;
+                                            }
+                                            setHistoryManualSaving(true);
+                                            if (isResistanceManual) {
+                                              const reduced = clearHarmSlot(
+                                                historyManual.resistanceHarmTarget,
+                                              );
+                                              if (!reduced) {
+                                                setHistoryWriteError(
+                                                  "Selected harm slot is empty or invalid.",
+                                                );
+                                                setHistoryManualSaving(false);
+                                                return;
+                                              }
+                                              if (resistanceSummary.stressCost > 0)
+                                                applyStressCost(
+                                                  resistanceSummary.stressCost,
+                                                );
+                                            }
+                                            await rollAPI.createRoll({
+                                              character: characterId,
+                                              session: sid,
+                                              roll_type: isResistanceManual
+                                                ? "RESISTANCE"
+                                                : "ACTION",
+                                              action_name: String(
+                                                historyManual.action || "action",
+                                              ).toLowerCase(),
+                                              ...(isResistanceManual
+                                                ? {}
+                                                : {
+                                                    position:
+                                                      historyManual.position,
+                                                    effect: historyManual.effect,
+                                                  }),
+                                              dice_pool: diceResults.length,
+                                              results: diceResults,
+                                              outcome: isResistanceManual
+                                                ? resistanceSummary.outcome
+                                                : historyManual.outcome,
+                                              ...(isResistanceManual
+                                                ? {
+                                                    roller_stress_spent:
+                                                      resistanceSummary.stressCost >
+                                                      0
+                                                        ? resistanceSummary.stressCost
+                                                        : 0,
+                                                  }
+                                                : {
+                                                    push_for_dice:
+                                                      !!historyManual.pushDice,
+                                                    push_for_effect:
+                                                      !!historyManual.pushEffect,
+                                                    uses_devil_bargain:
+                                                      !!historyManual.devil,
+                                                    pool_assist_dice:
+                                                      historyManual.helpDie
+                                                        ? 1
+                                                        : 0,
+                                                    group_action:
+                                                      historyManual.groupAction &&
+                                                      historyManual.groupActionId
+                                                        ? parseInt(
+                                                            String(
+                                                              historyManual.groupActionId,
+                                                            ),
+                                                            10,
+                                                          )
+                                                        : undefined,
+                                                  }),
+                                              description:
+                                                isResistanceManual
+                                                  ? `Manual resistance record from history panel. Reduced harm slot ${historyManual.resistanceHarmTarget}. Stress marked: ${Math.max(0, resistanceSummary.stressCost)}.`
+                                                  : "Manual record from history panel",
+                                            });
+                                            setHistoryRefreshTick((v) => v + 1);
+                                            setShowHistoryManualModal(false);
+                                          } catch (e) {
+                                            setHistoryWriteError(
+                                              e.message ||
+                                                "Failed to create manual history record.",
+                                            );
+                                          } finally {
+                                            setHistoryManualSaving(false);
+                                          }
+                                        }}
+                                        style={{
+                                          ...S.btn,
+                                          fontSize: 10,
+                                          background: "#4338ca",
+                                          color: "#fff",
+                                        }}
+                                      >
+                                        {historyManualSaving
+                                          ? "Saving…"
+                                          : "Add manual record"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setShowHistoryManualModal(false)
+                                        }
+                                        style={{ ...S.btn, fontSize: 10 }}
+                                      >
+                                        Cancel
+                                      </button>
+                                      {historyWriteError ? (
+                                        <span
+                                          style={{
+                                            color: "#f87171",
+                                            fontSize: 10,
+                                          }}
+                                        >
+                                          {historyWriteError}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </>
                           )}
                           {historyLoading ? (
                             <div style={{ color: "#6b7280" }}>Loading history…</div>
@@ -2837,7 +3522,7 @@ const CharacterSheetWrapper = ({
                             ))
                           )}
                         </>
-                      )}
+                    </div>
                     </div>
                   )}
                 </div>
@@ -5315,70 +6000,55 @@ const CharacterSheetWrapper = ({
                             This does not grant +1 effect or +1d.
                           </div>
                         )}
-                      {charCampaign?.active_session_detail
-                        ?.show_position_effect_to_players !== false ? (
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "16px",
-                            flexWrap: "wrap",
-                            marginBottom: "12px",
-                            alignItems: "flex-end",
-                          }}
-                        >
-                          <div>
-                            <div
-                              style={{
-                                fontSize: "10px",
-                                color: "#9ca3af",
-                                marginBottom: "4px",
-                              }}
-                            >
-                              Position (this action)
-                            </div>
-                            <PositionStack
-                              activePosition={
-                                sessionOverridePositionEffect?.position ||
-                                charCampaign?.active_session_detail
-                                  ?.default_position ||
-                                "risky"
-                              }
-                              readOnly
-                            />
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "16px",
+                          flexWrap: "wrap",
+                          marginBottom: "12px",
+                          alignItems: "flex-end",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            Position (this action)
                           </div>
-                          <div>
-                            <div
-                              style={{
-                                fontSize: "10px",
-                                color: "#9ca3af",
-                                marginBottom: "4px",
-                              }}
-                            >
-                              Effect (this action)
-                            </div>
-                            <EffectShapes
-                              activeEffect={
-                                sessionOverridePositionEffect?.effect ||
-                                charCampaign?.active_session_detail
-                                  ?.default_effect ||
-                                "standard"
-                              }
-                              readOnly
-                            />
+                          <PositionStack
+                            activePosition={
+                              sessionOverridePositionEffect?.position ||
+                              charCampaign?.active_session_detail
+                                ?.default_position ||
+                              "risky"
+                            }
+                            readOnly
+                          />
+                        </div>
+                        <div>
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            Effect (this action)
                           </div>
+                          <EffectShapes
+                            activeEffect={
+                              sessionOverridePositionEffect?.effect ||
+                              charCampaign?.active_session_detail?.default_effect ||
+                              "standard"
+                            }
+                            readOnly
+                          />
                         </div>
-                      ) : (
-                        <div
-                          style={{
-                            fontSize: "12px",
-                            color: "#9ca3af",
-                            marginBottom: "12px",
-                          }}
-                        >
-                          Position and effect are hidden for this session — check
-                          with the table before rolling.
-                        </div>
-                      )}
+                      </div>
                       <div style={{ marginBottom: "12px" }}>
                         <label
                           style={{
@@ -5394,10 +6064,7 @@ const CharacterSheetWrapper = ({
                           value={rollGoalDraft}
                           onChange={(e) => setRollGoalDraft(e.target.value)}
                           placeholder={
-                            (
-                              charCampaign?.active_session_detail
-                                ?.roll_goal_label || ""
-                            ).trim() ||
+                            assignedRollGoalLabel ||
                             "What are you trying to achieve on this roll?"
                           }
                           rows={2}
@@ -6023,6 +6690,68 @@ const CharacterSheetWrapper = ({
                                 Pay no stress AND remove one previously filled
                                 stress box.
                               </div>
+                              <div
+                                style={{
+                                  marginTop: "8px",
+                                  display: "grid",
+                                  gridTemplateColumns: "1fr auto",
+                                  gap: "8px",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <select
+                                  value={resistanceHarmTarget}
+                                  onChange={(e) =>
+                                    setResistanceHarmTarget(e.target.value)
+                                  }
+                                  style={{ ...S.sel, fontSize: "11px" }}
+                                >
+                                  <option value="">Harm to reduce…</option>
+                                  {filledHarmOptions.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  onClick={() => {
+                                    setResistanceApplyErr(null);
+                                    if (!resistanceHarmTarget) {
+                                      setResistanceApplyErr(
+                                        "Choose a harm level to reduce before resolving resistance.",
+                                      );
+                                      return;
+                                    }
+                                    const reduced =
+                                      clearHarmSlot(resistanceHarmTarget);
+                                    if (!reduced) {
+                                      setResistanceApplyErr(
+                                        "Selected harm slot is empty.",
+                                      );
+                                      return;
+                                    }
+                                    setStressFilled((prev) =>
+                                      Math.max(0, (Number(prev) || 0) - 1),
+                                    );
+                                    setDiceResult((prev) =>
+                                      prev
+                                        ? { ...prev, resistanceApplied: true }
+                                        : prev,
+                                    );
+                                  }}
+                                  disabled={!!diceResult.resistanceApplied}
+                                  style={{
+                                    ...S.btn,
+                                    background: "#92400e",
+                                    color: "#fff",
+                                    fontSize: "11px",
+                                  }}
+                                >
+                                  {diceResult.resistanceApplied
+                                    ? "Applied"
+                                    : "Reduce harm + clear 1 stress"}
+                                </button>
+                              </div>
                             </>
                           ) : (
                             <>
@@ -6045,22 +6774,79 @@ const CharacterSheetWrapper = ({
                                 Consequence reduced by 1 level (or fully negated
                                 at the table&apos;s discretion).
                               </div>
-                              <button
-                                onClick={() => {
-                                  const cost = diceResult.stressCost ?? 0;
-                                  applyStressCost(cost);
-                                }}
+                              <div
                                 style={{
-                                  ...S.btn,
-                                  background: "#b45309",
-                                  color: "#fff",
-                                  fontSize: "11px",
+                                  display: "grid",
+                                  gridTemplateColumns: "1fr auto",
+                                  gap: "8px",
+                                  alignItems: "center",
                                 }}
                               >
-                                Apply {diceResult.stressCost} stress
-                              </button>
+                                <select
+                                  value={resistanceHarmTarget}
+                                  onChange={(e) =>
+                                    setResistanceHarmTarget(e.target.value)
+                                  }
+                                  style={{ ...S.sel, fontSize: "11px" }}
+                                >
+                                  <option value="">Harm to reduce…</option>
+                                  {filledHarmOptions.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  onClick={() => {
+                                    setResistanceApplyErr(null);
+                                    if (!resistanceHarmTarget) {
+                                      setResistanceApplyErr(
+                                        "Choose a harm level to reduce before marking stress.",
+                                      );
+                                      return;
+                                    }
+                                    const reduced =
+                                      clearHarmSlot(resistanceHarmTarget);
+                                    if (!reduced) {
+                                      setResistanceApplyErr(
+                                        "Selected harm slot is empty.",
+                                      );
+                                      return;
+                                    }
+                                    const cost = diceResult.stressCost ?? 0;
+                                    applyStressCost(cost);
+                                    setDiceResult((prev) =>
+                                      prev
+                                        ? { ...prev, resistanceApplied: true }
+                                        : prev,
+                                    );
+                                  }}
+                                  disabled={!!diceResult.resistanceApplied}
+                                  style={{
+                                    ...S.btn,
+                                    background: "#b45309",
+                                    color: "#fff",
+                                    fontSize: "11px",
+                                  }}
+                                >
+                                  {diceResult.resistanceApplied
+                                    ? "Applied"
+                                    : `Reduce harm + mark ${diceResult.stressCost} stress`}
+                                </button>
+                              </div>
                             </>
                           )}
+                          {resistanceApplyErr ? (
+                            <div
+                              style={{
+                                marginTop: "6px",
+                                color: "#fca5a5",
+                                fontSize: "11px",
+                              }}
+                            >
+                              {resistanceApplyErr}
+                            </div>
+                          ) : null}
                         </div>
                       )}
 
@@ -6507,6 +7293,268 @@ const CharacterSheetWrapper = ({
                       </div>
                     </div>
                   )}
+
+                  {/* Vice roll — stress relief (downtime / table agreement) */}
+                  <div
+                    style={{
+                      marginBottom: "14px",
+                      background: "#1f2937",
+                      border: "1px solid #374151",
+                      borderRadius: "6px",
+                      padding: "10px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: "#f87171",
+                        fontSize: "11px",
+                        fontWeight: "bold",
+                        marginBottom: "6px",
+                        display: "block",
+                      }}
+                    >
+                      VICE ROLL
+                    </span>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "#9ca3af",
+                        lineHeight: 1.45,
+                        marginBottom: "8px",
+                      }}
+                    >
+                      Roll dice equal to your{" "}
+                      <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
+                        lowest attribute
+                      </span>{" "}
+                      (Insight / Prowess / Resolve). Clear stress equal to the{" "}
+                      <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
+                        highest die
+                      </span>
+                      . If that number is greater than stress you had marked, you{" "}
+                      <span style={{ color: "#fbbf24", fontWeight: "bold" }}>
+                        overindulge
+                      </span>
+                      . Skipping vice in downtime: take stress equal to your trauma
+                      ({traumaMarkedCount}); no trauma means vice cannot force stress
+                      yet.
+                    </div>
+                    {String(charData.vice || "").trim() ? (
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#a78bfa",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        Vice on sheet: {String(charData.vice).trim()}
+                      </div>
+                    ) : null}
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "#d1d5db",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      Pool:{" "}
+                      <span style={{ color: "#a78bfa", fontWeight: "bold" }}>
+                        {viceDicePool}d
+                      </span>
+                      <span style={{ color: "#6b7280" }}>
+                        {" "}
+                        (Insight {viceAttributeDice[0]?.dice ?? 0} · Prowess{" "}
+                        {viceAttributeDice[1]?.dice ?? 0} · Resolve{" "}
+                        {viceAttributeDice[2]?.dice ?? 0})
+                        {viceLowestLabels
+                          ? ` — lowest: ${viceLowestLabels}`
+                          : ""}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDiceResult(null);
+                        const pool = viceDicePool;
+                        let dice;
+                        let highest;
+                        const zeroDice = pool === 0;
+                        if (zeroDice) {
+                          const d1 = Math.floor(Math.random() * 6) + 1;
+                          const d2 = Math.floor(Math.random() * 6) + 1;
+                          highest = Math.min(d1, d2);
+                          dice = [d1, d2];
+                        } else {
+                          dice = Array.from(
+                            { length: pool },
+                            () => Math.floor(Math.random() * 6) + 1,
+                          );
+                          highest = Math.max(...dice);
+                        }
+                        const stressBefore = Number(stressFilled) || 0;
+                        const wouldOverindulge = highest > stressBefore;
+                        setViceRollResult({
+                          dice,
+                          highest,
+                          dicePool: pool,
+                          zeroDice,
+                          wouldOverindulge,
+                          stressBefore,
+                          applied: false,
+                          overindulge: "",
+                        });
+                      }}
+                      style={{
+                        ...S.btn,
+                        background: "#7c3aed",
+                        color: "#fff",
+                        fontSize: "11px",
+                      }}
+                    >
+                      Vice roll
+                    </button>
+                    {viceRollResult ? (
+                      <div
+                        style={{
+                          marginTop: "10px",
+                          padding: "8px",
+                          borderRadius: "4px",
+                          background: "#0d1117",
+                          border: "1px solid #374151",
+                          fontSize: "11px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "4px",
+                            flexWrap: "wrap",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          {viceRollResult.dice.map((die, i) => (
+                            <span
+                              key={i}
+                              style={{
+                                display: "inline-flex",
+                                width: "24px",
+                                height: "24px",
+                                borderRadius: "4px",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontWeight: "bold",
+                                border: "1px solid",
+                                background:
+                                  die === 6
+                                    ? "#166534"
+                                    : die >= 4
+                                      ? "#1e3a8a"
+                                      : "#374151",
+                                borderColor:
+                                  die === 6
+                                    ? "#22c55e"
+                                    : die >= 4
+                                      ? "#3b82f6"
+                                      : "#6b7280",
+                              }}
+                            >
+                              {die}
+                            </span>
+                          ))}
+                        </div>
+                        {viceRollResult.zeroDice ? (
+                          <div style={{ color: "#f87171", marginBottom: "4px" }}>
+                            0 rating — rolled 2d, took lower
+                          </div>
+                        ) : null}
+                        <div style={{ color: "#e5e7eb", marginBottom: "4px" }}>
+                          Highest:{" "}
+                          <strong style={{ color: "#34d399" }}>
+                            {viceRollResult.highest}
+                          </strong>{" "}
+                          → clear that many stress (cap at what you had:{" "}
+                          {viceRollResult.stressBefore} marked).
+                        </div>
+                        {viceRollResult.wouldOverindulge ? (
+                          <div
+                            style={{
+                              color: "#fbbf24",
+                              marginBottom: "6px",
+                              fontWeight: "bold",
+                            }}
+                          >
+                            Overindulgence: highest die exceeds stress marked — pick a
+                            consequence below (table/GM).
+                          </div>
+                        ) : null}
+                        {viceRollResult.wouldOverindulge ? (
+                          <select
+                            value={viceRollResult.overindulge || ""}
+                            onChange={(e) =>
+                              setViceRollResult((p) =>
+                                p
+                                  ? { ...p, overindulge: e.target.value }
+                                  : p,
+                              )
+                            }
+                            style={{
+                              ...S.sel,
+                              width: "100%",
+                              maxWidth: "100%",
+                              fontSize: "11px",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            {VICE_OVERINDULGE_CHOICES.map((o) => (
+                              <option key={o.value || "none"} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "8px",
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            disabled={!!viceRollResult.applied}
+                            onClick={() => {
+                              if (!viceRollResult || viceRollResult.applied) return;
+                              const hi = viceRollResult.highest;
+                              setStressFilled((prev) =>
+                                Math.max(0, (Number(prev) || 0) - hi),
+                              );
+                              setViceRollResult((p) =>
+                                p ? { ...p, applied: true } : p,
+                              );
+                            }}
+                            style={{
+                              ...S.btn,
+                              background: "#059669",
+                              color: "#fff",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {viceRollResult.applied
+                              ? "Stress cleared"
+                              : `Apply −${viceRollResult.highest} stress`}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setViceRollResult(null)}
+                            style={{ ...S.btn, fontSize: "11px" }}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
 
                   {/* Abilities */}
                   <div style={{ marginBottom: "14px" }}>

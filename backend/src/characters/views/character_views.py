@@ -324,7 +324,13 @@ class CharacterViewSet(viewsets.ModelViewSet):
             else:
                 position = normalize_position(session.default_position)
                 effect = normalize_effect(session.default_effect)
-            gl = (getattr(session, "roll_goal_label", None) or "").strip()
+            gl_map = getattr(session, "roll_goal_by_character", None) or {}
+            if not isinstance(gl_map, dict):
+                gl_map = {}
+            gl = (
+                str(gl_map.get(str(character.id)) or gl_map.get(character.id) or "").strip()
+                or (getattr(session, "roll_goal_label", None) or "").strip()
+            )
             if gl and not goal_label:
                 goal_label = gl
 
