@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
+          "enhance AppBar with search and account menu functionality",
           "enhance action handling and group action management",
           "enhance session management and roll handling",
           "add increment wanted action and roll deletion",
@@ -423,12 +424,6 @@ export const PATCH_NOTES = [
           "Merge pull request #15 from zoobavitel/copilot/add-github-action-prettier",
           "dw",
           "prettier format"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "add explicit permissions to prettier workflow"
         ]
       }
     ]

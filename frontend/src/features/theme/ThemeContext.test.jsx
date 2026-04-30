@@ -5,6 +5,7 @@
 import "@testing-library/jest-dom";
 import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
+import { AuthProvider } from "../auth";
 import { ThemeProvider, useTheme } from "./ThemeContext";
 
 function ThemeProbe() {
@@ -12,14 +13,18 @@ function ThemeProbe() {
   return <span data-testid="theme-value">{theme}</span>;
 }
 
-describe("ThemeProvider (HFTF)", () => {
+function renderWithProviders(ui) {
+  return render(<AuthProvider>{ui}</AuthProvider>);
+}
+
+describe("ThemeProvider", () => {
   beforeEach(() => {
     document.documentElement.removeAttribute("data-theme");
     localStorage.removeItem("theme");
   });
 
-  test("sets data-theme and localStorage to dark (HFTF)", async () => {
-    render(
+  test("defaults to dark when localStorage unset", async () => {
+    renderWithProviders(
       <ThemeProvider>
         <ThemeProbe />
       </ThemeProvider>,
@@ -30,5 +35,20 @@ describe("ThemeProvider (HFTF)", () => {
       expect(localStorage.getItem("theme")).toBe("dark");
     });
     expect(screen.getByTestId("theme-value")).toHaveTextContent("dark");
+  });
+
+  test("restores theme from localStorage", async () => {
+    localStorage.setItem("theme", "light");
+    renderWithProviders(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => {
+      expect(document.documentElement.dataset.theme).toBe("light");
+      expect(localStorage.getItem("theme")).toBe("light");
+    });
+    expect(screen.getByTestId("theme-value")).toHaveTextContent("light");
   });
 });
