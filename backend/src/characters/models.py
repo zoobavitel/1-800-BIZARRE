@@ -1862,6 +1862,7 @@ class GroupAction(models.Model):
     STATUS_CHOICES = [
         ("OPEN", "Open"),
         ("RESOLVED", "Resolved"),
+        ("CANCELLED", "Cancelled"),
     ]
 
     session = models.ForeignKey(

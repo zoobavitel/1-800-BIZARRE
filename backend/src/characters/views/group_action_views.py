@@ -6,15 +6,17 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from ..models import Character, GroupAction, Roll, Session
+from ..roll_helpers import action_roll_counts_as_failure_for_group
 from ..serializers import GroupActionSerializer
 
 
 def _is_failure_roll(roll):
-    """BitD: highest die 1–3 counts as failure for group tally."""
-    dice = roll.results or []
-    if not dice:
-        return True
-    return max(dice) <= 3
+    """Same tier die as outcome; tier 1–3 counts failed for leader stress."""
+    return action_roll_counts_as_failure_for_group(
+        roll.results or [],
+        getattr(roll, "dice_pool", None),
+        getattr(roll, "pool_action_rating", None),
+    )
 
 
 def _max_stress_for_character(character):
@@ -87,11 +89,38 @@ class GroupActionViewSet(viewsets.ModelViewSet):
         )
         return Response(GroupActionSerializer(ga).data, status=status.HTTP_201_CREATED)
 
+    @action(detail=True, methods=['post'], url_path='cancel')
+    def cancel_action(self, request, pk=None):
+        ga = self.get_object()
+        if ga.status != 'OPEN':
+            return Response(
+                {'error': 'Only an open group action can be cancelled.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        camp = ga.session.campaign
+        if (
+            camp.gm_id != request.user.id
+            and ga.leader.user_id != request.user.id
+            and not request.user.is_staff
+        ):
+            return Response(
+                {'error': 'Only the GM or group leader can cancel a group action.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        ga.status = 'CANCELLED'
+        ga.save(update_fields=['status'])
+        return Response(GroupActionSerializer(ga).data)
+
     @action(detail=True, methods=['post'], url_path='resolve')
     def resolve_action(self, request, pk=None):
         ga = self.get_object()
-        if ga.status == 'RESOLVED':
-            return Response({'error': 'Already resolved.'}, status=status.HTTP_400_BAD_REQUEST)
+        if ga.status != 'OPEN':
+            if ga.status == 'RESOLVED':
+                return Response({'error': 'Already resolved.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'This group action is not open.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         camp = ga.session.campaign
         if (
             camp.gm_id != request.user.id
@@ -118,7 +147,11 @@ class GroupActionViewSet(viewsets.ModelViewSet):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        failures = sum(1 for r in rolls if _is_failure_roll(r))
+        failures = sum(
+            1
+            for r in rolls
+            if _is_failure_roll(r) and r.character_id != ga.leader_id
+        )
         leader = ga.leader
         cur = getattr(leader, 'stress', 0) or 0
         max_stress = _max_stress_for_character(leader)

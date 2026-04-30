@@ -2679,6 +2679,7 @@ function SessionDetail({
   });
   const [manualRollSaving, setManualRollSaving] = useState(false);
   const [fortuneDice, setFortuneDice] = useState(2);
+  const [fortuneReason, setFortuneReason] = useState("");
   const [fortuneRolling, setFortuneRolling] = useState(false);
   const [error, setError] = useState(null);
   const [sessionDateInput, setSessionDateInput] = useState("");
@@ -2875,16 +2876,20 @@ function SessionDetail({
       return;
     }
     try {
+      const reason = String(fortuneReason || "").trim();
       await characterAPI.rollAction(firstChar.id, {
         roll_type: "FORTUNE",
         action: "Fortune",
         session_id: session.id,
         dice_pool: fortuneDice,
+        goal_label: reason,
+        fortune_public_label: reason,
       });
       rollAPI
         .getRolls({ session: session.id })
         .then(setRolls)
         .catch(() => {});
+      if (reason) setFortuneReason("");
       onRefresh();
     } catch (e) {
       setError(e.message);
@@ -3092,6 +3097,14 @@ function SessionDetail({
             flexWrap: "wrap",
           }}
         >
+          <span style={{ fontSize: "11px" }}>Goal / reason:</span>
+          <input
+            type="text"
+            style={{ ...S.inp, width: "260px", maxWidth: "100%" }}
+            value={fortuneReason}
+            onChange={(e) => setFortuneReason(e.target.value)}
+            placeholder="Why this fortune roll is being made"
+          />
           <span style={{ fontSize: "11px" }}>Dice pool:</span>
           <select
             style={S.select}

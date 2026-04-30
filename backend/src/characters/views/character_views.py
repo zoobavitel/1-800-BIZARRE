@@ -15,10 +15,13 @@ import random
 from ..models import Campaign, Character, GroupAction, Session, Roll, RollHistory
 from ..parsers import MultipartJsonParser
 from ..roll_helpers import (
+    action_rating_from_action_dots,
     award_desperate_action_xp,
     bump_effect,
     normalize_effect,
     normalize_position,
+    outcome_from_action_roll,
+    tier_die_from_action_pool,
 )
 from ..serializers import CharacterSerializer
 from ..history_context import bind_character_history_editor, reset_character_history_editor
@@ -425,15 +428,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
         # Get action rating from action_dots (flat or nested) - skip for FORTUNE
         if roll_type.upper() != "FORTUNE":
-            action_dots = character.action_dots or {}
-            action_rating = 0
-            if isinstance(action_dots.get("insight"), dict):
-                for group in action_dots.values():
-                    if isinstance(group, dict) and action_name.lower() in group:
-                        action_rating = group.get(action_name.lower(), 0) or 0
-                        break
-            else:
-                action_rating = action_dots.get(action_name.lower(), 0) or 0
+            action_rating = action_rating_from_action_dots(
+                character.action_dots, action_name
+            )
 
             # Base action pool: action rating only (no extra dice from other
             # actions in the same attribute).
@@ -489,21 +486,25 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     assist_helper.save(update_fields=["stress"])
                     dice_pool += 1
 
-        dice_results = (
-            [random.randint(1, 6) for _ in range(max(1, dice_pool))]
-            if dice_pool > 0
-            else [0]
-        )
-        max_result = max(dice_results) if dice_results else 0
-
-        if max_result >= 6:
-            outcome = "CRITICAL_SUCCESS"
-        elif max_result >= 4:
-            outcome = "FULL_SUCCESS"
-        elif max_result >= 1:
-            outcome = "PARTIAL_SUCCESS"
+        pool_before_roll = dice_pool
+        # 0d action pool (Blades-style): roll 2d take the lowest for outcome tiers; mirrors offline rollDice().
+        if dice_pool > 0:
+            dice_results = [random.randint(1, 6) for _ in range(dice_pool)]
         else:
-            outcome = "FAILURE"
+            d1 = random.randint(1, 6)
+            d2 = random.randint(1, 6)
+            dice_results = [d1, d2]
+
+        # action_rating: dots in rolled action only (Fortune path sets 0 above).
+        ar_for_tier = (
+            action_rating if roll_type.upper() != "FORTUNE" else 0
+        )
+        outcome = outcome_from_action_roll(
+            dice_results, pool_before_roll, ar_for_tier
+        )
+        max_result = tier_die_from_action_pool(
+            dice_results, pool_before_roll, ar_for_tier
+        )
 
         # Deduct stress for push
         if stress_cost > 0:

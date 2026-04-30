@@ -120,6 +120,24 @@ function reputationTierLabel(v) {
   return "Neutral";
 }
 
+function normalizeCrewFromCharacter(character) {
+  const rawCrew = character?.crew;
+  const crewName =
+    (typeof rawCrew === "object" ? rawCrew?.name : rawCrew) ||
+    character?.crew_name ||
+    character?.personal_crew_name ||
+    "";
+  const crewId =
+    (typeof rawCrew === "object" ? rawCrew?.id : null) ??
+    character?.crewId ??
+    character?.crew_id ??
+    null;
+  return {
+    crew: String(crewName || ""),
+    crewId: crewId == null || crewId === "" ? null : crewId,
+  };
+}
+
 function computeResistanceSummary(diceResults) {
   const sorted = (Array.isArray(diceResults) ? diceResults : [])
     .map((n) => Number(n))
@@ -182,6 +200,14 @@ function viceOverindulgeLabel(value) {
   const hit = VICE_OVERINDULGE_CHOICES.find((o) => o.value === v);
   return hit ? hit.label : v;
 }
+
+/** Group roll board outcome label + color (SRD tiers; two sixes = critical before tier die). */
+const GROUP_ROLL_BOARD_BAND = {
+  critical: { label: "Critical", color: "#e9d5ff" },
+  success: { label: "Success", color: "#34d399" },
+  partial: { label: "Partial", color: "#fbbf24" },
+  fail: { label: "Fail", color: "#f87171" },
+};
 
 const HISTORY_FIELD_LABELS = {
   true_name: "Name",
@@ -437,6 +463,7 @@ const CharacterSheetWrapper = ({
       ? `Created by user #${character.user_id}`
       : "Created by unknown";
   const canEditSheet = !character?.id || isGM || character?.user_id === user?.id;
+  const canCreateManualHistoryRecord = isGM || character?.user_id === user?.id;
   const [activeMode, setActiveMode] = useState("CHARACTER MODE");
   const charCampaign = campaigns?.find((c) => c.id === character?.campaign);
   const activeSessionId =
@@ -472,6 +499,7 @@ const CharacterSheetWrapper = ({
   };
 
   // Identity
+  const initialCrew = normalizeCrewFromCharacter(character);
   const [charData, setCharData] = useState({
     // Unsaved drafts should start truly blank even if upstream placeholders exist.
     name: character?.id ? (character?.name || "") : "",
@@ -481,8 +509,8 @@ const CharacterSheetWrapper = ({
     look: character?.look || "",
     vice: character?.vice || "",
     viceDetails: character?.viceDetails ?? character?.vice_details ?? "",
-    crew: character?.crew || "",
-    crewId: character?.crewId ?? null,
+    crew: initialCrew.crew,
+    crewId: initialCrew.crewId,
   });
 
   // Campaign assignment (normalize: backend may send campaign as object or ID)
@@ -548,14 +576,22 @@ const CharacterSheetWrapper = ({
 
   // Sync crew/crewId when character changes (e.g. from parent after crew name update)
   useEffect(() => {
-    const newCrew = character?.crew ?? "";
-    const newCrewId = character?.crewId ?? null;
+    const normalized = normalizeCrewFromCharacter(character);
+    const newCrew = normalized.crew;
+    const newCrewId = normalized.crewId;
     setCharData((prev) =>
       prev.crew !== newCrew || prev.crewId !== newCrewId
         ? { ...prev, crew: newCrew, crewId: newCrewId }
         : prev,
     );
-  }, [character?.crew, character?.crewId]);
+  }, [
+    character,
+    character?.crew,
+    character?.crewId,
+    character?.crew_id,
+    character?.crew_name,
+    character?.personal_crew_name,
+  ]);
 
   // Auto-populate crew from campaign context when this sheet has no crew yet.
   useEffect(() => {
@@ -1242,12 +1278,31 @@ const CharacterSheetWrapper = ({
     const t = setTimeout(() => {
       crewAPI
         .patchCrew(charData.crewId, buildCrewPatchPayload())
+        .then(() => {
+          const cid = Number.parseInt(String(campaignId || ""), 10);
+          const wanted = Math.min(5, Math.max(0, Number(crewData.wanted) || 0));
+          const currentCampaignWanted = Number(charCampaign?.wanted_stars ?? 0);
+          if (
+            isGM &&
+            Number.isFinite(cid) &&
+            wanted !== currentCampaignWanted
+          ) {
+            campaignAPI
+              .patchCampaign(cid, { wanted_stars: wanted })
+              .then(() => onCampaignRefresh?.())
+              .catch(() => {});
+          }
+        })
         .catch(() => {});
     }, 900);
     return () => clearTimeout(t);
   }, [
     charData.crewId,
     buildCrewPatchPayload,
+    campaignId,
+    charCampaign?.wanted_stars,
+    isGM,
+    onCampaignRefresh,
     crewData.rep,
     crewData.turf,
     crewData.tier,
@@ -1341,6 +1396,27 @@ const CharacterSheetWrapper = ({
   const traumaMarkedCount = useMemo(
     () => Object.values(trauma || {}).filter(Boolean).length,
     [trauma],
+  );
+
+  /** At max stress, cannot manually clear marked boxes until player records a trauma (table rule). */
+  const traumaRequiredBeforeStressClear = useMemo(
+    () =>
+      (Number(stressFilled) || 0) >= maxStress && traumaMarkedCount < 1,
+    [stressFilled, maxStress, traumaMarkedCount],
+  );
+
+  const toggleTraumaMark = useCallback(
+    (traumaKey) => {
+      const gaining = !(trauma[traumaKey] ?? false);
+      if (
+        gaining &&
+        (Number(stressFilled) || 0) >= maxStress
+      ) {
+        setStressFilled(0);
+      }
+      setTrauma((p) => ({ ...p, [traumaKey]: gaining }));
+    },
+    [trauma, stressFilled, maxStress],
   );
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
@@ -1524,12 +1600,14 @@ const CharacterSheetWrapper = ({
   const [groupActionErr, setGroupActionErr] = useState(null);
   const [groupActionRolls, setGroupActionRolls] = useState([]);
   const [groupActionLoading, setGroupActionLoading] = useState(false);
+  /** Last session+group id we showed full-panel spinner for; unchanged on sheet poll tick → silent refetch */
+  const groupRollFetchSpinnerKeyRef = useRef("");
+  const [showGroupActionCard, setShowGroupActionCard] = useState(false);
   const [assistTargetId, setAssistTargetId] = useState("");
   const [assistGrantBusy, setAssistGrantBusy] = useState(false);
   const [assistGrantMsg, setAssistGrantMsg] = useState(null);
   const [assistGrantErr, setAssistGrantErr] = useState(null);
   const [rollGoalDraft, setRollGoalDraft] = useState("");
-  const [assistHelperId, setAssistHelperId] = useState("");
   const [showDevilsBargainModal, setShowDevilsBargainModal] = useState(false);
   const [devilBargainConfirmed, setDevilBargainConfirmed] = useState(false);
   const [expandedActionInfo, setExpandedActionInfo] = useState(null);
@@ -1740,6 +1818,9 @@ const CharacterSheetWrapper = ({
       .then(([rollsRes, sessionRes, clocksRes]) => {
         const rows = [];
         asArray(rollsRes).forEach((r) => {
+          const isFortune = String(r.roll_type || "").toUpperCase() === "FORTUNE";
+          // GM Fortune rolls stay out of player history until GM reveals outcomes.
+          if (isFortune && !r.fortune_reveal_outcome) return;
           rows.push({
             key: `roll-${r.id}`,
             timestamp: r.timestamp,
@@ -1889,21 +1970,59 @@ const CharacterSheetWrapper = ({
         const open = rows.find((ga) => ga.status === "OPEN") || null;
         setActiveGroupAction(open);
       })
-      .catch(() => setActiveGroupAction(null));
-  }, [activeSessionId]);
+      .catch(() => {
+        /* keep prior OPEN GA; clearing here caused missing group_action_id on submit */
+      });
+  }, [activeSessionId, sessionDataPollTick]);
+
+  // Leader may create a group action after this sheet already has activeSessionId; refetch when opening an action roll.
+  useEffect(() => {
+    if (!activeSessionId || !rollPending?.actionName) return;
+    let cancelled = false;
+    groupActionAPI
+      .list({ session: activeSessionId })
+      .then((res) => {
+        if (cancelled) return;
+        const rows = Array.isArray(res) ? res : res?.results || [];
+        const open = rows.find((ga) => ga.status === "OPEN") || null;
+        setActiveGroupAction(open);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionId, rollPending?.actionName]);
 
   useEffect(() => {
-    if (activeGroupAction?.action_name) {
-      setGroupActionNameDraft(String(activeGroupAction.action_name).toUpperCase());
+    if (!activeGroupAction?.id) return;
+    if (activeGroupAction.action_name) {
+      setGroupActionNameDraft(
+        String(activeGroupAction.action_name).toUpperCase(),
+      );
     }
-  }, [activeGroupAction?.action_name]);
+    setGroupGoalDraft(String(activeGroupAction.goal_label || ""));
+  }, [
+    activeGroupAction?.id,
+    activeGroupAction?.action_name,
+    activeGroupAction?.goal_label,
+  ]);
+
+  useEffect(() => {
+    if (activeGroupAction?.id) setShowGroupActionCard(true);
+  }, [activeGroupAction?.id]);
 
   useEffect(() => {
     if (!activeGroupAction?.id) {
       setGroupActionRolls([]);
+      setGroupActionLoading(false);
+      groupRollFetchSpinnerKeyRef.current = "";
       return;
     }
-    setGroupActionLoading(true);
+    const spinnerKey = `${activeSessionId}:${activeGroupAction.id}`;
+    if (groupRollFetchSpinnerKeyRef.current !== spinnerKey) {
+      groupRollFetchSpinnerKeyRef.current = spinnerKey;
+      setGroupActionLoading(true);
+    }
     rollAPI
       .getRolls({
         session: activeSessionId,
@@ -1915,7 +2034,7 @@ const CharacterSheetWrapper = ({
       })
       .catch(() => setGroupActionRolls([]))
       .finally(() => setGroupActionLoading(false));
-  }, [activeGroupAction?.id, activeSessionId]);
+  }, [activeGroupAction?.id, activeSessionId, sessionDataPollTick]);
 
   const groupRollBoard = useMemo(() => {
     if (!activeGroupAction?.id) return [];
@@ -1939,25 +2058,77 @@ const CharacterSheetWrapper = ({
       });
     return groupParticipants.map((p) => {
       const roll = byCharacter.get(p.id) || null;
-      const highest = Math.max(...((roll?.results || []).map(Number) || [0]));
-      const failed = roll ? highest <= 3 : null;
+      let failed = null;
+      let outcomeBand = null;
+      if (roll) {
+        const dice = ((roll.results || []).map(Number) || []).filter((n) =>
+          Number.isFinite(n),
+        );
+        if (!dice.length) {
+          failed = true;
+          outcomeBand = "fail";
+        } else {
+          const pool = Number(roll.dice_pool) || 0;
+          const dots = Number(roll.pool_action_rating) || 0;
+          // FiTD 0-dot + 0 pool rolls 2d and takes lower; if dots > 0 but pool 0,
+          // treat as inconsistent data and read highest die (a 6 still succeeds).
+          const tierDie =
+            dice.length >= 2 && pool === 0 && dots === 0
+              ? Math.min(...dice)
+              : Math.max(...dice);
+          // Match backend group resolve: tier 1–3 fails (ignore stale outcome field).
+          failed = tierDie <= 3;
+          const sixes = dice.filter((d) => d === 6).length;
+          if (sixes >= 2) outcomeBand = "critical";
+          else if (tierDie >= 6) outcomeBand = "success";
+          else if (tierDie >= 4) outcomeBand = "partial";
+          else outcomeBand = "fail";
+        }
+      }
       return {
         id: p.id,
         name: p.true_name || p.name || `PC ${p.id}`,
         roll,
         failed,
+        outcomeBand,
       };
     });
   }, [activeGroupAction, groupActionRolls, groupParticipants]);
 
   const groupFailures = useMemo(
-    () => groupRollBoard.filter((r) => r.failed === true).length,
-    [groupRollBoard],
+    () =>
+      groupRollBoard.filter(
+        (r) =>
+          r.failed === true &&
+          String(r.id) !== String(activeGroupAction?.leader),
+      ).length,
+    [groupRollBoard, activeGroupAction?.leader],
   );
   const groupPendingCount = useMemo(
     () => groupRollBoard.filter((r) => !r.roll).length,
     [groupRollBoard],
   );
+  const activeGroupLeaderName = useMemo(() => {
+    if (!activeGroupAction?.leader) return "";
+    const roster = charCampaign?.campaign_characters || [];
+    const leader = roster.find(
+      (c) => String(c.id) === String(activeGroupAction.leader),
+    );
+    return leader?.true_name || leader?.name || `PC ${activeGroupAction.leader}`;
+  }, [activeGroupAction?.leader, charCampaign?.campaign_characters]);
+
+  const isOpenGroupLeader = useMemo(
+    () =>
+      Boolean(
+        activeGroupAction?.id &&
+          String(activeGroupAction.leader) === String(characterId),
+      ),
+    [activeGroupAction?.id, activeGroupAction?.leader, characterId],
+  );
+
+  /** With an OPEN group action, only the leader may edit chosen action / goal (before-start: anyone configuring). */
+  const canEditGroupActionSetupFields =
+    !activeGroupAction?.id || isOpenGroupLeader;
 
   const abilityRollBonusOptions = useMemo(() => {
     const supportsBonusDice = (description) =>
@@ -2090,7 +2261,6 @@ const CharacterSheetWrapper = ({
     let mod = 0;
     if (rollModal.push_dice) mod += 1;
     if (rollModal.devil_bargain_dice) mod += 1;
-    if (assistHelperId) mod += 1;
     mod += bonusDiceFromAbilities;
     const selectedPushStress =
       (rollModal.push_effect ? 2 : 0) + (rollModal.push_dice ? 2 : 0);
@@ -2110,7 +2280,6 @@ const CharacterSheetWrapper = ({
     rollModal.push_effect,
     rollModal.devil_bargain_dice,
     harmLevel3Used,
-    assistHelperId,
     bonusDiceFromAbilities,
   ]);
 
@@ -2141,13 +2310,13 @@ const CharacterSheetWrapper = ({
         ability_bonuses: abilityBonusAudit.length
           ? abilityBonusAudit
           : undefined,
-        assist_helper_id: assistHelperId
-          ? parseInt(assistHelperId, 10)
-          : undefined,
       };
       if (activeSessionId) {
         payload.session_id = activeSessionId;
-        if (
+        const snappedGa = rollPending.group_action_id;
+        if (snappedGa) {
+          payload.group_action_id = snappedGa;
+        } else if (
           activeGroupAction?.id &&
           String(rollPending.actionName || "").toLowerCase() ===
             String(activeGroupAction.action_name || "").toLowerCase()
@@ -2156,6 +2325,17 @@ const CharacterSheetWrapper = ({
         }
       }
       const res = await characterAPI.rollAction(characterId, payload);
+      // Match roll modal + session GM map: per-PC session override beats API echo (same order as PositionStack preview).
+      const effectivePosition =
+        sessionOverridePositionEffect?.position ||
+        res.position ||
+        asd?.default_position ||
+        "";
+      const effectiveEffect =
+        sessionOverridePositionEffect?.effect ||
+        res.effect ||
+        asd?.default_effect ||
+        "";
       if (payload.group_action_id && res.roll_id) {
         setGroupActionRolls((prev) => {
           const withoutMine = (prev || []).filter(
@@ -2174,6 +2354,17 @@ const CharacterSheetWrapper = ({
             ...withoutMine,
           ];
         });
+        // Source-of-truth refresh to ensure board reflects server state.
+        rollAPI
+          .getRolls({
+            session: activeSessionId,
+            group_action: payload.group_action_id,
+          })
+          .then((rows) =>
+            setGroupActionRolls(Array.isArray(rows) ? rows : rows?.results || []),
+          )
+          .catch(() => {});
+        onCampaignRefresh?.();
       }
       setDiceResult({
         action: rollPending.actionName,
@@ -2186,23 +2377,12 @@ const CharacterSheetWrapper = ({
             : "",
         isResistance: false,
         stressCost: res.stress_spent || null,
-        zeroDice: (res.dice_results || []).length === 0,
+        zeroDice: (Number(res.total_dice) || 0) === 0,
         isDesperateAction:
-          (
-            res.position ||
-            sessionOverridePositionEffect?.position ||
-            asd?.default_position ||
-            ""
-          ).toLowerCase() === "desperate",
+          String(effectivePosition || "").toLowerCase() === "desperate",
         isCritical: (res.dice_results || []).filter((d) => d === 6).length >= 2,
-        position:
-          res.position ||
-          sessionOverridePositionEffect?.position ||
-          asd?.default_position,
-        effect:
-          res.effect ||
-          sessionOverridePositionEffect?.effect ||
-          asd?.default_effect,
+        position: effectivePosition,
+        effect: effectiveEffect,
         xpGained: res.xp_gained || 0,
       });
       if (res.xp_gained > 0 && res.xp_track) {
@@ -2212,10 +2392,8 @@ const CharacterSheetWrapper = ({
         }));
       }
       if (res.stress_spent) applyStressCost(res.stress_spent);
-      if (res.assist_helper_id) onCampaignRefresh?.();
       setRollPending(null);
       setRollGoalDraft("");
-      setAssistHelperId("");
       setDevilBargainConfirmed(false);
       setRollModal((p) => ({
         ...p,
@@ -2229,21 +2407,29 @@ const CharacterSheetWrapper = ({
   };
 
   // FIX 8: Resistance critical → stressCost = -1 (clear 1 stress, pay none)
+  /** @param {unknown} [groupActionIdSnap] If set, POST includes this group_action_id even if activeGroupAction is cleared before submit. */
   const rollDice = (
     actionName,
     diceCount,
     isResistance = false,
     isDesperateAction = false,
+    groupActionIdSnap = undefined,
   ) => {
     if (characterId && !isResistance) {
-      setRollPending({ actionName, diceCount, isDesperateAction });
+      setRollPending({
+        actionName,
+        diceCount,
+        isDesperateAction,
+        ...(groupActionIdSnap != null
+          ? { group_action_id: groupActionIdSnap }
+          : {}),
+      });
       setRollAbilityBoost({});
       setDevilBargainConfirmed(false);
       const asdGoal = (
         assignedRollGoalLabel || ""
       ).trim();
       setRollGoalDraft(asdGoal);
-      setAssistHelperId("");
       setRollModal({
         push_effect: false,
         push_dice: false,
@@ -3064,15 +3250,26 @@ const CharacterSheetWrapper = ({
                               >
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    setShowHistoryManualModal((v) => !v)
-                                  }
+                                  onClick={() => {
+                                    if (!canCreateManualHistoryRecord) return;
+                                    setShowHistoryManualModal((v) => !v);
+                                  }}
                                   style={{
                                     ...S.btn,
                                     fontSize: 10,
                                     background: "#4338ca",
                                     color: "#fff",
+                                    opacity: canCreateManualHistoryRecord ? 1 : 0.45,
+                                    cursor: canCreateManualHistoryRecord
+                                      ? "pointer"
+                                      : "not-allowed",
                                   }}
+                                  disabled={!canCreateManualHistoryRecord}
+                                  title={
+                                    canCreateManualHistoryRecord
+                                      ? "Add an offline/manual history entry."
+                                      : "Only the GM or this character's owner can add manual records."
+                                  }
                                 >
                                   Manual record…
                                 </button>
@@ -3457,6 +3654,12 @@ const CharacterSheetWrapper = ({
                                         type="button"
                                         disabled={historyManualSaving}
                                         onClick={async () => {
+                                          if (!canCreateManualHistoryRecord) {
+                                            setHistoryWriteError(
+                                              "Only the GM or this character's owner can add manual records.",
+                                            );
+                                            return;
+                                          }
                                           try {
                                             setHistoryWriteError(null);
                                             const sid = parseInt(
@@ -4117,6 +4320,20 @@ const CharacterSheetWrapper = ({
                       )}
                     </span>
                   </div>
+                  {traumaRequiredBeforeStressClear ? (
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        color: "#f87171",
+                        marginBottom: "6px",
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      Stress track is full — mark a trauma below to clear all
+                      stress (or manually clear boxes after you have marked at
+                      least one trauma).
+                    </div>
+                  ) : null}
                   <div
                     style={{
                       display: "flex",
@@ -4124,13 +4341,27 @@ const CharacterSheetWrapper = ({
                       flexWrap: "wrap",
                       marginBottom: "12px",
                     }}
+                    title={
+                      traumaRequiredBeforeStressClear
+                        ? "Clearing stress blocked until you mark a trauma."
+                        : undefined
+                    }
                   >
                     {Array.from({ length: maxStress }, (_, i) => (
                       <div
                         key={i}
-                        onClick={() =>
-                          setStressFilled(i < stressFilled ? i : i + 1)
-                        }
+                        onClick={() => {
+                          const next =
+                            i < stressFilled ? i : i + 1;
+                          const decreases = next < stressFilled;
+                          if (
+                            decreases &&
+                            traumaRequiredBeforeStressClear
+                          ) {
+                            return;
+                          }
+                          setStressFilled(next);
+                        }}
                         style={{
                           width: "22px",
                           height: "22px",
@@ -4159,9 +4390,7 @@ const CharacterSheetWrapper = ({
                         <input
                           type="checkbox"
                           checked={checked}
-                          onChange={() =>
-                            setTrauma((p) => ({ ...p, [t]: !p[t] }))
-                          }
+                          onChange={() => toggleTraumaMark(t)}
                         />
                         {t}
                       </label>
@@ -6055,7 +6284,11 @@ const CharacterSheetWrapper = ({
                                         padding: 0,
                                         lineHeight: 1,
                                       }}
-                                      title={`Roll ${rating}d`}
+                                      title={
+                                        rating === 0
+                                          ? "Roll (0 dots — modal uses 2d6, lower)"
+                                          : `Roll ${rating}d`
+                                      }
                                     >
                                       🎲
                                     </button>
@@ -6320,17 +6553,25 @@ const CharacterSheetWrapper = ({
                               count={1}
                             />
                           ) : null}
-                          {assistHelperId ? (
-                            <DicePoolStrip
-                              label="Assist (+1d, helper spends 1 stress)"
-                              count={1}
-                            />
-                          ) : null}
                           {bonusDiceFromAbilities > 0 ? (
                             <DicePoolStrip
                               label={`Standard abilities (+${bonusDiceFromAbilities}d)`}
                               count={bonusDiceFromAbilities}
                             />
+                          ) : null}
+                          {rollPoolPreview.total === 0 ? (
+                            <div
+                              style={{
+                                fontSize: "11px",
+                                color: "#f87171",
+                                marginTop: "6px",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              0 dice in pool — you roll{" "}
+                              <strong>2d6</strong> and use the{" "}
+                              <strong>lower</strong> result (same as offline).
+                            </div>
                           ) : null}
                           <div
                             style={{
@@ -6522,30 +6763,6 @@ const CharacterSheetWrapper = ({
                         ))}
                       </fieldset>
                       <div style={{ marginBottom: "12px" }}>
-                        <div style={{ marginTop: "8px" }}>
-                          <span
-                            style={{
-                              fontSize: "11px",
-                              color: "#9ca3af",
-                              display: "block",
-                              marginBottom: "4px",
-                            }}
-                          >
-                            Assist (one teammate, +1d, helper pays 1 stress)
-                          </span>
-                          <select
-                            style={{ ...S.sel, width: "100%", maxWidth: 320 }}
-                            value={assistHelperId}
-                            onChange={(e) => setAssistHelperId(e.target.value)}
-                          >
-                            <option value="">No assist</option>
-                            {helpCandidates.map((c) => (
-                              <option key={c.id} value={String(c.id)}>
-                                {c.true_name || c.name || `PC ${c.id}`}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
                         <div style={{ marginTop: "10px" }}>
                           {rollModal.devil_bargain_dice &&
                           gmDevilBargainText ? (
@@ -6708,7 +6925,6 @@ const CharacterSheetWrapper = ({
                             setRollApiError(null);
                             setRollAbilityBoost({});
                             setRollGoalDraft("");
-                            setAssistHelperId("");
                             setDevilBargainConfirmed(false);
                             setRollModal({
                               push_effect: false,
@@ -6750,7 +6966,7 @@ const CharacterSheetWrapper = ({
                           : "Action Roll"}
                         {diceResult.zeroDice && (
                           <span style={{ color: "#f87171", marginLeft: "8px" }}>
-                            (0 Dice — take lower)
+                            (2d6 — lower counts)
                           </span>
                         )}
                         {diceResult.isDesperateAction && (
@@ -7088,6 +7304,26 @@ const CharacterSheetWrapper = ({
                   {charCampaign && activeSessionId && characterId && (
                     <div style={{ ...S.card, marginBottom: "12px" }}>
                       <span style={S.lbl}>CREW ACTIONS</span>
+                      {activeGroupAction?.id &&
+                      String(activeGroupAction.leader) !== String(characterId) ? (
+                        <div
+                          style={{
+                            marginTop: "8px",
+                            marginBottom: "8px",
+                            padding: "6px 8px",
+                            border: "1px solid #374151",
+                            borderRadius: "6px",
+                            background: "#0f172a",
+                            fontSize: "11px",
+                            color: "#93c5fd",
+                          }}
+                        >
+                          Group leader:{" "}
+                          <strong style={{ color: "#e5e7eb" }}>
+                            {activeGroupLeaderName}
+                          </strong>
+                        </div>
+                      ) : null}
                       <div
                         style={{
                           fontSize: "11px",
@@ -7182,16 +7418,33 @@ const CharacterSheetWrapper = ({
                           {assistGrantErr}
                         </div>
                       ) : null}
-                      <div
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowGroupActionCard((v) => !v)
+                        }
                         style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: "10px",
-                          alignItems: "flex-end",
-                          marginTop: "8px",
-                          fontSize: "12px",
+                          ...S.btn,
+                          background: "#4338ca",
+                          color: "#fff",
+                          fontSize: "11px",
                         }}
                       >
+                        {showGroupActionCard
+                          ? "Hide group action card"
+                          : "Open group action card"}
+                      </button>
+                      {showGroupActionCard && (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "10px",
+                            alignItems: "flex-end",
+                            marginTop: "8px",
+                            fontSize: "12px",
+                          }}
+                        >
                         <div style={{ flex: "1 1 200px" }}>
                           <span
                             style={{
@@ -7206,6 +7459,7 @@ const CharacterSheetWrapper = ({
                           <select
                             style={{ ...S.sel, width: "100%", maxWidth: 320 }}
                             value={groupActionNameDraft}
+                            disabled={!canEditGroupActionSetupFields}
                             onChange={(e) =>
                               setGroupActionNameDraft(e.target.value)
                             }
@@ -7231,9 +7485,23 @@ const CharacterSheetWrapper = ({
                           <input
                             style={{ ...S.inp, width: "100%", maxWidth: 320 }}
                             value={groupGoalDraft}
+                            disabled={!canEditGroupActionSetupFields}
                             onChange={(e) => setGroupGoalDraft(e.target.value)}
                             placeholder="Name the group action"
                           />
+                          {activeGroupAction?.id && !isOpenGroupLeader ? (
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                marginTop: "6px",
+                              }}
+                            >
+                              Only{" "}
+                              {activeGroupLeaderName || "the group leader"} can
+                              change the action or goal for this open group.
+                            </div>
+                          ) : null}
                           <div
                             style={{
                               display: "flex",
@@ -7245,7 +7513,11 @@ const CharacterSheetWrapper = ({
                           >
                             <button
                               type="button"
-                              disabled={groupBusy || !groupActionNameDraft}
+                              disabled={
+                                groupBusy ||
+                                !groupActionNameDraft ||
+                                !!activeGroupAction?.id
+                              }
                               onClick={async () => {
                                 setGroupBusy(true);
                                 try {
@@ -7280,15 +7552,72 @@ const CharacterSheetWrapper = ({
                                 Open group #{activeGroupAction.id} ({String(activeGroupAction.action_name || "").toUpperCase()}) — {groupPendingCount} pending, {groupFailures} fail.
                               </span>
                             )}
+                            {activeGroupAction?.id && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  rollDice(
+                                    String(activeGroupAction.action_name || "").toLowerCase(),
+                                    0,
+                                    false,
+                                    false,
+                                    activeGroupAction.id,
+                                  )
+                                }
+                                style={{
+                                  ...S.btn,
+                                  fontSize: "11px",
+                                  background: "#0f766e",
+                                  color: "#ecfeff",
+                                }}
+                                title="Roll this group's chosen action"
+                              >
+                                Roll {String(activeGroupAction.action_name || "").toUpperCase()} 🎲
+                              </button>
+                            )}
+                            {activeGroupAction?.id && isOpenGroupLeader && (
+                              <button
+                                type="button"
+                                disabled={groupBusy}
+                                onClick={async () => {
+                                  setGroupBusy(true);
+                                  try {
+                                    setGroupActionErr(null);
+                                    await groupActionAPI.cancel(
+                                      activeGroupAction.id,
+                                    );
+                                    setActiveGroupAction(null);
+                                    onCampaignRefresh?.();
+                                  } catch (e) {
+                                    setGroupActionErr(e.message);
+                                  } finally {
+                                    setGroupBusy(false);
+                                  }
+                                }}
+                                style={{
+                                  ...S.btn,
+                                  fontSize: "11px",
+                                  background: "#1f2937",
+                                  color: "#e5e7eb",
+                                  border: "1px solid #6b7280",
+                                }}
+                              >
+                                {groupBusy ? "…" : "Cancel group action"}
+                              </button>
+                            )}
                             {activeGroupAction?.id &&
+                              !groupActionLoading &&
+                              groupPendingCount === 0 &&
                               (isGM ||
                                 String(activeGroupAction.leader) ===
                                   String(characterId)) && (
                               <button
                                 type="button"
-                                disabled={groupPendingCount > 0}
+                                disabled={groupBusy}
                                 onClick={async () => {
+                                  setGroupBusy(true);
                                   try {
+                                    setGroupActionErr(null);
                                     await groupActionAPI.resolve(
                                       activeGroupAction.id,
                                     );
@@ -7296,6 +7625,8 @@ const CharacterSheetWrapper = ({
                                     onCampaignRefresh?.();
                                   } catch (e) {
                                     setGroupActionErr(e.message);
+                                  } finally {
+                                    setGroupBusy(false);
                                   }
                                 }}
                                 style={{
@@ -7305,7 +7636,7 @@ const CharacterSheetWrapper = ({
                                   color: "#fff",
                                 }}
                               >
-                                Resolve
+                                {groupBusy ? "…" : "Resolve"}
                               </button>
                             )}
                           </div>
@@ -7321,8 +7652,9 @@ const CharacterSheetWrapper = ({
                             </div>
                           )}
                         </div>
-                      </div>
-                      {activeGroupAction?.id && (
+                        </div>
+                      )}
+                      {showGroupActionCard && activeGroupAction?.id && (
                         <div
                           style={{
                             marginTop: "8px",
@@ -7370,15 +7702,32 @@ const CharacterSheetWrapper = ({
                                     {row.name}
                                   </span>
                                   {!row.roll ? (
-                                    <span style={{ color: "#9ca3af" }}>Pending</span>
-                                  ) : row.failed ? (
-                                    <span style={{ color: "#f87171" }}>
-                                      Fail ({(row.roll.results || []).join(", ")})
+                                    <span style={{ color: "#9ca3af" }}>
+                                      Pending
                                     </span>
                                   ) : (
-                                    <span style={{ color: "#34d399" }}>
-                                      Pass ({(row.roll.results || []).join(", ")})
-                                    </span>
+                                    (() => {
+                                      const diceStr = (
+                                        row.roll.results || []
+                                      ).join(", ");
+                                      const meta =
+                                        GROUP_ROLL_BOARD_BAND[
+                                          row.outcomeBand || "fail"
+                                        ] || GROUP_ROLL_BOARD_BAND.fail;
+                                      return (
+                                        <span
+                                          style={{
+                                            color: meta.color,
+                                            fontWeight:
+                                              row.outcomeBand === "critical"
+                                                ? 600
+                                                : undefined,
+                                          }}
+                                        >
+                                          {meta.label} ({diceStr})
+                                        </span>
+                                      );
+                                    })()
                                   )}
                                 </div>
                               ))}
@@ -7391,7 +7740,7 @@ const CharacterSheetWrapper = ({
                               color: "#93c5fd",
                             }}
                           >
-                            Leader marks {groupFailures} stress on resolve (1 per fail).
+                            Leader marks {groupFailures} stress on resolve (1 per non-leader fail).
                           </div>
                         </div>
                       )}

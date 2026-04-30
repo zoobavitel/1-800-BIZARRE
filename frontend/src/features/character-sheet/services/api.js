@@ -687,6 +687,11 @@ export const groupActionAPI = {
       method: "POST",
       body: JSON.stringify({}),
     }),
+  cancel: (id) =>
+    apiRequest(`/group-actions/${id}/cancel/`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
 };
 
 // Global search
@@ -807,7 +812,8 @@ export const transformBackendToFrontend = (backendCharacter) => {
       PROWL: backendCharacter.action_dots?.prowl || 0,
       SKIRMISH: backendCharacter.action_dots?.skirmish || 0,
       WRECK: backendCharacter.action_dots?.wreck || 0,
-      BIZARRE: backendCharacter.action_dots?.attune || 0, // Note: backend uses 'attune'
+      // BitD ATTUNE key in DB; roll_action resolves bizarre↔attune (roll_helpers.action_rating_from_action_dots)
+      BIZARRE: backendCharacter.action_dots?.attune || 0,
       COMMAND: backendCharacter.action_dots?.command || 0,
       CONSORT: backendCharacter.action_dots?.consort || 0,
       SWAY: backendCharacter.action_dots?.sway || 0,

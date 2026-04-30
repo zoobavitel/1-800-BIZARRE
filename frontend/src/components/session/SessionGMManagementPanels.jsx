@@ -5,6 +5,8 @@ import {
   npcAPI,
   characterAPI,
   crewAPI,
+  factionAPI,
+  rollAPI,
 } from "../../features/character-sheet/services/api";
 import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import { ACTION_RATING_KEYS } from "../../features/character-sheet/constants/srd";
@@ -115,6 +117,10 @@ export default function SessionGMManagementPanels({
   const [crewSavingId, setCrewSavingId] = useState(null);
   /** Local crew field drafts; reset when `crews` refetch from parent. */
   const [crewDraftById, setCrewDraftById] = useState({});
+  const [showAllRecentRolls, setShowAllRecentRolls] = useState(false);
+  const [recentRollSavingId, setRecentRollSavingId] = useState(null);
+  const [factionSavingId, setFactionSavingId] = useState(null);
+  const [factionDraftById, setFactionDraftById] = useState({});
 
   const npcInvolvements = useMemo(
     () => sessionData?.npc_involvements || [],
@@ -259,6 +265,90 @@ export default function SessionGMManagementPanels({
   );
 
   const sessionRolls = rolls;
+  const getRecentCharacterRolls = useCallback(
+    (characterId) =>
+      (sessionRolls || [])
+        .filter((r) => {
+          if (String(r.character) !== String(characterId)) return false;
+          // Fortune rolls are GM-authored and shown in the dedicated Fortune history panel.
+          if (String((r.roll_type || "").toUpperCase()) === "FORTUNE") return false;
+          if (showAllRecentRolls) return true;
+          return (
+            String((r.roll_type || "").toUpperCase()) === "ACTION" &&
+            String((r.action_name || "").toUpperCase()) !== "FORTUNE"
+          );
+        })
+        .slice(0, 5),
+    [sessionRolls, showAllRecentRolls],
+  );
+
+  const editRecentRoll = useCallback(
+    async (roll) => {
+      if (!roll?.id) return;
+      const actionInput = window.prompt(
+        "Action/label",
+        String(roll.action_name || "action"),
+      );
+      if (actionInput == null) return;
+      const diceInput = window.prompt(
+        "Dice results (comma separated 1-6)",
+        (roll.results || []).join(", "),
+      );
+      if (diceInput == null) return;
+      const parsed = String(diceInput)
+        .split(/[\s,]+/)
+        .map((n) => Number.parseInt(n, 10))
+        .filter((n) => Number.isFinite(n) && n >= 1 && n <= 6);
+      if (!parsed.length) {
+        setError("Dice must be numbers 1-6.");
+        return;
+      }
+      const outcomeInput = window.prompt(
+        "Outcome (CRITICAL_SUCCESS/FULL_SUCCESS/PARTIAL_SUCCESS/FAILURE/BOTCH)",
+        String(roll.outcome || "FULL_SUCCESS"),
+      );
+      if (outcomeInput == null) return;
+      const outcome = String(outcomeInput || "")
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, "_");
+      setRecentRollSavingId(roll.id);
+      setError(null);
+      try {
+        await rollAPI.patchRoll(roll.id, {
+          action_name: String(actionInput || "").trim(),
+          results: parsed,
+          outcome,
+          dice_pool: parsed.length,
+        });
+        onRefresh();
+      } catch (e) {
+        setError(e.message || "Failed to update roll.");
+      } finally {
+        setRecentRollSavingId(null);
+      }
+    },
+    [onRefresh, setError],
+  );
+
+  const deleteRecentRoll = useCallback(
+    async (roll) => {
+      if (!roll?.id) return;
+      const ok = window.confirm("Delete this roll record?");
+      if (!ok) return;
+      setRecentRollSavingId(roll.id);
+      setError(null);
+      try {
+        await rollAPI.deleteRoll(roll.id);
+        onRefresh();
+      } catch (e) {
+        setError(e.message || "Failed to delete roll.");
+      } finally {
+        setRecentRollSavingId(null);
+      }
+    },
+    [onRefresh, setError],
+  );
 
   useEffect(() => {
     const next = {};
@@ -304,6 +394,27 @@ export default function SessionGMManagementPanels({
     setCrewDraftById(m);
   }, [crews]);
 
+  useEffect(() => {
+    const m = {};
+    for (const f of campaign?.factions || []) {
+      if (f?.id == null) continue;
+      m[f.id] = {
+        name: f.name ?? "",
+        faction_type: f.faction_type ?? "",
+        level: String(f.level ?? 0),
+        hold: String(f.hold ?? "weak"),
+        reputation: String(f.reputation ?? 0),
+        notes: f.notes ?? "",
+        crew_notes: f.crew_notes ?? "",
+        visible_to_players: !!f.visible_to_players,
+        contacts: JSON.stringify(f.contacts ?? [], null, 2),
+        inventory: JSON.stringify(f.inventory ?? [], null, 2),
+        faction_status: JSON.stringify(f.faction_status ?? {}, null, 2),
+      };
+    }
+    setFactionDraftById(m);
+  }, [campaign?.factions]);
+
   const patchCrewSnapshot = async (crewId, partial) => {
     if (!crewId) return;
     setCrewSavingId(crewId);
@@ -315,6 +426,39 @@ export default function SessionGMManagementPanels({
       setError(e.message || "Crew update failed");
     } finally {
       setCrewSavingId(null);
+    }
+  };
+
+  const patchFactionSnapshot = async (factionId) => {
+    if (!factionId) return;
+    const draft = factionDraftById[factionId];
+    if (!draft) return;
+    const parseJsonText = (raw, fallback) => {
+      const txt = String(raw ?? "").trim();
+      if (!txt) return fallback;
+      return JSON.parse(txt);
+    };
+    setFactionSavingId(factionId);
+    setError(null);
+    try {
+      await factionAPI.patchFaction(factionId, {
+        name: String(draft.name ?? "").trim(),
+        faction_type: String(draft.faction_type ?? "").trim(),
+        level: Number.parseInt(String(draft.level ?? "0"), 10) || 0,
+        hold: String(draft.hold ?? "weak") || "weak",
+        reputation: Number.parseInt(String(draft.reputation ?? "0"), 10) || 0,
+        notes: String(draft.notes ?? ""),
+        crew_notes: String(draft.crew_notes ?? ""),
+        visible_to_players: !!draft.visible_to_players,
+        contacts: parseJsonText(draft.contacts, []),
+        inventory: parseJsonText(draft.inventory, []),
+        faction_status: parseJsonText(draft.faction_status, {}),
+      });
+      onRefresh();
+    } catch (e) {
+      setError(e.message || "Faction update failed");
+    } finally {
+      setFactionSavingId(null);
     }
   };
 
@@ -502,34 +646,149 @@ export default function SessionGMManagementPanels({
               factionsById[String(fid)] ||
               {};
             const name = fac.name || `Faction ${fid}`;
-            const metaBits = [];
-            if (fac.faction_type) metaBits.push(String(fac.faction_type));
-            if (fac.level != null && fac.level !== "") metaBits.push(`Lvl ${fac.level}`);
-            if (fac.hold != null && fac.hold !== "") metaBits.push(`Hold ${fac.hold}`);
-            if (fac.reputation != null && fac.reputation !== "") {
-              metaBits.push(`Rep ${fac.reputation}`);
-            }
-            const notesPreview = String(fac.notes || "").trim();
-            const notesShort =
-              notesPreview.length > 160
-                ? `${notesPreview.slice(0, 160)}…`
-                : notesPreview;
+            const draft = factionDraftById[fid] || {
+              name: name,
+              faction_type: String(fac.faction_type ?? ""),
+              level: String(fac.level ?? 0),
+              hold: String(fac.hold ?? "weak"),
+              reputation: String(fac.reputation ?? 0),
+              notes: String(fac.notes ?? ""),
+              crew_notes: String(fac.crew_notes ?? ""),
+              visible_to_players: !!fac.visible_to_players,
+              contacts: JSON.stringify(fac.contacts ?? [], null, 2),
+              inventory: JSON.stringify(fac.inventory ?? [], null, 2),
+              faction_status: JSON.stringify(fac.faction_status ?? {}, null, 2),
+            };
+            const setDraftField = (field, value) =>
+              setFactionDraftById((prev) => ({
+                ...prev,
+                [fid]: { ...(prev[fid] || draft), [field]: value },
+              }));
             return (
               <div key={`faction-${fid}`} style={factionGroupWrap}>
                 <div style={{ marginBottom: 10 }}>
                   <div style={{ fontWeight: "bold", fontSize: 13, color: "#a78bfa" }}>
                     {name}
                   </div>
-                  {metaBits.length > 0 && (
-                    <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 4 }}>
-                      {metaBits.join(" · ")}
+                  <div
+                    style={{
+                      marginTop: 8,
+                      display: "grid",
+                      gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr",
+                      gap: 8,
+                    }}
+                  >
+                    <div>
+                      <div style={lbl}>Faction name</div>
+                      <input
+                        style={{ ...S.inp, width: "100%" }}
+                        value={draft.name}
+                        onChange={(e) => setDraftField("name", e.target.value)}
+                      />
                     </div>
-                  )}
-                  {notesShort ? (
-                    <div style={{ fontSize: 10, color: "#6b7280", marginTop: 6, lineHeight: 1.4 }}>
-                      {notesShort}
+                    <div>
+                      <div style={lbl}>Faction type</div>
+                      <input
+                        style={{ ...S.inp, width: "100%" }}
+                        value={draft.faction_type}
+                        onChange={(e) => setDraftField("faction_type", e.target.value)}
+                      />
                     </div>
-                  ) : null}
+                    <div>
+                      <div style={lbl}>Level</div>
+                      <input
+                        type="number"
+                        style={{ ...S.inp, width: "100%" }}
+                        value={draft.level}
+                        onChange={(e) => setDraftField("level", e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <div style={lbl}>Hold</div>
+                      <select
+                        style={{ ...S.select, width: "100%" }}
+                        value={draft.hold}
+                        onChange={(e) => setDraftField("hold", e.target.value)}
+                      >
+                        <option value="weak">weak</option>
+                        <option value="strong">strong</option>
+                      </select>
+                    </div>
+                    <div>
+                      <div style={lbl}>Rep</div>
+                      <input
+                        type="number"
+                        style={{ ...S.inp, width: "100%" }}
+                        value={draft.reputation}
+                        onChange={(e) => setDraftField("reputation", e.target.value)}
+                      />
+                    </div>
+                    <div style={{ gridColumn: "1 / span 2" }}>
+                      <div style={lbl}>Notes</div>
+                      <textarea
+                        style={{ ...S.inp, width: "100%", minHeight: 56, border: "1px solid #374151", padding: 6 }}
+                        value={draft.notes}
+                        onChange={(e) => setDraftField("notes", e.target.value)}
+                      />
+                    </div>
+                    <div style={{ gridColumn: "3 / span 2" }}>
+                      <div style={lbl}>Crew notes</div>
+                      <textarea
+                        style={{ ...S.inp, width: "100%", minHeight: 56, border: "1px solid #374151", padding: 6 }}
+                        value={draft.crew_notes}
+                        onChange={(e) => setDraftField("crew_notes", e.target.value)}
+                      />
+                    </div>
+                    <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 4 }}>
+                      <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11 }}>
+                        <input
+                          type="checkbox"
+                          checked={!!draft.visible_to_players}
+                          onChange={(e) =>
+                            setDraftField("visible_to_players", e.target.checked)
+                          }
+                        />
+                        Visible to players
+                      </label>
+                    </div>
+                    <div style={{ gridColumn: "1 / span 2" }}>
+                      <div style={lbl}>Contacts (JSON)</div>
+                      <textarea
+                        style={{ ...S.inp, width: "100%", minHeight: 88, border: "1px solid #374151", padding: 6 }}
+                        value={draft.contacts}
+                        onChange={(e) => setDraftField("contacts", e.target.value)}
+                      />
+                    </div>
+                    <div style={{ gridColumn: "3 / span 2" }}>
+                      <div style={lbl}>Inventory (JSON)</div>
+                      <textarea
+                        style={{ ...S.inp, width: "100%", minHeight: 88, border: "1px solid #374151", padding: 6 }}
+                        value={draft.inventory}
+                        onChange={(e) => setDraftField("inventory", e.target.value)}
+                      />
+                    </div>
+                    <div style={{ gridColumn: "5 / span 1" }}>
+                      <div style={lbl}>Status (JSON)</div>
+                      <textarea
+                        style={{ ...S.inp, width: "100%", minHeight: 88, border: "1px solid #374151", padding: 6 }}
+                        value={draft.faction_status}
+                        onChange={(e) => setDraftField("faction_status", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+                    <button
+                      type="button"
+                      style={S.btnPrimary}
+                      onClick={() => patchFactionSnapshot(fid)}
+                      disabled={factionSavingId === fid}
+                    >
+                      {factionSavingId === fid ? "Saving..." : "Save faction fields"}
+                    </button>
+                    <span style={{ fontSize: 10, color: "#6b7280" }}>
+                      Edit fields here; changes apply to this faction everywhere.
+                    </span>
+                  </div>
                 </div>
                 <div style={grid}>{npcList.map((npc) => renderNpcSessionCard(npc))}</div>
               </div>
@@ -1575,7 +1834,34 @@ export default function SessionGMManagementPanels({
                     />
                   </div>
                   <div style={{ minWidth: 220, flex: "1 1 220px" }}>
-                    <div style={lbl}>Recent rolls</div>
+                    <div
+                      style={{
+                        ...lbl,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 8,
+                      }}
+                    >
+                      <span>Recent rolls</span>
+                      <label
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          fontSize: 10,
+                          color: "#9ca3af",
+                          textTransform: "none",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={showAllRecentRolls}
+                          onChange={(e) => setShowAllRecentRolls(e.target.checked)}
+                        />
+                        All roll types
+                      </label>
+                    </div>
                     <div
                       style={{
                         border: "1px solid #374151",
@@ -1588,31 +1874,50 @@ export default function SessionGMManagementPanels({
                         color: "#9ca3af",
                       }}
                     >
-                      {(sessionRolls || [])
-                        .filter(
-                          (r) =>
-                            String(r.character) === String(id) &&
-                            String((r.roll_type || "").toUpperCase()) === "ACTION" &&
-                            String((r.action_name || "").toUpperCase()) !== "FORTUNE",
-                        )
-                        .slice(0, 5).length === 0 ? (
+                      {getRecentCharacterRolls(id).length === 0 ? (
                         <div>—</div>
                       ) : (
-                        (sessionRolls || [])
-                          .filter(
-                            (r) =>
-                              String(r.character) === String(id) &&
-                              String((r.roll_type || "").toUpperCase()) === "ACTION" &&
-                              String((r.action_name || "").toUpperCase()) !== "FORTUNE",
-                          )
-                          .slice(0, 5)
-                          .map((r) => (
-                            <div key={r.id} style={{ marginBottom: 4 }}>
+                        getRecentCharacterRolls(id).map((r) => (
+                          <div
+                            key={r.id}
+                            style={{
+                              marginBottom: 4,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              gap: 8,
+                            }}
+                          >
+                            <div style={{ minWidth: 0 }}>
+                              {showAllRecentRolls ? (
+                                <span style={{ color: "#6b7280" }}>
+                                  {String(r.roll_type || "").toUpperCase()} ·{" "}
+                                </span>
+                              ) : null}
                               {(r.action_name || "action").toUpperCase()} ·{" "}
                               {(r.results || []).join(", ")} →{" "}
                               {(r.outcome || "").replace(/_/g, " ")}
                             </div>
-                          ))
+                            <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                              <button
+                                type="button"
+                                style={{ ...S.btnGhost, fontSize: 9, padding: "2px 6px" }}
+                                onClick={() => editRecentRoll(r)}
+                                disabled={recentRollSavingId === r.id}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                style={{ ...S.btnDanger, fontSize: 9, padding: "2px 6px" }}
+                                onClick={() => deleteRecentRoll(r)}
+                                disabled={recentRollSavingId === r.id}
+                              >
+                                Del
+                              </button>
+                            </div>
+                          </div>
+                        ))
                       )}
                     </div>
                   </div>

@@ -41,12 +41,12 @@ class RollViewSet(viewsets.ModelViewSet):
         return qs.order_by('-timestamp')
 
     def partial_update(self, request, *args, **kwargs):
-        """GM-only: update roll fields (position/effect and fortune visibility controls)."""
+        """GM-only: update roll fields (position/effect/fortune + manual corrections)."""
         roll = self.get_object()
         campaign = roll.session.campaign
         if campaign.gm_id != request.user.id and not request.user.is_staff:
             return Response(
-                {'error': 'Only the GM can edit roll position/effect.'},
+                {'error': 'Only the GM can edit roll records.'},
                 status=status.HTTP_403_FORBIDDEN
             )
         position = request.data.get('position')
@@ -62,6 +62,56 @@ class RollViewSet(viewsets.ModelViewSet):
             updates['fortune_reveal_outcome'] = bool(request.data.get('fortune_reveal_outcome'))
         if 'fortune_public_label' in request.data:
             updates['fortune_public_label'] = str(request.data.get('fortune_public_label') or '').strip()[:120]
+        if 'action_name' in request.data:
+            updates['action_name'] = str(request.data.get('action_name') or '').strip()[:50]
+        if 'description' in request.data:
+            updates['description'] = str(request.data.get('description') or '').strip()
+        if 'goal_label' in request.data:
+            updates['goal_label'] = str(request.data.get('goal_label') or '').strip()[:300]
+        if 'dice_pool' in request.data:
+            try:
+                updates['dice_pool'] = max(0, int(request.data.get('dice_pool')))
+            except (TypeError, ValueError):
+                return Response(
+                    {'error': 'dice_pool must be an integer.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        if 'results' in request.data:
+            raw_results = request.data.get('results')
+            if not isinstance(raw_results, list):
+                return Response(
+                    {'error': 'results must be a list of integers 1-6.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            parsed = []
+            for n in raw_results:
+                try:
+                    v = int(n)
+                except (TypeError, ValueError):
+                    return Response(
+                        {'error': 'results must be a list of integers 1-6.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                if v < 1 or v > 6:
+                    return Response(
+                        {'error': 'results values must be between 1 and 6.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                parsed.append(v)
+            updates['results'] = parsed
+            if 'dice_pool' not in request.data:
+                updates['dice_pool'] = len(parsed)
+            if 'outcome' not in request.data:
+                updates['outcome'] = outcome_from_dice_results(parsed)
+        if 'outcome' in request.data:
+            raw_outcome = str(request.data.get('outcome') or '').strip().upper()
+            allowed = {'CRITICAL_SUCCESS', 'FULL_SUCCESS', 'PARTIAL_SUCCESS', 'FAILURE', 'BOTCH'}
+            if raw_outcome not in allowed:
+                return Response(
+                    {'error': 'outcome must be one of CRITICAL_SUCCESS, FULL_SUCCESS, PARTIAL_SUCCESS, FAILURE, BOTCH.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            updates['outcome'] = raw_outcome
         if updates:
             for k, v in updates.items():
                 setattr(roll, k, v)
@@ -106,7 +156,10 @@ class RollViewSet(viewsets.ModelViewSet):
         })
 
     def create(self, request, *args, **kwargs):
-        """GM-only: create a manual roll (offline dice) for a character in a session."""
+        """Create a manual roll (offline dice) for a character in a session.
+
+        Allowed for campaign GM/staff, or the owner of the target character.
+        """
         session_id = request.data.get('session')
         character_id = request.data.get('character')
         if not session_id or not character_id:
@@ -121,9 +174,11 @@ class RollViewSet(viewsets.ModelViewSet):
                 {'error': 'Character must belong to session campaign.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if session.campaign.gm_id != request.user.id and not request.user.is_staff:
+        is_gm_or_staff = session.campaign.gm_id == request.user.id or request.user.is_staff
+        is_character_owner = character.user_id == request.user.id
+        if not is_gm_or_staff and not is_character_owner:
             return Response(
-                {'error': 'Only the GM can create manual rolls.'},
+                {'error': "Only the GM/staff or this character's owner can create manual rolls."},
                 status=status.HTTP_403_FORBIDDEN,
             )
         return super().create(request, *args, **kwargs)

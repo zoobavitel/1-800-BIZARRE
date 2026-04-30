@@ -2,6 +2,8 @@
  * Mirrors backend `roll_action` base dice math (character_views.py):
  * base action pool = action rating only (dots in the rolled action). Attribute
  * group breadth does not add dice.
+ * When the final pool is 0 (after rating + push/devil/bonus/assist), the server
+ * rolls 2d6 and uses the lower die for the outcome (Blades-style).
  *
  * @param {string} actionName - e.g. "HUNT" or "hunt"
  * @param {Record<string, number>} actionRatings - sheet keys (HUNT, BIZARRE, …)
