@@ -111,3 +111,42 @@ textarea {
   background: var(--hftf-purple);
   width: 14px;
 }
+
+/* AppBar Search — aligns with homepage .home-poc .header-btn-ghost */
+.appbar-search-btn {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  cursor: pointer;
+  background: none;
+  border: 1px solid var(--hftf-gold-muted);
+  border-radius: 0;
+  color: var(--hftf-text-dim);
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.appbar-search-btn:hover {
+  color: var(--hftf-text-cream);
+  border-color: var(--hftf-text-cream);
+}
+
+/* AppBar Account — aligns with homepage .home-poc .header-btn-fill */
+.appbar-account-btn {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  cursor: pointer;
+  color: #fff;
+  background: var(--hftf-purple);
+  border: 1px solid var(--hftf-purple);
+  border-radius: 0;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.appbar-account-btn:hover {
+  background: var(--hftf-purple-hover);
+  border-color: var(--hftf-purple-hover);
+  color: #fff;
+}

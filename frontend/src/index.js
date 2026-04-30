@@ -109,7 +109,17 @@ const barStyles = {
   },
 };
 
-function AppBar({ onHamburgerClick, onBack, onHome, pageTitle, rightContent }) {
+function AppBar({
+  onHamburgerClick,
+  onBack,
+  onHome,
+  pageTitle,
+  rightContent,
+  onSearch,
+  onOpenAccountMenu,
+  accountMenuOpen = false,
+}) {
+  const showRight = rightContent || onSearch || onOpenAccountMenu;
   return (
     <header style={barStyles.bar}>
       <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
@@ -170,9 +180,25 @@ function AppBar({ onHamburgerClick, onBack, onHome, pageTitle, rightContent }) {
           </>
         )}
       </div>
-      {rightContent && (
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      {showRight && (
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           {rightContent}
+          {onSearch && (
+            <button type="button" className="appbar-search-btn" onClick={onSearch}>
+              Search
+            </button>
+          )}
+          {onOpenAccountMenu && (
+            <button
+              type="button"
+              className="appbar-account-btn"
+              onClick={onOpenAccountMenu}
+              aria-haspopup="dialog"
+              aria-expanded={accountMenuOpen}
+            >
+              Account
+            </button>
+          )}
         </div>
       )}
     </header>
@@ -426,29 +452,31 @@ const App = () => {
           onLogout={logout}
         />
 
+        <UserMenu
+          open={userMenuOpen}
+          onClose={() => setUserMenuOpen(false)}
+          onNavigateToNotifications={() => handlePageChange("notifications")}
+          onNavigateToMessages={() => handlePageChange("messages")}
+          onNavigateToAccountSettings={() =>
+            handlePageChange("account-settings")
+          }
+          onLogout={logout}
+        />
+
         {currentPage !== "home" && (
-            <AppBar
-              onHamburgerClick={toggleMenu}
-              onBack={handleBack}
-              onHome={() => handlePageChange("home")}
-              pageTitle={PAGE_TITLES[currentPage]}
-            />
-          )}
+          <AppBar
+            onHamburgerClick={toggleMenu}
+            onBack={handleBack}
+            onHome={() => handlePageChange("home")}
+            pageTitle={PAGE_TITLES[currentPage]}
+            onSearch={() => handlePageChange("search")}
+            onOpenAccountMenu={() => setUserMenuOpen(true)}
+            accountMenuOpen={userMenuOpen}
+          />
+        )}
 
         {currentPage === "home" && (
           <>
-            <UserMenu
-              open={userMenuOpen}
-              onClose={() => setUserMenuOpen(false)}
-              onNavigateToNotifications={() =>
-                handlePageChange("notifications")
-              }
-              onNavigateToMessages={() => handlePageChange("messages")}
-              onNavigateToAccountSettings={() =>
-                handlePageChange("account-settings")
-              }
-              onLogout={logout}
-            />
             <Home
               menuOpen={menuOpen}
               onToggleMenu={toggleMenu}

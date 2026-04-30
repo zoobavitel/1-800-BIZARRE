@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
+          "enhance action handling and group action management",
           "enhance session management and roll handling",
           "add increment wanted action and roll deletion",
           "add roll goal mapping by character",
@@ -428,12 +429,6 @@ export const PATCH_NOTES = [
         "title": "Fixed",
         "items": [
           "add explicit permissions to prettier workflow"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "add prettier formatting GitHub Action with config and scripts"
         ]
       }
     ]
