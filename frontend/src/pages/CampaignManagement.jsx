@@ -1166,8 +1166,38 @@ function CampaignDetail({
         <div style={S.card}>
           <span style={S.sectionLbl}>Campaign NPCs</span>
           {(campaign.campaign_npcs || []).length === 0 ? (
-            <div style={{ color: "#6b7280", fontSize: "12px" }}>
-              No NPCs assigned to this campaign.
+            <div
+              style={{
+                color: "#6b7280",
+                fontSize: "12px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "8px",
+                flexWrap: "wrap",
+              }}
+            >
+              <span>No NPCs assigned to this campaign.</span>
+              {typeof onNavigateToNPC === "function" && (
+                <a
+                  href={buildRouteHref("npcs", { campaignId: campaign.id })}
+                  onClick={(e) =>
+                    handleSpaNavClick(e, () =>
+                      onNavigateToNPC(null, { campaignId: campaign.id }),
+                    )
+                  }
+                  style={{
+                    ...S.btn,
+                    fontSize: "10px",
+                    padding: "2px 6px",
+                    background: "#15803d",
+                    color: "#bbf7d0",
+                    textDecoration: "none",
+                  }}
+                >
+                  Create NPC for this campaign now
+                </a>
+              )}
             </div>
           ) : (
             (campaign.campaign_npcs || []).map((npc) => (

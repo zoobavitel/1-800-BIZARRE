@@ -193,6 +193,7 @@ function routeStateFromHash(hash) {
     characterPageId: null,
     campaignPageId: null,
     npcPageId: null,
+    npcCampaignId: null,
     abilityFilter: null,
     rulesSection: null,
   };
@@ -200,6 +201,15 @@ function routeStateFromHash(hash) {
   if (hash === "test") return { ...base, currentPage: "test" };
   if (hash === "npcs" || hash.startsWith("npcs/")) {
     const idPart = hash.replace(/^npcs\/?/, "");
+    if (idPart.startsWith("new/")) {
+      const campaignPart = idPart.replace(/^new\/?/, "");
+      return {
+        ...base,
+        currentPage: "npcs",
+        npcPageId: null,
+        npcCampaignId: parseHashId(campaignPart),
+      };
+    }
     return {
       ...base,
       currentPage: "npcs",
@@ -265,6 +275,9 @@ const App = () => {
   );
   const [campaignFactionId, setCampaignFactionId] = useState(null);
   const [npcPageId, setNpcPageId] = useState(initialRoute.npcPageId);
+  const [npcCampaignId, setNpcCampaignId] = useState(
+    initialRoute.npcCampaignId,
+  );
   const [abilityFilter, setAbilityFilter] = useState(
     initialRoute.abilityFilter,
   );
@@ -283,6 +296,7 @@ const App = () => {
     setCharacterPageId(s.characterPageId);
     setCampaignPageId(s.campaignPageId);
     setNpcPageId(s.npcPageId);
+    setNpcCampaignId(s.npcCampaignId);
     setAbilityFilter(s.abilityFilter);
     setRulesSection(s.rulesSection);
   }, []);
@@ -351,12 +365,15 @@ const App = () => {
       setCharacterPageId(null);
       setCampaignPageId(null);
       const npcId = payload?.npcId ?? null;
+      const campaignId = payload?.campaignId ?? null;
       setNpcPageId(npcId);
-      window.location.hash = buildRouteHash(page, { npcId });
+      setNpcCampaignId(npcId == null ? campaignId : null);
+      window.location.hash = buildRouteHash(page, { npcId, campaignId });
     } else {
       setCharacterPageId(null);
       setCampaignPageId(null);
       setNpcPageId(null);
+      setNpcCampaignId(null);
       setAbilityFilter(null);
       setRulesSection(null);
       window.location.hash = buildRouteHash(page, payload);
@@ -473,6 +490,7 @@ const App = () => {
           <CharacterPage
             initialCharacterId={null}
             initialNpcId={npcPageId}
+            initialNpcCampaignId={npcCampaignId}
             preferNpcMode
             onRegisterNavigationGuard={setNavigationGuard}
           />
@@ -484,7 +502,12 @@ const App = () => {
             onNavigateToCharacter={(id) =>
               handlePageChange("character", { characterId: id })
             }
-            onNavigateToNPC={(id) => handlePageChange("npcs", { npcId: id })}
+            onNavigateToNPC={(id, opts) =>
+              handlePageChange("npcs", {
+                npcId: id,
+                campaignId: opts?.campaignId ?? null,
+              })
+            }
             onCampaignSelect={(id) =>
               handlePageChange("campaigns", { campaignId: id })
             }

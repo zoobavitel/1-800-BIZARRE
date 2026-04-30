@@ -27,7 +27,9 @@ export function buildRouteHash(page, payload = {}) {
     return payload.section ? `rules-${payload.section}` : "rules";
   }
   if (page === "npcs") {
-    return payload.npcId != null ? `npcs/${payload.npcId}` : "npcs";
+    if (payload.npcId != null) return `npcs/${payload.npcId}`;
+    if (payload.campaignId != null) return `npcs/new/${payload.campaignId}`;
+    return "npcs";
   }
   if (!page || page === "home") return "";
   return page;

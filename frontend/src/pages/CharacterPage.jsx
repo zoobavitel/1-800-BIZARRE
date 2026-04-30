@@ -253,6 +253,7 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
 export default function CharacterPage({
   initialCharacterId = null,
   initialNpcId = null,
+  initialNpcCampaignId = null,
   preferNpcMode = false,
   onRegisterNavigationGuard = null,
 }) {
@@ -845,11 +846,13 @@ export default function CharacterPage({
         const npcList = list || [];
         setNpcs(npcList);
         if (!npcTabsInitialized.current) {
+          const seededCampaign =
+            initialNpcCampaignId != null ? initialNpcCampaignId : null;
           npcTabsInitialized.current = true;
           const tab = {
             tabId: nextTabId++,
             npcId: null,
-            npc: null,
+            npc: seededCampaign ? { campaign: seededCampaign } : null,
             label: "New NPC",
           };
           setNpcTabs([tab]);
@@ -858,7 +861,7 @@ export default function CharacterPage({
       })
       .catch(() => setNpcs([]))
       .finally(() => setNpcsLoading(false));
-  }, [mode, campaignId, initialNpcId]);
+  }, [mode, campaignId, initialNpcId, initialNpcCampaignId]);
 
   // NPC list for the toolbar "Open NPC…" while in character mode (no loading gate).
   useEffect(() => {

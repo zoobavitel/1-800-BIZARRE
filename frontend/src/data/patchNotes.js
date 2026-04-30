@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Fixed",
         "items": [
+          "enhance layout and accessibility of HomeStandCoin component",
           "enhance HomeStandCoin component layout and accessibility",
           "center stand coin in hero"
         ]
@@ -427,18 +428,6 @@ export const PATCH_NOTES = [
         "title": "Added",
         "items": [
           "per-section SRD pages, split script, and rules nav layout"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-08",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Fix CI: stash_slots migration; coin readout height; patch notes"
         ]
       }
     ]
