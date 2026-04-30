@@ -478,6 +478,43 @@ const CharacterSheetWrapper = ({
     );
   }, [character?.crew, character?.crewId]);
 
+  // Auto-populate crew from campaign context when this sheet has no crew yet.
+  useEffect(() => {
+    setCharData((prev) => {
+      if ((prev.crew || "").trim() || prev.crewId) return prev;
+      const roster = charCampaign?.campaign_characters || [];
+      const me = roster.find((c) => String(c.id) === String(characterId));
+      const meCrewName = (me?.crew || me?.personal_crew_name || "").trim();
+      if (me?.crewId || meCrewName) {
+        return {
+          ...prev,
+          crewId: me?.crewId ?? null,
+          crew: meCrewName || prev.crew,
+        };
+      }
+
+      const crews = [];
+      roster.forEach((c) => {
+        const name = (c?.crew || c?.personal_crew_name || "").trim();
+        const id = c?.crewId ?? null;
+        if (name || id) {
+          const key = String(id ?? name).toLowerCase();
+          if (!crews.some((x) => x.key === key)) {
+            crews.push({ key, id, name });
+          }
+        }
+      });
+      if (crews.length === 1) {
+        return {
+          ...prev,
+          crewId: crews[0].id ?? null,
+          crew: crews[0].name || prev.crew,
+        };
+      }
+      return prev;
+    });
+  }, [charCampaign?.campaign_characters, characterId]);
+
   /** Persist crew label: shared campaign crew (PATCH crew) or personal_crew_name / create+link. Used in Character and Crew mode. */
   const commitCrewName = useCallback(async () => {
     if (!characterId) return;
@@ -1146,6 +1183,27 @@ const CharacterSheetWrapper = ({
   const durVal = Math.min(5, Math.max(0, Number(standStats.durability) || 1));
   const devVal = Math.min(5, Math.max(0, Number(standStats.development) || 1));
   const maxStress = 9 + (DUR_TABLE[durVal]?.stressBonus ?? 0);
+  const applyStressCost = useCallback(
+    (cost) => {
+      const spend = Number(cost) || 0;
+      if (spend <= 0) return;
+      setStressFilled((prev) => {
+        const current = Number(prev) || 0;
+        const afterSpend = current + spend;
+        if (afterSpend <= maxStress) return afterSpend;
+        const overflow = afterSpend - maxStress;
+        setTrauma((prevTrauma) => {
+          const firstOpen = Object.entries(prevTrauma || {}).find(
+            ([, checked]) => !checked,
+          )?.[0];
+          if (!firstOpen) return prevTrauma;
+          return { ...prevTrauma, [firstOpen]: true };
+        });
+        return Math.max(0, overflow);
+      });
+    },
+    [maxStress],
+  );
   const maxArmorCharges = DUR_TABLE[durVal]?.armorCharges ?? 1;
   const sessionDevXP = DEV_SESSION_XP[devVal] ?? 0;
 
@@ -1331,8 +1389,15 @@ const CharacterSheetWrapper = ({
   const [xpReqRolls, setXpReqRolls] = useState([]);
   const [activeGroupAction, setActiveGroupAction] = useState(null);
   const [groupGoalDraft, setGroupGoalDraft] = useState("");
+  const [groupActionNameDraft, setGroupActionNameDraft] = useState("");
   const [groupBusy, setGroupBusy] = useState(false);
   const [groupActionErr, setGroupActionErr] = useState(null);
+  const [groupActionRolls, setGroupActionRolls] = useState([]);
+  const [groupActionLoading, setGroupActionLoading] = useState(false);
+  const [assistTargetId, setAssistTargetId] = useState("");
+  const [assistGrantBusy, setAssistGrantBusy] = useState(false);
+  const [assistGrantMsg, setAssistGrantMsg] = useState(null);
+  const [assistGrantErr, setAssistGrantErr] = useState(null);
   const [rollGoalDraft, setRollGoalDraft] = useState("");
   const [assistHelperId, setAssistHelperId] = useState("");
   const [showDevilsBargainModal, setShowDevilsBargainModal] = useState(false);
@@ -1574,32 +1639,143 @@ const CharacterSheetWrapper = ({
     return roster.filter((c) => c.id !== characterId);
   }, [charCampaign?.campaign_characters, characterId, charData.crewId]);
 
+  const groupParticipants = useMemo(() => {
+    const roster = charCampaign?.campaign_characters || [];
+    if (charData.crewId) {
+      const sameCrew = roster.filter((c) => c.crewId === charData.crewId);
+      if (sameCrew.length) return sameCrew;
+    }
+    return roster;
+  }, [charCampaign?.campaign_characters, charData.crewId]);
+
+  const groupActionChoices = useMemo(
+    () => Object.keys(ACTION_ATTR || {}).sort(),
+    [],
+  );
+
+  useEffect(() => {
+    if (!activeSessionId) {
+      setActiveGroupAction(null);
+      return;
+    }
+    groupActionAPI
+      .list({ session: activeSessionId })
+      .then((res) => {
+        const rows = Array.isArray(res) ? res : res?.results || [];
+        const open = rows.find((ga) => ga.status === "OPEN") || null;
+        setActiveGroupAction(open);
+      })
+      .catch(() => setActiveGroupAction(null));
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    if (activeGroupAction?.action_name) {
+      setGroupActionNameDraft(String(activeGroupAction.action_name).toUpperCase());
+    }
+  }, [activeGroupAction?.action_name]);
+
+  useEffect(() => {
+    if (!activeGroupAction?.id) {
+      setGroupActionRolls([]);
+      return;
+    }
+    setGroupActionLoading(true);
+    rollAPI
+      .getRolls({
+        session: activeSessionId,
+        group_action: activeGroupAction.id,
+      })
+      .then((res) => {
+        const rows = Array.isArray(res) ? res : res?.results || [];
+        setGroupActionRolls(rows);
+      })
+      .catch(() => setGroupActionRolls([]))
+      .finally(() => setGroupActionLoading(false));
+  }, [activeGroupAction?.id, activeSessionId]);
+
+  const groupRollBoard = useMemo(() => {
+    if (!activeGroupAction?.id) return [];
+    const byCharacter = new Map();
+    (groupActionRolls || [])
+      .filter(
+        (r) =>
+          String((r.roll_type || "").toUpperCase()) === "ACTION" &&
+          String((r.action_name || "").toLowerCase()) ===
+            String(activeGroupAction.action_name || "").toLowerCase(),
+      )
+      .forEach((r) => {
+        const existing = byCharacter.get(r.character);
+        if (!existing) {
+          byCharacter.set(r.character, r);
+          return;
+        }
+        const a = new Date(existing.timestamp || 0).getTime();
+        const b = new Date(r.timestamp || 0).getTime();
+        if (b > a) byCharacter.set(r.character, r);
+      });
+    return groupParticipants.map((p) => {
+      const roll = byCharacter.get(p.id) || null;
+      const highest = Math.max(...((roll?.results || []).map(Number) || [0]));
+      const failed = roll ? highest <= 3 : null;
+      return {
+        id: p.id,
+        name: p.true_name || p.name || `PC ${p.id}`,
+        roll,
+        failed,
+      };
+    });
+  }, [activeGroupAction, groupActionRolls, groupParticipants]);
+
+  const groupFailures = useMemo(
+    () => groupRollBoard.filter((r) => r.failed === true).length,
+    [groupRollBoard],
+  );
+  const groupPendingCount = useMemo(
+    () => groupRollBoard.filter((r) => !r.roll).length,
+    [groupRollBoard],
+  );
+
+  const abilityRollBonusOptions = useMemo(() => {
+    const supportsBonusDice = (description) =>
+      /\+1d\b|\bplus\s*1d\b/i.test(String(description || ""));
+    const supportsBonusEffect = (description) =>
+      /\+1\s*effect\b|\bplus\s*1\s*effect\b/i.test(
+        String(description || ""),
+      );
+    return (abilities || [])
+      .filter((a) => a.type === "standard")
+      .map((ab) => ({
+        ...ab,
+        supportsDice: supportsBonusDice(ab.description),
+        supportsEffect: supportsBonusEffect(ab.description),
+      }))
+      .filter((ab) => ab.supportsDice || ab.supportsEffect);
+  }, [abilities]);
+
   const { bonusDiceFromAbilities, abilityEffectSteps, abilityBonusAudit } =
     useMemo(() => {
       let d = 0;
       let e = 0;
       const audit = [];
-      (abilities || [])
-        .filter((a) => a.type === "standard")
-        .forEach((ab) => {
-          const id = ab.id ?? ab.name;
-          const b = rollAbilityBoost[id];
-          if (!b) return;
-          if (b.dice) {
-            d += 1;
-            audit.push(`${ab.name}: +1d`);
-          }
-          if (b.effect) {
-            e += 1;
-            audit.push(`${ab.name}: +1 effect`);
-          }
-        });
+      abilityRollBonusOptions.forEach((ab) => {
+        const id = ab.id ?? ab.name;
+        const b = rollAbilityBoost[id];
+        if (!b) return;
+        if (ab.supportsDice && b.dice) {
+          d += 1;
+          audit.push(`${ab.name}: +1d`);
+        }
+        if (ab.supportsEffect && b.effect) {
+          e += 1;
+          audit.push(`${ab.name}: +1 effect`);
+        }
+      });
       return {
         bonusDiceFromAbilities: d,
         abilityEffectSteps: e,
         abilityBonusAudit: audit,
       };
-    }, [abilities, rollAbilityBoost]);
+    }, [abilityRollBonusOptions, rollAbilityBoost]);
 
   const gmDevilBargainText = useMemo(() => {
     const m = charCampaign?.active_session_detail?.devils_bargain_by_character;
@@ -1624,6 +1800,9 @@ const CharacterSheetWrapper = ({
   const applyRollPushMode = useCallback(
     (mode) => {
       setDevilBargainConfirmed(false);
+      if (harmLevel3Used && (mode === "push_effect" || mode === "push_dice")) {
+        mode = "none";
+      }
       setRollModal((prev) => {
         if (mode === "none") {
           return {
@@ -1662,7 +1841,7 @@ const CharacterSheetWrapper = ({
         };
       });
     },
-    [gmDevilBargainText],
+    [gmDevilBargainText, harmLevel3Used],
   );
 
   const rollPoolPreview = useMemo(() => {
@@ -1676,8 +1855,10 @@ const CharacterSheetWrapper = ({
     if (rollModal.devil_bargain_dice) mod += 1;
     if (assistHelperId) mod += 1;
     mod += bonusDiceFromAbilities;
-    const pushStress =
+    const selectedPushStress =
       (rollModal.push_effect ? 2 : 0) + (rollModal.push_dice ? 2 : 0);
+    const requiredIncapacitatedStress = harmLevel3Used ? 2 : 0;
+    const pushStress = selectedPushStress + requiredIncapacitatedStress;
     return {
       action_rating,
       basePool,
@@ -1691,9 +1872,14 @@ const CharacterSheetWrapper = ({
     rollModal.push_dice,
     rollModal.push_effect,
     rollModal.devil_bargain_dice,
+    harmLevel3Used,
     assistHelperId,
     bonusDiceFromAbilities,
   ]);
+
+  const pushStressCost = rollPoolPreview?.pushStress || 0;
+  const pushWouldCauseTrauma =
+    pushStressCost > 0 && stressFilled + pushStressCost > maxStress;
 
   const handleRollWithSession = async () => {
     if (!rollPending || !characterId) return;
@@ -1724,11 +1910,34 @@ const CharacterSheetWrapper = ({
       };
       if (activeSessionId) {
         payload.session_id = activeSessionId;
-        if (activeGroupAction?.id) {
+        if (
+          activeGroupAction?.id &&
+          String(rollPending.actionName || "").toLowerCase() ===
+            String(activeGroupAction.action_name || "").toLowerCase()
+        ) {
           payload.group_action_id = activeGroupAction.id;
         }
       }
       const res = await characterAPI.rollAction(characterId, payload);
+      if (payload.group_action_id && res.roll_id) {
+        setGroupActionRolls((prev) => {
+          const withoutMine = (prev || []).filter(
+            (r) => String(r.character) !== String(characterId),
+          );
+          return [
+            {
+              id: res.roll_id,
+              character: characterId,
+              action_name: payload.action,
+              roll_type: "ACTION",
+              results: res.dice_results || [],
+              outcome: res.outcome || "",
+              timestamp: new Date().toISOString(),
+            },
+            ...withoutMine,
+          ];
+        });
+      }
       setDiceResult({
         action: rollPending.actionName,
         dice: res.dice_results || [],
@@ -1765,8 +1974,7 @@ const CharacterSheetWrapper = ({
           [res.xp_track]: Math.min((p[res.xp_track] || 0) + res.xp_gained, 5),
         }));
       }
-      if (res.stress_spent)
-        setStressFilled((p) => Math.max(0, (p ?? 0) - res.stress_spent));
+      if (res.stress_spent) applyStressCost(res.stress_spent);
       if (res.assist_helper_id) onCampaignRefresh?.();
       setRollPending(null);
       setRollGoalDraft("");
@@ -2487,7 +2695,9 @@ const CharacterSheetWrapper = ({
                             ...S.btn,
                             padding: "2px 8px",
                             fontSize: 10,
-                            background: "#1f2937",
+                            background: "#4338ca",
+                            color: "#f9fafb",
+                            border: "1px solid #818cf8",
                           }}
                         >
                           {historyCollapsed ? "Expand" : "Collapse"}
@@ -2510,7 +2720,13 @@ const CharacterSheetWrapper = ({
                                 fontSize: 10,
                                 padding: "4px 8px",
                                 background:
-                                  historyMode === "sheet" ? "#312e81" : "#1f2937",
+                                  historyMode === "sheet" ? "#4338ca" : "#1f2937",
+                                color:
+                                  historyMode === "sheet" ? "#f9fafb" : "#d1d5db",
+                                border:
+                                  historyMode === "sheet"
+                                    ? "1px solid #818cf8"
+                                    : "1px solid #374151",
                               }}
                             >
                               Character Sheet History
@@ -5083,9 +5299,7 @@ const CharacterSheetWrapper = ({
                         assist / bargain, then roll. Cancel to pick another
                         action.
                       </div>
-                      {harmLevel3Used &&
-                        !rollModal.push_effect &&
-                        !rollModal.push_dice && (
+                      {harmLevel3Used && (
                           <div
                             style={{
                               background: "#7f1d1d",
@@ -5097,8 +5311,8 @@ const CharacterSheetWrapper = ({
                               color: "#fca5a5",
                             }}
                           >
-                            Incapacitated (Level 3 harm). You must push yourself
-                            to act (2 stress for +1 effect or +1d).
+                            Incapacitated (Level 3 harm). Acting costs 2 stress.
+                            This does not grant +1 effect or +1d.
                           </div>
                         )}
                       {charCampaign?.active_session_detail
@@ -5267,9 +5481,19 @@ const CharacterSheetWrapper = ({
                               marginTop: "6px",
                               paddingTop: "8px",
                               borderTop: "1px solid #374151",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: "10px",
+                              flexWrap: "wrap",
                             }}
                           >
-                            Total dice: <strong>{rollPoolPreview.total}</strong>
+                            <span>
+                              Total dice: <strong>{rollPoolPreview.total}</strong>
+                            </span>
+                            <span>
+                              Total stress to mark:{" "}
+                              <strong>{rollPoolPreview.pushStress}</strong>
+                            </span>
                           </div>
                           {rollPoolPreview.pushStress > 0 ? (
                             <div
@@ -5286,8 +5510,7 @@ const CharacterSheetWrapper = ({
                           ) : null}
                         </div>
                       )}
-                      {(abilities || []).filter((a) => a.type === "standard")
-                        .length > 0 && (
+                      {abilityRollBonusOptions.length > 0 && (
                         <div style={{ marginBottom: "12px" }}>
                           <div
                             style={{
@@ -5307,10 +5530,7 @@ const CharacterSheetWrapper = ({
                               overflow: "auto",
                             }}
                           >
-                            {(abilities || [])
-                              .filter((a) => a.type === "standard")
-                              .slice(0, 16)
-                              .map((ab) => {
+                            {abilityRollBonusOptions.map((ab) => {
                                 const id = ab.id ?? ab.name;
                                 const b = rollAbilityBoost[id] || {};
                                 return (
@@ -5333,54 +5553,58 @@ const CharacterSheetWrapper = ({
                                     >
                                       {ab.name}
                                     </span>
-                                    <label
-                                      style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "4px",
-                                        cursor: "pointer",
-                                      }}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={!!b.dice}
-                                        onChange={(e) =>
-                                          setRollAbilityBoost((p) => ({
-                                            ...p,
-                                            [id]: {
-                                              ...p[id],
-                                              dice: e.target.checked,
-                                              effect: !!p[id]?.effect,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                      +1d
-                                    </label>
-                                    <label
-                                      style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "4px",
-                                        cursor: "pointer",
-                                      }}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={!!b.effect}
-                                        onChange={(e) =>
-                                          setRollAbilityBoost((p) => ({
-                                            ...p,
-                                            [id]: {
-                                              ...p[id],
-                                              effect: e.target.checked,
-                                              dice: !!p[id]?.dice,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                      +1 effect
-                                    </label>
+                                    {ab.supportsDice ? (
+                                      <label
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "4px",
+                                          cursor: "pointer",
+                                        }}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={!!b.dice}
+                                          onChange={(e) =>
+                                            setRollAbilityBoost((p) => ({
+                                              ...p,
+                                              [id]: {
+                                                ...p[id],
+                                                dice: e.target.checked,
+                                                effect: !!p[id]?.effect,
+                                              },
+                                            }))
+                                          }
+                                        />
+                                        +1d
+                                      </label>
+                                    ) : null}
+                                    {ab.supportsEffect ? (
+                                      <label
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "4px",
+                                          cursor: "pointer",
+                                        }}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={!!b.effect}
+                                          onChange={(e) =>
+                                            setRollAbilityBoost((p) => ({
+                                              ...p,
+                                              [id]: {
+                                                ...p[id],
+                                                effect: e.target.checked,
+                                                dice: !!p[id]?.dice,
+                                              },
+                                            }))
+                                          }
+                                        />
+                                        +1 effect
+                                      </label>
+                                    ) : null}
                                   </div>
                                 );
                               })}
@@ -5406,9 +5630,13 @@ const CharacterSheetWrapper = ({
                           Push / devil&apos;s bargain (choose at most one)
                         </legend>
                         {[
-                          ["none", "None"],
-                          ["push_effect", "Push for +1 effect (2 stress)"],
-                          ["push_dice", "Push for +1d (2 stress)"],
+                          ["none", harmLevel3Used ? "None (incapacitated cost still applies)" : "None"],
+                          ...(!harmLevel3Used
+                            ? [
+                                ["push_effect", "Push for +1 effect (2 stress)"],
+                                ["push_dice", "Push for +1d (2 stress)"],
+                              ]
+                            : []),
                           [
                             "devil",
                             "Devil's bargain (+1d, table-determined consequence)",
@@ -5578,6 +5806,18 @@ const CharacterSheetWrapper = ({
                           {rollApiError}
                         </div>
                       )}
+                      {pushWouldCauseTrauma && (
+                        <div
+                          style={{
+                            color: "#f59e0b",
+                            fontSize: "11px",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          Warning: paying this push stress will overflow your
+                          stress track and mark trauma.
+                        </div>
+                      )}
                       <div
                         style={{
                           display: "flex",
@@ -5588,9 +5828,6 @@ const CharacterSheetWrapper = ({
                         <button
                           onClick={handleRollWithSession}
                           disabled={
-                            (harmLevel3Used &&
-                              !rollModal.push_effect &&
-                              !rollModal.push_dice) ||
                             (rollModal.devil_bargain_dice &&
                               ((gmDevilBargainText && !devilBargainConfirmed) ||
                                 (!gmDevilBargainText &&
@@ -5811,9 +6048,7 @@ const CharacterSheetWrapper = ({
                               <button
                                 onClick={() => {
                                   const cost = diceResult.stressCost ?? 0;
-                                  setStressFilled((prev) =>
-                                    Math.min(maxStress, prev + cost),
-                                  );
+                                  applyStressCost(cost);
                                 }}
                                 style={{
                                   ...S.btn,
@@ -5893,6 +6128,87 @@ const CharacterSheetWrapper = ({
                         style={{
                           display: "flex",
                           flexWrap: "wrap",
+                          gap: "8px",
+                          alignItems: "center",
+                          marginBottom: "12px",
+                        }}
+                      >
+                        <select
+                          style={{ ...S.sel, width: "100%", maxWidth: 260 }}
+                          value={assistTargetId}
+                          onChange={(e) => setAssistTargetId(e.target.value)}
+                        >
+                          <option value="">Choose player for +1d</option>
+                          {helpCandidates.map((c) => (
+                            <option key={c.id} value={String(c.id)}>
+                              {c.true_name || c.name || `PC ${c.id}`}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!assistTargetId || assistGrantBusy}
+                          onClick={async () => {
+                            if (!assistTargetId || !characterId) return;
+                            setAssistGrantErr(null);
+                            setAssistGrantMsg(null);
+                            setAssistGrantBusy(true);
+                            try {
+                              await characterAPI.assistHelp(
+                                parseInt(assistTargetId, 10),
+                                characterId,
+                              );
+                              applyStressCost(1);
+                              const target = helpCandidates.find(
+                                (c) => String(c.id) === String(assistTargetId),
+                              );
+                              setAssistGrantMsg(
+                                `+1d assist granted to ${target?.true_name || target?.name || "teammate"} (you marked 1 stress).`,
+                              );
+                              setAssistTargetId("");
+                              onCampaignRefresh?.();
+                            } catch (e) {
+                              setAssistGrantErr(e.message);
+                            } finally {
+                              setAssistGrantBusy(false);
+                            }
+                          }}
+                          style={{
+                            ...S.btn,
+                            background: "#0f766e",
+                            color: "#f8fafc",
+                            fontSize: "11px",
+                          }}
+                        >
+                          {assistGrantBusy ? "…" : "Grant +1d assist"}
+                        </button>
+                      </div>
+                      {assistGrantMsg ? (
+                        <div
+                          style={{
+                            fontSize: "11px",
+                            color: "#5eead4",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          {assistGrantMsg}
+                        </div>
+                      ) : null}
+                      {assistGrantErr ? (
+                        <div
+                          style={{
+                            fontSize: "11px",
+                            color: "#f87171",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          {assistGrantErr}
+                        </div>
+                      ) : null}
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
                           gap: "10px",
                           alignItems: "flex-end",
                           marginTop: "8px",
@@ -5906,6 +6222,31 @@ const CharacterSheetWrapper = ({
                               color: "#9ca3af",
                               display: "block",
                               marginBottom: "4px",
+                            }}
+                          >
+                            Group action roll (required)
+                          </span>
+                          <select
+                            style={{ ...S.sel, width: "100%", maxWidth: 320 }}
+                            value={groupActionNameDraft}
+                            onChange={(e) =>
+                              setGroupActionNameDraft(e.target.value)
+                            }
+                          >
+                            <option value="">Choose action</option>
+                            {groupActionChoices.map((action) => (
+                              <option key={action} value={action}>
+                                {action}
+                              </option>
+                            ))}
+                          </select>
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              display: "block",
+                              marginBottom: "4px",
+                              marginTop: "8px",
                             }}
                           >
                             Group action goal
@@ -5927,7 +6268,7 @@ const CharacterSheetWrapper = ({
                           >
                             <button
                               type="button"
-                              disabled={groupBusy}
+                              disabled={groupBusy || !groupActionNameDraft}
                               onClick={async () => {
                                 setGroupBusy(true);
                                 try {
@@ -5935,6 +6276,7 @@ const CharacterSheetWrapper = ({
                                   const ga = await groupActionAPI.create({
                                     session: activeSessionId,
                                     leader: characterId,
+                                    action_name: groupActionNameDraft.toLowerCase(),
                                     goal_label: groupGoalDraft.trim(),
                                   });
                                   setActiveGroupAction(ga);
@@ -5958,13 +6300,16 @@ const CharacterSheetWrapper = ({
                               <span
                                 style={{ fontSize: "10px", color: "#a78bfa" }}
                               >
-                                Open group #{activeGroupAction.id} — rolls
-                                attach until resolved.
+                                Open group #{activeGroupAction.id} ({String(activeGroupAction.action_name || "").toUpperCase()}) — {groupPendingCount} pending, {groupFailures} fail.
                               </span>
                             )}
-                            {activeGroupAction?.id && isGM && (
+                            {activeGroupAction?.id &&
+                              (isGM ||
+                                String(activeGroupAction.leader) ===
+                                  String(characterId)) && (
                               <button
                                 type="button"
+                                disabled={groupPendingCount > 0}
                                 onClick={async () => {
                                   try {
                                     await groupActionAPI.resolve(
@@ -6000,6 +6345,79 @@ const CharacterSheetWrapper = ({
                           )}
                         </div>
                       </div>
+                      {activeGroupAction?.id && (
+                        <div
+                          style={{
+                            marginTop: "8px",
+                            background: "#0f172a",
+                            border: "1px solid #334155",
+                            borderRadius: "6px",
+                            padding: "8px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "11px",
+                              color: "#cbd5e1",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            Group roll board ({String(activeGroupAction.action_name || "").toUpperCase()})
+                          </div>
+                          {groupActionLoading ? (
+                            <div style={{ fontSize: "11px", color: "#94a3b8" }}>
+                              Loading group rolls…
+                            </div>
+                          ) : (
+                            <div
+                              style={{
+                                display: "grid",
+                                gap: "6px",
+                              }}
+                            >
+                              {groupRollBoard.map((row) => (
+                                <div
+                                  key={row.id}
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    fontSize: "11px",
+                                    background: "#111827",
+                                    border: "1px solid #374151",
+                                    borderRadius: "4px",
+                                    padding: "6px 8px",
+                                  }}
+                                >
+                                  <span style={{ color: "#e5e7eb" }}>
+                                    {row.name}
+                                  </span>
+                                  {!row.roll ? (
+                                    <span style={{ color: "#9ca3af" }}>Pending</span>
+                                  ) : row.failed ? (
+                                    <span style={{ color: "#f87171" }}>
+                                      Fail ({(row.roll.results || []).join(", ")})
+                                    </span>
+                                  ) : (
+                                    <span style={{ color: "#34d399" }}>
+                                      Pass ({(row.roll.results || []).join(", ")})
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div
+                            style={{
+                              marginTop: "8px",
+                              fontSize: "10px",
+                              color: "#93c5fd",
+                            }}
+                          >
+                            Leader marks {groupFailures} stress on resolve (1 per fail).
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 

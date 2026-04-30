@@ -37,6 +37,19 @@ def _character_queryset_for_user(user):
 _character_queryset_detail = _character_queryset_for_user
 
 
+def _max_stress_for_character(character):
+    """Stress capacity from durability grade (SRD baseline: 9, modified by DUR)."""
+    grade = None
+    stand = getattr(character, "stand", None)
+    if stand is not None:
+        grade = getattr(stand, "durability", None)
+    if not grade:
+        coin_stats = getattr(character, "coin_stats", None) or {}
+        if isinstance(coin_stats, dict):
+            grade = coin_stats.get("durability") or coin_stats.get("DURABILITY")
+    return {"S": 13, "A": 12, "B": 11, "C": 10, "D": 9, "F": 8}.get(grade, 9)
+
+
 class CharacterViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = CharacterSerializer
@@ -339,15 +352,20 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Incapacitated (level 3 harm): must push to act
+            # Incapacitated (level 3 harm): pay 2 stress to act, no push bonus.
             incapacitated = getattr(character, "harm_level3_used", False)
-            if incapacitated and not (push_effect or push_dice):
+            if incapacitated and (push_effect or push_dice):
                 return Response(
                     {
-                        "error": "Incapacitated (level 3 harm). You must push yourself to take an action (2 stress for +1 effect or +1d)."
+                        "error": (
+                            "Incapacitated (level 3 harm): acting costs 2 stress and "
+                            "does not grant +1 effect or +1d."
+                        )
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+            if incapacitated:
+                stress_cost += 2
 
             # Devil's bargain: GM may set per-character text; player must confirm before +1d
             if session and devil_bargain_dice:
@@ -375,16 +393,21 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Push costs 2 stress each
+            # Optional push costs 2 stress each (in addition to incapacitated cost, if any)
             if push_effect:
                 stress_cost += 2
             if push_dice:
                 stress_cost += 2
-            current_stress = getattr(character, "stress", 0) or 0
-            if stress_cost > current_stress:
+            current_stress = max(0, int(getattr(character, "stress", 0) or 0))
+            max_stress = _max_stress_for_character(character)
+            remaining_stress = max(0, max_stress - current_stress)
+            if stress_cost > remaining_stress:
                 return Response(
                     {
-                        "error": f"Not enough stress. Push costs {stress_cost} stress, you have {current_stress}."
+                        "error": (
+                            f"Not enough stress. Push costs {stress_cost} stress, "
+                            f"you have {remaining_stress} available."
+                        )
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
@@ -448,13 +471,15 @@ class CharacterViewSet(viewsets.ModelViewSet):
                             {"error": "Must be in the same crew to Help"},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
-                    hs = getattr(assist_helper, "stress", 0) or 0
-                    if hs < 1:
+                    hs = max(0, int(getattr(assist_helper, "stress", 0) or 0))
+                    helper_max_stress = _max_stress_for_character(assist_helper)
+                    helper_remaining_stress = max(0, helper_max_stress - hs)
+                    if helper_remaining_stress < 1:
                         return Response(
-                            {"error": "Helper has no stress to spend"},
+                            {"error": "Helper has no stress capacity left"},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
-                    assist_helper.stress = hs - 1
+                    assist_helper.stress = min(helper_max_stress, hs + 1)
                     assist_helper.save(update_fields=["stress"])
                     dice_pool += 1
 
@@ -476,8 +501,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
         # Deduct stress for push
         if stress_cost > 0:
-            current_stress = getattr(character, "stress", 0) or 0
-            character.stress = max(0, current_stress - stress_cost)
+            current_stress = max(0, int(getattr(character, "stress", 0) or 0))
+            max_stress = _max_stress_for_character(character)
+            character.stress = min(max_stress, current_stress + stress_cost)
             character.save(update_fields=["stress"])
 
         roll = None
@@ -498,6 +524,25 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 ga_obj = GroupAction.objects.filter(
                     id=group_action_id, session=session, status="OPEN"
                 ).first()
+                if not ga_obj:
+                    return Response(
+                        {"error": "Invalid or closed group action."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if (
+                    roll_type.upper() == "ACTION"
+                    and (ga_obj.action_name or "").strip()
+                    and (action_name or "").strip().lower()
+                    != (ga_obj.action_name or "").strip().lower()
+                ):
+                    return Response(
+                        {
+                            "error": (
+                                f"This group action requires {ga_obj.action_name.upper()} rolls."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
             if roll_type.upper() == "FORTUNE":
                 rp_ar = rp_ad = 0
                 rp_pe = rp_pd = False
@@ -613,13 +658,15 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 {"error": "Must be in the same crew to Help"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        hs = getattr(helper, "stress", 0) or 0
-        if hs < 1:
+        hs = max(0, int(getattr(helper, "stress", 0) or 0))
+        helper_max_stress = _max_stress_for_character(helper)
+        helper_remaining_stress = max(0, helper_max_stress - hs)
+        if helper_remaining_stress < 1:
             return Response(
-                {"error": "Helper has no stress to spend"},
+                {"error": "Helper has no stress capacity left"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        helper.stress = hs - 1
+        helper.stress = min(helper_max_stress, hs + 1)
         helper.save(update_fields=["stress"])
         return Response(
             {

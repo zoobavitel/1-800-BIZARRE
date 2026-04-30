@@ -682,7 +682,15 @@ class ExperienceTrackerSerializer(serializers.ModelSerializer):
 class GroupActionSerializer(serializers.ModelSerializer):
     class Meta:
         model = GroupAction
-        fields = ["id", "session", "leader", "goal_label", "status", "created_at"]
+        fields = [
+            "id",
+            "session",
+            "leader",
+            "action_name",
+            "goal_label",
+            "status",
+            "created_at",
+        ]
         read_only_fields = ["status", "created_at"]
 
 

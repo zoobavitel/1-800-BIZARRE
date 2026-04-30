@@ -1865,6 +1865,11 @@ class GroupAction(models.Model):
     leader = models.ForeignKey(
         Character, on_delete=models.CASCADE, related_name="led_group_actions"
     )
+    action_name = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text="Required action for this group action (e.g. skirmish, survey).",
+    )
     goal_label = models.CharField(max_length=300, blank=True)
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="OPEN")
     created_at = models.DateTimeField(auto_now_add=True)

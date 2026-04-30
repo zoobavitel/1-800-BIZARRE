@@ -564,6 +564,32 @@ export default function SessionGMManagementPanels({
           Overrides session defaults for these PCs on action rolls. Leave row at session
           default to use defaults (clear with Reset).
         </p>
+        <div style={{ marginBottom: 10, maxWidth: 420 }}>
+          <div style={lbl}>Roll goal label (players see in roll pool)</div>
+          <input
+            style={{ ...S.inp, width: "100%" }}
+            value={sessionData?.roll_goal_label ?? ""}
+            onChange={(e) =>
+              setSessionData((p) => ({
+                ...p,
+                roll_goal_label: e.target.value,
+              }))
+            }
+            onBlur={(e) => {
+              const value = e.target.value;
+              setSaving(true);
+              sessionAPI
+                .patchSession(session.id, { roll_goal_label: value })
+                .then((updated) => {
+                  setSessionData(updated);
+                  onRefresh();
+                })
+                .catch((err) => setError(err.message || "Save failed"))
+                .finally(() => setSaving(false));
+            }}
+            placeholder="e.g. Quietly open the service door"
+          />
+        </div>
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
@@ -584,36 +610,26 @@ export default function SessionGMManagementPanels({
                   <tr key={id} style={{ borderTop: "1px solid #374151" }}>
                     <td style={{ padding: 6 }}>{ch.true_name || ch.name || id}</td>
                     <td style={{ padding: 4 }}>
-                      <select
-                        style={S.select}
-                        value={pos}
-                        onChange={(e) => {
+                      <PositionStack
+                        activePosition={pos}
+                        readOnly={saving}
+                        onSelect={(value) =>
                           mergePosEffect({
-                            [id]: { position: e.target.value, effect: eff },
-                          });
-                        }}
-                        disabled={saving}
-                      >
-                        <option value="controlled">Controlled</option>
-                        <option value="risky">Risky</option>
-                        <option value="desperate">Desperate</option>
-                      </select>
+                            [id]: { position: value, effect: eff },
+                          })
+                        }
+                      />
                     </td>
                     <td style={{ padding: 4 }}>
-                      <select
-                        style={S.select}
-                        value={eff}
-                        onChange={(e) => {
+                      <EffectShapes
+                        activeEffect={eff}
+                        readOnly={saving}
+                        onSelect={(value) =>
                           mergePosEffect({
-                            [id]: { position: pos, effect: e.target.value },
-                          });
-                        }}
-                        disabled={saving}
-                      >
-                        <option value="limited">Limited</option>
-                        <option value="standard">Standard</option>
-                        <option value="extreme">Extreme</option>
-                      </select>
+                            [id]: { position: pos, effect: value },
+                          })
+                        }
+                      />
                     </td>
                     <td style={{ padding: 4 }}>
                       <button
@@ -631,16 +647,6 @@ export default function SessionGMManagementPanels({
               })}
             </tbody>
           </table>
-        </div>
-        <div style={{ display: "flex", gap: 12, marginTop: 8, flexWrap: "wrap" }}>
-          <div>
-            <div style={lbl}>Preview (defaults — session)</div>
-            <PositionStack activePosition={defaultPos} readOnly />
-          </div>
-          <div>
-            <div style={lbl}>&nbsp;</div>
-            <EffectShapes activeEffect={defaultEff} readOnly />
-          </div>
         </div>
       </div>
     </>

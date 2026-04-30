@@ -20,7 +20,7 @@ const shapeClip = {
 /**
  * Stacked position blocks (active tier highlighted).
  */
-export function PositionStack({ activePosition, readOnly = true }) {
+export function PositionStack({ activePosition, readOnly = true, onSelect }) {
   const ap = (activePosition || "risky").toLowerCase();
   return (
     <div
@@ -46,6 +46,11 @@ export function PositionStack({ activePosition, readOnly = true }) {
         return (
           <div
             key={p}
+            onClick={
+              !readOnly && typeof onSelect === "function"
+                ? () => onSelect(p)
+                : undefined
+            }
             style={{
               padding: "6px 10px",
               borderRadius: 6,
@@ -77,7 +82,7 @@ export function PositionStack({ activePosition, readOnly = true }) {
 /**
  * Effect tiers as shaped badges with L / S / E letters.
  */
-export function EffectShapes({ activeEffect, readOnly = true }) {
+export function EffectShapes({ activeEffect, readOnly = true, onSelect }) {
   const ae = (activeEffect || "standard").toLowerCase();
   const normalized = ae === "greater" ? "extreme" : ae;
   return (
@@ -128,6 +133,11 @@ export function EffectShapes({ activeEffect, readOnly = true }) {
                   fontSize: 14,
                   cursor: readOnly ? "default" : "pointer",
                 }}
+                onClick={
+                  !readOnly && typeof onSelect === "function"
+                    ? () => onSelect(tier)
+                    : undefined
+                }
               >
                 {EFFECT_LETTER[tier]}
               </div>

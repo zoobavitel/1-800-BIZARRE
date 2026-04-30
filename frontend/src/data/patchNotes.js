@@ -4,6 +4,18 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-04-30",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "enhance NPC routing and campaign management"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-04-28",
     "version": null,
     "sections": [
@@ -420,8 +432,7 @@ export const PATCH_NOTES = [
       {
         "title": "Maintenance",
         "items": [
-          "add prettier formatting GitHub Action with config and scripts",
-          "remove monolithic game-rules-srd.md"
+          "add prettier formatting GitHub Action with config and scripts"
         ]
       },
       {

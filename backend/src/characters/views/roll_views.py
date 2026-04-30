@@ -22,12 +22,15 @@ class RollViewSet(viewsets.ModelViewSet):
         campaign_id = self.request.query_params.get('campaign')
         session_id = self.request.query_params.get('session')
         character_id = self.request.query_params.get('character')
+        group_action_id = self.request.query_params.get('group_action')
         if campaign_id:
             qs = qs.filter(session__campaign_id=campaign_id)
         if session_id:
             qs = qs.filter(session_id=session_id)
         if character_id:
             qs = qs.filter(character_id=character_id)
+        if group_action_id:
+            qs = qs.filter(group_action_id=group_action_id)
         user = self.request.user
         if not user.is_staff:
             qs = qs.filter(

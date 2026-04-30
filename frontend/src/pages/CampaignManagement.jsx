@@ -2787,15 +2787,6 @@ function SessionDetail({
     [rolls],
   );
 
-  const lastRollByCharacter = useMemo(() => {
-    const m = {};
-    (rolls || []).forEach((r) => {
-      const cid = r.character;
-      if (cid != null && m[cid] == null) m[cid] = r;
-    });
-    return m;
-  }, [rolls]);
-
   const handleWantedStars = async (stars) => {
     setWantedStars(stars);
     try {
@@ -3430,92 +3421,6 @@ function SessionDetail({
                 </button>
               </div>
             </div>
-          </div>
-        )}
-      </div>
-
-      {/* GM visibility: last roll line per PC (v1 snapshot) */}
-      <div style={S.card}>
-        <span style={S.sectionLbl}>
-          Player dice pools (last committed roll)
-        </span>
-        <p
-          style={{
-            fontSize: "11px",
-            color: "#6b7280",
-            marginTop: "4px",
-            marginBottom: "8px",
-          }}
-        >
-          Full pool sources are stored on each roll&apos;s description. This
-          list shows the most recent roll per character in this session.
-        </p>
-        {campaignChars.length === 0 ? (
-          <div style={{ color: "#6b7280", fontSize: "12px" }}>
-            No characters in campaign.
-          </div>
-        ) : (
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "12px",
-              alignItems: "flex-start",
-            }}
-          >
-            {campaignChars.map((ch) => {
-              const lr = lastRollByCharacter[ch.id];
-              return (
-                <div
-                  key={ch.id}
-                  style={{
-                    fontSize: "12px",
-                    boxSizing: "border-box",
-                    flex: "1 1 260px",
-                    minWidth: "240px",
-                    padding: "8px 10px",
-                    border: "1px solid #374151",
-                    borderRadius: "4px",
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: "8px",
-                      alignItems: "flex-start",
-                    }}
-                  >
-                    <strong
-                      style={{
-                        color: "#e5e7eb",
-                        flex: "0 0 auto",
-                        maxWidth: "40%",
-                      }}
-                    >
-                      {ch.true_name || ch.name}
-                    </strong>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      {lr ? (
-                        <span style={{ color: "#9ca3af" }}>
-                          {lr.action_name} ·{" "}
-                          {[].concat(lr.results || []).join(", ")} →{" "}
-                          {lr.outcome}
-                          {(lr.description || "").trim() ? (
-                            <span style={{ color: "#6b7280" }}>
-                              {" "}
-                              · {(lr.description || "").slice(0, 140)}
-                              {(lr.description || "").length > 140 ? "…" : ""}
-                            </span>
-                          ) : null}
-                        </span>
-                      ) : (
-                        <span style={{ color: "#6b7280" }}>No rolls yet.</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
           </div>
         )}
       </div>
