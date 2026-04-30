@@ -1574,6 +1574,18 @@ const CharacterSheetWrapper = ({
     return roster.filter((c) => c.id !== characterId);
   }, [charCampaign?.campaign_characters, characterId, charData.crewId]);
 
+  const abilityHasBonusOption = useCallback((ability, kind) => {
+    const desc = String(ability?.description || "").toLowerCase();
+    if (!desc) return false;
+    if (kind === "dice") {
+      return /\+1d\b/.test(desc) || /\bextra\s+die\b/.test(desc);
+    }
+    if (kind === "effect") {
+      return /\+1\s*effect\b/.test(desc);
+    }
+    return false;
+  }, []);
+
   const { bonusDiceFromAbilities, abilityEffectSteps, abilityBonusAudit } =
     useMemo(() => {
       let d = 0;
@@ -1585,11 +1597,11 @@ const CharacterSheetWrapper = ({
           const id = ab.id ?? ab.name;
           const b = rollAbilityBoost[id];
           if (!b) return;
-          if (b.dice) {
+          if (b.dice && abilityHasBonusOption(ab, "dice")) {
             d += 1;
             audit.push(`${ab.name}: +1d`);
           }
-          if (b.effect) {
+          if (b.effect && abilityHasBonusOption(ab, "effect")) {
             e += 1;
             audit.push(`${ab.name}: +1 effect`);
           }
@@ -1599,7 +1611,7 @@ const CharacterSheetWrapper = ({
         abilityEffectSteps: e,
         abilityBonusAudit: audit,
       };
-    }, [abilities, rollAbilityBoost]);
+    }, [abilities, rollAbilityBoost, abilityHasBonusOption]);
 
   const gmDevilBargainText = useMemo(() => {
     const m = charCampaign?.active_session_detail?.devils_bargain_by_character;
@@ -5313,6 +5325,8 @@ const CharacterSheetWrapper = ({
                               .map((ab) => {
                                 const id = ab.id ?? ab.name;
                                 const b = rollAbilityBoost[id] || {};
+                                const showDice = abilityHasBonusOption(ab, "dice");
+                                const showEffect = abilityHasBonusOption(ab, "effect");
                                 return (
                                   <div
                                     key={id}
@@ -5333,54 +5347,58 @@ const CharacterSheetWrapper = ({
                                     >
                                       {ab.name}
                                     </span>
-                                    <label
-                                      style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "4px",
-                                        cursor: "pointer",
-                                      }}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={!!b.dice}
-                                        onChange={(e) =>
-                                          setRollAbilityBoost((p) => ({
-                                            ...p,
-                                            [id]: {
-                                              ...p[id],
-                                              dice: e.target.checked,
-                                              effect: !!p[id]?.effect,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                      +1d
-                                    </label>
-                                    <label
-                                      style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "4px",
-                                        cursor: "pointer",
-                                      }}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={!!b.effect}
-                                        onChange={(e) =>
-                                          setRollAbilityBoost((p) => ({
-                                            ...p,
-                                            [id]: {
-                                              ...p[id],
-                                              effect: e.target.checked,
-                                              dice: !!p[id]?.dice,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                      +1 effect
-                                    </label>
+                                    {showDice ? (
+                                      <label
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "4px",
+                                          cursor: "pointer",
+                                        }}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={!!b.dice}
+                                          onChange={(e) =>
+                                            setRollAbilityBoost((p) => ({
+                                              ...p,
+                                              [id]: {
+                                                ...p[id],
+                                                dice: e.target.checked,
+                                                effect: !!p[id]?.effect,
+                                              },
+                                            }))
+                                          }
+                                        />
+                                        +1d
+                                      </label>
+                                    ) : null}
+                                    {showEffect ? (
+                                      <label
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "4px",
+                                          cursor: "pointer",
+                                        }}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={!!b.effect}
+                                          onChange={(e) =>
+                                            setRollAbilityBoost((p) => ({
+                                              ...p,
+                                              [id]: {
+                                                ...p[id],
+                                                effect: e.target.checked,
+                                                dice: !!p[id]?.dice,
+                                              },
+                                            }))
+                                          }
+                                        />
+                                        +1 effect
+                                      </label>
+                                    ) : null}
                                   </div>
                                 );
                               })}
