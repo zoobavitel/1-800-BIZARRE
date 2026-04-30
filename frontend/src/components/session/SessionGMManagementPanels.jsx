@@ -781,28 +781,14 @@ export default function SessionGMManagementPanels({
                       <span style={{ fontSize: 10, color: "#9ca3af" }}>Wanted ★</span>
                       <input
                         style={S.inp}
-                        value={d.wanted_level ?? ""}
+                        value={String(campaign?.wanted_stars ?? 0)}
                         inputMode="numeric"
-                        onChange={(e) =>
-                          setCrewDraftById((p) => ({
-                            ...p,
-                            [crew.id]: {
-                              ...(p[crew.id] || {}),
-                              wanted_level: e.target.value,
-                            },
-                          }))
-                        }
-                        onBlur={() => {
-                          const n = parseInt(String(d.wanted_level).trim(), 10);
-                          if (
-                            !Number.isFinite(n) ||
-                            n === crew.wanted_level
-                          )
-                            return;
-                          patchCrewSnapshot(crew.id, { wanted_level: n });
-                        }}
-                        disabled={busy}
+                        readOnly
+                        disabled
                       />
+                      <span style={{ fontSize: 9, color: "#6b7280" }}>
+                        Synced from campaign Wanted Level
+                      </span>
                     </label>
                     <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                       <span style={{ fontSize: 10, color: "#9ca3af" }}>Turf (0–6)</span>

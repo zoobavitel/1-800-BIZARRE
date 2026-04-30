@@ -242,7 +242,7 @@ function CampaignDetail({
   user,
   onBack,
   onRefresh,
-  onManageSessions,
+  onOpenSession,
   onNavigateToCharacter,
   onNavigateToNPC,
   onCampaignDeleted,
@@ -572,7 +572,7 @@ function CampaignDetail({
       level: 0,
       hold: "weak",
       rep: 0,
-      wanted_level: 0,
+      wanted_level: campaign?.wanted_stars ?? 0,
       coin: 0,
     });
   const startCrewEdit = (c) =>
@@ -609,6 +609,34 @@ function CampaignDetail({
           ...crewForm,
           campaign: campaign.id,
         });
+      }
+      // Wanted is campaign-wide + mirrored on every crew; character sheets read campaign.wanted_stars.
+      if (isGM) {
+        const targetWanted =
+          Number.parseInt(String(crewForm.wanted_level ?? "0"), 10) || 0;
+        try {
+          await campaignAPI.patchCampaign(campaign.id, {
+            wanted_stars: targetWanted,
+          });
+          const crews = campaign.crews || [];
+          const needSyncIds = crews
+            .filter(
+              (c) => Number.parseInt(String(c.wanted_level ?? "0"), 10) !== targetWanted,
+            )
+            .map((c) => c.id)
+            .filter(Boolean);
+          if (needSyncIds.length > 0) {
+            await Promise.allSettled(
+              needSyncIds.map((cid) =>
+                crewAPI.patchCrew(cid, { wanted_level: targetWanted }),
+              ),
+            );
+          }
+        } catch (syncErr) {
+          setCrewError(syncErr.message || String(syncErr));
+          onRefresh();
+          return;
+        }
       }
       setCrewForm(null);
       onRefresh();
@@ -746,9 +774,6 @@ function CampaignDetail({
               </div>
               {isGM && (
                 <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
-                  <button onClick={onManageSessions} style={S.btnPrimary}>
-                    Manage Sessions
-                  </button>
                   <button onClick={startCampaignEdit} style={S.btnGhost}>
                     Edit
                   </button>
@@ -764,6 +789,9 @@ function CampaignDetail({
                 </div>
               )}
             </div>
+            {isGM && typeof onOpenSession === "function" && (
+              <CampaignSessionsPanel campaign={campaign} onOpenSession={onOpenSession} />
+            )}
           </>
         )}
       </div>
@@ -2289,6 +2317,48 @@ function ClockManager({ clocks, setClocks, campaignId, sessionId, setError }) {
 // ---------------------------------------------------------------------------
 // Session Records Modal (view session history: goals, rolls, events)
 // ---------------------------------------------------------------------------
+
+/** Primary label for dice row: Fortune uses GM (rolled_by), not vehicle character_id. */
+function formatSessionRecordsRollSummary(r, showPositionEffect) {
+  const rt = String(r.roll_type || "").toUpperCase();
+  const diceStr = [].concat(r.results || []).join(", ");
+  const outcomeStr = String(r.outcome || "").trim();
+  const posEff =
+    showPositionEffect && (r.position || r.effect)
+      ? ` (${r.position || ""}, ${r.effect || ""})`
+      : "";
+
+  if (rt === "FORTUNE") {
+    const gm = String(r.rolled_by_username || "").trim() || "GM";
+    const label = String(r.fortune_public_label || r.goal_label || "").trim();
+    const act = String(r.action_name || "").trim();
+    const mid =
+      label ||
+      (act.toLowerCase() !== "fortune" ? act : "") ||
+      "Fortune";
+    const midSeg = mid && mid !== "Fortune" ? ` · ${mid}` : "";
+    return `${gm} · GM Fortune${midSeg} · ${diceStr} → ${outcomeStr}${posEff}`;
+  }
+
+  if (rt === "CLEAR_STRESS") {
+    const actor =
+      String(r.rolled_by_username || "").trim() ||
+      String(r.character_name || "").trim() ||
+      String(r.character ?? "");
+    const act = String(r.action_name || "").trim().toLowerCase() === "vice"
+      ? "Vice"
+      : String(r.action_name || "").trim() || "Clear stress";
+    return `${actor || "unknown"} · ${act} · ${diceStr} → ${outcomeStr}${posEff}`;
+  }
+
+  const actor =
+    String(r.rolled_by_username || "").trim() ||
+    String(r.character_name || "").trim() ||
+    String(r.character ?? "");
+  const action = String(r.action_name || "").trim() || "Roll";
+  return `${actor || "unknown"} · ${action} · ${diceStr} → ${outcomeStr}${posEff}`;
+}
+
 function SessionRecordsModal({ sessionId, sessionName, onClose }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -2405,13 +2475,7 @@ function SessionRecordsModal({ sessionId, sessionName, onClose }) {
                       borderBottom: "1px solid #1f2937",
                     }}
                   >
-                    {r.character_name || r.character} · {r.action_name} ·{" "}
-                    {[].concat(r.results || []).join(", ")} → {r.outcome || ""}
-                    {showPositionEffect && (r.position || r.effect) && (
-                      <span
-                        style={{ color: "#6b7280", marginLeft: "6px" }}
-                      >{`(${r.position || ""}, ${r.effect || ""})`}</span>
-                    )}
+                    {formatSessionRecordsRollSummary(r, showPositionEffect)}
                   </div>
                 ))
               )}
@@ -2442,9 +2506,9 @@ function SessionRecordsModal({ sessionId, sessionName, onClose }) {
 }
 
 // ---------------------------------------------------------------------------
-// Session List View
+// Sessions list + create + records modal (embedded in CampaignDetail)
 // ---------------------------------------------------------------------------
-function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
+function CampaignSessionsPanel({ campaign, onOpenSession }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -2452,6 +2516,7 @@ function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
   const [recordsModalSession, setRecordsModalSession] = useState(null);
 
   useEffect(() => {
+    setLoading(true);
     sessionAPI
       .getSessions(campaign.id)
       .then(setSessions)
@@ -2472,7 +2537,7 @@ function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
         status: "PLANNED",
       });
       setSessions((prev) => [session, ...(prev || [])]);
-      onSelectSession(session);
+      onOpenSession(session);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -2481,45 +2546,70 @@ function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
   };
 
   return (
-    <div>
-      <button onClick={onBack} style={{ ...S.btnGhost, marginBottom: "12px" }}>
-        {"< Back to Campaign"}
-      </button>
-      {error && <div style={S.err}>{error}</div>}
-      <div style={{ ...S.card, border: "1px solid #4b5563" }}>
-        <span style={S.sectionLbl}>Sessions</span>
-        <button
-          onClick={handleCreateSession}
-          style={S.btnSuccess}
-          disabled={creating}
+    <>
+      {error && <div style={{ ...S.err, marginTop: "12px" }}>{error}</div>}
+      <div
+        style={{
+          marginTop: "14px",
+          paddingTop: "14px",
+          borderTop: "1px solid #374151",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: "8px",
+            marginBottom: loading ? "0" : "10px",
+          }}
         >
-          {creating ? "Creating..." : "+ New Session"}
-        </button>
+          <span style={{ ...S.sectionLbl, marginTop: 0, marginBottom: 0 }}>
+            Sessions
+          </span>
+          <button
+            onClick={handleCreateSession}
+            style={S.btnSuccess}
+            disabled={creating}
+          >
+            {creating ? "Creating..." : "+ New Session"}
+          </button>
+        </div>
         {loading ? (
-          <div style={{ color: "#6b7280", padding: "16px" }}>
+          <div style={{ color: "#6b7280", padding: "12px 0" }}>
             Loading sessions...
           </div>
         ) : !sessions?.length ? (
-          <div style={{ color: "#6b7280", padding: "16px" }}>
+          <div style={{ color: "#6b7280", padding: "8px 0" }}>
             No sessions yet. Create one to get started.
           </div>
         ) : (
-          <div style={{ marginTop: "12px" }}>
+          <div style={{ marginTop: "4px" }}>
             {sessions.map((s) => (
-              <div key={s.id} style={{ ...S.card, marginBottom: "8px" }}>
+              <div
+                key={s.id}
+                style={{
+                  background: "#0d1117",
+                  border: "1px solid #374151",
+                  borderRadius: "4px",
+                  padding: "10px",
+                  marginBottom: "8px",
+                }}
+              >
                 <div
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "flex-start",
+                    gap: "8px",
                   }}
                 >
                   <div
-                    style={{ flex: 1, cursor: "pointer" }}
-                    onClick={() => onSelectSession(s)}
+                    style={{ flex: 1, cursor: "pointer", minWidth: 0 }}
+                    onClick={() => onOpenSession(s)}
                     role="button"
                     tabIndex={0}
-                    onKeyDown={(e) => e.key === "Enter" && onSelectSession(s)}
+                    onKeyDown={(e) => e.key === "Enter" && onOpenSession(s)}
                   >
                     <div style={{ fontWeight: "bold" }}>
                       {s.name || `Session ${s.id}`}
@@ -2535,6 +2625,7 @@ function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
                     </div>
                   </div>
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       setRecordsModalSession(s);
@@ -2546,17 +2637,17 @@ function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
                 </div>
               </div>
             ))}
-            {recordsModalSession && (
-              <SessionRecordsModal
-                sessionId={recordsModalSession.id}
-                sessionName={recordsModalSession.name}
-                onClose={() => setRecordsModalSession(null)}
-              />
-            )}
           </div>
         )}
       </div>
-    </div>
+      {recordsModalSession && (
+        <SessionRecordsModal
+          sessionId={recordsModalSession.id}
+          sessionName={recordsModalSession.name}
+          onClose={() => setRecordsModalSession(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -2590,7 +2681,6 @@ function SessionDetail({
   const [fortuneDice, setFortuneDice] = useState(2);
   const [fortuneRolling, setFortuneRolling] = useState(false);
   const [error, setError] = useState(null);
-  const [wantedStars, setWantedStars] = useState(campaign?.wanted_stars ?? 0);
   const [sessionDateInput, setSessionDateInput] = useState("");
 
   useEffect(() => {
@@ -2623,7 +2713,6 @@ function SessionDetail({
       .getNPCs(campaign.id)
       .then(setCampaignNPCs)
       .catch(() => setCampaignNPCs([]));
-    setWantedStars(campaign?.wanted_stars ?? 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id, campaign?.id, campaign?.wanted_stars]);
 
@@ -2655,16 +2744,6 @@ function SessionDetail({
       ),
     [rolls],
   );
-
-  const handleWantedStars = async (stars) => {
-    setWantedStars(stars);
-    try {
-      await campaignAPI.patchCampaign(campaign.id, { wanted_stars: stars });
-      onRefresh();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
 
   const handleSetActiveSession = async () => {
     try {
@@ -2849,7 +2928,7 @@ function SessionDetail({
   return (
     <div>
       <button onClick={onBack} style={{ ...S.btnGhost, marginBottom: "12px" }}>
-        {"< Back to Sessions"}
+        {"< Back to Campaign"}
       </button>
       {error && <div style={S.err}>{error}</div>}
 
@@ -2959,29 +3038,6 @@ function SessionDetail({
         manualRollSaving={manualRollSaving}
         onManualRollCreate={handleManualRollCreate}
       />
-
-      {/* Wanted level */}
-      <div style={S.card}>
-        <span style={S.sectionLbl}>Wanted Level</span>
-        <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button
-              key={n}
-              onClick={() => handleWantedStars(n)}
-              style={{
-                ...S.btn,
-                background: n <= wantedStars ? "#fbbf24" : "#374151",
-                color: n <= wantedStars ? "#000" : "#9ca3af",
-                width: "28px",
-                height: "28px",
-                padding: 0,
-              }}
-            >
-              ★
-            </button>
-          ))}
-        </div>
-      </div>
 
       {/* Goals */}
       <GoalsEditor sessionData={sessionData} onSave={handleUpdateSession} />
@@ -3100,7 +3156,6 @@ function SessionDetail({
                 const label = String(
                   r.fortune_public_label || r.goal_label || r.action_name || "",
                 ).trim();
-                const reveal = r.fortune_reveal_outcome === true;
                 return (
                   <div
                     key={r.id}
@@ -3152,9 +3207,6 @@ function SessionDetail({
                       <span>{dice}</span>
                       <span style={{ color: "#6b7280" }}> → </span>
                       <span>{oc}</span>
-                      <span style={{ marginLeft: 8, color: reveal ? "#22c55e" : "#6b7280" }}>
-                        [{reveal ? "revealed" : "hidden"}]
-                      </span>
                     </div>
                   </div>
                 );
@@ -3266,7 +3318,7 @@ export default function CampaignManagement({
   const [form, setForm] = useState({ name: "", description: "" });
   const [selectedCampaignId, setSelectedCampaignId] =
     useState(initialCampaignId);
-  const [sessionView, setSessionView] = useState(null); // null | 'list' | 'detail'
+  const [sessionView, setSessionView] = useState(null); // null | 'detail'
   const [selectedSession, setSelectedSession] = useState(null);
 
   const loadCampaigns = useCallback(async () => {
@@ -3366,31 +3418,12 @@ export default function CampaignManagement({
             campaign={selectedCampaign}
             session={selectedSession}
             onBack={() => {
-              setSessionView("list");
+              setSessionView(null);
               setSelectedSession(null);
             }}
             onRefresh={refreshSelected}
             onNavigateToCharacter={onNavigateToCharacter}
             onNavigateToNPC={onNavigateToNPC}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  // ---- Session list view ----
-  if (selectedCampaign && sessionView === "list") {
-    return (
-      <div style={S.page}>
-        <div style={S.content}>
-          <SessionList
-            campaign={selectedCampaign}
-            onBack={() => setSessionView(null)}
-            onSelectSession={(session) => {
-              setSelectedSession(session);
-              setSessionView("detail");
-            }}
-            onRefresh={refreshSelected}
           />
         </div>
       </div>
@@ -3409,7 +3442,10 @@ export default function CampaignManagement({
             user={user}
             onBack={() => window.history.back()}
             onRefresh={refreshSelected}
-            onManageSessions={() => setSessionView("list")}
+            onOpenSession={(session) => {
+              setSelectedSession(session);
+              setSessionView("detail");
+            }}
             onNavigateToCharacter={onNavigateToCharacter}
             onNavigateToNPC={onNavigateToNPC}
             initialFactionId={initialFactionId}

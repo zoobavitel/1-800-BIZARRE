@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
+          "add increment wanted action and roll deletion",
           "add roll goal mapping by character",
           "add action_name field to GroupAction model and update related serializers and views",
           "enhance NPC routing and campaign management"
@@ -420,8 +421,7 @@ export const PATCH_NOTES = [
           "Merge pull request #15 from zoobavitel/copilot/add-github-action-prettier",
           "dw",
           "prettier format",
-          "Merge pull request #14 from zoobavitel/zoobavitel-patch-1",
-          "Refactor CI/CD workflow for branch and deployment updates"
+          "Merge pull request #14 from zoobavitel/zoobavitel-patch-1"
         ]
       },
       {

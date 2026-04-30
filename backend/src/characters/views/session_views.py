@@ -1,11 +1,12 @@
 from django.db import models
+from django.db.models import Prefetch
 from django.core.exceptions import PermissionDenied
 from rest_framework import viewsets, status, permissions
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import action
 
-from ..models import Session, SessionEvent
+from ..models import Session, SessionEvent, Roll
 from ..serializers import SessionSerializer, SessionEventSerializer, SessionRecordsSerializer
 
 
@@ -39,12 +40,13 @@ class SessionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         # Filter sessions based on user permissions
         user = self.request.user
-        if user.is_staff:
-            return Session.objects.all()
-        # Return sessions from campaigns where user is GM or a member
-        return Session.objects.filter(
+        rolls_qs = Roll.objects.select_related("rolled_by", "character").order_by(
+            "-timestamp"
+        )
+        base = Session.objects.all() if user.is_staff else Session.objects.filter(
             models.Q(campaign__gm=user) | models.Q(campaign__characters__user=user)
         ).distinct()
+        return base.prefetch_related(Prefetch("rolls", queryset=rolls_qs))
 
     def perform_create(self, serializer):
         serializer.save()

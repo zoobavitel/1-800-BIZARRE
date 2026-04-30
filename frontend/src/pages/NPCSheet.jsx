@@ -962,8 +962,12 @@ const NPCSheet = ({
     selectedHamonIds,
     selectedSpinIds,
     campaign,
+    faction,
     imageUrl,
     imageFile,
+    contacts,
+    factionStatus,
+    inventory,
   ]);
 
   // ── Styles ────────────────────────────────────────────────────────────────────
@@ -2991,6 +2995,21 @@ const NPCSheet = ({
                     >
                       ✕
                     </button>
+                  </div>
+                )}
+                {saveStatus === "saving" && (
+                  <div style={{ color: "#9ca3af", fontSize: "11px", marginTop: "4px" }}>
+                    Saving faction selection...
+                  </div>
+                )}
+                {saveStatus === "saved" && (
+                  <div style={{ color: "#34d399", fontSize: "11px", marginTop: "4px" }}>
+                    Faction selection saved.
+                  </div>
+                )}
+                {saveStatus === "error" && (
+                  <div style={{ color: "#f87171", fontSize: "11px", marginTop: "4px" }}>
+                    Failed to save faction selection.
                   </div>
                 )}
                 {factionCreateError && (
