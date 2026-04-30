@@ -15,7 +15,7 @@ class RollViewSet(viewsets.ModelViewSet):
     """List/retrieve rolls; GM can PATCH position/effect. Filter by campaign or session."""
     permission_classes = [IsAuthenticated]
     serializer_class = RollSerializer
-    http_method_names = ['get', 'patch', 'post', 'head', 'options']
+    http_method_names = ['get', 'patch', 'post', 'delete', 'head', 'options']
 
     def get_queryset(self):
         qs = Roll.objects.all().select_related('character', 'session', 'session__campaign')
@@ -127,6 +127,18 @@ class RollViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
         return super().create(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        """GM-only: remove a roll record from history."""
+        roll = self.get_object()
+        campaign = roll.session.campaign
+        if campaign.gm_id != request.user.id and not request.user.is_staff:
+            return Response(
+                {'error': 'Only the GM can remove roll records.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        self.perform_destroy(roll)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     def perform_create(self, serializer):
         roll = serializer.save(rolled_by=self.request.user)

@@ -333,6 +333,12 @@ export const campaignAPI = {
       method: "PATCH",
       body: JSON.stringify(campaignData),
     }),
+  /** Campaign members: rules-triggered wanted (e.g. vice brag +2); GM-only PATCH unchanged. */
+  incrementCampaignWanted: (campaignId, { amount = 2, cap = 5 } = {}) =>
+    apiRequest(`/campaigns/${campaignId}/increment-wanted/`, {
+      method: "POST",
+      body: JSON.stringify({ amount, cap }),
+    }),
   deleteCampaign: (id) =>
     apiRequest(`/campaigns/${id}/`, { method: "DELETE" }),
   invitePlayer: (id, username) =>
@@ -627,6 +633,10 @@ export const rollAPI = {
     apiRequest(`/rolls/${id}/`, {
       method: "PATCH",
       body: JSON.stringify(data),
+    }),
+  deleteRoll: (id) =>
+    apiRequest(`/rolls/${id}/`, {
+      method: "DELETE",
     }),
   grantXP: (id) =>
     apiRequest(`/rolls/${id}/grant-xp/`, {

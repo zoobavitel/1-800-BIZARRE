@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
+          "add roll goal mapping by character",
           "add action_name field to GroupAction model and update related serializers and views",
           "enhance NPC routing and campaign management"
         ]
@@ -420,8 +421,7 @@ export const PATCH_NOTES = [
           "dw",
           "prettier format",
           "Merge pull request #14 from zoobavitel/zoobavitel-patch-1",
-          "Refactor CI/CD workflow for branch and deployment updates",
-          "Merge pull request #13 from zoobavitel/feature/rules-srd-sections-ui"
+          "Refactor CI/CD workflow for branch and deployment updates"
         ]
       },
       {

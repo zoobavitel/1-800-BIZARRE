@@ -9,11 +9,6 @@ import {
   rollAPI,
   crewAPI,
 } from "../features/character-sheet";
-import {
-  PositionStack,
-  EffectShapes,
-  HistoryBranchIcon,
-} from "../components/position-effect/PositionEffectIndicators";
 import { useAuth } from "../features/auth";
 import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
@@ -2291,131 +2286,6 @@ function ClockManager({ clocks, setClocks, campaignId, sessionId, setError }) {
   );
 }
 
-function DiceHistoryRow({
-  roll,
-  showPositionEffect,
-  onPatch,
-  onGrantXP,
-  isGM,
-}) {
-  const [editing, setEditing] = useState(false);
-  const [pos, setPos] = useState(roll.position || "risky");
-  const [eff, setEff] = useState(roll.effect || "standard");
-  const handleSave = () => {
-    onPatch(roll.id, { position: pos, effect: eff });
-    setEditing(false);
-  };
-  const isDesperate =
-    roll.position === "desperate" && roll.roll_type === "ACTION";
-  const canGrantXP = isGM && isDesperate && !roll.xp_awarded && onGrantXP;
-  return (
-    <div
-      style={{
-        padding: "6px 0",
-        borderBottom: "1px solid #1f2937",
-        fontSize: "12px",
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-        flexWrap: "wrap",
-        ...(isDesperate
-          ? {
-              background: "rgba(249, 115, 22, 0.08)",
-              margin: "0 -8px",
-              padding: "6px 8px",
-              borderLeft: "3px solid #f97316",
-            }
-          : {}),
-      }}
-    >
-      {isDesperate && (
-        <span style={{ ...S.badge, background: "#f97316", color: "#000" }}>
-          Desperate
-        </span>
-      )}
-      {roll.xp_awarded && (
-        <span style={{ ...S.badge, background: "#16a34a", color: "#fff" }}>
-          +1 XP
-        </span>
-      )}
-      <span style={{ fontWeight: "bold" }}>
-        {roll.character_name || roll.character}
-      </span>
-      <span>·</span>
-      <span>{roll.action_name}</span>
-      <span>·</span>
-      <span>{[].concat(roll.results || []).join(", ")}</span>
-      <span>→</span>
-      <span>{roll.outcome}</span>
-      {showPositionEffect &&
-        (editing ? (
-          <>
-            <select
-              style={S.select}
-              value={pos}
-              onChange={(e) => setPos(e.target.value)}
-            >
-              <option value="controlled">Controlled</option>
-              <option value="risky">Risky</option>
-              <option value="desperate">Desperate</option>
-            </select>
-            <select
-              style={S.select}
-              value={eff}
-              onChange={(e) => setEff(e.target.value)}
-            >
-              <option value="limited">Limited</option>
-              <option value="standard">Standard</option>
-              <option value="extreme">Extreme</option>
-            </select>
-            <button
-              onClick={handleSave}
-              style={{ ...S.btn, fontSize: "10px", padding: "2px 6px" }}
-            >
-              Save
-            </button>
-            <button
-              onClick={() => setEditing(false)}
-              style={{ ...S.btn, fontSize: "10px", padding: "2px 6px" }}
-            >
-              Cancel
-            </button>
-          </>
-        ) : (
-          <span style={{ color: "#9ca3af", marginLeft: "8px" }}>
-            ({roll.position || "—"}, {roll.effect || "—"})
-            <button
-              onClick={() => setEditing(true)}
-              style={{
-                marginLeft: "4px",
-                background: "none",
-                border: "none",
-                color: "#6b7280",
-                cursor: "pointer",
-                fontSize: "10px",
-              }}
-            >
-              Edit
-            </button>
-          </span>
-        ))}
-      {canGrantXP && (
-        <button
-          onClick={() => onGrantXP(roll.id)}
-          style={{
-            ...S.btnSuccess,
-            fontSize: "10px",
-            padding: "2px 8px",
-            marginLeft: "auto",
-          }}
-        >
-          Grant XP
-        </button>
-      )}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Session Records Modal (view session history: goals, rolls, events)
 // ---------------------------------------------------------------------------
@@ -2707,11 +2577,12 @@ function SessionDetail({
   const [crews, setCrews] = useState([]);
   const [characters, setCharacters] = useState([]);
   const [campaignNPCs, setCampaignNPCs] = useState([]);
-  const [showPositionEffect, setShowPositionEffect] = useState(false);
-  const [showDiceHistoryPanel, setShowDiceHistoryPanel] = useState(false);
   const [manualRoll, setManualRoll] = useState({
+    rollKind: "ACTION",
     characterId: "",
     actionName: "skirmish",
+    resistanceAttr: "resolve",
+    viceNote: "",
     diceStr: "4,5",
     outcome: "FULL_SUCCESS",
   });
@@ -2777,13 +2648,11 @@ function SessionDetail({
     campaign?.campaign_characters ||
     characters.map((c) => ({ id: c.id, true_name: c.true_name, ...c }));
 
-  const desperateRollCount = useMemo(
+  const fortuneRolls = useMemo(
     () =>
-      rolls.filter(
-        (r) =>
-          (r.roll_type || "") === "ACTION" &&
-          (r.position || "").toLowerCase() === "desperate",
-      ).length,
+      (rolls || []).filter(
+        (r) => String(r.roll_type || "").toUpperCase() === "FORTUNE",
+      ),
     [rolls],
   );
 
@@ -2855,29 +2724,6 @@ function SessionDetail({
     }
   };
 
-  const handlePatchRoll = async (rollId, data) => {
-    try {
-      await rollAPI.patchRoll(rollId, data);
-      setRolls((prev) =>
-        prev.map((r) => (r.id === rollId ? { ...r, ...data } : r)),
-      );
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
-  const handleGrantXP = async (rollId) => {
-    try {
-      await rollAPI.grantXP(rollId);
-      setRolls((prev) =>
-        prev.map((r) => (r.id === rollId ? { ...r, xp_awarded: true } : r)),
-      );
-      onRefresh();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
   const handleManualRollCreate = async () => {
     const cid = parseInt(manualRoll.characterId, 10);
     if (!cid) {
@@ -2894,19 +2740,42 @@ function SessionDetail({
     }
     setManualRollSaving(true);
     setError(null);
+    const kind = String(manualRoll.rollKind || "ACTION").toUpperCase();
+    const base = {
+      character: cid,
+      session: session.id,
+      dice_pool: results.length,
+      results,
+      outcome: manualRoll.outcome,
+      position: sessionData?.default_position || "risky",
+      effect: sessionData?.default_effect || "standard",
+    };
     try {
-      await rollAPI.createRoll({
-        character: cid,
-        session: session.id,
-        roll_type: "ACTION",
-        action_name: (manualRoll.actionName || "action").toLowerCase(),
-        position: sessionData?.default_position || "risky",
-        effect: sessionData?.default_effect || "standard",
-        dice_pool: results.length,
-        results,
-        outcome: manualRoll.outcome,
-        description: "Manual / offline dice (GM)",
-      });
+      if (kind === "RESISTANCE") {
+        await rollAPI.createRoll({
+          ...base,
+          roll_type: "RESISTANCE",
+          action_name: (manualRoll.resistanceAttr || "resolve").toLowerCase(),
+          description: "Manual / offline resistance (GM)",
+        });
+      } else if (kind === "CLEAR_STRESS") {
+        const note = String(manualRoll.viceNote || "").trim();
+        await rollAPI.createRoll({
+          ...base,
+          roll_type: "CLEAR_STRESS",
+          action_name: "vice",
+          description: note
+            ? `Manual vice (offline dice, GM). ${note}`
+            : "Manual vice (offline dice, GM)",
+        });
+      } else {
+        await rollAPI.createRoll({
+          ...base,
+          roll_type: "ACTION",
+          action_name: (manualRoll.actionName || "action").toLowerCase(),
+          description: "Manual / offline action (GM)",
+        });
+      }
       const next = await rollAPI.getRolls({ session: session.id });
       setRolls(next || []);
       onRefresh();
@@ -2942,6 +2811,19 @@ function SessionDetail({
       setError(e.message);
     } finally {
       setFortuneRolling(false);
+    }
+  };
+
+  const handleDeleteFortuneRoll = async (rollId) => {
+    if (!rollId) return;
+    const ok = window.confirm("Remove this fortune roll record?");
+    if (!ok) return;
+    try {
+      await rollAPI.deleteRoll(rollId);
+      setRolls((prev) => (prev || []).filter((r) => r.id !== rollId));
+      onRefresh();
+    } catch (e) {
+      setError(e.message || "Failed to remove roll record.");
     }
   };
 
@@ -3063,6 +2945,7 @@ function SessionDetail({
         sessionData={sessionData}
         setSessionData={setSessionData}
         campaign={campaign}
+        crews={crews}
         campaignNPCs={campaignNPCs}
         characters={characters}
         clocks={clocks}
@@ -3070,335 +2953,12 @@ function SessionDetail({
         setError={setError}
         onNavigateToCharacter={onNavigateToCharacter}
         onNavigateToNPC={onNavigateToNPC}
+        rolls={rolls}
+        manualRoll={manualRoll}
+        setManualRoll={setManualRoll}
+        manualRollSaving={manualRollSaving}
+        onManualRollCreate={handleManualRollCreate}
       />
-
-      {/* Position & Effect + dice history toggle (GM control) */}
-      <div style={S.card}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: "8px",
-          }}
-        >
-          <span style={S.sectionLbl}>
-            Position & Effect (Player Visibility)
-          </span>
-          <button
-            type="button"
-            onClick={() => setShowDiceHistoryPanel((x) => !x)}
-            title={
-              showDiceHistoryPanel ? "Hide dice history" : "Show dice history"
-            }
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              background: showDiceHistoryPanel ? "#312e81" : "#1f2937",
-              border: "1px solid #4b5563",
-              borderRadius: 6,
-              padding: "6px 10px",
-              cursor: "pointer",
-              color: "#e5e7eb",
-              fontSize: 11,
-            }}
-          >
-            <HistoryBranchIcon size={16} />
-            Dice history
-          </button>
-        </div>
-        <div style={{ marginTop: "8px", fontSize: "12px", color: "#9ca3af" }}>
-          Position & effect are always shown to players.
-        </div>
-        <div
-          style={{
-            display: "flex",
-            gap: "16px",
-            marginTop: "12px",
-            flexWrap: "wrap",
-            alignItems: "flex-start",
-          }}
-        >
-          <div>
-            <span
-              style={{
-                fontSize: "11px",
-                color: "#9ca3af",
-                display: "block",
-                marginBottom: "4px",
-              }}
-            >
-              Default position
-            </span>
-            <select
-              style={S.select}
-              value={sessionData?.default_position || "risky"}
-              onChange={(e) =>
-                handleUpdateSession({ default_position: e.target.value })
-              }
-            >
-              <option value="controlled">Controlled</option>
-              <option value="risky">Risky</option>
-              <option value="desperate">Desperate</option>
-            </select>
-          </div>
-          <div>
-            <span
-              style={{
-                fontSize: "11px",
-                color: "#9ca3af",
-                display: "block",
-                marginBottom: "4px",
-              }}
-            >
-              Default effect
-            </span>
-            <select
-              style={S.select}
-              value={sessionData?.default_effect || "standard"}
-              onChange={(e) =>
-                handleUpdateSession({ default_effect: e.target.value })
-              }
-            >
-              <option value="limited">Limited</option>
-              <option value="standard">Standard</option>
-              <option value="extreme">Extreme</option>
-            </select>
-          </div>
-          <div style={{ flex: "1 1 220px" }}>
-            <span
-              style={{
-                fontSize: "11px",
-                color: "#9ca3af",
-                display: "block",
-                marginBottom: "4px",
-              }}
-            >
-              Roll goal label (players see in roll pool)
-            </span>
-            <input
-              style={{ ...S.inp, width: "100%", maxWidth: 360 }}
-              value={sessionData?.roll_goal_label ?? ""}
-              onChange={(e) =>
-                setSessionData((p) => ({
-                  ...p,
-                  roll_goal_label: e.target.value,
-                }))
-              }
-              onBlur={(e) =>
-                handleUpdateSession({ roll_goal_label: e.target.value })
-              }
-              placeholder="e.g. Quietly open the service door"
-            />
-          </div>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            gap: "16px",
-            flexWrap: "wrap",
-            marginTop: "12px",
-          }}
-        >
-          <PositionStack
-            activePosition={sessionData?.default_position || "risky"}
-            readOnly
-          />
-          <EffectShapes
-            activeEffect={sessionData?.default_effect || "standard"}
-            readOnly
-          />
-        </div>
-
-        {showDiceHistoryPanel && (
-          <div
-            style={{
-              marginTop: "14px",
-              padding: "12px",
-              background: "#0d1117",
-              borderRadius: "8px",
-              border: "1px solid #374151",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "11px",
-                color: "#9ca3af",
-                marginBottom: "8px",
-              }}
-            >
-              Desperate action rolls this session:{" "}
-              <span style={{ color: "#f97316", fontWeight: "bold" }}>
-                {desperateRollCount}
-              </span>
-            </div>
-            <label
-              style={{
-                fontSize: "11px",
-                marginBottom: "8px",
-                display: "block",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={showPositionEffect}
-                onChange={(e) => setShowPositionEffect(e.target.checked)}
-              />{" "}
-              Show position & effect on rows
-            </label>
-            {rolls.filter((r) => (r.roll_type || "").toUpperCase() === "ACTION")
-              .length === 0 ? (
-              <div style={{ color: "#6b7280", fontSize: "12px" }}>
-                No rolls for this session.
-              </div>
-            ) : (
-              rolls
-                .filter((r) => (r.roll_type || "").toUpperCase() === "ACTION")
-                .map((r) => (
-                <DiceHistoryRow
-                  key={r.id}
-                  roll={r}
-                  showPositionEffect={showPositionEffect}
-                  onPatch={handlePatchRoll}
-                  onGrantXP={handleGrantXP}
-                  isGM
-                />
-                ))
-            )}
-            <div
-              style={{
-                marginTop: "12px",
-                paddingTop: "12px",
-                borderTop: "1px solid #1f2937",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "11px",
-                  color: "#a78bfa",
-                  fontWeight: "bold",
-                  display: "block",
-                  marginBottom: "8px",
-                }}
-              >
-                Manual roll (offline dice)
-              </span>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "8px",
-                  alignItems: "flex-end",
-                  fontSize: "11px",
-                }}
-              >
-                <div>
-                  <span
-                    style={{
-                      color: "#9ca3af",
-                      display: "block",
-                      marginBottom: "2px",
-                    }}
-                  >
-                    Character
-                  </span>
-                  <select
-                    style={S.select}
-                    value={manualRoll.characterId}
-                    onChange={(e) =>
-                      setManualRoll((p) => ({
-                        ...p,
-                        characterId: e.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">—</option>
-                    {campaignChars.map((ch) => (
-                      <option key={ch.id} value={ch.id}>
-                        {ch.true_name || ch.name || `PC ${ch.id}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <span
-                    style={{
-                      color: "#9ca3af",
-                      display: "block",
-                      marginBottom: "2px",
-                    }}
-                  >
-                    Action
-                  </span>
-                  <input
-                    style={{ ...S.inp, width: 100 }}
-                    value={manualRoll.actionName}
-                    onChange={(e) =>
-                      setManualRoll((p) => ({
-                        ...p,
-                        actionName: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div>
-                  <span
-                    style={{
-                      color: "#9ca3af",
-                      display: "block",
-                      marginBottom: "2px",
-                    }}
-                  >
-                    Dice (1–6)
-                  </span>
-                  <input
-                    style={{ ...S.inp, width: 90 }}
-                    value={manualRoll.diceStr}
-                    onChange={(e) =>
-                      setManualRoll((p) => ({ ...p, diceStr: e.target.value }))
-                    }
-                    placeholder="4, 5"
-                  />
-                </div>
-                <div>
-                  <span
-                    style={{
-                      color: "#9ca3af",
-                      display: "block",
-                      marginBottom: "2px",
-                    }}
-                  >
-                    Outcome
-                  </span>
-                  <select
-                    style={S.select}
-                    value={manualRoll.outcome}
-                    onChange={(e) =>
-                      setManualRoll((p) => ({ ...p, outcome: e.target.value }))
-                    }
-                  >
-                    <option value="CRITICAL_SUCCESS">Critical</option>
-                    <option value="FULL_SUCCESS">Full</option>
-                    <option value="PARTIAL_SUCCESS">Partial</option>
-                    <option value="FAILURE">Failure</option>
-                    <option value="BOTCH">Botch</option>
-                  </select>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleManualRollCreate}
-                  style={S.btnPrimary}
-                  disabled={manualRollSaving}
-                >
-                  {manualRollSaving ? "Saving..." : "Add manual roll"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
 
       {/* Wanted level */}
       <div style={S.card}>
@@ -3473,6 +3033,7 @@ function SessionDetail({
             alignItems: "center",
             gap: "8px",
             marginTop: "8px",
+            flexWrap: "wrap",
           }}
         >
           <span style={{ fontSize: "11px" }}>Dice pool:</span>
@@ -3494,6 +3055,112 @@ function SessionDetail({
           >
             {fortuneRolling ? "Rolling..." : "Roll Fortune"}
           </button>
+        </div>
+        <div
+          style={{
+            marginTop: "14px",
+            paddingTop: "12px",
+            borderTop: "1px solid #374151",
+          }}
+        >
+          <span
+            style={{
+              ...S.sectionLbl,
+              marginTop: 0,
+              display: "block",
+              marginBottom: "8px",
+            }}
+          >
+            Fortune roll history
+          </span>
+          {fortuneRolls.length === 0 ? (
+            <div style={{ fontSize: "12px", color: "#6b7280" }}>
+              No fortune rolls this session yet.
+            </div>
+          ) : (
+            <div
+              style={{
+                maxHeight: 220,
+                overflowY: "auto",
+                border: "1px solid #374151",
+                borderRadius: 6,
+                background: "#0d1117",
+                padding: "8px 10px",
+              }}
+            >
+              {fortuneRolls.map((r) => {
+                const when = r.timestamp
+                  ? new Date(r.timestamp).toLocaleString()
+                  : "—";
+                const dice = [].concat(r.results || []).join(", ") || "—";
+                const oc = String(r.outcome || "").replace(/_/g, " ") || "—";
+                const actor =
+                  (r.rolled_by_username && String(r.rolled_by_username).trim()) ||
+                  "GM";
+                const label = String(
+                  r.fortune_public_label || r.goal_label || r.action_name || "",
+                ).trim();
+                const reveal = r.fortune_reveal_outcome === true;
+                return (
+                  <div
+                    key={r.id}
+                    style={{
+                      fontSize: "11px",
+                      padding: "6px 0",
+                      borderBottom: "1px solid #1f2937",
+                      color: "#d1d5db",
+                    }}
+                  >
+                    <div style={{ color: "#9ca3af", fontSize: "10px" }}>
+                      {when}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 4,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 8,
+                      }}
+                    >
+                      <div>
+                        <span style={{ color: "#e5e7eb" }}>{actor}</span>
+                        <span style={{ color: "#6b7280" }}> · GM Fortune</span>
+                        {label ? (
+                          <span style={{ color: "#a78bfa" }}>
+                            {" "}
+                            · {label}
+                          </span>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFortuneRoll(r.id)}
+                        style={{
+                          ...S.btnDanger,
+                          fontSize: 10,
+                          padding: "2px 8px",
+                          background: "#3f1d1d",
+                          color: "#fca5a5",
+                        }}
+                        title="Remove this fortune record"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div style={{ marginTop: 2 }}>
+                      <span>{dice}</span>
+                      <span style={{ color: "#6b7280" }}> → </span>
+                      <span>{oc}</span>
+                      <span style={{ marginLeft: 8, color: reveal ? "#22c55e" : "#6b7280" }}>
+                        [{reveal ? "revealed" : "hidden"}]
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 

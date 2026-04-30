@@ -138,22 +138,50 @@ function computeResistanceSummary(diceResults) {
   return { highest, isCritical, stressCost, outcome };
 }
 
+/** Vice manual record: highest die = stress cleared; outcome for stored roll only */
+function computeViceManualSummary(diceResults) {
+  const nums = (Array.isArray(diceResults) ? diceResults : [])
+    .map((n) => Number(n))
+    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 6);
+  const highest = nums.length ? Math.max(...nums) : 0;
+  const outcome =
+    highest >= 6
+      ? "FULL_SUCCESS"
+      : highest >= 4
+        ? "PARTIAL_SUCCESS"
+        : "FAILURE";
+  return { highest, outcome };
+}
+
 const VICE_OVERINDULGE_CHOICES = [
-  { value: "", label: "If overindulged, record outcome…" },
+  { value: "", label: "If overindulged, pick an outcome…" },
   {
     value: "trouble",
-    label: "Attract trouble (extra entanglement)",
+    label:
+      "Attract Trouble — extra entanglement (fortune roll for GM or GM choice)",
   },
-  { value: "brag", label: "Brag about exploits (+2 heat)" },
+  {
+    value: "brag",
+    label: "Brag about your exploits — +2 wanted levels",
+  },
   {
     value: "lost",
-    label: "Lost (weeks away; alt PC; return fully healed)",
+    label:
+      "Lost — gone weeks; play another PC until return; on return, all harm healed",
   },
   {
     value: "tapped",
-    label: "Tapped (purveyor cuts you off)",
+    label:
+      "Tapped — current purveyor cuts you off; find a new source for your vice",
   },
 ];
+
+function viceOverindulgeLabel(value) {
+  const v = String(value || "").trim();
+  if (!v) return "";
+  const hit = VICE_OVERINDULGE_CHOICES.find((o) => o.value === v);
+  return hit ? hit.label : v;
+}
 
 const HISTORY_FIELD_LABELS = {
   true_name: "Name",
@@ -469,6 +497,8 @@ const CharacterSheetWrapper = ({
     character?.image || character?.image_url || "",
   );
   const [removeImageRequested, setRemoveImageRequested] = useState(false);
+  const [portraitUrlModalOpen, setPortraitUrlModalOpen] = useState(false);
+  const [portraitUrlDraft, setPortraitUrlDraft] = useState("");
 
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState(null);
@@ -486,21 +516,35 @@ const CharacterSheetWrapper = ({
     lastSavedPayloadRef.current = null;
   }, [sessionDataPollTick]);
 
-  const handleImageUrlPrompt = useCallback(() => {
-    const url = prompt("Paste image URL (https://...)");
-    const next = String(url || "").trim();
+  const openPortraitUrlModal = useCallback(() => {
+    setPortraitUrlDraft(String(imageUrl || "").trim());
+    setPortraitUrlModalOpen(true);
+  }, [imageUrl]);
+
+  const savePortraitUrlFromModal = useCallback(() => {
+    const next = String(portraitUrlDraft || "").trim();
     if (next) {
       setImageUrl(next);
       setImagePreview(next);
       setRemoveImageRequested(false);
     }
-  }, []);
+    setPortraitUrlModalOpen(false);
+  }, [portraitUrlDraft]);
 
   const handleRemovePortrait = useCallback(() => {
     setImageUrl("");
     setImagePreview("");
     setRemoveImageRequested(true);
   }, []);
+
+  useEffect(() => {
+    if (!portraitUrlModalOpen) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setPortraitUrlModalOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [portraitUrlModalOpen]);
 
   // Sync crew/crewId when character changes (e.g. from parent after crew name update)
   useEffect(() => {
@@ -1459,6 +1503,7 @@ const CharacterSheetWrapper = ({
     position: "risky",
     effect: "standard",
     resistanceHarmTarget: "",
+    viceOverindulge: "",
     pushDice: false,
     pushEffect: false,
     devil: false,
@@ -1516,6 +1561,19 @@ const CharacterSheetWrapper = ({
     });
     return out;
   }, [harm]);
+
+  /** True when manual vice dice highest exceeds current marked stress → must pick consequence */
+  const viceManualWouldOverindulge = useMemo(() => {
+    if (String(historyManual.rollType || "").toUpperCase() !== "VICE")
+      return false;
+    const diceResults = String(historyManual.dice || "")
+      .split(/[\s,]+/)
+      .map((n) => parseInt(n.trim(), 10))
+      .filter((n) => Number.isFinite(n) && n >= 1 && n <= 6);
+    if (!diceResults.length) return false;
+    const hi = Math.max(...diceResults);
+    return hi > (Number(stressFilled) || 0);
+  }, [historyManual.rollType, historyManual.dice, stressFilled]);
 
   const clearHarmSlot = useCallback((target) => {
     const [level, idxRaw] = String(target || "").split(":");
@@ -1693,9 +1751,28 @@ const CharacterSheetWrapper = ({
               (r.roll_type || "").toUpperCase() === "FORTUNE" &&
               !r.fortune_reveal_outcome
                 ? `${r.action_name || "Fortune"} (redacted)`
-                : `${r.action_name || "Roll"} · ${[]
-                    .concat(r.results || [])
-                    .join(", ")} → ${r.outcome || ""}`,
+                : (r.roll_type || "").toUpperCase() === "CLEAR_STRESS"
+                  ? (() => {
+                      const clears = []
+                        .concat(r.results || [])
+                        .map((x) => Number(x))
+                        .filter((n) => Number.isFinite(n));
+                      const hi = clears.length ? Math.max(...clears) : 0;
+                      const label =
+                        String(r.action_name || "").toLowerCase() === "vice"
+                          ? "Vice"
+                          : r.action_name || "Clear stress";
+                      const desc = String(r.description || "").trim();
+                      const parts = desc.split(" Overindulgence: ");
+                      const overTail =
+                        parts.length > 1 ? parts[parts.length - 1].trim() : "";
+                      return `${label} · ${clears.join(", ")} → clears ${hi} stress${
+                        overTail ? ` · ${overTail}` : ""
+                      }`;
+                    })()
+                  : `${r.action_name || "Roll"} · ${[]
+                      .concat(r.results || [])
+                      .join(", ")} → ${r.outcome || ""}`,
             modifiers: [
               r.position ? `Pos ${r.position}` : null,
               r.effect ? `Eff ${r.effect}` : null,
@@ -3032,6 +3109,7 @@ const CharacterSheetWrapper = ({
                                           setHistoryManual((p) => ({
                                             ...p,
                                             rollType: e.target.value,
+                                            viceOverindulge: "",
                                           }))
                                         }
                                         style={{
@@ -3044,6 +3122,7 @@ const CharacterSheetWrapper = ({
                                         <option value="RESISTANCE">
                                           Resistance
                                         </option>
+                                        <option value="VICE">Vice roll</option>
                                       </select>
                                       <select
                                         value={historyManual.sessionId}
@@ -3088,6 +3167,19 @@ const CharacterSheetWrapper = ({
                                           <option value="prowess">Prowess</option>
                                           <option value="resolve">Resolve</option>
                                         </select>
+                                      ) : historyManual.rollType === "VICE" ? (
+                                        <div
+                                          style={{
+                                            ...S.inp,
+                                            fontSize: 10,
+                                            padding: "2px 6px",
+                                            color: "#9ca3af",
+                                            display: "flex",
+                                            alignItems: "center",
+                                          }}
+                                        >
+                                          Vice (downtime indulgence)
+                                        </div>
                                       ) : (
                                         <input
                                           value={historyManual.action}
@@ -3160,6 +3252,23 @@ const CharacterSheetWrapper = ({
                                             }}
                                           >
                                             Stress = 6 - highest die
+                                          </div>
+                                        </>
+                                      ) : historyManual.rollType === "VICE" ? (
+                                        <>
+                                          <div
+                                            style={{
+                                              ...S.inp,
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                              color: "#d1d5db",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              gridColumn: "1 / -1",
+                                            }}
+                                          >
+                                            Pool = lowest Insight / Prowess / Resolve
+                                            rating · stress cleared = highest die
                                           </div>
                                         </>
                                       ) : (
@@ -3240,7 +3349,8 @@ const CharacterSheetWrapper = ({
                                         </>
                                       )}
                                     </div>
-                                    {historyManual.rollType !== "RESISTANCE" && (
+                                    {historyManual.rollType !== "RESISTANCE" &&
+                                      historyManual.rollType !== "VICE" && (
                                       <div
                                         style={{
                                           marginTop: 6,
@@ -3277,6 +3387,7 @@ const CharacterSheetWrapper = ({
                                       </div>
                                     )}
                                     {historyManual.rollType !== "RESISTANCE" &&
+                                    historyManual.rollType !== "VICE" &&
                                     historyManual.groupAction ? (
                                       <input
                                         value={historyManual.groupActionId}
@@ -3295,6 +3406,44 @@ const CharacterSheetWrapper = ({
                                         }}
                                         placeholder="Group action id"
                                       />
+                                    ) : null}
+                                    {historyManual.rollType === "VICE" &&
+                                    viceManualWouldOverindulge ? (
+                                      <div style={{ marginTop: 6 }}>
+                                        <div
+                                          style={{
+                                            fontSize: 10,
+                                            color: "#fbbf24",
+                                            marginBottom: 4,
+                                            fontWeight: "bold",
+                                          }}
+                                        >
+                                          Overindulgence (highest die exceeds stress marked) — pick
+                                          consequence:
+                                        </div>
+                                        <select
+                                          value={historyManual.viceOverindulge || ""}
+                                          onChange={(e) =>
+                                            setHistoryManual((p) => ({
+                                              ...p,
+                                              viceOverindulge: e.target.value,
+                                            }))
+                                          }
+                                          style={{
+                                            ...S.sel,
+                                            fontSize: 10,
+                                            padding: "2px 6px",
+                                            width: "100%",
+                                            maxWidth: "100%",
+                                          }}
+                                        >
+                                          {VICE_OVERINDULGE_CHOICES.map((o) => (
+                                            <option key={o.value || "none"} value={o.value}>
+                                              {o.label}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
                                     ) : null}
                                     <div
                                       style={{
@@ -3332,14 +3481,18 @@ const CharacterSheetWrapper = ({
                                               );
                                               return;
                                             }
+                                            const rt = String(
+                                              historyManual.rollType || "ACTION",
+                                            ).toUpperCase();
                                             const isResistanceManual =
-                                              String(
-                                                historyManual.rollType ||
-                                                  "ACTION",
-                                              ).toUpperCase() ===
-                                              "RESISTANCE";
+                                              rt === "RESISTANCE";
+                                            const isViceManual = rt === "VICE";
                                             const resistanceSummary =
                                               computeResistanceSummary(
+                                                diceResults,
+                                              );
+                                            const viceSummary =
+                                              computeViceManualSummary(
                                                 diceResults,
                                               );
                                             if (
@@ -3348,6 +3501,22 @@ const CharacterSheetWrapper = ({
                                             ) {
                                               setHistoryWriteError(
                                                 "Choose which harm slot this resistance roll reduces.",
+                                              );
+                                              return;
+                                            }
+                                            const viceOverAtSave =
+                                              isViceManual &&
+                                              viceSummary.highest >
+                                                (Number(stressFilled) || 0);
+                                            if (
+                                              viceOverAtSave &&
+                                              !String(
+                                                historyManual.viceOverindulge ||
+                                                  "",
+                                              ).trim()
+                                            ) {
+                                              setHistoryWriteError(
+                                                "Overindulgence: choose which consequence applies (highest die exceeds marked stress).",
                                               );
                                               return;
                                             }
@@ -3368,16 +3537,30 @@ const CharacterSheetWrapper = ({
                                                   resistanceSummary.stressCost,
                                                 );
                                             }
+                                            if (isViceManual) {
+                                              setStressFilled((prev) =>
+                                                Math.max(
+                                                  0,
+                                                  (Number(prev) || 0) -
+                                                    viceSummary.highest,
+                                                ),
+                                              );
+                                            }
                                             await rollAPI.createRoll({
                                               character: characterId,
                                               session: sid,
                                               roll_type: isResistanceManual
                                                 ? "RESISTANCE"
-                                                : "ACTION",
-                                              action_name: String(
-                                                historyManual.action || "action",
-                                              ).toLowerCase(),
-                                              ...(isResistanceManual
+                                                : isViceManual
+                                                  ? "CLEAR_STRESS"
+                                                  : "ACTION",
+                                              action_name: isViceManual
+                                                ? "vice"
+                                                : String(
+                                                      historyManual.action ||
+                                                        "action",
+                                                    ).toLowerCase(),
+                                              ...(isResistanceManual || isViceManual
                                                 ? {}
                                                 : {
                                                     position:
@@ -3388,7 +3571,9 @@ const CharacterSheetWrapper = ({
                                               results: diceResults,
                                               outcome: isResistanceManual
                                                 ? resistanceSummary.outcome
-                                                : historyManual.outcome,
+                                                : isViceManual
+                                                  ? viceSummary.outcome
+                                                  : historyManual.outcome,
                                               ...(isResistanceManual
                                                 ? {
                                                     roller_stress_spent:
@@ -3397,32 +3582,36 @@ const CharacterSheetWrapper = ({
                                                         ? resistanceSummary.stressCost
                                                         : 0,
                                                   }
-                                                : {
-                                                    push_for_dice:
-                                                      !!historyManual.pushDice,
-                                                    push_for_effect:
-                                                      !!historyManual.pushEffect,
-                                                    uses_devil_bargain:
-                                                      !!historyManual.devil,
-                                                    pool_assist_dice:
-                                                      historyManual.helpDie
-                                                        ? 1
-                                                        : 0,
-                                                    group_action:
-                                                      historyManual.groupAction &&
-                                                      historyManual.groupActionId
-                                                        ? parseInt(
-                                                            String(
-                                                              historyManual.groupActionId,
-                                                            ),
-                                                            10,
-                                                          )
-                                                        : undefined,
-                                                  }),
+                                                : isViceManual
+                                                  ? { roller_stress_spent: 0 }
+                                                  : {
+                                                      push_for_dice:
+                                                        !!historyManual.pushDice,
+                                                      push_for_effect:
+                                                        !!historyManual.pushEffect,
+                                                      uses_devil_bargain:
+                                                        !!historyManual.devil,
+                                                      pool_assist_dice:
+                                                        historyManual.helpDie
+                                                          ? 1
+                                                          : 0,
+                                                      group_action:
+                                                        historyManual.groupAction &&
+                                                        historyManual.groupActionId
+                                                          ? parseInt(
+                                                              String(
+                                                                historyManual.groupActionId,
+                                                              ),
+                                                              10,
+                                                            )
+                                                          : undefined,
+                                                    }),
                                               description:
                                                 isResistanceManual
                                                   ? `Manual resistance record from history panel. Reduced harm slot ${historyManual.resistanceHarmTarget}. Stress marked: ${Math.max(0, resistanceSummary.stressCost)}.`
-                                                  : "Manual record from history panel",
+                                                  : isViceManual
+                                                    ? `Manual vice record from history panel. Stress cleared (highest die): ${viceSummary.highest}.${viceOverAtSave && String(historyManual.viceOverindulge || "").trim() ? ` Overindulgence: ${viceOverindulgeLabel(historyManual.viceOverindulge)}` : ""}`
+                                                    : "Manual record from history panel",
                                             });
                                             setHistoryRefreshTick((v) => v + 1);
                                             setShowHistoryManualModal(false);
@@ -3591,7 +3780,8 @@ const CharacterSheetWrapper = ({
                       </div>
                       <div style={{ display: "flex", gap: "4px" }}>
                         <button
-                          onClick={handleImageUrlPrompt}
+                          type="button"
+                          onClick={openPortraitUrlModal}
                           style={{
                             ...S.btn,
                             fontSize: "9px",
@@ -3603,6 +3793,7 @@ const CharacterSheetWrapper = ({
                           URL
                         </button>
                         <button
+                          type="button"
                           onClick={handleRemovePortrait}
                           style={{
                             ...S.btn,
@@ -7402,6 +7593,8 @@ const CharacterSheetWrapper = ({
                           stressBefore,
                           applied: false,
                           overindulge: "",
+                          wantedApplyErr: null,
+                          viceApplyErr: null,
                         });
                       }}
                       style={{
@@ -7483,17 +7676,23 @@ const CharacterSheetWrapper = ({
                               fontWeight: "bold",
                             }}
                           >
-                            Overindulgence: highest die exceeds stress marked — pick a
-                            consequence below (table/GM).
+                            Overindulgence: you cleared more stress than you had marked —
+                            bad call from vice. Choose an outcome below with the table/GM.
                           </div>
                         ) : null}
-                        {viceRollResult.wouldOverindulge ? (
+                        {viceRollResult.wouldOverindulge &&
+                        !viceRollResult.applied ? (
                           <select
                             value={viceRollResult.overindulge || ""}
                             onChange={(e) =>
                               setViceRollResult((p) =>
                                 p
-                                  ? { ...p, overindulge: e.target.value }
+                                  ? {
+                                      ...p,
+                                      overindulge: e.target.value,
+                                      wantedApplyErr: null,
+                                      viceApplyErr: null,
+                                    }
                                   : p,
                               )
                             }
@@ -7512,6 +7711,38 @@ const CharacterSheetWrapper = ({
                             ))}
                           </select>
                         ) : null}
+                        {viceRollResult.wouldOverindulge &&
+                        viceRollResult.applied &&
+                        viceRollResult.overindulge ? (
+                          <div
+                            style={{
+                              padding: "6px 8px",
+                              marginBottom: "8px",
+                              borderRadius: "4px",
+                              background: "#422006",
+                              border: "1px solid #a16207",
+                              color: "#fde68a",
+                              fontSize: "11px",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            <strong>Overindulgence:</strong>{" "}
+                            {viceOverindulgeLabel(viceRollResult.overindulge)}
+                          </div>
+                        ) : null}
+                        {viceRollResult.wouldOverindulge &&
+                        viceRollResult.overindulge === "brag" ? (
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#93c5fd",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            Apply will bump this campaign&rsquo;s wanted stars by +2
+                            (caps at 5) before stress clears.
+                          </div>
+                        ) : null}
                         <div
                           style={{
                             display: "flex",
@@ -7523,15 +7754,77 @@ const CharacterSheetWrapper = ({
                           <button
                             type="button"
                             disabled={!!viceRollResult.applied}
-                            onClick={() => {
+                            onClick={async () => {
                               if (!viceRollResult || viceRollResult.applied) return;
+                              if (
+                                viceRollResult.wouldOverindulge &&
+                                !String(
+                                  viceRollResult.overindulge || "",
+                                ).trim()
+                              ) {
+                                setViceRollResult((p) =>
+                                  p
+                                    ? {
+                                        ...p,
+                                        viceApplyErr:
+                                          "Choose an overindulgence consequence before applying.",
+                                      }
+                                    : p,
+                                );
+                                return;
+                              }
                               const hi = viceRollResult.highest;
-                              setStressFilled((prev) =>
-                                Math.max(0, (Number(prev) || 0) - hi),
-                              );
-                              setViceRollResult((p) =>
-                                p ? { ...p, applied: true } : p,
-                              );
+                              const bumpWanted =
+                                viceRollResult.wouldOverindulge &&
+                                viceRollResult.overindulge === "brag";
+                              try {
+                                setViceRollResult((p) =>
+                                  p ? { ...p, viceApplyErr: null } : p,
+                                );
+                                if (bumpWanted) {
+                                  if (!charCampaign?.id) {
+                                    setViceRollResult((p) =>
+                                      p
+                                        ? {
+                                            ...p,
+                                            wantedApplyErr:
+                                              "No campaign linked; wanted stars not updated.",
+                                          }
+                                        : p,
+                                    );
+                                    return;
+                                  }
+                                  await campaignAPI.incrementCampaignWanted(
+                                    charCampaign.id,
+                                    { amount: 2, cap: 5 },
+                                  );
+                                  onCampaignRefresh?.();
+                                }
+                                setStressFilled((prev) =>
+                                  Math.max(0, (Number(prev) || 0) - hi),
+                                );
+                                setViceRollResult((p) =>
+                                  p
+                                    ? {
+                                        ...p,
+                                        applied: true,
+                                        wantedApplyErr: null,
+                                        viceApplyErr: null,
+                                      }
+                                    : p,
+                                );
+                              } catch (e) {
+                                setViceRollResult((p) =>
+                                  p
+                                    ? {
+                                        ...p,
+                                        wantedApplyErr:
+                                          e.message ||
+                                          "Could not update campaign wanted stars.",
+                                      }
+                                    : p,
+                                );
+                              }
                             }}
                             style={{
                               ...S.btn,
@@ -7552,6 +7845,28 @@ const CharacterSheetWrapper = ({
                             Dismiss
                           </button>
                         </div>
+                        {viceRollResult.viceApplyErr ? (
+                          <div
+                            style={{
+                              marginTop: "8px",
+                              color: "#fca5a5",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {viceRollResult.viceApplyErr}
+                          </div>
+                        ) : null}
+                        {viceRollResult.wantedApplyErr ? (
+                          <div
+                            style={{
+                              marginTop: "8px",
+                              color: "#fca5a5",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {viceRollResult.wantedApplyErr}
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
@@ -9458,6 +9773,114 @@ const CharacterSheetWrapper = ({
               </div>
             </div>
             </div>
+            {portraitUrlModalOpen && canEditSheet && (
+              <div
+                role="presentation"
+                onClick={() => setPortraitUrlModalOpen(false)}
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  background: "rgba(0,0,0,0.65)",
+                  zIndex: 200,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "16px",
+                }}
+              >
+                <div
+                  role="dialog"
+                  aria-label="Portrait image URL"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    background: "#111827",
+                    border: "1px solid #374151",
+                    borderRadius: 8,
+                    padding: 14,
+                    maxWidth: 420,
+                    width: "100%",
+                    boxShadow: "0 14px 40px rgba(0,0,0,0.55)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: "bold",
+                      color: "#a78bfa",
+                      marginBottom: 8,
+                      fontSize: 13,
+                    }}
+                  >
+                    Portrait URL
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#9ca3af",
+                      marginBottom: 8,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    Paste a direct image link. It updates preview and saves with your
+                    sheet (same as other edits).
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="url"
+                    value={portraitUrlDraft}
+                    onChange={(e) => setPortraitUrlDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        savePortraitUrlFromModal();
+                      }
+                    }}
+                    placeholder="https://example.com/portrait.jpg"
+                    style={{
+                      ...S.inp,
+                      width: "100%",
+                      boxSizing: "border-box",
+                      marginBottom: 10,
+                      fontSize: 12,
+                    }}
+                    autoComplete="off"
+                    autoFocus
+                  />
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      justifyContent: "flex-end",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                    }}
+                  >
+                    <span style={{ fontSize: 10, color: "#6b7280", marginRight: "auto" }}>
+                      Esc to close
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPortraitUrlModalOpen(false)}
+                      style={{ ...S.btn, fontSize: 11 }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!String(portraitUrlDraft || "").trim()}
+                      onClick={savePortraitUrlFromModal}
+                      style={{
+                        ...S.btn,
+                        fontSize: 11,
+                        background: "#7c3aed",
+                        color: "#fff",
+                      }}
+                    >
+                      Save URL
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
 
