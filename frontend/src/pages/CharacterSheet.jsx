@@ -1613,6 +1613,17 @@ const CharacterSheetWrapper = ({
       };
     }, [abilities, rollAbilityBoost, abilityHasBonusOption]);
 
+  const rollBonusEligibleAbilities = useMemo(
+    () =>
+      (abilities || []).filter((a) => {
+        if (a.type !== "standard") return false;
+        return (
+          abilityHasBonusOption(a, "dice") || abilityHasBonusOption(a, "effect")
+        );
+      }),
+    [abilities, abilityHasBonusOption],
+  );
+
   const gmDevilBargainText = useMemo(() => {
     const m = charCampaign?.active_session_detail?.devils_bargain_by_character;
     if (!m || characterId == null) return "";
@@ -5298,8 +5309,7 @@ const CharacterSheetWrapper = ({
                           ) : null}
                         </div>
                       )}
-                      {(abilities || []).filter((a) => a.type === "standard")
-                        .length > 0 && (
+                      {rollBonusEligibleAbilities.length > 0 && (
                         <div style={{ marginBottom: "12px" }}>
                           <div
                             style={{
@@ -5319,8 +5329,7 @@ const CharacterSheetWrapper = ({
                               overflow: "auto",
                             }}
                           >
-                            {(abilities || [])
-                              .filter((a) => a.type === "standard")
+                            {rollBonusEligibleAbilities
                               .slice(0, 16)
                               .map((ab) => {
                                 const id = ab.id ?? ab.name;
