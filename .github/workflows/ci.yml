@@ -259,10 +259,13 @@ jobs:
       github.event.inputs.lxc_action == 'deploy' &&
       github.ref == 'refs/heads/master'
     steps:
+      # OAuth client: https://tailscale.com/s/oauth-clients — scope "Devices" write (auth keys),
+      # tag must match `tags` below (e.g. tag:ci) and your tailnet tagOwners ACL.
       - name: Connect runner to Tailscale
         uses: tailscale/github-action@v4
         with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
           ping: ${{ secrets.LXC_SSH_HOST }}
 
