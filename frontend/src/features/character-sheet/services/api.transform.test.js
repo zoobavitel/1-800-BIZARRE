@@ -46,7 +46,12 @@ function makeSheet(overrides = {}) {
     stress: [],
     trauma: [],
     armor: { armor: false, heavy: false },
-    harmEntries: { level1: [""], level2: [""], level3: [""] },
+    harmEntries: {
+      level4: [""],
+      level3: [""],
+      level2: ["", ""],
+      level1: ["", ""],
+    },
     xp: {},
     clocks: [],
     campaign: null,
@@ -123,6 +128,29 @@ describe("transformFrontendToBackend playbook and playbook abilities", () => {
       makeSheet({ coin: [true, false, true, false] }),
     );
     expect(out.coin_boxes).toEqual([true, false, true, false]);
+  });
+
+  test("maps all harm boxes including slot2 and level4 to backend fields", () => {
+    const out = transformFrontendToBackend(
+      makeSheet({
+        harm: {
+          level4: ["Fatal wound"],
+          level3: [""],
+          level2: ["mod-a", "mod-b"],
+          level1: ["l1a", "l1b"],
+        },
+      }),
+    );
+    expect(out.harm_level4_used).toBe(true);
+    expect(out.harm_level4_name).toBe("Fatal wound");
+    expect(out.harm_level1_used).toBe(true);
+    expect(out.harm_level1_name).toBe("l1a");
+    expect(out.harm_level1_slot2_used).toBe(true);
+    expect(out.harm_level1_slot2_name).toBe("l1b");
+    expect(out.harm_level2_used).toBe(true);
+    expect(out.harm_level2_name).toBe("mod-a");
+    expect(out.harm_level2_slot2_used).toBe(true);
+    expect(out.harm_level2_slot2_name).toBe("mod-b");
   });
 
   test("clears custom ability payload when sheet has no custom abilities (after user removed them)", () => {
@@ -206,6 +234,28 @@ describe("transformBackendToFrontend coin and crew stash", () => {
       trauma_details: [],
     });
     expect(fe.trauma.UNSTABLE).toBe(true);
+  });
+
+  test("maps harm slot2 and level4 from backend to frontend", () => {
+    const fe = transformBackendToFrontend({
+      harm_level1_used: true,
+      harm_level1_name: "one",
+      harm_level1_slot2_used: true,
+      harm_level1_slot2_name: "two",
+      harm_level2_used: true,
+      harm_level2_name: "a",
+      harm_level2_slot2_used: true,
+      harm_level2_slot2_name: "b",
+      harm_level3_used: true,
+      harm_level3_name: "sev",
+      harm_level4_used: true,
+      harm_level4_name: "fat",
+    });
+    expect(fe.harm.level1).toEqual(["one", "two"]);
+    expect(fe.harm.level2).toEqual(["a", "b"]);
+    expect(fe.harm.level3).toEqual(["sev"]);
+    expect(fe.harm.level4).toEqual(["fat"]);
+    expect(fe.harmEntries).toEqual(fe.harm);
   });
 });
 

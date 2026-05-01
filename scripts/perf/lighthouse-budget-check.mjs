@@ -1,0 +1,69 @@
+import { spawn } from "node:child_process";
+import { readFileSync, mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+const frontendUrl = process.env.PERF_FRONTEND_URL || "http://127.0.0.1:3000";
+const perfScoreBudget = Number(process.env.PERF_LIGHTHOUSE_MIN || 80);
+/** Set to `desktop` for CI-stable scores; omit for default (mobile emulation). */
+const lhPreset = (process.env.PERF_LIGHTHOUSE_PRESET || "").trim().toLowerCase();
+
+function run(command, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: "inherit", shell: true });
+    child.on("exit", (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`${command} exited with code ${code}`));
+      }
+    });
+  });
+}
+
+const presetArg = lhPreset === "desktop" ? "--preset=desktop" : null;
+
+console.log(
+  `Lighthouse check: url=${frontendUrl}, minimum performance score=${perfScoreBudget}${presetArg ? ", preset=desktop" : ", preset=default (mobile)"}`,
+);
+
+const reportDir = mkdtempSync(join(tmpdir(), "lh-report-"));
+const reportPath = join(reportDir, "report.json");
+
+const lhArgs = [
+  "--yes",
+  "lighthouse",
+  frontendUrl,
+  "--only-categories=performance",
+  "--chrome-flags=\"--headless --no-sandbox\"",
+  `--budgets-path=scripts/perf/lighthouse-budget.json`,
+  `--output=json`,
+  `--output-path=${reportPath}`,
+  "--quiet",
+];
+if (presetArg) {
+  lhArgs.splice(3, 0, presetArg); // after URL: lighthouse <url> --preset=… --only-categories=…
+}
+
+await run("npx", lhArgs);
+
+let score;
+try {
+  const report = JSON.parse(readFileSync(reportPath, "utf8"));
+  score = Math.round(report.categories.performance.score * 100);
+} catch (err) {
+  console.error("Failed to parse Lighthouse report:", err.message);
+  process.exit(1);
+}
+
+console.log(`Lighthouse performance score: ${score} (minimum: ${perfScoreBudget})`);
+
+if (score < perfScoreBudget) {
+  console.error(
+    `Performance budget failed: score ${score} is below the minimum of ${perfScoreBudget}.`,
+  );
+  process.exit(1);
+}
+
+console.log("Performance budget check passed.");
+

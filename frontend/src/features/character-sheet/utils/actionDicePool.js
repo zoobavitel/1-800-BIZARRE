@@ -1,7 +1,9 @@
 /**
- * Mirrors backend `roll_action` dice math (character_views.py):
- * action_rating + attribute_dice, where attribute_dice counts actions in the
- * same attribute with dots > 0.
+ * Mirrors backend `roll_action` base dice math (character_views.py):
+ * base action pool = action rating only (dots in the rolled action). Attribute
+ * group breadth does not add dice.
+ * When the final pool is 0 (after rating + push/devil/bonus/assist), the server
+ * rolls 2d6 and uses the lower die for the outcome (Blades-style).
  *
  * @param {string} actionName - e.g. "HUNT" or "hunt"
  * @param {Record<string, number>} actionRatings - sheet keys (HUNT, BIZARRE, …)
@@ -22,14 +24,11 @@ export function computeActionPoolBreakdown(actionName, actionRatings) {
   const ratings = actionRatings || {};
   const key = String(actionName || "").toUpperCase();
   const action_rating = Math.max(0, Number(ratings[key] ?? 0) || 0);
-  const attrGroup = attributeGroupForAction(key);
-  const attribute_dice = attrGroup.filter(
-    (a) => (Number(ratings[a] ?? 0) || 0) > 0,
-  ).length;
   return {
     action_rating,
-    attribute_dice,
-    basePool: action_rating + attribute_dice,
+    /** @deprecated always 0; kept for callers that destructure; not added to pool */
+    attribute_dice: 0,
+    basePool: action_rating,
   };
 }
 

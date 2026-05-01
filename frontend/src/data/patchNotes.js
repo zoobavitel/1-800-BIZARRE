@@ -4,23 +4,176 @@
  */
 export const PATCH_NOTES = [
   {
-    "date": "2026-04-18",
+    "date": "2026-05-01",
     "version": null,
     "sections": [
       {
-        "title": "Added",
+        "title": "Fixed",
         "items": [
-          "delete, session scheduling, NPC clock scope"
+          "push and group-action stress semantics"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-04-30",
+    "version": null,
+    "sections": [
+      {
+        "title": "Maintenance",
+        "items": [
+          "add GroupAction.status CANCELLED choice"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "assist stress spend, sessions for campaign players; CI Jest/playwright layout"
         ]
       },
       {
         "title": "Other",
         "items": [
+          "patch notes: add theme changelog line; tidy older entries"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "enhance theme management and styling across components",
+          "enhance AppBar with search and account menu functionality",
+          "enhance action handling and group action management",
+          "enhance session management and roll handling",
+          "add increment wanted action and roll deletion",
+          "add roll goal mapping by character",
+          "add action_name field to GroupAction model and update related serializers and views",
+          "enhance NPC routing and campaign management"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-04-28",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "enhance layout and accessibility of HomeStandCoin component",
+          "enhance HomeStandCoin component layout and accessibility",
+          "center stand coin in hero"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "update patch notes for SPA routing utilities"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "implement SPA routing utilities and refactor navigation components"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-04-26",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "add position effect mapping for session actions"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-04-25",
+    "version": null,
+    "sections": [
+      {
+        "title": "Maintenance",
+        "items": [
+          "update patch notes and package-lock.json"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-04-24",
+    "version": null,
+    "sections": [
+      {
+        "title": "Maintenance",
+        "items": [
+          "update CI workflow and README for LXC deployment",
+          "update package versions and enhance CI workflow"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-04-23",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "enhance SessionNPCInvolvement and Roll models with new fields"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-04-22",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "add CrewHistory model and related functionality",
+          "improve character display and harm editor layout in CampaignManagement",
+          "enhance user profile update and validation"
+        ]
+      },
+      {
+        "title": "Refactored",
+        "items": [
+          "replace line chart with scatter chart for session data visualization"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "update session date handling and UI"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-04-18",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #63 from zoobavitel/feature/campaign-delete-session-qol-npc-clock-scope",
+          "Merge pull request #62 from zoobavitel/feature/campaign-delete-session-qol-npc-clock-scope",
           "Merge pull request #61 from zoobavitel/feature/sheet-updates",
           "Enhance campaign views and NPC sheet functionality",
           "Refactor character view creation process",
           "Update NPC involvement clock flags handling",
           "Add normalization function for NPC involvement clock flags"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "GM remove players and withdraw invites",
+          "delete, session scheduling, NPC clock scope"
         ]
       }
     ]
@@ -263,8 +416,7 @@ export const PATCH_NOTES = [
           "Merge pull request #16 from zoobavitel/copilot/fix-syntax-error-in-create-npc-py",
           "Fix curly apostrophe syntax error in create_npc.py",
           "Update Black action options in workflow",
-          "Update source path in black.yml workflow",
-          "Update Black workflow to use new configuration"
+          "Update source path in black.yml workflow"
         ]
       },
       {
@@ -287,109 +439,6 @@ export const PATCH_NOTES = [
           "add crew management panel to campaign page and auto-assign crew on character assignment",
           "add Delete NPC button to NPC character sheet top bar",
           "inline faction creation & shared faction data in NPC Sheet"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-09",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Delete .github/workflows/prettier.yml",
-          "Merge pull request #15 from zoobavitel/copilot/add-github-action-prettier",
-          "dw",
-          "prettier format",
-          "Merge pull request #14 from zoobavitel/zoobavitel-patch-1",
-          "Refactor CI/CD workflow for branch and deployment updates",
-          "Merge pull request #13 from zoobavitel/feature/rules-srd-sections-ui"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "add explicit permissions to prettier workflow"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "add prettier formatting GitHub Action with config and scripts",
-          "remove monolithic game-rules-srd.md"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "per-section SRD pages, split script, and rules nav layout"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-08",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Fix CI: stash_slots migration; coin readout height; patch notes",
-          "Site stats API, stash slots & portrait uploads; sheet/home fixes"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-07",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #12 from zoobavitel/fix/character-delete-empty-response-and-home-errors",
-          "Stop tracking backend/src/db.sqlite3 (local dev DB)",
-          "Add hero Stand Coin, centered layout; update patch notes and db",
-          "Merge pull request #11 from zoobavitel/fix/character-delete-empty-response-and-home-errors",
-          "Merge remote-tracking branch 'origin/master' into fix/character-delete-empty-response-and-home-errors",
-          "Merge pull request #10 from zoobavitel/feature/home-campaign-invites",
-          "Merge pull request #9 from zoobavitel/cursor/srd-potency-doc-sync",
-          "Merge pull request #8 from zoobavitel/feature/bizarrepoc-homepage"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "update patch notes and backend debug log",
-          "update local db.sqlite3 snapshot",
-          "refresh game-rules-srd and patch notes; update local db and debug log",
-          "update database and log warnings"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "DELETE 204 empty body; Home delete shows errors"
-        ]
-      },
-      {
-        "title": "Documentation",
-        "items": [
-          "sync rules mirrors with SRD (potency removal, preemptive resistance)",
-          "drop Power-vs-Durability potency ladder; expand skills preemptive resistance"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-05",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #7 from zoobavitel/feature/bizarrepoc-homepage"
         ]
       }
     ]

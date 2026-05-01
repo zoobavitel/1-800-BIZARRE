@@ -26,12 +26,17 @@ import {
   characterAPI,
   campaignAPI,
   crewAPI,
+  crewHistoryAPI,
+  factionAPI,
   rollAPI,
   progressClockAPI,
   referenceAPI,
   experienceTrackerAPI,
   xpHistoryAPI,
   groupActionAPI,
+  characterHistoryAPI,
+  sessionAPI,
+  normalizeHarmObject,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -40,6 +45,212 @@ import {
   HistoryBranchIcon,
 } from "../components/position-effect/PositionEffectIndicators";
 import { computeActionPoolBreakdown } from "../features/character-sheet/utils/actionDicePool";
+import {
+  buildXpRequirementSnapshot,
+  formatAttrTally,
+} from "../features/character-sheet/utils/xpRequirements";
+
+const CREW_HISTORY_FIELD_KEYS = new Set([
+  "name",
+  "rep",
+  "turf",
+  "level",
+  "hold",
+  "wanted_level",
+  "coin",
+  "description",
+  "notes",
+  "stash",
+  "upgrade_progress",
+  "xp",
+  "advancement_points",
+  "stash_slots",
+  "proposed_name",
+]);
+
+function upgradesToProgress(upgrades) {
+  const p = {};
+  if (!upgrades) return p;
+  Object.entries(upgrades.lair || {}).forEach(([k, v]) => {
+    p[`lair_${k}`] = !!v;
+  });
+  Object.entries(upgrades.training || {}).forEach(([k, v]) => {
+    p[`training_${k}`] = !!v;
+  });
+  return p;
+}
+
+function progressToUpgrades(progress) {
+  const base = {
+    lair: {
+      carriage: false,
+      boat: false,
+      hidden: false,
+      quarters: false,
+      secure: false,
+      vault: false,
+      workshop: false,
+    },
+    training: {
+      insight: false,
+      prowess: false,
+      resolve: false,
+      personal: false,
+      mastery: false,
+    },
+  };
+  if (!progress || typeof progress !== "object") return base;
+  Object.entries(progress).forEach(([key, val]) => {
+    const parts = key.split("_");
+    if (parts.length >= 2) {
+      const group = parts[0];
+      const rest = parts.slice(1).join("_");
+      if (group === "lair" && rest in base.lair) base.lair[rest] = !!val;
+      if (group === "training" && rest in base.training)
+        base.training[rest] = !!val;
+    }
+  });
+  return base;
+}
+
+function reputationTierLabel(v) {
+  const n = Number(v) || 0;
+  if (n <= -2) return "Hostile";
+  if (n >= 2) return "Allied";
+  return "Neutral";
+}
+
+function normalizeCrewFromCharacter(character) {
+  const rawCrew = character?.crew;
+  const crewName =
+    (typeof rawCrew === "object" ? rawCrew?.name : rawCrew) ||
+    character?.crew_name ||
+    character?.personal_crew_name ||
+    "";
+  const crewId =
+    (typeof rawCrew === "object" ? rawCrew?.id : null) ??
+    character?.crewId ??
+    character?.crew_id ??
+    null;
+  return {
+    crew: String(crewName || ""),
+    crewId: crewId == null || crewId === "" ? null : crewId,
+  };
+}
+
+function computeResistanceSummary(diceResults) {
+  const sorted = (Array.isArray(diceResults) ? diceResults : [])
+    .map((n) => Number(n))
+    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 6);
+  const highest = sorted.length ? Math.max(...sorted) : 0;
+  const sixes = sorted.filter((d) => d === 6).length;
+  const isCritical = sixes >= 2;
+  const stressCost = isCritical ? -1 : Math.max(0, 6 - highest);
+  const outcome = isCritical
+    ? "CRITICAL_SUCCESS"
+    : highest >= 6
+      ? "FULL_SUCCESS"
+      : highest >= 4
+        ? "PARTIAL_SUCCESS"
+        : "FAILURE";
+  return { highest, isCritical, stressCost, outcome };
+}
+
+/** Vice manual record: highest die = stress cleared; outcome for stored roll only */
+function computeViceManualSummary(diceResults) {
+  const nums = (Array.isArray(diceResults) ? diceResults : [])
+    .map((n) => Number(n))
+    .filter((n) => Number.isFinite(n) && n >= 1 && n <= 6);
+  const highest = nums.length ? Math.max(...nums) : 0;
+  const outcome =
+    highest >= 6
+      ? "FULL_SUCCESS"
+      : highest >= 4
+        ? "PARTIAL_SUCCESS"
+        : "FAILURE";
+  return { highest, outcome };
+}
+
+const VICE_OVERINDULGE_CHOICES = [
+  { value: "", label: "If overindulged, pick an outcome…" },
+  {
+    value: "trouble",
+    label:
+      "Attract Trouble — extra entanglement (fortune roll for GM or GM choice)",
+  },
+  {
+    value: "brag",
+    label: "Brag about your exploits — +2 wanted levels",
+  },
+  {
+    value: "lost",
+    label:
+      "Lost — gone weeks; play another PC until return; on return, all harm healed",
+  },
+  {
+    value: "tapped",
+    label:
+      "Tapped — current purveyor cuts you off; find a new source for your vice",
+  },
+];
+
+function viceOverindulgeLabel(value) {
+  const v = String(value || "").trim();
+  if (!v) return "";
+  const hit = VICE_OVERINDULGE_CHOICES.find((o) => o.value === v);
+  return hit ? hit.label : v;
+}
+
+/** Group roll board outcome label + color (SRD tiers; two sixes = critical before tier die). */
+const GROUP_ROLL_BOARD_BAND = {
+  critical: { label: "Critical", color: "#e9d5ff" },
+  success: { label: "Success", color: "#34d399" },
+  partial: { label: "Partial", color: "#fbbf24" },
+  fail: { label: "Fail", color: "#f87171" },
+};
+
+const HISTORY_FIELD_LABELS = {
+  true_name: "Name",
+  stand_name: "Stand name",
+  appearance: "Look",
+  background_note: "Background",
+  inventory: "Inventory",
+  stress: "Stress",
+  trauma: "Trauma",
+  armor_charges: "Armor",
+  regular_armor_used: "Armor spent",
+  special_armor_used: "Special armor spent",
+  harm_clock_current: "Healing clock",
+  harm_level1_name: "Harm Lv1",
+  harm_level1_slot2_name: "Harm Lv1 (slot 2)",
+  harm_level2_name: "Harm Lv2",
+  harm_level2_slot2_name: "Harm Lv2 (slot 2)",
+  harm_level3_name: "Harm Lv3",
+  harm_level4_name: "Harm Lv4",
+  coin_stats: "Stand coin stats",
+  heritage: "Heritage",
+  selected_benefits: "Heritage benefits",
+  selected_detriments: "Heritage detriments",
+  level: "Level",
+  crew: "Crew",
+  action_dots: "Action dots",
+  xp_clocks: "XP tracks",
+};
+
+function historyFieldLabel(key) {
+  return HISTORY_FIELD_LABELS[key] || key.replace(/_/g, " ");
+}
+
+function stringifyValue(v) {
+  if (v == null) return "";
+  if (typeof v === "string" || typeof v === "number" || typeof v === "boolean")
+    return String(v);
+  try {
+    return JSON.stringify(v);
+  } catch (_err) {
+    return String(v);
+  }
+}
 
 // ─── Dice pool (pre-roll preview) ─────────────────────────────────────────────
 
@@ -183,7 +394,6 @@ function hasMeaningfulDraftChanges(payload) {
     payload.image_url,
   ];
   if (textFields.some((v) => String(v ?? "").trim() !== "")) return true;
-  if (payload.imageFile) return true;
   if (payload.campaign != null && payload.campaign !== "") return true;
   if ((payload.playbook || "Stand") !== "Stand") return true;
   if ((payload.stressFilled || 0) > 0) return true;
@@ -253,6 +463,7 @@ const CharacterSheetWrapper = ({
       ? `Created by user #${character.user_id}`
       : "Created by unknown";
   const canEditSheet = !character?.id || isGM || character?.user_id === user?.id;
+  const canCreateManualHistoryRecord = isGM || character?.user_id === user?.id;
   const [activeMode, setActiveMode] = useState("CHARACTER MODE");
   const charCampaign = campaigns?.find((c) => c.id === character?.campaign);
   const activeSessionId =
@@ -261,6 +472,16 @@ const CharacterSheetWrapper = ({
       ? charCampaign?.active_session?.id
       : null);
   const characterId = character?.id;
+
+  /** GM Session bulk editor: per-PC position/effect for this session (overrides defaults). */
+  const sessionOverridePositionEffect = useMemo(() => {
+    const asd = charCampaign?.active_session_detail;
+    if (!asd || characterId == null) return null;
+    const m = asd.position_effect_by_character;
+    if (!m || typeof m !== "object") return null;
+    const row = m[String(characterId)] ?? m[characterId];
+    return row && typeof row === "object" ? row : null;
+  }, [charCampaign?.active_session_detail, characterId]);
 
   const maxStandGradeIndex =
     character?.gm_can_have_s_rank_stand_stats === true ? 5 : 4;
@@ -278,6 +499,7 @@ const CharacterSheetWrapper = ({
   };
 
   // Identity
+  const initialCrew = normalizeCrewFromCharacter(character);
   const [charData, setCharData] = useState({
     // Unsaved drafts should start truly blank even if upstream placeholders exist.
     name: character?.id ? (character?.name || "") : "",
@@ -287,8 +509,8 @@ const CharacterSheetWrapper = ({
     look: character?.look || "",
     vice: character?.vice || "",
     viceDetails: character?.viceDetails ?? character?.vice_details ?? "",
-    crew: character?.crew || "",
-    crewId: character?.crewId ?? null,
+    crew: initialCrew.crew,
+    crewId: initialCrew.crewId,
   });
 
   // Campaign assignment (normalize: backend may send campaign as object or ID)
@@ -298,12 +520,13 @@ const CharacterSheetWrapper = ({
   });
 
   // Portrait state
-  const [imageFile, setImageFile] = useState(null);
   const [imageUrl, setImageUrl] = useState(character?.image_url || "");
   const [imagePreview, setImagePreview] = useState(
     character?.image || character?.image_url || "",
   );
-  const fileInputRef = useRef(null);
+  const [removeImageRequested, setRemoveImageRequested] = useState(false);
+  const [portraitUrlModalOpen, setPortraitUrlModalOpen] = useState(false);
+  const [portraitUrlDraft, setPortraitUrlDraft] = useState("");
 
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState(null);
@@ -313,32 +536,99 @@ const CharacterSheetWrapper = ({
   const savingRef = useRef(false);
   const lastSavedPayloadRef = useRef(null);
 
-  const handleFileSelect = useCallback((e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
+  useEffect(() => {
+    lastSavedPayloadRef.current = null;
+  }, [character?.id]);
+
+  useEffect(() => {
+    lastSavedPayloadRef.current = null;
+  }, [sessionDataPollTick]);
+
+  const openPortraitUrlModal = useCallback(() => {
+    setPortraitUrlDraft(String(imageUrl || "").trim());
+    setPortraitUrlModalOpen(true);
+  }, [imageUrl]);
+
+  const savePortraitUrlFromModal = useCallback(() => {
+    const next = String(portraitUrlDraft || "").trim();
+    if (next) {
+      setImageUrl(next);
+      setImagePreview(next);
+      setRemoveImageRequested(false);
+    }
+    setPortraitUrlModalOpen(false);
+  }, [portraitUrlDraft]);
+
+  const handleRemovePortrait = useCallback(() => {
+    setImageUrl("");
+    setImagePreview("");
+    setRemoveImageRequested(true);
   }, []);
 
-  const handleImageUrlPrompt = useCallback(() => {
-    const url = prompt("Paste image URL:");
-    if (url) {
-      setImageUrl(url);
-      setImagePreview(url);
-      setImageFile(null);
-    }
-  }, []);
+  useEffect(() => {
+    if (!portraitUrlModalOpen) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setPortraitUrlModalOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [portraitUrlModalOpen]);
 
   // Sync crew/crewId when character changes (e.g. from parent after crew name update)
   useEffect(() => {
-    const newCrew = character?.crew ?? "";
-    const newCrewId = character?.crewId ?? null;
+    const normalized = normalizeCrewFromCharacter(character);
+    const newCrew = normalized.crew;
+    const newCrewId = normalized.crewId;
     setCharData((prev) =>
       prev.crew !== newCrew || prev.crewId !== newCrewId
         ? { ...prev, crew: newCrew, crewId: newCrewId }
         : prev,
     );
-  }, [character?.crew, character?.crewId]);
+  }, [
+    character,
+    character?.crew,
+    character?.crewId,
+    character?.crew_id,
+    character?.crew_name,
+    character?.personal_crew_name,
+  ]);
+
+  // Auto-populate crew from campaign context when this sheet has no crew yet.
+  useEffect(() => {
+    setCharData((prev) => {
+      if ((prev.crew || "").trim() || prev.crewId) return prev;
+      const roster = charCampaign?.campaign_characters || [];
+      const me = roster.find((c) => String(c.id) === String(characterId));
+      const meCrewName = (me?.crew || me?.personal_crew_name || "").trim();
+      if (me?.crewId || meCrewName) {
+        return {
+          ...prev,
+          crewId: me?.crewId ?? null,
+          crew: meCrewName || prev.crew,
+        };
+      }
+
+      const crews = [];
+      roster.forEach((c) => {
+        const name = (c?.crew || c?.personal_crew_name || "").trim();
+        const id = c?.crewId ?? null;
+        if (name || id) {
+          const key = String(id ?? name).toLowerCase();
+          if (!crews.some((x) => x.key === key)) {
+            crews.push({ key, id, name });
+          }
+        }
+      });
+      if (crews.length === 1) {
+        return {
+          ...prev,
+          crewId: crews[0].id ?? null,
+          crew: crews[0].name || prev.crew,
+        };
+      }
+      return prev;
+    });
+  }, [charCampaign?.campaign_characters, characterId]);
 
   /** Persist crew label: shared campaign crew (PATCH crew) or personal_crew_name / create+link. Used in Character and Crew mode. */
   const commitCrewName = useCallback(async () => {
@@ -439,10 +729,10 @@ const CharacterSheetWrapper = ({
 
   // Portrait: sync from server/merged character; do not clobber while a file upload is pending
   useEffect(() => {
-    if (imageFile) return;
     setImageUrl(character?.image_url || "");
     setImagePreview(character?.image || character?.image_url || "");
-  }, [character?.id, character?.image, character?.image_url, imageFile]);
+    setRemoveImageRequested(false);
+  }, [character?.id, character?.image, character?.image_url]);
 
   // Sync heritage when heritages load (e.g. new char has heritage: 'Human' string)
   useEffect(() => {
@@ -593,14 +883,9 @@ const CharacterSheetWrapper = ({
     character?.specialArmorUsed || false,
   );
 
-  // Harm (API can send harm or harmEntries)
-  const [harm, setHarm] = useState(
-    character?.harm ||
-      character?.harmEntries || {
-        level3: [""],
-        level2: ["", ""],
-        level1: ["", ""],
-      },
+  // Harm (API can send harm or harmEntries; always keep L1/L2×2, L3, L4)
+  const [harm, setHarm] = useState(() =>
+    normalizeHarmObject(character?.harm || character?.harmEntries),
   );
   const [healingClock, setHealingClock] = useState(
     character?.healingClock ?? 0,
@@ -652,11 +937,12 @@ const CharacterSheetWrapper = ({
     const h = character?.harm || character?.harmEntries;
     if (!h || typeof h !== "object") return;
     setHarm((prev) => {
-      const levels = ["level1", "level2", "level3"];
+      const next = normalizeHarmObject(h);
+      const levels = ["level4", "level3", "level2", "level1"];
       const same = levels.every(
-        (lv) => JSON.stringify(prev[lv]) === JSON.stringify(h[lv]),
+        (lv) => JSON.stringify(prev[lv]) === JSON.stringify(next[lv]),
       );
-      return same ? prev : { ...prev, ...h };
+      return same ? prev : { ...prev, ...next };
     });
   }, [character?.id, character?.harm, character?.harmEntries]);
 
@@ -819,6 +1105,10 @@ const CharacterSheetWrapper = ({
   );
 
   const [clocks, setClocks] = useState(character?.clocks || []);
+  const [clockEditorOpen, setClockEditorOpen] = useState(false);
+  const [newClockName, setNewClockName] = useState("");
+  const [newClockSegments, setNewClockSegments] = useState(4);
+  const [newClockShared, setNewClockShared] = useState(false);
   const [customAbilityModal, setCustomAbilityModal] = useState(null); // { type, name, uses, items } or null
   const [playbook, setPlaybook] = useState(character?.playbook || "Stand");
   // Standard ability picker (Option A: searchable dropdown + preview)
@@ -882,10 +1172,11 @@ const CharacterSheetWrapper = ({
 
   // Dice result
   const [diceResult, setDiceResult] = useState(null);
+  /** { dice, highest, dicePool, wouldOverindulge, stressBefore, applied?, overindulge? } */
+  const [viceRollResult, setViceRollResult] = useState(null);
 
   // Crew
   const [crewData, setCrewData] = useState({
-    reputation: "",
     rep: 0,
     turf: 0,
     hold: "strong",
@@ -914,12 +1205,141 @@ const CharacterSheetWrapper = ({
     },
     notes: "",
   });
+  const [crewFactionLinks, setCrewFactionLinks] = useState([]);
+  const [crewHistoryEntries, setCrewHistoryEntries] = useState([]);
+  const crewHydratedRef = useRef(false);
+
+  const buildCrewPatchPayload = useCallback(() => {
+    return {
+      rep: crewData.rep,
+      turf: crewData.turf,
+      level: crewData.tier,
+      wanted_level: crewData.wanted,
+      coin: crewData.coin,
+      hold: crewData.hold,
+      description: crewData.description,
+      notes: crewData.notes,
+      upgrade_progress: upgradesToProgress(crewData.upgrades),
+    };
+  }, [crewData]);
+
+  useEffect(() => {
+    if (activeMode !== "CREW MODE" || !charData.crewId) {
+      crewHydratedRef.current = false;
+      return undefined;
+    }
+    const cid = charData.crewId;
+    let cancelled = false;
+    crewHydratedRef.current = false;
+    crewAPI
+      .getCrew(cid)
+      .then((d) => {
+        if (cancelled) return;
+        setCrewData((p) => ({
+          ...p,
+          rep: Math.min(6, Math.max(0, Number(d.rep) || 0)),
+          turf: Math.min(6, Math.max(0, Number(d.turf) || 0)),
+          tier: Math.min(4, Math.max(0, Number(d.level) || 0)),
+          wanted: Math.min(5, Math.max(0, Number(d.wanted_level) || 0)),
+          coin: Math.min(4, Math.max(0, Number(d.coin) || 0)),
+          hold: d.hold === "weak" || d.hold === "strong" ? d.hold : p.hold,
+          description: d.description ?? "",
+          notes: d.notes ?? "",
+          upgrades: progressToUpgrades(d.upgrade_progress),
+          specialAbilities: (d.special_abilities || []).map((a) => ({
+            name: a.name,
+            description: a.description || "",
+          })),
+        }));
+        setCrewFactionLinks(d.faction_relationships || []);
+        crewHydratedRef.current = true;
+      })
+      .catch(() => {
+        if (!cancelled) setCrewFactionLinks([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMode, charData.crewId]);
+
+  useEffect(() => {
+    if (activeMode !== "CREW MODE" || !charData.crewId) return;
+    crewHistoryAPI
+      .list({ crew: charData.crewId })
+      .then((rows) => {
+        const list = Array.isArray(rows) ? rows : rows?.results || [];
+        setCrewHistoryEntries(list);
+      })
+      .catch(() => setCrewHistoryEntries([]));
+  }, [activeMode, charData.crewId]);
+
+  useEffect(() => {
+    if (!crewHydratedRef.current || !charData.crewId) return undefined;
+    const t = setTimeout(() => {
+      crewAPI
+        .patchCrew(charData.crewId, buildCrewPatchPayload())
+        .then(() => {
+          const cid = Number.parseInt(String(campaignId || ""), 10);
+          const wanted = Math.min(5, Math.max(0, Number(crewData.wanted) || 0));
+          const currentCampaignWanted = Number(charCampaign?.wanted_stars ?? 0);
+          if (
+            isGM &&
+            Number.isFinite(cid) &&
+            wanted !== currentCampaignWanted
+          ) {
+            campaignAPI
+              .patchCampaign(cid, { wanted_stars: wanted })
+              .then(() => onCampaignRefresh?.())
+              .catch(() => {});
+          }
+        })
+        .catch(() => {});
+    }, 900);
+    return () => clearTimeout(t);
+  }, [
+    charData.crewId,
+    buildCrewPatchPayload,
+    campaignId,
+    charCampaign?.wanted_stars,
+    isGM,
+    onCampaignRefresh,
+    crewData.rep,
+    crewData.turf,
+    crewData.tier,
+    crewData.wanted,
+    crewData.coin,
+    crewData.hold,
+    crewData.description,
+    crewData.notes,
+    crewData.upgrades,
+  ]);
 
   // ─── Derived Values ──────────────────────────────────────────────────────────
 
   const durVal = Math.min(5, Math.max(0, Number(standStats.durability) || 1));
   const devVal = Math.min(5, Math.max(0, Number(standStats.development) || 1));
   const maxStress = 9 + (DUR_TABLE[durVal]?.stressBonus ?? 0);
+  const applyStressCost = useCallback(
+    (cost) => {
+      const spend = Number(cost) || 0;
+      if (spend <= 0) return;
+      setStressFilled((prev) => {
+        const current = Number(prev) || 0;
+        const afterSpend = current + spend;
+        if (afterSpend <= maxStress) return afterSpend;
+        const overflow = afterSpend - maxStress;
+        setTrauma((prevTrauma) => {
+          const firstOpen = Object.entries(prevTrauma || {}).find(
+            ([, checked]) => !checked,
+          )?.[0];
+          if (!firstOpen) return prevTrauma;
+          return { ...prevTrauma, [firstOpen]: true };
+        });
+        return Math.max(0, overflow);
+      });
+    },
+    [maxStress],
+  );
   const maxArmorCharges = DUR_TABLE[durVal]?.armorCharges ?? 1;
   const sessionDevXP = DEV_SESSION_XP[devVal] ?? 0;
 
@@ -948,6 +1368,56 @@ const CharacterSheetWrapper = ({
 
   const getAttributeDice = (actions) =>
     actions.filter((a) => actionRatings[a] > 0).length;
+
+  const viceAttributeDice = useMemo(() => {
+    const groups = [
+      { key: "INSIGHT", actions: ["HUNT", "STUDY", "SURVEY", "TINKER"] },
+      { key: "PROWESS", actions: ["FINESSE", "PROWL", "SKIRMISH", "WRECK"] },
+      { key: "RESOLVE", actions: ["BIZARRE", "COMMAND", "CONSORT", "SWAY"] },
+    ];
+    return groups.map((g) => ({
+      ...g,
+      dice: g.actions.filter((a) => (actionRatings[a] ?? 0) > 0).length,
+    }));
+  }, [actionRatings]);
+
+  const viceDicePool = useMemo(() => {
+    const vals = viceAttributeDice.map((g) => g.dice);
+    return vals.length ? Math.min(...vals) : 0;
+  }, [viceAttributeDice]);
+
+  const viceLowestLabels = useMemo(() => {
+    return viceAttributeDice
+      .filter((g) => g.dice === viceDicePool)
+      .map((g) => g.key)
+      .join(", ");
+  }, [viceAttributeDice, viceDicePool]);
+
+  const traumaMarkedCount = useMemo(
+    () => Object.values(trauma || {}).filter(Boolean).length,
+    [trauma],
+  );
+
+  /** At max stress, cannot manually clear marked boxes until player records a trauma (table rule). */
+  const traumaRequiredBeforeStressClear = useMemo(
+    () =>
+      (Number(stressFilled) || 0) >= maxStress && traumaMarkedCount < 1,
+    [stressFilled, maxStress, traumaMarkedCount],
+  );
+
+  const toggleTraumaMark = useCallback(
+    (traumaKey) => {
+      const gaining = !(trauma[traumaKey] ?? false);
+      if (
+        gaining &&
+        (Number(stressFilled) || 0) >= maxStress
+      ) {
+        setStressFilled(0);
+      }
+      setTrauma((p) => ({ ...p, [traumaKey]: gaining }));
+    },
+    [trauma, stressFilled, maxStress],
+  );
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
 
@@ -1089,39 +1559,175 @@ const CharacterSheetWrapper = ({
   });
   const [rollAbilityBoost, setRollAbilityBoost] = useState({});
   const [rollApiError, setRollApiError] = useState(null);
-  const [sessionRolls, setSessionRolls] = useState([]);
-  const [showPositionEffect, setShowPositionEffect] = useState(false);
-  const [showDiceHistoryPanel, setShowDiceHistoryPanel] = useState(false);
+  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  const [historyMode, setHistoryMode] = useState("session");
+  const [historyRows, setHistoryRows] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState(null);
+  const [historyWriteError, setHistoryWriteError] = useState(null);
+  const [historySessionId, setHistorySessionId] = useState(null);
+  const [historyCharacterFilter, setHistoryCharacterFilter] = useState("all");
+  const [historyRefreshTick, setHistoryRefreshTick] = useState(0);
+  const [showHistoryManualModal, setShowHistoryManualModal] = useState(false);
+  const [historyManualSaving, setHistoryManualSaving] = useState(false);
+  const [historyManual, setHistoryManual] = useState({
+    rollType: "ACTION",
+    sessionId: "",
+    action: "bizarre",
+    dice: "4,5",
+    outcome: "FULL_SUCCESS",
+    position: "risky",
+    effect: "standard",
+    resistanceHarmTarget: "",
+    viceOverindulge: "",
+    pushDice: false,
+    pushEffect: false,
+    devil: false,
+    helpDie: false,
+    groupAction: false,
+    groupActionId: "",
+  });
   const [showXpHistoryModal, setShowXpHistoryModal] = useState(false);
   const [xpTimelineLoading, setXpTimelineLoading] = useState(false);
   const [xpTimelineError, setXpTimelineError] = useState(null);
   const [xpTimelineRows, setXpTimelineRows] = useState([]);
+  const [xpReqTracker, setXpReqTracker] = useState([]);
+  const [xpReqRolls, setXpReqRolls] = useState([]);
   const [activeGroupAction, setActiveGroupAction] = useState(null);
   const [groupGoalDraft, setGroupGoalDraft] = useState("");
+  const [groupActionNameDraft, setGroupActionNameDraft] = useState("");
   const [groupBusy, setGroupBusy] = useState(false);
   const [groupActionErr, setGroupActionErr] = useState(null);
+  const [groupActionRolls, setGroupActionRolls] = useState([]);
+  const [groupActionLoading, setGroupActionLoading] = useState(false);
+  /** Last session+group id we showed full-panel spinner for; unchanged on sheet poll tick → silent refetch */
+  const groupRollFetchSpinnerKeyRef = useRef("");
+  const [showGroupActionCard, setShowGroupActionCard] = useState(false);
+  const [assistTargetId, setAssistTargetId] = useState("");
+  const [assistGrantBusy, setAssistGrantBusy] = useState(false);
+  const [assistGrantMsg, setAssistGrantMsg] = useState(null);
+  const [assistGrantErr, setAssistGrantErr] = useState(null);
   const [rollGoalDraft, setRollGoalDraft] = useState("");
-  const [assistHelperId, setAssistHelperId] = useState("");
-  const [pendingPushDice, setPendingPushDice] = useState(false);
   const [showDevilsBargainModal, setShowDevilsBargainModal] = useState(false);
-  const [pendingDevilsBargain, setPendingDevilsBargain] = useState(null);
   const [devilBargainConfirmed, setDevilBargainConfirmed] = useState(false);
   const [expandedActionInfo, setExpandedActionInfo] = useState(null);
   const [campaignAssignStatus, setCampaignAssignStatus] = useState(null);
   const [campaignAssignError, setCampaignAssignError] = useState(null);
+  const [resistanceHarmTarget, setResistanceHarmTarget] = useState("");
+  const [resistanceApplyErr, setResistanceApplyErr] = useState(null);
   const harmLevel3Used =
     ((harm?.level3?.[0] ?? "")?.toString?.()?.trim?.() ?? "") !== "";
 
+  const filledHarmOptions = useMemo(() => {
+    const levels = [
+      ["level1", "Level 1"],
+      ["level2", "Level 2"],
+      ["level3", "Level 3"],
+      ["level4", "Level 4"],
+    ];
+    const out = [];
+    levels.forEach(([level, label]) => {
+      const slots = Array.isArray(harm?.[level]) ? harm[level] : [];
+      slots.forEach((value, idx) => {
+        if (String(value || "").trim()) {
+          out.push({
+            value: `${level}:${idx}`,
+            label: `${label}${slots.length > 1 ? String.fromCharCode(65 + idx) : ""} — ${String(value).trim()}`,
+          });
+        }
+      });
+    });
+    return out;
+  }, [harm]);
+
+  /** True when manual vice dice highest exceeds current marked stress → must pick consequence */
+  const viceManualWouldOverindulge = useMemo(() => {
+    if (String(historyManual.rollType || "").toUpperCase() !== "VICE")
+      return false;
+    const diceResults = String(historyManual.dice || "")
+      .split(/[\s,]+/)
+      .map((n) => parseInt(n.trim(), 10))
+      .filter((n) => Number.isFinite(n) && n >= 1 && n <= 6);
+    if (!diceResults.length) return false;
+    const hi = Math.max(...diceResults);
+    return hi > (Number(stressFilled) || 0);
+  }, [historyManual.rollType, historyManual.dice, stressFilled]);
+
+  const clearHarmSlot = useCallback((target) => {
+    const [level, idxRaw] = String(target || "").split(":");
+    const idx = parseInt(String(idxRaw || ""), 10);
+    if (!level || !Number.isFinite(idx)) return false;
+    let changed = false;
+    setHarm((prev) => {
+      const row = Array.isArray(prev?.[level]) ? [...prev[level]] : [];
+      if (!row.length || idx < 0 || idx >= row.length) return prev;
+      if (!String(row[idx] || "").trim()) return prev;
+      row[idx] = "";
+      changed = true;
+      return { ...prev, [level]: row };
+    });
+    return changed;
+  }, []);
+
+  const xpReqSnapshot = useMemo(
+    () =>
+      buildXpRequirementSnapshot({
+        sessionId: activeSessionId,
+        characterId,
+        trackerEntries: xpReqTracker,
+        rolls: xpReqRolls,
+      }),
+    [activeSessionId, characterId, xpReqTracker, xpReqRolls],
+  );
+
   useEffect(() => {
-    if (activeSessionId && characterId) {
-      rollAPI
-        .getRolls({ session: activeSessionId, character: characterId })
-        .then(setSessionRolls)
-        .catch(() => setSessionRolls([]));
-    } else {
-      setSessionRolls([]);
+    if (!characterId) {
+      setXpReqTracker([]);
+      return;
     }
-  }, [activeSessionId, characterId, sessionDataPollTick]);
+    const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
+    experienceTrackerAPI
+      .list({ character: characterId })
+      .then((r) => setXpReqTracker(asArray(r)))
+      .catch(() => setXpReqTracker([]));
+  }, [characterId, sessionDataPollTick]);
+
+  useEffect(() => {
+    if (!characterId || !activeSessionId) {
+      setXpReqRolls([]);
+      return;
+    }
+    const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
+    rollAPI
+      .getRolls({ session: activeSessionId })
+      .then((r) => setXpReqRolls(asArray(r)))
+      .catch(() => setXpReqRolls([]));
+  }, [characterId, activeSessionId, sessionDataPollTick]);
+
+  useEffect(() => {
+    setHistorySessionId(activeSessionId || null);
+    setHistoryManual((p) => ({
+      ...p,
+      sessionId: activeSessionId ? String(activeSessionId) : "",
+    }));
+  }, [activeSessionId]);
+
+  useEffect(() => {
+    if (isGM) return;
+    if (characterId == null) return;
+    setHistoryCharacterFilter(String(characterId));
+  }, [isGM, characterId, showHistoryPanel, historyMode]);
+
+  useEffect(() => {
+    if (!showHistoryPanel) return;
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setShowHistoryPanel(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showHistoryPanel]);
 
   useEffect(() => {
     if (!showXpHistoryModal || !characterId) return;
@@ -1152,15 +1758,181 @@ const CharacterSheetWrapper = ({
       .finally(() => setXpTimelineLoading(false));
   }, [showXpHistoryModal, characterId]);
 
-  const desperateActionRollCount = useMemo(
-    () =>
-      (sessionRolls || []).filter(
-        (r) =>
-          (r.roll_type || "") === "ACTION" &&
-          (r.position || "").toLowerCase() === "desperate",
-      ).length,
-    [sessionRolls],
-  );
+  useEffect(() => {
+    if (!showHistoryPanel) return;
+    if (!characterId) {
+      setHistoryRows([]);
+      return;
+    }
+    setHistoryLoading(true);
+    setHistoryError(null);
+    const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
+    if (historyMode === "sheet") {
+      characterHistoryAPI
+        .list({
+          character: characterId,
+          ...(charCampaign?.id ? { campaign: charCampaign.id } : {}),
+        })
+        .then((res) => {
+          const rows = asArray(res)
+            .map((entry) => {
+              const changed = entry.changed_fields || {};
+              const details = Object.keys(changed).map((k) => ({
+                key: k,
+                label: historyFieldLabel(k),
+                oldValue: stringifyValue(changed[k]?.old),
+                newValue: stringifyValue(changed[k]?.new),
+              }));
+              return {
+                key: `sheet-${entry.id}`,
+                timestamp: entry.timestamp,
+                actor: entry.editor_username || "system",
+                type: "sheet_edit",
+                sessionTag: "Out of session",
+                details,
+              };
+            })
+            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          setHistoryRows(rows);
+        })
+        .catch((e) => setHistoryError(e.message))
+        .finally(() => setHistoryLoading(false));
+      return;
+    }
+
+    if (!historySessionId) {
+      setHistoryRows([]);
+      setHistoryLoading(false);
+      return;
+    }
+    Promise.all([
+      rollAPI.getRolls({ session: historySessionId }).catch(() => []),
+      sessionAPI.getSession(historySessionId).catch(() => null),
+      progressClockAPI
+        .getProgressClocks({
+          session: historySessionId,
+          ...(charCampaign?.id ? { campaign: charCampaign.id } : {}),
+        })
+        .catch(() => []),
+    ])
+      .then(([rollsRes, sessionRes, clocksRes]) => {
+        const rows = [];
+        asArray(rollsRes).forEach((r) => {
+          const isFortune = String(r.roll_type || "").toUpperCase() === "FORTUNE";
+          // GM Fortune rolls stay out of player history until GM reveals outcomes.
+          if (isFortune && !r.fortune_reveal_outcome) return;
+          rows.push({
+            key: `roll-${r.id}`,
+            timestamp: r.timestamp,
+            actor: r.rolled_by_username || r.character_name || "unknown",
+            characterId: r.character,
+            type: "roll",
+            rollType: r.roll_type,
+            text:
+              (r.roll_type || "").toUpperCase() === "FORTUNE" &&
+              !r.fortune_reveal_outcome
+                ? `${r.action_name || "Fortune"} (redacted)`
+                : (r.roll_type || "").toUpperCase() === "CLEAR_STRESS"
+                  ? (() => {
+                      const clears = []
+                        .concat(r.results || [])
+                        .map((x) => Number(x))
+                        .filter((n) => Number.isFinite(n));
+                      const hi = clears.length ? Math.max(...clears) : 0;
+                      const label =
+                        String(r.action_name || "").toLowerCase() === "vice"
+                          ? "Vice"
+                          : r.action_name || "Clear stress";
+                      const desc = String(r.description || "").trim();
+                      const parts = desc.split(" Overindulgence: ");
+                      const overTail =
+                        parts.length > 1 ? parts[parts.length - 1].trim() : "";
+                      return `${label} · ${clears.join(", ")} → clears ${hi} stress${
+                        overTail ? ` · ${overTail}` : ""
+                      }`;
+                    })()
+                  : `${r.action_name || "Roll"} · ${[]
+                      .concat(r.results || [])
+                      .join(", ")} → ${r.outcome || ""}`,
+            modifiers: [
+              r.position ? `Pos ${r.position}` : null,
+              r.effect ? `Eff ${r.effect}` : null,
+              r.push_for_dice ? "Push(+1d)" : null,
+              r.push_for_effect ? "Push(+effect)" : null,
+              r.uses_devil_bargain ? "Devil's bargain" : null,
+              r.roller_stress_spent ? `Stress ${r.roller_stress_spent}` : null,
+            ].filter(Boolean),
+          });
+        });
+
+        const events = (sessionRes?.events || []).map((evt) => ({
+          key: `evt-${evt.id}`,
+          timestamp: evt.timestamp,
+          actor: "session",
+          characterId: evt.character || null,
+          type: "event",
+          text: `${evt.event_type}: ${stringifyValue(evt.details)}`,
+          modifiers: [],
+        }));
+        rows.push(...events);
+
+        const stressRows = (sessionRes?.stress_history || []).map((s) => ({
+          key: `stress-${s.id}`,
+          timestamp: s.timestamp,
+          actor: "stress",
+          characterId: s.character || null,
+          type: "stress",
+          text: `Stress ${s.amount > 0 ? "+" : ""}${s.amount} (${s.reason || "update"})`,
+          modifiers: [],
+        }));
+        rows.push(...stressRows);
+
+        const xpRows = (sessionRes?.xp_entries || []).map((x) => ({
+          key: `xp-${x.id}`,
+          timestamp: x.session_date || sessionRes?.session_date,
+          actor: "xp",
+          characterId: x.character || null,
+          type: "xp",
+          text: `XP +${x.xp_gained} (${x.trigger_display || x.trigger || "trigger"})`,
+          modifiers: [],
+        }));
+        rows.push(...xpRows);
+
+        asArray(clocksRes).forEach((clk) => {
+          rows.push({
+            key: `clock-${clk.id}`,
+            timestamp: clk.updated_at || clk.created_at || sessionRes?.session_date,
+            actor:
+              clk.created_by_username ||
+              clk.created_by_character_name ||
+              "clock",
+            characterId: null,
+            type: "clock",
+            text: `Clock ${clk.name}: ${clk.filled_segments}/${clk.max_segments}`,
+            modifiers: [clk.visible_to_party ? "Shared party" : "Private"],
+          });
+        });
+
+        const filtered =
+          historyCharacterFilter === "all"
+            ? rows
+            : rows.filter(
+                (r) => String(r.characterId || "") === String(historyCharacterFilter),
+              );
+        filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        setHistoryRows(filtered);
+      })
+      .catch((e) => setHistoryError(e.message))
+      .finally(() => setHistoryLoading(false));
+  }, [
+    showHistoryPanel,
+    historyMode,
+    historySessionId,
+    historyCharacterFilter,
+    characterId,
+    charCampaign?.id,
+    historyRefreshTick,
+  ]);
 
   const helpCandidates = useMemo(() => {
     const roster = charCampaign?.campaign_characters || [];
@@ -1172,32 +1944,233 @@ const CharacterSheetWrapper = ({
     return roster.filter((c) => c.id !== characterId);
   }, [charCampaign?.campaign_characters, characterId, charData.crewId]);
 
+  const groupParticipants = useMemo(() => {
+    const roster = charCampaign?.campaign_characters || [];
+    if (charData.crewId) {
+      const sameCrew = roster.filter((c) => c.crewId === charData.crewId);
+      if (sameCrew.length) return sameCrew;
+    }
+    return roster;
+  }, [charCampaign?.campaign_characters, charData.crewId]);
+
+  const groupActionChoices = useMemo(
+    () => Object.keys(ACTION_ATTR || {}).sort(),
+    [],
+  );
+
+  useEffect(() => {
+    if (!activeSessionId) {
+      setActiveGroupAction(null);
+      return;
+    }
+    groupActionAPI
+      .list({ session: activeSessionId })
+      .then((res) => {
+        const rows = Array.isArray(res) ? res : res?.results || [];
+        const open = rows.find((ga) => ga.status === "OPEN") || null;
+        setActiveGroupAction(open);
+      })
+      .catch(() => {
+        /* keep prior OPEN GA; clearing here caused missing group_action_id on submit */
+      });
+  }, [activeSessionId, sessionDataPollTick]);
+
+  // Leader may create a group action after this sheet already has activeSessionId; refetch when opening an action roll.
+  useEffect(() => {
+    if (!activeSessionId || !rollPending?.actionName) return;
+    let cancelled = false;
+    groupActionAPI
+      .list({ session: activeSessionId })
+      .then((res) => {
+        if (cancelled) return;
+        const rows = Array.isArray(res) ? res : res?.results || [];
+        const open = rows.find((ga) => ga.status === "OPEN") || null;
+        setActiveGroupAction(open);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSessionId, rollPending?.actionName]);
+
+  useEffect(() => {
+    if (!activeGroupAction?.id) return;
+    if (activeGroupAction.action_name) {
+      setGroupActionNameDraft(
+        String(activeGroupAction.action_name).toUpperCase(),
+      );
+    }
+    setGroupGoalDraft(String(activeGroupAction.goal_label || ""));
+  }, [
+    activeGroupAction?.id,
+    activeGroupAction?.action_name,
+    activeGroupAction?.goal_label,
+  ]);
+
+  useEffect(() => {
+    if (activeGroupAction?.id) setShowGroupActionCard(true);
+  }, [activeGroupAction?.id]);
+
+  useEffect(() => {
+    if (!activeGroupAction?.id) {
+      setGroupActionRolls([]);
+      setGroupActionLoading(false);
+      groupRollFetchSpinnerKeyRef.current = "";
+      return;
+    }
+    const spinnerKey = `${activeSessionId}:${activeGroupAction.id}`;
+    if (groupRollFetchSpinnerKeyRef.current !== spinnerKey) {
+      groupRollFetchSpinnerKeyRef.current = spinnerKey;
+      setGroupActionLoading(true);
+    }
+    rollAPI
+      .getRolls({
+        session: activeSessionId,
+        group_action: activeGroupAction.id,
+      })
+      .then((res) => {
+        const rows = Array.isArray(res) ? res : res?.results || [];
+        setGroupActionRolls(rows);
+      })
+      .catch(() => setGroupActionRolls([]))
+      .finally(() => setGroupActionLoading(false));
+  }, [activeGroupAction?.id, activeSessionId, sessionDataPollTick]);
+
+  const groupRollBoard = useMemo(() => {
+    if (!activeGroupAction?.id) return [];
+    const byCharacter = new Map();
+    (groupActionRolls || [])
+      .filter(
+        (r) =>
+          String((r.roll_type || "").toUpperCase()) === "ACTION" &&
+          String((r.action_name || "").toLowerCase()) ===
+            String(activeGroupAction.action_name || "").toLowerCase(),
+      )
+      .forEach((r) => {
+        const existing = byCharacter.get(r.character);
+        if (!existing) {
+          byCharacter.set(r.character, r);
+          return;
+        }
+        const a = new Date(existing.timestamp || 0).getTime();
+        const b = new Date(r.timestamp || 0).getTime();
+        if (b > a) byCharacter.set(r.character, r);
+      });
+    return groupParticipants.map((p) => {
+      const roll = byCharacter.get(p.id) || null;
+      let failed = null;
+      let outcomeBand = null;
+      if (roll) {
+        const dice = ((roll.results || []).map(Number) || []).filter((n) =>
+          Number.isFinite(n),
+        );
+        if (!dice.length) {
+          failed = true;
+          outcomeBand = "fail";
+        } else {
+          const pool = Number(roll.dice_pool) || 0;
+          const dots = Number(roll.pool_action_rating) || 0;
+          // FiTD 0-dot + 0 pool rolls 2d and takes lower; if dots > 0 but pool 0,
+          // treat as inconsistent data and read highest die (a 6 still succeeds).
+          const tierDie =
+            dice.length >= 2 && pool === 0 && dots === 0
+              ? Math.min(...dice)
+              : Math.max(...dice);
+          // Match backend group resolve: tier 1–3 fails (ignore stale outcome field).
+          failed = tierDie <= 3;
+          const sixes = dice.filter((d) => d === 6).length;
+          if (sixes >= 2) outcomeBand = "critical";
+          else if (tierDie >= 6) outcomeBand = "success";
+          else if (tierDie >= 4) outcomeBand = "partial";
+          else outcomeBand = "fail";
+        }
+      }
+      return {
+        id: p.id,
+        name: p.true_name || p.name || `PC ${p.id}`,
+        roll,
+        failed,
+        outcomeBand,
+      };
+    });
+  }, [activeGroupAction, groupActionRolls, groupParticipants]);
+
+  const groupFailures = useMemo(
+    () =>
+      groupRollBoard.filter(
+        (r) =>
+          r.failed === true &&
+          String(r.id) !== String(activeGroupAction?.leader),
+      ).length,
+    [groupRollBoard, activeGroupAction?.leader],
+  );
+  const groupPendingCount = useMemo(
+    () => groupRollBoard.filter((r) => !r.roll).length,
+    [groupRollBoard],
+  );
+  const activeGroupLeaderName = useMemo(() => {
+    if (!activeGroupAction?.leader) return "";
+    const roster = charCampaign?.campaign_characters || [];
+    const leader = roster.find(
+      (c) => String(c.id) === String(activeGroupAction.leader),
+    );
+    return leader?.true_name || leader?.name || `PC ${activeGroupAction.leader}`;
+  }, [activeGroupAction?.leader, charCampaign?.campaign_characters]);
+
+  const isOpenGroupLeader = useMemo(
+    () =>
+      Boolean(
+        activeGroupAction?.id &&
+          String(activeGroupAction.leader) === String(characterId),
+      ),
+    [activeGroupAction?.id, activeGroupAction?.leader, characterId],
+  );
+
+  /** With an OPEN group action, only the leader may edit chosen action / goal (before-start: anyone configuring). */
+  const canEditGroupActionSetupFields =
+    !activeGroupAction?.id || isOpenGroupLeader;
+
+  const abilityRollBonusOptions = useMemo(() => {
+    const supportsBonusDice = (description) =>
+      /\+1d\b|\bplus\s*1d\b/i.test(String(description || ""));
+    const supportsBonusEffect = (description) =>
+      /\+1\s*effect\b|\bplus\s*1\s*effect\b/i.test(
+        String(description || ""),
+      );
+    return (abilities || [])
+      .filter((a) => a.type === "standard")
+      .map((ab) => ({
+        ...ab,
+        supportsDice: supportsBonusDice(ab.description),
+        supportsEffect: supportsBonusEffect(ab.description),
+      }))
+      .filter((ab) => ab.supportsDice || ab.supportsEffect);
+  }, [abilities]);
+
   const { bonusDiceFromAbilities, abilityEffectSteps, abilityBonusAudit } =
     useMemo(() => {
       let d = 0;
       let e = 0;
       const audit = [];
-      (abilities || [])
-        .filter((a) => a.type === "standard")
-        .forEach((ab) => {
-          const id = ab.id ?? ab.name;
-          const b = rollAbilityBoost[id];
-          if (!b) return;
-          if (b.dice) {
-            d += 1;
-            audit.push(`${ab.name}: +1d`);
-          }
-          if (b.effect) {
-            e += 1;
-            audit.push(`${ab.name}: +1 effect`);
-          }
-        });
+      abilityRollBonusOptions.forEach((ab) => {
+        const id = ab.id ?? ab.name;
+        const b = rollAbilityBoost[id];
+        if (!b) return;
+        if (ab.supportsDice && b.dice) {
+          d += 1;
+          audit.push(`${ab.name}: +1d`);
+        }
+        if (ab.supportsEffect && b.effect) {
+          e += 1;
+          audit.push(`${ab.name}: +1 effect`);
+        }
+      });
       return {
         bonusDiceFromAbilities: d,
         abilityEffectSteps: e,
         abilityBonusAudit: audit,
       };
-    }, [abilities, rollAbilityBoost]);
+    }, [abilityRollBonusOptions, rollAbilityBoost]);
 
   const gmDevilBargainText = useMemo(() => {
     const m = charCampaign?.active_session_detail?.devils_bargain_by_character;
@@ -1208,20 +2181,93 @@ const CharacterSheetWrapper = ({
     characterId,
   ]);
 
+  const assignedRollGoalLabel = useMemo(() => {
+    const asd = charCampaign?.active_session_detail;
+    const map = asd?.roll_goal_by_character;
+    if (map && characterId != null) {
+      const perChar = String(map[String(characterId)] ?? map[characterId] ?? "").trim();
+      if (perChar) return perChar;
+    }
+    return String(asd?.roll_goal_label || "").trim();
+  }, [
+    charCampaign?.active_session_detail,
+    characterId,
+  ]);
+
+  const rollPushMode = useMemo(() => {
+    if (rollModal.devil_bargain_dice) return "devil";
+    if (rollModal.push_effect) return "push_effect";
+    if (rollModal.push_dice) return "push_dice";
+    return "none";
+  }, [
+    rollModal.devil_bargain_dice,
+    rollModal.push_effect,
+    rollModal.push_dice,
+  ]);
+
+  const applyRollPushMode = useCallback(
+    (mode) => {
+      setDevilBargainConfirmed(false);
+      if (harmLevel3Used && (mode === "push_effect" || mode === "push_dice")) {
+        mode = "none";
+      }
+      setRollModal((prev) => {
+        if (mode === "none") {
+          return {
+            ...prev,
+            push_effect: false,
+            push_dice: false,
+            devil_bargain_dice: false,
+            devil_bargain_note: "",
+          };
+        }
+        if (mode === "push_effect") {
+          return {
+            ...prev,
+            push_effect: true,
+            push_dice: false,
+            devil_bargain_dice: false,
+            devil_bargain_note: "",
+          };
+        }
+        if (mode === "push_dice") {
+          return {
+            ...prev,
+            push_effect: false,
+            push_dice: true,
+            devil_bargain_dice: false,
+            devil_bargain_note: "",
+          };
+        }
+        const gm = gmDevilBargainText;
+        return {
+          ...prev,
+          push_effect: false,
+          push_dice: false,
+          devil_bargain_dice: true,
+          devil_bargain_note: gm || prev.devil_bargain_note || "",
+        };
+      });
+    },
+    [gmDevilBargainText, harmLevel3Used],
+  );
+
   const rollPoolPreview = useMemo(() => {
     if (!rollPending) return null;
-    const { action_rating, attribute_dice, basePool } =
-      computeActionPoolBreakdown(rollPending.actionName, actionRatings);
+    const { action_rating, basePool } = computeActionPoolBreakdown(
+      rollPending.actionName,
+      actionRatings,
+    );
     let mod = 0;
     if (rollModal.push_dice) mod += 1;
     if (rollModal.devil_bargain_dice) mod += 1;
-    if (assistHelperId) mod += 1;
     mod += bonusDiceFromAbilities;
-    const pushStress =
+    const selectedPushStress =
       (rollModal.push_effect ? 2 : 0) + (rollModal.push_dice ? 2 : 0);
+    const requiredIncapacitatedStress = harmLevel3Used ? 2 : 0;
+    const pushStress = selectedPushStress + requiredIncapacitatedStress;
     return {
       action_rating,
-      attribute_dice,
       basePool,
       mod,
       total: basePool + mod,
@@ -1233,19 +2279,22 @@ const CharacterSheetWrapper = ({
     rollModal.push_dice,
     rollModal.push_effect,
     rollModal.devil_bargain_dice,
-    assistHelperId,
+    harmLevel3Used,
     bonusDiceFromAbilities,
   ]);
 
+  const pushStressCost = rollPoolPreview?.pushStress || 0;
+  const pushWouldCauseTrauma =
+    pushStressCost > 0 && stressFilled + pushStressCost > maxStress;
+
   const handleRollWithSession = async () => {
-    if (!rollPending || !characterId || !activeSessionId) return;
+    if (!rollPending || !characterId) return;
     setRollApiError(null);
     const asd = charCampaign?.active_session_detail;
     try {
       const goalFromDraft = (rollGoalDraft || "").trim();
-      const res = await characterAPI.rollAction(characterId, {
+      const payload = {
         action: rollPending.actionName.toLowerCase(),
-        session_id: activeSessionId,
         push_effect: rollModal.push_effect,
         push_dice: rollModal.push_dice,
         devil_bargain_dice: rollModal.devil_bargain_dice,
@@ -1257,15 +2306,66 @@ const CharacterSheetWrapper = ({
         bonus_dice: bonusDiceFromAbilities,
         ability_effect_steps: abilityEffectSteps,
         goal_label:
-          goalFromDraft || (asd?.roll_goal_label || "").trim() || undefined,
+          goalFromDraft || assignedRollGoalLabel || undefined,
         ability_bonuses: abilityBonusAudit.length
           ? abilityBonusAudit
           : undefined,
-        group_action_id: activeGroupAction?.id || undefined,
-        assist_helper_id: assistHelperId
-          ? parseInt(assistHelperId, 10)
-          : undefined,
-      });
+      };
+      if (activeSessionId) {
+        payload.session_id = activeSessionId;
+        const snappedGa = rollPending.group_action_id;
+        if (snappedGa) {
+          payload.group_action_id = snappedGa;
+        } else if (
+          activeGroupAction?.id &&
+          String(rollPending.actionName || "").toLowerCase() ===
+            String(activeGroupAction.action_name || "").toLowerCase()
+        ) {
+          payload.group_action_id = activeGroupAction.id;
+        }
+      }
+      const res = await characterAPI.rollAction(characterId, payload);
+      // Match roll modal + session GM map: per-PC session override beats API echo (same order as PositionStack preview).
+      const effectivePosition =
+        sessionOverridePositionEffect?.position ||
+        res.position ||
+        asd?.default_position ||
+        "";
+      const effectiveEffect =
+        sessionOverridePositionEffect?.effect ||
+        res.effect ||
+        asd?.default_effect ||
+        "";
+      if (payload.group_action_id && res.roll_id) {
+        setGroupActionRolls((prev) => {
+          const withoutMine = (prev || []).filter(
+            (r) => String(r.character) !== String(characterId),
+          );
+          return [
+            {
+              id: res.roll_id,
+              character: characterId,
+              action_name: payload.action,
+              roll_type: "ACTION",
+              results: res.dice_results || [],
+              outcome: res.outcome || "",
+              timestamp: new Date().toISOString(),
+            },
+            ...withoutMine,
+          ];
+        });
+        // Source-of-truth refresh to ensure board reflects server state.
+        rollAPI
+          .getRolls({
+            session: activeSessionId,
+            group_action: payload.group_action_id,
+          })
+          .then((rows) =>
+            setGroupActionRolls(Array.isArray(rows) ? rows : rows?.results || []),
+          )
+          .catch(() => {});
+        onCampaignRefresh?.();
+      }
       setDiceResult({
         action: rollPending.actionName,
         dice: res.dice_results || [],
@@ -1277,13 +2377,12 @@ const CharacterSheetWrapper = ({
             : "",
         isResistance: false,
         stressCost: res.stress_spent || null,
-        zeroDice: (res.dice_results || []).length === 0,
+        zeroDice: (Number(res.total_dice) || 0) === 0,
         isDesperateAction:
-          (res.position || asd?.default_position || "").toLowerCase() ===
-          "desperate",
+          String(effectivePosition || "").toLowerCase() === "desperate",
         isCritical: (res.dice_results || []).filter((d) => d === 6).length >= 2,
-        position: res.position || asd?.default_position,
-        effect: res.effect || asd?.default_effect,
+        position: effectivePosition,
+        effect: effectiveEffect,
         xpGained: res.xp_gained || 0,
       });
       if (res.xp_gained > 0 && res.xp_track) {
@@ -1292,14 +2391,9 @@ const CharacterSheetWrapper = ({
           [res.xp_track]: Math.min((p[res.xp_track] || 0) + res.xp_gained, 5),
         }));
       }
-      if (res.stress_spent)
-        setStressFilled((p) => Math.max(0, (p ?? 0) - res.stress_spent));
-      if (res.assist_helper_id) onCampaignRefresh?.();
+      if (res.stress_spent) applyStressCost(res.stress_spent);
       setRollPending(null);
       setRollGoalDraft("");
-      setAssistHelperId("");
-      setPendingPushDice(false);
-      setPendingDevilsBargain(null);
       setDevilBargainConfirmed(false);
       setRollModal((p) => ({
         ...p,
@@ -1307,36 +2401,40 @@ const CharacterSheetWrapper = ({
         devil_bargain_note: "",
       }));
       setRollAbilityBoost({});
-      rollAPI
-        .getRolls({ session: activeSessionId, character: characterId })
-        .then(setSessionRolls)
-        .catch(() => {});
     } catch (e) {
       setRollApiError(e.message);
     }
   };
 
   // FIX 8: Resistance critical → stressCost = -1 (clear 1 stress, pay none)
+  /** @param {unknown} [groupActionIdSnap] If set, POST includes this group_action_id even if activeGroupAction is cleared before submit. */
   const rollDice = (
     actionName,
     diceCount,
     isResistance = false,
     isDesperateAction = false,
+    groupActionIdSnap = undefined,
   ) => {
-    if (activeSessionId && characterId && !isResistance) {
-      setRollPending({ actionName, diceCount, isDesperateAction });
+    if (characterId && !isResistance) {
+      setRollPending({
+        actionName,
+        diceCount,
+        isDesperateAction,
+        ...(groupActionIdSnap != null
+          ? { group_action_id: groupActionIdSnap }
+          : {}),
+      });
       setRollAbilityBoost({});
       setDevilBargainConfirmed(false);
       const asdGoal = (
-        charCampaign?.active_session_detail?.roll_goal_label || ""
+        assignedRollGoalLabel || ""
       ).trim();
       setRollGoalDraft(asdGoal);
-      setAssistHelperId("");
       setRollModal({
         push_effect: false,
-        push_dice: pendingPushDice,
-        devil_bargain_dice: !!pendingDevilsBargain,
-        devil_bargain_note: pendingDevilsBargain || "",
+        push_dice: false,
+        devil_bargain_dice: false,
+        devil_bargain_note: "",
       });
       setRollApiError(null);
       return;
@@ -1389,6 +2487,8 @@ const CharacterSheetWrapper = ({
       isDesperateAction,
       isCritical,
     });
+    setResistanceApplyErr(null);
+    setResistanceHarmTarget("");
 
     if (isDesperateAction && !isResistance) {
       const attr = ACTION_ATTR[actionName];
@@ -1397,13 +2497,24 @@ const CharacterSheetWrapper = ({
   };
 
   const addClock = () => {
-    const name = prompt("Clock name:");
-    const segs = parseInt(prompt("Segments (1-12):") || "4", 10);
-    if (name && !isNaN(segs) && segs >= 1 && segs <= 12)
-      setClocks((p) => [
-        ...p,
-        { id: Date.now(), name, segments: segs, filled: 0 },
-      ]);
+    const name = String(newClockName || "").trim();
+    const segs = Number(newClockSegments);
+    if (!name || !Number.isFinite(segs)) return;
+    const boundedSegments = Math.max(1, Math.min(12, Math.round(segs)));
+    setClocks((p) => [
+      ...p,
+      {
+        id: Date.now(),
+        name,
+        segments: boundedSegments,
+        filled: 0,
+        visible_to_party: !!newClockShared,
+      },
+    ]);
+    setNewClockName("");
+    setNewClockSegments(4);
+    setNewClockShared(false);
+    setClockEditorOpen(false);
   };
 
   const buildPayload = useCallback(() => {
@@ -1432,7 +2543,7 @@ const CharacterSheetWrapper = ({
       playbook,
       campaign: campaignId || null,
       image_url: imageUrl,
-      ...(imageFile ? { imageFile } : {}),
+      ...(removeImageRequested ? { image: null } : {}),
       id: backendId,
       lastModified: new Date().toISOString(),
       selected_benefits: selectedBenefits,
@@ -1456,7 +2567,7 @@ const CharacterSheetWrapper = ({
     playbook,
     campaignId,
     imageUrl,
-    imageFile,
+    removeImageRequested,
     character?.id,
     selectedBenefits,
     selectedDetriments,
@@ -1465,10 +2576,18 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     if (!onDraftMetaChange) return;
     const payload = buildPayload();
+    const { lastModified, ...rest } = payload;
+    const payloadKey = JSON.stringify(rest);
+    if (payload.id && lastSavedPayloadRef.current == null) {
+      lastSavedPayloadRef.current = payloadKey;
+    }
+    const isDirty = !payload.id
+      ? hasMeaningfulDraftChanges(payload)
+      : payloadKey !== (lastSavedPayloadRef.current ?? "");
     onDraftMetaChange({
       payload,
       isNewCharacter: !payload.id,
-      isDirty: hasMeaningfulDraftChanges(payload),
+      isDirty,
     });
   }, [onDraftMetaChange, buildPayload]);
 
@@ -1503,7 +2622,7 @@ const CharacterSheetWrapper = ({
         return;
       }
       // Skip save if payload matches last saved (prevents loop from server response overwriting fields)
-      const { lastModified, imageFile: _img, ...rest } = payload;
+      const { lastModified, ...rest } = payload;
       const payloadKey = JSON.stringify(rest);
       if (lastSavedPayloadRef.current === payloadKey) {
         return;
@@ -1513,9 +2632,7 @@ const CharacterSheetWrapper = ({
       try {
         await onSave(payload);
         lastSavedPayloadRef.current = payloadKey;
-        if (payload.imageFile) {
-          setImageFile(null);
-        }
+        if (removeImageRequested) setRemoveImageRequested(false);
         setSaveStatus("saved");
         setSaveErrorMessage(null);
         setTimeout(
@@ -1551,7 +2668,7 @@ const CharacterSheetWrapper = ({
     playbook,
     campaignId,
     imageUrl,
-    imageFile,
+    removeImageRequested,
     selectedBenefits,
     selectedDetriments,
     character?.id,
@@ -1604,6 +2721,8 @@ const CharacterSheetWrapper = ({
       borderBottom: "1px solid #4b5563",
       padding: "2px 4px",
       width: "100%",
+      minWidth: 0,
+      maxWidth: "100%",
       fontFamily: "monospace",
       fontSize: "13px",
       outline: "none",
@@ -1892,17 +3011,17 @@ const CharacterSheetWrapper = ({
                   <div
                     style={{ display: "flex", alignItems: "center", gap: 8 }}
                   >
-                    {activeSessionId && (
+                    {characterId && (
                       <button
                         type="button"
-                        onClick={() => setShowDiceHistoryPanel((x) => !x)}
+                        onClick={() => setShowHistoryPanel((x) => !x)}
                         title={
-                          showDiceHistoryPanel
-                            ? "Hide dice history"
-                            : "Show dice history"
+                          showHistoryPanel
+                            ? "Hide history"
+                            : "Show character/session history"
                         }
                         style={{
-                          background: showDiceHistoryPanel
+                          background: showHistoryPanel
                             ? "#312e81"
                             : "#1f2937",
                           border: "1px solid #4b5563",
@@ -1969,75 +3088,833 @@ const CharacterSheetWrapper = ({
                       </div>
                     </div>
                   </div>
-                  {showDiceHistoryPanel && activeSessionId && (
+                  {showHistoryPanel && (
                     <div
+                      style={{
+                        position: "fixed",
+                        inset: 0,
+                        background: "rgba(0,0,0,0.62)",
+                        zIndex: 125,
+                        display: "flex",
+                        alignItems: "flex-start",
+                        justifyContent: "center",
+                        paddingTop: "80px",
+                      }}
+                      onClick={() => setShowHistoryPanel(false)}
+                    >
+                    <div
+                      onClick={(e) => e.stopPropagation()}
                       style={{
                         background: "#111827",
                         border: "1px solid #374151",
                         borderRadius: 8,
                         padding: 10,
-                        minWidth: 260,
-                        maxWidth: 360,
+                        width: "min(680px, 92vw)",
+                        maxHeight: "70vh",
+                        overflowY: "auto",
                         fontSize: 11,
+                        boxShadow: "0 14px 40px rgba(0,0,0,0.55)",
                       }}
                     >
                       <div
                         style={{
-                          color: "#a78bfa",
-                          fontWeight: "bold",
-                          marginBottom: 6,
-                        }}
-                      >
-                        Session dice
-                      </div>
-                      <div style={{ color: "#9ca3af", marginBottom: 6 }}>
-                        Desperate action rolls (this session):{" "}
-                        <span style={{ color: "#f97316", fontWeight: "bold" }}>
-                          {desperateActionRollCount}
-                        </span>
-                      </div>
-                      <label
-                        style={{
                           display: "flex",
+                          justifyContent: "space-between",
                           alignItems: "center",
-                          gap: 6,
                           marginBottom: 8,
-                          cursor: "pointer",
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          checked={showPositionEffect}
-                          onChange={(e) =>
-                            setShowPositionEffect(e.target.checked)
-                          }
-                        />
-                        Show position &amp; effect
-                      </label>
-                      {sessionRolls.length === 0 ? (
-                        <div style={{ color: "#6b7280" }}>
-                          No rolls this session.
+                        <div style={{ color: "#a78bfa", fontWeight: "bold" }}>
+                          History
                         </div>
-                      ) : (
-                        sessionRolls.slice(0, 10).map((r) => (
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 8,
+                            alignItems: "center",
+                          }}
+                        >
+                          <span style={{ fontSize: 10, color: "#9ca3af" }}>
+                            Press Esc to exit view
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setShowHistoryPanel(false)}
+                            style={{ ...S.btn, padding: "2px 8px", fontSize: 10 }}
+                          >
+                            Close
+                          </button>
+                        </div>
+                      </div>
+                        <>
                           <div
-                            key={r.id}
                             style={{
-                              padding: "4px 0",
-                              borderBottom: "1px solid #1f2937",
+                              display: "flex",
+                              gap: 6,
+                              marginBottom: 8,
                             }}
                           >
-                            {r.action_name} ·{" "}
-                            {[].concat(r.results || []).join(", ")} →{" "}
-                            {r.outcome || ""}
-                            {showPositionEffect && (r.position || r.effect) && (
-                              <span style={{ color: "#6b7280", marginLeft: 6 }}>
-                                ({r.position || ""}, {r.effect || ""})
-                              </span>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => setHistoryMode("sheet")}
+                              style={{
+                                ...S.btn,
+                                fontSize: 10,
+                                padding: "4px 8px",
+                                background:
+                                  historyMode === "sheet" ? "#4338ca" : "#1f2937",
+                                color:
+                                  historyMode === "sheet" ? "#f9fafb" : "#d1d5db",
+                                border:
+                                  historyMode === "sheet"
+                                    ? "1px solid #818cf8"
+                                    : "1px solid #374151",
+                              }}
+                            >
+                              Character Sheet History
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setHistoryMode("session")}
+                              style={{
+                                ...S.btn,
+                                fontSize: 10,
+                                padding: "4px 8px",
+                                background:
+                                  historyMode === "session" ? "#4338ca" : "#1f2937",
+                                color:
+                                  historyMode === "session" ? "#f9fafb" : "#d1d5db",
+                                border:
+                                  historyMode === "session"
+                                    ? "1px solid #818cf8"
+                                    : "1px solid #374151",
+                              }}
+                            >
+                              Session History
+                            </button>
                           </div>
-                        ))
-                      )}
+                          {historyMode === "session" && (
+                            <>
+                              <div
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns: "1fr 1fr",
+                                  gap: 6,
+                                  marginBottom: 8,
+                                }}
+                              >
+                                <select
+                                  value={historySessionId || ""}
+                                  onChange={(e) =>
+                                    setHistorySessionId(
+                                      e.target.value ? Number(e.target.value) : null,
+                                    )
+                                  }
+                                  style={{ ...S.sel, fontSize: 10, padding: "2px 6px" }}
+                                >
+                                  <option value="">No session</option>
+                                  {(charCampaign?.sessions || []).map((s) => (
+                                    <option key={s.id} value={s.id}>
+                                      {s.name || `Session ${s.id}`}
+                                    </option>
+                                  ))}
+                                </select>
+                                <select
+                                  value={historyCharacterFilter}
+                                  onChange={(e) =>
+                                    setHistoryCharacterFilter(e.target.value)
+                                  }
+                                  disabled={!isGM}
+                                  style={{ ...S.sel, fontSize: 10, padding: "2px 6px" }}
+                                >
+                                  {isGM ? (
+                                    <option value="all">All players</option>
+                                  ) : null}
+                                  {(charCampaign?.campaign_characters || [])
+                                    .filter((pc) =>
+                                      isGM
+                                        ? true
+                                        : String(pc.id) === String(characterId),
+                                    )
+                                    .map((pc) => (
+                                    <option key={pc.id} value={pc.id}>
+                                      {pc.true_name || pc.name || `PC ${pc.id}`}
+                                    </option>
+                                    ))}
+                                </select>
+                              </div>
+                              <div
+                                style={{
+                                  marginBottom: 8,
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (!canCreateManualHistoryRecord) return;
+                                    setShowHistoryManualModal((v) => !v);
+                                  }}
+                                  style={{
+                                    ...S.btn,
+                                    fontSize: 10,
+                                    background: "#4338ca",
+                                    color: "#fff",
+                                    opacity: canCreateManualHistoryRecord ? 1 : 0.45,
+                                    cursor: canCreateManualHistoryRecord
+                                      ? "pointer"
+                                      : "not-allowed",
+                                  }}
+                                  disabled={!canCreateManualHistoryRecord}
+                                  title={
+                                    canCreateManualHistoryRecord
+                                      ? "Add an offline/manual history entry."
+                                      : "Only the GM or this character's owner can add manual records."
+                                  }
+                                >
+                                  Manual record…
+                                </button>
+                                {showHistoryManualModal && (
+                                  <div
+                                    style={{
+                                      marginTop: 8,
+                                      background: "#0d1117",
+                                      border: "1px solid #374151",
+                                      borderRadius: 8,
+                                      padding: 10,
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        color: "#a78bfa",
+                                        fontWeight: "bold",
+                                        fontSize: 12,
+                                        marginBottom: 8,
+                                      }}
+                                    >
+                                      Manual history record
+                                    </div>
+                                    <div
+                                      style={{
+                                        display: "grid",
+                                        gridTemplateColumns: "1fr 1fr",
+                                        gap: 6,
+                                      }}
+                                    >
+                                      <select
+                                        value={historyManual.rollType}
+                                        onChange={(e) =>
+                                          setHistoryManual((p) => ({
+                                            ...p,
+                                            rollType: e.target.value,
+                                            viceOverindulge: "",
+                                          }))
+                                        }
+                                        style={{
+                                          ...S.sel,
+                                          fontSize: 10,
+                                          padding: "2px 6px",
+                                        }}
+                                      >
+                                        <option value="ACTION">Action</option>
+                                        <option value="RESISTANCE">
+                                          Resistance
+                                        </option>
+                                        <option value="VICE">Vice roll</option>
+                                      </select>
+                                      <select
+                                        value={historyManual.sessionId}
+                                        onChange={(e) =>
+                                          setHistoryManual((p) => ({
+                                            ...p,
+                                            sessionId: e.target.value,
+                                          }))
+                                        }
+                                        style={{
+                                          ...S.sel,
+                                          fontSize: 10,
+                                          padding: "2px 6px",
+                                        }}
+                                      >
+                                        <option value="">Session</option>
+                                        {(charCampaign?.sessions || []).map((s) => (
+                                          <option
+                                            key={s.id}
+                                            value={String(s.id)}
+                                          >
+                                            {s.name || `Session ${s.id}`}
+                                          </option>
+                                        ))}
+                                      </select>
+                                      {historyManual.rollType === "RESISTANCE" ? (
+                                        <select
+                                          value={historyManual.action}
+                                          onChange={(e) =>
+                                            setHistoryManual((p) => ({
+                                              ...p,
+                                              action: e.target.value,
+                                            }))
+                                          }
+                                          style={{
+                                            ...S.sel,
+                                            fontSize: 10,
+                                            padding: "2px 6px",
+                                          }}
+                                        >
+                                          <option value="insight">Insight</option>
+                                          <option value="prowess">Prowess</option>
+                                          <option value="resolve">Resolve</option>
+                                        </select>
+                                      ) : historyManual.rollType === "VICE" ? (
+                                        <div
+                                          style={{
+                                            ...S.inp,
+                                            fontSize: 10,
+                                            padding: "2px 6px",
+                                            color: "#9ca3af",
+                                            display: "flex",
+                                            alignItems: "center",
+                                          }}
+                                        >
+                                          Vice (downtime indulgence)
+                                        </div>
+                                      ) : (
+                                        <input
+                                          value={historyManual.action}
+                                          onChange={(e) =>
+                                            setHistoryManual((p) => ({
+                                              ...p,
+                                              action: e.target.value,
+                                            }))
+                                          }
+                                          style={{
+                                            ...S.inp,
+                                            fontSize: 10,
+                                            padding: "2px 6px",
+                                          }}
+                                          placeholder="Action"
+                                        />
+                                      )}
+                                      <input
+                                        value={historyManual.dice}
+                                        onChange={(e) =>
+                                          setHistoryManual((p) => ({
+                                            ...p,
+                                            dice: e.target.value,
+                                          }))
+                                        }
+                                        style={{
+                                          ...S.inp,
+                                          fontSize: 10,
+                                          padding: "2px 6px",
+                                        }}
+                                        placeholder="Dice e.g. 6,4"
+                                      />
+                                      {historyManual.rollType === "RESISTANCE" ? (
+                                        <>
+                                          <select
+                                            value={historyManual.resistanceHarmTarget}
+                                            onChange={(e) =>
+                                              setHistoryManual((p) => ({
+                                                ...p,
+                                                resistanceHarmTarget:
+                                                  e.target.value,
+                                              }))
+                                            }
+                                            style={{
+                                              ...S.sel,
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                            }}
+                                          >
+                                            <option value="">
+                                              Harm to reduce…
+                                            </option>
+                                            {filledHarmOptions.map((opt) => (
+                                              <option
+                                                key={opt.value}
+                                                value={opt.value}
+                                              >
+                                                {opt.label}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <div
+                                            style={{
+                                              ...S.inp,
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                              color: "#d1d5db",
+                                              display: "flex",
+                                              alignItems: "center",
+                                            }}
+                                          >
+                                            Stress = 6 - highest die
+                                          </div>
+                                        </>
+                                      ) : historyManual.rollType === "VICE" ? (
+                                        <>
+                                          <div
+                                            style={{
+                                              ...S.inp,
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                              color: "#d1d5db",
+                                              display: "flex",
+                                              alignItems: "center",
+                                              gridColumn: "1 / -1",
+                                            }}
+                                          >
+                                            Pool = lowest Insight / Prowess / Resolve
+                                            rating · stress cleared = highest die
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <select
+                                            value={historyManual.outcome}
+                                            onChange={(e) =>
+                                              setHistoryManual((p) => ({
+                                                ...p,
+                                                outcome: e.target.value,
+                                              }))
+                                            }
+                                            style={{
+                                              ...S.sel,
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                            }}
+                                          >
+                                            <option value="CRITICAL_SUCCESS">
+                                              Critical
+                                            </option>
+                                            <option value="FULL_SUCCESS">
+                                              Full
+                                            </option>
+                                            <option value="PARTIAL_SUCCESS">
+                                              Partial
+                                            </option>
+                                            <option value="FAILURE">
+                                              Failure
+                                            </option>
+                                          </select>
+                                          <select
+                                            value={historyManual.position}
+                                            onChange={(e) =>
+                                              setHistoryManual((p) => ({
+                                                ...p,
+                                                position: e.target.value,
+                                              }))
+                                            }
+                                            style={{
+                                              ...S.sel,
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                            }}
+                                          >
+                                            <option value="controlled">
+                                              Controlled
+                                            </option>
+                                            <option value="risky">Risky</option>
+                                            <option value="desperate">
+                                              Desperate
+                                            </option>
+                                          </select>
+                                          <select
+                                            value={historyManual.effect}
+                                            onChange={(e) =>
+                                              setHistoryManual((p) => ({
+                                                ...p,
+                                                effect: e.target.value,
+                                              }))
+                                            }
+                                            style={{
+                                              ...S.sel,
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                            }}
+                                          >
+                                            <option value="limited">
+                                              Limited
+                                            </option>
+                                            <option value="standard">
+                                              Standard
+                                            </option>
+                                            <option value="extreme">
+                                              Extreme
+                                            </option>
+                                          </select>
+                                        </>
+                                      )}
+                                    </div>
+                                    {historyManual.rollType !== "RESISTANCE" &&
+                                      historyManual.rollType !== "VICE" && (
+                                      <div
+                                        style={{
+                                          marginTop: 6,
+                                          display: "flex",
+                                          gap: 8,
+                                          flexWrap: "wrap",
+                                          fontSize: 10,
+                                        }}
+                                      >
+                                        {[
+                                          ["pushDice", "Push +1d"],
+                                          ["pushEffect", "Push +effect"],
+                                          ["devil", "Devil's bargain"],
+                                          ["helpDie", "Help +1d"],
+                                          ["groupAction", "Group action"],
+                                        ].map(([k, label]) => (
+                                          <label
+                                            key={k}
+                                            style={{ display: "flex", gap: 4 }}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={!!historyManual[k]}
+                                              onChange={(e) =>
+                                                setHistoryManual((p) => ({
+                                                  ...p,
+                                                  [k]: e.target.checked,
+                                                }))
+                                              }
+                                            />
+                                            <span>{label}</span>
+                                          </label>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {historyManual.rollType !== "RESISTANCE" &&
+                                    historyManual.rollType !== "VICE" &&
+                                    historyManual.groupAction ? (
+                                      <input
+                                        value={historyManual.groupActionId}
+                                        onChange={(e) =>
+                                          setHistoryManual((p) => ({
+                                            ...p,
+                                            groupActionId: e.target.value,
+                                          }))
+                                        }
+                                        style={{
+                                          ...S.inp,
+                                          marginTop: 6,
+                                          fontSize: 10,
+                                          padding: "2px 6px",
+                                          width: 120,
+                                        }}
+                                        placeholder="Group action id"
+                                      />
+                                    ) : null}
+                                    {historyManual.rollType === "VICE" &&
+                                    viceManualWouldOverindulge ? (
+                                      <div style={{ marginTop: 6 }}>
+                                        <div
+                                          style={{
+                                            fontSize: 10,
+                                            color: "#fbbf24",
+                                            marginBottom: 4,
+                                            fontWeight: "bold",
+                                          }}
+                                        >
+                                          Overindulgence (highest die exceeds stress marked) — pick
+                                          consequence:
+                                        </div>
+                                        <select
+                                          value={historyManual.viceOverindulge || ""}
+                                          onChange={(e) =>
+                                            setHistoryManual((p) => ({
+                                              ...p,
+                                              viceOverindulge: e.target.value,
+                                            }))
+                                          }
+                                          style={{
+                                            ...S.sel,
+                                            fontSize: 10,
+                                            padding: "2px 6px",
+                                            width: "100%",
+                                            maxWidth: "100%",
+                                          }}
+                                        >
+                                          {VICE_OVERINDULGE_CHOICES.map((o) => (
+                                            <option key={o.value || "none"} value={o.value}>
+                                              {o.label}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    ) : null}
+                                    <div
+                                      style={{
+                                        marginTop: 8,
+                                        display: "flex",
+                                        gap: 8,
+                                        alignItems: "center",
+                                      }}
+                                    >
+                                      <button
+                                        type="button"
+                                        disabled={historyManualSaving}
+                                        onClick={async () => {
+                                          if (!canCreateManualHistoryRecord) {
+                                            setHistoryWriteError(
+                                              "Only the GM or this character's owner can add manual records.",
+                                            );
+                                            return;
+                                          }
+                                          try {
+                                            setHistoryWriteError(null);
+                                            const sid = parseInt(
+                                              String(historyManual.sessionId || ""),
+                                              10,
+                                            );
+                                            if (!sid || !characterId) return;
+                                            const diceResults = String(
+                                              historyManual.dice || "",
+                                            )
+                                              .split(/[\s,]+/)
+                                              .map((n) => parseInt(n.trim(), 10))
+                                              .filter(
+                                                (n) =>
+                                                  Number.isFinite(n) &&
+                                                  n >= 1 &&
+                                                  n <= 6,
+                                              );
+                                            if (!diceResults.length) {
+                                              setHistoryWriteError(
+                                                "Enter at least one die result (1-6).",
+                                              );
+                                              return;
+                                            }
+                                            const rt = String(
+                                              historyManual.rollType || "ACTION",
+                                            ).toUpperCase();
+                                            const isResistanceManual =
+                                              rt === "RESISTANCE";
+                                            const isViceManual = rt === "VICE";
+                                            const resistanceSummary =
+                                              computeResistanceSummary(
+                                                diceResults,
+                                              );
+                                            const viceSummary =
+                                              computeViceManualSummary(
+                                                diceResults,
+                                              );
+                                            if (
+                                              isResistanceManual &&
+                                              !historyManual.resistanceHarmTarget
+                                            ) {
+                                              setHistoryWriteError(
+                                                "Choose which harm slot this resistance roll reduces.",
+                                              );
+                                              return;
+                                            }
+                                            const viceOverAtSave =
+                                              isViceManual &&
+                                              viceSummary.highest >
+                                                (Number(stressFilled) || 0);
+                                            if (
+                                              viceOverAtSave &&
+                                              !String(
+                                                historyManual.viceOverindulge ||
+                                                  "",
+                                              ).trim()
+                                            ) {
+                                              setHistoryWriteError(
+                                                "Overindulgence: choose which consequence applies (highest die exceeds marked stress).",
+                                              );
+                                              return;
+                                            }
+                                            setHistoryManualSaving(true);
+                                            if (isResistanceManual) {
+                                              const reduced = clearHarmSlot(
+                                                historyManual.resistanceHarmTarget,
+                                              );
+                                              if (!reduced) {
+                                                setHistoryWriteError(
+                                                  "Selected harm slot is empty or invalid.",
+                                                );
+                                                setHistoryManualSaving(false);
+                                                return;
+                                              }
+                                              if (resistanceSummary.stressCost > 0)
+                                                applyStressCost(
+                                                  resistanceSummary.stressCost,
+                                                );
+                                            }
+                                            if (isViceManual) {
+                                              setStressFilled((prev) =>
+                                                Math.max(
+                                                  0,
+                                                  (Number(prev) || 0) -
+                                                    viceSummary.highest,
+                                                ),
+                                              );
+                                            }
+                                            await rollAPI.createRoll({
+                                              character: characterId,
+                                              session: sid,
+                                              roll_type: isResistanceManual
+                                                ? "RESISTANCE"
+                                                : isViceManual
+                                                  ? "CLEAR_STRESS"
+                                                  : "ACTION",
+                                              action_name: isViceManual
+                                                ? "vice"
+                                                : String(
+                                                      historyManual.action ||
+                                                        "action",
+                                                    ).toLowerCase(),
+                                              ...(isResistanceManual || isViceManual
+                                                ? {}
+                                                : {
+                                                    position:
+                                                      historyManual.position,
+                                                    effect: historyManual.effect,
+                                                  }),
+                                              dice_pool: diceResults.length,
+                                              results: diceResults,
+                                              outcome: isResistanceManual
+                                                ? resistanceSummary.outcome
+                                                : isViceManual
+                                                  ? viceSummary.outcome
+                                                  : historyManual.outcome,
+                                              ...(isResistanceManual
+                                                ? {
+                                                    roller_stress_spent:
+                                                      resistanceSummary.stressCost >
+                                                      0
+                                                        ? resistanceSummary.stressCost
+                                                        : 0,
+                                                  }
+                                                : isViceManual
+                                                  ? { roller_stress_spent: 0 }
+                                                  : {
+                                                      push_for_dice:
+                                                        !!historyManual.pushDice,
+                                                      push_for_effect:
+                                                        !!historyManual.pushEffect,
+                                                      uses_devil_bargain:
+                                                        !!historyManual.devil,
+                                                      pool_assist_dice:
+                                                        historyManual.helpDie
+                                                          ? 1
+                                                          : 0,
+                                                      group_action:
+                                                        historyManual.groupAction &&
+                                                        historyManual.groupActionId
+                                                          ? parseInt(
+                                                              String(
+                                                                historyManual.groupActionId,
+                                                              ),
+                                                              10,
+                                                            )
+                                                          : undefined,
+                                                    }),
+                                              description:
+                                                isResistanceManual
+                                                  ? `Manual resistance record from history panel. Reduced harm slot ${historyManual.resistanceHarmTarget}. Stress marked: ${Math.max(0, resistanceSummary.stressCost)}.`
+                                                  : isViceManual
+                                                    ? `Manual vice record from history panel. Stress cleared (highest die): ${viceSummary.highest}.${viceOverAtSave && String(historyManual.viceOverindulge || "").trim() ? ` Overindulgence: ${viceOverindulgeLabel(historyManual.viceOverindulge)}` : ""}`
+                                                    : "Manual record from history panel",
+                                            });
+                                            setHistoryRefreshTick((v) => v + 1);
+                                            setShowHistoryManualModal(false);
+                                          } catch (e) {
+                                            setHistoryWriteError(
+                                              e.message ||
+                                                "Failed to create manual history record.",
+                                            );
+                                          } finally {
+                                            setHistoryManualSaving(false);
+                                          }
+                                        }}
+                                        style={{
+                                          ...S.btn,
+                                          fontSize: 10,
+                                          background: "#4338ca",
+                                          color: "#fff",
+                                        }}
+                                      >
+                                        {historyManualSaving
+                                          ? "Saving…"
+                                          : "Add manual record"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          setShowHistoryManualModal(false)
+                                        }
+                                        style={{ ...S.btn, fontSize: 10 }}
+                                      >
+                                        Cancel
+                                      </button>
+                                      {historyWriteError ? (
+                                        <span
+                                          style={{
+                                            color: "#f87171",
+                                            fontSize: 10,
+                                          }}
+                                        >
+                                          {historyWriteError}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </>
+                          )}
+                          {historyLoading ? (
+                            <div style={{ color: "#6b7280" }}>Loading history…</div>
+                          ) : historyError ? (
+                            <div style={{ color: "#fca5a5" }}>{historyError}</div>
+                          ) : historyRows.length === 0 ? (
+                            <div style={{ color: "#6b7280" }}>
+                              No history entries.
+                            </div>
+                          ) : (
+                            historyRows.slice(0, 120).map((row) => (
+                              <div
+                                key={row.key}
+                                style={{
+                                  padding: "6px 0",
+                                  borderBottom: "1px solid #1f2937",
+                                }}
+                              >
+                                <div style={{ color: "#9ca3af", fontSize: 10 }}>
+                                  {row.timestamp
+                                    ? new Date(row.timestamp).toLocaleString()
+                                    : "No timestamp"}{" "}
+                                  · {row.actor || "unknown"}
+                                </div>
+                                {row.text ? (
+                                  <div style={{ color: "#d1d5db" }}>{row.text}</div>
+                                ) : null}
+                                {Array.isArray(row.details) &&
+                                  row.details.map((d) => (
+                                    <div
+                                      key={`${row.key}-${d.key}`}
+                                      style={{ fontSize: 10, color: "#d1d5db" }}
+                                    >
+                                      <strong>{d.label}</strong>:{" "}
+                                      <span style={{ color: "#fca5a5" }}>
+                                        {d.oldValue || "∅"}
+                                      </span>{" "}
+                                      →{" "}
+                                      <span style={{ color: "#86efac" }}>
+                                        {d.newValue || "∅"}
+                                      </span>
+                                    </div>
+                                  ))}
+                                {row.modifiers?.length ? (
+                                  <div style={{ fontSize: 10, color: "#a78bfa" }}>
+                                    {row.modifiers.join(" · ")}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ))
+                          )}
+                        </>
+                    </div>
                     </div>
                   )}
                 </div>
@@ -2062,6 +3939,7 @@ const CharacterSheetWrapper = ({
                       display: "flex",
                       gap: "16px",
                       alignItems: "start",
+                      flexWrap: "wrap",
                     }}
                   >
                     {/* Portrait */}
@@ -2104,27 +3982,9 @@ const CharacterSheetWrapper = ({
                         )}
                       </div>
                       <div style={{ display: "flex", gap: "4px" }}>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          onChange={handleFileSelect}
-                          style={{ display: "none" }}
-                        />
                         <button
-                          onClick={() => fileInputRef.current?.click()}
-                          style={{
-                            ...S.btn,
-                            fontSize: "9px",
-                            padding: "2px 6px",
-                            background: "#1f2937",
-                            color: "#9ca3af",
-                          }}
-                        >
-                          Upload
-                        </button>
-                        <button
-                          onClick={handleImageUrlPrompt}
+                          type="button"
+                          onClick={openPortraitUrlModal}
                           style={{
                             ...S.btn,
                             fontSize: "9px",
@@ -2135,11 +3995,30 @@ const CharacterSheetWrapper = ({
                         >
                           URL
                         </button>
+                        <button
+                          type="button"
+                          onClick={handleRemovePortrait}
+                          style={{
+                            ...S.btn,
+                            fontSize: "9px",
+                            padding: "2px 6px",
+                            background: "#1f2937",
+                            color: "#9ca3af",
+                          }}
+                        >
+                          Remove
+                        </button>
                       </div>
                     </div>
                     {/* Identity fields */}
-                    <div style={{ flex: 1 }}>
-                      <div style={S.g2}>
+                    <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fit, minmax(0, 1fr))",
+                          gap: "8px",
+                        }}
+                      >
                         <div>
                           <span style={S.lbl}>NAME</span>
                           <input
@@ -2198,7 +4077,8 @@ const CharacterSheetWrapper = ({
                       <div
                         style={{
                           display: "grid",
-                          gridTemplateColumns: "1fr 1fr 1fr",
+                          gridTemplateColumns:
+                            "repeat(auto-fit, minmax(0, 1fr))",
                           gap: "8px",
                           marginTop: "8px",
                         }}
@@ -2440,6 +4320,20 @@ const CharacterSheetWrapper = ({
                       )}
                     </span>
                   </div>
+                  {traumaRequiredBeforeStressClear ? (
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        color: "#f87171",
+                        marginBottom: "6px",
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      Stress track is full — mark a trauma below to clear all
+                      stress (or manually clear boxes after you have marked at
+                      least one trauma).
+                    </div>
+                  ) : null}
                   <div
                     style={{
                       display: "flex",
@@ -2447,13 +4341,27 @@ const CharacterSheetWrapper = ({
                       flexWrap: "wrap",
                       marginBottom: "12px",
                     }}
+                    title={
+                      traumaRequiredBeforeStressClear
+                        ? "Clearing stress blocked until you mark a trauma."
+                        : undefined
+                    }
                   >
                     {Array.from({ length: maxStress }, (_, i) => (
                       <div
                         key={i}
-                        onClick={() =>
-                          setStressFilled(i < stressFilled ? i : i + 1)
-                        }
+                        onClick={() => {
+                          const next =
+                            i < stressFilled ? i : i + 1;
+                          const decreases = next < stressFilled;
+                          if (
+                            decreases &&
+                            traumaRequiredBeforeStressClear
+                          ) {
+                            return;
+                          }
+                          setStressFilled(next);
+                        }}
                         style={{
                           width: "22px",
                           height: "22px",
@@ -2482,9 +4390,7 @@ const CharacterSheetWrapper = ({
                         <input
                           type="checkbox"
                           checked={checked}
-                          onChange={() =>
-                            setTrauma((p) => ({ ...p, [t]: !p[t] }))
-                          }
+                          onChange={() => toggleTraumaMark(t)}
                         />
                         {t}
                       </label>
@@ -2498,6 +4404,7 @@ const CharacterSheetWrapper = ({
                     <div style={{ flex: 1 }}>
                       <span style={S.lbl}>HARM</span>
                       {[
+                        { key: "level4", label: "FATAL", count: 1 },
                         { key: "level3", label: "NEED HELP", count: 1 },
                         { key: "level2", label: "-1D", count: 2 },
                         { key: "level1", label: "LESS EFFECT", count: 2 },
@@ -2531,14 +4438,15 @@ const CharacterSheetWrapper = ({
                                 fontSize: "11px",
                               }}
                               placeholder={`Lv${key.slice(-1)} harm`}
-                              value={harm[key][idx]}
+                              value={harm[key]?.[idx] ?? ""}
                               onChange={(e) =>
-                                setHarm((p) => ({
-                                  ...p,
-                                  [key]: p[key].map((v, i) =>
-                                    i === idx ? e.target.value : v,
-                                  ),
-                                }))
+                                setHarm((p) => {
+                                  const row = Array.isArray(p[key])
+                                    ? [...p[key]]
+                                    : Array(count).fill("");
+                                  row[idx] = e.target.value;
+                                  return { ...p, [key]: row };
+                                })
                               }
                             />
                           </div>
@@ -2913,17 +4821,165 @@ const CharacterSheetWrapper = ({
                   <div
                     style={{
                       marginTop: "10px",
+                      padding: "10px",
+                      background: "#0d1117",
+                      borderRadius: "6px",
+                      border: "1px solid #374151",
                       fontSize: "11px",
                       color: "#9ca3af",
-                      lineHeight: "1.7",
+                      lineHeight: "1.6",
                     }}
                   >
-                    <span style={S.lbl}>MARK XP WHEN YOU…</span>
-                    🔷 Make a desperate action roll — +1 XP in that attribute
-                    <br />
-                    🔷 Express beliefs, drives, heritage, or background
-                    <br />
-                    🔷 Struggle with your vice, trauma, or crew entanglements
+                    <div style={{ marginBottom: "8px" }}>
+                      <span style={S.lbl}>XP REQUIREMENTS (SRD)</span>
+                    </div>
+                    {!xpReqSnapshot.hasActiveSession && (
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          color: "#9ca3af",
+                        }}
+                      >
+                        No active session — requirement progress and desperate-roll
+                        tallies will show once the GM starts a session for this
+                        campaign and rolls or XP entries are logged.
+                      </div>
+                    )}
+                    {xpReqSnapshot.hasActiveSession && (
+                      <>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: "8px",
+                            padding: "4px 0",
+                            borderBottom: "1px solid #1f2937",
+                          }}
+                        >
+                          <div>
+                            <span style={{ color: "#e5e7eb" }}>
+                              Desperate action rolls
+                            </span>
+                            <span
+                              style={{
+                                marginLeft: "6px",
+                                fontSize: "10px",
+                                color: "#6b7280",
+                              }}
+                            >
+                              (auto, +1 XP / roll to that attribute)
+                            </span>
+                            <div
+                              style={{ fontSize: "10px", color: "#6b7280", marginTop: "2px" }}
+                            >
+                              This session: {xpReqSnapshot.desperateRolls.count} —{" "}
+                              {xpReqSnapshot.desperateRolls.count === 0
+                                ? "no desperate action rolls yet"
+                                : formatAttrTally(
+                                    xpReqSnapshot.desperateRolls.byAttribute,
+                                  )}
+                            </div>
+                            {xpReqSnapshot.desperateTrackerNote > 0 && (
+                              <div
+                                style={{ fontSize: "10px", color: "#a78bfa", marginTop: "2px" }}
+                              >
+                                Logged in tracker: up to +{xpReqSnapshot.desperateTrackerNote}{" "}
+                                (desperate / rating-0; max 2 shown)
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {[
+                          {
+                            label: "Playbook or standout (end of session, max 2)",
+                            v: xpReqSnapshot.playbook,
+                          },
+                          {
+                            label:
+                              "Beliefs, drives, heritage, or background (end of session, max 2)",
+                            v: xpReqSnapshot.beliefs,
+                          },
+                          {
+                            label:
+                              "Struggle: vice, trauma, entanglements (end of session, max 2)",
+                            v: xpReqSnapshot.struggle,
+                          },
+                        ].map((row) => (
+                          <div
+                            key={row.label}
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: "8px",
+                              padding: "5px 0",
+                              borderBottom: "1px solid #1f2937",
+                            }}
+                          >
+                            <span style={{ color: "#d1d5db" }}>{row.label}</span>
+                            <span
+                              style={{
+                                fontFamily: "monospace",
+                                color: "#e5e7eb",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {row.v} / 2
+                            </span>
+                          </div>
+                        ))}
+                        {xpReqSnapshot.beliefs === 0 &&
+                          xpReqSnapshot.struggle === 0 &&
+                          xpReqSnapshot.playbook === 0 &&
+                          xpReqSnapshot.desperateRolls.count === 0 &&
+                          xpReqSnapshot.desperateTrackerNote === 0 && (
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                color: "#6b7280",
+                                marginTop: "8px",
+                              }}
+                            >
+                              No session XP events yet — keep playing; this fills as
+                              your group logs rolls and (at end of session) reviews
+                              story beats.
+                            </div>
+                          )}
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#6b7280",
+                            marginTop: "8px",
+                          }}
+                        >
+                          <span style={S.lbl}>MARK XP WHEN YOU…</span> (same
+                          SRD) — make a{" "}
+                          <strong style={{ color: "#9ca3af" }}>desperate</strong>{" "}
+                          action roll; express{" "}
+                          <strong style={{ color: "#9ca3af" }}>beliefs, drives, heritage, or background</strong>; struggle with your{" "}
+                          <strong style={{ color: "#9ca3af" }}>vice, trauma, or crew</strong>{" "}
+                          entanglements; plus playbook / standout at end of session.
+                        </div>
+                        <details
+                          style={{ marginTop: "8px", fontSize: "10px", color: "#6b7280" }}
+                        >
+                          <summary style={{ cursor: "pointer", userSelect: "none" }}>
+                            Desperate roll → attribute (+1) · end-of-session (max 2 each)
+                          </summary>
+                          <p style={{ margin: "6px 0 0" }}>
+                            <strong>Desperate rolls:</strong> +1 XP in the roll&apos;s
+                            attribute: Insight (Hunt, Study, Survey, Tinker), Prowess
+                            (Finesse, Prowl, Skirmish, Wreck), Resolve (Bizarre, Command, Consort, Sway).
+                            {" "}
+                            <strong>End of session:</strong> table review for
+                            beliefs / struggle / playbook, up to 2 XP in each
+                            category; you may place that XP on any track when you
+                            spend it. Numbers here come from the experience tracker
+                            (this session) and your desperate rolls in the dice log.
+                          </p>
+                        </details>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3500,83 +5556,6 @@ const CharacterSheetWrapper = ({
                           ))}
                         </div>
                       </div>
-                      {charCampaign?.active_session_detail
-                        ?.show_position_effect_to_players !== false && (
-                        <div style={{ marginBottom: "8px" }}>
-                          <span style={{ fontSize: "11px", color: "#9ca3af" }}>
-                            Position & Effect:{" "}
-                          </span>
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: "8px",
-                              marginTop: "4px",
-                              flexWrap: "wrap",
-                            }}
-                          >
-                            <span
-                              style={{
-                                padding: "4px 8px",
-                                borderRadius: "4px",
-                                fontSize: "11px",
-                                fontWeight: "bold",
-                                background: (() => {
-                                  const p = (
-                                    charCampaign?.active_session_detail
-                                      ?.default_position || "risky"
-                                  ).toLowerCase();
-                                  return p === "controlled"
-                                    ? "#166534"
-                                    : p === "desperate"
-                                      ? "#991b1b"
-                                      : "#854d0e";
-                                })(),
-                                color: "#fff",
-                                border: "1px solid",
-                                borderColor: (() => {
-                                  const p = (
-                                    charCampaign?.active_session_detail
-                                      ?.default_position || "risky"
-                                  ).toLowerCase();
-                                  return p === "controlled"
-                                    ? "#22c55e"
-                                    : p === "desperate"
-                                      ? "#dc2626"
-                                      : "#eab308";
-                                })(),
-                              }}
-                            >
-                              {(
-                                charCampaign?.active_session_detail
-                                  ?.default_position || "Risky"
-                              ).replace(/^./, (c) => c.toUpperCase())}
-                            </span>
-                            <span
-                              style={{
-                                padding: "4px 8px",
-                                borderRadius: "4px",
-                                fontSize: "11px",
-                                background: "#374151",
-                                color: "#d1d5db",
-                              }}
-                            >
-                              {(() => {
-                                const e = (
-                                  charCampaign?.active_session_detail
-                                    ?.default_effect || "standard"
-                                ).toLowerCase();
-                                const label =
-                                  e === "extreme" || e === "greater"
-                                    ? "Extreme"
-                                    : e === "limited"
-                                      ? "Limited"
-                                      : "Standard";
-                                return `${label} effect`;
-                              })()}
-                            </span>
-                          </div>
-                        </div>
-                      )}
                       {(
                         charCampaign?.active_session_detail
                           ?.session_npcs_with_clocks || []
@@ -3628,6 +5607,54 @@ const CharacterSheetWrapper = ({
                                     {npc.stand_name}
                                   </div>
                                 )}
+                                {npc.stand_coin_stats &&
+                                  Object.keys(npc.stand_coin_stats).length > 0 && (
+                                    <div
+                                      style={{
+                                        fontSize: "10px",
+                                        color: "#a78bfa",
+                                        marginBottom: "4px",
+                                      }}
+                                    >
+                                      Stand{" "}
+                                      {Object.entries(npc.stand_coin_stats)
+                                        .map(([k, v]) => `${k[0]}:${v}`)
+                                        .join(" · ")}
+                                    </div>
+                                  )}
+                                {Array.isArray(npc.abilities) &&
+                                  npc.abilities.length > 0 && (
+                                    <div
+                                      style={{
+                                        marginBottom: "6px",
+                                        padding: "4px 6px",
+                                        border: "1px solid #374151",
+                                        borderRadius: "4px",
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          fontSize: "10px",
+                                          color: "#9ca3af",
+                                          marginBottom: "2px",
+                                        }}
+                                      >
+                                        Abilities
+                                      </div>
+                                      {(npc.abilities || []).slice(0, 6).map((ab) => (
+                                        <div
+                                          key={ab.id || ab.name}
+                                          style={{
+                                            fontSize: "10px",
+                                            color: "#d1d5db",
+                                            lineHeight: 1.35,
+                                          }}
+                                        >
+                                          {ab.name || "Ability"}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
                                 {npc.vulnerability_clock_max > 0 && (
                                   <div
                                     style={{
@@ -3790,6 +5817,56 @@ const CharacterSheetWrapper = ({
                                         {npc.stand_name}
                                       </div>
                                     )}
+                                    {npc.stand_coin_stats &&
+                                      Object.keys(npc.stand_coin_stats).length > 0 && (
+                                        <div
+                                          style={{
+                                            fontSize: "10px",
+                                            color: "#a78bfa",
+                                            marginBottom: "4px",
+                                          }}
+                                        >
+                                          Stand{" "}
+                                          {Object.entries(npc.stand_coin_stats)
+                                            .map(([k, v]) => `${k[0]}:${v}`)
+                                            .join(" · ")}
+                                        </div>
+                                      )}
+                                    {Array.isArray(npc.abilities) &&
+                                      npc.abilities.length > 0 && (
+                                        <div
+                                          style={{
+                                            marginBottom: "6px",
+                                            padding: "4px 6px",
+                                            border: "1px solid #374151",
+                                            borderRadius: "4px",
+                                          }}
+                                        >
+                                          <div
+                                            style={{
+                                              fontSize: "10px",
+                                              color: "#9ca3af",
+                                              marginBottom: "2px",
+                                            }}
+                                          >
+                                            Abilities
+                                          </div>
+                                          {(npc.abilities || [])
+                                            .slice(0, 6)
+                                            .map((ab) => (
+                                              <div
+                                                key={ab.id || ab.name}
+                                                style={{
+                                                  fontSize: "10px",
+                                                  color: "#d1d5db",
+                                                  lineHeight: 1.35,
+                                                }}
+                                              >
+                                                {ab.name || "Ability"}
+                                              </div>
+                                            ))}
+                                        </div>
+                                      )}
                                     {npc.vulnerability_clock_max > 0 && (
                                       <div
                                         style={{
@@ -3932,7 +6009,11 @@ const CharacterSheetWrapper = ({
                         <span style={{ fontSize: "11px", color: "#9ca3af" }}>
                           Clocks:{" "}
                         </span>
-                        {(charCampaign.progress_clocks || []).length > 0 ? (
+                        {(charCampaign.progress_clocks || []).filter((clk) => {
+                          const creator = Number(clk.created_by);
+                          const gmId = Number(charCampaign?.gm);
+                          return creator && creator === gmId;
+                        }).length > 0 ? (
                           <div
                             style={{
                               display: "flex",
@@ -3942,7 +6023,13 @@ const CharacterSheetWrapper = ({
                               marginTop: "4px",
                             }}
                           >
-                            {(charCampaign.progress_clocks || []).map((clk) => {
+                            {(charCampaign.progress_clocks || [])
+                              .filter((clk) => {
+                                const creator = Number(clk.created_by);
+                                const gmId = Number(charCampaign?.gm);
+                                return creator && creator === gmId;
+                              })
+                              .map((clk) => {
                               const canEdit =
                                 isGM || clk.created_by === user?.id;
                               return (
@@ -4197,7 +6284,11 @@ const CharacterSheetWrapper = ({
                                         padding: 0,
                                         lineHeight: 1,
                                       }}
-                                      title={`Roll ${rating}d`}
+                                      title={
+                                        rating === 0
+                                          ? "Roll (0 dots — modal uses 2d6, lower)"
+                                          : `Roll ${rating}d`
+                                      }
                                     >
                                       🎲
                                     </button>
@@ -4284,7 +6375,7 @@ const CharacterSheetWrapper = ({
                   </div>
 
                   {/* Action roll — dice pool preview (session) or roll result; same slot under action ratings */}
-                  {rollPending && activeSessionId && characterId && (
+                  {rollPending && characterId && (
                     <div
                       style={{
                         background: "#1f2937",
@@ -4317,9 +6408,7 @@ const CharacterSheetWrapper = ({
                         assist / bargain, then roll. Cancel to pick another
                         action.
                       </div>
-                      {harmLevel3Used &&
-                        !rollModal.push_effect &&
-                        !rollModal.push_dice && (
+                      {harmLevel3Used && (
                           <div
                             style={{
                               background: "#7f1d1d",
@@ -4331,70 +6420,59 @@ const CharacterSheetWrapper = ({
                               color: "#fca5a5",
                             }}
                           >
-                            Incapacitated (Level 3 harm). You must push yourself
-                            to act (2 stress for +1 effect or +1d).
+                            Incapacitated (Level 3 harm). Acting costs 2 stress.
+                            This does not grant +1 effect or +1d.
                           </div>
                         )}
-                      {charCampaign?.active_session_detail
-                        ?.show_position_effect_to_players !== false ? (
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "16px",
-                            flexWrap: "wrap",
-                            marginBottom: "12px",
-                            alignItems: "flex-end",
-                          }}
-                        >
-                          <div>
-                            <div
-                              style={{
-                                fontSize: "10px",
-                                color: "#9ca3af",
-                                marginBottom: "4px",
-                              }}
-                            >
-                              Position (this action)
-                            </div>
-                            <PositionStack
-                              activePosition={
-                                charCampaign?.active_session_detail
-                                  ?.default_position || "risky"
-                              }
-                              readOnly
-                            />
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "16px",
+                          flexWrap: "wrap",
+                          marginBottom: "12px",
+                          alignItems: "flex-end",
+                        }}
+                      >
+                        <div>
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            Position (this action)
                           </div>
-                          <div>
-                            <div
-                              style={{
-                                fontSize: "10px",
-                                color: "#9ca3af",
-                                marginBottom: "4px",
-                              }}
-                            >
-                              Effect (this action)
-                            </div>
-                            <EffectShapes
-                              activeEffect={
-                                charCampaign?.active_session_detail
-                                  ?.default_effect || "standard"
-                              }
-                              readOnly
-                            />
+                          <PositionStack
+                            activePosition={
+                              sessionOverridePositionEffect?.position ||
+                              charCampaign?.active_session_detail
+                                ?.default_position ||
+                              "risky"
+                            }
+                            readOnly
+                          />
+                        </div>
+                        <div>
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            Effect (this action)
                           </div>
+                          <EffectShapes
+                            activeEffect={
+                              sessionOverridePositionEffect?.effect ||
+                              charCampaign?.active_session_detail?.default_effect ||
+                              "standard"
+                            }
+                            readOnly
+                          />
                         </div>
-                      ) : (
-                        <div
-                          style={{
-                            fontSize: "12px",
-                            color: "#9ca3af",
-                            marginBottom: "12px",
-                          }}
-                        >
-                          Position and effect are hidden for this session — check
-                          with the table before rolling.
-                        </div>
-                      )}
+                      </div>
                       <div style={{ marginBottom: "12px" }}>
                         <label
                           style={{
@@ -4410,10 +6488,7 @@ const CharacterSheetWrapper = ({
                           value={rollGoalDraft}
                           onChange={(e) => setRollGoalDraft(e.target.value)}
                           placeholder={
-                            (
-                              charCampaign?.active_session_detail
-                                ?.roll_goal_label || ""
-                            ).trim() ||
+                            assignedRollGoalLabel ||
                             "What are you trying to achieve on this roll?"
                           }
                           rows={2}
@@ -4451,12 +6526,8 @@ const CharacterSheetWrapper = ({
                             Your dice pool
                           </div>
                           <DicePoolStrip
-                            label="Action rating (dots in this action)"
+                            label="Action rating (dice in this action only)"
                             count={rollPoolPreview.action_rating}
-                          />
-                          <DicePoolStrip
-                            label="Attribute dice (any dot in this attribute)"
-                            count={rollPoolPreview.attribute_dice}
                           />
                           {rollModal.push_dice ? (
                             <DicePoolStrip
@@ -4482,17 +6553,25 @@ const CharacterSheetWrapper = ({
                               count={1}
                             />
                           ) : null}
-                          {assistHelperId ? (
-                            <DicePoolStrip
-                              label="Assist (+1d, helper spends 1 stress)"
-                              count={1}
-                            />
-                          ) : null}
                           {bonusDiceFromAbilities > 0 ? (
                             <DicePoolStrip
                               label={`Standard abilities (+${bonusDiceFromAbilities}d)`}
                               count={bonusDiceFromAbilities}
                             />
+                          ) : null}
+                          {rollPoolPreview.total === 0 ? (
+                            <div
+                              style={{
+                                fontSize: "11px",
+                                color: "#f87171",
+                                marginTop: "6px",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              0 dice in pool — you roll{" "}
+                              <strong>2d6</strong> and use the{" "}
+                              <strong>lower</strong> result (same as offline).
+                            </div>
                           ) : null}
                           <div
                             style={{
@@ -4501,9 +6580,19 @@ const CharacterSheetWrapper = ({
                               marginTop: "6px",
                               paddingTop: "8px",
                               borderTop: "1px solid #374151",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: "10px",
+                              flexWrap: "wrap",
                             }}
                           >
-                            Total dice: <strong>{rollPoolPreview.total}</strong>
+                            <span>
+                              Total dice: <strong>{rollPoolPreview.total}</strong>
+                            </span>
+                            <span>
+                              Total stress to mark:{" "}
+                              <strong>{rollPoolPreview.pushStress}</strong>
+                            </span>
                           </div>
                           {rollPoolPreview.pushStress > 0 ? (
                             <div
@@ -4520,8 +6609,7 @@ const CharacterSheetWrapper = ({
                           ) : null}
                         </div>
                       )}
-                      {(abilities || []).filter((a) => a.type === "standard")
-                        .length > 0 && (
+                      {abilityRollBonusOptions.length > 0 && (
                         <div style={{ marginBottom: "12px" }}>
                           <div
                             style={{
@@ -4541,10 +6629,7 @@ const CharacterSheetWrapper = ({
                               overflow: "auto",
                             }}
                           >
-                            {(abilities || [])
-                              .filter((a) => a.type === "standard")
-                              .slice(0, 16)
-                              .map((ab) => {
+                            {abilityRollBonusOptions.map((ab) => {
                                 const id = ab.id ?? ab.name;
                                 const b = rollAbilityBoost[id] || {};
                                 return (
@@ -4567,162 +6652,118 @@ const CharacterSheetWrapper = ({
                                     >
                                       {ab.name}
                                     </span>
-                                    <label
-                                      style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "4px",
-                                        cursor: "pointer",
-                                      }}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={!!b.dice}
-                                        onChange={(e) =>
-                                          setRollAbilityBoost((p) => ({
-                                            ...p,
-                                            [id]: {
-                                              ...p[id],
-                                              dice: e.target.checked,
-                                              effect: !!p[id]?.effect,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                      +1d
-                                    </label>
-                                    <label
-                                      style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "4px",
-                                        cursor: "pointer",
-                                      }}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={!!b.effect}
-                                        onChange={(e) =>
-                                          setRollAbilityBoost((p) => ({
-                                            ...p,
-                                            [id]: {
-                                              ...p[id],
-                                              effect: e.target.checked,
-                                              dice: !!p[id]?.dice,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                      +1 effect
-                                    </label>
+                                    {ab.supportsDice ? (
+                                      <label
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "4px",
+                                          cursor: "pointer",
+                                        }}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={!!b.dice}
+                                          onChange={(e) =>
+                                            setRollAbilityBoost((p) => ({
+                                              ...p,
+                                              [id]: {
+                                                ...p[id],
+                                                dice: e.target.checked,
+                                                effect: !!p[id]?.effect,
+                                              },
+                                            }))
+                                          }
+                                        />
+                                        +1d
+                                      </label>
+                                    ) : null}
+                                    {ab.supportsEffect ? (
+                                      <label
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "4px",
+                                          cursor: "pointer",
+                                        }}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={!!b.effect}
+                                          onChange={(e) =>
+                                            setRollAbilityBoost((p) => ({
+                                              ...p,
+                                              [id]: {
+                                                ...p[id],
+                                                effect: e.target.checked,
+                                                dice: !!p[id]?.dice,
+                                              },
+                                            }))
+                                          }
+                                        />
+                                        +1 effect
+                                      </label>
+                                    ) : null}
                                   </div>
                                 );
                               })}
                           </div>
                         </div>
                       )}
-                      <div style={{ marginBottom: "12px" }}>
-                        <label
+                      <fieldset
+                        style={{
+                          border: "none",
+                          margin: 0,
+                          padding: 0,
+                          marginBottom: "12px",
+                        }}
+                      >
+                        <legend
                           style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "6px",
-                            fontSize: "12px",
-                            cursor: "pointer",
+                            fontSize: "11px",
+                            color: "#9ca3af",
+                            marginBottom: "6px",
+                            padding: 0,
                           }}
                         >
-                          <input
-                            type="checkbox"
-                            checked={rollModal.push_effect}
-                            onChange={(e) =>
-                              setRollModal((p) => ({
-                                ...p,
-                                push_effect: e.target.checked,
-                              }))
-                            }
-                          />
-                          Push for +1 effect (2 stress)
-                        </label>
-                        <label
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "6px",
-                            fontSize: "12px",
-                            cursor: "pointer",
-                            marginTop: "4px",
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={rollModal.push_dice}
-                            onChange={(e) => {
-                              setRollModal((p) => ({
-                                ...p,
-                                push_dice: e.target.checked,
-                              }));
-                              setPendingPushDice(e.target.checked);
-                            }}
-                          />
-                          Push for +1d (2 stress)
-                        </label>
-                        <div style={{ marginTop: "8px" }}>
-                          <span
-                            style={{
-                              fontSize: "11px",
-                              color: "#9ca3af",
-                              display: "block",
-                              marginBottom: "4px",
-                            }}
-                          >
-                            Assist (one teammate, +1d, helper pays 1 stress)
-                          </span>
-                          <select
-                            style={{ ...S.sel, width: "100%", maxWidth: 320 }}
-                            value={assistHelperId}
-                            onChange={(e) => setAssistHelperId(e.target.value)}
-                          >
-                            <option value="">No assist</option>
-                            {helpCandidates.map((c) => (
-                              <option key={c.id} value={String(c.id)}>
-                                {c.true_name || c.name || `PC ${c.id}`}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div style={{ marginTop: "10px" }}>
+                          Push / devil&apos;s bargain (choose at most one)
+                        </legend>
+                        {[
+                          ["none", harmLevel3Used ? "None (incapacitated cost still applies)" : "None"],
+                          ...(!harmLevel3Used
+                            ? [
+                                ["push_effect", "Push for +1 effect (2 stress)"],
+                                ["push_dice", "Push for +1d (2 stress)"],
+                              ]
+                            : []),
+                          [
+                            "devil",
+                            "Devil's bargain (+1d, table-determined consequence)",
+                          ],
+                        ].map(([value, label]) => (
                           <label
+                            key={value}
                             style={{
                               display: "flex",
                               alignItems: "center",
                               gap: "6px",
                               fontSize: "12px",
                               cursor: "pointer",
+                              marginTop: value === "none" ? 0 : "4px",
                             }}
                           >
                             <input
-                              type="checkbox"
-                              checked={rollModal.devil_bargain_dice}
-                              onChange={(e) => {
-                                const on = e.target.checked;
-                                const gm = gmDevilBargainText;
-                                setDevilBargainConfirmed(false);
-                                setRollModal((p) => ({
-                                  ...p,
-                                  devil_bargain_dice: on,
-                                  devil_bargain_note: on
-                                    ? gm ||
-                                      p.devil_bargain_note ||
-                                      pendingDevilsBargain ||
-                                      ""
-                                    : "",
-                                }));
-                                if (!on) setPendingDevilsBargain(null);
-                              }}
+                              type="radio"
+                              name="rollPushMode"
+                              checked={rollPushMode === value}
+                              onChange={() => applyRollPushMode(value)}
                             />
-                            Devil&apos;s bargain (+1d, table-determined
-                            consequence)
+                            {label}
                           </label>
+                        ))}
+                      </fieldset>
+                      <div style={{ marginBottom: "12px" }}>
+                        <div style={{ marginTop: "10px" }}>
                           {rollModal.devil_bargain_dice &&
                           gmDevilBargainText ? (
                             <div
@@ -4805,8 +6846,9 @@ const CharacterSheetWrapper = ({
                                 <span
                                   style={{ fontSize: "11px", color: "#f87171" }}
                                 >
-                                  Describe the consequence, or ask the referee to
-                                  set one for the session.
+                                  Describe the consequence below, or ask the
+                                  referee to set one when you have an active
+                                  session.
                                 </span>
                               )}
                             </div>
@@ -4839,6 +6881,18 @@ const CharacterSheetWrapper = ({
                           {rollApiError}
                         </div>
                       )}
+                      {pushWouldCauseTrauma && (
+                        <div
+                          style={{
+                            color: "#f59e0b",
+                            fontSize: "11px",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          Warning: paying this push stress will overflow your
+                          stress track and mark trauma.
+                        </div>
+                      )}
                       <div
                         style={{
                           display: "flex",
@@ -4849,9 +6903,6 @@ const CharacterSheetWrapper = ({
                         <button
                           onClick={handleRollWithSession}
                           disabled={
-                            (harmLevel3Used &&
-                              !rollModal.push_effect &&
-                              !rollModal.push_dice) ||
                             (rollModal.devil_bargain_dice &&
                               ((gmDevilBargainText && !devilBargainConfirmed) ||
                                 (!gmDevilBargainText &&
@@ -4874,9 +6925,6 @@ const CharacterSheetWrapper = ({
                             setRollApiError(null);
                             setRollAbilityBoost({});
                             setRollGoalDraft("");
-                            setAssistHelperId("");
-                            setPendingPushDice(false);
-                            setPendingDevilsBargain(null);
                             setDevilBargainConfirmed(false);
                             setRollModal({
                               push_effect: false,
@@ -4918,7 +6966,7 @@ const CharacterSheetWrapper = ({
                           : "Action Roll"}
                         {diceResult.zeroDice && (
                           <span style={{ color: "#f87171", marginLeft: "8px" }}>
-                            (0 Dice — take lower)
+                            (2d6 — lower counts)
                           </span>
                         )}
                         {diceResult.isDesperateAction && (
@@ -5049,6 +7097,68 @@ const CharacterSheetWrapper = ({
                                 Pay no stress AND remove one previously filled
                                 stress box.
                               </div>
+                              <div
+                                style={{
+                                  marginTop: "8px",
+                                  display: "grid",
+                                  gridTemplateColumns: "1fr auto",
+                                  gap: "8px",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <select
+                                  value={resistanceHarmTarget}
+                                  onChange={(e) =>
+                                    setResistanceHarmTarget(e.target.value)
+                                  }
+                                  style={{ ...S.sel, fontSize: "11px" }}
+                                >
+                                  <option value="">Harm to reduce…</option>
+                                  {filledHarmOptions.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  onClick={() => {
+                                    setResistanceApplyErr(null);
+                                    if (!resistanceHarmTarget) {
+                                      setResistanceApplyErr(
+                                        "Choose a harm level to reduce before resolving resistance.",
+                                      );
+                                      return;
+                                    }
+                                    const reduced =
+                                      clearHarmSlot(resistanceHarmTarget);
+                                    if (!reduced) {
+                                      setResistanceApplyErr(
+                                        "Selected harm slot is empty.",
+                                      );
+                                      return;
+                                    }
+                                    setStressFilled((prev) =>
+                                      Math.max(0, (Number(prev) || 0) - 1),
+                                    );
+                                    setDiceResult((prev) =>
+                                      prev
+                                        ? { ...prev, resistanceApplied: true }
+                                        : prev,
+                                    );
+                                  }}
+                                  disabled={!!diceResult.resistanceApplied}
+                                  style={{
+                                    ...S.btn,
+                                    background: "#92400e",
+                                    color: "#fff",
+                                    fontSize: "11px",
+                                  }}
+                                >
+                                  {diceResult.resistanceApplied
+                                    ? "Applied"
+                                    : "Reduce harm + clear 1 stress"}
+                                </button>
+                              </div>
                             </>
                           ) : (
                             <>
@@ -5071,24 +7181,79 @@ const CharacterSheetWrapper = ({
                                 Consequence reduced by 1 level (or fully negated
                                 at the table&apos;s discretion).
                               </div>
-                              <button
-                                onClick={() => {
-                                  const cost = diceResult.stressCost ?? 0;
-                                  setStressFilled((prev) =>
-                                    Math.min(maxStress, prev + cost),
-                                  );
-                                }}
+                              <div
                                 style={{
-                                  ...S.btn,
-                                  background: "#b45309",
-                                  color: "#fff",
-                                  fontSize: "11px",
+                                  display: "grid",
+                                  gridTemplateColumns: "1fr auto",
+                                  gap: "8px",
+                                  alignItems: "center",
                                 }}
                               >
-                                Apply {diceResult.stressCost} stress
-                              </button>
+                                <select
+                                  value={resistanceHarmTarget}
+                                  onChange={(e) =>
+                                    setResistanceHarmTarget(e.target.value)
+                                  }
+                                  style={{ ...S.sel, fontSize: "11px" }}
+                                >
+                                  <option value="">Harm to reduce…</option>
+                                  {filledHarmOptions.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  onClick={() => {
+                                    setResistanceApplyErr(null);
+                                    if (!resistanceHarmTarget) {
+                                      setResistanceApplyErr(
+                                        "Choose a harm level to reduce before marking stress.",
+                                      );
+                                      return;
+                                    }
+                                    const reduced =
+                                      clearHarmSlot(resistanceHarmTarget);
+                                    if (!reduced) {
+                                      setResistanceApplyErr(
+                                        "Selected harm slot is empty.",
+                                      );
+                                      return;
+                                    }
+                                    const cost = diceResult.stressCost ?? 0;
+                                    applyStressCost(cost);
+                                    setDiceResult((prev) =>
+                                      prev
+                                        ? { ...prev, resistanceApplied: true }
+                                        : prev,
+                                    );
+                                  }}
+                                  disabled={!!diceResult.resistanceApplied}
+                                  style={{
+                                    ...S.btn,
+                                    background: "#b45309",
+                                    color: "#fff",
+                                    fontSize: "11px",
+                                  }}
+                                >
+                                  {diceResult.resistanceApplied
+                                    ? "Applied"
+                                    : `Reduce harm + mark ${diceResult.stressCost} stress`}
+                                </button>
+                              </div>
                             </>
                           )}
+                          {resistanceApplyErr ? (
+                            <div
+                              style={{
+                                marginTop: "6px",
+                                color: "#fca5a5",
+                                fontSize: "11px",
+                              }}
+                            >
+                              {resistanceApplyErr}
+                            </div>
+                          ) : null}
                         </div>
                       )}
 
@@ -5139,6 +7304,26 @@ const CharacterSheetWrapper = ({
                   {charCampaign && activeSessionId && characterId && (
                     <div style={{ ...S.card, marginBottom: "12px" }}>
                       <span style={S.lbl}>CREW ACTIONS</span>
+                      {activeGroupAction?.id &&
+                      String(activeGroupAction.leader) !== String(characterId) ? (
+                        <div
+                          style={{
+                            marginTop: "8px",
+                            marginBottom: "8px",
+                            padding: "6px 8px",
+                            border: "1px solid #374151",
+                            borderRadius: "6px",
+                            background: "#0f172a",
+                            fontSize: "11px",
+                            color: "#93c5fd",
+                          }}
+                        >
+                          Group leader:{" "}
+                          <strong style={{ color: "#e5e7eb" }}>
+                            {activeGroupLeaderName}
+                          </strong>
+                        </div>
+                      ) : null}
                       <div
                         style={{
                           fontSize: "11px",
@@ -5156,12 +7341,110 @@ const CharacterSheetWrapper = ({
                         style={{
                           display: "flex",
                           flexWrap: "wrap",
-                          gap: "10px",
-                          alignItems: "flex-end",
-                          marginTop: "8px",
-                          fontSize: "12px",
+                          gap: "8px",
+                          alignItems: "center",
+                          marginBottom: "12px",
                         }}
                       >
+                        <select
+                          style={{ ...S.sel, width: "100%", maxWidth: 260 }}
+                          value={assistTargetId}
+                          onChange={(e) => setAssistTargetId(e.target.value)}
+                        >
+                          <option value="">Choose player for +1d</option>
+                          {helpCandidates.map((c) => (
+                            <option key={c.id} value={String(c.id)}>
+                              {c.true_name || c.name || `PC ${c.id}`}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          disabled={!assistTargetId || assistGrantBusy}
+                          onClick={async () => {
+                            if (!assistTargetId || !characterId) return;
+                            setAssistGrantErr(null);
+                            setAssistGrantMsg(null);
+                            setAssistGrantBusy(true);
+                            try {
+                              await characterAPI.assistHelp(
+                                parseInt(assistTargetId, 10),
+                                characterId,
+                              );
+                              applyStressCost(1);
+                              const target = helpCandidates.find(
+                                (c) => String(c.id) === String(assistTargetId),
+                              );
+                              setAssistGrantMsg(
+                                `+1d assist granted to ${target?.true_name || target?.name || "teammate"} (you marked 1 stress).`,
+                              );
+                              setAssistTargetId("");
+                              onCampaignRefresh?.();
+                            } catch (e) {
+                              setAssistGrantErr(e.message);
+                            } finally {
+                              setAssistGrantBusy(false);
+                            }
+                          }}
+                          style={{
+                            ...S.btn,
+                            background: "#0f766e",
+                            color: "#f8fafc",
+                            fontSize: "11px",
+                          }}
+                        >
+                          {assistGrantBusy ? "…" : "Grant +1d assist"}
+                        </button>
+                      </div>
+                      {assistGrantMsg ? (
+                        <div
+                          style={{
+                            fontSize: "11px",
+                            color: "#5eead4",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          {assistGrantMsg}
+                        </div>
+                      ) : null}
+                      {assistGrantErr ? (
+                        <div
+                          style={{
+                            fontSize: "11px",
+                            color: "#f87171",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          {assistGrantErr}
+                        </div>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowGroupActionCard((v) => !v)
+                        }
+                        style={{
+                          ...S.btn,
+                          background: "#4338ca",
+                          color: "#fff",
+                          fontSize: "11px",
+                        }}
+                      >
+                        {showGroupActionCard
+                          ? "Hide group action card"
+                          : "Open group action card"}
+                      </button>
+                      {showGroupActionCard && (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "10px",
+                            alignItems: "flex-end",
+                            marginTop: "8px",
+                            fontSize: "12px",
+                          }}
+                        >
                         <div style={{ flex: "1 1 200px" }}>
                           <span
                             style={{
@@ -5171,14 +7454,54 @@ const CharacterSheetWrapper = ({
                               marginBottom: "4px",
                             }}
                           >
+                            Group action roll (required)
+                          </span>
+                          <select
+                            style={{ ...S.sel, width: "100%", maxWidth: 320 }}
+                            value={groupActionNameDraft}
+                            disabled={!canEditGroupActionSetupFields}
+                            onChange={(e) =>
+                              setGroupActionNameDraft(e.target.value)
+                            }
+                          >
+                            <option value="">Choose action</option>
+                            {groupActionChoices.map((action) => (
+                              <option key={action} value={action}>
+                                {action}
+                              </option>
+                            ))}
+                          </select>
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              display: "block",
+                              marginBottom: "4px",
+                              marginTop: "8px",
+                            }}
+                          >
                             Group action goal
                           </span>
                           <input
                             style={{ ...S.inp, width: "100%", maxWidth: 320 }}
                             value={groupGoalDraft}
+                            disabled={!canEditGroupActionSetupFields}
                             onChange={(e) => setGroupGoalDraft(e.target.value)}
                             placeholder="Name the group action"
                           />
+                          {activeGroupAction?.id && !isOpenGroupLeader ? (
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                marginTop: "6px",
+                              }}
+                            >
+                              Only{" "}
+                              {activeGroupLeaderName || "the group leader"} can
+                              change the action or goal for this open group.
+                            </div>
+                          ) : null}
                           <div
                             style={{
                               display: "flex",
@@ -5190,7 +7513,11 @@ const CharacterSheetWrapper = ({
                           >
                             <button
                               type="button"
-                              disabled={groupBusy}
+                              disabled={
+                                groupBusy ||
+                                !groupActionNameDraft ||
+                                !!activeGroupAction?.id
+                              }
                               onClick={async () => {
                                 setGroupBusy(true);
                                 try {
@@ -5198,6 +7525,7 @@ const CharacterSheetWrapper = ({
                                   const ga = await groupActionAPI.create({
                                     session: activeSessionId,
                                     leader: characterId,
+                                    action_name: groupActionNameDraft.toLowerCase(),
                                     goal_label: groupGoalDraft.trim(),
                                   });
                                   setActiveGroupAction(ga);
@@ -5221,15 +7549,75 @@ const CharacterSheetWrapper = ({
                               <span
                                 style={{ fontSize: "10px", color: "#a78bfa" }}
                               >
-                                Open group #{activeGroupAction.id} — rolls
-                                attach until resolved.
+                                Open group #{activeGroupAction.id} ({String(activeGroupAction.action_name || "").toUpperCase()}) — {groupPendingCount} pending, {groupFailures} fail.
                               </span>
                             )}
-                            {activeGroupAction?.id && isGM && (
+                            {activeGroupAction?.id && (
                               <button
                                 type="button"
+                                onClick={() =>
+                                  rollDice(
+                                    String(activeGroupAction.action_name || "").toLowerCase(),
+                                    0,
+                                    false,
+                                    false,
+                                    activeGroupAction.id,
+                                  )
+                                }
+                                style={{
+                                  ...S.btn,
+                                  fontSize: "11px",
+                                  background: "#0f766e",
+                                  color: "#ecfeff",
+                                }}
+                                title="Roll this group's chosen action"
+                              >
+                                Roll {String(activeGroupAction.action_name || "").toUpperCase()} 🎲
+                              </button>
+                            )}
+                            {activeGroupAction?.id && isOpenGroupLeader && (
+                              <button
+                                type="button"
+                                disabled={groupBusy}
                                 onClick={async () => {
+                                  setGroupBusy(true);
                                   try {
+                                    setGroupActionErr(null);
+                                    await groupActionAPI.cancel(
+                                      activeGroupAction.id,
+                                    );
+                                    setActiveGroupAction(null);
+                                    onCampaignRefresh?.();
+                                  } catch (e) {
+                                    setGroupActionErr(e.message);
+                                  } finally {
+                                    setGroupBusy(false);
+                                  }
+                                }}
+                                style={{
+                                  ...S.btn,
+                                  fontSize: "11px",
+                                  background: "#1f2937",
+                                  color: "#e5e7eb",
+                                  border: "1px solid #6b7280",
+                                }}
+                              >
+                                {groupBusy ? "…" : "Cancel group action"}
+                              </button>
+                            )}
+                            {activeGroupAction?.id &&
+                              !groupActionLoading &&
+                              groupPendingCount === 0 &&
+                              (isGM ||
+                                String(activeGroupAction.leader) ===
+                                  String(characterId)) && (
+                              <button
+                                type="button"
+                                disabled={groupBusy}
+                                onClick={async () => {
+                                  setGroupBusy(true);
+                                  try {
+                                    setGroupActionErr(null);
                                     await groupActionAPI.resolve(
                                       activeGroupAction.id,
                                     );
@@ -5237,6 +7625,8 @@ const CharacterSheetWrapper = ({
                                     onCampaignRefresh?.();
                                   } catch (e) {
                                     setGroupActionErr(e.message);
+                                  } finally {
+                                    setGroupBusy(false);
                                   }
                                 }}
                                 style={{
@@ -5246,7 +7636,7 @@ const CharacterSheetWrapper = ({
                                   color: "#fff",
                                 }}
                               >
-                                Resolve
+                                {groupBusy ? "…" : "Resolve"}
                               </button>
                             )}
                           </div>
@@ -5262,7 +7652,98 @@ const CharacterSheetWrapper = ({
                             </div>
                           )}
                         </div>
-                      </div>
+                        </div>
+                      )}
+                      {showGroupActionCard && activeGroupAction?.id && (
+                        <div
+                          style={{
+                            marginTop: "8px",
+                            background: "#0f172a",
+                            border: "1px solid #334155",
+                            borderRadius: "6px",
+                            padding: "8px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "11px",
+                              color: "#cbd5e1",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            Group roll board ({String(activeGroupAction.action_name || "").toUpperCase()})
+                          </div>
+                          {groupActionLoading ? (
+                            <div style={{ fontSize: "11px", color: "#94a3b8" }}>
+                              Loading group rolls…
+                            </div>
+                          ) : (
+                            <div
+                              style={{
+                                display: "grid",
+                                gap: "6px",
+                              }}
+                            >
+                              {groupRollBoard.map((row) => (
+                                <div
+                                  key={row.id}
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    fontSize: "11px",
+                                    background: "#111827",
+                                    border: "1px solid #374151",
+                                    borderRadius: "4px",
+                                    padding: "6px 8px",
+                                  }}
+                                >
+                                  <span style={{ color: "#e5e7eb" }}>
+                                    {row.name}
+                                  </span>
+                                  {!row.roll ? (
+                                    <span style={{ color: "#9ca3af" }}>
+                                      Pending
+                                    </span>
+                                  ) : (
+                                    (() => {
+                                      const diceStr = (
+                                        row.roll.results || []
+                                      ).join(", ");
+                                      const meta =
+                                        GROUP_ROLL_BOARD_BAND[
+                                          row.outcomeBand || "fail"
+                                        ] || GROUP_ROLL_BOARD_BAND.fail;
+                                      return (
+                                        <span
+                                          style={{
+                                            color: meta.color,
+                                            fontWeight:
+                                              row.outcomeBand === "critical"
+                                                ? 600
+                                                : undefined,
+                                          }}
+                                        >
+                                          {meta.label} ({diceStr})
+                                        </span>
+                                      );
+                                    })()
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div
+                            style={{
+                              marginTop: "8px",
+                              fontSize: "10px",
+                              color: "#93c5fd",
+                            }}
+                          >
+                            Leader marks {groupFailures} stress on resolve (1 per non-leader fail).
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -5352,6 +7833,392 @@ const CharacterSheetWrapper = ({
                       </div>
                     </div>
                   )}
+
+                  {/* Vice roll — stress relief (downtime / table agreement) */}
+                  <div
+                    style={{
+                      marginBottom: "14px",
+                      background: "#1f2937",
+                      border: "1px solid #374151",
+                      borderRadius: "6px",
+                      padding: "10px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: "#f87171",
+                        fontSize: "11px",
+                        fontWeight: "bold",
+                        marginBottom: "6px",
+                        display: "block",
+                      }}
+                    >
+                      VICE ROLL
+                    </span>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "#9ca3af",
+                        lineHeight: 1.45,
+                        marginBottom: "8px",
+                      }}
+                    >
+                      Roll dice equal to your{" "}
+                      <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
+                        lowest attribute
+                      </span>{" "}
+                      (Insight / Prowess / Resolve). Clear stress equal to the{" "}
+                      <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
+                        highest die
+                      </span>
+                      . If that number is greater than stress you had marked, you{" "}
+                      <span style={{ color: "#fbbf24", fontWeight: "bold" }}>
+                        overindulge
+                      </span>
+                      . Skipping vice in downtime: take stress equal to your trauma
+                      ({traumaMarkedCount}); no trauma means vice cannot force stress
+                      yet.
+                    </div>
+                    {String(charData.vice || "").trim() ? (
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#a78bfa",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        Vice on sheet: {String(charData.vice).trim()}
+                      </div>
+                    ) : null}
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "#d1d5db",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      Pool:{" "}
+                      <span style={{ color: "#a78bfa", fontWeight: "bold" }}>
+                        {viceDicePool}d
+                      </span>
+                      <span style={{ color: "#6b7280" }}>
+                        {" "}
+                        (Insight {viceAttributeDice[0]?.dice ?? 0} · Prowess{" "}
+                        {viceAttributeDice[1]?.dice ?? 0} · Resolve{" "}
+                        {viceAttributeDice[2]?.dice ?? 0})
+                        {viceLowestLabels
+                          ? ` — lowest: ${viceLowestLabels}`
+                          : ""}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDiceResult(null);
+                        const pool = viceDicePool;
+                        let dice;
+                        let highest;
+                        const zeroDice = pool === 0;
+                        if (zeroDice) {
+                          const d1 = Math.floor(Math.random() * 6) + 1;
+                          const d2 = Math.floor(Math.random() * 6) + 1;
+                          highest = Math.min(d1, d2);
+                          dice = [d1, d2];
+                        } else {
+                          dice = Array.from(
+                            { length: pool },
+                            () => Math.floor(Math.random() * 6) + 1,
+                          );
+                          highest = Math.max(...dice);
+                        }
+                        const stressBefore = Number(stressFilled) || 0;
+                        const wouldOverindulge = highest > stressBefore;
+                        setViceRollResult({
+                          dice,
+                          highest,
+                          dicePool: pool,
+                          zeroDice,
+                          wouldOverindulge,
+                          stressBefore,
+                          applied: false,
+                          overindulge: "",
+                          wantedApplyErr: null,
+                          viceApplyErr: null,
+                        });
+                      }}
+                      style={{
+                        ...S.btn,
+                        background: "#7c3aed",
+                        color: "#fff",
+                        fontSize: "11px",
+                      }}
+                    >
+                      Vice roll
+                    </button>
+                    {viceRollResult ? (
+                      <div
+                        style={{
+                          marginTop: "10px",
+                          padding: "8px",
+                          borderRadius: "4px",
+                          background: "#0d1117",
+                          border: "1px solid #374151",
+                          fontSize: "11px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "4px",
+                            flexWrap: "wrap",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          {viceRollResult.dice.map((die, i) => (
+                            <span
+                              key={i}
+                              style={{
+                                display: "inline-flex",
+                                width: "24px",
+                                height: "24px",
+                                borderRadius: "4px",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontWeight: "bold",
+                                border: "1px solid",
+                                background:
+                                  die === 6
+                                    ? "#166534"
+                                    : die >= 4
+                                      ? "#1e3a8a"
+                                      : "#374151",
+                                borderColor:
+                                  die === 6
+                                    ? "#22c55e"
+                                    : die >= 4
+                                      ? "#3b82f6"
+                                      : "#6b7280",
+                              }}
+                            >
+                              {die}
+                            </span>
+                          ))}
+                        </div>
+                        {viceRollResult.zeroDice ? (
+                          <div style={{ color: "#f87171", marginBottom: "4px" }}>
+                            0 rating — rolled 2d, took lower
+                          </div>
+                        ) : null}
+                        <div style={{ color: "#e5e7eb", marginBottom: "4px" }}>
+                          Highest:{" "}
+                          <strong style={{ color: "#34d399" }}>
+                            {viceRollResult.highest}
+                          </strong>{" "}
+                          → clear that many stress (cap at what you had:{" "}
+                          {viceRollResult.stressBefore} marked).
+                        </div>
+                        {viceRollResult.wouldOverindulge ? (
+                          <div
+                            style={{
+                              color: "#fbbf24",
+                              marginBottom: "6px",
+                              fontWeight: "bold",
+                            }}
+                          >
+                            Overindulgence: you cleared more stress than you had marked —
+                            bad call from vice. Choose an outcome below with the table/GM.
+                          </div>
+                        ) : null}
+                        {viceRollResult.wouldOverindulge &&
+                        !viceRollResult.applied ? (
+                          <select
+                            value={viceRollResult.overindulge || ""}
+                            onChange={(e) =>
+                              setViceRollResult((p) =>
+                                p
+                                  ? {
+                                      ...p,
+                                      overindulge: e.target.value,
+                                      wantedApplyErr: null,
+                                      viceApplyErr: null,
+                                    }
+                                  : p,
+                              )
+                            }
+                            style={{
+                              ...S.sel,
+                              width: "100%",
+                              maxWidth: "100%",
+                              fontSize: "11px",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            {VICE_OVERINDULGE_CHOICES.map((o) => (
+                              <option key={o.value || "none"} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                        {viceRollResult.wouldOverindulge &&
+                        viceRollResult.applied &&
+                        viceRollResult.overindulge ? (
+                          <div
+                            style={{
+                              padding: "6px 8px",
+                              marginBottom: "8px",
+                              borderRadius: "4px",
+                              background: "#422006",
+                              border: "1px solid #a16207",
+                              color: "#fde68a",
+                              fontSize: "11px",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            <strong>Overindulgence:</strong>{" "}
+                            {viceOverindulgeLabel(viceRollResult.overindulge)}
+                          </div>
+                        ) : null}
+                        {viceRollResult.wouldOverindulge &&
+                        viceRollResult.overindulge === "brag" ? (
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#93c5fd",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            Apply will bump this campaign&rsquo;s wanted stars by +2
+                            (caps at 5) before stress clears.
+                          </div>
+                        ) : null}
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "8px",
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            disabled={!!viceRollResult.applied}
+                            onClick={async () => {
+                              if (!viceRollResult || viceRollResult.applied) return;
+                              if (
+                                viceRollResult.wouldOverindulge &&
+                                !String(
+                                  viceRollResult.overindulge || "",
+                                ).trim()
+                              ) {
+                                setViceRollResult((p) =>
+                                  p
+                                    ? {
+                                        ...p,
+                                        viceApplyErr:
+                                          "Choose an overindulgence consequence before applying.",
+                                      }
+                                    : p,
+                                );
+                                return;
+                              }
+                              const hi = viceRollResult.highest;
+                              const bumpWanted =
+                                viceRollResult.wouldOverindulge &&
+                                viceRollResult.overindulge === "brag";
+                              try {
+                                setViceRollResult((p) =>
+                                  p ? { ...p, viceApplyErr: null } : p,
+                                );
+                                if (bumpWanted) {
+                                  if (!charCampaign?.id) {
+                                    setViceRollResult((p) =>
+                                      p
+                                        ? {
+                                            ...p,
+                                            wantedApplyErr:
+                                              "No campaign linked; wanted stars not updated.",
+                                          }
+                                        : p,
+                                    );
+                                    return;
+                                  }
+                                  await campaignAPI.incrementCampaignWanted(
+                                    charCampaign.id,
+                                    { amount: 2, cap: 5 },
+                                  );
+                                  onCampaignRefresh?.();
+                                }
+                                setStressFilled((prev) =>
+                                  Math.max(0, (Number(prev) || 0) - hi),
+                                );
+                                setViceRollResult((p) =>
+                                  p
+                                    ? {
+                                        ...p,
+                                        applied: true,
+                                        wantedApplyErr: null,
+                                        viceApplyErr: null,
+                                      }
+                                    : p,
+                                );
+                              } catch (e) {
+                                setViceRollResult((p) =>
+                                  p
+                                    ? {
+                                        ...p,
+                                        wantedApplyErr:
+                                          e.message ||
+                                          "Could not update campaign wanted stars.",
+                                      }
+                                    : p,
+                                );
+                              }
+                            }}
+                            style={{
+                              ...S.btn,
+                              background: "#059669",
+                              color: "#fff",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {viceRollResult.applied
+                              ? "Stress cleared"
+                              : `Apply −${viceRollResult.highest} stress`}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setViceRollResult(null)}
+                            style={{ ...S.btn, fontSize: "11px" }}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                        {viceRollResult.viceApplyErr ? (
+                          <div
+                            style={{
+                              marginTop: "8px",
+                              color: "#fca5a5",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {viceRollResult.viceApplyErr}
+                          </div>
+                        ) : null}
+                        {viceRollResult.wantedApplyErr ? (
+                          <div
+                            style={{
+                              marginTop: "8px",
+                              color: "#fca5a5",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {viceRollResult.wantedApplyErr}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
 
                   {/* Abilities */}
                   <div style={{ marginBottom: "14px" }}>
@@ -6779,6 +9646,35 @@ const CharacterSheetWrapper = ({
                           <div style={{ fontSize: "10px", color: "#6b7280" }}>
                             {clk.filled}/{clk.segments}
                           </div>
+                          <label
+                            style={{
+                              display: "flex",
+                              justifyContent: "center",
+                              alignItems: "center",
+                              gap: "4px",
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              marginTop: "2px",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={!!clk.visible_to_party}
+                              onChange={(e) =>
+                                setClocks((p) =>
+                                  p.map((c) =>
+                                    c.id === clk.id
+                                      ? {
+                                          ...c,
+                                          visible_to_party: e.target.checked,
+                                        }
+                                      : c,
+                                  ),
+                                )
+                              }
+                            />
+                            Shared party
+                          </label>
                           <button
                             onClick={() =>
                               setClocks((p) => p.filter((c) => c.id !== clk.id))
@@ -6796,34 +9692,126 @@ const CharacterSheetWrapper = ({
                         </div>
                       ))}
                     </div>
-                    <button
-                      onClick={addClock}
-                      style={{
-                        ...S.btn,
-                        border: "2px dashed #374151",
-                        background: "transparent",
-                        color: "#6b7280",
-                        width: "100%",
-                        padding: "6px",
-                      }}
-                    >
-                      + Add Clock
-                    </button>
+                    {!clockEditorOpen ? (
+                      <button
+                        onClick={() => setClockEditorOpen(true)}
+                        style={{
+                          ...S.btn,
+                          border: "2px dashed #374151",
+                          background: "transparent",
+                          color: "#6b7280",
+                          width: "100%",
+                          padding: "6px",
+                        }}
+                      >
+                        + Add Clock
+                      </button>
+                    ) : (
+                      <div
+                        style={{
+                          border: "1px solid #374151",
+                          borderRadius: "6px",
+                          padding: "10px",
+                          background: "#0b1220",
+                          display: "grid",
+                          gap: "8px",
+                        }}
+                      >
+                        <div>
+                          <span style={S.lbl}>Clock name</span>
+                          <input
+                            style={S.inp}
+                            value={newClockName}
+                            onChange={(e) => setNewClockName(e.target.value)}
+                            placeholder="e.g. Infiltrate estate"
+                            maxLength={64}
+                          />
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                          <div>
+                            <span style={S.lbl}>Segments</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={12}
+                              style={S.inp}
+                              value={newClockSegments}
+                              onChange={(e) =>
+                                setNewClockSegments(
+                                  Math.max(1, Math.min(12, Number(e.target.value) || 1)),
+                                )
+                              }
+                            />
+                          </div>
+                          <div style={{ display: "flex", alignItems: "end" }}>
+                            <label
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                fontSize: "12px",
+                                color: "#9ca3af",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={newClockShared}
+                                onChange={(e) => setNewClockShared(e.target.checked)}
+                              />
+                              Shared party
+                            </label>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                          <button
+                            onClick={() => {
+                              setClockEditorOpen(false);
+                              setNewClockName("");
+                              setNewClockSegments(4);
+                              setNewClockShared(false);
+                            }}
+                            style={S.btnGhost}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={addClock}
+                            disabled={!String(newClockName || "").trim()}
+                            style={{
+                              ...S.btnPrimary,
+                              opacity: String(newClockName || "").trim() ? 1 : 0.5,
+                              cursor: String(newClockName || "").trim()
+                                ? "pointer"
+                                : "not-allowed",
+                            }}
+                          >
+                            Create clock
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Shared campaign clocks the table exposes to players (read-only here unless you are the referee). */}
+                  {/* Shared party clocks (player/crew-authored clocks; GM-created clocks live in SESSION > Clocks). */}
                   {charCampaign?.progress_clocks?.length > 0 &&
                     (() => {
-                      const gmClocks = (
-                        charCampaign.progress_clocks || []
-                      ).filter(
-                        (clk) =>
-                          clk.created_by == null && clk.visible_to_players,
-                      );
-                      if (gmClocks.length === 0) return null;
+                      const gmId = Number(charCampaign?.gm);
+                      const partyClocks = (charCampaign.progress_clocks || [])
+                        .filter((clk) => {
+                          const creator = Number(clk.created_by);
+                          return creator && creator !== gmId;
+                        })
+                        .filter((clk) => {
+                          if (isGM) return true;
+                          return (
+                            Number(clk.created_by) === Number(user?.id) ||
+                            !!clk.visible_to_party
+                          );
+                        });
+                      if (partyClocks.length === 0) return null;
                       return (
                         <div style={{ marginBottom: "14px" }}>
-                          <span style={S.lbl}>SHARED CLOCKS</span>
+                          <span style={S.lbl}>Shared party clocks</span>
                           <div
                             style={{
                               display: "flex",
@@ -6832,8 +9820,9 @@ const CharacterSheetWrapper = ({
                               marginTop: "6px",
                             }}
                           >
-                            {gmClocks.map((clk) => {
-                              const canEdit = isGM;
+                            {partyClocks.map((clk) => {
+                              const canEdit =
+                                isGM || Number(clk.created_by) === Number(user?.id);
                               return (
                                 <div
                                   key={clk.id}
@@ -6888,6 +9877,33 @@ const CharacterSheetWrapper = ({
                                   >
                                     {clk.filled_segments}/{clk.max_segments}
                                   </div>
+                                  <label
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      gap: 4,
+                                      marginTop: 4,
+                                      fontSize: "10px",
+                                      color: "#9ca3af",
+                                      cursor: canEdit ? "pointer" : "default",
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={!!clk.visible_to_party}
+                                      disabled={!canEdit}
+                                      onChange={(e) => {
+                                        progressClockAPI
+                                          .updateProgressClock(clk.id, {
+                                            visible_to_party: e.target.checked,
+                                          })
+                                          .then(() => onCampaignRefresh?.())
+                                          .catch(() => {});
+                                      }}
+                                    />
+                                    Shared party
+                                  </label>
                                 </div>
                               );
                             })}
@@ -6895,72 +9911,6 @@ const CharacterSheetWrapper = ({
                         </div>
                       );
                     })()}
-
-                  {/* Bonus Dice — Push Yourself & Devil's Bargain buttons */}
-                  <div style={{ fontSize: "12px", marginBottom: "12px" }}>
-                    <span style={S.lbl}>BONUS DICE</span>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "8px",
-                        marginTop: "4px",
-                        flexWrap: "wrap",
-                        alignItems: "center",
-                      }}
-                    >
-                      <button
-                        onClick={() => setPendingPushDice((p) => !p)}
-                        style={{
-                          ...S.btn,
-                          padding: "6px 12px",
-                          fontSize: "11px",
-                          background: pendingPushDice ? "#166534" : "#374151",
-                          borderColor: pendingPushDice ? "#22c55e" : "#4b5563",
-                          color: "#fff",
-                        }}
-                        title="2 Stress for +1d on next roll"
-                      >
-                        PUSH YOURSELF {pendingPushDice && "✓"}
-                      </button>
-                      <span style={{ color: "#6b7280", fontSize: "11px" }}>
-                        — or —
-                      </span>
-                      <button
-                        onClick={() => setShowDevilsBargainModal(true)}
-                        style={{
-                          ...S.btn,
-                          padding: "6px 12px",
-                          fontSize: "11px",
-                          background: pendingDevilsBargain
-                            ? "#7c3aed"
-                            : "#374151",
-                          borderColor: pendingDevilsBargain
-                            ? "#a78bfa"
-                            : "#4b5563",
-                          color: "#fff",
-                        }}
-                        title="Choose a detriment for +1d on next roll"
-                      >
-                        DEVIL'S BARGAIN{" "}
-                        {pendingDevilsBargain
-                          ? `(${pendingDevilsBargain})`
-                          : ""}
-                      </button>
-                    </div>
-                    <div
-                      style={{
-                        color: "#9ca3af",
-                        marginTop: "6px",
-                        fontSize: "11px",
-                        lineHeight: 1.4,
-                      }}
-                    >
-                      Shortcuts for your next{" "}
-                      <strong style={{ color: "#d1d5db" }}>dice pool</strong>{" "}
-                      (click 🎲 on an action). Assist is set in the pool, not
-                      here.
-                    </div>
-                  </div>
 
                   {/* Devil's Bargain modal (above dice pool overlay when both open) */}
                   {showDevilsBargainModal && (
@@ -7016,7 +9966,6 @@ const CharacterSheetWrapper = ({
                               key={detriment}
                               type="button"
                               onClick={() => {
-                                setPendingDevilsBargain(detriment);
                                 if (rollPending) {
                                   setRollModal((p) => ({
                                     ...p,
@@ -7042,7 +9991,6 @@ const CharacterSheetWrapper = ({
                               const c = prompt("Custom detriment:");
                               if (c?.trim()) {
                                 const t = c.trim();
-                                setPendingDevilsBargain(t);
                                 if (rollPending) {
                                   setRollModal((p) => ({
                                     ...p,
@@ -7174,6 +10122,114 @@ const CharacterSheetWrapper = ({
               </div>
             </div>
             </div>
+            {portraitUrlModalOpen && canEditSheet && (
+              <div
+                role="presentation"
+                onClick={() => setPortraitUrlModalOpen(false)}
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  background: "rgba(0,0,0,0.65)",
+                  zIndex: 200,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "16px",
+                }}
+              >
+                <div
+                  role="dialog"
+                  aria-label="Portrait image URL"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    background: "#111827",
+                    border: "1px solid #374151",
+                    borderRadius: 8,
+                    padding: 14,
+                    maxWidth: 420,
+                    width: "100%",
+                    boxShadow: "0 14px 40px rgba(0,0,0,0.55)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: "bold",
+                      color: "#a78bfa",
+                      marginBottom: 8,
+                      fontSize: 13,
+                    }}
+                  >
+                    Portrait URL
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#9ca3af",
+                      marginBottom: 8,
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    Paste a direct image link. It updates preview and saves with your
+                    sheet (same as other edits).
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="url"
+                    value={portraitUrlDraft}
+                    onChange={(e) => setPortraitUrlDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        savePortraitUrlFromModal();
+                      }
+                    }}
+                    placeholder="https://example.com/portrait.jpg"
+                    style={{
+                      ...S.inp,
+                      width: "100%",
+                      boxSizing: "border-box",
+                      marginBottom: 10,
+                      fontSize: 12,
+                    }}
+                    autoComplete="off"
+                    autoFocus
+                  />
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      justifyContent: "flex-end",
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                    }}
+                  >
+                    <span style={{ fontSize: 10, color: "#6b7280", marginRight: "auto" }}>
+                      Esc to close
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPortraitUrlModalOpen(false)}
+                      style={{ ...S.btn, fontSize: 11 }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!String(portraitUrlDraft || "").trim()}
+                      onClick={savePortraitUrlFromModal}
+                      style={{
+                        ...S.btn,
+                        fontSize: 11,
+                        background: "#7c3aed",
+                        color: "#fff",
+                      }}
+                    >
+                      Save URL
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -7194,17 +10250,227 @@ const CharacterSheetWrapper = ({
                     placeholder="Crew Name"
                   />
                 </div>
-                <div>
-                  <span style={S.lbl}>REPUTATION</span>
-                  <input
-                    style={S.inp}
-                    value={crewData.reputation}
-                    onChange={(e) =>
-                      setCrewData((p) => ({ ...p, reputation: e.target.value }))
-                    }
-                    placeholder="Crew Reputation"
-                  />
+              </div>
+              <div
+                style={{
+                  marginTop: "12px",
+                  paddingTop: "12px",
+                  borderTop: "1px solid #374151",
+                }}
+              >
+                <span style={S.lbl}>FACTION REPUTATION</span>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "#9ca3af",
+                    marginTop: "4px",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Standing with campaign factions (-3 hostile, 0 neutral, +3
+                  allied). Hidden factions are GM-only until revealed.
                 </div>
+                {crewFactionLinks.length === 0 ? (
+                  <div style={{ fontSize: "12px", color: "#6b7280" }}>
+                    No linked factions yet.
+                    {isGM && campaignId
+                      ? " Create a faction for the campaign, then link it to this crew."
+                      : ""}
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "8px",
+                    }}
+                  >
+                    {crewFactionLinks.map((row) => (
+                      <div
+                        key={row.id}
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                          gap: "10px",
+                          fontSize: "12px",
+                          background: "#111827",
+                          padding: "8px",
+                          borderRadius: "6px",
+                          border: "1px solid #374151",
+                        }}
+                      >
+                        <span style={{ fontWeight: 600, color: "#e5e7eb" }}>
+                          {row.faction_name}
+                        </span>
+                        <span style={{ color: "#9ca3af" }}>
+                          {row.reputation_value}{" "}
+                          <span style={{ color: "#6b7280" }}>
+                            ({reputationTierLabel(row.reputation_value)})
+                          </span>
+                        </span>
+                        {isGM && charData.crewId ? (
+                          <>
+                            <label
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                fontSize: "11px",
+                              }}
+                            >
+                              Rep
+                              <input
+                                type="number"
+                                min={-3}
+                                max={3}
+                                defaultValue={row.reputation_value}
+                                key={`${row.id}-${row.reputation_value}`}
+                                style={{
+                                  width: "52px",
+                                  background: "#0d1117",
+                                  color: "#fff",
+                                  border: "1px solid #4b5563",
+                                  borderRadius: "4px",
+                                  padding: "2px 4px",
+                                }}
+                                onBlur={(e) => {
+                                  const v = Math.min(
+                                    3,
+                                    Math.max(
+                                      -3,
+                                      parseInt(e.target.value, 10) || 0,
+                                    ),
+                                  );
+                                  crewAPI
+                                    .patchCrew(charData.crewId, {
+                                      faction_relationships: [
+                                        {
+                                          faction_id: row.faction_id,
+                                          reputation_value: v,
+                                        },
+                                      ],
+                                    })
+                                    .then(() =>
+                                      crewAPI.getCrew(charData.crewId).then((d) => {
+                                        setCrewFactionLinks(
+                                          d.faction_relationships || [],
+                                        );
+                                      }),
+                                    )
+                                    .catch(() => {});
+                                }}
+                              />
+                            </label>
+                            <button
+                              type="button"
+                              style={{
+                                ...S.btn,
+                                fontSize: "10px",
+                                padding: "2px 8px",
+                              }}
+                              onClick={() => {
+                                factionAPI
+                                  .patchFaction(row.faction_id, {
+                                    visible_to_players: !row.visible_to_players,
+                                  })
+                                  .then(() =>
+                                    crewAPI.getCrew(charData.crewId).then((d) => {
+                                      setCrewFactionLinks(
+                                        d.faction_relationships || [],
+                                      );
+                                    }),
+                                  )
+                                  .catch(() => {});
+                              }}
+                            >
+                              {row.visible_to_players
+                                ? "Hide from players"
+                                : "Reveal to players"}
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {isGM && campaignId && charData.crewId ? (
+                  <div
+                    style={{
+                      marginTop: "10px",
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: "8px",
+                      alignItems: "center",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      style={{ ...S.btn, fontSize: "11px" }}
+                      onClick={() => {
+                        const name = prompt("New faction name?");
+                        if (!name?.trim()) return;
+                        factionAPI
+                          .createFaction({
+                            campaign: parseInt(String(campaignId), 10),
+                            name: name.trim(),
+                            visible_to_players: false,
+                          })
+                              .then((created) => {
+                            const fid = created?.id ?? created?.pk;
+                            if (!fid) return;
+                            return crewAPI
+                              .patchCrew(charData.crewId, {
+                                faction_relationships: [
+                                  {
+                                    faction_id: fid,
+                                    reputation_value: 0,
+                                  },
+                                ],
+                              })
+                              .then(() =>
+                                crewAPI
+                                  .getCrew(charData.crewId)
+                                  .then((crewRes) => {
+                                    setCrewFactionLinks(
+                                      crewRes.faction_relationships || [],
+                                    );
+                                  }),
+                              );
+                          })
+                          .catch(() => {});
+                      }}
+                    >
+                      + Create hidden faction and link
+                    </button>
+                    <button
+                      type="button"
+                      style={{ ...S.btn, fontSize: "11px" }}
+                      onClick={() => {
+                        const raw = prompt(
+                          "Link existing faction: enter faction ID",
+                        );
+                        if (!raw?.trim()) return;
+                        const fid = parseInt(raw.trim(), 10);
+                        if (!Number.isFinite(fid)) return;
+                        crewAPI
+                          .patchCrew(charData.crewId, {
+                            faction_relationships: [
+                              { faction_id: fid, reputation_value: 0 },
+                            ],
+                          })
+                          .then(() =>
+                            crewAPI.getCrew(charData.crewId).then((d) => {
+                              setCrewFactionLinks(d.faction_relationships || []);
+                            }),
+                          )
+                          .catch(() => {});
+                      }}
+                    >
+                      Link faction by ID
+                    </button>
+                  </div>
+                ) : null}
               </div>
               <div
                 style={{
@@ -7282,6 +10548,80 @@ const CharacterSheetWrapper = ({
                 ))}
               </div>
             </div>
+            {charData.crewId ? (
+              <div
+                style={{
+                  ...S.card,
+                  marginBottom: "12px",
+                  maxHeight: "220px",
+                  overflow: "auto",
+                }}
+              >
+                <span style={S.lbl}>CREW MODIFICATION HISTORY</span>
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "#6b7280",
+                    marginTop: "4px",
+                    marginBottom: "8px",
+                  }}
+                >
+                  Saved changes to this crew (name, rep, turf, tier, wanted,
+                  coin, notes, upgrades, etc.).
+                </div>
+                {crewHistoryEntries.length === 0 ? (
+                  <div style={{ fontSize: "12px", color: "#6b7280" }}>
+                    No history entries yet.
+                  </div>
+                ) : (
+                  <ul
+                    style={{
+                      margin: 0,
+                      paddingLeft: "18px",
+                      fontSize: "11px",
+                      color: "#d1d5db",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {crewHistoryEntries.map((entry) => {
+                      const cf = entry.changed_fields || {};
+                      const keys = Object.keys(cf).filter((k) =>
+                        CREW_HISTORY_FIELD_KEYS.has(k),
+                      );
+                      if (!keys.length) return null;
+                      const when = entry.timestamp
+                        ? new Date(entry.timestamp).toLocaleString()
+                        : "";
+                      return (
+                        <li key={entry.id} style={{ marginBottom: "8px" }}>
+                          <div style={{ color: "#9ca3af" }}>
+                            {when}
+                            {entry.editor_username
+                              ? ` · ${entry.editor_username}`
+                              : ""}
+                          </div>
+                          {keys.map((k) => {
+                            const ch = cf[k] || {};
+                            return (
+                              <div key={k}>
+                                <strong>{k}</strong>:{" "}
+                                <span style={{ color: "#fca5a5" }}>
+                                  {String(ch.old ?? "")}
+                                </span>{" "}
+                                →{" "}
+                                <span style={{ color: "#86efac" }}>
+                                  {String(ch.new ?? "")}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            ) : null}
             <div style={S.g3}>
               <div style={S.card}>
                 <span style={S.lbl}>SPECIAL ABILITIES</span>

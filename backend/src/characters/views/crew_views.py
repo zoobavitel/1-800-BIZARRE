@@ -15,6 +15,7 @@ _CREW_MEMBER_ALLOWED_PATCH_FIELDS = frozenset(
         "name",
         "stash_slots",
         "description",
+        "notes",
         "upgrade_progress",
         "xp",
         "xp_track_size",
@@ -22,6 +23,7 @@ _CREW_MEMBER_ALLOWED_PATCH_FIELDS = frozenset(
         "level",
         "hold",
         "rep",
+        "turf",
         "wanted_level",
         "coin",
         "stash",
@@ -40,12 +42,17 @@ class CrewViewSet(viewsets.ModelViewSet):
         # Filter crews based on user permissions
         user = self.request.user
         if user.is_staff:
-            qs = Crew.objects.all()
+            qs = Crew.objects.select_related("campaign").all()
         else:
             # Return crews from campaigns where user is GM or a member
-            qs = Crew.objects.filter(
-                models.Q(campaign__gm=user) | models.Q(campaign__characters__user=user)
-            ).distinct()
+            qs = (
+                Crew.objects.select_related("campaign")
+                .filter(
+                    models.Q(campaign__gm=user)
+                    | models.Q(campaign__characters__user=user)
+                )
+                .distinct()
+            )
 
         campaign_id = self.request.query_params.get("campaign")
         if campaign_id:

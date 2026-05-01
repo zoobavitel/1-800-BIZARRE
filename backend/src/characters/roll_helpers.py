@@ -35,6 +35,35 @@ def bump_effect(effect, steps):
     return EFFECT_ORDER[j]
 
 
+def action_rating_from_action_dots(action_dots, action_name_raw):
+    """
+    Dot count for rolled action. Persisted `action_dots` may use `attune` (BitD name) while
+    clients send roll `action` as `bizarre`; treat them as the same stat.
+    """
+    an = str(action_name_raw or "").strip().lower()
+    if not an:
+        return 0
+    ad = action_dots or {}
+    keys = [an]
+    if an == "bizarre":
+        keys.append("attune")
+    elif an == "attune":
+        keys.append("bizarre")
+
+    if isinstance(ad.get("insight"), dict):
+        for group in ad.values():
+            if not isinstance(group, dict):
+                continue
+            for k in keys:
+                if k in group:
+                    return int(group[k] or 0)
+        return 0
+    for k in keys:
+        if k in ad:
+            return int(ad.get(k) or 0)
+    return 0
+
+
 def award_desperate_action_xp(character, session, roll, action_name, request_user):
     """
     If this is a desperate ACTION roll with a mappable action name, award 1 XP on the attribute track.
@@ -75,15 +104,94 @@ def award_desperate_action_xp(character, session, roll, action_name, request_use
     return 1, track
 
 
-def outcome_from_dice_results(results):
-    """Highest die → Blades-style outcome bucket."""
+def tier_die_from_action_pool(
+    results, pool_before_roll, pool_action_rating=None
+):
+    """
+    Tier die following SRD: normally highest rolled die.
+
+    When the *final* pool before rolling is 0 **and** the character has **0 dots** in that
+    action, the server rolled 2d and the **lower** die counts (FiTD 0‑dice).
+
+    If `pool_before_roll == 0` but `pool_action_rating > 0`, stored data is inconsistent
+    (e.g. legacy row); read **max** so a 6 still succeeds.
+    """
     if not results:
-        return 'FAILURE'
-    max_result = max(results)
-    if max_result >= 6:
-        return 'CRITICAL_SUCCESS'
-    if max_result >= 4:
-        return 'FULL_SUCCESS'
-    if max_result >= 1:
-        return 'PARTIAL_SUCCESS'
-    return 'FAILURE'
+        return 0
+    try:
+        pool_int = (
+            int(pool_before_roll)
+            if pool_before_roll is not None
+            else 0
+        )
+    except (TypeError, ValueError):
+        pool_int = 0
+    try:
+        par = (
+            int(pool_action_rating)
+            if pool_action_rating is not None
+            else None
+        )
+    except (TypeError, ValueError):
+        par = None
+    try:
+        vals = [int(r) for r in results]
+    except (TypeError, ValueError):
+        return 0
+    if pool_int == 0 and len(vals) >= 2:
+        if par is not None and par > 0:
+            return max(vals)
+        return min(vals)
+    return max(vals)
+
+
+def action_roll_counts_as_failure_for_group(
+    results, pool_before_roll, pool_action_rating=None
+):
+    """Tier 1–3 on the tier die ⇒ counts as failure for group-action leader stress and board."""
+    if not results:
+        return True
+    return (
+        tier_die_from_action_pool(
+            results, pool_before_roll, pool_action_rating
+        )
+        <= 3
+    )
+
+
+def outcome_from_action_roll(
+    results, pool_before_roll, pool_action_rating=None
+):
+    """
+    SRD-aligned buckets: critical if ≥2 sixes; otherwise 6 = full success, 4–5 = partial with
+    consequence, 1–3 = failure (`docs/1(800)-Bizarre SRD.md`: read highest; 4–5 mixed; 1–3 fail).
+    For true 0-dot + 0 pool (two dice, take lower), tier uses min(...) after crit check.
+    """
+    if not results:
+        return "FAILURE"
+    sixes = sum(1 for r in results if r == 6)
+    if sixes >= 2:
+        return "CRITICAL_SUCCESS"
+    tier = tier_die_from_action_pool(
+        results, pool_before_roll, pool_action_rating
+    )
+    if tier >= 6:
+        return "FULL_SUCCESS"
+    if tier >= 4:
+        return "PARTIAL_SUCCESS"
+    return "FAILURE"
+
+
+def outcome_from_dice_results(results):
+    """Highest die + crit if ≥2 sixes (manual fortune/GM roll PATCH; always read max of listed dice)."""
+    if not results:
+        return "FAILURE"
+    sixes = sum(1 for r in results if r == 6)
+    if sixes >= 2:
+        return "CRITICAL_SUCCESS"
+    tier = max(results)
+    if tier >= 6:
+        return "FULL_SUCCESS"
+    if tier >= 4:
+        return "PARTIAL_SUCCESS"
+    return "FAILURE"

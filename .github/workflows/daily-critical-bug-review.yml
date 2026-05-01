@@ -1,0 +1,59 @@
+name: Daily Critical Bug Review
+
+on:
+  schedule:
+    # Run at both possible UTC hours for 7pm America/New_York, then gate in-job.
+    - cron: "0 23,0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  review_recent_commits:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 200
+
+      - name: Gate run to 7pm America/New_York
+        id: gate
+        run: |
+          NY_HOUR="$(TZ=America/New_York date +%H)"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] || [ "$NY_HOUR" = "19" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip outside 7pm ET
+        if: steps.gate.outputs.run != 'true'
+        run: |
+          {
+            echo "## Daily critical review"
+            echo ""
+            echo "Skipped: not 7:00 PM America/New_York."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Setup Python
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Run critical bug review
+        if: steps.gate.outputs.run == 'true'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          REVIEW_MODEL: gpt-4.1-mini
+          REVIEW_SINCE_WINDOW: 26 hours ago
+          REVIEW_MAX_DIFF_CHARS: "180000"
+        run: |
+          python scripts/daily_critical_bug_review.py > review_output.md
+          {
+            echo "## Daily critical review"
+            echo ""
+            cat review_output.md
+          } >> "$GITHUB_STEP_SUMMARY"

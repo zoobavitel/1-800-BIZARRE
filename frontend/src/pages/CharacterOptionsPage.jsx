@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { ChevronDown, ChevronRight, BookOpen, Users, Zap } from "lucide-react";
 import { characterAPI, referenceAPI } from "../features/character-sheet";
+import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 
 const S = {
   page: {
@@ -322,12 +323,15 @@ export default function CharacterOptionsPage({ onNavigateToAbilities }) {
                 player thinking and engagement when designing your own Stand.
               </p>
               {typeof onNavigateToAbilities === "function" && (
-                <button
+                <a
+                  href={buildRouteHref("abilities", { filter: "standard" })}
                   style={S.linkBtn}
-                  onClick={() => onNavigateToAbilities("standard")}
+                  onClick={(e) =>
+                    handleSpaNavClick(e, () => onNavigateToAbilities("standard"))
+                  }
                 >
                   Browse standard abilities
-                </button>
+                </a>
               )}
             </div>
             <div style={S.card}>
@@ -359,12 +363,15 @@ export default function CharacterOptionsPage({ onNavigateToAbilities }) {
                 Foundation playbooks available. Abilities gated by A-ranks.
               </p>
               {typeof onNavigateToAbilities === "function" && (
-                <button
+                <a
+                  href={buildRouteHref("abilities", { filter: "hamon" })}
                   style={S.linkBtn}
-                  onClick={() => onNavigateToAbilities("hamon")}
+                  onClick={(e) =>
+                    handleSpaNavClick(e, () => onNavigateToAbilities("hamon"))
+                  }
                 >
                   Browse Hamon abilities
-                </button>
+                </a>
               )}
             </div>
             <div style={S.card}>
@@ -396,12 +403,15 @@ export default function CharacterOptionsPage({ onNavigateToAbilities }) {
                 Foundation playbooks available. Abilities gated by A-ranks.
               </p>
               {typeof onNavigateToAbilities === "function" && (
-                <button
+                <a
+                  href={buildRouteHref("abilities", { filter: "spin" })}
                   style={S.linkBtn}
-                  onClick={() => onNavigateToAbilities("spin")}
+                  onClick={(e) =>
+                    handleSpaNavClick(e, () => onNavigateToAbilities("spin"))
+                  }
                 >
                   Browse Spin abilities
-                </button>
+                </a>
               )}
             </div>
           </div>

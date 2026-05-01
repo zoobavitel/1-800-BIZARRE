@@ -146,207 +146,209 @@ export default function HomeStandCoin() {
         <div className="home-stand-coin-kicker">Stand coin</div>
         <div className="home-stand-coin-name">Example stand</div>
       </div>
-      <div className="home-stand-coin-readout">
-        <div className="home-stand-coin-readout-stack">
-          <div
-            className={`home-stand-coin-readout-panel${active ? " is-inactive" : ""}`}
-            aria-hidden={!!active}
-          >
-            <span className="home-stand-coin-readout-hint">
-              Hover or tap a segment to see each stat and grade (F–S).
-            </span>
-          </div>
-          <div
-            className={`home-stand-coin-readout-panel${active ? "" : " is-inactive"}`}
-            aria-hidden={!active}
-          >
-            <span className="home-stand-coin-readout-stat">
-              {active?.label ?? "\u00a0"}
-            </span>
-            <span className="home-stand-coin-readout-grade">
-              {active?.grade ?? "\u00a0"}
-            </span>
-            <span className="home-stand-coin-readout-blurb">
-              {active?.blurb ?? "\u00a0"}
-            </span>
-          </div>
-        </div>
-      </div>
-      <svg
-        className="home-stand-coin-svg"
-        viewBox="0 0 200 200"
-        role="img"
-        aria-labelledby="home-stand-coin-title"
-      >
-        <title id="home-stand-coin-title">
-          Demo stand coin with six stats: Power, Speed, Range, Durability,
-          Precision, and Development. Grades from F to S.
-        </title>
-        <defs>
-          <clipPath id="home-stand-coin-clip">
-            <circle cx={CX} cy={CY} r={R_RING} />
-          </clipPath>
-        </defs>
+      <div className="home-stand-coin-main">
+        <svg
+          className="home-stand-coin-svg"
+          viewBox="0 0 200 200"
+          role="img"
+          aria-labelledby="home-stand-coin-title"
+        >
+          <title id="home-stand-coin-title">
+            Demo stand coin with six stats: Power, Speed, Range, Durability,
+            Precision, and Development. Grades from F to S.
+          </title>
+          <defs>
+            <clipPath id="home-stand-coin-clip">
+              <circle cx={CX} cy={CY} r={R_RING} />
+            </clipPath>
+          </defs>
 
-        <circle
-          cx={CX}
-          cy={CY}
-          r={R_OUTER}
-          fill="var(--bg2, #0d0814)"
-          stroke="var(--p1)"
-          strokeWidth="3"
-        />
-        {gradeRings.map(({ g, r }) => (
           <circle
-            key={g}
             cx={CX}
             cy={CY}
-            r={r}
-            fill="none"
-            stroke="rgba(255,255,255,0.25)"
-            strokeWidth="0.35"
-            opacity={0.6}
+            r={R_OUTER}
+            fill="var(--bg2, #0d0814)"
+            stroke="var(--p1)"
+            strokeWidth="3"
           />
-        ))}
+          {gradeRings.map(({ g, r }) => (
+            <circle
+              key={g}
+              cx={CX}
+              cy={CY}
+              r={r}
+              fill="none"
+              stroke="rgba(255,255,255,0.25)"
+              strokeWidth="0.35"
+              opacity={0.6}
+            />
+          ))}
 
-        <g clipPath="url(#home-stand-coin-clip)">
-          {STATS.map((_, i) => {
-            const a = statAngle(i);
-            const [xe, ye] = polar(CX, CY, R_RING - 1, a);
+          <g clipPath="url(#home-stand-coin-clip)">
+            {STATS.map((_, i) => {
+              const a = statAngle(i);
+              const [xe, ye] = polar(CX, CY, R_RING - 1, a);
+              return (
+                <line
+                  key={`axis-${i}`}
+                  x1={CX}
+                  y1={CY}
+                  x2={xe}
+                  y2={ye}
+                  stroke="rgba(255,255,255,0.25)"
+                  strokeWidth="0.6"
+                  opacity={0.8}
+                />
+              );
+            })}
+            <polygon
+              points={polygonPoints()}
+              fill="var(--p1)"
+              fillOpacity={0.45}
+              stroke="var(--p2)"
+              strokeWidth="1.2"
+              strokeOpacity={0.9}
+            />
+          </g>
+
+          {Array.from({ length: 24 }, (_, t) => {
+            const ang = (t * Math.PI) / 12;
+            const [ix, iy] = polar(CX, CY, R_OUTER - 2, ang);
+            const [ox, oy] = polar(CX, CY, R_OUTER + 3, ang);
             return (
               <line
-                key={`axis-${i}`}
-                x1={CX}
-                y1={CY}
-                x2={xe}
-                y2={ye}
-                stroke="rgba(255,255,255,0.25)"
-                strokeWidth="0.6"
-                opacity={0.8}
+                key={`tick-${t}`}
+                x1={ix}
+                y1={iy}
+                x2={ox}
+                y2={oy}
+                stroke="rgba(255,255,255,0.45)"
+                strokeWidth={t % 2 === 0 ? 1.1 : 0.5}
+                opacity={0.7}
               />
             );
           })}
-          <polygon
-            points={polygonPoints()}
-            fill="var(--p1)"
-            fillOpacity={0.45}
-            stroke="var(--p2)"
-            strokeWidth="1.2"
-            strokeOpacity={0.9}
-          />
-        </g>
 
-        {Array.from({ length: 24 }, (_, t) => {
-          const ang = (t * Math.PI) / 12;
-          const [ix, iy] = polar(CX, CY, R_OUTER - 2, ang);
-          const [ox, oy] = polar(CX, CY, R_OUTER + 3, ang);
-          return (
-            <line
-              key={`tick-${t}`}
-              x1={ix}
-              y1={iy}
-              x2={ox}
-              y2={oy}
-              stroke="rgba(255,255,255,0.45)"
-              strokeWidth={t % 2 === 0 ? 1.1 : 0.5}
-              opacity={0.7}
-            />
-          );
-        })}
-
-        {STATS.map((s, i) => {
-          const a = statAngle(i);
-          const [lx, ly] = polar(CX, CY, R_LABEL, a);
-          const deg = (a * 180) / Math.PI + 90;
-          const isActive = activeKey === s.key;
-          return (
-            <g key={s.key}>
-              <text
-                x={lx}
-                y={ly}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                transform={`rotate(${deg}, ${lx}, ${ly})`}
-                className="home-stand-coin-label"
-                fill="rgba(255,255,255,0.75)"
-                style={{
-                  fontSize: 7.5,
-                  fontFamily: "var(--font-mono)",
-                  fontWeight: 400,
-                }}
-              >
-                {s.label.toUpperCase()}
-              </text>
-              <text
-                x={polar(CX, CY, R_LABEL - 12, a)[0]}
-                y={polar(CX, CY, R_LABEL - 12, a)[1]}
-                textAnchor="middle"
-                dominantBaseline="middle"
-                fill="var(--p2)"
-                style={{
-                  fontSize: 9,
-                  fontFamily: "var(--font-display)",
-                  fontWeight: 700,
-                }}
-              >
-                {s.grade}
-              </text>
-              {isActive && (
-                <circle
-                  cx={
-                    polar(
-                      CX,
-                      CY,
-                      R_DATA_MIN +
-                        (GRADE_RADIUS[s.grade] ?? 0.5) *
-                          (R_DATA_MAX - R_DATA_MIN),
-                      a,
-                    )[0]
-                  }
-                  cy={
-                    polar(
-                      CX,
-                      CY,
-                      R_DATA_MIN +
-                        (GRADE_RADIUS[s.grade] ?? 0.5) *
-                          (R_DATA_MAX - R_DATA_MIN),
-                      a,
-                    )[1]
-                  }
-                  r={4}
+          {STATS.map((s, i) => {
+            const a = statAngle(i);
+            const [lx, ly] = polar(CX, CY, R_LABEL, a);
+            const deg = (a * 180) / Math.PI + 90;
+            const isActive = activeKey === s.key;
+            return (
+              <g key={s.key}>
+                <text
+                  x={lx}
+                  y={ly}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  transform={`rotate(${deg}, ${lx}, ${ly})`}
+                  className="home-stand-coin-label"
+                  fill="rgba(255,255,255,0.75)"
+                  style={{
+                    fontSize: 7.5,
+                    fontFamily: "var(--font-mono)",
+                    fontWeight: 400,
+                  }}
+                >
+                  {s.label.toUpperCase()}
+                </text>
+                <text
+                  x={polar(CX, CY, R_LABEL - 12, a)[0]}
+                  y={polar(CX, CY, R_LABEL - 12, a)[1]}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
                   fill="var(--p2)"
-                  fillOpacity={0.9}
-                  stroke="rgba(255,255,255,0.6)"
-                  strokeWidth="0.75"
-                />
-              )}
-            </g>
-          );
-        })}
+                  style={{
+                    fontSize: 9,
+                    fontFamily: "var(--font-display)",
+                    fontWeight: 700,
+                  }}
+                >
+                  {s.grade}
+                </text>
+                {isActive && (
+                  <circle
+                    cx={
+                      polar(
+                        CX,
+                        CY,
+                        R_DATA_MIN +
+                          (GRADE_RADIUS[s.grade] ?? 0.5) *
+                            (R_DATA_MAX - R_DATA_MIN),
+                        a,
+                      )[0]
+                    }
+                    cy={
+                      polar(
+                        CX,
+                        CY,
+                        R_DATA_MIN +
+                          (GRADE_RADIUS[s.grade] ?? 0.5) *
+                            (R_DATA_MAX - R_DATA_MIN),
+                        a,
+                      )[1]
+                    }
+                    r={4}
+                    fill="var(--p2)"
+                    fillOpacity={0.9}
+                    stroke="rgba(255,255,255,0.6)"
+                    strokeWidth="0.75"
+                  />
+                )}
+              </g>
+            );
+          })}
 
-        {STATS.map((s, i) => {
-          const isHot = hovered === s.key || pinned === s.key;
-          return (
-            <path
-              key={`hit-${s.key}`}
-              d={wedgePath(i)}
-              fill={isHot ? "var(--p1)" : "#0d0814"}
-              fillOpacity={isHot ? 0.25 : 0.001}
-              stroke="none"
-              style={{ cursor: "pointer" }}
-              role="button"
-              tabIndex={0}
-              aria-label={`${s.label}, grade ${s.grade}`}
-              onMouseEnter={() => setHovered(s.key)}
-              onMouseLeave={() => setHovered(null)}
-              onFocus={() => setHovered(s.key)}
-              onBlur={() => setHovered(null)}
-              onClick={() => onWedgeClick(s.key)}
-              onKeyDown={(e) => onWedgeKey(e, s.key)}
-            />
-          );
-        })}
-      </svg>
+          {STATS.map((s, i) => {
+            const isHot = hovered === s.key || pinned === s.key;
+            return (
+              <path
+                key={`hit-${s.key}`}
+                d={wedgePath(i)}
+                fill={isHot ? "var(--p1)" : "#0d0814"}
+                fillOpacity={isHot ? 0.25 : 0.001}
+                stroke="none"
+                style={{ cursor: "pointer" }}
+                role="button"
+                tabIndex={0}
+                aria-label={`${s.label}, grade ${s.grade}`}
+                onMouseEnter={() => setHovered(s.key)}
+                onMouseLeave={() => setHovered(null)}
+                onFocus={() => setHovered(s.key)}
+                onBlur={() => setHovered(null)}
+                onClick={() => onWedgeClick(s.key)}
+                onKeyDown={(e) => onWedgeKey(e, s.key)}
+              />
+            );
+          })}
+        </svg>
+        <div className="home-stand-coin-readout">
+          <div className="home-stand-coin-readout-stack">
+            <div
+              className={`home-stand-coin-readout-panel${active ? " is-inactive" : ""}`}
+              aria-hidden={!!active}
+            >
+              <span className="home-stand-coin-readout-hint">
+                Hover or tap a segment to see each stat and grade (F–S).
+              </span>
+            </div>
+            <div
+              className={`home-stand-coin-readout-panel${active ? "" : " is-inactive"}`}
+              aria-hidden={!active}
+            >
+              <span className="home-stand-coin-readout-stat">
+                {active?.label ?? "\u00a0"}
+              </span>
+              <span className="home-stand-coin-readout-grade">
+                {active?.grade ?? "\u00a0"}
+              </span>
+              <span className="home-stand-coin-readout-blurb">
+                {active?.blurb ?? "\u00a0"}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

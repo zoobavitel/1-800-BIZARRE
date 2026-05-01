@@ -15,10 +15,13 @@ import random
 from ..models import Campaign, Character, GroupAction, Session, Roll, RollHistory
 from ..parsers import MultipartJsonParser
 from ..roll_helpers import (
+    action_rating_from_action_dots,
     award_desperate_action_xp,
     bump_effect,
     normalize_effect,
     normalize_position,
+    outcome_from_action_roll,
+    tier_die_from_action_pool,
 )
 from ..serializers import CharacterSerializer
 from ..history_context import bind_character_history_editor, reset_character_history_editor
@@ -35,6 +38,19 @@ def _character_queryset_for_user(user):
 
 # Backward-compatible name for code that imported the old detail-only helper.
 _character_queryset_detail = _character_queryset_for_user
+
+
+def _max_stress_for_character(character):
+    """Stress capacity from durability grade (SRD baseline: 9, modified by DUR)."""
+    grade = None
+    stand = getattr(character, "stand", None)
+    if stand is not None:
+        grade = getattr(stand, "durability", None)
+    if not grade:
+        coin_stats = getattr(character, "coin_stats", None) or {}
+        if isinstance(coin_stats, dict):
+            grade = coin_stats.get("durability") or coin_stats.get("DURABILITY")
+    return {"S": 13, "A": 12, "B": 11, "C": 10, "D": 9, "F": 8}.get(grade, 9)
 
 
 class CharacterViewSet(viewsets.ModelViewSet):
@@ -246,13 +262,29 @@ class CharacterViewSet(viewsets.ModelViewSet):
         character = self.get_object()
         action_name = request.data.get("action")
         session_id = request.data.get("session_id")
-        push_effect = request.data.get("push_effect", False)
-        push_dice = request.data.get("push_dice", False)
-        devil_bargain_dice = request.data.get("devil_bargain_dice", False)
+
+        def _as_bool(v):
+            if v is True:
+                return True
+            if v is False or v is None:
+                return False
+            if isinstance(v, str):
+                return v.strip().lower() in ("1", "true", "yes", "on")
+            return bool(v)
+
+        push_effect = _as_bool(request.data.get("push_effect", False))
+        push_dice = _as_bool(request.data.get("push_dice", False))
+        devil_bargain_dice = _as_bool(request.data.get("devil_bargain_dice", False))
         devil_bargain_note = request.data.get("devil_bargain_note", "")
         devil_bargain_confirmed = bool(
             request.data.get("devil_bargain_confirmed", False)
         )
+        fortune_reveal_outcome = bool(
+            request.data.get("fortune_reveal_outcome", False)
+        )
+        fortune_public_label = str(
+            request.data.get("fortune_public_label", "") or ""
+        ).strip()
         roll_type = request.data.get("roll_type", "ACTION")
         bonus_dice = int(request.data.get("bonus_dice") or 0)
         ability_effect_steps = int(request.data.get("ability_effect_steps") or 0)
@@ -280,9 +312,28 @@ class CharacterViewSet(viewsets.ModelViewSet):
         position = normalize_position(request.data.get("position"))
         effect = normalize_effect(request.data.get("effect") or "standard")
         if session and roll_type.upper() == "ACTION":
-            position = normalize_position(session.default_position)
-            effect = normalize_effect(session.default_effect)
-            gl = (getattr(session, "roll_goal_label", None) or "").strip()
+            pe_map = getattr(session, "position_effect_by_character", None) or {}
+            if not isinstance(pe_map, dict):
+                pe_map = {}
+            key = str(character.id)
+            entry = pe_map.get(key) or pe_map.get(character.id)
+            if isinstance(entry, dict) and entry:
+                position = normalize_position(
+                    entry.get("position") or session.default_position
+                )
+                effect = normalize_effect(
+                    entry.get("effect") or session.default_effect
+                )
+            else:
+                position = normalize_position(session.default_position)
+                effect = normalize_effect(session.default_effect)
+            gl_map = getattr(session, "roll_goal_by_character", None) or {}
+            if not isinstance(gl_map, dict):
+                gl_map = {}
+            gl = (
+                str(gl_map.get(str(character.id)) or gl_map.get(character.id) or "").strip()
+                or (getattr(session, "roll_goal_label", None) or "").strip()
+            )
             if gl and not goal_label:
                 goal_label = gl
 
@@ -299,15 +350,31 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            # Incapacitated (level 3 harm): must push to act
-            incapacitated = getattr(character, "harm_level3_used", False)
-            if incapacitated and not (push_effect or push_dice):
+            if sum([push_effect, push_dice, devil_bargain_dice]) > 1:
                 return Response(
                     {
-                        "error": "Incapacitated (level 3 harm). You must push yourself to take an action (2 stress for +1 effect or +1d)."
+                        "error": (
+                            "Choose only one of: push for +1 effect, push for +1d, "
+                            "or devil's bargain."
+                        )
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+            # Incapacitated (level 3 harm): pay 2 stress to act, no push bonus.
+            incapacitated = getattr(character, "harm_level3_used", False)
+            if incapacitated and (push_effect or push_dice):
+                return Response(
+                    {
+                        "error": (
+                            "Incapacitated (level 3 harm): acting costs 2 stress and "
+                            "does not grant +1 effect or +1d."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if incapacitated:
+                stress_cost += 2
 
             # Devil's bargain: GM may set per-character text; player must confirm before +1d
             if session and devil_bargain_dice:
@@ -335,16 +402,20 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_400_BAD_REQUEST,
                     )
 
-            # Push costs 2 stress each
+            # Optional push costs 2 stress each (in addition to incapacitated cost, if any)
             if push_effect:
                 stress_cost += 2
             if push_dice:
                 stress_cost += 2
-            current_stress = getattr(character, "stress", 0) or 0
-            if stress_cost > current_stress:
+            # Character.stress is remaining available stress (same as assist spend).
+            available_stress = max(0, int(getattr(character, "stress", 0) or 0))
+            if stress_cost > available_stress:
                 return Response(
                     {
-                        "error": f"Not enough stress. Push costs {stress_cost} stress, you have {current_stress}."
+                        "error": (
+                            f"Not enough stress. Push costs {stress_cost} stress, "
+                            f"you have {available_stress} available."
+                        )
                     },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
@@ -356,40 +427,15 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
         # Get action rating from action_dots (flat or nested) - skip for FORTUNE
         if roll_type.upper() != "FORTUNE":
-            action_dots = character.action_dots or {}
-            action_rating = 0
-            if isinstance(action_dots.get("insight"), dict):
-                for group in action_dots.values():
-                    if isinstance(group, dict) and action_name.lower() in group:
-                        action_rating = group.get(action_name.lower(), 0) or 0
-                        break
-            else:
-                action_rating = action_dots.get(action_name.lower(), 0) or 0
-
-            # Attribute dice: each action in same attribute with dots > 0 adds 1
-            insight_actions = ["hunt", "study", "survey", "tinker"]
-            prowess_actions = ["finesse", "prowl", "skirmish", "wreck"]
-            resolve_actions = ["bizarre", "command", "consort", "sway"]
-
-            def get_dots(action):
-                if isinstance(action_dots.get("insight"), dict):
-                    for group in action_dots.values():
-                        if isinstance(group, dict) and action in group:
-                            return group.get(action, 0) or 0
-                return action_dots.get(action, 0) or 0
-
-            attr_group = (
-                insight_actions
-                if action_name.lower() in insight_actions
-                else (
-                    prowess_actions
-                    if action_name.lower() in prowess_actions
-                    else resolve_actions
-                )
+            action_rating = action_rating_from_action_dots(
+                character.action_dots, action_name
             )
-            attribute_dice = len([a for a in attr_group if get_dots(a) > 0])
 
-            dice_pool = action_rating + attribute_dice
+            # Base action pool: action rating only (no extra dice from other
+            # actions in the same attribute).
+            attribute_dice = 0
+
+            dice_pool = action_rating
             if push_dice:
                 dice_pool += 1
             if devil_bargain_dice:
@@ -427,35 +473,42 @@ class CharacterViewSet(viewsets.ModelViewSet):
                             {"error": "Must be in the same crew to Help"},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
-                    hs = getattr(assist_helper, "stress", 0) or 0
+                    hs = max(0, int(getattr(assist_helper, "stress", 0) or 0))
+                    helper_max_stress = _max_stress_for_character(assist_helper)
                     if hs < 1:
                         return Response(
                             {"error": "Helper has no stress to spend"},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
-                    assist_helper.stress = hs - 1
+                    assist_helper.stress = max(
+                        0, min(helper_max_stress, hs - 1)
+                    )
                     assist_helper.save(update_fields=["stress"])
                     dice_pool += 1
 
-        dice_results = (
-            [random.randint(1, 6) for _ in range(max(1, dice_pool))]
-            if dice_pool > 0
-            else [0]
-        )
-        max_result = max(dice_results) if dice_results else 0
-
-        if max_result >= 6:
-            outcome = "CRITICAL_SUCCESS"
-        elif max_result >= 4:
-            outcome = "FULL_SUCCESS"
-        elif max_result >= 1:
-            outcome = "PARTIAL_SUCCESS"
+        pool_before_roll = dice_pool
+        # 0d action pool (Blades-style): roll 2d take the lowest for outcome tiers; mirrors offline rollDice().
+        if dice_pool > 0:
+            dice_results = [random.randint(1, 6) for _ in range(dice_pool)]
         else:
-            outcome = "FAILURE"
+            d1 = random.randint(1, 6)
+            d2 = random.randint(1, 6)
+            dice_results = [d1, d2]
 
-        # Deduct stress for push
+        # action_rating: dots in rolled action only (Fortune path sets 0 above).
+        ar_for_tier = (
+            action_rating if roll_type.upper() != "FORTUNE" else 0
+        )
+        outcome = outcome_from_action_roll(
+            dice_results, pool_before_roll, ar_for_tier
+        )
+        max_result = tier_die_from_action_pool(
+            dice_results, pool_before_roll, ar_for_tier
+        )
+
+        # Deduct stress for push (remaining pool decreases)
         if stress_cost > 0:
-            current_stress = getattr(character, "stress", 0) or 0
+            current_stress = max(0, int(getattr(character, "stress", 0) or 0))
             character.stress = max(0, current_stress - stress_cost)
             character.save(update_fields=["stress"])
 
@@ -477,6 +530,25 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 ga_obj = GroupAction.objects.filter(
                     id=group_action_id, session=session, status="OPEN"
                 ).first()
+                if not ga_obj:
+                    return Response(
+                        {"error": "Invalid or closed group action."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if (
+                    roll_type.upper() == "ACTION"
+                    and (ga_obj.action_name or "").strip()
+                    and (action_name or "").strip().lower()
+                    != (ga_obj.action_name or "").strip().lower()
+                ):
+                    return Response(
+                        {
+                            "error": (
+                                f"This group action requires {ga_obj.action_name.upper()} rolls."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
             if roll_type.upper() == "FORTUNE":
                 rp_ar = rp_ad = 0
                 rp_pe = rp_pd = False
@@ -487,6 +559,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 rp_devil_txt = ""
             else:
                 rp_ar = action_rating
+                # Historical rolls may have pool_attribute_dice > 0; new rolls use 0
+                # (action pool = action rating only, not other actions in attribute).
                 rp_ad = attribute_dice
                 rp_pe = push_effect
                 rp_pd = push_dice
@@ -521,6 +595,12 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 pool_bonus_dice=rp_bonus,
                 roller_stress_spent=rp_stress,
                 devil_bargain_consequence=rp_devil_txt,
+                fortune_reveal_outcome=(
+                    fortune_reveal_outcome if roll_type.upper() == "FORTUNE" else False
+                ),
+                fortune_public_label=(
+                    fortune_public_label if roll_type.upper() == "FORTUNE" else ""
+                ),
             )
             RollHistory.objects.create(campaign=session.campaign, roll=roll)
 
@@ -584,13 +664,14 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 {"error": "Must be in the same crew to Help"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        hs = getattr(helper, "stress", 0) or 0
+        hs = max(0, int(getattr(helper, "stress", 0) or 0))
+        helper_max_stress = _max_stress_for_character(helper)
         if hs < 1:
             return Response(
                 {"error": "Helper has no stress to spend"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        helper.stress = hs - 1
+        helper.stress = max(0, min(helper_max_stress, hs - 1))
         helper.save(update_fields=["stress"])
         return Response(
             {

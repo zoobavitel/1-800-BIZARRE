@@ -23,6 +23,7 @@ import {
   characterAPI,
   transformBackendToFrontend,
 } from "./features/character-sheet";
+import { buildRouteHref, buildRouteHash, handleSpaNavClick } from "./utils/spaNavigation";
 
 const PAGE_TITLES = {
   home: "HOME",
@@ -108,7 +109,17 @@ const barStyles = {
   },
 };
 
-function AppBar({ onHamburgerClick, onBack, onHome, pageTitle, rightContent }) {
+function AppBar({
+  onHamburgerClick,
+  onBack,
+  onHome,
+  pageTitle,
+  rightContent,
+  onSearch,
+  onOpenAccountMenu,
+  accountMenuOpen = false,
+}) {
+  const showRight = rightContent || onSearch || onOpenAccountMenu;
   return (
     <header style={barStyles.bar}>
       <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
@@ -133,9 +144,9 @@ function AppBar({ onHamburgerClick, onBack, onHome, pageTitle, rightContent }) {
             ← Back
           </button>
         )}
-        <button
-          type="button"
-          onClick={onHome}
+        <a
+          href={buildRouteHref("home")}
+          onClick={(e) => handleSpaNavClick(e, onHome)}
           style={{
             background: "none",
             border: "none",
@@ -146,12 +157,13 @@ function AppBar({ onHamburgerClick, onBack, onHome, pageTitle, rightContent }) {
             color: "var(--hftf-text-cream)",
             fontFamily: "var(--font-display)",
             letterSpacing: "0.06em",
+            textDecoration: "none",
           }}
           aria-label="Go to home"
         >
           <span style={{ color: "var(--hftf-purple)" }}>1(800)</span>
           <span style={{ color: "var(--hftf-text-cream)" }}>BIZARRE</span>
-        </button>
+        </a>
         {pageTitle && (
           <>
             <span style={{ color: "var(--hftf-gold-muted)" }}>—</span>
@@ -168,9 +180,25 @@ function AppBar({ onHamburgerClick, onBack, onHome, pageTitle, rightContent }) {
           </>
         )}
       </div>
-      {rightContent && (
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      {showRight && (
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           {rightContent}
+          {onSearch && (
+            <button type="button" className="appbar-search-btn" onClick={onSearch}>
+              Search
+            </button>
+          )}
+          {onOpenAccountMenu && (
+            <button
+              type="button"
+              className="appbar-account-btn"
+              onClick={onOpenAccountMenu}
+              aria-haspopup="dialog"
+              aria-expanded={accountMenuOpen}
+            >
+              Account
+            </button>
+          )}
         </div>
       )}
     </header>
@@ -191,6 +219,7 @@ function routeStateFromHash(hash) {
     characterPageId: null,
     campaignPageId: null,
     npcPageId: null,
+    npcCampaignId: null,
     abilityFilter: null,
     rulesSection: null,
   };
@@ -198,6 +227,15 @@ function routeStateFromHash(hash) {
   if (hash === "test") return { ...base, currentPage: "test" };
   if (hash === "npcs" || hash.startsWith("npcs/")) {
     const idPart = hash.replace(/^npcs\/?/, "");
+    if (idPart.startsWith("new/")) {
+      const campaignPart = idPart.replace(/^new\/?/, "");
+      return {
+        ...base,
+        currentPage: "npcs",
+        npcPageId: null,
+        npcCampaignId: parseHashId(campaignPart),
+      };
+    }
     return {
       ...base,
       currentPage: "npcs",
@@ -263,6 +301,9 @@ const App = () => {
   );
   const [campaignFactionId, setCampaignFactionId] = useState(null);
   const [npcPageId, setNpcPageId] = useState(initialRoute.npcPageId);
+  const [npcCampaignId, setNpcCampaignId] = useState(
+    initialRoute.npcCampaignId,
+  );
   const [abilityFilter, setAbilityFilter] = useState(
     initialRoute.abilityFilter,
   );
@@ -281,6 +322,7 @@ const App = () => {
     setCharacterPageId(s.characterPageId);
     setCampaignPageId(s.campaignPageId);
     setNpcPageId(s.npcPageId);
+    setNpcCampaignId(s.npcCampaignId);
     setAbilityFilter(s.abilityFilter);
     setRulesSection(s.rulesSection);
   }, []);
@@ -320,50 +362,47 @@ const App = () => {
       setCharacterPageId(payload?.characterId ?? null);
       setCampaignPageId(null);
       setAbilityFilter(null);
-      window.location.hash =
-        payload?.characterId != null
-          ? `character/${payload.characterId}`
-          : "character";
+      window.location.hash = buildRouteHash(page, payload);
     } else if (page === "campaigns") {
       setCampaignPageId(payload?.campaignId ?? null);
       setCampaignFactionId(payload?.factionId ?? null);
       setCharacterPageId(null);
       setAbilityFilter(null);
-      window.location.hash =
-        payload?.campaignId != null
-          ? `campaigns/${payload.campaignId}`
-          : "campaigns";
+      window.location.hash = buildRouteHash(page, payload);
     } else if (page === "abilities") {
       setCharacterPageId(null);
       setCampaignPageId(null);
       const filter = payload?.filter || null;
       setAbilityFilter(filter);
-      window.location.hash = filter ? `abilities-${filter}` : "abilities";
+      window.location.hash = buildRouteHash(page, { filter });
     } else if (page === "character-options") {
       setCharacterPageId(null);
       setCampaignPageId(null);
       setAbilityFilter(null);
-      window.location.hash = "character-options";
+      window.location.hash = buildRouteHash(page, payload);
     } else if (page === "rules") {
       setCharacterPageId(null);
       setCampaignPageId(null);
       setAbilityFilter(null);
       const section = payload?.section || null;
       setRulesSection(section);
-      window.location.hash = section ? `rules-${section}` : "rules";
+      window.location.hash = buildRouteHash(page, { section });
     } else if (page === "npcs") {
       setCharacterPageId(null);
       setCampaignPageId(null);
       const npcId = payload?.npcId ?? null;
+      const campaignId = payload?.campaignId ?? null;
       setNpcPageId(npcId);
-      window.location.hash = npcId != null ? `npcs/${npcId}` : "npcs";
+      setNpcCampaignId(npcId == null ? campaignId : null);
+      window.location.hash = buildRouteHash(page, { npcId, campaignId });
     } else {
       setCharacterPageId(null);
       setCampaignPageId(null);
       setNpcPageId(null);
+      setNpcCampaignId(null);
       setAbilityFilter(null);
       setRulesSection(null);
-      window.location.hash = page === "home" ? "" : page;
+      window.location.hash = buildRouteHash(page, payload);
     }
   };
 
@@ -413,29 +452,31 @@ const App = () => {
           onLogout={logout}
         />
 
+        <UserMenu
+          open={userMenuOpen}
+          onClose={() => setUserMenuOpen(false)}
+          onNavigateToNotifications={() => handlePageChange("notifications")}
+          onNavigateToMessages={() => handlePageChange("messages")}
+          onNavigateToAccountSettings={() =>
+            handlePageChange("account-settings")
+          }
+          onLogout={logout}
+        />
+
         {currentPage !== "home" && (
-            <AppBar
-              onHamburgerClick={toggleMenu}
-              onBack={handleBack}
-              onHome={() => handlePageChange("home")}
-              pageTitle={PAGE_TITLES[currentPage]}
-            />
-          )}
+          <AppBar
+            onHamburgerClick={toggleMenu}
+            onBack={handleBack}
+            onHome={() => handlePageChange("home")}
+            pageTitle={PAGE_TITLES[currentPage]}
+            onSearch={() => handlePageChange("search")}
+            onOpenAccountMenu={() => setUserMenuOpen(true)}
+            accountMenuOpen={userMenuOpen}
+          />
+        )}
 
         {currentPage === "home" && (
           <>
-            <UserMenu
-              open={userMenuOpen}
-              onClose={() => setUserMenuOpen(false)}
-              onNavigateToNotifications={() =>
-                handlePageChange("notifications")
-              }
-              onNavigateToMessages={() => handlePageChange("messages")}
-              onNavigateToAccountSettings={() =>
-                handlePageChange("account-settings")
-              }
-              onLogout={logout}
-            />
             <Home
               menuOpen={menuOpen}
               onToggleMenu={toggleMenu}
@@ -477,6 +518,7 @@ const App = () => {
           <CharacterPage
             initialCharacterId={null}
             initialNpcId={npcPageId}
+            initialNpcCampaignId={npcCampaignId}
             preferNpcMode
             onRegisterNavigationGuard={setNavigationGuard}
           />
@@ -488,7 +530,12 @@ const App = () => {
             onNavigateToCharacter={(id) =>
               handlePageChange("character", { characterId: id })
             }
-            onNavigateToNPC={(id) => handlePageChange("npcs", { npcId: id })}
+            onNavigateToNPC={(id, opts) =>
+              handlePageChange("npcs", {
+                npcId: id,
+                campaignId: opts?.campaignId ?? null,
+              })
+            }
             onCampaignSelect={(id) =>
               handlePageChange("campaigns", { campaignId: id })
             }

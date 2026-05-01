@@ -13,7 +13,7 @@ from characters.views import (
     StandViewSet, CharacterViewSet,
     CampaignViewSet, CampaignInvitationViewSet, ShowcasedNPCViewSet,
     FactionViewSet, NPCViewSet, CrewViewSet,
-    TraumaViewSet, CharacterHistoryViewSet, ExperienceTrackerViewSet, SessionViewSet, SessionEventViewSet,
+    TraumaViewSet, CharacterHistoryViewSet, CrewHistoryViewSet, ExperienceTrackerViewSet, SessionViewSet, SessionEventViewSet,
     RollViewSet, GroupActionViewSet,
     home, RegisterView, StandAbilityViewSet, LoginView, CurrentUserView,
     HamonAbilityViewSet, SpinAbilityViewSet, global_search,
@@ -35,6 +35,7 @@ router.register(r'hamon-abilities', HamonAbilityViewSet)
 router.register(r'spin-abilities', SpinAbilityViewSet)
 router.register(r'characters', CharacterViewSet, basename='characters')
 router.register(r'character-history', CharacterHistoryViewSet, basename='character-history')
+router.register(r'crew-history', CrewHistoryViewSet, basename='crew-history')
 router.register(r'experience-tracker', ExperienceTrackerViewSet, basename='experience-tracker')
 router.register(r'sessions', SessionViewSet, basename='sessions')
 router.register(r'session-events', SessionEventViewSet)

@@ -16,12 +16,13 @@ import {
   sortPatchNotesEntries,
 } from "../utils/patchNotesPreview";
 import {
-  buildSessionsByMonth,
+  buildSessionScatterPoints,
   buildBarChartRows,
 } from "../utils/homeChartData";
-import HomeSessionLineChart from "../components/home/HomeSessionLineChart";
+import HomeSessionScatterChart from "../components/home/HomeSessionScatterChart";
 import HomeStatsBarChart from "../components/home/HomeStatsBarChart";
 import HomeStandCoin from "../components/home/HomeStandCoin";
+import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 
 function tierRoman(level) {
   const n = Number(level);
@@ -101,14 +102,6 @@ function getUserAvatarSrc(person) {
   const avatarUrl =
     typeof profile?.avatar_url === "string" ? profile.avatar_url.trim() : "";
   return avatarUrl || null;
-}
-
-function getInitials(text) {
-  const cleaned = typeof text === "string" ? text.trim() : "";
-  if (!cleaned) return "?";
-  const parts = cleaned.split(/\s+/).filter(Boolean);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
 }
 
 const HomePage = ({
@@ -234,8 +227,8 @@ const HomePage = ({
     };
   }, [campaigns, characters, npcs.length, crewCount]);
 
-  const sessionsByMonth = useMemo(
-    () => buildSessionsByMonth(campaigns),
+  const sessionScatter = useMemo(
+    () => buildSessionScatterPoints(campaigns),
     [campaigns],
   );
   const barChartRows = useMemo(() => buildBarChartRows(heroStats), [heroStats]);
@@ -313,10 +306,6 @@ const HomePage = ({
     }
   };
 
-  const openRules = () => {
-    if (typeof onNavigateToRules === "function") onNavigateToRules();
-  };
-
   return (
     <div className="home-poc">
       <header className="site-header">
@@ -376,20 +365,20 @@ const HomePage = ({
               Fate is truly a very long, roundabout path...
             </p>
             <div className="hero-cta fade-up d3">
-              <button
-                type="button"
+              <a
+                href={buildRouteHref("character")}
                 className="btn btn-primary"
-                onClick={handleCreateCharacter}
+                onClick={(e) => handleSpaNavClick(e, handleCreateCharacter)}
               >
                 + Create Character
-              </button>
-              <button
-                type="button"
+              </a>
+              <a
+                href={buildRouteHref("rules")}
                 className="btn btn-secondary"
-                onClick={openRules}
+                onClick={(e) => handleSpaNavClick(e, onNavigateToRules)}
               >
                 Game Rules
-              </button>
+              </a>
             </div>
           </div>
           <div className="hero-coin-column fade-up d3">
@@ -427,7 +416,19 @@ const HomePage = ({
             </p>
           ) : (
             characters.map((character) => (
-              <div key={character.id} className="p-card" role="presentation">
+              <div
+                key={character.id}
+                className="p-card"
+                role="button"
+                tabIndex={0}
+                onClick={() => handleEditCharacter(character)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleEditCharacter(character);
+                  }
+                }}
+              >
                 <div className="p-card-stripe" />
                 <div className="p-card-body">
                   <div className="p-card-info">
@@ -444,17 +445,23 @@ const HomePage = ({
                     </div>
                   </div>
                   <div className="p-card-actions">
-                    <button
-                      type="button"
+                    <a
+                      href={buildRouteHref("character", { characterId: character.id })}
                       className="p-card-btn p-card-btn-primary"
-                      onClick={() => handleEditCharacter(character)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSpaNavClick(e, () => handleEditCharacter(character));
+                      }}
                     >
                       Edit
-                    </button>
+                    </a>
                     <button
                       type="button"
                       className="p-card-btn p-card-btn-delete"
-                      onClick={() => handleDeleteCharacter(character.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteCharacter(character.id);
+                      }}
                       aria-label="Delete character"
                     >
                       ×
@@ -506,13 +513,13 @@ const HomePage = ({
                     </div>
                   </div>
                   <div className="p-card-actions">
-                    <button
-                      type="button"
+                    <a
+                      href={buildRouteHref("npcs", { npcId: npc.id })}
                       className="p-card-btn p-card-btn-primary p-card-btn-npc"
-                      onClick={() => handleEditNpc(npc.id)}
+                      onClick={(e) => handleSpaNavClick(e, () => handleEditNpc(npc.id))}
                     >
                       Edit
-                    </button>
+                    </a>
                     <button
                       type="button"
                       className="p-card-btn p-card-btn-delete"
@@ -567,94 +574,94 @@ const HomePage = ({
               const inactive = campaign.is_active === false;
 
               return (
-                <div
+                <a
                   key={campaign.id}
+                  href={buildRouteHref("campaigns", { campaignId: campaign.id })}
                   className={`g-card${inactive ? " g-card-inactive" : ""}`}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handleManageCampaign(campaign.id)}
-                  onKeyDown={(e) =>
-                    e.key === "Enter" && handleManageCampaign(campaign.id)
+                  onClick={(e) =>
+                    handleSpaNavClick(e, () => handleManageCampaign(campaign.id))
                   }
+                  style={{ textDecoration: "none", color: "inherit" }}
                 >
-                  <div className="g-card-header">
-                    <div className="g-card-name">{campaign.name || "—"}</div>
-                    <div className="g-card-badges">
-                      <span
-                        className={`g-badge ${inactive ? "g-badge-inactive" : "g-badge-active"}`}
-                      >
-                        {inactive ? "Inactive" : "Active"}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="g-card-gm-row">
-                    <span className="g-card-gm-label">GM</span>
-                    <div className={`g-card-gm-chip${isGm ? " is-self" : ""}`}>
-                      <span className="g-card-user-avatar" aria-hidden="true">
-                        {gmAvatarSrc ? (
-                          <img src={gmAvatarSrc} alt="" />
-                        ) : (
-                          getInitials(gmName)
-                        )}
-                      </span>
-                      <span className="g-card-user-name">{gmName}</span>
-                    </div>
-                  </div>
-                  <div className="g-card-desc">
-                    {campaign.description || "—"}
-                  </div>
-                  <div className="g-card-stats">
-                    <span>
-                      Players
-                      <span className="g-card-stat-val">{playerCount}</span>
-                    </span>
-                    <span>
-                      Sessions
-                      <span className="g-card-stat-val">{sessionCount}</span>
-                    </span>
-                    {playingAs && (
-                      <span>
-                        Playing as
-                        <span className="g-card-stat-val g-card-stat-accent">
-                          {playingAs}
-                        </span>
-                      </span>
-                    )}
-                  </div>
-                  <div className="g-card-player-list">
-                    {visiblePlayers.length === 0 ? (
-                      <span className="g-card-player-empty">No players yet</span>
-                    ) : (
-                      visiblePlayers.map((player) => {
-                        const playerName = getUserDisplayName(player);
-                        const playerAvatarSrc = getUserAvatarSrc(player);
-                        return (
-                          <span key={player.id || playerName} className="g-card-player-chip">
-                            <span className="g-card-user-avatar" aria-hidden="true">
-                              {playerAvatarSrc ? (
-                                <img src={playerAvatarSrc} alt="" />
-                              ) : (
-                                getInitials(playerName)
-                              )}
-                            </span>
-                            <span className="g-card-user-name">{playerName}</span>
+                  <div className="g-card-stripe" />
+                  <div className="g-card-body">
+                    <div className="g-card-info">
+                      <div className="g-card-header">
+                        <div className="g-card-name">{campaign.name || "—"}</div>
+                        <div className="g-card-badges">
+                          <span
+                            className={`g-badge ${inactive ? "g-badge-inactive" : "g-badge-active"}`}
+                          >
+                            {inactive ? "Inactive" : "Active"}
                           </span>
-                        );
-                      })
-                    )}
-                    {extraPlayers > 0 && (
-                      <span className="g-card-player-chip g-card-player-chip-more">
-                        +{extraPlayers} more
-                      </span>
-                    )}
-                  </div>
-                  {live && !inactive && (
-                    <div className="g-session-live">
-                      {live.name ? `Session: ${live.name}` : "Session active"} —
-                      open campaign to join
+                        </div>
+                      </div>
+                      <div className="g-card-gm-row">
+                        <span className="g-card-gm-label">GM</span>
+                        <div className={`g-card-gm-chip${isGm ? " is-self" : ""}`}>
+                          {gmAvatarSrc ? (
+                            <span className="g-card-user-avatar" aria-hidden="true">
+                              <img src={gmAvatarSrc} alt="" />
+                            </span>
+                          ) : null}
+                          <span className="g-card-user-name">{gmName}</span>
+                        </div>
+                      </div>
+                      <div className="g-card-desc">
+                        {campaign.description || "—"}
+                      </div>
+                      <div className="g-card-stats">
+                        <span>
+                          Players
+                          <span className="g-card-stat-val">{playerCount}</span>
+                        </span>
+                        <span>
+                          Sessions
+                          <span className="g-card-stat-val">{sessionCount}</span>
+                        </span>
+                        {playingAs && (
+                          <span>
+                            Playing as
+                            <span className="g-card-stat-val g-card-stat-accent">
+                              {playingAs}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                      <div className="g-card-player-list">
+                        {visiblePlayers.length === 0 ? (
+                          <span className="g-card-player-empty">No players yet</span>
+                        ) : (
+                          visiblePlayers.map((player) => {
+                            const playerName = getUserDisplayName(player);
+                            const playerAvatarSrc = getUserAvatarSrc(player);
+                            return (
+                              <span key={player.id || playerName} className="g-card-player-chip">
+                                {playerAvatarSrc ? (
+                                  <span className="g-card-user-avatar" aria-hidden="true">
+                                    <img src={playerAvatarSrc} alt="" />
+                                  </span>
+                                ) : null}
+                                <span className="g-card-user-name">{playerName}</span>
+                              </span>
+                            );
+                          })
+                        )}
+                        {extraPlayers > 0 && (
+                          <span className="g-card-player-chip g-card-player-chip-more">
+                            +{extraPlayers} more
+                          </span>
+                        )}
+                      </div>
+                      {live && !inactive && (
+                        <div className="g-session-live">
+                          {live.name ? `Session: ${live.name}` : "Session active"} —
+                          open campaign to join
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                </a>
               );
             })
           )}
@@ -755,38 +762,50 @@ const HomePage = ({
       </section>
 
       <div className="quick-strip">
-        <button type="button" className="qa" onClick={handleCreateCharacter}>
+        <a
+          href={buildRouteHref("character")}
+          className="qa"
+          onClick={(e) => handleSpaNavClick(e, handleCreateCharacter)}
+          style={{ textDecoration: "none", color: "inherit" }}
+        >
           <div className="qa-icon">+</div>
           <div className="qa-title">Create Character</div>
           <div className="qa-desc">Build your next Stand user.</div>
           <div className="qa-arrow">→</div>
-        </button>
-        <button
-          type="button"
+        </a>
+        <a
+          href={buildRouteHref("campaigns")}
           className="qa"
-          onClick={() => onNavigateToCampaign?.(null)}
+          onClick={(e) => handleSpaNavClick(e, () => onNavigateToCampaign?.(null))}
+          style={{ textDecoration: "none", color: "inherit" }}
         >
           <div className="qa-icon">☆</div>
           <div className="qa-title">Join Campaign</div>
           <div className="qa-desc">Find other bizarre individuals.</div>
           <div className="qa-arrow">→</div>
-        </button>
-        <button type="button" className="qa" onClick={openRules}>
+        </a>
+        <a
+          href={buildRouteHref("rules")}
+          className="qa"
+          onClick={(e) => handleSpaNavClick(e, onNavigateToRules)}
+          style={{ textDecoration: "none", color: "inherit" }}
+        >
           <div className="qa-icon">♦</div>
           <div className="qa-title">Game Rules</div>
           <div className="qa-desc">Master the SRD mechanics.</div>
           <div className="qa-arrow">→</div>
-        </button>
-        <button
-          type="button"
+        </a>
+        <a
+          href={buildRouteHref("campaigns")}
           className="qa"
-          onClick={() => onNavigateToCampaign?.(null)}
+          onClick={(e) => handleSpaNavClick(e, () => onNavigateToCampaign?.(null))}
+          style={{ textDecoration: "none", color: "inherit" }}
         >
           <div className="qa-icon">✎</div>
           <div className="qa-title">Create Campaign</div>
           <div className="qa-desc">Run your own bizarre adventure.</div>
           <div className="qa-arrow">→</div>
-        </button>
+        </a>
       </div>
 
       <section className="home-stats-section">
@@ -826,8 +845,8 @@ const HomePage = ({
                 </span>
               </div>
             </div>
-            <HomeSessionLineChart
-              data={sessionsByMonth}
+            <HomeSessionScatterChart
+              data={sessionScatter}
               loading={chartsLoading}
             />
             <HomeStatsBarChart data={barChartRows} loading={chartsLoading} />
@@ -844,13 +863,13 @@ const HomePage = ({
       <section className="patch-section">
         <div className="patch-header">
           <span className="patch-header-title">Recent Changes</span>
-          <button
-            type="button"
+          <a
+            href={buildRouteHref("patch-notes")}
             className="patch-header-link"
-            onClick={() => onNavigateToPatchNotes?.()}
+            onClick={(e) => handleSpaNavClick(e, onNavigateToPatchNotes)}
           >
             View all patch notes →
-          </button>
+          </a>
         </div>
         <div className="patch-list">
           {patchRows.map((row, i) => (
@@ -873,20 +892,20 @@ const HomePage = ({
             </span>
           </span>
           <div className="footer-links">
-            <button
-              type="button"
+            <a
+              href={buildRouteHref("licenses")}
               className="footer-link"
-              onClick={() => onNavigateToLicenses?.()}
+              onClick={(e) => handleSpaNavClick(e, onNavigateToLicenses)}
             >
               Licenses
-            </button>
-            <button
-              type="button"
+            </a>
+            <a
+              href={buildRouteHref("patch-notes")}
               className="footer-link"
-              onClick={() => onNavigateToPatchNotes?.()}
+              onClick={(e) => handleSpaNavClick(e, onNavigateToPatchNotes)}
             >
               Patch Notes
-            </button>
+            </a>
             <button
               type="button"
               className="footer-link"

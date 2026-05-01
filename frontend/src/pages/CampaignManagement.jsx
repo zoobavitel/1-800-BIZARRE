@@ -9,12 +9,9 @@ import {
   rollAPI,
   crewAPI,
 } from "../features/character-sheet";
-import {
-  PositionStack,
-  EffectShapes,
-  HistoryBranchIcon,
-} from "../components/position-effect/PositionEffectIndicators";
 import { useAuth } from "../features/auth";
+import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
+import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 
 const S = {
   page: {
@@ -245,7 +242,7 @@ function CampaignDetail({
   user,
   onBack,
   onRefresh,
-  onManageSessions,
+  onOpenSession,
   onNavigateToCharacter,
   onNavigateToNPC,
   onCampaignDeleted,
@@ -575,7 +572,7 @@ function CampaignDetail({
       level: 0,
       hold: "weak",
       rep: 0,
-      wanted_level: 0,
+      wanted_level: campaign?.wanted_stars ?? 0,
       coin: 0,
     });
   const startCrewEdit = (c) =>
@@ -612,6 +609,34 @@ function CampaignDetail({
           ...crewForm,
           campaign: campaign.id,
         });
+      }
+      // Wanted is campaign-wide + mirrored on every crew; character sheets read campaign.wanted_stars.
+      if (isGM) {
+        const targetWanted =
+          Number.parseInt(String(crewForm.wanted_level ?? "0"), 10) || 0;
+        try {
+          await campaignAPI.patchCampaign(campaign.id, {
+            wanted_stars: targetWanted,
+          });
+          const crews = campaign.crews || [];
+          const needSyncIds = crews
+            .filter(
+              (c) => Number.parseInt(String(c.wanted_level ?? "0"), 10) !== targetWanted,
+            )
+            .map((c) => c.id)
+            .filter(Boolean);
+          if (needSyncIds.length > 0) {
+            await Promise.allSettled(
+              needSyncIds.map((cid) =>
+                crewAPI.patchCrew(cid, { wanted_level: targetWanted }),
+              ),
+            );
+          }
+        } catch (syncErr) {
+          setCrewError(syncErr.message || String(syncErr));
+          onRefresh();
+          return;
+        }
       }
       setCrewForm(null);
       onRefresh();
@@ -749,9 +774,6 @@ function CampaignDetail({
               </div>
               {isGM && (
                 <div style={{ display: "flex", gap: "6px", flexShrink: 0 }}>
-                  <button onClick={onManageSessions} style={S.btnPrimary}>
-                    Manage Sessions
-                  </button>
                   <button onClick={startCampaignEdit} style={S.btnGhost}>
                     Edit
                   </button>
@@ -767,6 +789,9 @@ function CampaignDetail({
                 </div>
               )}
             </div>
+            {isGM && typeof onOpenSession === "function" && (
+              <CampaignSessionsPanel campaign={campaign} onOpenSession={onOpenSession} />
+            )}
           </>
         )}
       </div>
@@ -835,8 +860,11 @@ function CampaignDetail({
                           </span>
                         )}
                         {typeof onNavigateToCharacter === "function" && (
-                          <button
-                            onClick={() => onNavigateToCharacter(ch.id)}
+                          <a
+                            href={buildRouteHref("character", { characterId: ch.id })}
+                            onClick={(e) =>
+                              handleSpaNavClick(e, () => onNavigateToCharacter(ch.id))
+                            }
                             style={{
                               ...S.btn,
                               fontSize: "10px",
@@ -846,7 +874,7 @@ function CampaignDetail({
                             }}
                           >
                             View
-                          </button>
+                          </a>
                         )}
                         {user?.id === campaign.gm?.id && (
                           <button
@@ -967,8 +995,11 @@ function CampaignDetail({
                             </span>
                           )}
                           {typeof onNavigateToCharacter === "function" && (
-                            <button
-                              onClick={() => onNavigateToCharacter(ch.id)}
+                            <a
+                              href={buildRouteHref("character", { characterId: ch.id })}
+                              onClick={(e) =>
+                                handleSpaNavClick(e, () => onNavigateToCharacter(ch.id))
+                              }
                               style={{
                                 ...S.btn,
                                 fontSize: "10px",
@@ -978,7 +1009,7 @@ function CampaignDetail({
                               }}
                             >
                               View
-                            </button>
+                            </a>
                           )}
                           {((isGM && p.id !== campaign.gm?.id) ||
                             p.id === user?.id) && (
@@ -1158,8 +1189,38 @@ function CampaignDetail({
         <div style={S.card}>
           <span style={S.sectionLbl}>Campaign NPCs</span>
           {(campaign.campaign_npcs || []).length === 0 ? (
-            <div style={{ color: "#6b7280", fontSize: "12px" }}>
-              No NPCs assigned to this campaign.
+            <div
+              style={{
+                color: "#6b7280",
+                fontSize: "12px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: "8px",
+                flexWrap: "wrap",
+              }}
+            >
+              <span>No NPCs assigned to this campaign.</span>
+              {typeof onNavigateToNPC === "function" && (
+                <a
+                  href={buildRouteHref("npcs", { campaignId: campaign.id })}
+                  onClick={(e) =>
+                    handleSpaNavClick(e, () =>
+                      onNavigateToNPC(null, { campaignId: campaign.id }),
+                    )
+                  }
+                  style={{
+                    ...S.btn,
+                    fontSize: "10px",
+                    padding: "2px 6px",
+                    background: "#15803d",
+                    color: "#bbf7d0",
+                    textDecoration: "none",
+                  }}
+                >
+                  Create NPC for this campaign now
+                </a>
+              )}
             </div>
           ) : (
             (campaign.campaign_npcs || []).map((npc) => (
@@ -1205,8 +1266,11 @@ function CampaignDetail({
                   )}
                   {typeof onNavigateToNPC === "function" && (
                     <>
-                      <button
-                        onClick={() => onNavigateToNPC(npc.id)}
+                      <a
+                        href={buildRouteHref("npcs", { npcId: npc.id })}
+                        onClick={(e) =>
+                          handleSpaNavClick(e, () => onNavigateToNPC(npc.id))
+                        }
                         style={{
                           ...S.btn,
                           fontSize: "10px",
@@ -1216,7 +1280,7 @@ function CampaignDetail({
                         }}
                       >
                         View
-                      </button>
+                      </a>
                       <button
                         onClick={() => {
                           const url = `${window.location.origin}${window.location.pathname}#npcs/${npc.id}`;
@@ -2250,134 +2314,51 @@ function ClockManager({ clocks, setClocks, campaignId, sessionId, setError }) {
   );
 }
 
-function DiceHistoryRow({
-  roll,
-  showPositionEffect,
-  onPatch,
-  onGrantXP,
-  isGM,
-}) {
-  const [editing, setEditing] = useState(false);
-  const [pos, setPos] = useState(roll.position || "risky");
-  const [eff, setEff] = useState(roll.effect || "standard");
-  const handleSave = () => {
-    onPatch(roll.id, { position: pos, effect: eff });
-    setEditing(false);
-  };
-  const isDesperate =
-    roll.position === "desperate" && roll.roll_type === "ACTION";
-  const canGrantXP = isGM && isDesperate && !roll.xp_awarded && onGrantXP;
-  return (
-    <div
-      style={{
-        padding: "6px 0",
-        borderBottom: "1px solid #1f2937",
-        fontSize: "12px",
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-        flexWrap: "wrap",
-        ...(isDesperate
-          ? {
-              background: "rgba(249, 115, 22, 0.08)",
-              margin: "0 -8px",
-              padding: "6px 8px",
-              borderLeft: "3px solid #f97316",
-            }
-          : {}),
-      }}
-    >
-      {isDesperate && (
-        <span style={{ ...S.badge, background: "#f97316", color: "#000" }}>
-          Desperate
-        </span>
-      )}
-      {roll.xp_awarded && (
-        <span style={{ ...S.badge, background: "#16a34a", color: "#fff" }}>
-          +1 XP
-        </span>
-      )}
-      <span style={{ fontWeight: "bold" }}>
-        {roll.character_name || roll.character}
-      </span>
-      <span>·</span>
-      <span>{roll.action_name}</span>
-      <span>·</span>
-      <span>{[].concat(roll.results || []).join(", ")}</span>
-      <span>→</span>
-      <span>{roll.outcome}</span>
-      {showPositionEffect &&
-        (editing ? (
-          <>
-            <select
-              style={S.select}
-              value={pos}
-              onChange={(e) => setPos(e.target.value)}
-            >
-              <option value="controlled">Controlled</option>
-              <option value="risky">Risky</option>
-              <option value="desperate">Desperate</option>
-            </select>
-            <select
-              style={S.select}
-              value={eff}
-              onChange={(e) => setEff(e.target.value)}
-            >
-              <option value="limited">Limited</option>
-              <option value="standard">Standard</option>
-              <option value="extreme">Extreme</option>
-            </select>
-            <button
-              onClick={handleSave}
-              style={{ ...S.btn, fontSize: "10px", padding: "2px 6px" }}
-            >
-              Save
-            </button>
-            <button
-              onClick={() => setEditing(false)}
-              style={{ ...S.btn, fontSize: "10px", padding: "2px 6px" }}
-            >
-              Cancel
-            </button>
-          </>
-        ) : (
-          <span style={{ color: "#9ca3af", marginLeft: "8px" }}>
-            ({roll.position || "—"}, {roll.effect || "—"})
-            <button
-              onClick={() => setEditing(true)}
-              style={{
-                marginLeft: "4px",
-                background: "none",
-                border: "none",
-                color: "#6b7280",
-                cursor: "pointer",
-                fontSize: "10px",
-              }}
-            >
-              Edit
-            </button>
-          </span>
-        ))}
-      {canGrantXP && (
-        <button
-          onClick={() => onGrantXP(roll.id)}
-          style={{
-            ...S.btnSuccess,
-            fontSize: "10px",
-            padding: "2px 8px",
-            marginLeft: "auto",
-          }}
-        >
-          Grant XP
-        </button>
-      )}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Session Records Modal (view session history: goals, rolls, events)
 // ---------------------------------------------------------------------------
+
+/** Primary label for dice row: Fortune uses GM (rolled_by), not vehicle character_id. */
+function formatSessionRecordsRollSummary(r, showPositionEffect) {
+  const rt = String(r.roll_type || "").toUpperCase();
+  const diceStr = [].concat(r.results || []).join(", ");
+  const outcomeStr = String(r.outcome || "").trim();
+  const posEff =
+    showPositionEffect && (r.position || r.effect)
+      ? ` (${r.position || ""}, ${r.effect || ""})`
+      : "";
+
+  if (rt === "FORTUNE") {
+    const gm = String(r.rolled_by_username || "").trim() || "GM";
+    const label = String(r.fortune_public_label || r.goal_label || "").trim();
+    const act = String(r.action_name || "").trim();
+    const mid =
+      label ||
+      (act.toLowerCase() !== "fortune" ? act : "") ||
+      "Fortune";
+    const midSeg = mid && mid !== "Fortune" ? ` · ${mid}` : "";
+    return `${gm} · GM Fortune${midSeg} · ${diceStr} → ${outcomeStr}${posEff}`;
+  }
+
+  if (rt === "CLEAR_STRESS") {
+    const actor =
+      String(r.rolled_by_username || "").trim() ||
+      String(r.character_name || "").trim() ||
+      String(r.character ?? "");
+    const act = String(r.action_name || "").trim().toLowerCase() === "vice"
+      ? "Vice"
+      : String(r.action_name || "").trim() || "Clear stress";
+    return `${actor || "unknown"} · ${act} · ${diceStr} → ${outcomeStr}${posEff}`;
+  }
+
+  const actor =
+    String(r.rolled_by_username || "").trim() ||
+    String(r.character_name || "").trim() ||
+    String(r.character ?? "");
+  const action = String(r.action_name || "").trim() || "Roll";
+  return `${actor || "unknown"} · ${action} · ${diceStr} → ${outcomeStr}${posEff}`;
+}
+
 function SessionRecordsModal({ sessionId, sessionName, onClose }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -2494,13 +2475,7 @@ function SessionRecordsModal({ sessionId, sessionName, onClose }) {
                       borderBottom: "1px solid #1f2937",
                     }}
                   >
-                    {r.character_name || r.character} · {r.action_name} ·{" "}
-                    {[].concat(r.results || []).join(", ")} → {r.outcome || ""}
-                    {showPositionEffect && (r.position || r.effect) && (
-                      <span
-                        style={{ color: "#6b7280", marginLeft: "6px" }}
-                      >{`(${r.position || ""}, ${r.effect || ""})`}</span>
-                    )}
+                    {formatSessionRecordsRollSummary(r, showPositionEffect)}
                   </div>
                 ))
               )}
@@ -2531,9 +2506,9 @@ function SessionRecordsModal({ sessionId, sessionName, onClose }) {
 }
 
 // ---------------------------------------------------------------------------
-// Session List View
+// Sessions list + create + records modal (embedded in CampaignDetail)
 // ---------------------------------------------------------------------------
-function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
+function CampaignSessionsPanel({ campaign, onOpenSession }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -2541,6 +2516,7 @@ function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
   const [recordsModalSession, setRecordsModalSession] = useState(null);
 
   useEffect(() => {
+    setLoading(true);
     sessionAPI
       .getSessions(campaign.id)
       .then(setSessions)
@@ -2561,7 +2537,7 @@ function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
         status: "PLANNED",
       });
       setSessions((prev) => [session, ...(prev || [])]);
-      onSelectSession(session);
+      onOpenSession(session);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -2570,45 +2546,70 @@ function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
   };
 
   return (
-    <div>
-      <button onClick={onBack} style={{ ...S.btnGhost, marginBottom: "12px" }}>
-        {"< Back to Campaign"}
-      </button>
-      {error && <div style={S.err}>{error}</div>}
-      <div style={{ ...S.card, border: "1px solid #4b5563" }}>
-        <span style={S.sectionLbl}>Sessions</span>
-        <button
-          onClick={handleCreateSession}
-          style={S.btnSuccess}
-          disabled={creating}
+    <>
+      {error && <div style={{ ...S.err, marginTop: "12px" }}>{error}</div>}
+      <div
+        style={{
+          marginTop: "14px",
+          paddingTop: "14px",
+          borderTop: "1px solid #374151",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: "8px",
+            marginBottom: loading ? "0" : "10px",
+          }}
         >
-          {creating ? "Creating..." : "+ New Session"}
-        </button>
+          <span style={{ ...S.sectionLbl, marginTop: 0, marginBottom: 0 }}>
+            Sessions
+          </span>
+          <button
+            onClick={handleCreateSession}
+            style={S.btnSuccess}
+            disabled={creating}
+          >
+            {creating ? "Creating..." : "+ New Session"}
+          </button>
+        </div>
         {loading ? (
-          <div style={{ color: "#6b7280", padding: "16px" }}>
+          <div style={{ color: "#6b7280", padding: "12px 0" }}>
             Loading sessions...
           </div>
         ) : !sessions?.length ? (
-          <div style={{ color: "#6b7280", padding: "16px" }}>
+          <div style={{ color: "#6b7280", padding: "8px 0" }}>
             No sessions yet. Create one to get started.
           </div>
         ) : (
-          <div style={{ marginTop: "12px" }}>
+          <div style={{ marginTop: "4px" }}>
             {sessions.map((s) => (
-              <div key={s.id} style={{ ...S.card, marginBottom: "8px" }}>
+              <div
+                key={s.id}
+                style={{
+                  background: "#0d1117",
+                  border: "1px solid #374151",
+                  borderRadius: "4px",
+                  padding: "10px",
+                  marginBottom: "8px",
+                }}
+              >
                 <div
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "flex-start",
+                    gap: "8px",
                   }}
                 >
                   <div
-                    style={{ flex: 1, cursor: "pointer" }}
-                    onClick={() => onSelectSession(s)}
+                    style={{ flex: 1, cursor: "pointer", minWidth: 0 }}
+                    onClick={() => onOpenSession(s)}
                     role="button"
                     tabIndex={0}
-                    onKeyDown={(e) => e.key === "Enter" && onSelectSession(s)}
+                    onKeyDown={(e) => e.key === "Enter" && onOpenSession(s)}
                   >
                     <div style={{ fontWeight: "bold" }}>
                       {s.name || `Session ${s.id}`}
@@ -2624,6 +2625,7 @@ function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
                     </div>
                   </div>
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       setRecordsModalSession(s);
@@ -2635,44 +2637,52 @@ function SessionList({ campaign, onBack, onSelectSession, onRefresh }) {
                 </div>
               </div>
             ))}
-            {recordsModalSession && (
-              <SessionRecordsModal
-                sessionId={recordsModalSession.id}
-                sessionName={recordsModalSession.name}
-                onClose={() => setRecordsModalSession(null)}
-              />
-            )}
           </div>
         )}
       </div>
-    </div>
+      {recordsModalSession && (
+        <SessionRecordsModal
+          sessionId={recordsModalSession.id}
+          sessionName={recordsModalSession.name}
+          onClose={() => setRecordsModalSession(null)}
+        />
+      )}
+    </>
   );
 }
 
 // ---------------------------------------------------------------------------
 // Session Detail View (GM-only)
 // ---------------------------------------------------------------------------
-function SessionDetail({ campaign, session, onBack, onRefresh }) {
+function SessionDetail({
+  campaign,
+  session,
+  onBack,
+  onRefresh,
+  onNavigateToCharacter,
+  onNavigateToNPC,
+}) {
   const [sessionData, setSessionData] = useState(session);
   const [rolls, setRolls] = useState([]);
   const [clocks, setClocks] = useState([]);
   const [crews, setCrews] = useState([]);
   const [characters, setCharacters] = useState([]);
   const [campaignNPCs, setCampaignNPCs] = useState([]);
-  const [showPositionEffect, setShowPositionEffect] = useState(false);
-  const [showDiceHistoryPanel, setShowDiceHistoryPanel] = useState(false);
   const [manualRoll, setManualRoll] = useState({
+    rollKind: "ACTION",
     characterId: "",
     actionName: "skirmish",
+    resistanceAttr: "resolve",
+    viceNote: "",
     diceStr: "4,5",
     outcome: "FULL_SUCCESS",
   });
   const [manualRollSaving, setManualRollSaving] = useState(false);
   const [fortuneDice, setFortuneDice] = useState(2);
+  const [fortuneReason, setFortuneReason] = useState("");
   const [fortuneRolling, setFortuneRolling] = useState(false);
   const [error, setError] = useState(null);
-  const [wantedStars, setWantedStars] = useState(campaign?.wanted_stars ?? 0);
-  const [proposedDateInput, setProposedDateInput] = useState("");
+  const [sessionDateInput, setSessionDateInput] = useState("");
 
   useEffect(() => {
     if (!session?.id) return;
@@ -2704,53 +2714,37 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
       .getNPCs(campaign.id)
       .then(setCampaignNPCs)
       .catch(() => setCampaignNPCs([]));
-    setWantedStars(campaign?.wanted_stars ?? 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id, campaign?.id, campaign?.wanted_stars]);
 
   useEffect(() => {
-    const p = sessionData?.proposed_date;
-    if (p == null || p === "") {
-      setProposedDateInput("");
-    } else {
-      setProposedDateInput(
-        typeof p === "string" ? p.slice(0, 10) : "",
-      );
+    const raw = sessionData?.session_date;
+    if (!raw) {
+      setSessionDateInput("");
+      return;
     }
-  }, [sessionData?.id, sessionData?.proposed_date]);
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) {
+      setSessionDateInput("");
+      return;
+    }
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, "0");
+    const day = String(parsed.getDate()).padStart(2, "0");
+    setSessionDateInput(`${year}-${month}-${day}`);
+  }, [sessionData?.id, sessionData?.session_date]);
 
   const campaignChars =
     campaign?.campaign_characters ||
     characters.map((c) => ({ id: c.id, true_name: c.true_name, ...c }));
 
-  const desperateRollCount = useMemo(
+  const fortuneRolls = useMemo(
     () =>
-      rolls.filter(
-        (r) =>
-          (r.roll_type || "") === "ACTION" &&
-          (r.position || "").toLowerCase() === "desperate",
-      ).length,
+      (rolls || []).filter(
+        (r) => String(r.roll_type || "").toUpperCase() === "FORTUNE",
+      ),
     [rolls],
   );
-
-  const lastRollByCharacter = useMemo(() => {
-    const m = {};
-    (rolls || []).forEach((r) => {
-      const cid = r.character;
-      if (cid != null && m[cid] == null) m[cid] = r;
-    });
-    return m;
-  }, [rolls]);
-
-  const handleWantedStars = async (stars) => {
-    setWantedStars(stars);
-    try {
-      await campaignAPI.patchCampaign(campaign.id, { wanted_stars: stars });
-      onRefresh();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
 
   const handleSetActiveSession = async () => {
     try {
@@ -2778,37 +2772,22 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
     }
   };
 
-  const handleSaveProposedDate = async () => {
+  const handleSaveSessionDate = async () => {
     setError(null);
+    if (!sessionDateInput) {
+      setError("Pick a session date first.");
+      return;
+    }
     try {
-      const value = proposedDateInput.trim() || null;
+      const [yearStr, monthStr, dayStr] = sessionDateInput.split("-");
+      const year = Number(yearStr);
+      const month = Number(monthStr);
+      const day = Number(dayStr);
+      const value = new Date(year, month - 1, day, 12, 0, 0, 0).toISOString();
       const updated = await sessionAPI.patchSession(session.id, {
-        proposed_date: value,
+        session_date: value,
       });
       setSessionData((prev) => ({ ...prev, ...updated }));
-      onRefresh();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
-  const handleClearProposedDate = async () => {
-    setError(null);
-    try {
-      const updated = await sessionAPI.patchSession(session.id, {
-        proposed_date: null,
-      });
-      setProposedDateInput("");
-      setSessionData((prev) => ({ ...prev, ...updated }));
-      onRefresh();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
-  const handlePatchCharacterHarm = async (charId, harmData) => {
-    try {
-      await characterAPI.patchCharacter(charId, harmData);
       onRefresh();
     } catch (e) {
       setError(e.message);
@@ -2819,29 +2798,6 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
     try {
       const updated = await sessionAPI.patchSession(session.id, data);
       setSessionData(updated);
-      onRefresh();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
-  const handlePatchRoll = async (rollId, data) => {
-    try {
-      await rollAPI.patchRoll(rollId, data);
-      setRolls((prev) =>
-        prev.map((r) => (r.id === rollId ? { ...r, ...data } : r)),
-      );
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
-  const handleGrantXP = async (rollId) => {
-    try {
-      await rollAPI.grantXP(rollId);
-      setRolls((prev) =>
-        prev.map((r) => (r.id === rollId ? { ...r, xp_awarded: true } : r)),
-      );
       onRefresh();
     } catch (e) {
       setError(e.message);
@@ -2864,19 +2820,42 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
     }
     setManualRollSaving(true);
     setError(null);
+    const kind = String(manualRoll.rollKind || "ACTION").toUpperCase();
+    const base = {
+      character: cid,
+      session: session.id,
+      dice_pool: results.length,
+      results,
+      outcome: manualRoll.outcome,
+      position: sessionData?.default_position || "risky",
+      effect: sessionData?.default_effect || "standard",
+    };
     try {
-      await rollAPI.createRoll({
-        character: cid,
-        session: session.id,
-        roll_type: "ACTION",
-        action_name: (manualRoll.actionName || "action").toLowerCase(),
-        position: sessionData?.default_position || "risky",
-        effect: sessionData?.default_effect || "standard",
-        dice_pool: results.length,
-        results,
-        outcome: manualRoll.outcome,
-        description: "Manual / offline dice (GM)",
-      });
+      if (kind === "RESISTANCE") {
+        await rollAPI.createRoll({
+          ...base,
+          roll_type: "RESISTANCE",
+          action_name: (manualRoll.resistanceAttr || "resolve").toLowerCase(),
+          description: "Manual / offline resistance (GM)",
+        });
+      } else if (kind === "CLEAR_STRESS") {
+        const note = String(manualRoll.viceNote || "").trim();
+        await rollAPI.createRoll({
+          ...base,
+          roll_type: "CLEAR_STRESS",
+          action_name: "vice",
+          description: note
+            ? `Manual vice (offline dice, GM). ${note}`
+            : "Manual vice (offline dice, GM)",
+        });
+      } else {
+        await rollAPI.createRoll({
+          ...base,
+          roll_type: "ACTION",
+          action_name: (manualRoll.actionName || "action").toLowerCase(),
+          description: "Manual / offline action (GM)",
+        });
+      }
       const next = await rollAPI.getRolls({ session: session.id });
       setRolls(next || []);
       onRefresh();
@@ -2897,16 +2876,20 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
       return;
     }
     try {
+      const reason = String(fortuneReason || "").trim();
       await characterAPI.rollAction(firstChar.id, {
         roll_type: "FORTUNE",
         action: "Fortune",
         session_id: session.id,
         dice_pool: fortuneDice,
+        goal_label: reason,
+        fortune_public_label: reason,
       });
       rollAPI
         .getRolls({ session: session.id })
         .then(setRolls)
         .catch(() => {});
+      if (reason) setFortuneReason("");
       onRefresh();
     } catch (e) {
       setError(e.message);
@@ -2915,83 +2898,18 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
     }
   };
 
-  const npcInvolvements = sessionData?.npc_involvements || [];
-  const invByNpc = Object.fromEntries(
-    (npcInvolvements || []).map((i) => [i.npc, i]),
-  );
-  const toggleNpcInvolved = async (npcId) => {
-    const inv = invByNpc[npcId];
-    const next = inv
-      ? npcInvolvements.filter((i) => i.npc !== npcId)
-      : [
-          ...npcInvolvements,
-          {
-            npc: npcId,
-            show_clocks_to_players: false,
-            show_vulnerability_clock_to_players: false,
-          },
-        ];
+  const handleDeleteFortuneRoll = async (rollId) => {
+    if (!rollId) return;
+    const ok = window.confirm("Remove this fortune roll record?");
+    if (!ok) return;
     try {
-      const updated = await sessionAPI.patchSession(session.id, {
-        npc_involvements: next,
-      });
-      setSessionData(updated);
+      await rollAPI.deleteRoll(rollId);
+      setRolls((prev) => (prev || []).filter((r) => r.id !== rollId));
       onRefresh();
     } catch (e) {
-      setError(e.message);
+      setError(e.message || "Failed to remove roll record.");
     }
   };
-  const toggleShowClocks = async (npcId) => {
-    const inv = invByNpc[npcId];
-    if (!inv) return;
-    const next = npcInvolvements.map((i) => {
-      if (i.npc !== npcId) return i;
-      const showClocks = !i.show_clocks_to_players;
-      return {
-        ...i,
-        show_clocks_to_players: showClocks,
-        show_vulnerability_clock_to_players: showClocks
-          ? true
-          : i.show_vulnerability_clock_to_players ?? false,
-      };
-    });
-    try {
-      const updated = await sessionAPI.patchSession(session.id, {
-        npc_involvements: next,
-      });
-      setSessionData(updated);
-      onRefresh();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-  const toggleShowVulnerabilityClock = async (npcId) => {
-    const inv = invByNpc[npcId];
-    if (!inv) return;
-    const next = npcInvolvements.map((i) =>
-      i.npc === npcId
-        ? {
-            ...i,
-            show_vulnerability_clock_to_players:
-              i.show_clocks_to_players
-                ? true
-                : !(i.show_vulnerability_clock_to_players ?? false),
-            show_clocks_to_players: i.show_clocks_to_players ?? false,
-          }
-        : i,
-    );
-    try {
-      const updated = await sessionAPI.patchSession(session.id, {
-        npc_involvements: next,
-      });
-      setSessionData(updated);
-      onRefresh();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-  const isVulnerabilityVisibleToPlayers = (inv) =>
-    !!inv?.show_clocks_to_players || !!inv?.show_vulnerability_clock_to_players;
 
   const [coinEdits, setCoinEdits] = useState({});
   const handleCrewCoinChange = async (crewId, coin) => {
@@ -3015,7 +2933,7 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
   return (
     <div>
       <button onClick={onBack} style={{ ...S.btnGhost, marginBottom: "12px" }}>
-        {"< Back to Sessions"}
+        {"< Back to Campaign"}
       </button>
       {error && <div style={S.err}>{error}</div>}
 
@@ -3063,7 +2981,7 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
           }}
         >
           <div style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "6px" }}>
-            Proposed session date (when you plan to play)
+            Session date (editable)
           </div>
           <div
             style={{
@@ -3075,8 +2993,8 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
           >
             <input
               type="date"
-              value={proposedDateInput}
-              onChange={(e) => setProposedDateInput(e.target.value)}
+              value={sessionDateInput}
+              onChange={(e) => setSessionDateInput(e.target.value)}
               style={{
                 fontFamily: "monospace",
                 fontSize: "12px",
@@ -3090,23 +3008,14 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
             />
             <button
               type="button"
-              onClick={handleSaveProposedDate}
+              onClick={handleSaveSessionDate}
               style={S.btnGhost}
             >
               Save date
             </button>
-            {(sessionData?.proposed_date || proposedDateInput) && (
-              <button
-                type="button"
-                onClick={handleClearProposedDate}
-                style={{ ...S.btnGhost, fontSize: "11px" }}
-              >
-                Clear date
-              </button>
-            )}
           </div>
           <div style={{ fontSize: "10px", color: "#6b7280", marginTop: "6px" }}>
-            Record created:{" "}
+            Created at:{" "}
             {sessionData?.session_date
               ? new Date(sessionData.session_date).toLocaleString()
               : "—"}
@@ -3114,538 +3023,29 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
         </div>
       </div>
 
-      {/* Position & Effect + dice history toggle (GM control) */}
-      <div style={S.card}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            flexWrap: "wrap",
-            gap: "8px",
-          }}
-        >
-          <span style={S.sectionLbl}>
-            Position & Effect (Player Visibility)
-          </span>
-          <button
-            type="button"
-            onClick={() => setShowDiceHistoryPanel((x) => !x)}
-            title={
-              showDiceHistoryPanel ? "Hide dice history" : "Show dice history"
-            }
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              background: showDiceHistoryPanel ? "#312e81" : "#1f2937",
-              border: "1px solid #4b5563",
-              borderRadius: 6,
-              padding: "6px 10px",
-              cursor: "pointer",
-              color: "#e5e7eb",
-              fontSize: 11,
-            }}
-          >
-            <HistoryBranchIcon size={16} />
-            Dice history
-          </button>
-        </div>
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            marginTop: "8px",
-            cursor: "pointer",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={sessionData?.show_position_effect_to_players !== false}
-            onChange={(e) =>
-              handleUpdateSession({
-                show_position_effect_to_players: e.target.checked,
-              })
-            }
-          />
-          <span>
-            Show position & effect to players on their character sheets
-          </span>
-        </label>
-        <div
-          style={{
-            display: "flex",
-            gap: "16px",
-            marginTop: "12px",
-            flexWrap: "wrap",
-            alignItems: "flex-start",
-          }}
-        >
-          <div>
-            <span
-              style={{
-                fontSize: "11px",
-                color: "#9ca3af",
-                display: "block",
-                marginBottom: "4px",
-              }}
-            >
-              Default position
-            </span>
-            <select
-              style={S.select}
-              value={sessionData?.default_position || "risky"}
-              onChange={(e) =>
-                handleUpdateSession({ default_position: e.target.value })
-              }
-            >
-              <option value="controlled">Controlled</option>
-              <option value="risky">Risky</option>
-              <option value="desperate">Desperate</option>
-            </select>
-          </div>
-          <div>
-            <span
-              style={{
-                fontSize: "11px",
-                color: "#9ca3af",
-                display: "block",
-                marginBottom: "4px",
-              }}
-            >
-              Default effect
-            </span>
-            <select
-              style={S.select}
-              value={sessionData?.default_effect || "standard"}
-              onChange={(e) =>
-                handleUpdateSession({ default_effect: e.target.value })
-              }
-            >
-              <option value="limited">Limited</option>
-              <option value="standard">Standard</option>
-              <option value="extreme">Extreme</option>
-            </select>
-          </div>
-          <div style={{ flex: "1 1 220px" }}>
-            <span
-              style={{
-                fontSize: "11px",
-                color: "#9ca3af",
-                display: "block",
-                marginBottom: "4px",
-              }}
-            >
-              Roll goal label (players see in roll pool)
-            </span>
-            <input
-              style={{ ...S.inp, width: "100%", maxWidth: 360 }}
-              value={sessionData?.roll_goal_label ?? ""}
-              onChange={(e) =>
-                setSessionData((p) => ({
-                  ...p,
-                  roll_goal_label: e.target.value,
-                }))
-              }
-              onBlur={(e) =>
-                handleUpdateSession({ roll_goal_label: e.target.value })
-              }
-              placeholder="e.g. Quietly open the service door"
-            />
-          </div>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            gap: "16px",
-            flexWrap: "wrap",
-            marginTop: "12px",
-          }}
-        >
-          <PositionStack
-            activePosition={sessionData?.default_position || "risky"}
-            readOnly
-          />
-          <EffectShapes
-            activeEffect={sessionData?.default_effect || "standard"}
-            readOnly
-          />
-        </div>
-
-        {showDiceHistoryPanel && (
-          <div
-            style={{
-              marginTop: "14px",
-              padding: "12px",
-              background: "#0d1117",
-              borderRadius: "8px",
-              border: "1px solid #374151",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "11px",
-                color: "#9ca3af",
-                marginBottom: "8px",
-              }}
-            >
-              Desperate action rolls this session:{" "}
-              <span style={{ color: "#f97316", fontWeight: "bold" }}>
-                {desperateRollCount}
-              </span>
-            </div>
-            <label
-              style={{
-                fontSize: "11px",
-                marginBottom: "8px",
-                display: "block",
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={showPositionEffect}
-                onChange={(e) => setShowPositionEffect(e.target.checked)}
-              />{" "}
-              Show position & effect on rows
-            </label>
-            {rolls.length === 0 ? (
-              <div style={{ color: "#6b7280", fontSize: "12px" }}>
-                No rolls for this session.
-              </div>
-            ) : (
-              rolls.map((r) => (
-                <DiceHistoryRow
-                  key={r.id}
-                  roll={r}
-                  showPositionEffect={showPositionEffect}
-                  onPatch={handlePatchRoll}
-                  onGrantXP={handleGrantXP}
-                  isGM
-                />
-              ))
-            )}
-            <div
-              style={{
-                marginTop: "12px",
-                paddingTop: "12px",
-                borderTop: "1px solid #1f2937",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "11px",
-                  color: "#a78bfa",
-                  fontWeight: "bold",
-                  display: "block",
-                  marginBottom: "8px",
-                }}
-              >
-                Manual roll (offline dice)
-              </span>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "8px",
-                  alignItems: "flex-end",
-                  fontSize: "11px",
-                }}
-              >
-                <div>
-                  <span
-                    style={{
-                      color: "#9ca3af",
-                      display: "block",
-                      marginBottom: "2px",
-                    }}
-                  >
-                    Character
-                  </span>
-                  <select
-                    style={S.select}
-                    value={manualRoll.characterId}
-                    onChange={(e) =>
-                      setManualRoll((p) => ({
-                        ...p,
-                        characterId: e.target.value,
-                      }))
-                    }
-                  >
-                    <option value="">—</option>
-                    {campaignChars.map((ch) => (
-                      <option key={ch.id} value={ch.id}>
-                        {ch.true_name || ch.name || `PC ${ch.id}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <span
-                    style={{
-                      color: "#9ca3af",
-                      display: "block",
-                      marginBottom: "2px",
-                    }}
-                  >
-                    Action
-                  </span>
-                  <input
-                    style={{ ...S.inp, width: 100 }}
-                    value={manualRoll.actionName}
-                    onChange={(e) =>
-                      setManualRoll((p) => ({
-                        ...p,
-                        actionName: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div>
-                  <span
-                    style={{
-                      color: "#9ca3af",
-                      display: "block",
-                      marginBottom: "2px",
-                    }}
-                  >
-                    Dice (1–6)
-                  </span>
-                  <input
-                    style={{ ...S.inp, width: 90 }}
-                    value={manualRoll.diceStr}
-                    onChange={(e) =>
-                      setManualRoll((p) => ({ ...p, diceStr: e.target.value }))
-                    }
-                    placeholder="4, 5"
-                  />
-                </div>
-                <div>
-                  <span
-                    style={{
-                      color: "#9ca3af",
-                      display: "block",
-                      marginBottom: "2px",
-                    }}
-                  >
-                    Outcome
-                  </span>
-                  <select
-                    style={S.select}
-                    value={manualRoll.outcome}
-                    onChange={(e) =>
-                      setManualRoll((p) => ({ ...p, outcome: e.target.value }))
-                    }
-                  >
-                    <option value="CRITICAL_SUCCESS">Critical</option>
-                    <option value="FULL_SUCCESS">Full</option>
-                    <option value="PARTIAL_SUCCESS">Partial</option>
-                    <option value="FAILURE">Failure</option>
-                    <option value="BOTCH">Botch</option>
-                  </select>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleManualRollCreate}
-                  style={S.btnPrimary}
-                  disabled={manualRollSaving}
-                >
-                  {manualRollSaving ? "Saving..." : "Add manual roll"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* GM visibility: last roll line per PC (v1 snapshot) */}
-      <div style={S.card}>
-        <span style={S.sectionLbl}>
-          Player dice pools (last committed roll)
-        </span>
-        <p
-          style={{
-            fontSize: "11px",
-            color: "#6b7280",
-            marginTop: "4px",
-            marginBottom: "8px",
-          }}
-        >
-          Full pool sources are stored on each roll&apos;s description. This
-          list shows the most recent roll per character in this session.
-        </p>
-        {campaignChars.length === 0 ? (
-          <div style={{ color: "#6b7280", fontSize: "12px" }}>
-            No characters in campaign.
-          </div>
-        ) : (
-          campaignChars.map((ch) => {
-            const lr = lastRollByCharacter[ch.id];
-            return (
-              <div
-                key={ch.id}
-                style={{
-                  fontSize: "12px",
-                  padding: "6px 0",
-                  borderBottom: "1px solid #1f2937",
-                }}
-              >
-                <strong style={{ color: "#e5e7eb" }}>
-                  {ch.true_name || ch.name}
-                </strong>
-                {lr ? (
-                  <span style={{ color: "#9ca3af" }}>
-                    {" "}
-                    — {lr.action_name} ·{" "}
-                    {[].concat(lr.results || []).join(", ")} → {lr.outcome}
-                    {(lr.description || "").trim() ? (
-                      <span style={{ color: "#6b7280" }}>
-                        {" "}
-                        · {(lr.description || "").slice(0, 140)}
-                        {(lr.description || "").length > 140 ? "…" : ""}
-                      </span>
-                    ) : null}
-                  </span>
-                ) : (
-                  <span style={{ color: "#6b7280" }}> — No rolls yet.</span>
-                )}
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* Wanted level */}
-      <div style={S.card}>
-        <span style={S.sectionLbl}>Wanted Level</span>
-        <div style={{ display: "flex", gap: "4px", marginTop: "4px" }}>
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button
-              key={n}
-              onClick={() => handleWantedStars(n)}
-              style={{
-                ...S.btn,
-                background: n <= wantedStars ? "#fbbf24" : "#374151",
-                color: n <= wantedStars ? "#000" : "#9ca3af",
-                width: "28px",
-                height: "28px",
-                padding: 0,
-              }}
-            >
-              ★
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Harm for players */}
-      <div style={S.card}>
-        <span style={S.sectionLbl}>Harm for Players</span>
-        {campaignChars.length === 0 ? (
-          <div style={{ color: "#6b7280" }}>No characters in campaign.</div>
-        ) : (
-          campaignChars.map((ch) => (
-            <HarmEditor
-              key={ch.id}
-              character={ch}
-              onSave={(data) => handlePatchCharacterHarm(ch.id, data)}
-            />
-          ))
-        )}
-      </div>
+      <SessionGMManagementPanels
+        S={S}
+        session={session}
+        sessionData={sessionData}
+        setSessionData={setSessionData}
+        campaign={campaign}
+        crews={crews}
+        campaignNPCs={campaignNPCs}
+        characters={characters}
+        clocks={clocks}
+        onRefresh={onRefresh}
+        setError={setError}
+        onNavigateToCharacter={onNavigateToCharacter}
+        onNavigateToNPC={onNavigateToNPC}
+        rolls={rolls}
+        manualRoll={manualRoll}
+        setManualRoll={setManualRoll}
+        manualRollSaving={manualRollSaving}
+        onManualRollCreate={handleManualRollCreate}
+      />
 
       {/* Goals */}
       <GoalsEditor sessionData={sessionData} onSave={handleUpdateSession} />
-
-      {/* NPCs used */}
-      <div style={S.card}>
-        <span style={S.sectionLbl}>NPCs Used</span>
-        {campaignNPCs.length === 0 ? (
-          <div style={{ color: "#6b7280" }}>No NPCs in campaign.</div>
-        ) : (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-              marginTop: "8px",
-            }}
-          >
-            {campaignNPCs.map((npc) => {
-              const inv = invByNpc[npc.id];
-              const inSession = !!inv;
-              return (
-                <div
-                  key={npc.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "12px",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <label
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "4px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={inSession}
-                      onChange={() => toggleNpcInvolved(npc.id)}
-                    />
-                    <span>{npc.name || npc.true_name || `NPC ${npc.id}`}</span>
-                  </label>
-                  {inSession && (
-                    <>
-                      <label
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "4px",
-                          cursor: "pointer",
-                          fontSize: "12px",
-                          color: "#9ca3af",
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={!!inv.show_clocks_to_players}
-                          onChange={() => toggleShowClocks(npc.id)}
-                        />
-                        <span>Show clocks to players</span>
-                      </label>
-                      <label
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "4px",
-                          cursor: inv.show_clocks_to_players
-                            ? "not-allowed"
-                            : "pointer",
-                          fontSize: "12px",
-                          color: "#9ca3af",
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isVulnerabilityVisibleToPlayers(inv)}
-                          disabled={!!inv.show_clocks_to_players}
-                          onChange={() => toggleShowVulnerabilityClock(npc.id)}
-                        />
-                        <span>Show vulnerability to players</span>
-                      </label>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
 
       {/* Coin (crew-level) */}
       <div style={S.card}>
@@ -3694,8 +3094,17 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
             alignItems: "center",
             gap: "8px",
             marginTop: "8px",
+            flexWrap: "wrap",
           }}
         >
+          <span style={{ fontSize: "11px" }}>Goal / reason:</span>
+          <input
+            type="text"
+            style={{ ...S.inp, width: "260px", maxWidth: "100%" }}
+            value={fortuneReason}
+            onChange={(e) => setFortuneReason(e.target.value)}
+            placeholder="Why this fortune roll is being made"
+          />
           <span style={{ fontSize: "11px" }}>Dice pool:</span>
           <select
             style={S.select}
@@ -3715,6 +3124,108 @@ function SessionDetail({ campaign, session, onBack, onRefresh }) {
           >
             {fortuneRolling ? "Rolling..." : "Roll Fortune"}
           </button>
+        </div>
+        <div
+          style={{
+            marginTop: "14px",
+            paddingTop: "12px",
+            borderTop: "1px solid #374151",
+          }}
+        >
+          <span
+            style={{
+              ...S.sectionLbl,
+              marginTop: 0,
+              display: "block",
+              marginBottom: "8px",
+            }}
+          >
+            Fortune roll history
+          </span>
+          {fortuneRolls.length === 0 ? (
+            <div style={{ fontSize: "12px", color: "#6b7280" }}>
+              No fortune rolls this session yet.
+            </div>
+          ) : (
+            <div
+              style={{
+                maxHeight: 220,
+                overflowY: "auto",
+                border: "1px solid #374151",
+                borderRadius: 6,
+                background: "#0d1117",
+                padding: "8px 10px",
+              }}
+            >
+              {fortuneRolls.map((r) => {
+                const when = r.timestamp
+                  ? new Date(r.timestamp).toLocaleString()
+                  : "—";
+                const dice = [].concat(r.results || []).join(", ") || "—";
+                const oc = String(r.outcome || "").replace(/_/g, " ") || "—";
+                const actor =
+                  (r.rolled_by_username && String(r.rolled_by_username).trim()) ||
+                  "GM";
+                const label = String(
+                  r.fortune_public_label || r.goal_label || r.action_name || "",
+                ).trim();
+                return (
+                  <div
+                    key={r.id}
+                    style={{
+                      fontSize: "11px",
+                      padding: "6px 0",
+                      borderBottom: "1px solid #1f2937",
+                      color: "#d1d5db",
+                    }}
+                  >
+                    <div style={{ color: "#9ca3af", fontSize: "10px" }}>
+                      {when}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 4,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 8,
+                      }}
+                    >
+                      <div>
+                        <span style={{ color: "#e5e7eb" }}>{actor}</span>
+                        <span style={{ color: "#6b7280" }}> · GM Fortune</span>
+                        {label ? (
+                          <span style={{ color: "#a78bfa" }}>
+                            {" "}
+                            · {label}
+                          </span>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFortuneRoll(r.id)}
+                        style={{
+                          ...S.btnDanger,
+                          fontSize: 10,
+                          padding: "2px 8px",
+                          background: "#3f1d1d",
+                          color: "#fca5a5",
+                        }}
+                        title="Remove this fortune record"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div style={{ marginTop: 2 }}>
+                      <span>{dice}</span>
+                      <span style={{ color: "#6b7280" }}> → </span>
+                      <span>{oc}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -3801,105 +3312,6 @@ function GoalsEditor({ sessionData, onSave }) {
   );
 }
 
-function HarmEditor({ character, onSave }) {
-  const [harm, setHarm] = useState({
-    harm_level1_used: character.harm_level1_used ?? false,
-    harm_level1_name: character.harm_level1_name || "",
-    harm_level1_slot2_used: character.harm_level1_slot2_used ?? false,
-    harm_level1_slot2_name: character.harm_level1_slot2_name || "",
-    harm_level2_used: character.harm_level2_used ?? false,
-    harm_level2_name: character.harm_level2_name || "",
-    harm_level2_slot2_used: character.harm_level2_slot2_used ?? false,
-    harm_level2_slot2_name: character.harm_level2_slot2_name || "",
-    harm_level3_used: character.harm_level3_used ?? false,
-    harm_level3_name: character.harm_level3_name || "",
-    harm_level4_used: character.harm_level4_used ?? false,
-    harm_level4_name: character.harm_level4_name || "",
-  });
-  useEffect(() => {
-    setHarm({
-      harm_level1_used: character.harm_level1_used ?? false,
-      harm_level1_name: character.harm_level1_name || "",
-      harm_level1_slot2_used: character.harm_level1_slot2_used ?? false,
-      harm_level1_slot2_name: character.harm_level1_slot2_name || "",
-      harm_level2_used: character.harm_level2_used ?? false,
-      harm_level2_name: character.harm_level2_name || "",
-      harm_level2_slot2_used: character.harm_level2_slot2_used ?? false,
-      harm_level2_slot2_name: character.harm_level2_slot2_name || "",
-      harm_level3_used: character.harm_level3_used ?? false,
-      harm_level3_name: character.harm_level3_name || "",
-      harm_level4_used: character.harm_level4_used ?? false,
-      harm_level4_name: character.harm_level4_name || "",
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [character.id]);
-  const save = () => onSave(harm);
-  const renderSlot = (usedKey, nameKey, levelLabel) => (
-    <div
-      key={usedKey}
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "8px",
-        marginTop: "4px",
-      }}
-    >
-      <input
-        type="checkbox"
-        checked={harm[usedKey]}
-        onChange={(e) =>
-          setHarm((p) => ({ ...p, [usedKey]: e.target.checked }))
-        }
-      />
-      <input
-        style={{ ...S.inp, flex: 1, maxWidth: "200px" }}
-        placeholder={levelLabel}
-        value={harm[nameKey]}
-        onChange={(e) => setHarm((p) => ({ ...p, [nameKey]: e.target.value }))}
-      />
-    </div>
-  );
-  return (
-    <div style={{ padding: "8px 0", borderBottom: "1px solid #1f2937" }}>
-      <div style={{ fontWeight: "bold", marginBottom: "4px" }}>
-        {character.true_name || character.alias || "Unnamed"}
-      </div>
-      {/* Level 1: 2 slots */}
-      {renderSlot(
-        "harm_level1_used",
-        "harm_level1_name",
-        "Level 1 harm (slot 1)",
-      )}
-      {renderSlot(
-        "harm_level1_slot2_used",
-        "harm_level1_slot2_name",
-        "Level 1 harm (slot 2)",
-      )}
-      {/* Level 2: 2 slots */}
-      {renderSlot(
-        "harm_level2_used",
-        "harm_level2_name",
-        "Level 2 harm (slot 1)",
-      )}
-      {renderSlot(
-        "harm_level2_slot2_used",
-        "harm_level2_slot2_name",
-        "Level 2 harm (slot 2)",
-      )}
-      {/* Level 3: 1 slot */}
-      {renderSlot("harm_level3_used", "harm_level3_name", "Level 3 harm")}
-      {/* Level 4: 1 slot */}
-      {renderSlot("harm_level4_used", "harm_level4_name", "Level 4 harm")}
-      <button
-        onClick={save}
-        style={{ ...S.btn, marginTop: "6px", fontSize: "10px" }}
-      >
-        Save harm
-      </button>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
@@ -3919,7 +3331,7 @@ export default function CampaignManagement({
   const [form, setForm] = useState({ name: "", description: "" });
   const [selectedCampaignId, setSelectedCampaignId] =
     useState(initialCampaignId);
-  const [sessionView, setSessionView] = useState(null); // null | 'list' | 'detail'
+  const [sessionView, setSessionView] = useState(null); // null | 'detail'
   const [selectedSession, setSelectedSession] = useState(null);
 
   const loadCampaigns = useCallback(async () => {
@@ -4019,29 +3431,12 @@ export default function CampaignManagement({
             campaign={selectedCampaign}
             session={selectedSession}
             onBack={() => {
-              setSessionView("list");
+              setSessionView(null);
               setSelectedSession(null);
             }}
             onRefresh={refreshSelected}
-          />
-        </div>
-      </div>
-    );
-  }
-
-  // ---- Session list view ----
-  if (selectedCampaign && sessionView === "list") {
-    return (
-      <div style={S.page}>
-        <div style={S.content}>
-          <SessionList
-            campaign={selectedCampaign}
-            onBack={() => setSessionView(null)}
-            onSelectSession={(session) => {
-              setSelectedSession(session);
-              setSessionView("detail");
-            }}
-            onRefresh={refreshSelected}
+            onNavigateToCharacter={onNavigateToCharacter}
+            onNavigateToNPC={onNavigateToNPC}
           />
         </div>
       </div>
@@ -4060,7 +3455,10 @@ export default function CampaignManagement({
             user={user}
             onBack={() => window.history.back()}
             onRefresh={refreshSelected}
-            onManageSessions={() => setSessionView("list")}
+            onOpenSession={(session) => {
+              setSelectedSession(session);
+              setSessionView("detail");
+            }}
             onNavigateToCharacter={onNavigateToCharacter}
             onNavigateToNPC={onNavigateToNPC}
             initialFactionId={initialFactionId}

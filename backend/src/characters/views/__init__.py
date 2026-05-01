@@ -16,7 +16,8 @@ from .gameplay_views import (
 from .reference_views import (
     HeritageViewSet, ViceViewSet, AbilityViewSet, StandViewSet,
     StandAbilityViewSet, HamonAbilityViewSet, SpinAbilityViewSet,
-    TraumaViewSet, CharacterHistoryViewSet, ExperienceTrackerViewSet
+    TraumaViewSet, CharacterHistoryViewSet, CrewHistoryViewSet,
+    ExperienceTrackerViewSet,
 )
 from .utility_views import (
     global_search, get_available_playbook_abilities,
@@ -32,7 +33,7 @@ __all__ = [
     'StressHistoryViewSet', 'ChatMessageViewSet', 'ProgressClockViewSet', 'HeritageViewSet',
     'ViceViewSet', 'AbilityViewSet', 'StandViewSet', 'StandAbilityViewSet',
     'HamonAbilityViewSet', 'SpinAbilityViewSet', 'TraumaViewSet',
-    'CharacterHistoryViewSet', 'ExperienceTrackerViewSet',
+    'CharacterHistoryViewSet', 'CrewHistoryViewSet', 'ExperienceTrackerViewSet',
     'global_search', 'get_available_playbook_abilities', 'api_documentation',
     'home', 'SpendCoinAPIView', 'site_stats',
 ] 

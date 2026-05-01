@@ -99,6 +99,29 @@ class CampaignViewSet(viewsets.ModelViewSet):
         except DjangoPermissionDenied:
             raise PermissionDenied(detail="Only the GM can delete this campaign.")
 
+    @action(detail=True, methods=["post"], url_path="increment-wanted")
+    def increment_wanted(self, request, pk=None):
+        """
+        Bump campaign wanted_stars for table-driven effects (e.g. vice overindulge:
+        brag). Any user who can load this campaign may call it; GM-only PATCH still
+        applies for arbitrary edits.
+        """
+        campaign = self.get_object()
+        try:
+            amount = int(request.data.get("amount", 2))
+        except (TypeError, ValueError):
+            amount = 2
+        amount = max(-20, min(20, amount))
+        try:
+            cap = int(request.data.get("cap", 5))
+        except (TypeError, ValueError):
+            cap = 5
+        cap = max(0, min(99, cap))
+        cur = int(getattr(campaign, "wanted_stars", 0) or 0)
+        campaign.wanted_stars = max(0, min(cap, cur + amount))
+        campaign.save(update_fields=["wanted_stars"])
+        return Response(CampaignSerializer(campaign).data)
+
     @action(detail=True, methods=["post"], url_path="invite")
     def invite_player(self, request, pk=None):
         campaign = self.get_object()

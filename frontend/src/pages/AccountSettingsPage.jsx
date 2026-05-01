@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { authAPI, useAuth } from "../features/auth";
+import { useTheme } from "../features/theme/ThemeContext";
 
-// Dark mode format (same as Character Sheet, Character Options)
 const S = {
   page: {
     fontFamily: "monospace",
     fontSize: "13px",
-    background: "#000",
-    color: "#fff",
+    background: "var(--bg-page)",
+    color: "var(--text-primary)",
     minHeight: "100vh",
   },
   content: { padding: "16px", maxWidth: "800px", margin: "0 auto" },
@@ -17,14 +17,14 @@ const S = {
     fontWeight: "bold",
     textTransform: "uppercase",
     letterSpacing: "1px",
-    color: "#e2e8f0",
-    borderBottom: "1px solid #374151",
+    color: "var(--text-primary)",
+    borderBottom: "1px solid var(--border)",
     paddingBottom: "8px",
     marginBottom: "16px",
   },
   card: {
-    background: "#111827",
-    border: "1px solid #374151",
+    background: "var(--bg-card)",
+    border: "1px solid var(--border)",
     borderRadius: "4px",
     padding: "12px",
     marginBottom: "8px",
@@ -38,9 +38,9 @@ const S = {
   },
   inp: {
     background: "transparent",
-    color: "#fff",
+    color: "var(--text-primary)",
     border: "none",
-    borderBottom: "1px solid #4b5563",
+    borderBottom: "1px solid var(--border)",
     padding: "6px 10px",
     width: "100%",
     fontFamily: "monospace",
@@ -49,9 +49,9 @@ const S = {
     boxSizing: "border-box",
   },
   textarea: {
-    background: "#111827",
-    color: "#fff",
-    border: "1px solid #374151",
+    background: "var(--bg-card)",
+    color: "var(--text-primary)",
+    border: "1px solid var(--border)",
     borderRadius: "4px",
     padding: "8px 10px",
     width: "100%",
@@ -67,7 +67,7 @@ const S = {
     borderRadius: "11px",
     border: "none",
     cursor: "pointer",
-    background: on ? "#4f8ef7" : "#374151",
+    background: on ? "#4f8ef7" : "rgba(148, 163, 184, 0.35)",
     color: "#fff" /* inner knob */,
   }),
   btn: {
@@ -77,13 +77,41 @@ const S = {
     cursor: "pointer",
     border: "none",
     fontFamily: "monospace",
-    background: "#7c3aed",
+    background: "var(--accent)",
     color: "#fff",
+  },
+  mutedSmall: {
+    margin: "0 0 10px",
+    color: "var(--text-muted)",
+    fontSize: "11px",
+    lineHeight: 1.45,
   },
 };
 
+function themeChipStyle(active) {
+  return {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "stretch",
+    textAlign: "left",
+    padding: "10px 14px",
+    borderRadius: "4px",
+    border: active
+      ? "2px solid var(--accent)"
+      : "1px solid var(--hftf-border)",
+    background: active ? "rgba(108, 57, 137, 0.12)" : "var(--hftf-panel)",
+    color: "var(--hftf-text-cream)",
+    fontFamily: 'var(--font-heading, "Oswald", sans-serif)',
+    cursor: "pointer",
+    minWidth: "120px",
+    boxSizing: "border-box",
+    outline: "none",
+  };
+}
+
 export default function AccountSettingsPage() {
   const { user } = useAuth();
+  const { theme: appTheme, setTheme } = useTheme();
   const [avatarUrl, setAvatarUrl] = useState("");
   const [avatarPreviewError, setAvatarPreviewError] = useState(false);
   const [signature, setSignature] = useState("");
@@ -122,7 +150,7 @@ export default function AccountSettingsPage() {
         display_title: displayTitle,
         show_avatars: showAvatars,
         show_signatures: showSignatures,
-        theme: "dark",
+        theme: appTheme,
       });
       setSaveMessage("Saved");
     } catch (err) {
@@ -139,20 +167,19 @@ export default function AccountSettingsPage() {
           <h2 style={S.sectionTitle}>Profile</h2>
           <div style={S.card}>
             <label style={S.lbl}>Username</label>
-            <div style={{ color: "#e5e7eb", fontSize: "14px", wordBreak: "break-all" }}>
+            <div
+              style={{
+                color: "var(--text-primary)",
+                fontSize: "14px",
+                wordBreak: "break-all",
+              }}
+            >
               {(user?.username && String(user.username).trim()) || "—"}
             </div>
           </div>
           <div style={S.card}>
             <label style={S.lbl}>Profile picture URL</label>
-            <p
-              style={{
-                margin: "0 0 8px",
-                color: "#9ca3af",
-                fontSize: "11px",
-                lineHeight: 1.45,
-              }}
-            >
+            <p style={{ ...S.mutedSmall, margin: "0 0 8px" }}>
               Use a direct image URL (https://…). File upload is not supported
               here. Recommended: square image (1:1), up to 1024x1024 and 2 MB.
               Best results at 256x256 in WebP, PNG, or JPEG.
@@ -180,13 +207,13 @@ export default function AccountSettingsPage() {
                   height: "72px",
                   flexShrink: 0,
                   borderRadius: "4px",
-                  border: "1px solid #374151",
-                  background: "#0f172a",
+                  border: "1px solid var(--border)",
+                  background: "var(--bg-page)",
                   overflow: "hidden",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  color: "#6b7280",
+                  color: "var(--text-muted)",
                   fontSize: "10px",
                   textAlign: "center",
                   padding: "4px",
@@ -211,7 +238,7 @@ export default function AccountSettingsPage() {
                   "Preview"
                 )}
               </div>
-              <span style={{ color: "#9ca3af", fontSize: "11px" }}>
+              <span style={{ color: "var(--text-muted)", fontSize: "11px" }}>
                 Preview updates as you type a valid image URL.
               </span>
             </div>
@@ -302,9 +329,9 @@ export default function AccountSettingsPage() {
           <h2 style={S.sectionTitle}>Theme / Appearance</h2>
           <div style={S.card}>
             <label style={S.lbl}>HFTF</label>
-            <p style={{ margin: "0 0 10px", color: "#9ca3af", fontSize: "11px" }}>
-              Same palette as the home page: deep black, purple accent, gold and
-              cream highlights.
+            <p style={{ ...S.mutedSmall, marginBottom: "12px" }}>
+              Same brand colors everywhere: purple accent, gold, orange, scarlet —
+              tuned for dark (ink) or light (parchment) backgrounds.
             </p>
             <div
               style={{
@@ -314,7 +341,7 @@ export default function AccountSettingsPage() {
                 maxWidth: "320px",
                 borderRadius: "2px",
                 overflow: "hidden",
-                marginBottom: "12px",
+                marginBottom: "14px",
               }}
               aria-hidden
             >
@@ -325,29 +352,92 @@ export default function AccountSettingsPage() {
             </div>
             <div
               style={{
-                display: "inline-flex",
-                alignItems: "center",
-                padding: "8px 16px",
-                borderRadius: "4px",
-                border: "1px solid var(--hftf-border)",
-                background: "var(--hftf-deep)",
-                color: "var(--hftf-text-cream)",
-                fontFamily: 'var(--font-heading, "Oswald", sans-serif)',
-                fontSize: "13px",
-                fontWeight: 600,
-                letterSpacing: "0.14em",
-                textTransform: "uppercase",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "10px",
+                alignItems: "stretch",
+              }}
+              role="group"
+              aria-label="Choose color theme"
+            >
+              <button
+                type="button"
+                style={themeChipStyle(appTheme === "dark")}
+                aria-pressed={appTheme === "dark"}
+                onClick={() => setTheme("dark")}
+              >
+                <span
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    letterSpacing: "0.12em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  HFTF
+                </span>
+                <span
+                  style={{
+                    fontSize: "10px",
+                    marginTop: "4px",
+                    opacity: 0.85,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  Dark
+                </span>
+              </button>
+              <button
+                type="button"
+                style={themeChipStyle(appTheme === "light")}
+                aria-pressed={appTheme === "light"}
+                onClick={() => setTheme("light")}
+              >
+                <span
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  HFTF Light
+                </span>
+                <span
+                  style={{
+                    fontSize: "10px",
+                    marginTop: "4px",
+                    opacity: 0.85,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  Parchment
+                </span>
+              </button>
+            </div>
+            <p
+              style={{
+                marginTop: "12px",
+                marginBottom: 0,
+                color: "var(--text-muted)",
+                fontSize: "10px",
+                lineHeight: 1.5,
               }}
             >
-              HFTF
-            </div>
+              Use &quot;Save changes&quot; to store your theme with your profile
+              so it carries across devices.
+            </p>
           </div>
         </section>
 
         <section style={S.section}>
           <h2 style={S.sectionTitle}>Notification Settings</h2>
           <div style={S.card}>
-            <div style={{ color: "#9ca3af", fontSize: "12px" }}>
+            <div style={{ color: "var(--text-muted)", fontSize: "12px" }}>
               Notification settings will be available in a future update.
             </div>
           </div>

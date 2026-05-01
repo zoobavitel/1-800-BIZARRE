@@ -20,7 +20,7 @@ const shapeClip = {
 /**
  * Stacked position blocks (active tier highlighted).
  */
-export function PositionStack({ activePosition, readOnly = true }) {
+export function PositionStack({ activePosition, readOnly = true, onSelect }) {
   const ap = (activePosition || "risky").toLowerCase();
   return (
     <div
@@ -43,9 +43,23 @@ export function PositionStack({ activePosition, readOnly = true }) {
       </div>
       {POS_ORDER.map((p) => {
         const on = ap === p;
+        const interactive = !readOnly && typeof onSelect === "function";
         return (
           <div
             key={p}
+            role={interactive ? "button" : undefined}
+            tabIndex={interactive ? 0 : undefined}
+            onClick={interactive ? () => onSelect(p) : undefined}
+            onKeyDown={
+              interactive
+                ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelect(p);
+                    }
+                  }
+                : undefined
+            }
             style={{
               padding: "6px 10px",
               borderRadius: 6,
@@ -77,7 +91,7 @@ export function PositionStack({ activePosition, readOnly = true }) {
 /**
  * Effect tiers as shaped badges with L / S / E letters.
  */
-export function EffectShapes({ activeEffect, readOnly = true }) {
+export function EffectShapes({ activeEffect, readOnly = true, onSelect }) {
   const ae = (activeEffect || "standard").toLowerCase();
   const normalized = ae === "greater" ? "extreme" : ae;
   return (
@@ -104,6 +118,7 @@ export function EffectShapes({ activeEffect, readOnly = true }) {
           const on = normalized === tier;
           const fill = on ? "#7c3aed" : "#374151";
           const letterColor = on ? "#fff" : "#6b7280";
+          const interactive = !readOnly && typeof onSelect === "function";
           return (
             <div
               key={tier}
@@ -115,6 +130,8 @@ export function EffectShapes({ activeEffect, readOnly = true }) {
               }}
             >
               <div
+                role={interactive ? "button" : undefined}
+                tabIndex={interactive ? 0 : undefined}
                 style={{
                   width: 36,
                   height: 36,
@@ -128,6 +145,17 @@ export function EffectShapes({ activeEffect, readOnly = true }) {
                   fontSize: 14,
                   cursor: readOnly ? "default" : "pointer",
                 }}
+                onClick={interactive ? () => onSelect(tier) : undefined}
+                onKeyDown={
+                  interactive
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onSelect(tier);
+                        }
+                      }
+                    : undefined
+                }
               >
                 {EFFECT_LETTER[tier]}
               </div>

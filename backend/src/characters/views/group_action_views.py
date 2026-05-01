@@ -6,15 +6,26 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from ..models import Character, GroupAction, Roll, Session
+from ..roll_helpers import action_roll_counts_as_failure_for_group
 from ..serializers import GroupActionSerializer
 
 
 def _is_failure_roll(roll):
-    """BitD: highest die 1–3 counts as failure for group tally."""
-    dice = roll.results or []
-    if not dice:
-        return True
-    return max(dice) <= 3
+    """Same tier die as outcome; tier 1–3 counts failed for leader stress."""
+    return action_roll_counts_as_failure_for_group(
+        roll.results or [],
+        getattr(roll, "dice_pool", None),
+        getattr(roll, "pool_action_rating", None),
+    )
+
+
+def _group_participants(ga):
+    campaign_chars = list(ga.session.campaign.characters.all())
+    if ga.leader.crew_id:
+        same_crew = [c for c in campaign_chars if c.crew_id == ga.leader.crew_id]
+        if same_crew:
+            return same_crew
+    return campaign_chars
 
 
 class GroupActionViewSet(viewsets.ModelViewSet):
@@ -41,9 +52,13 @@ class GroupActionViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         session_id = request.data.get('session')
         leader_id = request.data.get('leader')
+        action_name = str(request.data.get('action_name') or '').strip().lower()
         goal_label = (request.data.get('goal_label') or '').strip()
-        if not session_id or not leader_id:
-            return Response({'error': 'session and leader are required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not session_id or not leader_id or not action_name:
+            return Response(
+                {'error': 'session, leader, and action_name are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         session = Session.objects.select_related('campaign').filter(pk=session_id).first()
         if not session:
             return Response({'error': 'Invalid session.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -53,22 +68,81 @@ class GroupActionViewSet(viewsets.ModelViewSet):
         camp = session.campaign
         if camp.gm_id != request.user.id and leader.user_id != request.user.id and not request.user.is_staff:
             return Response({'error': 'Only the GM or leader can start a group action.'}, status=status.HTTP_403_FORBIDDEN)
-        ga = GroupAction.objects.create(session=session, leader=leader, goal_label=goal_label, status='OPEN')
+        ga = GroupAction.objects.create(
+            session=session,
+            leader=leader,
+            action_name=action_name,
+            goal_label=goal_label,
+            status='OPEN',
+        )
         return Response(GroupActionSerializer(ga).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], url_path='cancel')
+    def cancel_action(self, request, pk=None):
+        ga = self.get_object()
+        if ga.status != 'OPEN':
+            return Response(
+                {'error': 'Only an open group action can be cancelled.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        camp = ga.session.campaign
+        if (
+            camp.gm_id != request.user.id
+            and ga.leader.user_id != request.user.id
+            and not request.user.is_staff
+        ):
+            return Response(
+                {'error': 'Only the GM or group leader can cancel a group action.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        ga.status = 'CANCELLED'
+        ga.save(update_fields=['status'])
+        return Response(GroupActionSerializer(ga).data)
 
     @action(detail=True, methods=['post'], url_path='resolve')
     def resolve_action(self, request, pk=None):
         ga = self.get_object()
-        if ga.status == 'RESOLVED':
-            return Response({'error': 'Already resolved.'}, status=status.HTTP_400_BAD_REQUEST)
+        if ga.status != 'OPEN':
+            if ga.status == 'RESOLVED':
+                return Response({'error': 'Already resolved.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'This group action is not open.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         camp = ga.session.campaign
-        if camp.gm_id != request.user.id and not request.user.is_staff:
-            return Response({'error': 'Only the GM can resolve a group action.'}, status=status.HTTP_403_FORBIDDEN)
-        rolls = list(Roll.objects.filter(group_action=ga))
-        failures = sum(1 for r in rolls if _is_failure_roll(r))
+        if (
+            camp.gm_id != request.user.id
+            and ga.leader.user_id != request.user.id
+            and not request.user.is_staff
+        ):
+            return Response(
+                {'error': 'Only the GM or leader can resolve a group action.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        participants = _group_participants(ga)
+        rolls = list(
+            Roll.objects.filter(group_action=ga, roll_type='ACTION', action_name__iexact=ga.action_name)
+            .select_related('character')
+            .order_by('-timestamp')
+        )
+        rolled_character_ids = {r.character_id for r in rolls}
+        missing = [p.true_name for p in participants if p.id not in rolled_character_ids]
+        if missing:
+            return Response(
+                {
+                    'error': 'Cannot resolve until all participants have rolled.',
+                    'missing_players': missing,
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        failures = sum(
+            1
+            for r in rolls
+            if _is_failure_roll(r) and r.character_id != ga.leader_id
+        )
         leader = ga.leader
-        cur = getattr(leader, 'stress', 0) or 0
-        new_stress = min(9, cur + failures)
+        cur = max(0, int(getattr(leader, "stress", 0) or 0))
+        new_stress = max(0, cur - failures)
         leader.stress = new_stress
         leader.save(update_fields=['stress'])
         ga.status = 'RESOLVED'

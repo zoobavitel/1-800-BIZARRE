@@ -119,8 +119,15 @@ class UserProfileViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['put'], url_path='update')
     def update_profile(self, request):
-        user = request.user
-        serializer = UserSerializer(user, data=request.data, partial=True)
+        """Flat body matches UserProfileSerializer (same contract as auth_views.UserProfileViewSet)."""
+        try:
+            profile = UserProfile.objects.get(user=request.user)
+        except UserProfile.DoesNotExist:
+            return Response(
+                {"error": "Profile not found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = UserProfileSerializer(profile, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)

@@ -236,7 +236,7 @@
   max-width: 1200px;
   margin: 0 auto;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 32px;
 }
@@ -262,11 +262,18 @@
 .home-poc .home-stand-coin {
   position: relative;
   width: 100%;
-  max-width: 260px;
+  max-width: 420px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
+}
+.home-poc .home-stand-coin-main {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
 }
 .home-poc .home-stand-coin-sr {
   position: absolute;
@@ -360,11 +367,12 @@
   max-width: 220px;
 }
 .home-poc .home-stand-coin-svg {
-  width: 100%;
+  width: min(280px, 100%);
   height: auto;
   display: block;
   border-radius: 50%;
   box-shadow: 0 8px 28px rgba(26, 22, 16, 0.12);
+  justify-self: center;
 }
 .home-poc .home-stand-coin-svg path[role="button"]:focus {
   outline: none;
@@ -593,6 +601,9 @@
   border-top: 1px solid rgba(234, 222, 183, 0.08);
 }
 .home-poc .home-chart-line {
+  padding-top: 10px;
+}
+.home-poc .home-chart-scatter {
   padding-top: 10px;
 }
 .home-poc .home-chart-title {
@@ -939,18 +950,46 @@
 }
 
 .home-poc .g-card {
+  display: flex;
   background: var(--dark-bg-card);
   border: 1px solid var(--dark-border);
-  padding: 16px;
+  padding: 0;
   margin-bottom: 12px;
-  transition: border-color 0.2s;
+  transition:
+    border-color 0.2s,
+    transform 0.15s,
+    box-shadow 0.15s;
   cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
 }
 .home-poc .g-card:hover {
   border-color: var(--p1);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
 }
 .home-poc .g-card-inactive {
   opacity: 0.6;
+}
+.home-poc .g-card-stripe {
+  width: 4px;
+  flex-shrink: 0;
+  background: linear-gradient(
+    to bottom,
+    var(--stripe-1) 0% 25%,
+    var(--stripe-2) 25% 50%,
+    var(--stripe-3) 50% 75%,
+    var(--stripe-4) 75% 100%
+  );
+}
+.home-poc .g-card-body {
+  flex: 1;
+  padding: 12px 14px;
+  min-width: 0;
+}
+.home-poc .g-card-info {
+  min-width: 0;
 }
 .home-poc .g-card-header {
   display: flex;
@@ -965,6 +1004,7 @@
   color: var(--cream);
   letter-spacing: 0.03em;
   min-width: 0;
+  line-height: 1;
 }
 .home-poc .g-card-badges {
   display: flex;
@@ -1095,7 +1135,7 @@
   flex-wrap: wrap;
   font-size: 10px;
   color: var(--dark-text-3);
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 .home-poc .g-card-stat-val {
   color: var(--cream);
@@ -1470,8 +1510,20 @@
   }
   .home-poc .hero-coin-column {
     width: 100%;
-    max-width: 300px;
+    max-width: 360px;
     margin-inline: auto;
+  }
+  .home-poc .home-stand-coin-main {
+    grid-template-columns: minmax(0, 1fr) 132px;
+    align-items: center;
+    gap: 8px;
+  }
+  .home-poc .home-stand-coin-readout {
+    width: 132px;
+  }
+  .home-poc .home-stand-coin-readout-hint,
+  .home-poc .home-stand-coin-readout-blurb {
+    max-width: 112px;
   }
   .home-poc .hero-metrics {
     padding: 0 16px 28px;

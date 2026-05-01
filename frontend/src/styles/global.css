@@ -43,20 +43,39 @@
 }
 
 [data-theme="light"] {
-  /* Keep HFTF brand colors while brightening surfaces */
-  --bg-page: #ede3c7;
-  --bg-header: #f5ecd2;
-  --bg-card: #efe5cb;
-  --text-primary: #1a0e2e;
-  --text-secondary: #5a4070;
-  --accent: #6c3989;
-  --accent-hover: #8a4aaa;
-  --border: #d0c4a4;
+  /* HFTF light: parchment surfaces, same purple / burnt orange accents as dark */
+  --hftf-black: #f5ecd8;
+  --hftf-deep: #ebe3cf;
+  --hftf-panel: #faf6ee;
+  --hftf-border: #c4b89a;
+  --hftf-purple: #6c3989;
+  --hftf-purple-hover: #53266d;
+  --hftf-gold: #7a6924;
+  --hftf-gold-muted: #695d45;
+  --hftf-orange: #c24a0a;
+  --hftf-text-cream: #17101f;
+  --hftf-text-dim: #483e52;
+
+  --bg-page: #faf8f0;
+  --bg-header: var(--hftf-black);
+  --bg-card: var(--hftf-panel);
+  --text-primary: var(--hftf-text-cream);
+  --text-secondary: #4f3f63;
+  --accent: var(--hftf-purple);
+  --accent-hover: var(--hftf-purple-hover);
+  --border: var(--hftf-border);
   --surface-1: var(--bg-header);
   --surface-2: var(--bg-card);
   --surface-border: var(--border);
-  --text-muted: var(--text-secondary);
-  --text-dim: #8d7a54;
+  --text-muted: var(--hftf-text-dim);
+  --text-dim: var(--hftf-text-dim);
+
+  --hm-dark-border: var(--hftf-border);
+  --hm-dark-text: var(--hftf-text-cream);
+  --hm-cream: var(--hftf-text-cream);
+  --hm-font-mono: var(--font-mono);
+  --hm-font-display: var(--font-display);
+  --hm-font-heading: var(--font-heading);
 }
 
 html,
@@ -110,4 +129,43 @@ textarea {
 .appbar-hamburger span:nth-child(3) {
   background: var(--hftf-purple);
   width: 14px;
+}
+
+/* AppBar Search — aligns with homepage .home-poc .header-btn-ghost */
+.appbar-search-btn {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  cursor: pointer;
+  background: none;
+  border: 1px solid var(--hftf-gold-muted);
+  border-radius: 0;
+  color: var(--hftf-text-dim);
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.appbar-search-btn:hover {
+  color: var(--hftf-text-cream);
+  border-color: var(--hftf-text-cream);
+}
+
+/* AppBar Account — aligns with homepage .home-poc .header-btn-fill */
+.appbar-account-btn {
+  font-family: var(--font-heading);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  cursor: pointer;
+  color: #fff;
+  background: var(--hftf-purple);
+  border: 1px solid var(--hftf-purple);
+  border-radius: 0;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.appbar-account-btn:hover {
+  background: var(--hftf-purple-hover);
+  border-color: var(--hftf-purple-hover);
+  color: #fff;
 }

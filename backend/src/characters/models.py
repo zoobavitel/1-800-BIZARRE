@@ -89,6 +89,10 @@ class Faction(models.Model):
         max_length=10, choices=[("weak", "Weak"), ("strong", "Strong")], default="weak"
     )
     reputation = models.IntegerField(default=0)
+    visible_to_players = models.BooleanField(
+        default=True,
+        help_text="When false, crew reputation with this faction is hidden from players until the GM reveals it.",
+    )
 
     # Shared faction data — all NPCs in this faction share these fields
     inventory = models.JSONField(
@@ -188,6 +192,7 @@ class Crew(models.Model):
         CrewPlaybook, on_delete=models.SET_NULL, null=True, blank=True
     )
     description = models.TextField(blank=True)
+    notes = models.TextField(blank=True, help_text="Crew sheet notes (player-facing).")
     image = models.FileField(upload_to="crew_images/", blank=True, null=True)
     xp = models.IntegerField(default=0)
     xp_track_size = models.IntegerField(default=8)
@@ -208,6 +213,10 @@ class Crew(models.Model):
     )
 
     rep = models.IntegerField(default=0)
+    turf = models.IntegerField(
+        default=0,
+        help_text="Crew turf track (0–6), Blades-style.",
+    )
     wanted_level = models.IntegerField(default=0)
 
     coin = models.IntegerField(default=0)
@@ -940,6 +949,21 @@ class CharacterHistory(models.Model):
         return f"Changes for {self.character.true_name} at {self.timestamp}"
 
 
+class CrewHistory(models.Model):
+    crew = models.ForeignKey(
+        Crew, on_delete=models.CASCADE, related_name="history_entries"
+    )
+    editor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    changed_fields = models.JSONField()
+
+    class Meta:
+        ordering = ["-timestamp"]
+
+    def __str__(self):
+        return f"Crew changes for {self.crew.name} at {self.timestamp}"
+
+
 class CampaignAuditLog(models.Model):
     """GM-visible audit trail for campaign-scoped actions (e.g. progress clocks)."""
 
@@ -1027,6 +1051,75 @@ def log_character_changes(sender, instance, created, **kwargs):
 
     if hasattr(instance, "_history_prev_snapshot"):
         del instance._history_prev_snapshot
+
+
+def _crew_scalar_snapshot(crew):
+    """Serialize concrete scalar fields on Crew for history diffing."""
+    snap = {}
+    for field in crew._meta.concrete_fields:
+        if field.primary_key:
+            continue
+        name = field.name
+        if field.many_to_many:
+            continue
+        internal = field.get_internal_type()
+        try:
+            if internal in ("ForeignKey", "OneToOneField"):
+                snap[name] = str(getattr(crew, field.attname))
+            elif internal == "JSONField":
+                snap[name] = json.dumps(
+                    getattr(crew, name), sort_keys=True, default=str
+                )
+            else:
+                val = getattr(crew, name)
+                if hasattr(val, "isoformat"):
+                    snap[name] = val.isoformat()
+                else:
+                    snap[name] = "" if val is None else str(val)
+        except Exception:
+            snap[name] = ""
+    return snap
+
+
+@receiver(pre_save, sender=Crew)
+def crew_presave_snapshot(sender, instance, **kwargs):
+    if not instance.pk:
+        instance._crew_history_prev_snapshot = None
+        return
+    try:
+        prev = Crew.objects.get(pk=instance.pk)
+    except Crew.DoesNotExist:
+        instance._crew_history_prev_snapshot = None
+        return
+    instance._crew_history_prev_snapshot = _crew_scalar_snapshot(prev)
+
+
+@receiver(post_save, sender=Crew)
+def log_crew_changes(sender, instance, created, **kwargs):
+    if created:
+        return
+
+    from .history_context import get_character_history_editor
+
+    prev = getattr(instance, "_crew_history_prev_snapshot", None)
+    if prev is None:
+        prev = {}
+    new_snap = _crew_scalar_snapshot(instance)
+    changed_fields = {}
+    for field_name, new_value in new_snap.items():
+        old_value = prev.get(field_name)
+        if old_value != new_value:
+            changed_fields[field_name] = {"old": old_value, "new": new_value}
+
+    if changed_fields:
+        CrewHistory.objects.create(
+            crew=instance,
+            editor=get_character_history_editor(),
+            changed_fields=changed_fields,
+        )
+
+    if hasattr(instance, "_crew_history_prev_snapshot"):
+        del instance._crew_history_prev_snapshot
 
 
 class Stand(models.Model):
@@ -1431,7 +1524,7 @@ class Session(models.Model):
     name = models.CharField(
         max_length=200, help_text="Title or name of the session/episode"
     )
-    session_date = models.DateTimeField(auto_now_add=True)
+    session_date = models.DateTimeField(default=timezone.now)
     proposed_date = models.DateField(
         null=True,
         blank=True,
@@ -1467,10 +1560,23 @@ class Session(models.Model):
         blank=True,
         help_text="GM-set label for the current roll goal; copied to Roll on commit.",
     )
+    roll_goal_by_character = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Map of character id (string) to GM-set roll goal label for that player.",
+    )
     devils_bargain_by_character = models.JSONField(
         default=dict,
         blank=True,
         help_text="Map of character id (string) to GM-written devil's bargain consequence; player must confirm before rolling with +1d.",
+    )
+    position_effect_by_character = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Map of character id (string) to {position, effect} for this session; "
+            "overrides default_position/default_effect for that PC's action rolls when set."
+        ),
     )
 
     # Score proposal fields
@@ -1500,6 +1606,14 @@ class SessionNPCInvolvement(models.Model):
     )
     show_clocks_to_players = models.BooleanField(default=False)
     show_vulnerability_clock_to_players = models.BooleanField(default=False)
+    show_harm_clock_to_players = models.BooleanField(default=False)
+    revealed_conflict_clock_names = models.JSONField(default=list, blank=True)
+    revealed_alt_clock_names = models.JSONField(default=list, blank=True)
+    revealed_progress_clock_ids = models.JSONField(default=list, blank=True)
+    show_stand_coin_to_players = models.BooleanField(default=False)
+    revealed_stand_coin_stats = models.JSONField(default=list, blank=True)
+    show_all_abilities_to_players = models.BooleanField(default=False)
+    revealed_ability_names = models.JSONField(default=list, blank=True)
 
     class Meta:
         unique_together = ("session", "npc")
@@ -1508,8 +1622,14 @@ class SessionNPCInvolvement(models.Model):
         parts = []
         if self.show_clocks_to_players:
             parts.append("all_clocks")
+        if self.show_harm_clock_to_players:
+            parts.append("harm")
         if self.show_vulnerability_clock_to_players:
             parts.append("vuln")
+        if self.show_stand_coin_to_players:
+            parts.append("stand")
+        if self.show_all_abilities_to_players or self.revealed_ability_names:
+            parts.append("abilities")
         vis = "+".join(parts) if parts else "off"
         return f"{self.npc.name} in {self.session.name} ({vis})"
 
@@ -1722,6 +1842,15 @@ class Roll(models.Model):
         default=0, help_text="Stress spent by the rolling character (push, etc.)."
     )
     devil_bargain_consequence = models.CharField(max_length=500, blank=True)
+    fortune_reveal_outcome = models.BooleanField(
+        default=False,
+        help_text="When false, non-GMs only see that a fortune roll happened.",
+    )
+    fortune_public_label = models.CharField(
+        max_length=120,
+        blank=True,
+        help_text="Optional public-facing label explaining what the fortune roll was for.",
+    )
 
     def __str__(self):
         return f"{self.character.true_name} - {self.action_name} ({self.outcome})"
@@ -1733,6 +1862,7 @@ class GroupAction(models.Model):
     STATUS_CHOICES = [
         ("OPEN", "Open"),
         ("RESOLVED", "Resolved"),
+        ("CANCELLED", "Cancelled"),
     ]
 
     session = models.ForeignKey(
@@ -1740,6 +1870,11 @@ class GroupAction(models.Model):
     )
     leader = models.ForeignKey(
         Character, on_delete=models.CASCADE, related_name="led_group_actions"
+    )
+    action_name = models.CharField(
+        max_length=32,
+        blank=True,
+        help_text="Required action for this group action (e.g. skirmish, survey).",
     )
     goal_label = models.CharField(max_length=300, blank=True)
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default="OPEN")
