@@ -217,7 +217,16 @@ class CrewSerializer(serializers.ModelSerializer):
                 pk=fid_int, campaign_id=crew.campaign_id
             ).exists():
                 continue
-            rep = int(row.get("reputation_value", 0))
+            try:
+                rep = int(row.get("reputation_value", 0))
+            except (TypeError, ValueError):
+                raise serializers.ValidationError(
+                    {
+                        "faction_relationships": (
+                            f"reputation_value for faction_id {fid_int} must be an integer."
+                        )
+                    }
+                )
             rep = max(-3, min(3, rep))
             notes = row.get("notes")
             if notes is None:

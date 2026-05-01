@@ -407,15 +407,14 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 stress_cost += 2
             if push_dice:
                 stress_cost += 2
-            current_stress = max(0, int(getattr(character, "stress", 0) or 0))
-            max_stress = _max_stress_for_character(character)
-            remaining_stress = max(0, max_stress - current_stress)
-            if stress_cost > remaining_stress:
+            # Character.stress is remaining available stress (same as assist spend).
+            available_stress = max(0, int(getattr(character, "stress", 0) or 0))
+            if stress_cost > available_stress:
                 return Response(
                     {
                         "error": (
                             f"Not enough stress. Push costs {stress_cost} stress, "
-                            f"you have {remaining_stress} available."
+                            f"you have {available_stress} available."
                         )
                     },
                     status=status.HTTP_400_BAD_REQUEST,
@@ -507,11 +506,10 @@ class CharacterViewSet(viewsets.ModelViewSet):
             dice_results, pool_before_roll, ar_for_tier
         )
 
-        # Deduct stress for push
+        # Deduct stress for push (remaining pool decreases)
         if stress_cost > 0:
             current_stress = max(0, int(getattr(character, "stress", 0) or 0))
-            max_stress = _max_stress_for_character(character)
-            character.stress = min(max_stress, current_stress + stress_cost)
+            character.stress = max(0, current_stress - stress_cost)
             character.save(update_fields=["stress"])
 
         roll = None

@@ -8,6 +8,24 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Maintenance",
+        "items": [
+          "add GroupAction.status CANCELLED choice"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "assist stress spend, sessions for campaign players; CI Jest/playwright layout"
+        ]
+      },
+      {
+        "title": "Other",
+        "items": [
+          "patch notes: add theme changelog line; tidy older entries"
+        ]
+      },
+      {
         "title": "Added",
         "items": [
           "enhance theme management and styling across components",
@@ -410,20 +428,6 @@ export const PATCH_NOTES = [
           "add crew management panel to campaign page and auto-assign crew on character assignment",
           "add Delete NPC button to NPC character sheet top bar",
           "inline faction creation & shared faction data in NPC Sheet"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-09",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Delete .github/workflows/prettier.yml",
-          "Merge pull request #15 from zoobavitel/copilot/add-github-action-prettier",
-          "dw"
         ]
       }
     ]

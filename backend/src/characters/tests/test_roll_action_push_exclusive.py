@@ -74,3 +74,23 @@ class RollActionPushExclusiveTests(TestCase):
             format="json",
         )
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.actor.refresh_from_db()
+        # push_effect costs 2 stress from remaining pool
+        self.assertEqual(self.actor.stress, 4)
+
+    def test_push_rejects_when_not_enough_stress(self):
+        self.actor.stress = 1
+        self.actor.save(update_fields=["stress"])
+        self.client.force_authenticate(user=self.user)
+        url = f"/api/characters/{self.actor.id}/roll-action/"
+        r = self.client.post(
+            url,
+            {
+                "action": "hunt",
+                "session_id": self.session.id,
+                "push_effect": True,
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Not enough stress", str(r.data.get("error", "")))

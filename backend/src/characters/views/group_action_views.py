@@ -19,18 +19,6 @@ def _is_failure_roll(roll):
     )
 
 
-def _max_stress_for_character(character):
-    grade = None
-    stand = getattr(character, "stand", None)
-    if stand is not None:
-        grade = getattr(stand, "durability", None)
-    if not grade:
-        coin_stats = getattr(character, "coin_stats", None) or {}
-        if isinstance(coin_stats, dict):
-            grade = coin_stats.get("durability") or coin_stats.get("DURABILITY")
-    return {"S": 13, "A": 12, "B": 11, "C": 10, "D": 9, "F": 8}.get(grade, 9)
-
-
 def _group_participants(ga):
     campaign_chars = list(ga.session.campaign.characters.all())
     if ga.leader.crew_id:
@@ -153,9 +141,8 @@ class GroupActionViewSet(viewsets.ModelViewSet):
             if _is_failure_roll(r) and r.character_id != ga.leader_id
         )
         leader = ga.leader
-        cur = getattr(leader, 'stress', 0) or 0
-        max_stress = _max_stress_for_character(leader)
-        new_stress = min(max_stress, cur + failures)
+        cur = max(0, int(getattr(leader, "stress", 0) or 0))
+        new_stress = max(0, cur - failures)
         leader.stress = new_stress
         leader.save(update_fields=['stress'])
         ga.status = 'RESOLVED'
