@@ -22,8 +22,13 @@ function getRuntimeDefaultBase() {
     return "http://localhost:8000/api";
   }
 
-  // Cloud preview and custom domains often serve the frontend from the same host.
-  // Defaulting to host:8000 removes the need to manually enter the server URL.
+  // GitHub Pages is static only; there is no API on :8000 on this hostname.
+  // Require the Game server URL (localStorage) or REACT_APP_API_URL at build time.
+  if (hostname === "github.io" || hostname.endsWith(".github.io")) {
+    return "";
+  }
+
+  // Same-host API (e.g. LAN or a domain that serves Django on port 8000).
   return `${protocol}//${hostname}:8000/api`;
 }
 
