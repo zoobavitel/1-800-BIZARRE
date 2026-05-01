@@ -4,6 +4,18 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-05-01",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "push and group-action stress semantics"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-04-30",
     "version": null,
     "sections": [
@@ -404,8 +416,7 @@ export const PATCH_NOTES = [
           "Merge pull request #16 from zoobavitel/copilot/fix-syntax-error-in-create-npc-py",
           "Fix curly apostrophe syntax error in create_npc.py",
           "Update Black action options in workflow",
-          "Update source path in black.yml workflow",
-          "Update Black workflow to use new configuration"
+          "Update source path in black.yml workflow"
         ]
       },
       {
