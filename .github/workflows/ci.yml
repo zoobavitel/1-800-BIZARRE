@@ -266,15 +266,32 @@ jobs:
           tags: tag:ci
           ping: ${{ secrets.LXC_SSH_HOST }}
 
+      # Passing multiline PEM via `key: ${{ secrets... }}` can strip newlines; drone-ssh then fails ssh.ParsePrivateKey.
+      - name: Write SSH deploy key
+        run: |
+          install -dm700 "$GITHUB_WORKSPACE/.ssh-ci"
+          printf '%s\n' "$PRIVATE_KEY" >"$GITHUB_WORKSPACE/.ssh-ci/lxc_deploy"
+          chmod 600 "$GITHUB_WORKSPACE/.ssh-ci/lxc_deploy"
+        env:
+          PRIVATE_KEY: ${{ secrets.LXC_SSH_KEY }}
+
+      - name: Trust server host key (Tailscale resolves LXC_SSH_HOST)
+        env:
+          SSH_HOST: ${{ secrets.LXC_SSH_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -T 30 -H "$SSH_HOST" >> ~/.ssh/known_hosts || true
+
       - name: Deploy via SSH (bizarre-api)
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.LXC_SSH_HOST }}
           username: ${{ secrets.LXC_SSH_USER }}
-          key: ${{ secrets.LXC_SSH_KEY }}
-          # Ephemeral builders may not know the CT host key; tighten later with PLUGIN_KNOWN_HOSTS if you want strict checking.
-          strict: false
-          script_stop: true
+          key_path: ${{ github.workspace }}/.ssh-ci/lxc_deploy
+          request_pty: true
+          timeout: 3m
+          command_timeout: 20m
           script: |
             set -euo pipefail
             cd /opt/bizarre
