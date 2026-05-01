@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
+          "enhance theme management and styling across components",
           "enhance AppBar with search and account menu functionality",
           "enhance action handling and group action management",
           "enhance session management and roll handling",
@@ -422,8 +423,7 @@ export const PATCH_NOTES = [
         "items": [
           "Delete .github/workflows/prettier.yml",
           "Merge pull request #15 from zoobavitel/copilot/add-github-action-prettier",
-          "dw",
-          "prettier format"
+          "dw"
         ]
       }
     ]
