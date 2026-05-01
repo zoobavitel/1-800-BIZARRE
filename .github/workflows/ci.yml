@@ -185,6 +185,8 @@ jobs:
           PERF_API_BASE_URL: "http://127.0.0.1:8000"
           # Must match CRA homepage/PUBLIC_URL (/1-800-BIZARRE); dev server masked low Lighthouse scores.
           PERF_FRONTEND_URL: "http://127.0.0.1:3000/1-800-BIZARRE"
+          # Default Lighthouse (mobile emulation) is harsh and noisy on ubuntu-latest; desktop is stable for regression checks.
+          PERF_LIGHTHOUSE_PRESET: "desktop"
           GENERATE_SOURCEMAP: "false"
         run: |
           set -e

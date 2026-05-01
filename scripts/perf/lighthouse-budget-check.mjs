@@ -5,6 +5,8 @@ import { join } from "node:path";
 
 const frontendUrl = process.env.PERF_FRONTEND_URL || "http://127.0.0.1:3000";
 const perfScoreBudget = Number(process.env.PERF_LIGHTHOUSE_MIN || 80);
+/** Set to `desktop` for CI-stable scores; omit for default (mobile emulation). */
+const lhPreset = (process.env.PERF_LIGHTHOUSE_PRESET || "").trim().toLowerCase();
 
 function run(command, args) {
   return new Promise((resolve, reject) => {
@@ -19,14 +21,16 @@ function run(command, args) {
   });
 }
 
+const presetArg = lhPreset === "desktop" ? "--preset=desktop" : null;
+
 console.log(
-  `Lighthouse check: url=${frontendUrl}, minimum performance score=${perfScoreBudget}`,
+  `Lighthouse check: url=${frontendUrl}, minimum performance score=${perfScoreBudget}${presetArg ? ", preset=desktop" : ", preset=default (mobile)"}`,
 );
 
 const reportDir = mkdtempSync(join(tmpdir(), "lh-report-"));
 const reportPath = join(reportDir, "report.json");
 
-await run("npx", [
+const lhArgs = [
   "--yes",
   "lighthouse",
   frontendUrl,
@@ -36,7 +40,12 @@ await run("npx", [
   `--output=json`,
   `--output-path=${reportPath}`,
   "--quiet",
-]);
+];
+if (presetArg) {
+  lhArgs.splice(3, 0, presetArg); // after URL: lighthouse <url> --preset=… --only-categories=…
+}
+
+await run("npx", lhArgs);
 
 let score;
 try {
