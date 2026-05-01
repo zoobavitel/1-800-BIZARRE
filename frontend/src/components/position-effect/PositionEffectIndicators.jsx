@@ -43,12 +43,21 @@ export function PositionStack({ activePosition, readOnly = true, onSelect }) {
       </div>
       {POS_ORDER.map((p) => {
         const on = ap === p;
+        const interactive = !readOnly && typeof onSelect === "function";
         return (
           <div
             key={p}
-            onClick={
-              !readOnly && typeof onSelect === "function"
-                ? () => onSelect(p)
+            role={interactive ? "button" : undefined}
+            tabIndex={interactive ? 0 : undefined}
+            onClick={interactive ? () => onSelect(p) : undefined}
+            onKeyDown={
+              interactive
+                ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onSelect(p);
+                    }
+                  }
                 : undefined
             }
             style={{
@@ -109,6 +118,7 @@ export function EffectShapes({ activeEffect, readOnly = true, onSelect }) {
           const on = normalized === tier;
           const fill = on ? "#7c3aed" : "#374151";
           const letterColor = on ? "#fff" : "#6b7280";
+          const interactive = !readOnly && typeof onSelect === "function";
           return (
             <div
               key={tier}
@@ -120,6 +130,8 @@ export function EffectShapes({ activeEffect, readOnly = true, onSelect }) {
               }}
             >
               <div
+                role={interactive ? "button" : undefined}
+                tabIndex={interactive ? 0 : undefined}
                 style={{
                   width: 36,
                   height: 36,
@@ -133,9 +145,15 @@ export function EffectShapes({ activeEffect, readOnly = true, onSelect }) {
                   fontSize: 14,
                   cursor: readOnly ? "default" : "pointer",
                 }}
-                onClick={
-                  !readOnly && typeof onSelect === "function"
-                    ? () => onSelect(tier)
+                onClick={interactive ? () => onSelect(tier) : undefined}
+                onKeyDown={
+                  interactive
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          onSelect(tier);
+                        }
+                      }
                     : undefined
                 }
               >

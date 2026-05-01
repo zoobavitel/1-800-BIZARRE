@@ -121,7 +121,7 @@ class GroupActionViewSet(viewsets.ModelViewSet):
             )
         participants = _group_participants(ga)
         rolls = list(
-            Roll.objects.filter(group_action=ga, roll_type='ACTION', action_name=ga.action_name)
+            Roll.objects.filter(group_action=ga, roll_type='ACTION', action_name__iexact=ga.action_name)
             .select_related('character')
             .order_by('-timestamp')
         )
