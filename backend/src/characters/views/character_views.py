@@ -476,13 +476,14 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         )
                     hs = max(0, int(getattr(assist_helper, "stress", 0) or 0))
                     helper_max_stress = _max_stress_for_character(assist_helper)
-                    helper_remaining_stress = max(0, helper_max_stress - hs)
-                    if helper_remaining_stress < 1:
+                    if hs < 1:
                         return Response(
-                            {"error": "Helper has no stress capacity left"},
+                            {"error": "Helper has no stress to spend"},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
-                    assist_helper.stress = min(helper_max_stress, hs + 1)
+                    assist_helper.stress = max(
+                        0, min(helper_max_stress, hs - 1)
+                    )
                     assist_helper.save(update_fields=["stress"])
                     dice_pool += 1
 
@@ -667,13 +668,12 @@ class CharacterViewSet(viewsets.ModelViewSet):
             )
         hs = max(0, int(getattr(helper, "stress", 0) or 0))
         helper_max_stress = _max_stress_for_character(helper)
-        helper_remaining_stress = max(0, helper_max_stress - hs)
-        if helper_remaining_stress < 1:
+        if hs < 1:
             return Response(
-                {"error": "Helper has no stress capacity left"},
+                {"error": "Helper has no stress to spend"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        helper.stress = min(helper_max_stress, hs + 1)
+        helper.stress = max(0, min(helper_max_stress, hs - 1))
         helper.save(update_fields=["stress"])
         return Response(
             {

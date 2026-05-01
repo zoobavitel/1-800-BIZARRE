@@ -44,7 +44,9 @@ class SessionViewSet(viewsets.ModelViewSet):
             "-timestamp"
         )
         base = Session.objects.all() if user.is_staff else Session.objects.filter(
-            models.Q(campaign__gm=user) | models.Q(campaign__characters__user=user)
+            models.Q(campaign__gm=user)
+            | models.Q(campaign__characters__user=user)
+            | models.Q(campaign__players=user)
         ).distinct()
         return base.prefetch_related(Prefetch("rolls", queryset=rolls_qs))
 

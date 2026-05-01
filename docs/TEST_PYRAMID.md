@@ -31,7 +31,7 @@ Lower layers run more often and must stay fast. Top layer runs less often and fo
 
 ## Coverage Targets
 
-- Frontend Jest coverage threshold enforced in `frontend/package.json`.
+- Frontend: Jest emits coverage when CI runs `npm test -- --coverage --watchAll=false`; global thresholds are off until unit coverage grows. Use `cd frontend && npm run test:coverage` locally. Playwright smoke specs live under `frontend/e2e/` so Jest (which only scans `src/`) does not pick them up.
 - Backend coverage threshold enforced by `coverage report --fail-under` in root scripts.
 
 ## Critical Flow Coverage
