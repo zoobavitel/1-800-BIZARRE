@@ -1,3 +1,5 @@
+import logging
+
 from django.db import models
 from django.db.models import Prefetch
 from django.core.exceptions import PermissionDenied
@@ -8,6 +10,8 @@ from rest_framework.decorators import action
 
 from ..models import Session, SessionEvent, Roll
 from ..serializers import SessionSerializer, SessionEventSerializer, SessionRecordsSerializer
+
+logger = logging.getLogger(__name__)
 
 
 class IsCampaignGMOrReadOnly(permissions.BasePermission):
@@ -58,7 +62,21 @@ class SessionViewSet(viewsets.ModelViewSet):
         session = self.get_object()
         if session.campaign.gm != self.request.user and not self.request.user.is_staff:
             raise PermissionDenied("Only the GM can update this session")
-        serializer.save()
+        prev_status = session.status
+        instance = serializer.save()
+        if prev_status != "COMPLETED" and instance.status == "COMPLETED":
+            try:
+                from ..services.session_xp_settlement import (
+                    settle_encoded_session_xp,
+                )
+
+                settle_encoded_session_xp(instance, self.request.user)
+            except Exception:
+                logger.exception(
+                    "Encoded session XP settlement failed on session COMPLETED "
+                    "(session=%s)",
+                    instance.id,
+                )
 
     @action(detail=True, methods=['post'], url_path='propose-score')
     def propose_score(self, request, pk=None):

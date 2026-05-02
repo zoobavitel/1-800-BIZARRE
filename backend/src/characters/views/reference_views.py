@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import viewsets, permissions
 from rest_framework.permissions import IsAuthenticated
 
@@ -70,12 +71,50 @@ class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         user = self.request.user
         campaign_id = self.request.query_params.get("campaign")
+        character_id = self.request.query_params.get("character")
         qs = CharacterHistory.objects.all().select_related(
             "character", "character__campaign", "editor"
         )
+
         if user.is_staff:
             base = qs
-        elif campaign_id:
+            if character_id:
+                try:
+                    base = base.filter(character_id=int(character_id))
+                except (TypeError, ValueError):
+                    return CharacterHistory.objects.none()
+            elif campaign_id:
+                try:
+                    base = base.filter(character__campaign_id=int(campaign_id))
+                except (TypeError, ValueError):
+                    return CharacterHistory.objects.none()
+            return base.order_by("-timestamp")
+
+        if character_id:
+            try:
+                ch_pk = int(character_id)
+            except (TypeError, ValueError):
+                return CharacterHistory.objects.none()
+            char = Character.objects.filter(pk=ch_pk).select_related("campaign").first()
+            if not char:
+                return CharacterHistory.objects.none()
+            can_view = char.user_id == user.id
+            if char.campaign_id:
+                camp = char.campaign
+                can_view = can_view or camp.gm_id == user.id
+                can_view = can_view or camp.players.filter(pk=user.id).exists()
+            if not can_view:
+                return CharacterHistory.objects.none()
+            if campaign_id:
+                try:
+                    cap = int(campaign_id)
+                except (TypeError, ValueError):
+                    return CharacterHistory.objects.none()
+                if char.campaign_id != cap:
+                    return CharacterHistory.objects.none()
+            return qs.filter(character_id=ch_pk).order_by("-timestamp")
+
+        if campaign_id:
             try:
                 cid = int(campaign_id)
             except (TypeError, ValueError):
@@ -83,16 +122,17 @@ class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
             campaign = Campaign.objects.filter(pk=cid).first()
             if not campaign or campaign.gm_id != user.id:
                 return CharacterHistory.objects.none()
-            base = qs.filter(character__campaign_id=cid)
-        elif Campaign.objects.filter(gm=user).exists():
-            base = qs.filter(character__campaign__gm=user)
-        else:
-            base = qs.filter(character__user=user)
+            return qs.filter(character__campaign_id=cid).order_by("-timestamp")
 
-        character_id = self.request.query_params.get("character")
-        if character_id:
-            base = base.filter(character_id=character_id)
-        return base.order_by("-timestamp")
+        return (
+            qs.filter(
+                Q(character__user=user)
+                | Q(character__campaign__gm=user)
+                | Q(character__campaign__players=user)
+            )
+            .distinct()
+            .order_by("-timestamp")
+        )
 
 
 class CrewHistoryViewSet(viewsets.ReadOnlyModelViewSet):

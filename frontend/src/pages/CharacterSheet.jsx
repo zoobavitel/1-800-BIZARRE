@@ -37,6 +37,7 @@ import {
   characterHistoryAPI,
   sessionAPI,
   normalizeHarmObject,
+  resolveMediaUrl,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -220,7 +221,6 @@ const HISTORY_FIELD_LABELS = {
   armor_charges: "Armor",
   regular_armor_used: "Armor spent",
   special_armor_used: "Special armor spent",
-  harm_clock_current: "Healing clock",
   harm_level1_name: "Harm Lv1",
   harm_level1_slot2_name: "Harm Lv1 (slot 2)",
   harm_level2_name: "Harm Lv2",
@@ -235,6 +235,10 @@ const HISTORY_FIELD_LABELS = {
   crew: "Crew",
   action_dots: "Action dots",
   xp_clocks: "XP tracks",
+  total_xp_spent: "Total XP spent",
+  heritage_points_gained: "Heritage points gained",
+  stand_coin_points_gained: "Stand coin points gained",
+  action_dice_gained: "Action dice gained",
 };
 
 function historyFieldLabel(key) {
@@ -250,6 +254,61 @@ function stringifyValue(v) {
   } catch (_err) {
     return String(v);
   }
+}
+
+const XP_LEDGER_HISTORY_KEYS = new Set([
+  "xp_clocks",
+  "total_xp_spent",
+  "heritage_points_gained",
+  "stand_coin_points_gained",
+  "action_dice_gained",
+  "action_dots",
+]);
+
+/** One-line summary when a sheet save touched XP / advancement fields. */
+function summarizeXpSpendFromHistoryEntry(entry) {
+  const changed = entry?.changed_fields;
+  if (!changed || typeof changed !== "object") return null;
+  const parts = [];
+  for (const key of Object.keys(changed)) {
+    if (!XP_LEDGER_HISTORY_KEYS.has(key)) continue;
+    const chunk = changed[key];
+    if (!chunk || typeof chunk !== "object") continue;
+    if (key === "xp_clocks") {
+      const oldXC = chunk.old;
+      const newXC = chunk.new;
+      if (
+        oldXC &&
+        newXC &&
+        typeof oldXC === "object" &&
+        typeof newXC === "object"
+      ) {
+        const keys = new Set([
+          ...Object.keys(oldXC),
+          ...Object.keys(newXC),
+        ]);
+        for (const k of keys) {
+          const o = Number(oldXC[k]) || 0;
+          const n = Number(newXC[k]) || 0;
+          if (n === o) continue;
+          parts.push(
+            `${k}: ${o}→${n}${
+              n < o ? ` (−${o - n} on track)` : ` (+${n - o} on track)`
+            }`,
+          );
+        }
+      }
+      continue;
+    }
+    const o = chunk.old;
+    const n = chunk.new;
+    if (JSON.stringify(o) === JSON.stringify(n)) continue;
+    parts.push(
+      `${historyFieldLabel(key)}: ${stringifyValue(o)} → ${stringifyValue(n)}`,
+    );
+  }
+  if (!parts.length) return null;
+  return `Advancement / XP: ${parts.join("; ")}`;
 }
 
 // ─── Dice pool (pre-roll preview) ─────────────────────────────────────────────
@@ -1204,8 +1263,18 @@ const CharacterSheetWrapper = ({
       },
     },
     notes: "",
+    image: "",
+    image_url: "",
   });
+  const [crewPortraitUrlDraft, setCrewPortraitUrlDraft] = useState("");
+  const [crewPortraitSaving, setCrewPortraitSaving] = useState(false);
+  const [crewPortraitMsg, setCrewPortraitMsg] = useState(null);
   const [crewFactionLinks, setCrewFactionLinks] = useState([]);
+  const [crewFactionAddName, setCrewFactionAddName] = useState("");
+  const [crewFactionAddExistingId, setCrewFactionAddExistingId] = useState("");
+  const [crewFactionAddRep, setCrewFactionAddRep] = useState(0);
+  const [crewFactionAddBusy, setCrewFactionAddBusy] = useState(false);
+  const [crewFactionAddErr, setCrewFactionAddErr] = useState(null);
   const [crewHistoryEntries, setCrewHistoryEntries] = useState([]);
   const crewHydratedRef = useRef(false);
 
@@ -1222,6 +1291,11 @@ const CharacterSheetWrapper = ({
       upgrade_progress: upgradesToProgress(crewData.upgrades),
     };
   }, [crewData]);
+
+  const crewPortraitSrc = useMemo(
+    () => resolveMediaUrl(crewData.image || crewData.image_url || ""),
+    [crewData.image, crewData.image_url],
+  );
 
   useEffect(() => {
     if (activeMode !== "CREW MODE" || !charData.crewId) {
@@ -1245,12 +1319,15 @@ const CharacterSheetWrapper = ({
           hold: d.hold === "weak" || d.hold === "strong" ? d.hold : p.hold,
           description: d.description ?? "",
           notes: d.notes ?? "",
+          image: d.image ?? "",
+          image_url: d.image_url ?? "",
           upgrades: progressToUpgrades(d.upgrade_progress),
           specialAbilities: (d.special_abilities || []).map((a) => ({
             name: a.name,
             description: a.description || "",
           })),
         }));
+        setCrewPortraitUrlDraft(String(d.image_url || "").trim());
         setCrewFactionLinks(d.faction_relationships || []);
         crewHydratedRef.current = true;
       })
@@ -1315,6 +1392,80 @@ const CharacterSheetWrapper = ({
   ]);
 
   // ─── Derived Values ──────────────────────────────────────────────────────────
+
+  const campaignForCrewFactionAdd = useMemo(
+    () =>
+      (campaigns || []).find(
+        (c) =>
+          Number(c.id) ===
+          Number.parseInt(String(campaignId || "").trim(), 10),
+      ) ?? null,
+    [campaigns, campaignId],
+  );
+
+  const crewLinkableFactions = useMemo(() => {
+    const facs = campaignForCrewFactionAdd?.factions || [];
+    const linkedIds = new Set(
+      (crewFactionLinks || []).map((r) => Number(r.faction_id)),
+    );
+    return facs.filter((f) => f?.id != null && !linkedIds.has(Number(f.id)));
+  }, [campaignForCrewFactionAdd?.factions, crewFactionLinks]);
+
+  const handleAddCrewFactionLink = useCallback(async () => {
+    if (!charData.crewId || !campaignId) return;
+    const nameTrim = crewFactionAddName.trim();
+    const exId = Number.parseInt(String(crewFactionAddExistingId || ""), 10);
+    const rep = Math.min(3, Math.max(-3, Number(crewFactionAddRep) || 0));
+    if (nameTrim && Number.isFinite(exId)) {
+      setCrewFactionAddErr("Use either a new name or an existing faction, not both.");
+      return;
+    }
+    if (!nameTrim && !Number.isFinite(exId)) {
+      setCrewFactionAddErr("Enter a new faction name or pick an existing faction.");
+      return;
+    }
+    setCrewFactionAddBusy(true);
+    setCrewFactionAddErr(null);
+    try {
+      let fid = null;
+      if (nameTrim) {
+        const created = await factionAPI.createFaction({
+          campaign: Number.parseInt(String(campaignId), 10),
+          name: nameTrim,
+          visible_to_players: false,
+        });
+        fid = created?.id ?? created?.pk;
+      } else {
+        fid = exId;
+      }
+      if (!fid) {
+        setCrewFactionAddErr("Could not resolve faction to link.");
+        return;
+      }
+      await crewAPI.patchCrew(charData.crewId, {
+        faction_relationships: [{ faction_id: fid, reputation_value: rep }],
+      });
+      const crewRes = await crewAPI.getCrew(charData.crewId);
+      setCrewFactionLinks(crewRes.faction_relationships || []);
+      setCrewFactionAddName("");
+      setCrewFactionAddExistingId("");
+      setCrewFactionAddRep(0);
+      onCampaignRefresh?.();
+    } catch (e) {
+      setCrewFactionAddErr(
+        e?.message || "Could not create or link faction. Try a different name.",
+      );
+    } finally {
+      setCrewFactionAddBusy(false);
+    }
+  }, [
+    charData.crewId,
+    campaignId,
+    crewFactionAddName,
+    crewFactionAddExistingId,
+    crewFactionAddRep,
+    onCampaignRefresh,
+  ]);
 
   const durVal = Math.min(5, Math.max(0, Number(standStats.durability) || 1));
   const devVal = Math.min(5, Math.max(0, Number(standStats.development) || 1));
@@ -1558,6 +1709,7 @@ const CharacterSheetWrapper = ({
     devil_bargain_note: "",
   });
   const [rollAbilityBoost, setRollAbilityBoost] = useState({});
+  const [heritageRollBoost, setHeritageRollBoost] = useState({});
   const [rollApiError, setRollApiError] = useState(null);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [historyMode, setHistoryMode] = useState("session");
@@ -1586,6 +1738,9 @@ const CharacterSheetWrapper = ({
     helpDie: false,
     groupAction: false,
     groupActionId: "",
+    xpTrack: "playbook",
+    xpAmount: "1",
+    xpReason: "",
   });
   const [showXpHistoryModal, setShowXpHistoryModal] = useState(false);
   const [xpTimelineLoading, setXpTimelineLoading] = useState(false);
@@ -1768,31 +1923,57 @@ const CharacterSheetWrapper = ({
     setHistoryError(null);
     const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
     if (historyMode === "sheet") {
-      characterHistoryAPI
-        .list({
-          character: characterId,
-          ...(charCampaign?.id ? { campaign: charCampaign.id } : {}),
-        })
-        .then((res) => {
-          const rows = asArray(res)
-            .map((entry) => {
-              const changed = entry.changed_fields || {};
-              const details = Object.keys(changed).map((k) => ({
-                key: k,
-                label: historyFieldLabel(k),
-                oldValue: stringifyValue(changed[k]?.old),
-                newValue: stringifyValue(changed[k]?.new),
-              }));
-              return {
-                key: `sheet-${entry.id}`,
-                timestamp: entry.timestamp,
-                actor: entry.editor_username || "system",
-                type: "sheet_edit",
-                sessionTag: "Out of session",
-                details,
-              };
-            })
-            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      Promise.all([
+        characterHistoryAPI.list({ character: characterId }),
+        experienceTrackerAPI.list({ character: characterId }).catch(() => []),
+        xpHistoryAPI.list({ character: characterId }).catch(() => []),
+      ])
+        .then(([histRes, etRes, xhRes]) => {
+          const rows = [];
+          asArray(histRes).forEach((entry) => {
+            const changed = entry.changed_fields || {};
+            const details = Object.keys(changed).map((k) => ({
+              key: k,
+              label: historyFieldLabel(k),
+              oldValue: stringifyValue(changed[k]?.old),
+              newValue: stringifyValue(changed[k]?.new),
+            }));
+            rows.push({
+              key: `sheet-${entry.id}`,
+              timestamp: entry.timestamp,
+              actor: entry.editor_username || "system",
+              type: "sheet_edit",
+              sessionTag: "Out of session",
+              details,
+            });
+          });
+          asArray(etRes).forEach((e) => {
+            rows.push({
+              key: `et-all-${e.id}`,
+              timestamp: e.session_date,
+              actor: "xp (tracker)",
+              characterId: e.character ?? characterId,
+              type: "xp_tracker",
+              text: `+${e.xp_gained ?? 0} XP — ${e.trigger_display || e.trigger || "XP"}: ${e.description || "—"}`,
+              modifiers: e.session
+                ? [`Session #${e.session}`]
+                : ["No session link"],
+            });
+          });
+          asArray(xhRes).forEach((x) => {
+            rows.push({
+              key: `xh-all-${x.id}`,
+              timestamp: x.timestamp,
+              actor: "xp (ledger)",
+              characterId: x.character ?? characterId,
+              type: "xp_ledger",
+              text: `+${x.amount ?? 0} XP — ${x.reason || "—"}`,
+              modifiers: x.session
+                ? [`Session #${x.session}`]
+                : [],
+            });
+          });
+          rows.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
           setHistoryRows(rows);
         })
         .catch((e) => setHistoryError(e.message))
@@ -1801,8 +1982,91 @@ const CharacterSheetWrapper = ({
     }
 
     if (!historySessionId) {
-      setHistoryRows([]);
-      setHistoryLoading(false);
+      const roster = charCampaign?.campaign_characters || [];
+      let targetIds = [];
+      if (historyCharacterFilter === "all" && isGM && roster.length) {
+        targetIds = roster.map((c) => c.id).filter((id) => id != null);
+      } else {
+        const tid = parseInt(
+          String(historyCharacterFilter || characterId || ""),
+          10,
+        );
+        if (Number.isFinite(tid)) targetIds = [tid];
+      }
+      if (!targetIds.length) {
+        setHistoryRows([]);
+        setHistoryLoading(false);
+        return;
+      }
+      const nameById = new Map(
+        roster.map((c) => [
+          c.id,
+          c.true_name || c.name || `PC ${c.id}`,
+        ]),
+      );
+      Promise.all(
+        targetIds.map((cid) =>
+          Promise.all([
+            experienceTrackerAPI.list({ character: cid }).catch(() => []),
+            xpHistoryAPI.list({ character: cid }).catch(() => []),
+            characterHistoryAPI.list({ character: cid }).catch(() => []),
+          ]).then(([et, xh, hist]) => ({
+            cid,
+            et: asArray(et),
+            xh: asArray(xh),
+            hist: asArray(hist),
+          })),
+        ),
+      )
+        .then((bundles) => {
+          const rows = [];
+          for (const b of bundles) {
+            const cname = nameById.get(b.cid) || `PC ${b.cid}`;
+            b.et.forEach((e) => {
+              rows.push({
+                key: `et-${e.id}-${b.cid}`,
+                timestamp: e.session_date,
+                actor: "xp (tracker)",
+                characterId: b.cid,
+                type: "xp_tracker",
+                text: `[${cname}] +${e.xp_gained ?? 0} XP — ${e.trigger_display || e.trigger || "XP"}: ${e.description || "—"}`,
+                modifiers: e.session
+                  ? [`Session #${e.session}`]
+                  : [],
+              });
+            });
+            b.xh.forEach((x) => {
+              rows.push({
+                key: `xh-${x.id}-${b.cid}`,
+                timestamp: x.timestamp,
+                actor: "xp (ledger)",
+                characterId: b.cid,
+                type: "xp_ledger",
+                text: `[${cname}] +${x.amount ?? 0} XP — ${x.reason || "—"}`,
+                modifiers: x.session
+                  ? [`Session #${x.session}`]
+                  : [],
+              });
+            });
+            b.hist.forEach((entry) => {
+              const spend = summarizeXpSpendFromHistoryEntry(entry);
+              if (!spend) return;
+              rows.push({
+                key: `xpspend-${entry.id}-${b.cid}`,
+                timestamp: entry.timestamp,
+                actor: entry.editor_username || "sheet",
+                characterId: b.cid,
+                type: "xp_spend",
+                text: `[${cname}] ${spend}`,
+                modifiers: [],
+              });
+            });
+          }
+          rows.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          setHistoryRows(rows);
+        })
+        .catch((e) => setHistoryError(e.message))
+        .finally(() => setHistoryLoading(false));
       return;
     }
     Promise.all([
@@ -1861,6 +2125,9 @@ const CharacterSheetWrapper = ({
               r.push_for_effect ? "Push(+effect)" : null,
               r.uses_devil_bargain ? "Devil's bargain" : null,
               r.roller_stress_spent ? `Stress ${r.roller_stress_spent}` : null,
+              r.xp_award_detail?.xp_gained
+                ? `+${r.xp_award_detail.xp_gained} XP (${r.xp_award_detail.trigger_label || r.xp_award_detail.trigger || "roll"})`
+                : null,
             ].filter(Boolean),
           });
         });
@@ -1887,16 +2154,43 @@ const CharacterSheetWrapper = ({
         }));
         rows.push(...stressRows);
 
-        const xpRows = (sessionRes?.xp_entries || []).map((x) => ({
-          key: `xp-${x.id}`,
-          timestamp: x.session_date || sessionRes?.session_date,
-          actor: "xp",
-          characterId: x.character || null,
-          type: "xp",
-          text: `XP +${x.xp_gained} (${x.trigger_display || x.trigger || "trigger"})`,
-          modifiers: [],
-        }));
+        const charFilter =
+          historyCharacterFilter === "all"
+            ? null
+            : String(historyCharacterFilter);
+        const xpEntryMatches = (x) =>
+          !charFilter || String(x.character || "") === charFilter;
+        const xpHistMatches = (x) =>
+          !charFilter || String(x.character || "") === charFilter;
+
+        const xpRows = (sessionRes?.xp_entries || [])
+          .filter(xpEntryMatches)
+          .map((x) => {
+            const desc = String(x.description || "").trim();
+            return {
+              key: `xp-${x.id}`,
+              timestamp: x.session_date || sessionRes?.session_date,
+              actor: "xp (tracker)",
+              characterId: x.character || null,
+              type: "xp",
+              text: `+${x.xp_gained ?? 0} XP — ${x.trigger_display || x.trigger || "trigger"}${desc ? `: ${desc}` : ""}`,
+              modifiers: [],
+            };
+          });
         rows.push(...xpRows);
+
+        const legacyXpRows = (sessionRes?.xp_history || [])
+          .filter(xpHistMatches)
+          .map((x) => ({
+            key: `xph-${x.id}`,
+            timestamp: x.timestamp,
+            actor: "xp (ledger)",
+            characterId: x.character || null,
+            type: "xp_ledger",
+            text: `+${x.amount ?? 0} XP — ${x.reason || "—"}`,
+            modifiers: [],
+          }));
+        rows.push(...legacyXpRows);
 
         asArray(clocksRes).forEach((clk) => {
           rows.push({
@@ -1931,6 +2225,8 @@ const CharacterSheetWrapper = ({
     historyCharacterFilter,
     characterId,
     charCampaign?.id,
+    charCampaign?.campaign_characters,
+    isGM,
     historyRefreshTick,
   ]);
 
@@ -2130,22 +2426,54 @@ const CharacterSheetWrapper = ({
   const canEditGroupActionSetupFields =
     !activeGroupAction?.id || isOpenGroupLeader;
 
+  const supportsAbilityBonusDice = useCallback((description) => {
+    return /\+1d\b|\bplus\s*1d\b/i.test(String(description || ""));
+  }, []);
+  const supportsAbilityBonusEffect = useCallback((description) => {
+    return /\+1\s*effect\b|\bplus\s*1\s*effect\b/i.test(
+      String(description || ""),
+    );
+  }, []);
+
   const abilityRollBonusOptions = useMemo(() => {
-    const supportsBonusDice = (description) =>
-      /\+1d\b|\bplus\s*1d\b/i.test(String(description || ""));
-    const supportsBonusEffect = (description) =>
-      /\+1\s*effect\b|\bplus\s*1\s*effect\b/i.test(
-        String(description || ""),
-      );
     return (abilities || [])
       .filter((a) => a.type === "standard")
       .map((ab) => ({
         ...ab,
-        supportsDice: supportsBonusDice(ab.description),
-        supportsEffect: supportsBonusEffect(ab.description),
+        supportsDice: supportsAbilityBonusDice(ab.description),
+        supportsEffect: supportsAbilityBonusEffect(ab.description),
       }))
       .filter((ab) => ab.supportsDice || ab.supportsEffect);
-  }, [abilities]);
+  }, [abilities, supportsAbilityBonusDice, supportsAbilityBonusEffect]);
+
+  const heritageRollBonusOptions = useMemo(() => {
+    const hid = charData?.heritage;
+    const h =
+      hid != null && Array.isArray(heritages) && heritages.length
+        ? heritages.find((x) => x.id === hid)
+        : null;
+    if (!h?.benefits?.length) return [];
+    return h.benefits
+      .filter(
+        (b) =>
+          b &&
+          ((Array.isArray(selectedBenefits) &&
+            selectedBenefits.includes(b.id)) ||
+            b.required),
+      )
+      .map((b) => ({
+        ...b,
+        supportsDice: supportsAbilityBonusDice(b.description),
+        supportsEffect: supportsAbilityBonusEffect(b.description),
+      }))
+      .filter((hb) => hb.supportsDice || hb.supportsEffect);
+  }, [
+    charData?.heritage,
+    heritages,
+    selectedBenefits,
+    supportsAbilityBonusDice,
+    supportsAbilityBonusEffect,
+  ]);
 
   const { bonusDiceFromAbilities, abilityEffectSteps, abilityBonusAudit } =
     useMemo(() => {
@@ -2171,6 +2499,38 @@ const CharacterSheetWrapper = ({
         abilityBonusAudit: audit,
       };
     }, [abilityRollBonusOptions, rollAbilityBoost]);
+
+  const {
+    bonusDiceFromHeritage,
+    heritageEffectSteps,
+    heritageBonusAudit,
+  } = useMemo(() => {
+    let d = 0;
+    let e = 0;
+    const audit = [];
+    heritageRollBonusOptions.forEach((hb) => {
+      const id = hb.id ?? hb.name;
+      const b = heritageRollBoost[id];
+      if (!b) return;
+      if (hb.supportsDice && b.dice) {
+        d += 1;
+        audit.push(`${hb.name}: +1d (heritage)`);
+      }
+      if (hb.supportsEffect && b.effect) {
+        e += 1;
+        audit.push(`${hb.name}: +1 effect (heritage)`);
+      }
+    });
+    return {
+      bonusDiceFromHeritage: d,
+      heritageEffectSteps: e,
+      heritageBonusAudit: audit,
+    };
+  }, [heritageRollBonusOptions, heritageRollBoost]);
+
+  const totalBonusDiceFromAbilitiesAndHeritage =
+    bonusDiceFromAbilities + bonusDiceFromHeritage;
+  const totalAbilityEffectSteps = abilityEffectSteps + heritageEffectSteps;
 
   const gmDevilBargainText = useMemo(() => {
     const m = charCampaign?.active_session_detail?.devils_bargain_by_character;
@@ -2261,7 +2621,7 @@ const CharacterSheetWrapper = ({
     let mod = 0;
     if (rollModal.push_dice) mod += 1;
     if (rollModal.devil_bargain_dice) mod += 1;
-    mod += bonusDiceFromAbilities;
+    mod += totalBonusDiceFromAbilitiesAndHeritage;
     const selectedPushStress =
       (rollModal.push_effect ? 2 : 0) + (rollModal.push_dice ? 2 : 0);
     const requiredIncapacitatedStress = harmLevel3Used ? 2 : 0;
@@ -2280,7 +2640,7 @@ const CharacterSheetWrapper = ({
     rollModal.push_effect,
     rollModal.devil_bargain_dice,
     harmLevel3Used,
-    bonusDiceFromAbilities,
+    totalBonusDiceFromAbilitiesAndHeritage,
   ]);
 
   const pushStressCost = rollPoolPreview?.pushStress || 0;
@@ -2303,8 +2663,10 @@ const CharacterSheetWrapper = ({
           !rollModal.devil_bargain_dice ||
           !gmDevilBargainText ||
           devilBargainConfirmed,
-        bonus_dice: bonusDiceFromAbilities,
-        ability_effect_steps: abilityEffectSteps,
+        bonus_dice: totalBonusDiceFromAbilitiesAndHeritage,
+        ability_effect_steps: totalAbilityEffectSteps,
+        heritage_bonuses:
+          heritageBonusAudit.length > 0 ? heritageBonusAudit : undefined,
         goal_label:
           goalFromDraft || assignedRollGoalLabel || undefined,
         ability_bonuses: abilityBonusAudit.length
@@ -2401,6 +2763,7 @@ const CharacterSheetWrapper = ({
         devil_bargain_note: "",
       }));
       setRollAbilityBoost({});
+      setHeritageRollBoost({});
     } catch (e) {
       setRollApiError(e.message);
     }
@@ -2425,6 +2788,7 @@ const CharacterSheetWrapper = ({
           : {}),
       });
       setRollAbilityBoost({});
+      setHeritageRollBoost({});
       setDevilBargainConfirmed(false);
       const asdGoal = (
         assignedRollGoalLabel || ""
@@ -3291,7 +3655,7 @@ const CharacterSheetWrapper = ({
                                         marginBottom: 8,
                                       }}
                                     >
-                                      Manual history record
+                                      Manual history or XP award
                                     </div>
                                     <div
                                       style={{
@@ -3320,6 +3684,7 @@ const CharacterSheetWrapper = ({
                                           Resistance
                                         </option>
                                         <option value="VICE">Vice roll</option>
+                                        <option value="XP">XP award</option>
                                       </select>
                                       <select
                                         value={historyManual.sessionId}
@@ -3345,7 +3710,68 @@ const CharacterSheetWrapper = ({
                                           </option>
                                         ))}
                                       </select>
-                                      {historyManual.rollType === "RESISTANCE" ? (
+                                      {historyManual.rollType === "XP" ? (
+                                        <>
+                                          <select
+                                            value={historyManual.xpTrack}
+                                            onChange={(e) =>
+                                              setHistoryManual((p) => ({
+                                                ...p,
+                                                xpTrack: e.target.value,
+                                              }))
+                                            }
+                                            style={{
+                                              ...S.sel,
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                            }}
+                                          >
+                                            <option value="playbook">Playbook</option>
+                                            <option value="insight">Insight</option>
+                                            <option value="prowess">Prowess</option>
+                                            <option value="resolve">Resolve</option>
+                                            <option value="heritage">Heritage</option>
+                                          </select>
+                                          <input
+                                            type="number"
+                                            min={1}
+                                            max={20}
+                                            value={historyManual.xpAmount}
+                                            onChange={(e) =>
+                                              setHistoryManual((p) => ({
+                                                ...p,
+                                                xpAmount: e.target.value,
+                                              }))
+                                            }
+                                            style={{
+                                              ...S.inp,
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                            }}
+                                            title="XP to add (1–20 per award)"
+                                          />
+                                          <textarea
+                                            value={historyManual.xpReason}
+                                            onChange={(e) =>
+                                              setHistoryManual((p) => ({
+                                                ...p,
+                                                xpReason: e.target.value,
+                                              }))
+                                            }
+                                            style={{
+                                              ...S.inp,
+                                              gridColumn: "1 / -1",
+                                              fontSize: 10,
+                                              padding: "6px",
+                                              minHeight: 52,
+                                              resize: "vertical",
+                                              fontFamily: "inherit",
+                                            }}
+                                            placeholder="Explain what this XP was for (appears in session history and XP log)."
+                                            rows={3}
+                                          />
+                                        </>
+                                      ) : historyManual.rollType === "RESISTANCE" ? (
                                         <select
                                           value={historyManual.action}
                                           onChange={(e) =>
@@ -3394,22 +3820,25 @@ const CharacterSheetWrapper = ({
                                           placeholder="Action"
                                         />
                                       )}
-                                      <input
-                                        value={historyManual.dice}
-                                        onChange={(e) =>
-                                          setHistoryManual((p) => ({
-                                            ...p,
-                                            dice: e.target.value,
-                                          }))
-                                        }
-                                        style={{
-                                          ...S.inp,
-                                          fontSize: 10,
-                                          padding: "2px 6px",
-                                        }}
-                                        placeholder="Dice e.g. 6,4"
-                                      />
-                                      {historyManual.rollType === "RESISTANCE" ? (
+                                      {historyManual.rollType !== "XP" ? (
+                                        <input
+                                          value={historyManual.dice}
+                                          onChange={(e) =>
+                                            setHistoryManual((p) => ({
+                                              ...p,
+                                              dice: e.target.value,
+                                            }))
+                                          }
+                                          style={{
+                                            ...S.inp,
+                                            fontSize: 10,
+                                            padding: "2px 6px",
+                                          }}
+                                          placeholder="Dice e.g. 6,4"
+                                        />
+                                      ) : null}
+                                      {historyManual.rollType === "XP" ? null : historyManual.rollType ===
+                                      "RESISTANCE" ? (
                                         <>
                                           <select
                                             value={historyManual.resistanceHarmTarget}
@@ -3547,7 +3976,8 @@ const CharacterSheetWrapper = ({
                                       )}
                                     </div>
                                     {historyManual.rollType !== "RESISTANCE" &&
-                                      historyManual.rollType !== "VICE" && (
+                                      historyManual.rollType !== "VICE" &&
+                                      historyManual.rollType !== "XP" && (
                                       <div
                                         style={{
                                           marginTop: 6,
@@ -3585,6 +4015,7 @@ const CharacterSheetWrapper = ({
                                     )}
                                     {historyManual.rollType !== "RESISTANCE" &&
                                     historyManual.rollType !== "VICE" &&
+                                    historyManual.rollType !== "XP" &&
                                     historyManual.groupAction ? (
                                       <input
                                         value={historyManual.groupActionId}
@@ -3662,6 +4093,98 @@ const CharacterSheetWrapper = ({
                                           }
                                           try {
                                             setHistoryWriteError(null);
+                                            const rt0 = String(
+                                              historyManual.rollType || "ACTION",
+                                            ).toUpperCase();
+                                            if (rt0 === "XP") {
+                                              if (!characterId) return;
+                                              const sessions =
+                                                charCampaign?.sessions || [];
+                                              const sidStr = String(
+                                                historyManual.sessionId || "",
+                                              ).trim();
+                                              if (sessions.length > 0 && !sidStr) {
+                                                setHistoryWriteError(
+                                                  "Select a session for this XP award.",
+                                                );
+                                                return;
+                                              }
+                                              let sessionIdPayload = null;
+                                              if (sidStr) {
+                                                const sidNum = parseInt(sidStr, 10);
+                                                if (
+                                                  !Number.isFinite(sidNum) ||
+                                                  sidNum < 1
+                                                ) {
+                                                  setHistoryWriteError(
+                                                    "Invalid session.",
+                                                  );
+                                                  return;
+                                                }
+                                                sessionIdPayload = sidNum;
+                                              }
+                                              const amt = parseInt(
+                                                String(historyManual.xpAmount || "1"),
+                                                10,
+                                              );
+                                              if (
+                                                !Number.isFinite(amt) ||
+                                                amt < 1 ||
+                                                amt > 20
+                                              ) {
+                                                setHistoryWriteError(
+                                                  "XP amount must be between 1 and 20.",
+                                                );
+                                                return;
+                                              }
+                                              const reason = String(
+                                                historyManual.xpReason || "",
+                                              ).trim();
+                                              if (reason.length < 3) {
+                                                setHistoryWriteError(
+                                                  "Enter at least 3 characters explaining this XP award.",
+                                                );
+                                                return;
+                                              }
+                                              const track = String(
+                                                historyManual.xpTrack || "playbook",
+                                              ).toLowerCase();
+                                              setHistoryManualSaving(true);
+                                              const res = await characterAPI.addXP(
+                                                characterId,
+                                                {
+                                                  xp_type: track,
+                                                  amount: amt,
+                                                  reason,
+                                                  ...(sessionIdPayload != null
+                                                    ? {
+                                                        session_id:
+                                                          sessionIdPayload,
+                                                      }
+                                                    : {}),
+                                                },
+                                              );
+                                              if (
+                                                res?.xp_clocks &&
+                                                typeof res.xp_clocks === "object"
+                                              ) {
+                                                setXp((prev) => ({
+                                                  ...prev,
+                                                  ...res.xp_clocks,
+                                                }));
+                                              } else if (
+                                                res?.new_total != null &&
+                                                track
+                                              ) {
+                                                setXp((p) => ({
+                                                  ...p,
+                                                  [track]: res.new_total,
+                                                }));
+                                              }
+                                              setHistoryRefreshTick((v) => v + 1);
+                                              setShowHistoryManualModal(false);
+                                              return;
+                                            }
                                             const sid = parseInt(
                                               String(historyManual.sessionId || ""),
                                               10,
@@ -3836,7 +4359,9 @@ const CharacterSheetWrapper = ({
                                       >
                                         {historyManualSaving
                                           ? "Saving…"
-                                          : "Add manual record"}
+                                          : historyManual.rollType === "XP"
+                                            ? "Add XP award"
+                                            : "Add manual record"}
                                       </button>
                                       <button
                                         type="button"
@@ -3868,11 +4393,13 @@ const CharacterSheetWrapper = ({
                           ) : historyError ? (
                             <div style={{ color: "#fca5a5" }}>{historyError}</div>
                           ) : historyRows.length === 0 ? (
-                            <div style={{ color: "#6b7280" }}>
-                              No history entries.
+                            <div style={{ color: "#6b7280", lineHeight: 1.45 }}>
+                              {historyMode === "session" && !historySessionId
+                                ? "No XP log for this filter. Choose a campaign session for rolls, stress, and session-tied XP, or stay on “No session” for full tracker + ledger + advancement edits (all time)."
+                                : "No history entries."}
                             </div>
                           ) : (
-                            historyRows.slice(0, 120).map((row) => (
+                            historyRows.slice(0, 200).map((row) => (
                               <div
                                 key={row.key}
                                 style={{
@@ -4403,55 +4930,116 @@ const CharacterSheetWrapper = ({
                   <div style={{ display: "flex", gap: "16px" }}>
                     <div style={{ flex: 1 }}>
                       <span style={S.lbl}>HARM</span>
-                      {[
-                        { key: "level4", label: "FATAL", count: 1 },
-                        { key: "level3", label: "NEED HELP", count: 1 },
-                        { key: "level2", label: "-1D", count: 2 },
-                        { key: "level1", label: "LESS EFFECT", count: 2 },
-                      ].map(({ key, label, count }) =>
-                        Array.from({ length: count }, (_, idx) => (
-                          <div
-                            key={`${key}-${idx}`}
+                      {(
+                        [
+                          { key: "level4", label: "FATAL", count: 1 },
+                          { key: "level3", label: "NEED HELP", count: 1 },
+                        ]
+                      ).map(({ key, label, count }) => (
+                        <div
+                          key={key}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          <span
                             style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "6px",
-                              marginBottom: "4px",
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              width: "68px",
+                              flexShrink: 0,
                             }}
                           >
-                            <span
-                              style={{
-                                fontSize: "10px",
-                                color: "#9ca3af",
-                                width: "68px",
-                                flexShrink: 0,
-                              }}
-                            >
-                              {label}
-                            </span>
-                            <input
-                              style={{
-                                ...S.inp,
-                                border: "1px solid #374151",
-                                background: "#0a0a0a",
-                                padding: "2px 6px",
-                                fontSize: "11px",
-                              }}
-                              placeholder={`Lv${key.slice(-1)} harm`}
-                              value={harm[key]?.[idx] ?? ""}
-                              onChange={(e) =>
-                                setHarm((p) => {
-                                  const row = Array.isArray(p[key])
-                                    ? [...p[key]]
-                                    : Array(count).fill("");
-                                  row[idx] = e.target.value;
-                                  return { ...p, [key]: row };
-                                })
-                              }
-                            />
+                            {label}
+                          </span>
+                          <input
+                            style={{
+                              ...S.inp,
+                              flex: 1,
+                              minWidth: 0,
+                              border: "1px solid #374151",
+                              background: "#0a0a0a",
+                              padding: "2px 6px",
+                              fontSize: "11px",
+                            }}
+                            placeholder={`Lv${key.slice(-1)} harm`}
+                            value={harm[key]?.[0] ?? ""}
+                            onChange={(e) =>
+                              setHarm((p) => {
+                                const row = Array.isArray(p[key])
+                                  ? [...p[key]]
+                                  : Array(count).fill("");
+                                row[0] = e.target.value;
+                                return { ...p, [key]: row };
+                              })
+                            }
+                          />
+                        </div>
+                      ))}
+                      {(
+                        [
+                          { key: "level2", label: "-1D", count: 2 },
+                          { key: "level1", label: "LESS EFFECT", count: 2 },
+                        ]
+                      ).map(({ key, label, count }) => (
+                        <div
+                          key={key}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              width: "68px",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {label}
+                          </span>
+                          <div
+                            style={{
+                              display: "flex",
+                              flex: 1,
+                              minWidth: 0,
+                              gap: "6px",
+                            }}
+                          >
+                            {Array.from({ length: count }, (_, idx) => (
+                              <input
+                                key={`${key}-${idx}`}
+                                style={{
+                                  ...S.inp,
+                                  flex: 1,
+                                  minWidth: 0,
+                                  border: "1px solid #374151",
+                                  background: "#0a0a0a",
+                                  padding: "2px 6px",
+                                  fontSize: "11px",
+                                }}
+                                placeholder={`Lv${key.slice(-1)} harm`}
+                                value={harm[key]?.[idx] ?? ""}
+                                onChange={(e) =>
+                                  setHarm((p) => {
+                                    const row = Array.isArray(p[key])
+                                      ? [...p[key]]
+                                      : Array(count).fill("");
+                                    row[idx] = e.target.value;
+                                    return { ...p, [key]: row };
+                                  })
+                                }
+                              />
+                            ))}
                           </div>
-                        )),
-                      )}
+                        </div>
+                      ))}
                     </div>
                     <div
                       style={{
@@ -5680,31 +6268,6 @@ const CharacterSheetWrapper = ({
                                     </span>
                                   </div>
                                 )}
-                                {npc.harm_clock_max > 0 && (
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "6px",
-                                      marginBottom: "4px",
-                                    }}
-                                  >
-                                    <ProgressClock
-                                      size={36}
-                                      segments={npc.harm_clock_max}
-                                      filled={npc.harm_clock_current}
-                                    />
-                                    <span
-                                      style={{
-                                        fontSize: "10px",
-                                        color: "#9ca3af",
-                                      }}
-                                    >
-                                      Harm {npc.harm_clock_current}/
-                                      {npc.harm_clock_max}
-                                    </span>
-                                  </div>
-                                )}
                                 {(npc.conflict_clocks || []).length > 0
                                   ? (npc.conflict_clocks || []).map((clk) => (
                                       <div
@@ -5892,31 +6455,6 @@ const CharacterSheetWrapper = ({
                                           Vuln{" "}
                                           {npc.vulnerability_clock_current || 0}
                                           /{npc.vulnerability_clock_max}
-                                        </span>
-                                      </div>
-                                    )}
-                                    {npc.harm_clock_max > 0 && (
-                                      <div
-                                        style={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: "6px",
-                                          marginBottom: "4px",
-                                        }}
-                                      >
-                                        <ProgressClock
-                                          size={36}
-                                          segments={npc.harm_clock_max}
-                                          filled={npc.harm_clock_current || 0}
-                                        />
-                                        <span
-                                          style={{
-                                            fontSize: "10px",
-                                            color: "#9ca3af",
-                                          }}
-                                        >
-                                          Harm {npc.harm_clock_current || 0}/
-                                          {npc.harm_clock_max}
                                         </span>
                                       </div>
                                     )}
@@ -6559,6 +7097,12 @@ const CharacterSheetWrapper = ({
                               count={bonusDiceFromAbilities}
                             />
                           ) : null}
+                          {bonusDiceFromHeritage > 0 ? (
+                            <DicePoolStrip
+                              label={`Heritage benefits (+${bonusDiceFromHeritage}d)`}
+                              count={bonusDiceFromHeritage}
+                            />
+                          ) : null}
                           {rollPoolPreview.total === 0 ? (
                             <div
                               style={{
@@ -6707,6 +7251,108 @@ const CharacterSheetWrapper = ({
                                   </div>
                                 );
                               })}
+                          </div>
+                        </div>
+                      )}
+                      {heritageRollBonusOptions.length > 0 && (
+                        <div style={{ marginBottom: "12px" }}>
+                          <div
+                            style={{
+                              fontSize: "11px",
+                              color: "#9ca3af",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            Heritage benefits (optional — marks heritage expression
+                            XP when used with an active session)
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "6px",
+                              maxHeight: "140px",
+                              overflow: "auto",
+                            }}
+                          >
+                            {heritageRollBonusOptions.map((hb) => {
+                              const hid = hb.id ?? hb.name;
+                              const b = heritageRollBoost[hid] || {};
+                              return (
+                                <div
+                                  key={hid}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    gap: "8px",
+                                    fontSize: "11px",
+                                    flexWrap: "wrap",
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      color: "#fde68a",
+                                      flex: "1 1 120px",
+                                    }}
+                                  >
+                                    {hb.name}
+                                  </span>
+                                  {hb.supportsDice ? (
+                                    <label
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "4px",
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={!!b.dice}
+                                        onChange={(e) =>
+                                          setHeritageRollBoost((p) => ({
+                                            ...p,
+                                            [hid]: {
+                                              ...p[hid],
+                                              dice: e.target.checked,
+                                              effect: !!p[hid]?.effect,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                      +1d
+                                    </label>
+                                  ) : null}
+                                  {hb.supportsEffect ? (
+                                    <label
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "4px",
+                                        cursor: "pointer",
+                                      }}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={!!b.effect}
+                                        onChange={(e) =>
+                                          setHeritageRollBoost((p) => ({
+                                            ...p,
+                                            [hid]: {
+                                              ...p[hid],
+                                              effect: e.target.checked,
+                                              dice: !!p[hid]?.dice,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                      +1 effect
+                                    </label>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
@@ -6924,6 +7570,7 @@ const CharacterSheetWrapper = ({
                             setRollPending(null);
                             setRollApiError(null);
                             setRollAbilityBoost({});
+                            setHeritageRollBoost({});
                             setRollGoalDraft("");
                             setDevilBargainConfirmed(false);
                             setRollModal({
@@ -10270,6 +10917,115 @@ const CharacterSheetWrapper = ({
                   Standing with campaign factions (-3 hostile, 0 neutral, +3
                   allied). Hidden factions are GM-only until revealed.
                 </div>
+                {charData.crewId && canEditSheet ? (
+                  <div
+                    style={{
+                      marginBottom: 10,
+                      padding: 10,
+                      borderRadius: 6,
+                      border: "1px solid #374151",
+                      background: "#0d1117",
+                    }}
+                  >
+                    <span style={{ ...S.lbl, fontSize: "10px" }}>
+                      Crew portrait (HTTPS URL)
+                    </span>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 10,
+                        alignItems: "center",
+                        marginTop: 8,
+                      }}
+                    >
+                      {crewPortraitSrc ? (
+                        <img
+                          src={crewPortraitSrc}
+                          alt=""
+                          style={{
+                            width: 44,
+                            height: 44,
+                            objectFit: "cover",
+                            borderRadius: 6,
+                            border: "1px solid #4b5563",
+                            flexShrink: 0,
+                          }}
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      ) : null}
+                      <input
+                        type="url"
+                        style={{
+                          ...S.inp,
+                          flex: "1 1 200px",
+                          minWidth: 0,
+                          fontSize: 11,
+                        }}
+                        value={crewPortraitUrlDraft}
+                        onChange={(e) => {
+                          setCrewPortraitUrlDraft(e.target.value);
+                          setCrewPortraitMsg(null);
+                        }}
+                        placeholder="https://example.com/crew-photo.jpg"
+                      />
+                      <button
+                        type="button"
+                        style={{ ...S.btn, fontSize: 11 }}
+                        disabled={crewPortraitSaving}
+                        onClick={async () => {
+                          if (!charData.crewId) return;
+                          setCrewPortraitSaving(true);
+                          setCrewPortraitMsg(null);
+                          try {
+                            await crewAPI.patchCrew(charData.crewId, {
+                              image_url: String(
+                                crewPortraitUrlDraft || "",
+                              ).trim(),
+                            });
+                            const d = await crewAPI.getCrew(charData.crewId);
+                            setCrewData((p) => ({
+                              ...p,
+                              image: d.image ?? "",
+                              image_url: d.image_url ?? "",
+                            }));
+                            setCrewPortraitUrlDraft(
+                              String(d.image_url || "").trim(),
+                            );
+                            setCrewPortraitMsg({
+                              ok: true,
+                              text: "Portrait URL saved.",
+                            });
+                          } catch (err) {
+                            setCrewPortraitMsg({
+                              ok: false,
+                              text:
+                                err?.message ||
+                                "Could not save (HTTPS URL required).",
+                            });
+                          } finally {
+                            setCrewPortraitSaving(false);
+                          }
+                        }}
+                      >
+                        {crewPortraitSaving ? "Saving…" : "Save URL"}
+                      </button>
+                    </div>
+                    {crewPortraitMsg ? (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          fontSize: 10,
+                          color: crewPortraitMsg.ok ? "#34d399" : "#f87171",
+                        }}
+                      >
+                        {crewPortraitMsg.text}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 {crewFactionLinks.length === 0 ? (
                   <div style={{ fontSize: "12px", color: "#6b7280" }}>
                     No linked factions yet.
@@ -10300,6 +11056,24 @@ const CharacterSheetWrapper = ({
                           border: "1px solid #374151",
                         }}
                       >
+                        {crewPortraitSrc ? (
+                          <img
+                            src={crewPortraitSrc}
+                            alt=""
+                            title="Crew portrait"
+                            style={{
+                              width: 36,
+                              height: 36,
+                              objectFit: "cover",
+                              borderRadius: 6,
+                              border: "1px solid #4b5563",
+                              flexShrink: 0,
+                            }}
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                        ) : null}
                         <span style={{ fontWeight: 600, color: "#e5e7eb" }}>
                           {row.faction_name}
                         </span>
@@ -10397,78 +11171,152 @@ const CharacterSheetWrapper = ({
                 {isGM && campaignId && charData.crewId ? (
                   <div
                     style={{
-                      marginTop: "10px",
+                      marginTop: "12px",
+                      padding: "10px",
+                      borderRadius: "6px",
+                      border: "1px solid #374151",
+                      background: "#111827",
                       display: "flex",
-                      flexWrap: "wrap",
+                      flexDirection: "column",
                       gap: "8px",
-                      alignItems: "center",
                     }}
                   >
-                    <button
-                      type="button"
-                      style={{ ...S.btn, fontSize: "11px" }}
-                      onClick={() => {
-                        const name = prompt("New faction name?");
-                        if (!name?.trim()) return;
-                        factionAPI
-                          .createFaction({
-                            campaign: parseInt(String(campaignId), 10),
-                            name: name.trim(),
-                            visible_to_players: false,
-                          })
-                              .then((created) => {
-                            const fid = created?.id ?? created?.pk;
-                            if (!fid) return;
-                            return crewAPI
-                              .patchCrew(charData.crewId, {
-                                faction_relationships: [
-                                  {
-                                    faction_id: fid,
-                                    reputation_value: 0,
-                                  },
-                                ],
-                              })
-                              .then(() =>
-                                crewAPI
-                                  .getCrew(charData.crewId)
-                                  .then((crewRes) => {
-                                    setCrewFactionLinks(
-                                      crewRes.faction_relationships || [],
-                                    );
-                                  }),
-                              );
-                          })
-                          .catch(() => {});
+                    <span style={{ ...S.lbl, fontSize: "10px" }}>
+                      Add faction link
+                    </span>
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        color: "#6b7280",
+                        lineHeight: 1.4,
                       }}
                     >
-                      + Create hidden faction and link
-                    </button>
-                    <button
-                      type="button"
-                      style={{ ...S.btn, fontSize: "11px" }}
-                      onClick={() => {
-                        const raw = prompt(
-                          "Link existing faction: enter faction ID",
-                        );
-                        if (!raw?.trim()) return;
-                        const fid = parseInt(raw.trim(), 10);
-                        if (!Number.isFinite(fid)) return;
-                        crewAPI
-                          .patchCrew(charData.crewId, {
-                            faction_relationships: [
-                              { faction_id: fid, reputation_value: 0 },
-                            ],
-                          })
-                          .then(() =>
-                            crewAPI.getCrew(charData.crewId).then((d) => {
-                              setCrewFactionLinks(d.faction_relationships || []);
-                            }),
-                          )
-                          .catch(() => {});
+                      Create a GM-only faction by name, or link one already in this
+                      campaign. Set starting reputation (−3 to +3), then add link.
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "8px",
+                        alignItems: "center",
                       }}
                     >
-                      Link faction by ID
-                    </button>
+                      <input
+                        type="text"
+                        style={{
+                          ...S.inp,
+                          flex: "1 1 160px",
+                          minWidth: "140px",
+                          fontSize: "11px",
+                        }}
+                        placeholder="New faction name (hidden until revealed)"
+                        value={crewFactionAddName}
+                        onChange={(e) => {
+                          setCrewFactionAddName(e.target.value);
+                          setCrewFactionAddErr(null);
+                          if (e.target.value.trim())
+                            setCrewFactionAddExistingId("");
+                        }}
+                        disabled={crewFactionAddBusy}
+                      />
+                      <span style={{ fontSize: "10px", color: "#6b7280" }}>or</span>
+                      <select
+                        style={{
+                          ...S.sel,
+                          flex: "1 1 160px",
+                          minWidth: "140px",
+                          fontSize: "11px",
+                        }}
+                        value={crewFactionAddExistingId}
+                        onChange={(e) => {
+                          setCrewFactionAddExistingId(e.target.value);
+                          setCrewFactionAddErr(null);
+                          if (e.target.value) setCrewFactionAddName("");
+                        }}
+                        disabled={crewFactionAddBusy}
+                      >
+                        <option value="">— Existing campaign faction —</option>
+                        {crewLinkableFactions.map((f) => (
+                          <option key={f.id} value={String(f.id)}>
+                            {f.name || `Faction ${f.id}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "10px",
+                        alignItems: "center",
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontSize: "11px",
+                          color: "#9ca3af",
+                        }}
+                      >
+                        Starting rep
+                        <input
+                          type="number"
+                          min={-3}
+                          max={3}
+                          style={{
+                            width: "52px",
+                            background: "#0d1117",
+                            color: "#fff",
+                            border: "1px solid #4b5563",
+                            borderRadius: "4px",
+                            padding: "2px 4px",
+                            fontSize: "11px",
+                          }}
+                          value={crewFactionAddRep}
+                          onChange={(e) => {
+                            setCrewFactionAddRep(
+                              Math.min(
+                                3,
+                                Math.max(
+                                  -3,
+                                  parseInt(e.target.value, 10) || 0,
+                                ),
+                              ),
+                            );
+                            setCrewFactionAddErr(null);
+                          }}
+                          disabled={crewFactionAddBusy}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        style={{
+                          ...S.btn,
+                          fontSize: "11px",
+                          padding: "4px 12px",
+                          opacity: crewFactionAddBusy ? 0.6 : 1,
+                        }}
+                        disabled={crewFactionAddBusy}
+                        onClick={() => void handleAddCrewFactionLink()}
+                      >
+                        {crewFactionAddBusy ? "Saving…" : "Add link"}
+                      </button>
+                    </div>
+                    {crewFactionAddErr ? (
+                      <div style={{ fontSize: "11px", color: "#f87171" }}>
+                        {crewFactionAddErr}
+                      </div>
+                    ) : null}
+                    {crewLinkableFactions.length === 0 &&
+                    !(campaignForCrewFactionAdd?.factions || []).length ? (
+                      <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                        No factions on this campaign yet — use the name field to
+                        create the first one.
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>

@@ -104,7 +104,6 @@ npc_mf_doom = NPC.objects.create(
         "PRECISION": "S",
         "POTENTIAL": "S",
     },
-    harm_clock_current=0,
     vulnerability_clock_current=0,
     armor_charges=0,
 )

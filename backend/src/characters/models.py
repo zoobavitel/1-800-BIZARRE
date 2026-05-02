@@ -109,6 +109,12 @@ class Faction(models.Model):
     crew_notes = models.TextField(
         blank=True, help_text="Operational notes shared across all faction members."
     )
+    image = models.FileField(
+        upload_to="faction_images/",
+        null=True,
+        blank=True,
+        help_text="Optional emblem or photo for this faction.",
+    )
 
     class Meta:
         unique_together = [("campaign", "name")]
@@ -194,6 +200,12 @@ class Crew(models.Model):
     description = models.TextField(blank=True)
     notes = models.TextField(blank=True, help_text="Crew sheet notes (player-facing).")
     image = models.FileField(upload_to="crew_images/", blank=True, null=True)
+    image_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="Optional HTTPS URL for crew portrait (no file upload).",
+    )
     xp = models.IntegerField(default=0)
     xp_track_size = models.IntegerField(default=8)
     advancement_points = models.IntegerField(default=0)
@@ -310,7 +322,6 @@ class NPC(models.Model):
     )
     custom_abilities = models.TextField(blank=True)
     relationships = models.JSONField(default=dict, blank=True)
-    harm_clock_current = models.IntegerField(default=0)
     vulnerability_clock_current = models.IntegerField(default=0)
     armor_charges = models.IntegerField(default=0)
     creator = models.ForeignKey(
@@ -350,8 +361,6 @@ class NPC(models.Model):
     # Armor tracking (regular vs special charges used)
     regular_armor_used = models.IntegerField(default=0)
     special_armor_used = models.IntegerField(default=0)
-
-    harm_clock_max = models.IntegerField(default=4)
 
     @property
     def regular_armor_charges(self):
@@ -1413,6 +1422,7 @@ class ExperienceTracker(models.Model):
         ("DESPERATE", "Address a challenge with action rating 0"),
         ("DESPERATE_ROLL", "Desperate skill check"),
         ("STANDOUT", "Standout action or leadership"),
+        ("MANUAL", "Manual or offline XP award"),
     ]
 
     character = models.ForeignKey(
@@ -1578,6 +1588,13 @@ class Session(models.Model):
             "overrides default_position/default_effect for that PC's action rolls when set."
         ),
     )
+    auto_encoded_xp_settled = models.BooleanField(
+        default=False,
+        help_text=(
+            "When true, encoded session-end XP (vice/playbook hints from rolls) was "
+            "applied once. Entanglement / score conflict XP stays manual."
+        ),
+    )
 
     # Score proposal fields
     proposed_score_target = models.CharField(max_length=200, blank=True, null=True)
@@ -1606,7 +1623,6 @@ class SessionNPCInvolvement(models.Model):
     )
     show_clocks_to_players = models.BooleanField(default=False)
     show_vulnerability_clock_to_players = models.BooleanField(default=False)
-    show_harm_clock_to_players = models.BooleanField(default=False)
     revealed_conflict_clock_names = models.JSONField(default=list, blank=True)
     revealed_alt_clock_names = models.JSONField(default=list, blank=True)
     revealed_progress_clock_ids = models.JSONField(default=list, blank=True)
@@ -1622,8 +1638,6 @@ class SessionNPCInvolvement(models.Model):
         parts = []
         if self.show_clocks_to_players:
             parts.append("all_clocks")
-        if self.show_harm_clock_to_players:
-            parts.append("harm")
         if self.show_vulnerability_clock_to_players:
             parts.append("vuln")
         if self.show_stand_coin_to_players:

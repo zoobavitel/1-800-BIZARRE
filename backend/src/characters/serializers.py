@@ -109,6 +109,14 @@ class CrewSerializer(serializers.ModelSerializer):
     image = serializers.FileField(required=False)
     faction_relationships = serializers.SerializerMethodField(read_only=True)
 
+    def validate_image_url(self, value):
+        s = (value or "").strip()
+        if not s:
+            return ""
+        if not s.startswith("https://"):
+            raise serializers.ValidationError("Use an HTTPS image URL.")
+        return s
+
     class Meta:
         model = Crew
         fields = [
@@ -119,6 +127,7 @@ class CrewSerializer(serializers.ModelSerializer):
             "description",
             "notes",
             "image",
+            "image_url",
             "xp",
             "xp_track_size",
             "advancement_points",
@@ -339,7 +348,6 @@ class SessionNPCInvolvementWriteSerializer(serializers.Serializer):
     npc = serializers.PrimaryKeyRelatedField(queryset=NPC.objects.all())
     show_clocks_to_players = serializers.BooleanField(default=False)
     show_vulnerability_clock_to_players = serializers.BooleanField(default=False)
-    show_harm_clock_to_players = serializers.BooleanField(default=False)
     revealed_conflict_clock_names = serializers.ListField(
         child=serializers.CharField(), required=False, default=list
     )
@@ -419,7 +427,6 @@ class SessionSerializer(serializers.ModelSerializer):
                 "npc": inv.npc_id,
                 "show_clocks_to_players": inv.show_clocks_to_players,
                 "show_vulnerability_clock_to_players": inv.show_vulnerability_clock_to_players,
-                "show_harm_clock_to_players": inv.show_harm_clock_to_players,
                 "revealed_conflict_clock_names": inv.revealed_conflict_clock_names or [],
                 "revealed_alt_clock_names": inv.revealed_alt_clock_names or [],
                 "revealed_progress_clock_ids": inv.revealed_progress_clock_ids or [],
@@ -453,7 +460,6 @@ class SessionSerializer(serializers.ModelSerializer):
                     show, show_vuln = _normalize_npc_involvement_clock_flags(
                         show, raw_vuln
                     )
-                    show_harm = bool(item.get("show_harm_clock_to_players", False))
                     revealed_conflict = _normalized_list(
                         item.get("revealed_conflict_clock_names")
                     )
@@ -476,7 +482,6 @@ class SessionSerializer(serializers.ModelSerializer):
                 else:
                     show = False
                     show_vuln = False
-                    show_harm = False
                     revealed_conflict = []
                     revealed_alt = []
                     revealed_progress_ids = []
@@ -492,7 +497,6 @@ class SessionSerializer(serializers.ModelSerializer):
                         {
                             "show_clocks_to_players": show,
                             "show_vulnerability_clock_to_players": show_vuln,
-                            "show_harm_clock_to_players": show_harm,
                             "revealed_conflict_clock_names": revealed_conflict,
                             "revealed_alt_clock_names": revealed_alt,
                             "revealed_progress_clock_ids": revealed_progress_ids,
@@ -527,7 +531,6 @@ class SessionSerializer(serializers.ModelSerializer):
                     defaults={
                         "show_clocks_to_players": False,
                         "show_vulnerability_clock_to_players": False,
-                        "show_harm_clock_to_players": False,
                         "revealed_conflict_clock_names": [],
                         "revealed_alt_clock_names": [],
                         "revealed_progress_clock_ids": [],
@@ -561,7 +564,6 @@ class SessionSerializer(serializers.ModelSerializer):
                     show, show_vuln = _normalize_npc_involvement_clock_flags(
                         show, raw_vuln
                     )
-                    show_harm = bool(item.get("show_harm_clock_to_players", False))
                     revealed_conflict = _normalized_list(
                         item.get("revealed_conflict_clock_names")
                     )
@@ -584,7 +586,6 @@ class SessionSerializer(serializers.ModelSerializer):
                 else:
                     show = False
                     show_vuln = False
-                    show_harm = False
                     revealed_conflict = []
                     revealed_alt = []
                     revealed_progress_ids = []
@@ -600,7 +601,6 @@ class SessionSerializer(serializers.ModelSerializer):
                         {
                             "show_clocks_to_players": show,
                             "show_vulnerability_clock_to_players": show_vuln,
-                            "show_harm_clock_to_players": show_harm,
                             "revealed_conflict_clock_names": revealed_conflict,
                             "revealed_alt_clock_names": revealed_alt,
                             "revealed_progress_clock_ids": revealed_progress_ids,
@@ -628,7 +628,6 @@ class SessionSerializer(serializers.ModelSerializer):
                     defaults={
                         "show_clocks_to_players": False,
                         "show_vulnerability_clock_to_players": False,
-                        "show_harm_clock_to_players": False,
                         "revealed_conflict_clock_names": [],
                         "revealed_alt_clock_names": [],
                         "revealed_progress_clock_ids": [],
@@ -709,6 +708,7 @@ class RollSerializer(serializers.ModelSerializer):
         source="rolled_by.username", read_only=True
     )
     xp_awarded = serializers.SerializerMethodField()
+    xp_award_detail = serializers.SerializerMethodField()
 
     class Meta:
         model = Roll
@@ -731,6 +731,7 @@ class RollSerializer(serializers.ModelSerializer):
             "rolled_by_username",
             "timestamp",
             "xp_awarded",
+            "xp_award_detail",
             "pool_action_rating",
             "pool_attribute_dice",
             "push_for_effect",
@@ -754,6 +755,39 @@ class RollSerializer(serializers.ModelSerializer):
         from .models import ExperienceTracker
 
         return ExperienceTracker.objects.filter(roll=obj).exists()
+
+    def get_xp_award_detail(self, obj):
+        """If this roll created an ExperienceTracker row, expose XP for session UI."""
+        from .models import ExperienceTracker
+        from .roll_helpers import xp_track_for_action_name
+
+        et = (
+            ExperienceTracker.objects.filter(roll=obj)
+            .select_related("character")
+            .first()
+        )
+        if not et:
+            return None
+        track = xp_track_for_action_name(obj.action_name or "")
+        char = et.character
+        try:
+            char.refresh_from_db(fields=["xp_clocks"])
+        except Exception:
+            pass
+        clocks = dict(char.xp_clocks or {})
+        track_total = None
+        if track:
+            track_total = int(clocks.get(track, 0) or 0)
+        all_tracks_total = sum(int(v or 0) for v in clocks.values())
+        return {
+            "xp_gained": int(et.xp_gained or 0),
+            "trigger": et.trigger,
+            "trigger_label": et.get_trigger_display(),
+            "track": track,
+            "track_total": track_total,
+            "all_tracks_total": all_tracks_total,
+            "description": (et.description or "")[:500],
+        }
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
@@ -1647,6 +1681,9 @@ class CharacterSummarySerializer(serializers.ModelSerializer):
             "user_id",
             "username",
             "crew_id",
+            # Portrait (upload or HTTPS URL) for GM session roster / crew lists
+            "image",
+            "image_url",
         ]
 
 
@@ -1661,7 +1698,16 @@ class NPCSummarySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = NPC
-        fields = ["id", "name", "level", "stand_name", "playbook", "heritage_name"]
+        fields = [
+            "id",
+            "name",
+            "level",
+            "stand_name",
+            "playbook",
+            "heritage_name",
+            "image",
+            "image_url",
+        ]
 
 
 class CrewCampaignSerializer(serializers.ModelSerializer):
@@ -1689,6 +1735,7 @@ class CrewCampaignSerializer(serializers.ModelSerializer):
 
 class FactionSerializer(serializers.ModelSerializer):
     npcs = NPCSummarySerializer(many=True, read_only=True)
+    image = serializers.FileField(required=False, allow_null=True)
 
     class Meta:
         model = Faction
@@ -1706,6 +1753,7 @@ class FactionSerializer(serializers.ModelSerializer):
             "faction_status",
             "crew_notes",
             "visible_to_players",
+            "image",
             "npcs",
         ]
 
@@ -1740,8 +1788,6 @@ class ShowcasedNPCSerializer(serializers.ModelSerializer):
             data["faction_status"] = obj.npc.faction_status or {}
         # Only include clock data when GM has enabled show_clocks_to_party
         if obj.show_clocks_to_party:
-            data["harm_clock_current"] = obj.npc.harm_clock_current
-            data["harm_clock_max"] = obj.npc.harm_clock_max
             data["vulnerability_clock_current"] = obj.npc.vulnerability_clock_current
             data["vulnerability_clock_max"] = obj.npc.vulnerability_clock_max
             data["conflict_clocks"] = obj.npc.conflict_clocks or []
@@ -1814,6 +1860,11 @@ class CampaignInvitationSerializer(serializers.ModelSerializer):
     invited_by = UserSerializer(read_only=True)
     campaign_name = serializers.CharField(source="campaign.name", read_only=True)
     campaign_id = serializers.IntegerField(source="campaign.id", read_only=True)
+    campaign_description = serializers.CharField(
+        source="campaign.description", read_only=True
+    )
+    gm = UserSerializer(source="campaign.gm", read_only=True)
+    players = UserSerializer(source="campaign.players", many=True, read_only=True)
 
     class Meta:
         model = CampaignInvitation
@@ -1821,6 +1872,9 @@ class CampaignInvitationSerializer(serializers.ModelSerializer):
             "id",
             "campaign_id",
             "campaign_name",
+            "campaign_description",
+            "gm",
+            "players",
             "invited_user",
             "invited_by",
             "status",
@@ -1899,8 +1953,6 @@ class CampaignSerializer(serializers.ModelSerializer):
                 "stand_name": npc.stand_name or "",
                 "stand_coin_stats": npc.stand_coin_stats or {},
                 "abilities": npc.abilities or [],
-                "harm_clock_current": npc.harm_clock_current,
-                "harm_clock_max": npc.harm_clock_max,
                 "vulnerability_clock_current": npc.vulnerability_clock_current,
                 "vulnerability_clock_max": npc.vulnerability_clock_max,
                 "conflict_clocks": npc.conflict_clocks or [],
@@ -1908,7 +1960,6 @@ class CampaignSerializer(serializers.ModelSerializer):
                 "progress_clocks": progress_clocks_full,
                 "show_clocks_to_players": inv.show_clocks_to_players,
                 "show_vulnerability_clock_to_players": inv.show_vulnerability_clock_to_players,
-                "show_harm_clock_to_players": inv.show_harm_clock_to_players,
                 "show_stand_coin_to_players": inv.show_stand_coin_to_players,
                 "show_all_abilities_to_players": inv.show_all_abilities_to_players,
                 "revealed_conflict_clock_names": inv.revealed_conflict_clock_names or [],
@@ -1919,7 +1970,6 @@ class CampaignSerializer(serializers.ModelSerializer):
             }
         show_all = inv.show_clocks_to_players
         show_vuln = inv.show_clocks_to_players or inv.show_vulnerability_clock_to_players
-        show_harm = show_all or inv.show_harm_clock_to_players
         revealed_conflict = set(inv.revealed_conflict_clock_names or [])
         revealed_alt = set(inv.revealed_alt_clock_names or [])
         revealed_progress_ids = set(inv.revealed_progress_clock_ids or [])
@@ -1970,7 +2020,6 @@ class CampaignSerializer(serializers.ModelSerializer):
         player_visible = bool(
             show_all
             or show_vuln
-            or show_harm
             or conflict_clocks
             or alt_clocks
             or progress_clocks
@@ -1983,8 +2032,6 @@ class CampaignSerializer(serializers.ModelSerializer):
             "stand_name": npc.stand_name or "",
             "stand_coin_stats": stand_stats,
             "abilities": abilities,
-            "harm_clock_current": npc.harm_clock_current if show_harm else 0,
-            "harm_clock_max": npc.harm_clock_max if show_harm else 0,
             "vulnerability_clock_current": (
                 npc.vulnerability_clock_current if show_vuln else 0
             ),
@@ -2110,10 +2157,8 @@ class NPCSerializer(serializers.ModelSerializer):
         queryset=Heritage.objects.all(), allow_null=True, required=False
     )
     heritage_details = HeritageSerializer(source="heritage", read_only=True)
-    harm_clock_max = serializers.IntegerField(read_only=True)
     special_armor_charges = serializers.IntegerField(read_only=True)
     vulnerability_clock_max = serializers.IntegerField(read_only=True)
-    harm_clock_current = serializers.IntegerField(read_only=True)
     vulnerability_clock_current = serializers.IntegerField(required=False)
     image = serializers.FileField(required=False, allow_null=True)
     hamon_ability_ids = serializers.PrimaryKeyRelatedField(
@@ -2162,7 +2207,6 @@ class NPCSerializer(serializers.ModelSerializer):
             "selected_hamon_abilities",
             "selected_spin_abilities",
             "relationships",
-            "harm_clock_current",
             "vulnerability_clock_current",
             "armor_charges",
             "regular_armor_used",
@@ -2176,7 +2220,6 @@ class NPCSerializer(serializers.ModelSerializer):
             "stand_appearance",
             "stand_manifestation",
             "special_traits",
-            "harm_clock_max",
             "special_armor_charges",
             "vulnerability_clock_max",
             "purveyor",

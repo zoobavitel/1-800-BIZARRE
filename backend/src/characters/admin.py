@@ -65,7 +65,7 @@ class CharacterAdmin(admin.ModelAdmin):
 
 @admin.register(NPC)
 class NPCAdmin(admin.ModelAdmin):
-    list_display = ('name', 'campaign', 'creator', 'playbook', 'level', 'harm_clock_current', 'vulnerability_clock_current', 'armor_charges')
+    list_display = ('name', 'campaign', 'creator', 'playbook', 'level', 'vulnerability_clock_current', 'armor_charges')
     list_filter = ('playbook', 'campaign', 'creator', 'level')
     search_fields = ('name', 'description', 'stand_description')
     fieldsets = (
@@ -82,7 +82,7 @@ class NPCAdmin(admin.ModelAdmin):
             'fields': ('heritage', 'playbook', 'stand_coin_stats', 'custom_abilities', 'relationships')
         }),
         ('Clocks & Armor', {
-            'fields': ('harm_clock_current', 'vulnerability_clock_current', 'armor_charges')
+            'fields': ('vulnerability_clock_current', 'armor_charges')
         }),
         ('Stand Description', {
             'fields': ('stand_description', 'stand_appearance', 'stand_manifestation', 'special_traits')

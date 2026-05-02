@@ -72,6 +72,7 @@ const BG2 = "#0d0814";
  * @param {{ power: string, speed: string, range: string, durability: string, precision: string, development: string }} props.grades
  * @param {Record<string, string>} props.readouts — per-stat summary under the coin
  * @param {(statKey: string, delta: 1 | -1) => void} props.onStep
+ * @param {boolean} [props.readOnly=false] — when true, wedges do not change grades (view-only).
  * @param {"npc" | "pc"} [props.variant="npc"] — PC adjusts default copy (grade cap A vs S).
  * @param {"A" | "S"} [props.pcMaxGrade="A"] — when variant is "pc", hints and aria use this as top grade.
  */
@@ -79,6 +80,7 @@ export default function NpcsStandCoin({
   grades,
   readouts,
   onStep,
+  readOnly = false,
   variant = "npc",
   pcMaxGrade = "A",
 }) {
@@ -121,10 +123,11 @@ export default function NpcsStandCoin({
 
   const bump = useCallback(
     (key, delta) => {
+      if (readOnly) return;
       onStep(key, delta);
       setPinned(key);
     },
-    [onStep],
+    [onStep, readOnly],
   );
 
   const onWedgeClick = useCallback(
@@ -155,14 +158,17 @@ export default function NpcsStandCoin({
   );
 
   const topLetter = variant === "pc" ? pcMaxGrade : "S";
-  const idleAnnounce =
-    "Stand coin: left-click a wedge to raise its grade; right-click to lower. Shift+Enter or Shift+Space lowers.";
-  const emptyStateLines =
-    variant === "pc"
+  const idleAnnounce = readOnly
+    ? "Stand coin (read-only)."
+    : "Stand coin: left-click a wedge to raise its grade; right-click to lower. Shift+Enter or Shift+Space lowers.";
+  const emptyStateLines = readOnly
+    ? "Stand coin is view-only here. Open the full NPC sheet to edit, or ask the GM if this NPC is not yours."
+    : variant === "pc"
       ? `Left-click a segment to raise its grade (F→${topLetter}). Right-click to lower. Shift+Enter / Shift+Space on a focused wedge lowers one step.`
       : "Left-click a segment to raise its grade (F→S). Right-click to lower. Shift+Enter / Shift+Space on a focused wedge lowers one step.";
-  const svgDefaultAria =
-    variant === "pc"
+  const svgDefaultAria = readOnly
+    ? "Stand coin: six stats (read-only)"
+    : variant === "pc"
       ? `Stand coin: six stats, grades F through ${topLetter}`
       : "Stand coin: six stats, grades F through S";
   const wedgeSuffix =
@@ -186,6 +192,8 @@ export default function NpcsStandCoin({
         maxWidth: "280px",
         margin: "0 auto 4px",
         userSelect: "none",
+        pointerEvents: readOnly ? "none" : "auto",
+        opacity: readOnly ? 0.92 : 1,
       }}
     >
       <span style={SR_ONLY} role="status" aria-live="polite" aria-atomic="true">
@@ -413,17 +421,22 @@ export default function NpcsStandCoin({
               fill={isHot ? P1 : "#0d0814"}
               fillOpacity={isHot ? 0.28 : 0.001}
               stroke="none"
-              style={{ cursor: "pointer" }}
-              role="button"
-              tabIndex={0}
-              aria-label={`${s.label}, grade ${g}. Left-click to raise, right-click to lower.${wedgeSuffix}`}
-              onMouseEnter={() => setHovered(s.key)}
-              onMouseLeave={() => setHovered(null)}
-              onFocus={() => setHovered(s.key)}
-              onBlur={() => setHovered(null)}
-              onClick={(e) => onWedgeClick(e, s.key)}
-              onContextMenu={(e) => onWedgeContext(e, s.key)}
-              onKeyDown={(e) => onWedgeKey(e, s.key)}
+              style={{ cursor: readOnly ? "default" : "pointer" }}
+              role={readOnly ? "presentation" : "button"}
+              tabIndex={readOnly ? -1 : 0}
+              aria-label={
+                readOnly
+                  ? `${s.label}, grade ${g} (read-only)`
+                  : `${s.label}, grade ${g}. Left-click to raise, right-click to lower.${wedgeSuffix}`
+              }
+              aria-disabled={readOnly ? "true" : undefined}
+              onMouseEnter={() => !readOnly && setHovered(s.key)}
+              onMouseLeave={() => !readOnly && setHovered(null)}
+              onFocus={() => !readOnly && setHovered(s.key)}
+              onBlur={() => !readOnly && setHovered(null)}
+              onClick={(e) => !readOnly && onWedgeClick(e, s.key)}
+              onContextMenu={(e) => !readOnly && onWedgeContext(e, s.key)}
+              onKeyDown={(e) => !readOnly && onWedgeKey(e, s.key)}
             />
           );
         })}

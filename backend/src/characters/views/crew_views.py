@@ -28,6 +28,7 @@ _CREW_MEMBER_ALLOWED_PATCH_FIELDS = frozenset(
         "coin",
         "stash",
         "image",
+        "image_url",
     }
 )
 

@@ -8,6 +8,7 @@ import {
   progressClockAPI,
   rollAPI,
   crewAPI,
+  resolveMediaUrl,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
@@ -256,6 +257,14 @@ function CampaignDetail({
   const [allNPCs, setAllNPCs] = useState([]);
   const [factionForm, setFactionForm] = useState(null);
   const [factionError, setFactionError] = useState(null);
+  const factionImageBlobPreview = useMemo(() => {
+    if (!factionForm?.imageFile) return null;
+    return URL.createObjectURL(factionForm.imageFile);
+  }, [factionForm?.imageFile]);
+  useEffect(() => {
+    if (!factionImageBlobPreview) return undefined;
+    return () => URL.revokeObjectURL(factionImageBlobPreview);
+  }, [factionImageBlobPreview]);
   const [crewForm, setCrewForm] = useState(null);
   const [crewError, setCrewError] = useState(null);
   const [editForm, setEditForm] = useState(null);
@@ -484,6 +493,9 @@ function CampaignDetail({
       hold: "weak",
       reputation: 0,
       notes: "",
+      visible_to_players: true,
+      image: null,
+      imageFile: null,
     });
   const startFactionEdit = (f) =>
     setFactionForm({
@@ -494,6 +506,9 @@ function CampaignDetail({
       hold: f.hold,
       reputation: f.reputation,
       notes: f.notes || "",
+      visible_to_players: f.visible_to_players !== false,
+      image: f.image || null,
+      imageFile: null,
       npcs: f.npcs || [],
     });
 
@@ -531,6 +546,25 @@ function CampaignDetail({
     }
   };
 
+  const buildFactionSavePayload = () => {
+    const f = factionForm;
+    const payload = {
+      name: f.name.trim(),
+      faction_type: f.faction_type || "",
+      level: Number(f.level) || 0,
+      hold: f.hold === "strong" ? "strong" : "weak",
+      reputation: Number(f.reputation) || 0,
+      notes: f.notes || "",
+      visible_to_players:
+        f.visible_to_players !== undefined ? !!f.visible_to_players : true,
+      campaign: campaign.id,
+    };
+    if (f.imageFile) {
+      payload.imageFile = f.imageFile;
+    }
+    return payload;
+  };
+
   const handleFactionSave = async () => {
     setFactionError(null);
     if (!factionForm.name.trim()) {
@@ -539,15 +573,12 @@ function CampaignDetail({
     }
     try {
       if (factionForm.id) {
-        await factionAPI.updateFaction(factionForm.id, {
-          ...factionForm,
-          campaign: campaign.id,
-        });
+        await factionAPI.updateFaction(
+          factionForm.id,
+          buildFactionSavePayload(),
+        );
       } else {
-        await factionAPI.createFaction({
-          ...factionForm,
-          campaign: campaign.id,
-        });
+        await factionAPI.createFaction(buildFactionSavePayload());
       }
       setFactionForm(null);
       onRefresh();
@@ -790,7 +821,11 @@ function CampaignDetail({
               )}
             </div>
             {isGM && typeof onOpenSession === "function" && (
-              <CampaignSessionsPanel campaign={campaign} onOpenSession={onOpenSession} />
+              <CampaignSessionsPanel
+                campaign={campaign}
+                onOpenSession={onOpenSession}
+                onRefresh={onRefresh}
+              />
             )}
           </>
         )}
@@ -1750,23 +1785,40 @@ function CampaignDetail({
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "center",
+                  gap: 10,
                 }}
               >
-                <div>
-                  <span style={{ fontWeight: "bold", color: "#e5e7eb" }}>
-                    {f.name}
-                  </span>
-                  {f.faction_type && (
-                    <span
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {f.image ? (
+                    <img
+                      src={resolveMediaUrl(f.image)}
+                      alt=""
                       style={{
-                        color: "#6b7280",
-                        fontSize: "11px",
-                        marginLeft: "8px",
+                        width: 40,
+                        height: 40,
+                        objectFit: "cover",
+                        borderRadius: 4,
+                        border: "1px solid #374151",
+                        flexShrink: 0,
                       }}
-                    >
-                      ({f.faction_type})
+                    />
+                  ) : null}
+                  <div>
+                    <span style={{ fontWeight: "bold", color: "#e5e7eb" }}>
+                      {f.name}
                     </span>
-                  )}
+                    {f.faction_type && (
+                      <span
+                        style={{
+                          color: "#6b7280",
+                          fontSize: "11px",
+                          marginLeft: "8px",
+                        }}
+                      >
+                        ({f.faction_type})
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div style={S.row}>
                   <button
@@ -1855,6 +1907,90 @@ function CampaignDetail({
                   {factionError}
                 </div>
               )}
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "12px",
+                  alignItems: "flex-start",
+                  marginBottom: "10px",
+                }}
+              >
+                {(factionImageBlobPreview || resolveMediaUrl(factionForm.image)) && (
+                  <div style={{ flexShrink: 0 }}>
+                    <span
+                      style={{
+                        fontSize: "11px",
+                        color: "#9ca3af",
+                        display: "block",
+                        marginBottom: "4px",
+                      }}
+                    >
+                      Preview
+                    </span>
+                    <img
+                      src={
+                        factionImageBlobPreview ||
+                        resolveMediaUrl(factionForm.image)
+                      }
+                      alt=""
+                      style={{
+                        width: 96,
+                        height: 96,
+                        objectFit: "cover",
+                        borderRadius: 6,
+                        border: "1px solid #374151",
+                        background: "#111",
+                      }}
+                    />
+                  </div>
+                )}
+                <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+                  <span
+                    style={{
+                      fontSize: "11px",
+                      color: "#9ca3af",
+                      display: "block",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    Faction image
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={{ fontSize: "11px", color: "#d1d5db", maxWidth: "100%" }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      setFactionForm((p) => ({
+                        ...p,
+                        imageFile: file || null,
+                      }));
+                      e.target.value = "";
+                    }}
+                  />
+                  {(factionForm.image || factionForm.imageFile) && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFactionForm((p) => ({
+                          ...p,
+                          image: null,
+                          imageFile: null,
+                        }))
+                      }
+                      style={{
+                        ...S.btnGhost,
+                        fontSize: "10px",
+                        marginTop: "6px",
+                        display: "block",
+                      }}
+                    >
+                      Clear image (local)
+                    </button>
+                  )}
+                </div>
+              </div>
               <div
                 style={{
                   display: "grid",
@@ -2505,15 +2641,24 @@ function SessionRecordsModal({ sessionId, sessionName, onClose }) {
   );
 }
 
+function campaignActiveSessionId(campaign) {
+  const a = campaign?.active_session;
+  if (a == null || a === "") return null;
+  if (typeof a === "object" && a !== null) return a.id ?? null;
+  const n = Number(a);
+  return Number.isFinite(n) ? n : null;
+}
+
 // ---------------------------------------------------------------------------
 // Sessions list + create + records modal (embedded in CampaignDetail)
 // ---------------------------------------------------------------------------
-function CampaignSessionsPanel({ campaign, onOpenSession }) {
+function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
   const [recordsModalSession, setRecordsModalSession] = useState(null);
+  const [busySessionId, setBusySessionId] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -2542,6 +2687,44 @@ function CampaignSessionsPanel({ campaign, onOpenSession }) {
       setError(e.message);
     } finally {
       setCreating(false);
+    }
+  };
+
+  const activeId = campaignActiveSessionId(campaign);
+
+  const handleClearActiveSession = async (s) => {
+    if (!campaign?.id || activeId == null || Number(activeId) !== Number(s.id)) return;
+    setBusySessionId(s.id);
+    setError(null);
+    try {
+      await campaignAPI.patchCampaign(campaign.id, { active_session: null });
+      onRefresh?.();
+    } catch (e) {
+      setError(e.message || "Could not clear active session");
+    } finally {
+      setBusySessionId(null);
+    }
+  };
+
+  const handleDeleteSession = async (s) => {
+    const label = s.name || `Session ${s.id}`;
+    if (
+      !window.confirm(
+        `Delete "${label}"? This removes the session and its tied records (e.g. rolls) where the server is configured to cascade. This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBusySessionId(s.id);
+    setError(null);
+    try {
+      await sessionAPI.deleteSession(s.id);
+      setSessions((prev) => (prev || []).filter((x) => x.id !== s.id));
+      onRefresh?.();
+    } catch (e) {
+      setError(e.message || "Could not delete session");
+    } finally {
+      setBusySessionId(null);
     }
   };
 
@@ -2611,8 +2794,27 @@ function CampaignSessionsPanel({ campaign, onOpenSession }) {
                     tabIndex={0}
                     onKeyDown={(e) => e.key === "Enter" && onOpenSession(s)}
                   >
-                    <div style={{ fontWeight: "bold" }}>
-                      {s.name || `Session ${s.id}`}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: "bold" }}>
+                        {s.name || `Session ${s.id}`}
+                      </span>
+                      {activeId != null && Number(activeId) === Number(s.id) && (
+                        <span
+                          style={{
+                            fontSize: "9px",
+                            fontWeight: 600,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.06em",
+                            color: "#a7f3d0",
+                            border: "1px solid #047857",
+                            borderRadius: "4px",
+                            padding: "2px 6px",
+                            background: "rgba(6, 95, 70, 0.25)",
+                          }}
+                        >
+                          Active
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: "11px", color: "#9ca3af" }}>
                       {s.session_date
@@ -2624,16 +2826,51 @@ function CampaignSessionsPanel({ campaign, onOpenSession }) {
                       · {s.status || "PLANNED"}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setRecordsModalSession(s);
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 6,
+                      alignItems: "center",
+                      justifyContent: "flex-end",
                     }}
-                    style={{ ...S.btn, fontSize: "10px", padding: "4px 8px" }}
                   >
-                    View records
-                  </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRecordsModalSession(s);
+                      }}
+                      style={{ ...S.btn, fontSize: "10px", padding: "4px 8px" }}
+                    >
+                      View records
+                    </button>
+                    {activeId != null && Number(activeId) === Number(s.id) && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleClearActiveSession(s);
+                        }}
+                        style={{ ...S.btnGhost, fontSize: "10px", padding: "4px 8px" }}
+                        disabled={busySessionId === s.id}
+                        title="Stop using this session as the campaign live session (tables, clocks, etc.)"
+                      >
+                        {busySessionId === s.id ? "…" : "Clear active"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteSession(s);
+                      }}
+                      style={{ ...S.btnDanger, fontSize: "10px", padding: "4px 8px" }}
+                      disabled={busySessionId === s.id}
+                    >
+                      {busySessionId === s.id ? "…" : "Delete"}
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
@@ -2662,6 +2899,7 @@ function SessionDetail({
   onNavigateToCharacter,
   onNavigateToNPC,
 }) {
+  const { user } = useAuth();
   const [sessionData, setSessionData] = useState(session);
   const [rolls, setRolls] = useState([]);
   const [clocks, setClocks] = useState([]);
@@ -2678,6 +2916,13 @@ function SessionDetail({
     outcome: "FULL_SUCCESS",
   });
   const [manualRollSaving, setManualRollSaving] = useState(false);
+  const [manualXp, setManualXp] = useState({
+    characterId: "",
+    track: "playbook",
+    amount: 1,
+    reason: "",
+  });
+  const [manualXpSaving, setManualXpSaving] = useState(false);
   const [fortuneDice, setFortuneDice] = useState(2);
   const [fortuneReason, setFortuneReason] = useState("");
   const [fortuneRolling, setFortuneRolling] = useState(false);
@@ -2710,12 +2955,18 @@ function SessionDetail({
         setCharacters(list?.filter((c) => c.campaign === campaign.id) || []),
       )
       .catch(() => setCharacters([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.id, campaign?.id, campaign?.wanted_stars]);
+
+  // Refetch NPCs when the campaign payload is refreshed (e.g. new factions) or session
+  // changes, so session faction dropdowns stay in sync with server `faction` fields.
+  useEffect(() => {
+    if (!campaign?.id) return;
     npcAPI
       .getNPCs(campaign.id)
       .then(setCampaignNPCs)
       .catch(() => setCampaignNPCs([]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.id, campaign?.id, campaign?.wanted_stars]);
+  }, [campaign, session?.id]);
 
   useEffect(() => {
     const raw = sessionData?.session_date;
@@ -2863,6 +3114,54 @@ function SessionDetail({
       setError(e.message);
     } finally {
       setManualRollSaving(false);
+    }
+  };
+
+  const handleManualXpGrant = async () => {
+    const cid = parseInt(manualXp.characterId, 10);
+    if (!cid) {
+      setError("Choose a character for the XP award.");
+      return;
+    }
+    let amt = parseInt(String(manualXp.amount), 10);
+    if (!Number.isFinite(amt)) amt = 1;
+    amt = Math.min(20, Math.max(1, amt));
+    const reason = String(manualXp.reason || "").trim();
+    if (reason.length < 3) {
+      setError(
+        "Enter at least 3 characters describing why this XP is awarded (e.g. desperate offline roll).",
+      );
+      return;
+    }
+    const track = String(manualXp.track || "playbook").toLowerCase();
+    setManualXpSaving(true);
+    setError(null);
+    try {
+      await characterAPI.addXP(cid, {
+        xp_type: track,
+        amount: amt,
+        reason,
+        session_id: session.id,
+      });
+      characterAPI
+        .getCharacters()
+        .then((list) =>
+          setCharacters(
+            list?.filter((c) => c.campaign === campaign.id) || [],
+          ),
+        )
+        .catch(() => {});
+      try {
+        const freshSession = await sessionAPI.getSession(session.id);
+        setSessionData(freshSession);
+      } catch {
+        /* session list still refreshed via onRefresh */
+      }
+      onRefresh();
+    } catch (e) {
+      setError(e.message || "Could not add XP.");
+    } finally {
+      setManualXpSaving(false);
     }
   };
 
@@ -3042,6 +3341,11 @@ function SessionDetail({
         setManualRoll={setManualRoll}
         manualRollSaving={manualRollSaving}
         onManualRollCreate={handleManualRollCreate}
+        manualXp={manualXp}
+        setManualXp={setManualXp}
+        manualXpSaving={manualXpSaving}
+        onManualXpGrant={handleManualXpGrant}
+        user={user}
       />
 
       {/* Goals */}

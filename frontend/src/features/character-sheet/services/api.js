@@ -402,16 +402,22 @@ export const factionAPI = {
       ? apiRequest(`/factions/?campaign=${campaignId}`)
       : apiRequest("/factions/"),
   getFaction: (id) => apiRequest(`/factions/${id}/`),
-  createFaction: (data) =>
-    apiRequest("/factions/", {
+  createFaction: (data) => {
+    const { multipart, body } = buildMultipartOrJson(data);
+    if (multipart) return apiRequestMultipart("/factions/", body, "POST");
+    return apiRequest("/factions/", {
       method: "POST",
-      body: JSON.stringify(data),
-    }),
-  updateFaction: (id, data) =>
-    apiRequest(`/factions/${id}/`, {
+      body,
+    });
+  },
+  updateFaction: (id, data) => {
+    const { multipart, body } = buildMultipartOrJson(data);
+    if (multipart) return apiRequestMultipart(`/factions/${id}/`, body, "PUT");
+    return apiRequest(`/factions/${id}/`, {
       method: "PUT",
-      body: JSON.stringify(data),
-    }),
+      body,
+    });
+  },
   patchFaction: (id, data) =>
     apiRequest(`/factions/${id}/`, {
       method: "PATCH",
@@ -593,6 +599,9 @@ export const sessionAPI = {
       method: "PATCH",
       body: JSON.stringify(sessionData),
     }),
+
+  deleteSession: (id) =>
+    apiRequest(`/sessions/${id}/`, { method: "DELETE" }),
 };
 
 // Progress clock API (GM clocks for campaigns/sessions)

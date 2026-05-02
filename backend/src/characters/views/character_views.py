@@ -12,16 +12,28 @@ from django.core.exceptions import PermissionDenied
 import json
 
 import random
-from ..models import Campaign, Character, GroupAction, Session, Roll, RollHistory
+from ..models import (
+    Campaign,
+    Character,
+    ExperienceTracker,
+    GroupAction,
+    Session,
+    Roll,
+    RollHistory,
+)
 from ..parsers import MultipartJsonParser
 from ..roll_helpers import (
     action_rating_from_action_dots,
     award_desperate_action_xp,
+    award_heritage_expression_xp,
     bump_effect,
+    heritage_bonus_labels,
+    normalized_trauma_pks,
     normalize_effect,
     normalize_position,
     outcome_from_action_roll,
     tier_die_from_action_pool,
+    award_struggle_for_new_traumas,
 )
 from ..serializers import CharacterSerializer
 from ..history_context import bind_character_history_editor, reset_character_history_editor
@@ -104,7 +116,24 @@ class CharacterViewSet(viewsets.ModelViewSet):
         original_user_id = serializer.instance.user_id
         token = bind_character_history_editor(user)
         try:
-            serializer.save(user_id=original_user_id)
+            prev_trauma_pks = normalized_trauma_pks(serializer.instance.trauma)
+            with transaction.atomic():
+                serializer.save(user_id=original_user_id)
+                inst = serializer.instance
+                gained = normalized_trauma_pks(inst.trauma) - prev_trauma_pks
+                if gained:
+                    campaign = getattr(inst, "campaign", None)
+                    act = (
+                        getattr(campaign, "active_session", None)
+                        if campaign is not None
+                        else None
+                    )
+                    if (
+                        act is not None
+                        and getattr(act, "campaign_id", None) == inst.campaign_id
+                        and getattr(inst, "campaign_id", None)
+                    ):
+                        award_struggle_for_new_traumas(inst, act, gained)
         finally:
             reset_character_history_editor(token)
 
@@ -292,6 +321,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         ability_bonuses = request.data.get(
             "ability_bonuses"
         )  # optional list for audit string
+        heritage_bonuses_raw = request.data.get("heritage_bonuses")
         group_action_id = request.data.get("group_action_id")
         assist_helper_id_raw = request.data.get("assist_helper_id")
         assist_helper = None
@@ -525,6 +555,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 desc += f" [Abilities: {ability_bonuses}]"
             elif isinstance(ability_bonuses, str) and ability_bonuses.strip():
                 desc += f" [Abilities: {ability_bonuses.strip()}]"
+            _hb_aud = heritage_bonus_labels(heritage_bonuses_raw)
+            if _hb_aud:
+                desc += f" [Heritage: {', '.join(_hb_aud)}]"
             ga_obj = None
             if group_action_id:
                 ga_obj = GroupAction.objects.filter(
@@ -611,6 +644,11 @@ class CharacterViewSet(viewsets.ModelViewSet):
             ):
                 xp_awarded, xp_track = award_desperate_action_xp(
                     character, session, roll, action_name, request.user
+                )
+
+            if roll_type.upper() == "ACTION":
+                award_heritage_expression_xp(
+                    character, session, roll, heritage_bonuses_raw
                 )
 
         return Response(
@@ -775,27 +813,127 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="add-xp")
     def add_xp(self, request, pk=None):
-        """Add XP to a character."""
+        """Add XP to a character's BitD-style tracks (xp_clocks) and log an ExperienceTracker row."""
         character = self.get_object()
-        amount = request.data.get("amount", 1)
-        reason = request.data.get("reason", "")
+        user = request.user
+        is_owner = character.user_id == user.id
+        is_gm = bool(
+            character.campaign_id and character.campaign.gm_id == user.id
+        )
+        if not (user.is_staff or is_owner or is_gm):
+            raise PermissionDenied(
+                "You may only add XP for your own character or as the campaign GM."
+            )
 
-        if amount <= 0:
+        track = request.data.get("track") or request.data.get("xp_type")
+        if not track or not isinstance(track, str):
             return Response(
-                {"error": "XP amount must be positive"},
+                {"error": "XP track is required (xp_type or track)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        track = track.strip().lower()
+        valid_tracks = ["insight", "prowess", "resolve", "heritage", "playbook"]
+        if track not in valid_tracks:
+            return Response(
+                {
+                    "error": (
+                        "Invalid track. Use one of: "
+                        + ", ".join(valid_tracks)
+                    )
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Add XP (simplified - you'd implement actual XP mechanics)
-        character.xp += amount
-        character.save()
+        try:
+            amount = int(request.data.get("amount", 1))
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "amount must be an integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if amount < 1 or amount > 20:
+            return Response(
+                {"error": "XP amount must be between 1 and 20 per award."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        description = (
+            request.data.get("description")
+            or request.data.get("reason")
+            or ""
+        ).strip()
+        if len(description) < 3:
+            description = "Manual XP award"
+
+        session_obj = None
+        session_raw = request.data.get("session") or request.data.get(
+            "session_id"
+        )
+        if session_raw not in (None, "", False):
+            try:
+                sid = int(session_raw)
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "Invalid session id"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not character.campaign_id:
+                return Response(
+                    {
+                        "error": (
+                            "Character has no campaign; cannot attach "
+                            "this XP to a session."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            session_obj = Session.objects.filter(
+                id=sid, campaign_id=character.campaign_id
+            ).first()
+            if not session_obj:
+                return Response(
+                    {"error": "Session not found for this character's campaign."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        xp_clocks = dict(character.xp_clocks or {})
+        current = int(xp_clocks.get(track, 0) or 0)
+        new_xp = current + amount
+        if track == "playbook" and new_xp > 10:
+            return Response(
+                {"error": "Playbook track cannot exceed 10 XP."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        xp_clocks[track] = new_xp
+
+        with transaction.atomic():
+            serializer = CharacterSerializer(
+                character, data={"xp_clocks": xp_clocks}, partial=True
+            )
+            if not serializer.is_valid():
+                return Response(
+                    {"error": "Failed to add XP", "errors": serializer.errors},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            serializer.save()
+            tracker = ExperienceTracker.objects.create(
+                character=character,
+                session=session_obj,
+                roll=None,
+                trigger="MANUAL",
+                description=f"[{track}] {description}",
+                xp_gained=amount,
+            )
 
         return Response(
             {
-                "message": f"Added {amount} XP",
-                "xp_gained": amount,
-                "total_xp": character.xp,
-                "reason": reason,
+                "success": True,
+                "track": track,
+                "amount": amount,
+                "new_total": new_xp,
+                "xp_clocks": xp_clocks,
+                "experience_tracker_id": tracker.id,
+                "message": f"Added {amount} XP to {track} track",
             }
         )
 

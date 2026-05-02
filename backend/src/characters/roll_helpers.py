@@ -1,6 +1,7 @@
 """Shared dice roll helpers: effect normalization and desperate action XP."""
 
 from .models import ExperienceTracker
+from .services.session_xp_settlement import grant_encoded_trigger_xp
 
 
 EFFECT_ORDER = ['limited', 'standard', 'extreme']
@@ -64,6 +65,23 @@ def action_rating_from_action_dots(action_dots, action_name_raw):
     return 0
 
 
+def xp_track_for_action_name(action_name):
+    """
+    BitD attribute track for a rolled action name (desperate-roll XP mapping).
+    Returns 'insight' | 'prowess' | 'resolve' or None if not mappable.
+    """
+    if not (action_name or "").strip():
+        return None
+    action_lower = str(action_name).strip().lower()
+    if action_lower in ("hunt", "study", "survey", "tinker"):
+        return "insight"
+    if action_lower in ("finesse", "prowl", "skirmish", "wreck"):
+        return "prowess"
+    if action_lower in ("bizarre", "command", "consort", "sway"):
+        return "resolve"
+    return None
+
+
 def award_desperate_action_xp(character, session, roll, action_name, request_user):
     """
     If this is a desperate ACTION roll with a mappable action name, award 1 XP on the attribute track.
@@ -74,14 +92,7 @@ def award_desperate_action_xp(character, session, roll, action_name, request_use
     if position != 'desperate' or roll_type != 'ACTION' or not (action_name or '').strip():
         return 0, None
 
-    action_lower = action_name.lower()
-    track = None
-    if action_lower in ['hunt', 'study', 'survey', 'tinker']:
-        track = 'insight'
-    elif action_lower in ['finesse', 'prowl', 'skirmish', 'wreck']:
-        track = 'prowess'
-    elif action_lower in ['bizarre', 'command', 'consort', 'sway']:
-        track = 'resolve'
+    track = xp_track_for_action_name(action_name)
     if not track:
         return 0, None
 
@@ -102,6 +113,89 @@ def award_desperate_action_xp(character, session, roll, action_name, request_use
         xp_gained=1,
     )
     return 1, track
+
+
+def normalized_trauma_pks(raw):
+    """Coerce Character.trauma JSON list entries to positive int PKs."""
+    if raw is None:
+        return set()
+    if isinstance(raw, (list, tuple)):
+        items = raw
+    elif isinstance(raw, dict):
+        return set()
+    else:
+        return set()
+    out = set()
+    for item in items:
+        if isinstance(item, bool):
+            continue
+        if isinstance(item, int) and item > 0:
+            out.add(item)
+            continue
+        if isinstance(item, float) and item > 0 and item == int(item):
+            out.add(int(item))
+            continue
+        if isinstance(item, str) and item.strip().isdigit():
+            n = int(item.strip())
+            if n > 0:
+                out.add(n)
+    return out
+
+
+def award_struggle_for_new_traumas(character, session, gained_pks):
+    """
+    Grant STRUGGLE (playbook) XP when new trauma IDs appear on save, same session bucket
+    as vice-based STRUGGLE and session settlement caps.
+    """
+    if not gained_pks or session is None or character is None:
+        return 0
+    n = len(gained_pks)
+    desc = (
+        "Auto (character save during active session): new trauma marked — "
+        f"counts toward struggle / trauma XP trigger (+{n})."
+    )[:500]
+    return grant_encoded_trigger_xp(
+        character,
+        session,
+        trigger="STRUGGLE",
+        clock_key="playbook",
+        clock_max=10,
+        want=n,
+        description=desc,
+        roll=None,
+    )
+
+
+def heritage_bonus_labels(raw):
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    if isinstance(raw, str) and raw.strip():
+        return [raw.strip()]
+    return []
+
+
+def award_heritage_expression_xp(character, session, roll, heritage_bonuses_raw):
+    """
+    BELIEFS XP on heritage track when a roll applies optional heritage bonuses.
+    Separate session bucket from playbook STRUGGLE/STANDOUT; track max 5 (sheet).
+    """
+    labels = heritage_bonus_labels(heritage_bonuses_raw)
+    if not labels or session is None or roll is None or character is None:
+        return 0
+    desc = (
+        "Auto (heritage benefit on roll): "
+        + ", ".join(labels)
+    )[:500]
+    return grant_encoded_trigger_xp(
+        character,
+        session,
+        trigger="BELIEFS",
+        clock_key="heritage",
+        clock_max=5,
+        want=1,
+        description=desc,
+        roll=roll,
+    )
 
 
 def tier_die_from_action_pool(

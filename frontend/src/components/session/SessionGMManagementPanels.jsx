@@ -7,6 +7,9 @@ import {
   crewAPI,
   factionAPI,
   rollAPI,
+  experienceTrackerAPI,
+  xpHistoryAPI,
+  characterHistoryAPI,
 } from "../../features/character-sheet/services/api";
 import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import { ACTION_RATING_KEYS } from "../../features/character-sheet/constants/srd";
@@ -48,6 +51,275 @@ function readoutsFromGrades(grades) {
   return out;
 }
 
+function npcCreatorId(npc) {
+  const c = npc?.creator ?? npc?.creator_id;
+  if (c == null || c === "") return null;
+  if (typeof c === "object" && c !== null) return c.id ?? null;
+  const n = Number(c);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Campaign GM, NPC creator, or staff may adjust stand coin from this panel. */
+function canEditNpcStandCoin(user, campaign, npc) {
+  if (!user?.id) return false;
+  if (user.is_staff) return true;
+  const gmRaw = campaign?.gm;
+  const gmId =
+    gmRaw && typeof gmRaw === "object" ? gmRaw.id : gmRaw ?? null;
+  if (gmId != null && Number(gmId) === Number(user.id)) return true;
+  const cid = npcCreatorId(npc);
+  if (cid != null && Number(cid) === Number(user.id)) return true;
+  return false;
+}
+
+function unwrapApiArray(data) {
+  if (data == null) return [];
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.results)) return data.results;
+  return [];
+}
+
+const XP_LEDGER_HISTORY_KEYS = new Set([
+  "xp_clocks",
+  "total_xp_spent",
+  "heritage_points_gained",
+  "stand_coin_points_gained",
+  "action_dice_gained",
+  "action_dots",
+]);
+
+const HISTORY_FIELD_LABELS = {
+  xp_clocks: "XP tracks",
+  total_xp_spent: "Total XP spent",
+  heritage_points_gained: "Heritage points gained",
+  stand_coin_points_gained: "Stand coin points gained",
+  action_dice_gained: "Action dice gained",
+  action_dots: "Action dots",
+};
+
+function historyFieldLabel(key) {
+  return HISTORY_FIELD_LABELS[key] || key.replace(/_/g, " ");
+}
+
+function stringifyHistoryValue(v) {
+  if (v == null) return "";
+  if (typeof v === "string" || typeof v === "number" || typeof v === "boolean")
+    return String(v);
+  try {
+    return JSON.stringify(v);
+  } catch (_err) {
+    return String(v);
+  }
+}
+
+function sumNumericRecord(obj) {
+  if (!obj || typeof obj !== "object") return 0;
+  let s = 0;
+  for (const v of Object.values(obj)) s += Number(v) || 0;
+  return s;
+}
+
+/** Human-readable nonzero action ratings, e.g. "command +2, hunt +2". */
+function formatNonZeroDotSpread(obj) {
+  if (!obj || typeof obj !== "object") return "(none)";
+  const parts = [];
+  for (const [k, v] of Object.entries(obj)) {
+    const n = Number(v) || 0;
+    if (n !== 0) parts.push(`${k} +${n}`);
+  }
+  return parts.length ? parts.join(", ") : "(all zero)";
+}
+
+/**
+ * Split sheet ledger deltas so GMs can tell creation / initial layout from spends.
+ * @returns {{ initial: string[], expenditure: string[], other: string[] }}
+ */
+function partitionLedgerHistoryEntry(entry) {
+  const initial = [];
+  const expenditure = [];
+  const other = [];
+  const changed = entry?.changed_fields;
+  if (!changed || typeof changed !== "object") {
+    return { initial, expenditure, other };
+  }
+
+  const pushIni = (s) => initial.push(s);
+  const pushExp = (s) => expenditure.push(s);
+  const pushOth = (s) => other.push(s);
+
+  for (const key of Object.keys(changed)) {
+    if (!XP_LEDGER_HISTORY_KEYS.has(key)) continue;
+    const chunk = changed[key];
+    if (!chunk || typeof chunk !== "object") continue;
+
+    if (key === "action_dots") {
+      const oldD = chunk.old;
+      const newD = chunk.new;
+      if (
+        oldD &&
+        newD &&
+        typeof oldD === "object" &&
+        typeof newD === "object"
+      ) {
+        const so = sumNumericRecord(oldD);
+        const sn = sumNumericRecord(newD);
+        if (so === 0 && sn > 0) {
+          pushIni(
+            `Action dots — initial buy (${sn} dots): ${formatNonZeroDotSpread(newD)}`,
+          );
+          continue;
+        }
+        if (sn > so && so > 0) {
+          pushExp(
+            `Action dots — +${sn - so} dot(s) with XP (total dots ${so}→${sn}): ${formatNonZeroDotSpread(oldD)} → ${formatNonZeroDotSpread(newD)}`,
+          );
+          continue;
+        }
+        if (sn === so && sn > 0) {
+          pushOth(
+            `Action dots — same total (${sn}), redistributed: ${formatNonZeroDotSpread(oldD)} → ${formatNonZeroDotSpread(newD)}`,
+          );
+          continue;
+        }
+        if (sn < so) {
+          pushOth(
+            `Action dots — net −${so - sn} (unusual vs spend flow): ${formatNonZeroDotSpread(oldD)} → ${formatNonZeroDotSpread(newD)}`,
+          );
+          continue;
+        }
+        pushOth(
+          `Action dots: ${stringifyHistoryValue(oldD)} → ${stringifyHistoryValue(newD)}`,
+        );
+      }
+      continue;
+    }
+
+    if (key === "xp_clocks") {
+      const oldXC = chunk.old;
+      const newXC = chunk.new;
+      if (
+        oldXC &&
+        newXC &&
+        typeof oldXC === "object" &&
+        typeof newXC === "object"
+      ) {
+        const sumOld = sumNumericRecord(oldXC);
+        const sumNew = sumNumericRecord(newXC);
+        const keys = new Set([...Object.keys(oldXC), ...Object.keys(newXC)]);
+        let anyDecrease = false;
+        let anyIncrease = false;
+        for (const tk of keys) {
+          const o = Number(oldXC[tk]) || 0;
+          const n = Number(newXC[tk]) || 0;
+          if (n < o) anyDecrease = true;
+          if (n > o) anyIncrease = true;
+        }
+        if (
+          sumOld === 0 &&
+          sumNew > 0 &&
+          !anyDecrease &&
+          anyIncrease
+        ) {
+          const parts = [];
+          for (const tk of keys) {
+            const o = Number(oldXC[tk]) || 0;
+            const n = Number(newXC[tk]) || 0;
+            if (n === o) continue;
+            parts.push(`${tk} +${n - o}`);
+          }
+          pushIni(
+            `Playbook XP tracks — initial fills (${parts.join("; ")})`,
+          );
+          continue;
+        }
+        for (const tk of keys) {
+          const o = Number(oldXC[tk]) || 0;
+          const n = Number(newXC[tk]) || 0;
+          if (n === o) continue;
+          if (n < o) {
+            pushExp(`Playbook XP — spent ticks on "${tk}": ${o}→${n} (−${o - n})`);
+          } else {
+            pushOth(`Playbook XP — ticks gained on sheet for "${tk}": ${o}→${n} (+${n - o})`);
+          }
+        }
+      }
+      continue;
+    }
+
+    if (key === "total_xp_spent") {
+      const o = Number(chunk.old);
+      const n = Number(chunk.new);
+      if (
+        Number.isFinite(o) &&
+        Number.isFinite(n) &&
+        n !== o
+      ) {
+        if (n > o) pushExp(`Recorded total XP spent +${n - o}: ${o}→${n}`);
+        else pushOth(`Recorded total XP spent ${o}→${n}`);
+      }
+      continue;
+    }
+
+    const o = chunk.old;
+    const n = chunk.new;
+    if (JSON.stringify(o) === JSON.stringify(n)) continue;
+    pushOth(`${historyFieldLabel(key)}: ${stringifyHistoryValue(o)} → ${stringifyHistoryValue(n)}`);
+  }
+
+  return { initial, expenditure, other };
+}
+
+function ledgerBucketsTouchXpFields(buckets) {
+  const n =
+    buckets.initial.length + buckets.expenditure.length + buckets.other.length;
+  return n > 0;
+}
+
+function renderSessionLedgerBucketUl(
+  entries,
+  bucketKey,
+  charDisplayNameById,
+) {
+  const out = [];
+  for (const entry of entries || []) {
+    const lines = entry?.advancement_buckets?.[bucketKey] || [];
+    if (!lines.length) continue;
+    const cid = Number(entry.character);
+    const title =
+      charDisplayNameById.get(cid) ||
+      entry.character_true_name ||
+      `PC ${entry.character}`;
+    const when = entry.timestamp
+      ? new Date(entry.timestamp).toLocaleString()
+      : "—";
+    out.push(
+      <li key={`${bucketKey}-entry-${entry.id}`} style={{ marginBottom: 10 }}>
+        <div style={{ color: "#e5e7eb", marginBottom: 4 }}>
+          <span>{when}</span>
+          <span style={{ color: "#9ca3af" }}>
+            {" "}
+            · {title}
+          </span>
+        </div>
+        <ul
+          style={{
+            margin: 0,
+            paddingLeft: 16,
+            color: "#cbd5e1",
+            fontSize: 10,
+            lineHeight: 1.4,
+          }}
+        >
+          {lines.map((line, i) => (
+            <li key={`${entry.id}-${bucketKey}-${i}`}>{line}</li>
+          ))}
+        </ul>
+      </li>,
+    );
+  }
+  return out;
+}
+
 function flatActionDots(actionDots) {
   if (!actionDots || typeof actionDots !== "object") return [];
   const first = Object.values(actionDots)[0];
@@ -84,6 +356,39 @@ const grid = {
 
 const lbl = { fontSize: 10, color: "#9ca3af", textTransform: "uppercase" };
 
+/** Visual severity for session compact harm grid (warns as higher tiers fill). */
+function compactHarmFieldStyle(key, rawValue) {
+  const filled = String(rawValue ?? "").trim().length > 0;
+  const borderA = filled ? 1 : 0.55;
+  const fillA = filled ? 0.28 : 0.14;
+  if (key === "l4") {
+    return {
+      border: `1px solid rgba(248, 113, 113, ${borderA})`,
+      background: `rgba(127, 29, 29, ${fillA})`,
+      color: "#fecaca",
+    };
+  }
+  if (key === "l3") {
+    return {
+      border: `1px solid rgba(251, 146, 60, ${borderA})`,
+      background: `rgba(154, 52, 18, ${fillA})`,
+      color: "#ffedd5",
+    };
+  }
+  if (key === "l2a" || key === "l2b") {
+    return {
+      border: `1px solid rgba(250, 204, 21, ${borderA})`,
+      background: `rgba(113, 63, 18, ${fillA})`,
+      color: "#fef9c3",
+    };
+  }
+  return {
+    border: `1px solid rgba(96, 165, 250, ${borderA})`,
+    background: `rgba(30, 58, 138, ${fillA})`,
+    color: "#dbeafe",
+  };
+}
+
 /**
  * Session GM quick-flow: NPC roster, player roster, bulk position/effect, add-NPC.
  */
@@ -106,6 +411,11 @@ export default function SessionGMManagementPanels({
   setManualRoll,
   manualRollSaving,
   onManualRollCreate,
+  manualXp,
+  setManualXp,
+  manualXpSaving,
+  onManualXpGrant,
+  user = null,
 }) {
   const [showAddNpc, setShowAddNpc] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -121,6 +431,22 @@ export default function SessionGMManagementPanels({
   const [recentRollSavingId, setRecentRollSavingId] = useState(null);
   const [factionSavingId, setFactionSavingId] = useState(null);
   const [factionDraftById, setFactionDraftById] = useState({});
+  const [npcFactionSavingId, setNpcFactionSavingId] = useState(null);
+  const [sessionQuickFactionName, setSessionQuickFactionName] = useState("");
+  const [sessionQuickFactionBusy, setSessionQuickFactionBusy] = useState(false);
+  const [xpLifetimeCharId, setXpLifetimeCharId] = useState("");
+  const [xpLifetimeModalOpen, setXpLifetimeModalOpen] = useState(false);
+  const [xpLifetimeRows, setXpLifetimeRows] = useState([]);
+  const [xpLifetimeLoading, setXpLifetimeLoading] = useState(false);
+  const [xpLifetimeError, setXpLifetimeError] = useState(null);
+  /** Sheet saves that touched XP clocks / advancement; filtered by session date heuristic. */
+  const [sessionAdvancementHistory, setSessionAdvancementHistory] = useState(
+    [],
+  );
+  const [
+    sessionAdvancementHistoryLoaded,
+    setSessionAdvancementHistoryLoaded,
+  ] = useState(false);
 
   const npcInvolvements = useMemo(
     () => sessionData?.npc_involvements || [],
@@ -202,12 +528,32 @@ export default function SessionGMManagementPanels({
         npc: npcId,
         show_clocks_to_players: false,
         show_vulnerability_clock_to_players: false,
-        show_harm_clock_to_players: false,
         show_stand_coin_to_players: false,
         show_all_abilities_to_players: false,
       },
     ];
     return patchSessionInv(next);
+  };
+
+  const handleAddNpcCardClick = () => {
+    const totalCampaignNpcs = (campaignNPCs || []).length;
+    if (totalCampaignNpcs === 0) {
+      if (!campaign?.id) {
+        setError("Campaign is missing; cannot open NPC creation.");
+        return;
+      }
+      if (typeof onNavigateToNPC !== "function") {
+        setError("NPC creation link is not available from this view.");
+        return;
+      }
+      const ok = window.confirm(
+        "This campaign has no NPCs yet. Open the NPC sheet to create one for this campaign? After you save the NPC, come back here and use Add NPC to session again.",
+      );
+      if (!ok) return;
+      onNavigateToNPC(null, { campaignId: campaign.id });
+      return;
+    }
+    setShowAddNpc(true);
   };
 
   const updateInv = (npcId, partial) => {
@@ -255,6 +601,236 @@ export default function SessionGMManagementPanels({
       })),
     [campaign, characters],
   );
+
+  const charDisplayNameById = useMemo(() => {
+    const m = new Map();
+    for (const ch of campaignChars || []) {
+      const cid = ch?.id != null ? Number(ch.id) : NaN;
+      if (!Number.isFinite(cid)) continue;
+      const full =
+        (characters || []).find((c) => Number(c?.id) === cid) || ch;
+      m.set(cid, full.true_name || full.name || `PC ${cid}`);
+    }
+    return m;
+  }, [campaignChars, characters]);
+
+  const sessionXpEntriesSorted = useMemo(() => {
+    const raw = sessionData?.xp_entries;
+    const list = Array.isArray(raw) ? raw : unwrapApiArray(raw);
+    return [...list].sort(
+      (a, b) =>
+        new Date(b.session_date || 0) - new Date(a.session_date || 0),
+    );
+  }, [sessionData?.xp_entries]);
+
+  const sessionXpFeedSorted = useMemo(() => {
+    const histRaw = sessionData?.xp_history;
+    const hist = Array.isArray(histRaw)
+      ? histRaw
+      : unwrapApiArray(histRaw);
+    const rows = [];
+    for (const e of sessionXpEntriesSorted) {
+      rows.push({
+        key: `et-${e.id}`,
+        when: e.session_date,
+        character: e.character,
+        xp: Number(e.xp_gained) || 0,
+        typeLabel: e.trigger_display || e.trigger || "—",
+        note: String(e.description || "").trim(),
+        source: "Tracker",
+      });
+    }
+    for (const h of hist) {
+      const amt = Number(h.amount) || 0;
+      rows.push({
+        key: `xh-${h.id}`,
+        when: h.timestamp,
+        character: h.character,
+        xp: amt,
+        typeLabel:
+          amt < 0
+            ? "Spend / adjustment"
+            : amt > 0
+              ? "Ledger (+)"
+              : "Ledger",
+        note: String(h.reason || "").trim(),
+        source: "XP history",
+      });
+    }
+    return rows.sort(
+      (a, b) => new Date(b.when || 0) - new Date(a.when || 0),
+    );
+  }, [sessionXpEntriesSorted, sessionData?.xp_history]);
+
+  const pcXpRequirementsByCharacter = useMemo(() => {
+    const m = new Map();
+    for (const row of sessionXpEntriesSorted) {
+      const cid = Number(row.character);
+      if (!Number.isFinite(cid)) continue;
+      const typeLbl = row.trigger_display || row.trigger || "XP";
+      const desc = String(row.description || "").trim();
+      const line = desc
+        ? `${typeLbl} (+${row.xp_gained ?? 0}) — ${desc}`
+        : `${typeLbl} (+${row.xp_gained ?? 0})`;
+      if (!m.has(cid)) m.set(cid, []);
+      m.get(cid).push(line);
+    }
+    return m;
+  }, [sessionXpEntriesSorted]);
+
+  const sessionCompletedClocks = useMemo(() => {
+    const sid = session?.id != null ? Number(session.id) : NaN;
+    if (!Number.isFinite(sid)) return [];
+    return (clocks || []).filter((c) => {
+      const cs =
+        c.session != null ? Number(c.session) : NaN;
+      if (!Number.isFinite(cs) || cs !== sid) return false;
+      const filled = Number(c.filled_segments) || 0;
+      const max = Number(c.max_segments) || 0;
+      return (
+        c.completed === true ||
+        (max > 0 && filled >= max)
+      );
+    });
+  }, [clocks, session?.id]);
+
+  const pcIdsInCampaign = useMemo(() => {
+    const s = new Set();
+    for (const ch of campaignChars || []) {
+      const cid = Number(ch?.id);
+      if (Number.isFinite(cid)) s.add(cid);
+    }
+    return s;
+  }, [campaignChars]);
+
+  useEffect(() => {
+    if (!campaign?.id) {
+      setSessionAdvancementHistory([]);
+      setSessionAdvancementHistoryLoaded(false);
+      return;
+    }
+    let cancelled = false;
+    setSessionAdvancementHistoryLoaded(false);
+    characterHistoryAPI
+      .list({ campaign: campaign.id })
+      .then((data) => {
+        if (cancelled) return;
+        const list = unwrapApiArray(data);
+        const sessionStartMs = sessionData?.session_date
+          ? new Date(sessionData.session_date).getTime()
+          : NaN;
+        const slopMs = 60 * 60 * 1000;
+        const filtered = list
+          .map((entry) => ({
+            ...entry,
+            advancement_buckets: partitionLedgerHistoryEntry(entry),
+          }))
+          .filter((entry) => {
+            const cid = Number(entry.character);
+            if (!pcIdsInCampaign.has(cid)) return false;
+            if (!ledgerBucketsTouchXpFields(entry.advancement_buckets))
+              return false;
+            if (!Number.isFinite(sessionStartMs)) return false;
+            const ts = new Date(entry.timestamp).getTime();
+            return ts >= sessionStartMs - slopMs;
+          })
+          .sort(
+            (a, b) =>
+              new Date(b.timestamp || 0) - new Date(a.timestamp || 0),
+          );
+        setSessionAdvancementHistory(filtered);
+        setSessionAdvancementHistoryLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSessionAdvancementHistory([]);
+        setSessionAdvancementHistoryLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    campaign?.id,
+    sessionData?.session_date,
+    sessionData?.id,
+    pcIdsInCampaign,
+  ]);
+
+  const advancementLedgerNodes = useMemo(
+    () => ({
+      initial: renderSessionLedgerBucketUl(
+        sessionAdvancementHistory,
+        "initial",
+        charDisplayNameById,
+      ),
+      expenditure: renderSessionLedgerBucketUl(
+        sessionAdvancementHistory,
+        "expenditure",
+        charDisplayNameById,
+      ),
+      other: renderSessionLedgerBucketUl(
+        sessionAdvancementHistory,
+        "other",
+        charDisplayNameById,
+      ),
+    }),
+    [sessionAdvancementHistory, charDisplayNameById],
+  );
+
+  function progressClockOwnerLabel(clk) {
+    if (clk?.character != null && clk.character !== "") {
+      const cid = Number(clk.character);
+      const name =
+        charDisplayNameById.get(cid) || `PC ${clk.character}`;
+      return name;
+    }
+    if (clk?.crew != null && clk.crew !== "")
+      return `Crew #${clk.crew}`;
+    if (clk?.npc != null && clk.npc !== "") return `NPC #${clk.npc}`;
+    return "Campaign / session";
+  }
+
+  useEffect(() => {
+    if (!xpLifetimeModalOpen || !xpLifetimeCharId) {
+      setXpLifetimeRows([]);
+      return;
+    }
+    const cid = parseInt(String(xpLifetimeCharId), 10);
+    if (!Number.isFinite(cid)) return;
+    let cancelled = false;
+    setXpLifetimeLoading(true);
+    setXpLifetimeError(null);
+    Promise.all([
+      experienceTrackerAPI.list({ character: cid }).catch(() => []),
+      xpHistoryAPI.list({ character: cid }).catch(() => []),
+    ])
+      .then(([et, xh]) => {
+        if (cancelled) return;
+        const rows = [
+          ...unwrapApiArray(et).map((e) => ({
+            key: `t-${e.id}`,
+            when: e.session_date,
+            text: `${e.trigger_display || e.trigger || "XP"}: ${e.description || ""} (+${e.xp_gained ?? 0} XP)`,
+          })),
+          ...unwrapApiArray(xh).map((x) => ({
+            key: `h-${x.id}`,
+            when: x.timestamp,
+            text: `${x.reason || "XP history"} (+${x.amount ?? 0})`,
+          })),
+        ];
+        rows.sort((a, b) => new Date(b.when) - new Date(a.when));
+        setXpLifetimeRows(rows);
+      })
+      .catch((e) => {
+        if (!cancelled) setXpLifetimeError(e.message || "Load failed");
+      })
+      .finally(() => {
+        if (!cancelled) setXpLifetimeLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [xpLifetimeModalOpen, xpLifetimeCharId]);
 
   const peMap = sessionData?.position_effect_by_character || {};
   const defaultPos = sessionData?.default_position || "risky";
@@ -469,7 +1045,74 @@ export default function SessionGMManagementPanels({
     setGoalAssignDraft(String(v || ""));
   }, [goalAssignCharId, goalMap]);
 
+  const npcFactionSelectValue = (npc) => {
+    const f = npc?.faction;
+    if (f == null || f === "") return "";
+    if (typeof f === "object" && f !== null && f.id != null) return String(f.id);
+    return String(f);
+  };
+
+  const handleAssignNpcFaction = useCallback(
+    async (npc, factionId) => {
+      if (!npc?.id) return;
+      setNpcFactionSavingId(npc.id);
+      setError(null);
+      try {
+        await npcAPI.patchNPC(npc.id, { faction: factionId });
+        onRefresh();
+      } catch (e) {
+        setError(e.message || "Could not update NPC faction");
+      } finally {
+        setNpcFactionSavingId(null);
+      }
+    },
+    [onRefresh, setError],
+  );
+
+  /** Create a campaign faction and assign every unfactioned NPC in the current "No faction" session group. */
+  const handleCreateFactionAndAssignUngrouped = useCallback(async () => {
+    const trimmed = sessionQuickFactionName.trim();
+    if (!trimmed || !campaign?.id) {
+      setError("Enter a faction name.");
+      return;
+    }
+    const list = sessionFactionNpcGroups.ungrouped;
+    if (!list.length) return;
+    const dup = (campaign?.factions || []).some(
+      (f) => String(f.name || "").trim().toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (dup) {
+      setError(`A faction named "${trimmed}" already exists in this campaign.`);
+      return;
+    }
+    setSessionQuickFactionBusy(true);
+    setError(null);
+    try {
+      const created = await factionAPI.createFaction({
+        name: trimmed,
+        campaign: campaign.id,
+      });
+      await Promise.all(
+        list.map((npc) => npcAPI.patchNPC(npc.id, { faction: created.id })),
+      );
+      setSessionQuickFactionName("");
+      onRefresh();
+    } catch (e) {
+      setError(e.message || "Could not create faction or assign NPCs");
+    } finally {
+      setSessionQuickFactionBusy(false);
+    }
+  }, [
+    sessionQuickFactionName,
+    campaign?.id,
+    campaign?.factions,
+    sessionFactionNpcGroups.ungrouped,
+    onRefresh,
+    setError,
+  ]);
+
   const handleNpcStandStep = (npc, key, delta) => {
+    if (!canEditNpcStandCoin(user, campaign, npc)) return;
     const g = rawStandToGrades(npc.stand_coin_stats);
     const nextLetter = stepGrade(g[key], delta);
     const next = { ...(npc.stand_coin_stats || {}), [key.toUpperCase()]: nextLetter };
@@ -502,24 +1145,29 @@ export default function SessionGMManagementPanels({
     const inv = invByNpc[npc.id] || {};
     const grades = rawStandToGrades(npc.stand_coin_stats);
     const busy = !!localNpcPatch[npc.id];
+    const canEditStand = canEditNpcStandCoin(user, campaign, npc);
+    const npcPortraitSrc = resolveMediaUrl(npc.image || npc.image_url || "");
     return (
       <div key={npc.id} style={card}>
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-          <img
-            src={resolveMediaUrl(npc.image || npc.image_url) || "data:,"}
-            alt=""
-            style={{
-              width: 48,
-              height: 48,
-              objectFit: "cover",
-              borderRadius: 4,
-              border: "1px solid #374151",
-              background: "#111",
-            }}
-            onError={(e) => {
-              e.target.style.display = "none";
-            }}
-          />
+        <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+          {npcPortraitSrc ? (
+            <img
+              src={npcPortraitSrc}
+              alt=""
+              style={{
+                width: 52,
+                height: 52,
+                flexShrink: 0,
+                objectFit: "cover",
+                borderRadius: 6,
+                border: "1px solid #30363d",
+                background: "#111",
+              }}
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+            />
+          ) : null}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: "bold" }}>{npc.name || `NPC ${npc.id}`}</div>
             <div style={{ fontSize: 10, color: "#9ca3af" }}>
@@ -532,6 +1180,36 @@ export default function SessionGMManagementPanels({
             >
               Full sheet
             </a>
+            <div style={{ marginTop: 8 }}>
+              <div style={lbl}>Faction (campaign)</div>
+              <select
+                value={npcFactionSelectValue(npc)}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  const nextId = v === "" ? null : parseInt(v, 10);
+                  if (!Number.isFinite(nextId) && nextId !== null) return;
+                  const cur = npcFactionSelectValue(npc);
+                  if (v === cur) return;
+                  handleAssignNpcFaction(npc, nextId);
+                }}
+                style={{ ...S.select, width: "100%", fontSize: 11, marginTop: 4 }}
+                disabled={
+                  saving || npcFactionSavingId === npc.id || !campaign?.id
+                }
+              >
+                <option value="">— None —</option>
+                {(campaign?.factions || []).map((f) => (
+                  <option key={f.id} value={String(f.id)}>
+                    {f.name || `Faction ${f.id}`}
+                  </option>
+                ))}
+              </select>
+              {(!campaign?.factions || campaign.factions.length === 0) && (
+                <div style={{ fontSize: 9, color: "#6b7280", marginTop: 4 }}>
+                  {`No factions yet — use "Create faction & assign" in the No faction group above, or add one from campaign management.`}
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <div style={{ display: "flex", justifyContent: "center" }}>
@@ -539,6 +1217,7 @@ export default function SessionGMManagementPanels({
             grades={grades}
             readouts={readoutsFromGrades(grades)}
             onStep={(k, d) => handleNpcStandStep(npc, k, d)}
+            readOnly={!canEditStand}
             variant="npc"
           />
         </div>
@@ -589,19 +1268,6 @@ export default function SessionGMManagementPanels({
           />
           <span>All abilities</span>
         </label>
-        <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <input
-            type="checkbox"
-            checked={!!inv.show_harm_clock_to_players}
-            onChange={() =>
-              updateInv(npc.id, {
-                show_harm_clock_to_players: !inv.show_harm_clock_to_players,
-              })
-            }
-            disabled={saving}
-          />
-          <span>Harm clock</span>
-        </label>
         <div style={lbl}>Abilities (preview)</div>
         <ul style={{ margin: 0, paddingLeft: 16, color: "#9ca3af" }}>
           {(npc.abilities || []).slice(0, 4).map((a, i) => (
@@ -611,8 +1277,7 @@ export default function SessionGMManagementPanels({
         </ul>
         <div style={lbl}>Clocks (summary)</div>
         <div style={{ fontSize: 10, color: "#6b7280" }}>
-          Harm {npc.harm_clock_current ?? 0}/{npc.harm_clock_max ?? 0} · Vuln{" "}
-          {npc.vulnerability_clock_current ?? 0}/
+          Vuln {npc.vulnerability_clock_current ?? 0}/
           {npc.vulnerability_clock_max ?? 0}
         </div>
         <button
@@ -636,8 +1301,10 @@ export default function SessionGMManagementPanels({
         <span style={S.sectionLbl}>Session NPC roster</span>
         <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 0" }}>
           NPCs grouped by faction (one faction card when multiple NPCs share it).
-          Use + to add from the campaign roster. Toggle what players can see;
-          quick-edit Stand coin.
+          Use + to add from the campaign roster. Assign faction from each NPC card, or
+          use Create faction & assign in the No faction block to add a campaign faction
+          and attach every unfactioned NPC here at once. Toggle what players can see;
+          quick-edit Stand coin (GM or that NPC's owner).
         </p>
         <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 10 }}>
           {sessionFactionNpcGroups.factionPairs.map(([fid, npcList]) => {
@@ -797,7 +1464,55 @@ export default function SessionGMManagementPanels({
 
           {sessionFactionNpcGroups.ungrouped.length > 0 && (
             <div style={factionGroupWrap}>
-              <div style={{ ...lbl, marginBottom: 8 }}>No faction</div>
+              <div style={{ fontWeight: "bold", fontSize: 13, color: "#a78bfa", marginBottom: 8 }}>
+                No faction
+              </div>
+              <div
+                style={{
+                  marginBottom: 12,
+                  padding: 10,
+                  background: "#111827",
+                  borderRadius: 6,
+                  border: "1px solid #374151",
+                }}
+              >
+                <div style={{ ...lbl, marginBottom: 6 }}>Create faction & assign</div>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 8,
+                    alignItems: "center",
+                  }}
+                >
+                  <input
+                    type="text"
+                    value={sessionQuickFactionName}
+                    onChange={(e) => setSessionQuickFactionName(e.target.value)}
+                    placeholder="New faction name"
+                    style={{ ...S.inp, flex: "1 1 160px", minWidth: 140, fontSize: 11 }}
+                    disabled={sessionQuickFactionBusy || saving}
+                  />
+                  <button
+                    type="button"
+                    style={{ ...S.btnPrimary, fontSize: 11 }}
+                    onClick={handleCreateFactionAndAssignUngrouped}
+                    disabled={
+                      sessionQuickFactionBusy ||
+                      saving ||
+                      !campaign?.id ||
+                      !sessionQuickFactionName.trim()
+                    }
+                  >
+                    {sessionQuickFactionBusy
+                      ? "Working…"
+                      : `Create & assign ${sessionFactionNpcGroups.ungrouped.length} NPC(s)`}
+                  </button>
+                </div>
+                <div style={{ fontSize: 9, color: "#6b7280", marginTop: 6 }}>
+                  {`Adds a campaign faction and sets every unfactioned NPC listed below to it (same as choosing it in each card's dropdown after refresh).`}
+                </div>
+              </div>
               <div style={grid}>
                 {sessionFactionNpcGroups.ungrouped.map((npc) => renderNpcSessionCard(npc))}
               </div>
@@ -807,7 +1522,7 @@ export default function SessionGMManagementPanels({
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "stretch" }}>
             <button
               type="button"
-              onClick={() => setShowAddNpc(true)}
+              onClick={handleAddNpcCardClick}
               style={{
                 ...card,
                 borderStyle: "dashed",
@@ -820,6 +1535,20 @@ export default function SessionGMManagementPanels({
             >
               <span style={{ fontSize: 24, color: "#6b7280" }}>+</span>
               <span style={{ color: "#9ca3af" }}>Add NPC to session</span>
+              {(campaignNPCs || []).length === 0 ? (
+                <span
+                  style={{
+                    fontSize: 9,
+                    color: "#6b7280",
+                    marginTop: 8,
+                    textAlign: "center",
+                    lineHeight: 1.35,
+                    maxWidth: 240,
+                  }}
+                >
+                  No NPCs in this campaign yet — click to open the NPC builder
+                </span>
+              ) : null}
             </button>
           </div>
         </div>
@@ -1270,7 +1999,12 @@ export default function SessionGMManagementPanels({
         )}
         <div style={grid}>
           {campaignChars.map((ch) => {
-            const full = (characters || []).find((c) => c.id === ch.id) || ch;
+            const cid = ch?.id != null ? Number(ch.id) : NaN;
+            const full =
+              (characters || []).find((c) => Number(c?.id) === cid) || ch;
+            const portraitSrc = resolveMediaUrl(
+              full.image || full.image_url || "",
+            );
             const stand = full.stand || {};
             const grades = rawStandToGrades({
               power: stand.power,
@@ -1289,22 +2023,26 @@ export default function SessionGMManagementPanels({
             const canSRank = full.gm_can_have_s_rank_stand_stats === true;
             return (
               <div key={full.id} style={{ ...card, width: 300 }}>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <img
-                    src={resolveMediaUrl(full.image || full.image_url) || "data:,"}
-                    alt=""
-                    style={{
-                      width: 48,
-                      height: 48,
-                      objectFit: "cover",
-                      borderRadius: 4,
-                      background: "#111",
-                    }}
-                    onError={(e) => {
-                      e.target.style.display = "none";
-                    }}
-                  />
-                  <div>
+                <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                  {portraitSrc ? (
+                    <img
+                      src={portraitSrc}
+                      alt=""
+                      style={{
+                        width: 64,
+                        height: 64,
+                        flexShrink: 0,
+                        objectFit: "cover",
+                        borderRadius: 6,
+                        border: "1px solid #30363d",
+                        background: "#111",
+                      }}
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                    />
+                  ) : null}
+                  <div style={{ minWidth: 0, flex: 1 }}>
                     <div style={{ fontWeight: "bold" }}>{name}</div>
                     <a
                       href={buildRouteHref("character", { characterId: full.id })}
@@ -1767,9 +2505,686 @@ export default function SessionGMManagementPanels({
             </button>
           </div>
         </div>
+        {manualXp != null && setManualXp != null && onManualXpGrant != null ? (
+          <div
+            style={{
+              marginBottom: 12,
+              marginTop: 4,
+              padding: 12,
+              background: "#0d1117",
+              borderRadius: 8,
+              border: "1px solid #374151",
+            }}
+          >
+            <span
+              style={{
+                fontSize: "11px",
+                color: "#a78bfa",
+                fontWeight: "bold",
+                display: "block",
+                marginBottom: "4px",
+              }}
+            >
+              Session XP
+            </span>
+            <div
+              style={{
+                fontSize: "10px",
+                color: "#6b7280",
+                marginBottom: "10px",
+              }}
+            >
+              <strong style={{ color: "#9ca3af" }}>Manual award</strong> — for
+              offline dice, table rulings, or end-of-session trigger marks with no
+              auto XP. The panels below pull together{" "}
+              <strong>experience tracker</strong> rows, <strong>linked XP history</strong>,
+              <strong>completed progress clocks</strong> on this session, and{" "}
+              <strong>sheet saves</strong> that changed XP tracks (spend / refill), scoped
+              roughly to this session&apos;s <strong>session date</strong>.
+            </div>
+            <details
+              style={{
+                fontSize: 10,
+                color: "#9ca3af",
+                marginBottom: 10,
+              }}
+            >
+              <summary
+                style={{
+                  color: "#d1d5db",
+                  cursor: "pointer",
+                  fontWeight: 600,
+                }}
+              >
+                XP types & automatic awards
+              </summary>
+              <ul
+                style={{
+                  margin: "8px 0 0",
+                  paddingLeft: 18,
+                  lineHeight: 1.45,
+                }}
+              >
+                <li>
+                  <strong style={{ color: "#e5e7eb" }}>DESPERATE_ROLL</strong> — +1
+                  on an attribute XP clock when a desperate{" "}
+                  <em>action</em> roll is made on the site for this session (mapped
+                  skill → insight / prowess / resolve; capped per track).
+                </li>
+                <li>
+                  <strong style={{ color: "#e5e7eb" }}>MANUAL</strong> — this form or
+                  the character sheet &ldquo;add XP&rdquo; flow; description usually
+                  includes the track and reason.
+                </li>
+                <li>
+                  <strong style={{ color: "#e5e7eb" }}>Heritage expression</strong> — auto
+                  on action rolls where heritage benefits applied (BELIEFS / heritage
+                  track), when logged by the server.
+                </li>
+                <li>
+                  Other trigger labels (beliefs, struggle, standout, etc.) appear when
+                  the site or a GM logs them (manual or automation).
+                </li>
+              </ul>
+            </details>
+            <div
+              style={{
+                fontSize: 10,
+                color: "#9ca3af",
+                marginBottom: 6,
+                fontWeight: "bold",
+              }}
+            >
+              By PC — requirements logged (experience tracker)
+            </div>
+            <div
+              style={{
+                fontSize: 10,
+                color: "#6b7280",
+                marginBottom: 10,
+                lineHeight: 1.45,
+              }}
+            >
+              {(() => {
+                const anyReq = (campaignChars || []).some((ch) =>
+                  (pcXpRequirementsByCharacter.get(Number(ch.id)) || []).length,
+                );
+                if (!anyReq) {
+                  return (
+                    <span>
+                      No tracker rows for this session yet. Auto awards (e.g. desperate
+                      rolls, heritage on rolls) and manual grants show here once the
+                      backend logs them.
+                    </span>
+                  );
+                }
+                return (campaignChars || []).map((ch) => {
+                  const cid = Number(ch.id);
+                  const lines = pcXpRequirementsByCharacter.get(cid);
+                  if (!lines?.length) return null;
+                  const title =
+                    charDisplayNameById.get(cid) ||
+                    ch.true_name ||
+                    ch.name ||
+                    `PC ${cid}`;
+                  return (
+                    <div
+                      key={`xp-req-${cid}`}
+                      style={{ marginBottom: 8 }}
+                    >
+                      <div
+                        style={{
+                          color: "#d1d5db",
+                          fontWeight: 600,
+                          marginBottom: 4,
+                        }}
+                      >
+                        {title}
+                      </div>
+                      <ul
+                        style={{
+                          margin: 0,
+                          paddingLeft: 18,
+                          color: "#9ca3af",
+                        }}
+                      >
+                        {lines.map((line, i) => (
+                          <li key={`${cid}-${i}`}>{line}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+            <div
+              style={{
+                fontSize: 10,
+                color: "#9ca3af",
+                marginBottom: 6,
+                fontWeight: "bold",
+              }}
+            >
+              Clocks completed this session
+            </div>
+            <div
+              style={{
+                fontSize: 10,
+                color: "#6b7280",
+                marginBottom: 10,
+                lineHeight: 1.45,
+              }}
+            >
+              {sessionCompletedClocks.length === 0 ? (
+                <span>No progress clocks on this session are marked complete yet.</span>
+              ) : (
+                <ul
+                  style={{
+                    margin: 0,
+                    paddingLeft: 18,
+                    color: "#9ca3af",
+                  }}
+                >
+                  {sessionCompletedClocks.map((clk) => (
+                    <li key={`done-clk-${clk.id}`}>
+                      <span style={{ color: "#d1d5db" }}>
+                        {clk.name || "Clock"}
+                      </span>
+                      {` · ${progressClockOwnerLabel(clk)} · `}
+                      {Number(clk.filled_segments) || 0}/{Number(clk.max_segments) || 0}
+                      {clk.clock_type ? ` (${clk.clock_type})` : ""}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div
+              style={{
+                fontSize: 10,
+                color: "#9ca3af",
+                marginBottom: 6,
+                fontWeight: "bold",
+              }}
+            >
+              Sheet changes — initial buy-in vs paid with XP
+            </div>
+            <div
+              style={{
+                fontSize: 10,
+                color: "#6b7280",
+                marginBottom: 10,
+                lineHeight: 1.45,
+              }}
+            >
+              {!sessionAdvancementHistoryLoaded ? (
+                <span>Loading sheet history…</span>
+              ) : !sessionData?.session_date ? (
+                <span>
+                  Set a session date on this session to bound sheet edits to
+                  &ldquo;this session&rdquo; (uses session date minus one hour).
+                </span>
+              ) : sessionAdvancementHistory.length === 0 ? (
+                <span>
+                  No character sheet saves in this window touched XP tracks, total
+                  spent, action dots, or related advancement fields.
+                </span>
+              ) : (
+                <>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: "#d1d5db",
+                      marginBottom: 6,
+                      marginTop: 2,
+                    }}
+                  >
+                    Initial buy-in / setup (from empty baselines)
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 9,
+                      color: "#52525b",
+                      marginBottom: 6,
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    First-time action-dot layout (was all zero) or first playbook
+                    tick fills starting from zero totals — not assumed to be XP
+                    spent.
+                  </div>
+                  {advancementLedgerNodes.initial.length === 0 ? (
+                    <div style={{ marginBottom: 12, color: "#6b7280" }}>
+                      No initial-layout rows in this window.
+                    </div>
+                  ) : (
+                    <ul
+                      style={{
+                        margin: "0 0 12px 0",
+                        paddingLeft: 18,
+                        color: "#9ca3af",
+                        listStyle: "disc",
+                      }}
+                    >
+                      {advancementLedgerNodes.initial}
+                    </ul>
+                  )}
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: "#d1d5db",
+                      marginBottom: 6,
+                    }}
+                  >
+                    Paid with XP (expenditure / advances)
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 9,
+                      color: "#52525b",
+                      marginBottom: 6,
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    Extra dots after you already had a built sheet, playbook ticks that
+                    went down or cleared, or an increased &ldquo;total XP spent&rdquo;
+                    tally.
+                  </div>
+                  {advancementLedgerNodes.expenditure.length === 0 ? (
+                    <div style={{ marginBottom: 12, color: "#6b7280" }}>
+                      No paid-with-XP rows in this window.
+                    </div>
+                  ) : (
+                    <ul
+                      style={{
+                        margin: "0 0 12px 0",
+                        paddingLeft: 18,
+                        color: "#9ca3af",
+                        listStyle: "disc",
+                      }}
+                    >
+                      {advancementLedgerNodes.expenditure}
+                    </ul>
+                  )}
+                  <div
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: "#d1d5db",
+                      marginBottom: 6,
+                    }}
+                  >
+                    Other sheet ledger (not sorted above)
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 9,
+                      color: "#52525b",
+                      marginBottom: 6,
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    Redistributed dots with the same total, ticks only going up on the
+                    sheet, stand coin / heritage tallies, etc.
+                  </div>
+                  {advancementLedgerNodes.other.length === 0 ? (
+                    <div style={{ color: "#6b7280" }}>None in this window.</div>
+                  ) : (
+                    <ul
+                      style={{
+                        margin: 0,
+                        paddingLeft: 18,
+                        color: "#9ca3af",
+                        listStyle: "disc",
+                      }}
+                    >
+                      {advancementLedgerNodes.other}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+            <div
+              style={{
+                fontSize: 10,
+                color: "#9ca3af",
+                marginBottom: 6,
+                fontWeight: "bold",
+              }}
+            >
+              Session XP log (tracker + linked ledger)
+            </div>
+            <div
+              style={{
+                maxHeight: 200,
+                overflowY: "auto",
+                border: "1px solid #30363d",
+                borderRadius: 6,
+                marginBottom: 12,
+                background: "#0b1220",
+              }}
+            >
+              <table
+                style={{
+                  width: "100%",
+                  borderCollapse: "collapse",
+                  fontSize: 10,
+                }}
+              >
+                <thead>
+                  <tr style={{ background: "#161b22", color: "#8b949e" }}>
+                    <th style={{ textAlign: "left", padding: 6 }}>When</th>
+                    <th style={{ textAlign: "left", padding: 6 }}>PC</th>
+                    <th style={{ textAlign: "right", padding: 6 }}>Δ XP</th>
+                    <th style={{ textAlign: "left", padding: 6 }}>Type</th>
+                    <th style={{ textAlign: "left", padding: 6 }}>Source</th>
+                    <th style={{ textAlign: "left", padding: 6 }}>Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sessionXpFeedSorted.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={6}
+                        style={{ padding: 8, color: "#6b7280" }}
+                      >
+                        No tracker or linked XP-history rows yet. Grant manual XP or refresh
+                        after play — new rows should appear here.
+                      </td>
+                    </tr>
+                  ) : (
+                    sessionXpFeedSorted.map((row) => {
+                      const cid = Number(row.character);
+                      const name =
+                        charDisplayNameById.get(cid) || `PC ${row.character}`;
+                      const xpN = Number(row.xp) || 0;
+                      const xpStr = xpN >= 0 ? `+${xpN}` : `${xpN}`;
+                      const xpColor =
+                        xpN < 0 ? "#f87171" : xpN === 0 ? "#9ca3af" : "#34d399";
+                      const desc = String(row.note || "").trim();
+                      const descShort =
+                        desc.length > 48 ? `${desc.slice(0, 45)}…` : desc;
+                      return (
+                        <tr
+                          key={row.key}
+                          style={{ borderTop: "1px solid #21262d" }}
+                        >
+                          <td
+                            style={{
+                              padding: 6,
+                              whiteSpace: "nowrap",
+                              verticalAlign: "top",
+                            }}
+                          >
+                            {row.when
+                              ? new Date(row.when).toLocaleString()
+                              : "—"}
+                          </td>
+                          <td
+                            style={{
+                              padding: 6,
+                              verticalAlign: "top",
+                              color: "#e5e7eb",
+                            }}
+                          >
+                            {name}
+                          </td>
+                          <td
+                            style={{
+                              padding: 6,
+                              textAlign: "right",
+                              verticalAlign: "top",
+                              color: xpColor,
+                            }}
+                          >
+                            {xpStr}
+                          </td>
+                          <td
+                            style={{
+                              padding: 6,
+                              verticalAlign: "top",
+                              color: "#c9d1d9",
+                            }}
+                          >
+                            {row.typeLabel || "—"}
+                          </td>
+                          <td
+                            style={{
+                              padding: 6,
+                              verticalAlign: "top",
+                              color: "#8b949e",
+                            }}
+                          >
+                            {row.source}
+                          </td>
+                          <td
+                            style={{
+                              padding: 6,
+                              verticalAlign: "top",
+                              color: "#9ca3af",
+                              maxWidth: 200,
+                              wordBreak: "break-word",
+                            }}
+                            title={desc || undefined}
+                          >
+                            {descShort || "—"}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 8,
+                alignItems: "flex-end",
+                marginBottom: 14,
+                fontSize: 11,
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    color: "#9ca3af",
+                    display: "block",
+                    marginBottom: 2,
+                  }}
+                >
+                  All-time XP log for
+                </span>
+                <select
+                  style={S.select}
+                  value={xpLifetimeCharId}
+                  onChange={(e) => setXpLifetimeCharId(e.target.value)}
+                >
+                  <option value="">— choose PC —</option>
+                  {campaignChars.map((ch) => (
+                    <option key={ch.id} value={String(ch.id)}>
+                      {ch.true_name || ch.name || `PC ${ch.id}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                style={S.btnPrimary}
+                disabled={!xpLifetimeCharId}
+                onClick={() => setXpLifetimeModalOpen(true)}
+              >
+                Open full log…
+              </button>
+              {onNavigateToCharacter ? (
+                <button
+                  type="button"
+                  style={S.btnGhost}
+                  disabled={!xpLifetimeCharId}
+                  onClick={() =>
+                    onNavigateToCharacter(Number(xpLifetimeCharId))
+                  }
+                >
+                  Open character sheet
+                </button>
+              ) : null}
+            </div>
+            <div
+              style={{
+                fontSize: 10,
+                color: "#9ca3af",
+                marginBottom: 8,
+                fontWeight: "bold",
+              }}
+            >
+              Add manual award
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                alignItems: "flex-end",
+                fontSize: "11px",
+              }}
+            >
+              <div>
+                <span
+                  style={{
+                    color: "#9ca3af",
+                    display: "block",
+                    marginBottom: "2px",
+                  }}
+                >
+                  Character
+                </span>
+                <select
+                  style={S.select}
+                  value={manualXp.characterId}
+                  onChange={(e) =>
+                    setManualXp((p) => ({
+                      ...p,
+                      characterId: e.target.value,
+                    }))
+                  }
+                >
+                  <option value="">—</option>
+                  {campaignChars.map((ch) => (
+                    <option key={ch.id} value={String(ch.id)}>
+                      {ch.true_name || ch.name || `PC ${ch.id}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <span
+                  style={{
+                    color: "#9ca3af",
+                    display: "block",
+                    marginBottom: "2px",
+                  }}
+                >
+                  XP track
+                </span>
+                <select
+                  style={S.select}
+                  value={manualXp.track}
+                  onChange={(e) =>
+                    setManualXp((p) => ({ ...p, track: e.target.value }))
+                  }
+                >
+                  <option value="playbook">Playbook</option>
+                  <option value="insight">Insight</option>
+                  <option value="prowess">Prowess</option>
+                  <option value="resolve">Resolve</option>
+                  <option value="heritage">Heritage</option>
+                </select>
+              </div>
+              <div>
+                <span
+                  style={{
+                    color: "#9ca3af",
+                    display: "block",
+                    marginBottom: "2px",
+                  }}
+                >
+                  Amount (1–20)
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  style={{ ...S.inp, width: 72 }}
+                  value={manualXp.amount}
+                  onChange={(e) =>
+                    setManualXp((p) => ({
+                      ...p,
+                      amount: Math.min(
+                        20,
+                        Math.max(1, parseInt(e.target.value, 10) || 1),
+                      ),
+                    }))
+                  }
+                />
+              </div>
+              <div style={{ flex: "1 1 200px", minWidth: "160px" }}>
+                <span
+                  style={{
+                    color: "#9ca3af",
+                    display: "block",
+                    marginBottom: "2px",
+                  }}
+                >
+                  Reason / note
+                </span>
+                <input
+                  style={{ ...S.inp, width: "100%" }}
+                  value={manualXp.reason}
+                  onChange={(e) =>
+                    setManualXp((p) => ({ ...p, reason: e.target.value }))
+                  }
+                  placeholder="e.g. Desperate skirmish at table, +2 XP"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={onManualXpGrant}
+                style={S.btnPrimary}
+                disabled={manualXpSaving}
+              >
+                {manualXpSaving ? "Saving..." : "Add XP"}
+              </button>
+            </div>
+          </div>
+        ) : null}
         <div style={{ display: "grid", gap: 10 }}>
           {campaignChars.map((ch) => {
             const id = ch.id;
+            const patchHarmFromDraft = async () => {
+              const d = harmDraftByChar[id] || {};
+              const payload = {
+                harm_level1_name: d.l1a || "",
+                harm_level1_used: !!(d.l1a || "").trim(),
+                harm_level1_slot2_name: d.l1b || "",
+                harm_level1_slot2_used: !!(d.l1b || "").trim(),
+                harm_level2_name: d.l2a || "",
+                harm_level2_used: !!(d.l2a || "").trim(),
+                harm_level2_slot2_name: d.l2b || "",
+                harm_level2_slot2_used: !!(d.l2b || "").trim(),
+                harm_level3_name: d.l3 || "",
+                harm_level3_used: !!(d.l3 || "").trim(),
+                harm_level4_name: d.l4 || "",
+                harm_level4_used: !!(d.l4 || "").trim(),
+              };
+              try {
+                await characterAPI.patchCharacter(id, payload);
+                onRefresh();
+              } catch (e) {
+                setError(e.message || "Failed to save harm");
+              }
+            };
             const row = peMap[String(id)] || peMap[id] || null;
             const pos = row?.position || defaultPos;
             const eff = row?.effect || defaultEff;
@@ -1897,6 +3312,30 @@ export default function SessionGMManagementPanels({
                               {(r.action_name || "action").toUpperCase()} ·{" "}
                               {(r.results || []).join(", ")} →{" "}
                               {(r.outcome || "").replace(/_/g, " ")}
+                              {r.xp_award_detail ? (
+                                <span
+                                  style={{
+                                    display: "block",
+                                    marginTop: 3,
+                                    color: "#34d399",
+                                    fontSize: 9,
+                                    lineHeight: 1.35,
+                                  }}
+                                >
+                                  +{r.xp_award_detail.xp_gained} XP ·{" "}
+                                  {r.xp_award_detail.trigger_label ||
+                                    r.xp_award_detail.trigger}
+                                  {r.xp_award_detail.track &&
+                                  r.xp_award_detail.track_total != null &&
+                                  r.xp_award_detail.track_total !== undefined
+                                    ? ` · ${String(r.xp_award_detail.track)} ${r.xp_award_detail.track_total}`
+                                    : ""}
+                                  {r.xp_award_detail.all_tracks_total != null &&
+                                  r.xp_award_detail.all_tracks_total !== undefined
+                                    ? ` · all clocks ${r.xp_award_detail.all_tracks_total}`
+                                    : ""}
+                                </span>
+                              ) : null}
                             </div>
                             <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                               <button
@@ -1931,16 +3370,18 @@ export default function SessionGMManagementPanels({
                         fontSize: 10,
                       }}
                     >
-                      {[
-                        ["l1a", "L1A"],
-                        ["l1b", "L1B"],
-                        ["l2a", "L2A"],
-                        ["l2b", "L2B"],
-                        ["l3", "L3"],
-                        ["l4", "L4"],
-                      ].map(([key, label]) => (
+                      {(
+                        [
+                          ["l4", "L4", "1 / -1"],
+                          ["l3", "L3", "1 / -1"],
+                          ["l2a", "L2A", null],
+                          ["l2b", "L2B", null],
+                          ["l1a", "L1A", null],
+                          ["l1b", "L1B", null],
+                        ]
+                      ).map(([key, label, gridColumn]) => (
                         <input
-                          key={key}
+                          key={`${id}-${key}`}
                           value={harmDraftByChar[id]?.[key] || ""}
                           onChange={(e) =>
                             setHarmDraftByChar((prev) => ({
@@ -1948,35 +3389,18 @@ export default function SessionGMManagementPanels({
                               [id]: { ...(prev[id] || {}), [key]: e.target.value },
                             }))
                           }
-                          onBlur={async () => {
-                            const d = harmDraftByChar[id] || {};
-                            const payload = {
-                              harm_level1_name: d.l1a || "",
-                              harm_level1_used: !!(d.l1a || "").trim(),
-                              harm_level1_slot2_name: d.l1b || "",
-                              harm_level1_slot2_used: !!(d.l1b || "").trim(),
-                              harm_level2_name: d.l2a || "",
-                              harm_level2_used: !!(d.l2a || "").trim(),
-                              harm_level2_slot2_name: d.l2b || "",
-                              harm_level2_slot2_used: !!(d.l2b || "").trim(),
-                              harm_level3_name: d.l3 || "",
-                              harm_level3_used: !!(d.l3 || "").trim(),
-                              harm_level4_name: d.l4 || "",
-                              harm_level4_used: !!(d.l4 || "").trim(),
-                            };
-                            try {
-                              await characterAPI.patchCharacter(id, payload);
-                              onRefresh();
-                            } catch (e) {
-                              setError(e.message || "Failed to save harm");
-                            }
-                          }}
+                          onBlur={patchHarmFromDraft}
                           placeholder={label}
                           style={{
                             ...S.inp,
                             fontSize: 10,
                             padding: "4px 6px",
                             minWidth: 0,
+                            ...compactHarmFieldStyle(
+                              key,
+                              harmDraftByChar[id]?.[key],
+                            ),
+                            ...(gridColumn ? { gridColumn } : {}),
                           }}
                         />
                       ))}
@@ -1988,6 +3412,86 @@ export default function SessionGMManagementPanels({
           })}
         </div>
       </div>
+      {xpLifetimeModalOpen && xpLifetimeCharId ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.75)",
+            zIndex: 220,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onClick={() => setXpLifetimeModalOpen(false)}
+        >
+          <div
+            style={{
+              background: "#111827",
+              border: "1px solid #4b5563",
+              borderRadius: 8,
+              padding: 16,
+              maxWidth: 520,
+              width: "100%",
+              maxHeight: "80vh",
+              overflow: "auto",
+              boxSizing: "border-box",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{ fontWeight: "bold", marginBottom: 8, color: "#e5e7eb" }}
+            >
+              All-time XP —{" "}
+              {charDisplayNameById.get(Number(xpLifetimeCharId)) ||
+                `PC ${xpLifetimeCharId}`}
+            </div>
+            <p style={{ fontSize: 11, color: "#9ca3af", margin: "0 0 12px" }}>
+              Experience tracker entries and legacy XP history for this character
+              (all sessions), newest first.
+            </p>
+            {xpLifetimeLoading ? (
+              <div style={{ color: "#9ca3af" }}>Loading…</div>
+            ) : xpLifetimeError ? (
+              <div style={{ color: "#f87171" }}>{xpLifetimeError}</div>
+            ) : (
+              <ul
+                style={{
+                  margin: 0,
+                  paddingLeft: 18,
+                  fontSize: 11,
+                  color: "#d1d5db",
+                  maxHeight: "55vh",
+                  overflowY: "auto",
+                }}
+              >
+                {xpLifetimeRows.length === 0 ? (
+                  <li style={{ color: "#6b7280", listStyle: "none" }}>
+                    No entries.
+                  </li>
+                ) : (
+                  xpLifetimeRows.map((r) => (
+                    <li key={r.key} style={{ marginBottom: 10 }}>
+                      <span style={{ color: "#6b7280", fontSize: 10 }}>
+                        {r.when ? new Date(r.when).toLocaleString() : "—"}
+                      </span>
+                      <div style={{ marginTop: 2 }}>{r.text}</div>
+                    </li>
+                  ))
+                )}
+              </ul>
+            )}
+            <button
+              type="button"
+              onClick={() => setXpLifetimeModalOpen(false)}
+              style={{ ...S.btnPrimary, marginTop: 14, width: "100%" }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

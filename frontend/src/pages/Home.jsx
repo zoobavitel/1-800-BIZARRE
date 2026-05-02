@@ -122,6 +122,10 @@ const HomePage = ({
   const [error, setError] = useState(null);
   const [campaigns, setCampaigns] = useState([]);
   const [campaignsLoading, setCampaignsLoading] = useState(true);
+  const [invitations, setInvitations] = useState([]);
+  const [invitationsLoading, setInvitationsLoading] = useState(true);
+  const [invitationBusyId, setInvitationBusyId] = useState(null);
+  const [invitationError, setInvitationError] = useState(null);
   const [npcs, setNpcs] = useState([]);
   const [npcsLoading, setNpcsLoading] = useState(true);
   const [crewCount, setCrewCount] = useState(0);
@@ -178,17 +182,27 @@ const HomePage = ({
     if (!user) {
       setCampaigns([]);
       setCampaignsLoading(false);
+      setInvitations([]);
+      setInvitationsLoading(false);
+      setInvitationError(null);
       setNpcs([]);
       setNpcsLoading(false);
       setCrewCount(0);
       return;
     }
     setCampaignsLoading(true);
+    setInvitationsLoading(true);
     campaignAPI
       .getCampaigns()
       .then((list) => setCampaigns(Array.isArray(list) ? list : []))
       .catch(() => setCampaigns([]))
       .finally(() => setCampaignsLoading(false));
+
+    campaignAPI
+      .getInvitations()
+      .then((list) => setInvitations(Array.isArray(list) ? list : []))
+      .catch(() => setInvitations([]))
+      .finally(() => setInvitationsLoading(false));
 
     setNpcsLoading(true);
     npcAPI
@@ -276,6 +290,34 @@ const HomePage = ({
   const handleManageCampaign = (campaignId) => {
     if (typeof onNavigateToCampaign === "function")
       onNavigateToCampaign(campaignId);
+  };
+
+  const handleAcceptCampaignInvitation = async (invitationId) => {
+    setInvitationError(null);
+    setInvitationBusyId(invitationId);
+    try {
+      await campaignAPI.acceptInvitation(invitationId);
+      setInvitations((prev) => prev.filter((inv) => inv.id !== invitationId));
+      const list = await campaignAPI.getCampaigns();
+      setCampaigns(Array.isArray(list) ? list : []);
+    } catch (err) {
+      setInvitationError(err.message || "Could not accept invitation");
+    } finally {
+      setInvitationBusyId(null);
+    }
+  };
+
+  const handleDeclineCampaignInvitation = async (invitationId) => {
+    setInvitationError(null);
+    setInvitationBusyId(invitationId);
+    try {
+      await campaignAPI.declineInvitation(invitationId);
+      setInvitations((prev) => prev.filter((inv) => inv.id !== invitationId));
+    } catch (err) {
+      setInvitationError(err.message || "Could not decline invitation");
+    } finally {
+      setInvitationBusyId(null);
+    }
   };
 
   const handleEditNpc = (npcId) => {
@@ -547,6 +589,92 @@ const HomePage = ({
               + New Campaign
             </button>
           </div>
+
+          {invitationError && (
+            <p className="home-invite-error" role="alert">
+              {invitationError}
+            </p>
+          )}
+
+          {!invitationsLoading &&
+            invitations.filter((inv) => inv.status === "pending").map((inv) => {
+              const gm = inv.gm;
+              const crew = Array.isArray(inv.players) ? inv.players : [];
+              const gmName = getUserDisplayName(gm);
+              const gmAvatarSrc = getUserAvatarSrc(gm);
+              const desc = String(inv.campaign_description || "").trim();
+              const busy = invitationBusyId === inv.id;
+
+              return (
+                <div key={inv.id} className="g-invite-card" role="group" aria-label="Campaign invitation">
+                  <div className="g-card-stripe" />
+                  <div className="g-card-body">
+                    <div className="g-card-info">
+                      <div className="g-card-header">
+                        <div className="g-card-name">{inv.campaign_name || "—"}</div>
+                        <div className="g-card-badges">
+                          <span className="g-badge g-badge-invite">Invite</span>
+                        </div>
+                      </div>
+                      <div className="g-card-gm-row">
+                        <span className="g-card-gm-label">GM</span>
+                        <div className="g-card-gm-chip">
+                          {gmAvatarSrc ? (
+                            <span className="g-card-user-avatar" aria-hidden="true">
+                              <img src={gmAvatarSrc} alt="" />
+                            </span>
+                          ) : null}
+                          <span className="g-card-user-name">{gmName}</span>
+                        </div>
+                      </div>
+                      {desc ? <div className="g-card-desc">{desc}</div> : null}
+                      <div className="g-invite-section-label">Crew</div>
+                      <div className="g-card-player-list">
+                        {crew.length === 0 ? (
+                          <span className="g-card-player-empty">No players yet</span>
+                        ) : (
+                          crew.map((player) => {
+                            const playerName = getUserDisplayName(player);
+                            const playerAvatarSrc = getUserAvatarSrc(player);
+                            return (
+                              <span
+                                key={player.id || playerName}
+                                className="g-card-player-chip"
+                              >
+                                {playerAvatarSrc ? (
+                                  <span className="g-card-user-avatar" aria-hidden="true">
+                                    <img src={playerAvatarSrc} alt="" />
+                                  </span>
+                                ) : null}
+                                <span className="g-card-user-name">{playerName}</span>
+                              </span>
+                            );
+                          })
+                        )}
+                      </div>
+                      <div className="g-invite-actions">
+                        <button
+                          type="button"
+                          className="split-btn g-invite-btn-accept"
+                          disabled={busy}
+                          onClick={() => handleAcceptCampaignInvitation(inv.id)}
+                        >
+                          {busy ? "…" : "Accept"}
+                        </button>
+                        <button
+                          type="button"
+                          className="g-invite-btn-decline"
+                          disabled={busy}
+                          onClick={() => handleDeclineCampaignInvitation(inv.id)}
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
 
           {campaignsLoading ? (
             <p className="home-muted-dark">Loading campaigns…</p>

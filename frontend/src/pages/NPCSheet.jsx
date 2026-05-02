@@ -36,6 +36,80 @@ const DUR_REGULAR_ARMOR = { F: 0, D: 1, C: 1, B: 2, A: 3, S: 3 };
 const DUR_SPECIAL_ARMOR = { F: 0, D: 0, C: 1, B: 1, A: 2, S: 2 };
 
 // Power → base harm level + position note
+/** Session involvement rows use `npc` FK from JSON — may be number or string */
+function npcInvMatches(invNpcId, sheetNpcId) {
+  if (sheetNpcId == null || invNpcId == null) return false;
+  return Number(invNpcId) === Number(sheetNpcId);
+}
+
+/** JSONField clocks from API vs local edits — normalize once for state + merges */
+function normalizeNpcClockEntry(c) {
+  if (!c || typeof c !== "object") return null;
+  const segsRaw = Number(c.segments);
+  const segments = [4, 6, 8, 12].includes(segsRaw) ? segsRaw : 8;
+  const filledRaw = Number(c.filled);
+  const filled =
+    Number.isFinite(filledRaw) && filledRaw >= 0
+      ? Math.min(segments, filledRaw)
+      : 0;
+  return {
+    id: c.id,
+    name: String(c.name ?? ""),
+    segments,
+    filled,
+  };
+}
+
+function normalizeClockList(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(normalizeNpcClockEntry).filter((x) => x != null);
+}
+
+function npcClockIdsMatch(a, b) {
+  return a === b || (a != null && b != null && Number(a) === Number(b));
+}
+
+/**
+ * NPC sheet: playbook copy is GM-facing narration only — strip PC-facing dice
+ * and stress spends from blurbs loaded from Hamon/Spin reference data.
+ */
+function sanitizeNpcPlaybookAbilityDescription(raw) {
+  if (raw == null || typeof raw !== "string") return "";
+  let s = raw.normalize("NFKC");
+
+  const passes = [
+    /\bCosts?\s+\d+\s+stress\.?\s*/gi,
+    /\bSpend(?:ing)?\s+\d+\s+stress[^.!?]*(?:[.!?]|$)/gi,
+    /\bPay\s+\d+\s+stress[^.!?]*(?:[.!?]|$)/gi,
+    // Clause starting with dice pool (+1d … through end of clause)
+    /\+?\d+\s*d[^.!?]*(?:[.!?]|$)/gi,
+    // Roll Finesse or Wreck; on a 6 / on a crit, …
+    /\bRoll\s+[A-Za-z][A-Za-z\s,]+\s*[;,]\s*on\s+(?:a\s+)?(?:crit|\d+)\+?\s*,\s*/gi,
+    /\bOn\s+a\s+(?:crit|\d+)\+?\s*,\s*/gi,
+  ];
+
+  passes.forEach((re) => {
+    for (let i = 0; i < 6; i += 1) {
+      const next = s.replace(re, "");
+      if (next === s) break;
+      s = next;
+    }
+  });
+
+  s = s
+    .replace(/\s+[,.;:]/g, (chunk) => chunk.trim())
+    .replace(/\s*,\s*\./g, ".")
+    .replace(/\(\s*\)/g, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[.,;\s:]+/, "")
+    .trim();
+
+  if (/^[a-z]/.test(s)) {
+    s = s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  return s;
+}
+
 const POWER_TABLE = {
   S: { harm: 4, pos: "Forces position worse by 1 step (always)" },
   A: { harm: 4, pos: "Forces position worse by 1 step" },
@@ -363,6 +437,8 @@ const NPCSheet = ({
   const [activeSessionDetail, setActiveSessionDetail] = useState(null);
   const [activeSessionLoading, setActiveSessionLoading] = useState(false);
   const [vulnRevealSaving, setVulnRevealSaving] = useState(false);
+  /** Invalidate in-flight GET /sessions/:id after PATCH so stale responses cannot revert UI */
+  const activeSessionDetailNonceRef = useRef(0);
 
   useEffect(() => {
     if (!isGM || activeSessionId == null) {
@@ -371,14 +447,24 @@ const NPCSheet = ({
       return;
     }
     let cancelled = false;
+    activeSessionDetailNonceRef.current += 1;
+    const ticket = activeSessionDetailNonceRef.current;
     setActiveSessionLoading(true);
     sessionAPI
       .getSession(activeSessionId)
       .then((data) => {
-        if (!cancelled) setActiveSessionDetail(data);
+        if (
+          cancelled ||
+          ticket !== activeSessionDetailNonceRef.current
+        ) {
+          return;
+        }
+        setActiveSessionDetail(data);
       })
       .catch(() => {
-        if (!cancelled) setActiveSessionDetail(null);
+        if (cancelled) return;
+        if (ticket !== activeSessionDetailNonceRef.current) return;
+        setActiveSessionDetail(null);
       })
       .finally(() => {
         if (!cancelled) setActiveSessionLoading(false);
@@ -386,13 +472,17 @@ const NPCSheet = ({
     return () => {
       cancelled = true;
     };
+    // Include `campaigns`: session NPC involvements change when GM edits session elsewhere;
+    // nonce drops stale GETs started before our own PATCH completes.
   }, [isGM, activeSessionId, campaigns]);
 
   const sessionInvolvementForNpc = useMemo(() => {
     const id = npc?.id;
     if (id == null || !activeSessionDetail?.npc_involvements) return null;
     return (
-      activeSessionDetail.npc_involvements.find((i) => i.npc === id) ?? null
+      activeSessionDetail.npc_involvements.find((i) =>
+        npcInvMatches(i.npc, id),
+      ) ?? null
     );
   }, [npc?.id, activeSessionDetail]);
 
@@ -414,6 +504,7 @@ const NPCSheet = ({
         const updated = await sessionAPI.patchSession(activeSessionId, {
           npc_involvements: normalized,
         });
+        activeSessionDetailNonceRef.current += 1;
         setActiveSessionDetail(updated);
         if (typeof onCampaignRefresh === "function") {
           onCampaignRefresh();
@@ -436,7 +527,7 @@ const NPCSheet = ({
     }
     const id = npc?.id;
     const next = activeSessionDetail.npc_involvements.map((i) =>
-      i.npc === id
+      npcInvMatches(i.npc, id)
         ? {
             ...i,
             show_vulnerability_clock_to_players: !(
@@ -622,13 +713,35 @@ const NPCSheet = ({
     };
   });
 
-  const [conflictClocks, setConflictClocks] = useState(
-    npc?.conflict_clocks ?? npc?.conflictClocks ?? [],
+  const [conflictClocks, setConflictClocks] = useState(() =>
+    normalizeClockList(npc?.conflict_clocks ?? npc?.conflictClocks ?? []),
   );
 
-  const [altClocks, setAltClocks] = useState(
-    npc?.alt_clocks ?? npc?.altClocks ?? [],
+  const [altClocks, setAltClocks] = useState(() =>
+    normalizeClockList(npc?.alt_clocks ?? npc?.altClocks ?? []),
   );
+
+  const npcConflictClocksSnap = useMemo(() => {
+    if (npc?.id == null) return "";
+    return JSON.stringify(npc?.conflict_clocks ?? npc?.conflictClocks ?? []);
+  }, [npc?.id, npc?.conflict_clocks, npc?.conflictClocks]);
+
+  const npcAltClocksSnap = useMemo(() => {
+    if (npc?.id == null) return "";
+    return JSON.stringify(npc?.alt_clocks ?? npc?.altClocks ?? []);
+  }, [npc?.id, npc?.alt_clocks, npc?.altClocks]);
+
+  useEffect(() => {
+    if (npc?.id == null || npcConflictClocksSnap === "") return;
+    setConflictClocks(
+      normalizeClockList(JSON.parse(npcConflictClocksSnap || "[]")),
+    );
+  }, [npc?.id, npcConflictClocksSnap]);
+
+  useEffect(() => {
+    if (npc?.id == null || npcAltClocksSnap === "") return;
+    setAltClocks(normalizeClockList(JSON.parse(npcAltClocksSnap || "[]")));
+  }, [npc?.id, npcAltClocksSnap]);
 
   const [vulnFilled, setVulnFilled] = useState(
     npc?.vulnerability_clock_current ?? 0,
@@ -841,14 +954,16 @@ const NPCSheet = ({
 
   const updateConflictClock = (id, filled) =>
     setConflictClocks((p) =>
-      p.map((c) => (c.id === id ? { ...c, filled } : c)),
+      p.map((c) => (npcClockIdsMatch(c.id, id) ? { ...c, filled } : c)),
     );
   const deleteConflictClock = (id) =>
-    setConflictClocks((p) => p.filter((c) => c.id !== id));
+    setConflictClocks((p) => p.filter((c) => !npcClockIdsMatch(c.id, id)));
   const updateAltClock = (id, filled) =>
-    setAltClocks((p) => p.map((c) => (c.id === id ? { ...c, filled } : c)));
+    setAltClocks((p) =>
+      p.map((c) => (npcClockIdsMatch(c.id, id) ? { ...c, filled } : c)),
+    );
   const deleteAltClock = (id) =>
-    setAltClocks((p) => p.filter((c) => c.id !== id));
+    setAltClocks((p) => p.filter((c) => !npcClockIdsMatch(c.id, id)));
 
   const buildPayload = useCallback(
     () => ({
@@ -929,6 +1044,12 @@ const NPCSheet = ({
       try {
         const result = await onSave(buildPayload());
         if (result?.id && !npcIdRef.current) npcIdRef.current = result.id;
+        if (Array.isArray(result?.conflict_clocks)) {
+          setConflictClocks(normalizeClockList(result.conflict_clocks));
+        }
+        if (Array.isArray(result?.alt_clocks)) {
+          setAltClocks(normalizeClockList(result.alt_clocks));
+        }
         setSaveStatus("saved");
         setTimeout(
           () => setSaveStatus((s) => (s === "saved" ? null : s)),
@@ -2031,6 +2152,9 @@ const NPCSheet = ({
                         ) : (
                           hamonAbilitiesList.map((a) => {
                             const selected = selectedHamonIds.includes(a.id);
+                            const desc = sanitizeNpcPlaybookAbilityDescription(
+                              a.description,
+                            );
                             return (
                               <div
                                 key={a.id}
@@ -2083,20 +2207,8 @@ const NPCSheet = ({
                                         {a.hamon_type}
                                       </span>
                                     )}
-                                    {a.stress_cost > 0 && (
-                                      <span
-                                        style={{
-                                          marginLeft: "6px",
-                                          fontSize: "10px",
-                                          color: "#f87171",
-                                          fontWeight: "normal",
-                                        }}
-                                      >
-                                        {a.stress_cost} stress
-                                      </span>
-                                    )}
                                   </div>
-                                  {a.description && (
+                                  {desc ? (
                                     <div
                                       style={{
                                         fontSize: "11px",
@@ -2105,9 +2217,9 @@ const NPCSheet = ({
                                         lineHeight: "1.4",
                                       }}
                                     >
-                                      {a.description}
+                                      {desc}
                                     </div>
-                                  )}
+                                  ) : null}
                                 </div>
                               </div>
                             );
@@ -2141,6 +2253,9 @@ const NPCSheet = ({
                         ) : (
                           spinAbilitiesList.map((a) => {
                             const selected = selectedSpinIds.includes(a.id);
+                            const desc = sanitizeNpcPlaybookAbilityDescription(
+                              a.description,
+                            );
                             return (
                               <div
                                 key={a.id}
@@ -2193,20 +2308,8 @@ const NPCSheet = ({
                                         {a.spin_type}
                                       </span>
                                     )}
-                                    {a.stress_cost > 0 && (
-                                      <span
-                                        style={{
-                                          marginLeft: "6px",
-                                          fontSize: "10px",
-                                          color: "#f87171",
-                                          fontWeight: "normal",
-                                        }}
-                                      >
-                                        {a.stress_cost} stress
-                                      </span>
-                                    )}
                                   </div>
-                                  {a.description && (
+                                  {desc ? (
                                     <div
                                       style={{
                                         fontSize: "11px",
@@ -2215,9 +2318,9 @@ const NPCSheet = ({
                                         lineHeight: "1.4",
                                       }}
                                     >
-                                      {a.description}
+                                      {desc}
                                     </div>
-                                  )}
+                                  ) : null}
                                 </div>
                               </div>
                             );
@@ -2332,9 +2435,11 @@ const NPCSheet = ({
                           justifyContent: "center",
                         }}
                       >
-                        {altClocks.map((clk) => (
+                        {altClocks.map((clk, cidx) => (
                           <div
-                            key={clk.id}
+                            key={
+                              clk.id != null ? String(clk.id) : `alt-${cidx}`
+                            }
                             style={{
                               textAlign: "center",
                               position: "relative",
@@ -2378,7 +2483,7 @@ const NPCSheet = ({
                                 if (newName)
                                   setAltClocks((p) =>
                                     p.map((c) =>
-                                      c.id === clk.id
+                                      npcClockIdsMatch(c.id, clk.id)
                                         ? { ...c, name: newName }
                                         : c,
                                     ),
@@ -2645,11 +2750,13 @@ const NPCSheet = ({
                         conflictClocks.length <= 2 ? "center" : "flex-start",
                     }}
                   >
-                    {conflictClocks.map((clk) => {
+                    {conflictClocks.map((clk, cidx) => {
                       const isComplete = clk.filled >= clk.segments;
                       return (
                         <div
-                          key={clk.id}
+                          key={
+                            clk.id != null ? String(clk.id) : `conf-${cidx}`
+                          }
                           style={{
                             textAlign: "center",
                             position: "relative",
@@ -2697,7 +2804,7 @@ const NPCSheet = ({
                                 if (newName)
                                   setConflictClocks((p) =>
                                     p.map((c) =>
-                                      c.id === clk.id
+                                      npcClockIdsMatch(c.id, clk.id)
                                         ? { ...c, name: newName }
                                         : c,
                                     ),
