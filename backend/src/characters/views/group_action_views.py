@@ -6,7 +6,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from ..models import Character, GroupAction, Roll, Session
-from ..roll_helpers import action_roll_counts_as_failure_for_group
+from ..roll_helpers import (
+    action_roll_counts_as_failure_for_group,
+    max_stress_slots_for_character,
+)
 from ..serializers import GroupActionSerializer
 
 
@@ -141,8 +144,13 @@ class GroupActionViewSet(viewsets.ModelViewSet):
             if _is_failure_roll(r) and r.character_id != ga.leader_id
         )
         leader = ga.leader
-        cur = max(0, int(getattr(leader, "stress", 0) or 0))
-        new_stress = max(0, cur - failures)
+        max_slots = max_stress_slots_for_character(leader)
+        cur = max(
+            0,
+            min(max_slots, int(getattr(leader, "stress", 0) or 0)),
+        )
+        # Character.stress = marked boxes; each non-leader failure marks 1 on the leader.
+        new_stress = min(max_slots, cur + failures)
         leader.stress = new_stress
         leader.save(update_fields=['stress'])
         ga.status = 'RESOLVED'

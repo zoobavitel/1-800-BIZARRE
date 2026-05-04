@@ -4,6 +4,18 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-05-02",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "session XP settlement, GM sheet history splits"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-05-01",
     "version": null,
     "sections": [
@@ -428,8 +440,7 @@ export const PATCH_NOTES = [
           "Address code review: bulk_create, consolidate heritage sync, use null for heritage",
           "Merge branch 'master' into copilot/create-faction-for-npc",
           "Add heritage, NPC type, and playbook abilities to NPC sheet",
-          "Merge pull request #19 from zoobavitel/copilot/update-repo-name-variables",
-          "Merge pull request #18 from zoobavitel/copilot/fix-vulnerability-clock-issue"
+          "Merge pull request #19 from zoobavitel/copilot/update-repo-name-variables"
         ]
       },
       {

@@ -289,3 +289,21 @@ def outcome_from_dice_results(results):
     if tier >= 4:
         return "PARTIAL_SUCCESS"
     return "FAILURE"
+
+
+def max_stress_slots_for_character(character):
+    """
+    Length of the stress track from Stand durability (SRD baseline 9 + grade table).
+
+    Character.stress in the API is the **filled / marked** count on that track
+    (same as the sheet's stressFilled), not "remaining budget."
+    """
+    grade = None
+    stand = getattr(character, "stand", None)
+    if stand is not None:
+        grade = getattr(stand, "durability", None)
+    if not grade:
+        coin_stats = getattr(character, "coin_stats", None) or {}
+        if isinstance(coin_stats, dict):
+            grade = coin_stats.get("durability") or coin_stats.get("DURABILITY")
+    return {"S": 13, "A": 12, "B": 11, "C": 10, "D": 9, "F": 8}.get(grade, 9)

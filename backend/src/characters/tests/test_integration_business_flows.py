@@ -152,3 +152,39 @@ class SessionRollLoopIntegrationTests(TestCase):
         )
         self.assertEqual(rolled.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("error", rolled.data)
+
+    def test_roll_action_extra_roll_stress_marks_one_box(self):
+        self.player.refresh_from_db()
+        self.assertEqual(self.player.stress, 5)
+        rolled = self.client.post(
+            f"/api/characters/{self.player.id}/roll-action/",
+            {
+                "action": "hunt",
+                "session_id": self.session.id,
+                "extra_roll_stress": 1,
+            },
+            format="json",
+        )
+        self.assertEqual(
+            rolled.status_code, status.HTTP_200_OK, rolled.data,
+        )
+        self.assertEqual(rolled.data.get("stress_spent"), 1)
+        self.player.refresh_from_db()
+        # stress = marked boxes on the track (same as sheet stressFilled).
+        self.assertEqual(self.player.stress, 6)
+
+    def test_roll_action_extra_roll_stress_rejects_when_track_full(self):
+        self.player.stress = 9
+        self.player.save(update_fields=["stress"])
+        rolled = self.client.post(
+            f"/api/characters/{self.player.id}/roll-action/",
+            {
+                "action": "hunt",
+                "session_id": self.session.id,
+                "extra_roll_stress": 1,
+            },
+            format="json",
+        )
+        self.assertEqual(rolled.status_code, status.HTTP_400_BAD_REQUEST)
+        self.player.refresh_from_db()
+        self.assertEqual(self.player.stress, 9)

@@ -1,4 +1,4 @@
-"""Group action resolve: leader loses 1 remaining stress per failed non-leader roll."""
+"""Group action resolve: leader marks 1 stress per failed non-leader roll (filled count)."""
 from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework import status
@@ -40,7 +40,7 @@ class GroupActionResolveLeaderStressTests(TestCase):
             true_name="Leader GAR",
             heritage=self.h,
             action_dots=dots,
-            stress=10,
+            stress=0,
         )
         self.follower = Character.objects.create(
             user=self.follower_user,
@@ -49,7 +49,7 @@ class GroupActionResolveLeaderStressTests(TestCase):
             true_name="Follow GAR",
             heritage=self.h,
             action_dots=dots,
-            stress=5,
+            stress=0,
         )
         self.session = Session.objects.create(campaign=self.campaign, name="GAR S1")
 
@@ -93,7 +93,7 @@ class GroupActionResolveLeaderStressTests(TestCase):
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
         self.assertEqual(r.data.get("failures"), 1)
         self.leader.refresh_from_db()
-        self.assertEqual(self.leader.stress, 9)
+        self.assertEqual(self.leader.stress, 1)
 
     def test_resolve_no_loss_when_follower_succeeds(self):
         ga = self._rolls(leader_tier_die=6, follower_tier_die=6)
@@ -102,4 +102,4 @@ class GroupActionResolveLeaderStressTests(TestCase):
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
         self.assertEqual(r.data.get("failures"), 0)
         self.leader.refresh_from_db()
-        self.assertEqual(self.leader.stress, 10)
+        self.assertEqual(self.leader.stress, 0)

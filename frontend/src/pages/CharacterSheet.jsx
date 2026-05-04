@@ -45,11 +45,34 @@ import {
   EffectShapes,
   HistoryBranchIcon,
 } from "../components/position-effect/PositionEffectIndicators";
-import { computeActionPoolBreakdown } from "../features/character-sheet/utils/actionDicePool";
+import {
+  computeActionPoolBreakdown,
+  INSIGHT_ACTIONS,
+  PROWESS_ACTIONS,
+  RESOLVE_ACTIONS,
+} from "../features/character-sheet/utils/actionDicePool";
+import { bumpEffectTier } from "../features/character-sheet/utils/rollEffectPreview";
 import {
   buildXpRequirementSnapshot,
   formatAttrTally,
 } from "../features/character-sheet/utils/xpRequirements";
+import {
+  adjustActionRollBonusSupports,
+  characterHasIronWill,
+  characterHasLegendaryGuard,
+  characterHasPhantomPain,
+  characterHasParryAndBreak,
+  ironWillBonusAppliesToResistanceAttr,
+  resistanceOutcomeAllowsParryCounterattack,
+} from "../features/character-sheet/utils/abilityRollBonusMeta";
+import { getResistanceResultSheetAbilityReminders } from "../features/character-sheet/utils/sheetAbilityResistanceReminders";
+
+/** Action keys for Parry and Break counterattack picker (same order as sheet columns). */
+const ALL_SHEET_ACTIONS_FOR_PARRY = [
+  ...INSIGHT_ACTIONS,
+  ...PROWESS_ACTIONS,
+  ...RESOLVE_ACTIONS,
+];
 
 const CREW_HISTORY_FIELD_KEYS = new Set([
   "name",
@@ -1185,6 +1208,13 @@ const CharacterSheetWrapper = ({
   const [hamonAbilityPickerOpen, setHamonAbilityPickerOpen] = useState(false);
   const hamonAbilityPickerRef = useRef(null);
   const [expandedAbilityId, setExpandedAbilityId] = useState(null);
+  const [abilitiesSectionExpanded, setAbilitiesSectionExpanded] =
+    useState(true);
+  const [clocksSectionExpanded, setClocksSectionExpanded] = useState(true);
+  const [notesInventoryExpanded, setNotesInventoryExpanded] = useState({
+    notes: true,
+    inventory: true,
+  });
 
   // Close standard / spin / hamon ability pickers when clicking outside
   useEffect(() => {
@@ -1710,6 +1740,14 @@ const CharacterSheetWrapper = ({
   });
   const [rollAbilityBoost, setRollAbilityBoost] = useState({});
   const [heritageRollBoost, setHeritageRollBoost] = useState({});
+  /** Phantom Pain: spend 1 stress when using the ability through cover/barriers (fiction). */
+  const [phantomPainThroughCover, setPhantomPainThroughCover] = useState(false);
+  /** Resolve-attribute resistance only; pairs with Iron Will (+1d). */
+  const [resistanceIronWillBonus, setResistanceIronWillBonus] = useState(false);
+  /** After a successful resist: open action roll with Parry (+1 effect baked in). */
+  const [resistanceFollowupChoice, setResistanceFollowupChoice] = useState("");
+  const [parryCounterattackActionDraft, setParryCounterattackActionDraft] =
+    useState("");
   const [rollApiError, setRollApiError] = useState(null);
   const [showHistoryPanel, setShowHistoryPanel] = useState(false);
   const [historyMode, setHistoryMode] = useState("session");
@@ -2121,6 +2159,16 @@ const CharacterSheetWrapper = ({
             modifiers: [
               r.position ? `Pos ${r.position}` : null,
               r.effect ? `Eff ${r.effect}` : null,
+              Number(r.pool_bonus_dice) > 0
+                ? `Pool +${r.pool_bonus_dice}d (abilities / heritage)`
+                : null,
+              (() => {
+                const d = String(r.description || "");
+                const tags = [];
+                if (/\[abilities:/i.test(d)) tags.push("Abilities");
+                if (/\[heritage:/i.test(d)) tags.push("Heritage");
+                return tags.length ? tags.join(" · ") : null;
+              })(),
               r.push_for_dice ? "Push(+1d)" : null,
               r.push_for_effect ? "Push(+effect)" : null,
               r.uses_devil_bargain ? "Devil's bargain" : null,
@@ -2435,16 +2483,64 @@ const CharacterSheetWrapper = ({
     );
   }, []);
 
+  /**
+   * Catalog abilities added with "Add to sheet" often store only { id, name, type }
+   * on `character.abilities` — roll bonuses must mirror the abilities panel, which
+   * resolves description from `/api/abilities/` reference lists by id + type.
+   */
+  const effectiveRollBonusAbilityDescription = useCallback(
+    (ab) => {
+      const raw = String(ab?.description ?? "").trim();
+      if (raw) return ab.description || "";
+      if (ab.type === "standard") {
+        const ref = standardAbilitiesList.find(
+          (x) => String(x.id) === String(ab.id),
+        );
+        return ref?.description || "";
+      }
+      if (ab.type === "spin") {
+        const ref = spinAbilitiesList.find(
+          (x) => String(x.id) === String(ab.id),
+        );
+        return ref?.description || "";
+      }
+      if (ab.type === "hamon") {
+        const ref = hamonAbilitiesList.find(
+          (x) => String(x.id) === String(ab.id),
+        );
+        return ref?.description || "";
+      }
+      return "";
+    },
+    [standardAbilitiesList, spinAbilitiesList, hamonAbilitiesList],
+  );
+
   const abilityRollBonusOptions = useMemo(() => {
+    const rollAbleTypes = new Set(["standard", "spin", "hamon", "custom"]);
     return (abilities || [])
-      .filter((a) => a.type === "standard")
-      .map((ab) => ({
-        ...ab,
-        supportsDice: supportsAbilityBonusDice(ab.description),
-        supportsEffect: supportsAbilityBonusEffect(ab.description),
-      }))
+      .filter((a) => a && rollAbleTypes.has(a.type))
+      .map((ab) => {
+        const resolvedDesc = effectiveRollBonusAbilityDescription(ab);
+        const baseDice = supportsAbilityBonusDice(resolvedDesc);
+        const baseEffect = supportsAbilityBonusEffect(resolvedDesc);
+        const adj = adjustActionRollBonusSupports(ab, {
+          supportsDice: baseDice,
+          supportsEffect: baseEffect,
+        });
+        return {
+          ...ab,
+          rollBonusResolvedDescription: resolvedDesc,
+          supportsDice: adj.supportsDice,
+          supportsEffect: adj.supportsEffect,
+        };
+      })
       .filter((ab) => ab.supportsDice || ab.supportsEffect);
-  }, [abilities, supportsAbilityBonusDice, supportsAbilityBonusEffect]);
+  }, [
+    abilities,
+    effectiveRollBonusAbilityDescription,
+    supportsAbilityBonusDice,
+    supportsAbilityBonusEffect,
+  ]);
 
   const heritageRollBonusOptions = useMemo(() => {
     const hid = charData?.heritage;
@@ -2474,6 +2570,18 @@ const CharacterSheetWrapper = ({
     supportsAbilityBonusDice,
     supportsAbilityBonusEffect,
   ]);
+
+  const phantomPainRollDescription = useMemo(() => {
+    if (!characterHasPhantomPain(abilities)) return "";
+    const ab =
+      abilities.find(
+        (a) =>
+          a &&
+          String(a.type || "").toLowerCase() === "standard" &&
+          String(a.name || "").trim().toLowerCase() === "phantom pain",
+      ) || null;
+    return ab ? String(effectiveRollBonusAbilityDescription(ab) || "").trim() : "";
+  }, [abilities, effectiveRollBonusAbilityDescription]);
 
   const { bonusDiceFromAbilities, abilityEffectSteps, abilityBonusAudit } =
     useMemo(() => {
@@ -2530,7 +2638,29 @@ const CharacterSheetWrapper = ({
 
   const totalBonusDiceFromAbilitiesAndHeritage =
     bonusDiceFromAbilities + bonusDiceFromHeritage;
-  const totalAbilityEffectSteps = abilityEffectSteps + heritageEffectSteps;
+
+  const parryCounterEffectStepsActive = Math.max(
+    0,
+    Math.min(1, Number(rollPending?.parryCounterEffectSteps || 0)),
+  );
+
+  const totalAbilityEffectSteps =
+    abilityEffectSteps + heritageEffectSteps + parryCounterEffectStepsActive;
+
+  /** Session default + push + ability/heritage/Parry steps — matches server roll_action order. */
+  const rollModalPreviewEffect = useMemo(() => {
+    const base =
+      sessionOverridePositionEffect?.effect ||
+      charCampaign?.active_session_detail?.default_effect ||
+      "standard";
+    const pushSteps = rollModal.push_effect ? 1 : 0;
+    return bumpEffectTier(base, pushSteps + totalAbilityEffectSteps);
+  }, [
+    sessionOverridePositionEffect?.effect,
+    charCampaign?.active_session_detail?.default_effect,
+    rollModal.push_effect,
+    totalAbilityEffectSteps,
+  ]);
 
   const gmDevilBargainText = useMemo(() => {
     const m = charCampaign?.active_session_detail?.devils_bargain_by_character;
@@ -2625,7 +2755,11 @@ const CharacterSheetWrapper = ({
     const selectedPushStress =
       (rollModal.push_effect ? 2 : 0) + (rollModal.push_dice ? 2 : 0);
     const requiredIncapacitatedStress = harmLevel3Used ? 2 : 0;
-    const pushStress = selectedPushStress + requiredIncapacitatedStress;
+    const phantomPainStressCost = phantomPainThroughCover ? 1 : 0;
+    const pushStress =
+      selectedPushStress +
+      requiredIncapacitatedStress +
+      phantomPainStressCost;
     return {
       action_rating,
       basePool,
@@ -2641,11 +2775,44 @@ const CharacterSheetWrapper = ({
     rollModal.devil_bargain_dice,
     harmLevel3Used,
     totalBonusDiceFromAbilitiesAndHeritage,
+    phantomPainThroughCover,
   ]);
 
   const pushStressCost = rollPoolPreview?.pushStress || 0;
   const pushWouldCauseTrauma =
     pushStressCost > 0 && stressFilled + pushStressCost > maxStress;
+
+  const openParryCounterattackRoll = useCallback(() => {
+    if (!characterId) return;
+    const raw = String(parryCounterattackActionDraft || "")
+      .trim()
+      .toUpperCase();
+    if (!raw || !ALL_SHEET_ACTIONS_FOR_PARRY.includes(raw)) return;
+    const rating = Math.max(0, Number(actionRatings[raw] ?? 0) || 0);
+    setRollPending({
+      actionName: raw,
+      diceCount: rating,
+      isDesperateAction: false,
+      parryCounterEffectSteps: 1,
+    });
+    setRollAbilityBoost({});
+    setHeritageRollBoost({});
+    setPhantomPainThroughCover(false);
+    setDevilBargainConfirmed(false);
+    setRollGoalDraft((assignedRollGoalLabel || "").trim());
+    setRollModal({
+      push_effect: false,
+      push_dice: false,
+      devil_bargain_dice: false,
+      devil_bargain_note: "",
+    });
+    setRollApiError(null);
+  }, [
+    characterId,
+    parryCounterattackActionDraft,
+    actionRatings,
+    assignedRollGoalLabel,
+  ]);
 
   const handleRollWithSession = async () => {
     if (!rollPending || !characterId) return;
@@ -2653,6 +2820,20 @@ const CharacterSheetWrapper = ({
     const asd = charCampaign?.active_session_detail;
     try {
       const goalFromDraft = (rollGoalDraft || "").trim();
+      const parryEffectStepsCommitted = Math.max(
+        0,
+        Math.min(1, Number(rollPending.parryCounterEffectSteps || 0)),
+      );
+      const phantomStress = phantomPainThroughCover ? 1 : 0;
+      const abilityBonusesMerged = [
+        ...abilityBonusAudit,
+        ...(parryEffectStepsCommitted > 0
+          ? ["Parry and Break: +1 effect (counterattack)"]
+          : []),
+        ...(phantomStress > 0
+          ? [`Phantom Pain: ${phantomStress} stress (attack through cover)`]
+          : []),
+      ];
       const payload = {
         action: rollPending.actionName.toLowerCase(),
         push_effect: rollModal.push_effect,
@@ -2664,14 +2845,17 @@ const CharacterSheetWrapper = ({
           !gmDevilBargainText ||
           devilBargainConfirmed,
         bonus_dice: totalBonusDiceFromAbilitiesAndHeritage,
-        ability_effect_steps: totalAbilityEffectSteps,
+        ability_effect_steps:
+          abilityEffectSteps +
+          heritageEffectSteps +
+          parryEffectStepsCommitted,
         heritage_bonuses:
           heritageBonusAudit.length > 0 ? heritageBonusAudit : undefined,
         goal_label:
           goalFromDraft || assignedRollGoalLabel || undefined,
-        ability_bonuses: abilityBonusAudit.length
-          ? abilityBonusAudit
-          : undefined,
+        ability_bonuses:
+          abilityBonusesMerged.length > 0 ? abilityBonusesMerged : undefined,
+        ...(phantomStress > 0 ? { extra_roll_stress: phantomStress } : {}),
       };
       if (activeSessionId) {
         payload.session_id = activeSessionId;
@@ -2764,19 +2948,47 @@ const CharacterSheetWrapper = ({
       }));
       setRollAbilityBoost({});
       setHeritageRollBoost({});
+      setPhantomPainThroughCover(false);
     } catch (e) {
       setRollApiError(e.message);
     }
   };
 
+  const hasIronWillAbility = useMemo(
+    () => characterHasIronWill(abilities),
+    [abilities],
+  );
+
+  const hasParryAndBreakAbility = useMemo(
+    () => characterHasParryAndBreak(abilities),
+    [abilities],
+  );
+
+  const resistanceRollSheetReminderItems = useMemo(() => {
+    if (
+      !diceResult?.isResistance ||
+      !Array.isArray(diceResult.dice)
+    ) {
+      return [];
+    }
+    return getResistanceResultSheetAbilityReminders(
+      abilities,
+      diceResult.dice,
+    );
+  }, [diceResult, abilities]);
+
   // FIX 8: Resistance critical → stressCost = -1 (clear 1 stress, pay none)
-  /** @param {unknown} [groupActionIdSnap] If set, POST includes this group_action_id even if activeGroupAction is cleared before submit. */
+  /**
+   * @param {unknown} [groupActionIdSnap] If set, POST includes this group_action_id even if activeGroupAction is cleared before submit.
+   * @param {{ resistanceBonusNote?: string }} [extras] Extra display only (e.g. Iron Will note on resistance).
+   */
   const rollDice = (
     actionName,
     diceCount,
     isResistance = false,
     isDesperateAction = false,
     groupActionIdSnap = undefined,
+    extras,
   ) => {
     if (characterId && !isResistance) {
       setRollPending({
@@ -2789,6 +3001,7 @@ const CharacterSheetWrapper = ({
       });
       setRollAbilityBoost({});
       setHeritageRollBoost({});
+      setPhantomPainThroughCover(false);
       setDevilBargainConfirmed(false);
       const asdGoal = (
         assignedRollGoalLabel || ""
@@ -2803,6 +3016,13 @@ const CharacterSheetWrapper = ({
       setRollApiError(null);
       return;
     }
+
+    if (isResistance) {
+      setResistanceFollowupChoice("");
+      setParryCounterattackActionDraft("");
+      setPhantomPainThroughCover(false);
+    }
+
     let dice, highest, sixes, isCritical, outcome;
 
     if (diceCount === 0) {
@@ -2839,12 +3059,22 @@ const CharacterSheetWrapper = ({
         : Math.max(0, 6 - highest)
       : null;
 
+    const resistanceNote =
+      extras &&
+      typeof extras === "object" &&
+      String(extras.resistanceBonusNote || "").trim();
+    const criticalPart = isCritical ? `Critical! (${sixes} sixes)` : "";
+    const special =
+      resistanceNote && criticalPart
+        ? `${criticalPart} · ${resistanceNote}`
+        : resistanceNote || criticalPart;
+
     setDiceResult({
       action: actionName,
       dice,
       result: highest,
       outcome,
-      special: isCritical ? `Critical! (${sixes} sixes)` : "",
+      special,
       isResistance,
       stressCost,
       zeroDice: diceCount === 0,
@@ -4923,6 +5153,398 @@ const CharacterSheetWrapper = ({
                       </label>
                     ))}
                   </div>
+
+                  {/* Vice roll — stress relief (downtime / table agreement) */}
+                  <div
+                    style={{
+                      marginTop: "12px",
+                      paddingTop: "12px",
+                      borderTop: "1px solid #374151",
+                      background: "#1f2937",
+                      borderRadius: "6px",
+                      paddingLeft: "10px",
+                      paddingRight: "10px",
+                      paddingBottom: "10px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: "#f87171",
+                        fontSize: "11px",
+                        fontWeight: "bold",
+                        marginBottom: "6px",
+                        display: "block",
+                      }}
+                    >
+                      VICE ROLL
+                    </span>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "#9ca3af",
+                        lineHeight: 1.45,
+                        marginBottom: "8px",
+                      }}
+                    >
+                      Roll dice equal to your{" "}
+                      <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
+                        lowest attribute
+                      </span>{" "}
+                      (Insight / Prowess / Resolve). Clear stress equal to the{" "}
+                      <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
+                        highest die
+                      </span>
+                      . If that number is greater than stress you had marked,
+                      you{" "}
+                      <span style={{ color: "#fbbf24", fontWeight: "bold" }}>
+                        overindulge
+                      </span>
+                      . Skipping vice in downtime: take stress equal to your
+                      trauma ({traumaMarkedCount}); no trauma means vice cannot
+                      force stress yet.
+                    </div>
+                    {String(charData.vice || "").trim() ? (
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#a78bfa",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        Vice on sheet: {String(charData.vice).trim()}
+                      </div>
+                    ) : null}
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "#d1d5db",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      Pool:{" "}
+                      <span style={{ color: "#a78bfa", fontWeight: "bold" }}>
+                        {viceDicePool}d
+                      </span>
+                      <span style={{ color: "#6b7280" }}>
+                        {" "}
+                        (Insight {viceAttributeDice[0]?.dice ?? 0} · Prowess{" "}
+                        {viceAttributeDice[1]?.dice ?? 0} · Resolve{" "}
+                        {viceAttributeDice[2]?.dice ?? 0})
+                        {viceLowestLabels
+                          ? ` — lowest: ${viceLowestLabels}`
+                          : ""}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDiceResult(null);
+                        const pool = viceDicePool;
+                        let dice;
+                        let highest;
+                        const zeroDice = pool === 0;
+                        if (zeroDice) {
+                          const d1 = Math.floor(Math.random() * 6) + 1;
+                          const d2 = Math.floor(Math.random() * 6) + 1;
+                          highest = Math.min(d1, d2);
+                          dice = [d1, d2];
+                        } else {
+                          dice = Array.from(
+                            { length: pool },
+                            () => Math.floor(Math.random() * 6) + 1,
+                          );
+                          highest = Math.max(...dice);
+                        }
+                        const stressBefore = Number(stressFilled) || 0;
+                        const wouldOverindulge = highest > stressBefore;
+                        setViceRollResult({
+                          dice,
+                          highest,
+                          dicePool: pool,
+                          zeroDice,
+                          wouldOverindulge,
+                          stressBefore,
+                          applied: false,
+                          overindulge: "",
+                          wantedApplyErr: null,
+                          viceApplyErr: null,
+                        });
+                      }}
+                      style={{
+                        ...S.btn,
+                        background: "#7c3aed",
+                        color: "#fff",
+                        fontSize: "11px",
+                      }}
+                    >
+                      Vice roll
+                    </button>
+                    {viceRollResult ? (
+                      <div
+                        style={{
+                          marginTop: "10px",
+                          padding: "8px",
+                          borderRadius: "4px",
+                          background: "#0d1117",
+                          border: "1px solid #374151",
+                          fontSize: "11px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "4px",
+                            flexWrap: "wrap",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          {viceRollResult.dice.map((die, i) => (
+                            <span
+                              key={i}
+                              style={{
+                                display: "inline-flex",
+                                width: "24px",
+                                height: "24px",
+                                borderRadius: "4px",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontWeight: "bold",
+                                border: "1px solid",
+                                background:
+                                  die === 6
+                                    ? "#166534"
+                                    : die >= 4
+                                      ? "#1e3a8a"
+                                      : "#374151",
+                                borderColor:
+                                  die === 6
+                                    ? "#22c55e"
+                                    : die >= 4
+                                      ? "#3b82f6"
+                                      : "#6b7280",
+                              }}
+                            >
+                              {die}
+                            </span>
+                          ))}
+                        </div>
+                        {viceRollResult.zeroDice ? (
+                          <div style={{ color: "#f87171", marginBottom: "4px" }}>
+                            0 rating — rolled 2d, took lower
+                          </div>
+                        ) : null}
+                        <div style={{ color: "#e5e7eb", marginBottom: "4px" }}>
+                          Highest:{" "}
+                          <strong style={{ color: "#34d399" }}>
+                            {viceRollResult.highest}
+                          </strong>{" "}
+                          → clear that many stress (cap at what you had:{" "}
+                          {viceRollResult.stressBefore} marked).
+                        </div>
+                        {viceRollResult.wouldOverindulge ? (
+                          <div
+                            style={{
+                              color: "#fbbf24",
+                              marginBottom: "6px",
+                              fontWeight: "bold",
+                            }}
+                          >
+                            Overindulgence: you cleared more stress than you
+                            had marked — bad call from vice. Choose an outcome
+                            below with the table/GM.
+                          </div>
+                        ) : null}
+                        {viceRollResult.wouldOverindulge &&
+                        !viceRollResult.applied ? (
+                          <select
+                            value={viceRollResult.overindulge || ""}
+                            onChange={(e) =>
+                              setViceRollResult((p) =>
+                                p
+                                  ? {
+                                      ...p,
+                                      overindulge: e.target.value,
+                                      wantedApplyErr: null,
+                                      viceApplyErr: null,
+                                    }
+                                  : p,
+                              )
+                            }
+                            style={{
+                              ...S.sel,
+                              width: "100%",
+                              maxWidth: "100%",
+                              fontSize: "11px",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            {VICE_OVERINDULGE_CHOICES.map((o) => (
+                              <option key={o.value || "none"} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                        {viceRollResult.wouldOverindulge &&
+                        viceRollResult.applied &&
+                        viceRollResult.overindulge ? (
+                          <div
+                            style={{
+                              padding: "6px 8px",
+                              marginBottom: "8px",
+                              borderRadius: "4px",
+                              background: "#422006",
+                              border: "1px solid #a16207",
+                              color: "#fde68a",
+                              fontSize: "11px",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            <strong>Overindulgence:</strong>{" "}
+                            {viceOverindulgeLabel(viceRollResult.overindulge)}
+                          </div>
+                        ) : null}
+                        {viceRollResult.wouldOverindulge &&
+                        viceRollResult.overindulge === "brag" ? (
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#93c5fd",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            Apply will bump this campaign&rsquo;s wanted stars by
+                            +2 (caps at 5) before stress clears.
+                          </div>
+                        ) : null}
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "8px",
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            disabled={!!viceRollResult.applied}
+                            onClick={async () => {
+                              if (!viceRollResult || viceRollResult.applied)
+                                return;
+                              if (
+                                viceRollResult.wouldOverindulge &&
+                                !String(
+                                  viceRollResult.overindulge || "",
+                                ).trim()
+                              ) {
+                                setViceRollResult((p) =>
+                                  p
+                                    ? {
+                                        ...p,
+                                        viceApplyErr:
+                                          "Choose an overindulgence consequence before applying.",
+                                      }
+                                    : p,
+                                );
+                                return;
+                              }
+                              const hi = viceRollResult.highest;
+                              const bumpWanted =
+                                viceRollResult.wouldOverindulge &&
+                                viceRollResult.overindulge === "brag";
+                              try {
+                                setViceRollResult((p) =>
+                                  p ? { ...p, viceApplyErr: null } : p,
+                                );
+                                if (bumpWanted) {
+                                  if (!charCampaign?.id) {
+                                    setViceRollResult((p) =>
+                                      p
+                                        ? {
+                                            ...p,
+                                            wantedApplyErr:
+                                              "No campaign linked; wanted stars not updated.",
+                                          }
+                                        : p,
+                                    );
+                                    return;
+                                  }
+                                  await campaignAPI.incrementCampaignWanted(
+                                    charCampaign.id,
+                                    { amount: 2, cap: 5 },
+                                  );
+                                  onCampaignRefresh?.();
+                                }
+                                setStressFilled((prev) =>
+                                  Math.max(0, (Number(prev) || 0) - hi),
+                                );
+                                setViceRollResult((p) =>
+                                  p
+                                    ? {
+                                        ...p,
+                                        applied: true,
+                                        wantedApplyErr: null,
+                                        viceApplyErr: null,
+                                      }
+                                    : p,
+                                );
+                              } catch (e) {
+                                setViceRollResult((p) =>
+                                  p
+                                    ? {
+                                        ...p,
+                                        wantedApplyErr:
+                                          e.message ||
+                                          "Could not update campaign wanted stars.",
+                                      }
+                                    : p,
+                                );
+                              }
+                            }}
+                            style={{
+                              ...S.btn,
+                              background: "#059669",
+                              color: "#fff",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {viceRollResult.applied
+                              ? "Stress cleared"
+                              : `Apply −${viceRollResult.highest} stress`}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setViceRollResult(null)}
+                            style={{ ...S.btn, fontSize: "11px" }}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                        {viceRollResult.viceApplyErr ? (
+                          <div
+                            style={{
+                              marginTop: "8px",
+                              color: "#fca5a5",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {viceRollResult.viceApplyErr}
+                          </div>
+                        ) : null}
+                        {viceRollResult.wantedApplyErr ? (
+                          <div
+                            style={{
+                              marginTop: "8px",
+                              color: "#fca5a5",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {viceRollResult.wantedApplyErr}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
 
                 {/* Harm + Armor */}
@@ -5131,6 +5753,31 @@ const CharacterSheetWrapper = ({
                         />
                         SPECIAL
                       </label>
+                      {characterHasLegendaryGuard(abilities) ? (
+                        <div
+                          title={
+                            'Standard: Legendary Guard — once per score, completely negate one instance of incoming harm (table tracks when used).'
+                          }
+                          style={{
+                            marginTop: "8px",
+                            padding: "5px 6px",
+                            fontSize: "9px",
+                            lineHeight: 1.3,
+                            color: "#86efac",
+                            background: "#0f172a",
+                            border: "1px solid #166534",
+                            borderRadius: "4px",
+                            maxWidth: "100%",
+                          }}
+                        >
+                          <span style={{ fontWeight: "bold", color: "#bbf7d0" }}>
+                            Legendary Guard
+                          </span>
+                          <span style={{ display: "block", color: "#a7f3d0" }}>
+                            1× / score · negate incoming harm (not armor boxes)
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -6715,13 +7362,27 @@ const CharacterSheetWrapper = ({
                                 {attr}
                               </button>
                               <button
-                                onClick={() =>
+                                onClick={() => {
+                                  const base = getAttributeDice(actions);
+                                  const iw =
+                                    ironWillBonusAppliesToResistanceAttr(attr) &&
+                                    resistanceIronWillBonus &&
+                                    hasIronWillAbility
+                                      ? 1
+                                      : 0;
                                   rollDice(
                                     attr,
-                                    getAttributeDice(actions),
+                                    base + iw,
                                     true,
-                                  )
-                                }
+                                    false,
+                                    undefined,
+                                    iw
+                                      ? {
+                                          resistanceBonusNote: "+1d (Iron Will)",
+                                        }
+                                      : undefined,
+                                  );
+                                }}
                                 style={{
                                   fontSize: "14px",
                                   background: "none",
@@ -6756,6 +7417,29 @@ const CharacterSheetWrapper = ({
                               ))}
                             </div>
                           </div>
+                          {ironWillBonusAppliesToResistanceAttr(attr) &&
+                          hasIronWillAbility ? (
+                            <label
+                              style={{
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                marginBottom: "6px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={resistanceIronWillBonus}
+                                onChange={(e) =>
+                                  setResistanceIronWillBonus(e.target.checked)
+                                }
+                              />
+                              Iron Will (+1d Resolve resistance)
+                            </label>
+                          ) : null}
                           {expandedActionInfo === attr && (
                             <div
                               style={{
@@ -6934,6 +7618,9 @@ const CharacterSheetWrapper = ({
                         }}
                       >
                         Dice pool — {rollPending.actionName}
+                        {Number(rollPending.parryCounterEffectSteps || 0) > 0
+                          ? " — Parry and Break counterattack"
+                          : ""}
                       </div>
                       <div
                         style={{
@@ -6945,6 +7632,20 @@ const CharacterSheetWrapper = ({
                         Preview your pool, check position and effect, add push /
                         assist / bargain, then roll. Cancel to pick another
                         action.
+                        {Number(rollPending.parryCounterEffectSteps || 0) > 0 ? (
+                          <span
+                            style={{
+                              display: "block",
+                              marginTop: "8px",
+                              color: "#6ee7b7",
+                              fontWeight: "600",
+                            }}
+                          >
+                            +1 effect tier step from Parry and Break (successful
+                            resist) — reflected in <strong>Effect</strong> (L / S /
+                            E) beside Position.
+                          </span>
+                        ) : null}
                       </div>
                       {harmLevel3Used && (
                           <div
@@ -6968,10 +7669,10 @@ const CharacterSheetWrapper = ({
                           gap: "16px",
                           flexWrap: "wrap",
                           marginBottom: "12px",
-                          alignItems: "flex-end",
+                          alignItems: "flex-start",
                         }}
                       >
-                        <div>
+                        <div style={{ flex: "1 1 160px", minWidth: 0 }}>
                           <div
                             style={{
                               fontSize: "10px",
@@ -6991,7 +7692,7 @@ const CharacterSheetWrapper = ({
                             readOnly
                           />
                         </div>
-                        <div>
+                        <div style={{ flex: "1 1 180px", minWidth: 0 }}>
                           <div
                             style={{
                               fontSize: "10px",
@@ -6999,16 +7700,33 @@ const CharacterSheetWrapper = ({
                               marginBottom: "4px",
                             }}
                           >
-                            Effect (this action)
+                            Effect (this action — after bonuses)
                           </div>
                           <EffectShapes
-                            activeEffect={
-                              sessionOverridePositionEffect?.effect ||
-                              charCampaign?.active_session_detail?.default_effect ||
-                              "standard"
-                            }
+                            activeEffect={rollModalPreviewEffect}
                             readOnly
                           />
+                          {rollModal.push_effect || totalAbilityEffectSteps > 0 ? (
+                            <div
+                              style={{
+                                fontSize: "9px",
+                                color: "#6ee7b7",
+                                marginTop: "6px",
+                                lineHeight: 1.35,
+                              }}
+                            >
+                              Highlight matches server tier: starts from session default
+                              plus{" "}
+                              {[
+                                rollModal.push_effect && "push (+1 tier)",
+                                totalAbilityEffectSteps > 0 &&
+                                  `${totalAbilityEffectSteps} ability/heritage/Parry step(s)`,
+                              ]
+                                .filter(Boolean)
+                                .join("; ")}
+                              .
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                       <div style={{ marginBottom: "12px" }}>
@@ -7063,10 +7781,300 @@ const CharacterSheetWrapper = ({
                           >
                             Your dice pool
                           </div>
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: "#6b7280",
+                              marginBottom: 8,
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            Tick what applies to <strong>this</strong> roll (fiction only).
+                            Some abilities are hidden here on purpose (counterattack / ally
+                            perks); Iron Will uses the checkbox under RESOLVE resistance.
+                            See{" "}
+                            <code style={{ color: "#9ca3af" }}>
+                              docs/codebase/standard-ability-roll-bonus-audit.md
+                            </code>
+                            . Choices update dice here, are sent on the roll, appear in
+                            session dice history, and add{" "}
+                            <code style={{ color: "#9ca3af" }}>[Abilities: …]</code> /{" "}
+                            <code style={{ color: "#9ca3af" }}>[Heritage: …]</code> on the
+                            stored roll (STANDOUT settle + heritage XP hooks read those).
+                          </div>
                           <DicePoolStrip
                             label="Action rating (dice in this action only)"
                             count={rollPoolPreview.action_rating}
                           />
+                          {abilityRollBonusOptions.length === 0 &&
+                          heritageRollBonusOptions.length === 0 ? (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "#6b7280",
+                                marginTop: 4,
+                                marginBottom: 8,
+                              }}
+                            >
+                              No abilities on this sheet or selected heritage benefits match{" "}
+                              <code style={{ color: "#9ca3af" }}>+1d</code> or{" "}
+                              <code style={{ color: "#9ca3af" }}>+1 effect</code> in their
+                              descriptions.
+                            </div>
+                          ) : null}
+                          {abilityRollBonusOptions.length > 0 ? (
+                            <div style={{ marginTop: 4, marginBottom: 8 }}>
+                              <div
+                                style={{
+                                  fontSize: 10,
+                                  color: "#9ca3af",
+                                  marginBottom: 4,
+                                }}
+                              >
+                                Sheet abilities (optional — hover name for full text)
+                              </div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "6px",
+                                  maxHeight: "140px",
+                                  overflow: "auto",
+                                }}
+                              >
+                                {abilityRollBonusOptions.map((ab) => {
+                                  const id = ab.id ?? ab.name;
+                                  const b = rollAbilityBoost[id] || {};
+                                  return (
+                                    <div
+                                      key={id}
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        gap: "8px",
+                                        fontSize: "11px",
+                                        flexWrap: "wrap",
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          color: "#e5e7eb",
+                                          flex: "1 1 120px",
+                                        }}
+                                        title={
+                                          ab.rollBonusResolvedDescription
+                                            ? String(ab.rollBonusResolvedDescription).slice(0, 800)
+                                            : undefined
+                                        }
+                                      >
+                                        {ab.name}
+                                      </span>
+                                      {ab.supportsDice ? (
+                                        <label
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "4px",
+                                            cursor: "pointer",
+                                          }}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={!!b.dice}
+                                            onChange={(e) =>
+                                              setRollAbilityBoost((p) => ({
+                                                ...p,
+                                                [id]: {
+                                                  ...p[id],
+                                                  dice: e.target.checked,
+                                                  effect: !!p[id]?.effect,
+                                                },
+                                              }))
+                                            }
+                                          />
+                                          +1d
+                                        </label>
+                                      ) : null}
+                                      {ab.supportsEffect ? (
+                                        <label
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "4px",
+                                            cursor: "pointer",
+                                          }}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={!!b.effect}
+                                            onChange={(e) =>
+                                              setRollAbilityBoost((p) => ({
+                                                ...p,
+                                                [id]: {
+                                                  ...p[id],
+                                                  effect: e.target.checked,
+                                                  dice: !!p[id]?.dice,
+                                                },
+                                              }))
+                                            }
+                                          />
+                                          +1 effect
+                                        </label>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : null}
+                          {heritageRollBonusOptions.length > 0 ? (
+                            <div style={{ marginBottom: 8 }}>
+                              <div
+                                style={{
+                                  fontSize: 10,
+                                  color: "#9ca3af",
+                                  marginBottom: 4,
+                                }}
+                              >
+                                Heritage benefits (optional — expression XP when session
+                                active)
+                              </div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "6px",
+                                  maxHeight: "140px",
+                                  overflow: "auto",
+                                }}
+                              >
+                                {heritageRollBonusOptions.map((hb) => {
+                                  const hid = hb.id ?? hb.name;
+                                  const b = heritageRollBoost[hid] || {};
+                                  return (
+                                    <div
+                                      key={hid}
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        gap: "8px",
+                                        fontSize: "11px",
+                                        flexWrap: "wrap",
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          color: "#fde68a",
+                                          flex: "1 1 120px",
+                                        }}
+                                      >
+                                        {hb.name}
+                                      </span>
+                                      {hb.supportsDice ? (
+                                        <label
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "4px",
+                                            cursor: "pointer",
+                                          }}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={!!b.dice}
+                                            onChange={(e) =>
+                                              setHeritageRollBoost((p) => ({
+                                                ...p,
+                                                [hid]: {
+                                                  ...p[hid],
+                                                  dice: e.target.checked,
+                                                  effect: !!p[hid]?.effect,
+                                                },
+                                              }))
+                                            }
+                                          />
+                                          +1d
+                                        </label>
+                                      ) : null}
+                                      {hb.supportsEffect ? (
+                                        <label
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "4px",
+                                            cursor: "pointer",
+                                          }}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={!!b.effect}
+                                            onChange={(e) =>
+                                              setHeritageRollBoost((p) => ({
+                                                ...p,
+                                                [hid]: {
+                                                  ...p[hid],
+                                                  effect: e.target.checked,
+                                                  dice: !!p[hid]?.dice,
+                                                },
+                                              }))
+                                            }
+                                          />
+                                          +1 effect
+                                        </label>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : null}
+                          {characterHasPhantomPain(abilities) ? (
+                            <div style={{ marginTop: 4, marginBottom: 8 }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  gap: "8px",
+                                  fontSize: "11px",
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    color: "#e5e7eb",
+                                    flex: "1 1 120px",
+                                  }}
+                                  title={
+                                    phantomPainRollDescription
+                                      ? phantomPainRollDescription.slice(0, 900)
+                                      : undefined
+                                  }
+                                >
+                                  Phantom Pain
+                                </span>
+                                <label
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={phantomPainThroughCover}
+                                    onChange={(e) =>
+                                      setPhantomPainThroughCover(e.target.checked)
+                                    }
+                                  />
+                                  Through cover/barriers (+1 stress)
+                                </label>
+                              </div>
+                            </div>
+                          ) : null}
                           {rollModal.push_dice ? (
                             <DicePoolStrip
                               label="Push yourself (+1d, costs 2 stress)"
@@ -7093,7 +8101,7 @@ const CharacterSheetWrapper = ({
                           ) : null}
                           {bonusDiceFromAbilities > 0 ? (
                             <DicePoolStrip
-                              label={`Standard abilities (+${bonusDiceFromAbilities}d)`}
+                              label={`Sheet abilities (+${bonusDiceFromAbilities}d)`}
                               count={bonusDiceFromAbilities}
                             />
                           ) : null}
@@ -7102,6 +8110,43 @@ const CharacterSheetWrapper = ({
                               label={`Heritage benefits (+${bonusDiceFromHeritage}d)`}
                               count={bonusDiceFromHeritage}
                             />
+                          ) : null}
+                          {parryCounterEffectStepsActive > 0 ? (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "#6ee7b7",
+                                marginBottom: 6,
+                              }}
+                            >
+                              Parry and Break: +1 effect (counterattack after
+                              resist)
+                            </div>
+                          ) : null}
+                          {totalAbilityEffectSteps > 0 ? (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "#a7f3d0",
+                                marginBottom: 6,
+                              }}
+                            >
+                              Total +{totalAbilityEffectSteps} effect tier step(s)
+                              (abilities / heritage / Parry — applied server-side
+                              before position).
+                            </div>
+                          ) : null}
+                          {phantomPainThroughCover ? (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "#fda4af",
+                                marginBottom: 6,
+                              }}
+                            >
+                              Phantom Pain: +1 stress marked on resolve (attacks
+                              through cover / barriers this roll).
+                            </div>
                           ) : null}
                           {rollPoolPreview.total === 0 ? (
                             <div
@@ -7148,212 +8193,10 @@ const CharacterSheetWrapper = ({
                             >
                               You will spend{" "}
                               <strong>{rollPoolPreview.pushStress}</strong>{" "}
-                              stress when this roll resolves (push).
+                              stress when this roll resolves (push, incap penalty,
+                              Phantom Pain — if checked).
                             </div>
                           ) : null}
-                        </div>
-                      )}
-                      {abilityRollBonusOptions.length > 0 && (
-                        <div style={{ marginBottom: "12px" }}>
-                          <div
-                            style={{
-                              fontSize: "11px",
-                              color: "#9ca3af",
-                              marginBottom: "6px",
-                            }}
-                          >
-                            Standard abilities (optional)
-                          </div>
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "6px",
-                              maxHeight: "140px",
-                              overflow: "auto",
-                            }}
-                          >
-                            {abilityRollBonusOptions.map((ab) => {
-                                const id = ab.id ?? ab.name;
-                                const b = rollAbilityBoost[id] || {};
-                                return (
-                                  <div
-                                    key={id}
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      justifyContent: "space-between",
-                                      gap: "8px",
-                                      fontSize: "11px",
-                                      flexWrap: "wrap",
-                                    }}
-                                  >
-                                    <span
-                                      style={{
-                                        color: "#e5e7eb",
-                                        flex: "1 1 120px",
-                                      }}
-                                    >
-                                      {ab.name}
-                                    </span>
-                                    {ab.supportsDice ? (
-                                      <label
-                                        style={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: "4px",
-                                          cursor: "pointer",
-                                        }}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={!!b.dice}
-                                          onChange={(e) =>
-                                            setRollAbilityBoost((p) => ({
-                                              ...p,
-                                              [id]: {
-                                                ...p[id],
-                                                dice: e.target.checked,
-                                                effect: !!p[id]?.effect,
-                                              },
-                                            }))
-                                          }
-                                        />
-                                        +1d
-                                      </label>
-                                    ) : null}
-                                    {ab.supportsEffect ? (
-                                      <label
-                                        style={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: "4px",
-                                          cursor: "pointer",
-                                        }}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={!!b.effect}
-                                          onChange={(e) =>
-                                            setRollAbilityBoost((p) => ({
-                                              ...p,
-                                              [id]: {
-                                                ...p[id],
-                                                effect: e.target.checked,
-                                                dice: !!p[id]?.dice,
-                                              },
-                                            }))
-                                          }
-                                        />
-                                        +1 effect
-                                      </label>
-                                    ) : null}
-                                  </div>
-                                );
-                              })}
-                          </div>
-                        </div>
-                      )}
-                      {heritageRollBonusOptions.length > 0 && (
-                        <div style={{ marginBottom: "12px" }}>
-                          <div
-                            style={{
-                              fontSize: "11px",
-                              color: "#9ca3af",
-                              marginBottom: "6px",
-                            }}
-                          >
-                            Heritage benefits (optional — marks heritage expression
-                            XP when used with an active session)
-                          </div>
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "6px",
-                              maxHeight: "140px",
-                              overflow: "auto",
-                            }}
-                          >
-                            {heritageRollBonusOptions.map((hb) => {
-                              const hid = hb.id ?? hb.name;
-                              const b = heritageRollBoost[hid] || {};
-                              return (
-                                <div
-                                  key={hid}
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "space-between",
-                                    gap: "8px",
-                                    fontSize: "11px",
-                                    flexWrap: "wrap",
-                                  }}
-                                >
-                                  <span
-                                    style={{
-                                      color: "#fde68a",
-                                      flex: "1 1 120px",
-                                    }}
-                                  >
-                                    {hb.name}
-                                  </span>
-                                  {hb.supportsDice ? (
-                                    <label
-                                      style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "4px",
-                                        cursor: "pointer",
-                                      }}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={!!b.dice}
-                                        onChange={(e) =>
-                                          setHeritageRollBoost((p) => ({
-                                            ...p,
-                                            [hid]: {
-                                              ...p[hid],
-                                              dice: e.target.checked,
-                                              effect: !!p[hid]?.effect,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                      +1d
-                                    </label>
-                                  ) : null}
-                                  {hb.supportsEffect ? (
-                                    <label
-                                      style={{
-                                        display: "flex",
-                                        alignItems: "center",
-                                        gap: "4px",
-                                        cursor: "pointer",
-                                      }}
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={!!b.effect}
-                                        onChange={(e) =>
-                                          setHeritageRollBoost((p) => ({
-                                            ...p,
-                                            [hid]: {
-                                              ...p[hid],
-                                              effect: e.target.checked,
-                                              dice: !!p[hid]?.dice,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                      +1 effect
-                                    </label>
-                                  ) : null}
-                                </div>
-                              );
-                            })}
-                          </div>
                         </div>
                       )}
                       <fieldset
@@ -7501,8 +8344,10 @@ const CharacterSheetWrapper = ({
                           ) : null}
                         </div>
                       </div>
-                      {(bonusDiceFromAbilities > 0 ||
-                        abilityEffectSteps > 0) && (
+                      {(totalBonusDiceFromAbilitiesAndHeritage > 0 ||
+                        abilityEffectSteps + heritageEffectSteps > 0 ||
+                        parryCounterEffectStepsActive > 0 ||
+                        phantomPainThroughCover) && (
                         <div
                           style={{
                             fontSize: "10px",
@@ -7510,9 +8355,15 @@ const CharacterSheetWrapper = ({
                             marginBottom: "8px",
                           }}
                         >
-                          Pool: +{bonusDiceFromAbilities}d from abilities
-                          {abilityEffectSteps > 0
-                            ? `, +${abilityEffectSteps} effect tier step(s)`
+                          Pool modifiers: +
+                          {totalBonusDiceFromAbilitiesAndHeritage}d (abilities /
+                          heritage)
+                          {abilityEffectSteps + heritageEffectSteps > 0 ||
+                          parryCounterEffectStepsActive > 0
+                            ? `; +${abilityEffectSteps + heritageEffectSteps + parryCounterEffectStepsActive} effect tier step(s) total`
+                            : ""}
+                          {phantomPainThroughCover
+                            ? "; Phantom Pain +1 stress"
                             : ""}
                         </div>
                       )}
@@ -7535,7 +8386,8 @@ const CharacterSheetWrapper = ({
                             marginBottom: "8px",
                           }}
                         >
-                          Warning: paying this push stress will overflow your
+                          Warning: marking stress from this roll (push /
+                          incapacity / Phantom Pain / etc.) will overflow your
                           stress track and mark trauma.
                         </div>
                       )}
@@ -7571,6 +8423,7 @@ const CharacterSheetWrapper = ({
                             setRollApiError(null);
                             setRollAbilityBoost({});
                             setHeritageRollBoost({});
+                            setPhantomPainThroughCover(false);
                             setRollGoalDraft("");
                             setDevilBargainConfirmed(false);
                             setRollModal({
@@ -7890,6 +8743,192 @@ const CharacterSheetWrapper = ({
                               </div>
                             </>
                           )}
+                          {(resistanceRollSheetReminderItems.length > 0 ||
+                            (hasParryAndBreakAbility &&
+                              resistanceOutcomeAllowsParryCounterattack(
+                                diceResult.outcome,
+                              ))) ? (
+                            <div
+                              style={{
+                                marginTop: "10px",
+                                paddingTop: "10px",
+                                borderTop: "1px solid #374151",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontSize: "10px",
+                                  color: "#9ca3af",
+                                  marginBottom: "4px",
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                Sheet abilities (optional — hover name for full
+                                text)
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "9px",
+                                  color: "#6b7280",
+                                  marginBottom: "8px",
+                                  lineHeight: 1.35,
+                                }}
+                              >
+                                Reminders from your standard / Hamon / Spin picks.
+                                Table confirms fiction (same idea as “Sheet
+                                abilities” in the dice pool).
+                              </div>
+                              {resistanceRollSheetReminderItems.map((rem) => (
+                                <div
+                                  key={rem.key}
+                                  title={rem.title}
+                                  style={{
+                                    marginBottom: "8px",
+                                    padding: "8px",
+                                    borderRadius: "6px",
+                                    background: "#0f172a",
+                                    border: "1px solid #14532d",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "flex-start",
+                                      justifyContent: "space-between",
+                                      gap: "8px",
+                                      marginBottom: "4px",
+                                    }}
+                                  >
+                                    <span
+                                      style={{
+                                        color: "#6ee7b7",
+                                        fontWeight: "bold",
+                                        fontSize: "11px",
+                                      }}
+                                    >
+                                      {rem.headline}
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontSize: "9px",
+                                        color: "#86efac",
+                                        textTransform: "uppercase",
+                                        flexShrink: 0,
+                                      }}
+                                    >
+                                      {rem.abilityName} · {rem.abilityType}
+                                    </span>
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "10px",
+                                      color: "#d1d5db",
+                                      lineHeight: 1.35,
+                                    }}
+                                  >
+                                    {rem.body}
+                                  </div>
+                                </div>
+                              ))}
+                              {hasParryAndBreakAbility &&
+                              resistanceOutcomeAllowsParryCounterattack(
+                                diceResult.outcome,
+                              ) ? (
+                                <div
+                                  style={{
+                                    marginTop:
+                                      resistanceRollSheetReminderItems.length > 0
+                                        ? "10px"
+                                        : 0,
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      fontSize: "10px",
+                                      color: "#9ca3af",
+                                      marginBottom: "6px",
+                                    }}
+                                  >
+                                    Parry and Break — follow-up action roll
+                                  </div>
+                                  <select
+                                    value={resistanceFollowupChoice}
+                                    onChange={(e) => {
+                                      const v = e.target.value;
+                                      setResistanceFollowupChoice(v);
+                                      if (v !== "parry") {
+                                        setParryCounterattackActionDraft("");
+                                      }
+                                    }}
+                                    style={{
+                                      ...S.sel,
+                                      fontSize: "11px",
+                                      width: "100%",
+                                      marginBottom: "8px",
+                                    }}
+                                  >
+                                    <option value="">(no follow-up roll)</option>
+                                    <option value="parry">
+                                      Optional — counterattack with potency (+1
+                                      effect)
+                                    </option>
+                                  </select>
+                                  {resistanceFollowupChoice === "parry" ? (
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        flexDirection: "column",
+                                        gap: "8px",
+                                      }}
+                                    >
+                                      <select
+                                        value={parryCounterattackActionDraft}
+                                        onChange={(e) =>
+                                          setParryCounterattackActionDraft(
+                                            e.target.value,
+                                          )
+                                        }
+                                        style={{ ...S.sel, fontSize: "11px" }}
+                                      >
+                                        <option value="">
+                                          Choose counterattack action…
+                                        </option>
+                                        {ALL_SHEET_ACTIONS_FOR_PARRY.map(
+                                          (act) => (
+                                            <option key={act} value={act}>
+                                              {act} ({actionRatings[act] ?? 0}d)
+                                            </option>
+                                          ),
+                                        )}
+                                      </select>
+                                      <button
+                                        type="button"
+                                        onClick={openParryCounterattackRoll}
+                                        disabled={
+                                          !parryCounterattackActionDraft ||
+                                          !characterId
+                                        }
+                                        title={
+                                          !characterId
+                                            ? "Link this sheet to a saved character (ID) for the online dice pool modal."
+                                            : undefined
+                                        }
+                                        style={{
+                                          ...S.btn,
+                                          background: "#047857",
+                                          color: "#fff",
+                                          fontSize: "11px",
+                                          opacity: !characterId ? 0.5 : 1,
+                                        }}
+                                      >
+                                        Open dice pool / roll counterattack
+                                      </button>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : null}
                           {resistanceApplyErr ? (
                             <div
                               style={{
@@ -7931,7 +8970,11 @@ const CharacterSheetWrapper = ({
                           </button>
                         )}
                       <button
-                        onClick={() => setDiceResult(null)}
+                        onClick={() => {
+                          setResistanceFollowupChoice("");
+                          setParryCounterattackActionDraft("");
+                          setDiceResult(null);
+                        }}
                         style={{
                           display: "block",
                           marginTop: "6px",
@@ -8481,395 +9524,68 @@ const CharacterSheetWrapper = ({
                     </div>
                   )}
 
-                  {/* Vice roll — stress relief (downtime / table agreement) */}
-                  <div
-                    style={{
-                      marginBottom: "14px",
-                      background: "#1f2937",
-                      border: "1px solid #374151",
-                      borderRadius: "6px",
-                      padding: "10px",
-                    }}
-                  >
-                    <span
-                      style={{
-                        color: "#f87171",
-                        fontSize: "11px",
-                        fontWeight: "bold",
-                        marginBottom: "6px",
-                        display: "block",
-                      }}
-                    >
-                      VICE ROLL
-                    </span>
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "#9ca3af",
-                        lineHeight: 1.45,
-                        marginBottom: "8px",
-                      }}
-                    >
-                      Roll dice equal to your{" "}
-                      <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
-                        lowest attribute
-                      </span>{" "}
-                      (Insight / Prowess / Resolve). Clear stress equal to the{" "}
-                      <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
-                        highest die
-                      </span>
-                      . If that number is greater than stress you had marked, you{" "}
-                      <span style={{ color: "#fbbf24", fontWeight: "bold" }}>
-                        overindulge
-                      </span>
-                      . Skipping vice in downtime: take stress equal to your trauma
-                      ({traumaMarkedCount}); no trauma means vice cannot force stress
-                      yet.
-                    </div>
-                    {String(charData.vice || "").trim() ? (
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          color: "#a78bfa",
-                          marginBottom: "8px",
-                        }}
-                      >
-                        Vice on sheet: {String(charData.vice).trim()}
-                      </div>
-                    ) : null}
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "#d1d5db",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      Pool:{" "}
-                      <span style={{ color: "#a78bfa", fontWeight: "bold" }}>
-                        {viceDicePool}d
-                      </span>
-                      <span style={{ color: "#6b7280" }}>
-                        {" "}
-                        (Insight {viceAttributeDice[0]?.dice ?? 0} · Prowess{" "}
-                        {viceAttributeDice[1]?.dice ?? 0} · Resolve{" "}
-                        {viceAttributeDice[2]?.dice ?? 0})
-                        {viceLowestLabels
-                          ? ` — lowest: ${viceLowestLabels}`
-                          : ""}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDiceResult(null);
-                        const pool = viceDicePool;
-                        let dice;
-                        let highest;
-                        const zeroDice = pool === 0;
-                        if (zeroDice) {
-                          const d1 = Math.floor(Math.random() * 6) + 1;
-                          const d2 = Math.floor(Math.random() * 6) + 1;
-                          highest = Math.min(d1, d2);
-                          dice = [d1, d2];
-                        } else {
-                          dice = Array.from(
-                            { length: pool },
-                            () => Math.floor(Math.random() * 6) + 1,
-                          );
-                          highest = Math.max(...dice);
-                        }
-                        const stressBefore = Number(stressFilled) || 0;
-                        const wouldOverindulge = highest > stressBefore;
-                        setViceRollResult({
-                          dice,
-                          highest,
-                          dicePool: pool,
-                          zeroDice,
-                          wouldOverindulge,
-                          stressBefore,
-                          applied: false,
-                          overindulge: "",
-                          wantedApplyErr: null,
-                          viceApplyErr: null,
-                        });
-                      }}
-                      style={{
-                        ...S.btn,
-                        background: "#7c3aed",
-                        color: "#fff",
-                        fontSize: "11px",
-                      }}
-                    >
-                      Vice roll
-                    </button>
-                    {viceRollResult ? (
-                      <div
-                        style={{
-                          marginTop: "10px",
-                          padding: "8px",
-                          borderRadius: "4px",
-                          background: "#0d1117",
-                          border: "1px solid #374151",
-                          fontSize: "11px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "4px",
-                            flexWrap: "wrap",
-                            marginBottom: "6px",
-                          }}
-                        >
-                          {viceRollResult.dice.map((die, i) => (
-                            <span
-                              key={i}
-                              style={{
-                                display: "inline-flex",
-                                width: "24px",
-                                height: "24px",
-                                borderRadius: "4px",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                fontWeight: "bold",
-                                border: "1px solid",
-                                background:
-                                  die === 6
-                                    ? "#166534"
-                                    : die >= 4
-                                      ? "#1e3a8a"
-                                      : "#374151",
-                                borderColor:
-                                  die === 6
-                                    ? "#22c55e"
-                                    : die >= 4
-                                      ? "#3b82f6"
-                                      : "#6b7280",
-                              }}
-                            >
-                              {die}
-                            </span>
-                          ))}
-                        </div>
-                        {viceRollResult.zeroDice ? (
-                          <div style={{ color: "#f87171", marginBottom: "4px" }}>
-                            0 rating — rolled 2d, took lower
-                          </div>
-                        ) : null}
-                        <div style={{ color: "#e5e7eb", marginBottom: "4px" }}>
-                          Highest:{" "}
-                          <strong style={{ color: "#34d399" }}>
-                            {viceRollResult.highest}
-                          </strong>{" "}
-                          → clear that many stress (cap at what you had:{" "}
-                          {viceRollResult.stressBefore} marked).
-                        </div>
-                        {viceRollResult.wouldOverindulge ? (
-                          <div
-                            style={{
-                              color: "#fbbf24",
-                              marginBottom: "6px",
-                              fontWeight: "bold",
-                            }}
-                          >
-                            Overindulgence: you cleared more stress than you had marked —
-                            bad call from vice. Choose an outcome below with the table/GM.
-                          </div>
-                        ) : null}
-                        {viceRollResult.wouldOverindulge &&
-                        !viceRollResult.applied ? (
-                          <select
-                            value={viceRollResult.overindulge || ""}
-                            onChange={(e) =>
-                              setViceRollResult((p) =>
-                                p
-                                  ? {
-                                      ...p,
-                                      overindulge: e.target.value,
-                                      wantedApplyErr: null,
-                                      viceApplyErr: null,
-                                    }
-                                  : p,
-                              )
-                            }
-                            style={{
-                              ...S.sel,
-                              width: "100%",
-                              maxWidth: "100%",
-                              fontSize: "11px",
-                              marginBottom: "8px",
-                            }}
-                          >
-                            {VICE_OVERINDULGE_CHOICES.map((o) => (
-                              <option key={o.value || "none"} value={o.value}>
-                                {o.label}
-                              </option>
-                            ))}
-                          </select>
-                        ) : null}
-                        {viceRollResult.wouldOverindulge &&
-                        viceRollResult.applied &&
-                        viceRollResult.overindulge ? (
-                          <div
-                            style={{
-                              padding: "6px 8px",
-                              marginBottom: "8px",
-                              borderRadius: "4px",
-                              background: "#422006",
-                              border: "1px solid #a16207",
-                              color: "#fde68a",
-                              fontSize: "11px",
-                              lineHeight: 1.4,
-                            }}
-                          >
-                            <strong>Overindulgence:</strong>{" "}
-                            {viceOverindulgeLabel(viceRollResult.overindulge)}
-                          </div>
-                        ) : null}
-                        {viceRollResult.wouldOverindulge &&
-                        viceRollResult.overindulge === "brag" ? (
-                          <div
-                            style={{
-                              fontSize: "10px",
-                              color: "#93c5fd",
-                              marginBottom: "8px",
-                            }}
-                          >
-                            Apply will bump this campaign&rsquo;s wanted stars by +2
-                            (caps at 5) before stress clears.
-                          </div>
-                        ) : null}
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "8px",
-                            flexWrap: "wrap",
-                            alignItems: "center",
-                          }}
-                        >
-                          <button
-                            type="button"
-                            disabled={!!viceRollResult.applied}
-                            onClick={async () => {
-                              if (!viceRollResult || viceRollResult.applied) return;
-                              if (
-                                viceRollResult.wouldOverindulge &&
-                                !String(
-                                  viceRollResult.overindulge || "",
-                                ).trim()
-                              ) {
-                                setViceRollResult((p) =>
-                                  p
-                                    ? {
-                                        ...p,
-                                        viceApplyErr:
-                                          "Choose an overindulgence consequence before applying.",
-                                      }
-                                    : p,
-                                );
-                                return;
-                              }
-                              const hi = viceRollResult.highest;
-                              const bumpWanted =
-                                viceRollResult.wouldOverindulge &&
-                                viceRollResult.overindulge === "brag";
-                              try {
-                                setViceRollResult((p) =>
-                                  p ? { ...p, viceApplyErr: null } : p,
-                                );
-                                if (bumpWanted) {
-                                  if (!charCampaign?.id) {
-                                    setViceRollResult((p) =>
-                                      p
-                                        ? {
-                                            ...p,
-                                            wantedApplyErr:
-                                              "No campaign linked; wanted stars not updated.",
-                                          }
-                                        : p,
-                                    );
-                                    return;
-                                  }
-                                  await campaignAPI.incrementCampaignWanted(
-                                    charCampaign.id,
-                                    { amount: 2, cap: 5 },
-                                  );
-                                  onCampaignRefresh?.();
-                                }
-                                setStressFilled((prev) =>
-                                  Math.max(0, (Number(prev) || 0) - hi),
-                                );
-                                setViceRollResult((p) =>
-                                  p
-                                    ? {
-                                        ...p,
-                                        applied: true,
-                                        wantedApplyErr: null,
-                                        viceApplyErr: null,
-                                      }
-                                    : p,
-                                );
-                              } catch (e) {
-                                setViceRollResult((p) =>
-                                  p
-                                    ? {
-                                        ...p,
-                                        wantedApplyErr:
-                                          e.message ||
-                                          "Could not update campaign wanted stars.",
-                                      }
-                                    : p,
-                                );
-                              }
-                            }}
-                            style={{
-                              ...S.btn,
-                              background: "#059669",
-                              color: "#fff",
-                              fontSize: "11px",
-                            }}
-                          >
-                            {viceRollResult.applied
-                              ? "Stress cleared"
-                              : `Apply −${viceRollResult.highest} stress`}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setViceRollResult(null)}
-                            style={{ ...S.btn, fontSize: "11px" }}
-                          >
-                            Dismiss
-                          </button>
-                        </div>
-                        {viceRollResult.viceApplyErr ? (
-                          <div
-                            style={{
-                              marginTop: "8px",
-                              color: "#fca5a5",
-                              fontSize: "11px",
-                            }}
-                          >
-                            {viceRollResult.viceApplyErr}
-                          </div>
-                        ) : null}
-                        {viceRollResult.wantedApplyErr ? (
-                          <div
-                            style={{
-                              marginTop: "8px",
-                              color: "#fca5a5",
-                              fontSize: "11px",
-                            }}
-                          >
-                            {viceRollResult.wantedApplyErr}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-
                   {/* Abilities */}
                   <div style={{ marginBottom: "14px" }}>
-                    <span style={S.lbl}>ABILITIES</span>
+                    <button
+                      type="button"
+                      id="character-sheet-abilities-heading"
+                      onClick={() =>
+                        setAbilitiesSectionExpanded((prev) => {
+                          if (prev) {
+                            setCustomAbilityModal(null);
+                            setStandardAbilityPickerOpen(false);
+                            setStandardAbilitySelected(null);
+                            setStandardAbilitySearch("");
+                            setSpinAbilityPickerOpen(false);
+                            setSpinAbilitySelected(null);
+                            setSpinAbilitySearch("");
+                            setHamonAbilityPickerOpen(false);
+                            setHamonAbilitySelected(null);
+                            setHamonAbilitySearch("");
+                          }
+                          return !prev;
+                        })
+                      }
+                      aria-expanded={abilitiesSectionExpanded}
+                      aria-controls="character-sheet-abilities-panel"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        width: "100%",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        marginBottom: "8px",
+                        textAlign: "left",
+                      }}
+                    >
+                      <span
+                        aria-hidden
+                        style={{
+                          color: "#9ca3af",
+                          fontSize: "10px",
+                          lineHeight: 1,
+                          width: "12px",
+                          flexShrink: 0,
+                          userSelect: "none",
+                        }}
+                      >
+                        {abilitiesSectionExpanded ? "\u25bc" : "\u25ba"}
+                      </span>
+                      <span
+                        style={{
+                          color: S.lbl.color,
+                          fontSize: S.lbl.fontSize,
+                          fontWeight: S.lbl.fontWeight,
+                        }}
+                      >
+                        ABILITIES
+                      </span>
+                    </button>
+                    {abilitiesSectionExpanded ? (
+                      <div id="character-sheet-abilities-panel">
                     {abilities.map((ab, abIndex) => {
                       const abKey = ab.id || ab.name || `ability-${abIndex}`;
                       const isExpanded = expandedAbilityId === abKey;
@@ -10228,11 +10944,65 @@ const CharacterSheetWrapper = ({
                         </div>
                       )}
                     </div>
+                      </div>
+                    ) : null}
                   </div>
 
                   {/* Clocks */}
                   <div style={{ marginBottom: "14px" }}>
-                    <span style={S.lbl}>CLOCKS</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setClocksSectionExpanded((prev) => {
+                          if (prev) {
+                            setClockEditorOpen(false);
+                            setNewClockName("");
+                            setNewClockSegments(4);
+                            setNewClockShared(false);
+                          }
+                          return !prev;
+                        })
+                      }
+                      aria-expanded={clocksSectionExpanded}
+                      aria-controls="character-sheet-clocks-panel"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        width: "100%",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        marginBottom: "8px",
+                        textAlign: "left",
+                      }}
+                    >
+                      <span
+                        aria-hidden
+                        style={{
+                          color: "#9ca3af",
+                          fontSize: "10px",
+                          lineHeight: 1,
+                          width: "12px",
+                          flexShrink: 0,
+                          userSelect: "none",
+                        }}
+                      >
+                        {clocksSectionExpanded ? "\u25bc" : "\u25ba"}
+                      </span>
+                      <span
+                        style={{
+                          color: S.lbl.color,
+                          fontSize: S.lbl.fontSize,
+                          fontWeight: S.lbl.fontWeight,
+                        }}
+                      >
+                        CLOCKS
+                      </span>
+                    </button>
+                    {clocksSectionExpanded ? (
+                      <div id="character-sheet-clocks-panel">
                     <div
                       style={{
                         display: "flex",
@@ -10437,7 +11207,6 @@ const CharacterSheetWrapper = ({
                         </div>
                       </div>
                     )}
-                  </div>
 
                   {/* Shared party clocks (player/crew-authored clocks; GM-created clocks live in SESSION > Clocks). */}
                   {charCampaign?.progress_clocks?.length > 0 &&
@@ -10558,6 +11327,9 @@ const CharacterSheetWrapper = ({
                         </div>
                       );
                     })()}
+                      </div>
+                    ) : null}
+                  </div>
 
                   {/* Devil's Bargain modal (above dice pool overlay when both open) */}
                   {showDevilsBargainModal && (
@@ -10671,42 +11443,138 @@ const CharacterSheetWrapper = ({
                   )}
 
                   {/* Notes */}
-                  <div>
-                    <span style={S.lbl}>NOTES</span>
-                    <textarea
-                      placeholder="Notes…"
+                  <div style={{ marginBottom: "14px" }}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNotesInventoryExpanded((prev) => ({
+                          ...prev,
+                          notes: !prev.notes,
+                        }))
+                      }
+                      aria-expanded={notesInventoryExpanded.notes}
+                      aria-controls="character-sheet-notes-panel"
                       style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
                         width: "100%",
-                        height: "80px",
-                        background: "#0d1117",
-                        color: "#fff",
-                        border: "1px solid #374151",
-                        padding: "8px",
-                        fontFamily: "monospace",
-                        fontSize: "12px",
-                        resize: "vertical",
-                        boxSizing: "border-box",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        marginBottom: "8px",
+                        textAlign: "left",
                       }}
-                    />
+                    >
+                      <span
+                        aria-hidden
+                        style={{
+                          color: "#9ca3af",
+                          fontSize: "10px",
+                          lineHeight: 1,
+                          width: "12px",
+                          flexShrink: 0,
+                          userSelect: "none",
+                        }}
+                      >
+                        {notesInventoryExpanded.notes ? "\u25bc" : "\u25ba"}
+                      </span>
+                      <span
+                        style={{
+                          color: S.lbl.color,
+                          fontSize: S.lbl.fontSize,
+                          fontWeight: S.lbl.fontWeight,
+                        }}
+                      >
+                        NOTES
+                      </span>
+                    </button>
+                    {notesInventoryExpanded.notes ? (
+                      <textarea
+                        id="character-sheet-notes-panel"
+                        placeholder="Notes…"
+                        style={{
+                          width: "100%",
+                          height: "80px",
+                          background: "#0d1117",
+                          color: "#fff",
+                          border: "1px solid #374151",
+                          padding: "8px",
+                          fontFamily: "monospace",
+                          fontSize: "12px",
+                          resize: "vertical",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                    ) : null}
                   </div>
                   {/* Inventory */}
-                  <div>
-                    <span style={S.lbl}>INVENTORY</span>
-                    <textarea
-                      placeholder="Inventory…"
+                  <div style={{ marginBottom: "14px" }}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNotesInventoryExpanded((prev) => ({
+                          ...prev,
+                          inventory: !prev.inventory,
+                        }))
+                      }
+                      aria-expanded={notesInventoryExpanded.inventory}
+                      aria-controls="character-sheet-inventory-panel"
                       style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
                         width: "100%",
-                        height: "80px",
-                        background: "#0d1117",
-                        color: "#fff",
-                        border: "1px solid #374151",
-                        padding: "8px",
-                        fontFamily: "monospace",
-                        fontSize: "12px",
-                        resize: "vertical",
-                        boxSizing: "border-box",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        marginBottom: "8px",
+                        textAlign: "left",
                       }}
-                    />
+                    >
+                      <span
+                        aria-hidden
+                        style={{
+                          color: "#9ca3af",
+                          fontSize: "10px",
+                          lineHeight: 1,
+                          width: "12px",
+                          flexShrink: 0,
+                          userSelect: "none",
+                        }}
+                      >
+                        {notesInventoryExpanded.inventory ? "\u25bc" : "\u25ba"}
+                      </span>
+                      <span
+                        style={{
+                          color: S.lbl.color,
+                          fontSize: S.lbl.fontSize,
+                          fontWeight: S.lbl.fontWeight,
+                        }}
+                      >
+                        INVENTORY
+                      </span>
+                    </button>
+                    {notesInventoryExpanded.inventory ? (
+                      <textarea
+                        id="character-sheet-inventory-panel"
+                        placeholder="Inventory…"
+                        style={{
+                          width: "100%",
+                          height: "80px",
+                          background: "#0d1117",
+                          color: "#fff",
+                          border: "1px solid #374151",
+                          padding: "8px",
+                          fontFamily: "monospace",
+                          fontSize: "12px",
+                          resize: "vertical",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                    ) : null}
                   </div>
                 </div>
               </div>

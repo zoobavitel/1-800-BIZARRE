@@ -28,6 +28,7 @@ from ..roll_helpers import (
     award_heritage_expression_xp,
     bump_effect,
     heritage_bonus_labels,
+    max_stress_slots_for_character,
     normalized_trauma_pks,
     normalize_effect,
     normalize_position,
@@ -437,14 +438,28 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 stress_cost += 2
             if push_dice:
                 stress_cost += 2
-            # Character.stress is remaining available stress (same as assist spend).
-            available_stress = max(0, int(getattr(character, "stress", 0) or 0))
-            if stress_cost > available_stress:
+            # Optional ability-linked spend (e.g. Phantom Pain: 1 stress to attack through cover).
+            try:
+                extra_roll_stress_raw = int(request.data.get("extra_roll_stress") or 0)
+            except (TypeError, ValueError):
+                extra_roll_stress_raw = 0
+            extra_roll_stress = max(0, min(6, extra_roll_stress_raw))
+            if roll_type.upper() == "ACTION" and extra_roll_stress > 0:
+                stress_cost += extra_roll_stress
+            # Character.stress is **marked** boxes on the track (same as sheet stressFilled),
+            # not "remaining budget". Spending stress marks more boxes.
+            max_slots = max_stress_slots_for_character(character)
+            stress_marked = max(
+                0, min(max_slots, int(getattr(character, "stress", 0) or 0))
+            )
+            free_slots = max(0, max_slots - stress_marked)
+            if stress_cost > free_slots:
                 return Response(
                     {
                         "error": (
-                            f"Not enough stress. Push costs {stress_cost} stress, "
-                            f"you have {available_stress} available."
+                            f"Not enough empty stress boxes to mark for this roll. "
+                            f"It costs {stress_cost} stress to mark, but only {free_slots} "
+                            f"empty slot(s) remain ({stress_marked}/{max_slots} filled)."
                         )
                     },
                     status=status.HTTP_400_BAD_REQUEST,
@@ -503,16 +518,24 @@ class CharacterViewSet(viewsets.ModelViewSet):
                             {"error": "Must be in the same crew to Help"},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
-                    hs = max(0, int(getattr(assist_helper, "stress", 0) or 0))
+                    hs = max(
+                        0,
+                        min(
+                            _max_stress_for_character(assist_helper),
+                            int(getattr(assist_helper, "stress", 0) or 0),
+                        ),
+                    )
                     helper_max_stress = _max_stress_for_character(assist_helper)
-                    if hs < 1:
+                    if hs >= helper_max_stress:
                         return Response(
-                            {"error": "Helper has no stress to spend"},
+                            {
+                                "error": (
+                                    "Helper's stress track is full (cannot mark another box)."
+                                )
+                            },
                             status=status.HTTP_400_BAD_REQUEST,
                         )
-                    assist_helper.stress = max(
-                        0, min(helper_max_stress, hs - 1)
-                    )
+                    assist_helper.stress = min(helper_max_stress, hs + 1)
                     assist_helper.save(update_fields=["stress"])
                     dice_pool += 1
 
@@ -536,10 +559,11 @@ class CharacterViewSet(viewsets.ModelViewSet):
             dice_results, pool_before_roll, ar_for_tier
         )
 
-        # Deduct stress for push (remaining pool decreases)
+        # Mark stress boxes for push / incapacity / ability spends (filled count increases).
         if stress_cost > 0:
-            current_stress = max(0, int(getattr(character, "stress", 0) or 0))
-            character.stress = max(0, current_stress - stress_cost)
+            max_slots = max_stress_slots_for_character(character)
+            cur = max(0, min(max_slots, int(getattr(character, "stress", 0) or 0)))
+            character.stress = min(max_slots, cur + stress_cost)
             character.save(update_fields=["stress"])
 
         roll = None
@@ -702,14 +726,24 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 {"error": "Must be in the same crew to Help"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        hs = max(0, int(getattr(helper, "stress", 0) or 0))
+        hs = max(
+            0,
+            min(
+                _max_stress_for_character(helper),
+                int(getattr(helper, "stress", 0) or 0),
+            ),
+        )
         helper_max_stress = _max_stress_for_character(helper)
-        if hs < 1:
+        if hs >= helper_max_stress:
             return Response(
-                {"error": "Helper has no stress to spend"},
+                {
+                    "error": (
+                        "Helper's stress track is full (cannot mark another box)."
+                    )
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        helper.stress = max(0, min(helper_max_stress, hs - 1))
+        helper.stress = min(helper_max_stress, hs + 1)
         helper.save(update_fields=["stress"])
         return Response(
             {

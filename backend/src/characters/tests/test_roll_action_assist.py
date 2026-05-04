@@ -72,7 +72,8 @@ class RollActionAssistTests(TestCase):
         self.assertEqual(r.data['total_dice'], 2)
         self.assertEqual(r.data['assist_helper_id'], self.helper.id)
         self.helper.refresh_from_db()
-        self.assertEqual(self.helper.stress, 4)
+        # stress = marked boxes; assist marks one more on the helper.
+        self.assertEqual(self.helper.stress, 6)
 
     def test_assist_rejects_different_crew(self):
         other_crew = Crew.objects.create(name='Other', campaign=self.campaign)
