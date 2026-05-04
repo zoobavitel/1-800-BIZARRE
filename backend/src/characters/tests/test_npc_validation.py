@@ -541,7 +541,7 @@ class NPCApplyEffectTest(TestCase):
         )
         self.assertEqual(resp.status_code, 400)
 
-    def test_harm_clock_type_rejected(self):
+    def test_non_vulnerability_clock_type_rejected(self):
         resp = self._auth_client(self.gm_user).post(
             f"/api/npcs/{self.npc.id}/apply-effect/",
             {"effect": "limited", "clock_type": "harm"},

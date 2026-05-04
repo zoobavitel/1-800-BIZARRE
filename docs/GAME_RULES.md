@@ -119,7 +119,7 @@ Full grade tables (movement, range, stress/armor by grade, Precision effects, De
 
 - **Position:** How bad consequences are (controlled → risky → desperate).
 - **Effect:** How much the action accomplishes; maps to **clock segments:** Zero = 0, Limited = 1, Standard = 2, Great = 3, Extreme = 4+.
-- **Against NPCs:** Players do not deal harm to NPCs. The effect of a successful roll fills an NPC’s clock (vulnerability, harm, or narrative clock): limited = 1 tick, standard = 2, greater = 3. Only the GM applies these ticks (e.g. via the apply-effect API).
+- **Against NPCs:** Players do not deal harm to NPCs. The effect of a successful roll fills an NPC’s **vulnerability clock** (additional fiction clocks are GM/table tools): limited = 1 tick, standard = 2, greater = 3. Only the GM applies these ticks (e.g. via the apply-effect API).
 - **Threat tiers (clocks):** Tier 0 (mooks, no clock), Tier I (4), Tier II (6), Tier III (8), Tier IV (10–12). See SRD for examples.
 - **Factors:** Potency, quality, scale can adjust effect (and position trades). +1 effect abilities apply after GM sets effect; push yourself can add +1 effect (2 stress).
 

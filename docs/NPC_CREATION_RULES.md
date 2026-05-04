@@ -7,7 +7,6 @@ Non-Player Characters (NPCs) provide flexible, streamlined foes and allies for t
 *   **No Action Ratings or Attributes:** NPCs have no action dots (skills) or attributes (Insight, Prowess, Resolve). Their capabilities derive solely from Stand Coin stats and narrative context.
 *   **No XP or Advancement:** NPCs do not earn or spend XP. Their level is fixed at creation based on Stand Coin points.
 *   **No Push Yourself:** Mechanics that spend Stress to push for extra dice or effect do not apply.
-*   **Configurable Harm Clock:** NPCs have a Harm Clock that defaults to 4 segments but can be configured by the GM.
 *   **Durability-Based Vulnerability Clock:** All NPCs have a Vulnerability Clock whose size is determined by their Durability stat.
 
 ## 2. NPC Stand Coin Stats
@@ -85,14 +84,13 @@ A management command `create_npc` is available to facilitate NPC creation.
 *   `--durability <grade>`: Stand Durability rating (S, A, B, C, D, F). Default: D
 *   `--precision <grade>`: Stand Precision rating (S, A, B, C, D, F). Default: F (Narrative only for NPCs)
 *   `--development <grade>`: Stand Development Potential rating (S, A, B, C, D, F). Default: F (Narrative only for NPCs)
-*   `--harm_clock_max <segments>`: The maximum segments for the NPC's Harm Clock. Default: 4
 
 **Example Usage:**
 ```bash
 source ~/.virtualenvs/jojo/bin/activate
-python backend/src/manage.py create_npc "The Shadow Broker" 1 1 --power A --speed B --durability C --range B --harm_clock_max 6
+python backend/src/manage.py create_npc "The Shadow Broker" 1 1 --power A --speed B --durability C --range B
 ```
-This will create an NPC named "The Shadow Broker" in campaign 1, created by user 1, with the specified Stand Coin stats and a 6-segment Harm Clock. Its level and vulnerability clock will be automatically calculated.
+This will create an NPC named "The Shadow Broker" in campaign 1, created by user 1, with the specified Stand Coin stats. Its level and vulnerability clock are derived from Durability and total Stand Coin points.
 
 ## 5. Harm and Clocks: GM-Only
 
@@ -110,9 +108,9 @@ When the GM resolves a player action against an NPC, the roll’s **effect** add
 | Great / Greater | 3   |
 | Extreme  | 4           |
 
-Use the **apply-effect** endpoint: `POST /api/npcs/{id}/apply-effect/` with body `{ "effect": "limited"|"standard"|"greater"|"great"|"extreme", "clock_type": "vulnerability"|"harm" }`. Only the campaign GM (or NPC creator) can call this; players cannot.
+Use the **apply-effect** endpoint: `POST /api/npcs/{id}/apply-effect/` with body `{ "effect": "limited"|"standard"|"greater"|"great"|"extreme", "clock_type": "vulnerability" }`. Only the campaign GM (or NPC creator) can call this; players cannot.
 
-**Clocks:** Per the SRD, NPCs are defeated by filling their **Vulnerability Clock**. The **Harm Clock** can be used for narrative tracking (e.g. pressure, time to activate an ability, or other stakes). Only the GM updates an NPC’s `vulnerability_clock_current`, `harm_clock_current`, or armor usage; these fields are read-only in the API except via the apply-effect action.
+**Clocks:** Per the SRD, NPCs are defeated by filling their **Vulnerability Clock**. Only the GM updates an NPC’s `vulnerability_clock_current` or armor usage; these fields are read-only in the API except via **apply-effect** (and related GM flows).
 
 ## 6. GMing NPCs
 
@@ -120,6 +118,6 @@ When running NPCs, the GM should prioritize narrative and dramatic effect over s
 
 *   **Focus on Narrative:** Use the NPC's stats to inform your descriptions of their actions and capabilities.
 *   **GM Judgment:** Decide when an NPC acts, how effectively they use their abilities, and what consequences arise, based on the fiction and the desired dramatic tension.
-*   **Clocks for Conflict:** Utilize Harm Clocks and Vulnerability Clocks to track progress in conflicts with NPCs, promoting urgency and clear outcomes. All clocks are configured by the GM and are intended to be displayed as indicators to the player characters.
+*   **Clocks for Conflict:** Use the NPC **Vulnerability Clock** (and any separate fiction clocks you add at the table) to track progress against NPCs; the platform surfaces the vulnerability clock for GM/player visibility per session settings.
 *   **Special Durability (S-Rank):** For NPCs with S-rank Durability, remember they cannot be defeated by direct damage. Instead, create clocks for alternative win conditions (e.g., "Expose the User," "Discover Weakness," "Break Will").
 *   **User as Target:** Consider having a separate, smaller clock for the NPC's user if they are vulnerable, offering players a strategic choice.
