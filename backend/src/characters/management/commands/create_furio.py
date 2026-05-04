@@ -62,7 +62,7 @@ class Command(BaseCommand):
         )
         bizarre_intuition, _ = Ability.objects.get_or_create(
             name='Bizarre Intuition',
-            defaults={'type': 'standard', 'description': 'You have a bizarre sense for danger. You cannot be surprised and always act first in ambush situations.'}
+            defaults={'type': 'standard', 'description': 'You have a bizarre sense for danger. You cannot be surprised.'}
         )
         satellite_ball, _ = Ability.objects.get_or_create(
             name='Satellite Ball',

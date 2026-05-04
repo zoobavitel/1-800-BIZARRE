@@ -125,7 +125,7 @@ const SPEED_TABLE = {
     base: "200 ft",
     greater: "—",
     lesser: "—",
-    note: "Acts before everyone",
+    note: "At least Controlled · May act twice before GM cuts to enemies",
   },
   A: { base: "60 ft", greater: "120 ft", lesser: "30 ft", note: "" },
   B: { base: "40 ft", greater: "80 ft", lesser: "20 ft", note: "" },
@@ -1664,8 +1664,28 @@ const NPCSheet = ({
                       <div>Greater: {speedInfo.greater}</div>
                       <div>Lesser: {speedInfo.lesser}</div>
                     </div>
-                    <div style={{ color: "#6b7280", marginTop: "2px" }}>
-                      Initiative: GM's call — NPCs never roll
+                    <div
+                      style={{
+                        color: "#6b7280",
+                        marginTop: "8px",
+                        fontSize: "10px",
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: "#9ca3af",
+                          fontWeight: 600,
+                          marginBottom: "4px",
+                        }}
+                      >
+                        Unexpected action vs PCs
+                      </div>
+                      NPC Speed grade vs. player Speed grade sets starting
+                      position when the NPC acts against players unexpectedly. If
+                      NPC Speed is higher, players begin Desperate. If equal,
+                      Risky. If lower, Risky or Controlled at GM discretion.
+                      Turn order stays narrative — not a fixed initiative list.
                     </div>
                   </div>
 

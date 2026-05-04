@@ -147,11 +147,11 @@ export const PC_STAT_DESC = {
     "Can demolish large buildings and city blocks with ease",
   ],
   speed: [
-    "25(50) ft · Push yourself to dash",
-    "30(60) ft · Acts before F · Push yourself to dash",
-    "35(70) ft · Acts before D, F · Push yourself to dash",
-    "40(80) ft · Acts before C, D, F · Push yourself to dash",
-    "60(120) ft · Acts before B, C, D, F · Push yourself to dash",
+    "25(50) ft · Desperate when ambushed · Push yourself to dash",
+    "30(60) ft · Desperate when ambushed · Push yourself to dash",
+    "35(70) ft · Desperate when ambushed · Risky vs D or F speed attackers · Push yourself to dash",
+    "40(80) ft · Risky when ambushed vs equal or slower threats · Push yourself to dash",
+    "60(120) ft · Risky or better when ambushed · Push yourself to dash",
   ],
   range: [
     "10(20) ft · Extension −2 effect",

@@ -519,13 +519,13 @@ C: Can shatter stone and heavy structural materials
 D: Can break through standard materials (wood, metal plating)   
 F: Human-level strength; baseline to above-average human physical capability
 
-**\- Speed: Determines initiative and mobility (same levels of speed as range):**   
-S: 200 ft movement, acts before everyone, able to act twice before GM cuts to enemies  
-A: 60(120) ft movement, acts before B, C, D, F, push yourself to dash   
-B: 40(80) ft movement, acts before C, D, F, push yourself to dash   
-C: 35(70) ft movement, acts before D, F, push yourself to dash   
-D: 30(60) ft movement, acts before F, push yourself to dash   
-F: 25(50) ft movement, push yourself to dash
+**\- Speed: Determines conflict position and mobility (same levels of speed as range):**   
+**S:** 200ft movement, always starts in at least Controlled position, may act twice before GM cuts to enemies.  
+**A:** 60(120)ft movement, starts in Risky or better when ambushed, push yourself to dash.  
+**B:** 40(80)ft movement, starts in Risky when ambushed against equal or slower threats, push yourself to dash.  
+**C:** 35(70)ft movement, starts in Desperate when ambushed, Risky against D or F speed attackers, push yourself to dash.  
+**D:** 30(60)ft movement, starts in Desperate when ambushed, push yourself to dash.  
+**F:** 25(50)ft movement, starts in Desperate when ambushed, push yourself to dash.
 
 **\- Range:**   
 S: Unlimited range, no range penalties  
@@ -573,8 +573,8 @@ C: Level 2 harm
 D: Level 1 harm  
 F: No significant harm
 
-**\- Speed:**   
-Determines mobility:   
+**\- Speed: Speed and mobility of an NPC’s stand.**  
+*NPC Speed grade vs. player Speed grade determines starting position when the NPC acts against players unexpectedly. If NPC Speed is higher, players begin Desperate. If equal, Risky. If lower, Risky or Controlled at GM discretion:*   
 S: 200 ft movement  
 A: 60 ft  
 B: 40 ft  
@@ -1337,11 +1337,11 @@ It is 5 xp to gain a \+1d in a skill rating. It is 10xp to gain a \+1 stand coin
 
 ## 
 
-## In 1-800(BIZARRE), the outcome of an **All-Out-Brawl** is determined by the player’s wit & resources. 
+In 1-800(BIZARRE), the outcome of an All-Out-Brawl is determined by the player's wit and resources. The order of combat and starting position in conflicts are influenced by relative Speed grades.
 
-The order of combat for players is determined by the speed grade. If a player has a higher speed, they can act first. 
+Relative Speed determines starting position in unexpected conflicts. When players are ambushed or narratively unprepared, they begin in a Desperate position by default. If the GM calls for an immediate resistance roll before a player can take an action, that is itself a signal of Desperate position — the players are reactionary and the threat is already landing. Players with meaningfully higher Speed than the attacker may instead roll an action at Risky position, reflecting their ability to respond before the threat fully lands.
 
-**All-Out-Brawls** and other types of showdowns are presented by the GM during a mission or as an entanglement as the result of gaining a **Wanted Level**. 
+All-Out-Brawls and other types of showdowns are presented by the GM during a mission or as an entanglement from gaining a Wanted Level.
 
 # 💨 Actions in Combat
 
@@ -1851,7 +1851,7 @@ Action categories include:
 | *Stat* | *Description* |
 | ----- | ----- |
 | *Power* | *Raw strength of attacks and effects* |
-| *Speed* | *How fast your Echo moves or acts* |
+| *Speed* | *How fast your Echo moves or acts, effects starting position of most conflicts.* |
 | *Range* | *Operational or targeting distance* |
 | *Durability* | *How much harm it can take before breaking* |
 | *Precision* | *Accuracy and control over fine effects* |
@@ -2710,7 +2710,7 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 * **Ambush:** When you attack from hiding or spring a trap, you get **\+1d.**  
 * **Cascade Effect:** If you roll a 6 from your resistance roll to resist a physical or bizarre consequence, the attacker suffers a mirrored backlash.  
 * **Final Barrage:** When reduced to 0 HP or Level 4 harm, make a **potent Stand attack** before going down.  
-* **Parry and Break:** On a successful resistance roll, counterattack with **potency (+1 effect)** on that strike — as the GM agrees, typically **mark up to 3 segments on a clock** (often a **vulnerability clock**), or **remove a nameless opponent**.  
+* **Parry and Break:** On a successful resistance roll, counterattack with **potency (+1 effect)**.  
 * **Phantom Pain:** Spend 1 stress to make your stand attack through cover, walls, or barriers that would otherwise block it. Works within your stand range.   
 * **Savage:** When you unleash physical violence, it's especially frightening. **When you command a frightened target, take \+1d**.  
 * **Spin-Boosted Blow:** Add Spin to your next Stand attack to supercharge a single strike (adds \+1 effect and \+1d).  
@@ -2720,11 +2720,9 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 
 * **Invigorated:** you recover from harm faster. Permanently fill in one of your healing clock segments. Take **\+1d** to healing treatment rolls.  
 * **Legendary Guard:** Once per score, you may completely negate one instance of incoming harm.  
-* **Battleborn:** You may expend your **stand armor** to reduce harm from an attack in combat or to **push yourself** during a fight.  
 * **Swan Song:** When you'd be taken out (Level 4 harm), spend remaining Stand armor charges to stay standing for one heroic action.  
 * **Iron Will:** You're immune to the terror that some bizarre entities inflict on sight. Take **\+1d** to resistance rolls with **Resolve**.  
 * **Tough as Nails:** Penalties from harm are one level less severe (though level 4 harm is still fatal)  
-* **Fortitude:** Expend your Stand armor to resist a consequence of fatigue, weakness, or chemical effects, or to push yourself when working with technical skill or handling chemicals.  
 * **Overdrive:** While wearing non-Stand armor, gain an extra **\+1 armor**.  
 * **Masochist:** When your Stand takes harm, reduce the user's damage by 1 level. If the Stand hits Level 4 harm, both die.  
 * **Undying Will:** When taking Level 3 harm, you can act normally for one round. Afterwards, actions cost **2 stress**.  
@@ -2741,7 +2739,7 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 
 **Awareness**
 
-* **Bizarre Intuition:** You have a bizarre sense for danger. You cannot be surprised and always act first in ambush situations.  
+* **Bizarre Intuition:** You have a bizarre sense for danger. You cannot be surprised.  
 * **Focused:** You may expend your **stand armor** to resist a consequence of surprise or mental harm (fear, confusion, losing track of someone).  
 * **Like looking into a Mirror:** You can always tell when someone is lying.  
 * **Mastermind:** You’re always aware of supernatural entities in your presence. Take **\+1d** when you **gather info** about the bizarre.  

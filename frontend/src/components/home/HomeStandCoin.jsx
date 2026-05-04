@@ -26,7 +26,7 @@ const STATS = [
     key: "speed",
     label: "Speed",
     grade: "B",
-    blurb: "Initiative and mobility.",
+    blurb: "Conflict position and mobility.",
   },
   {
     key: "range",

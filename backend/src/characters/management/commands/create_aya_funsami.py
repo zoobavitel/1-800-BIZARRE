@@ -93,7 +93,7 @@ class Command(BaseCommand):
             name="Bizarre Intuition",
             defaults={
                 "type": "standard",
-                "description": "You have a bizarre sense for danger. You cannot be surprised and always act first in ambush situations.",
+                "description": "You have a bizarre sense for danger. You cannot be surprised.",
             },
         )
 

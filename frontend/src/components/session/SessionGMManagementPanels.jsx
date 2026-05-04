@@ -428,6 +428,8 @@ export default function SessionGMManagementPanels({
   /** Local crew field drafts; reset when `crews` refetch from parent. */
   const [crewDraftById, setCrewDraftById] = useState({});
   const [showAllRecentRolls, setShowAllRecentRolls] = useState(false);
+  const [manualRollCardOpen, setManualRollCardOpen] = useState(true);
+  const [sessionXpCardOpen, setSessionXpCardOpen] = useState(true);
   const [recentRollSavingId, setRecentRollSavingId] = useState(null);
   const [factionSavingId, setFactionSavingId] = useState(null);
   const [factionDraftById, setFactionDraftById] = useState({});
@@ -2285,17 +2287,44 @@ export default function SessionGMManagementPanels({
             border: "1px solid #374151",
           }}
         >
-          <span
+          <div
             style={{
-              fontSize: "11px",
-              color: "#a78bfa",
-              fontWeight: "bold",
-              display: "block",
-              marginBottom: "8px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+              marginBottom: manualRollCardOpen ? 8 : 0,
             }}
           >
-            Manual dice roll (offline)
-          </span>
+            <span
+              style={{
+                fontSize: "11px",
+                color: "#a78bfa",
+                fontWeight: "bold",
+              }}
+            >
+              Manual dice roll (offline)
+            </span>
+            <button
+              type="button"
+              onClick={() => setManualRollCardOpen((o) => !o)}
+              aria-expanded={manualRollCardOpen}
+              style={{
+                flexShrink: 0,
+                fontSize: 11,
+                color: "#9ca3af",
+                background: "#161b22",
+                border: "1px solid #374151",
+                borderRadius: 4,
+                padding: "4px 8px",
+                cursor: "pointer",
+              }}
+            >
+              {manualRollCardOpen ? "Collapse" : "Expand"}
+            </button>
+          </div>
+          {manualRollCardOpen ? (
+            <>
           <div
             style={{
               fontSize: "10px",
@@ -2504,6 +2533,8 @@ export default function SessionGMManagementPanels({
               {manualRollSaving ? "Saving..." : "Add manual roll"}
             </button>
           </div>
+            </>
+          ) : null}
         </div>
         {manualXp != null && setManualXp != null && onManualXpGrant != null ? (
           <div
@@ -2516,17 +2547,44 @@ export default function SessionGMManagementPanels({
               border: "1px solid #374151",
             }}
           >
-            <span
+            <div
               style={{
-                fontSize: "11px",
-                color: "#a78bfa",
-                fontWeight: "bold",
-                display: "block",
-                marginBottom: "4px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+                marginBottom: sessionXpCardOpen ? 4 : 0,
               }}
             >
-              Session XP
-            </span>
+              <span
+                style={{
+                  fontSize: "11px",
+                  color: "#a78bfa",
+                  fontWeight: "bold",
+                }}
+              >
+                Session XP
+              </span>
+              <button
+                type="button"
+                onClick={() => setSessionXpCardOpen((o) => !o)}
+                aria-expanded={sessionXpCardOpen}
+                style={{
+                  flexShrink: 0,
+                  fontSize: 11,
+                  color: "#9ca3af",
+                  background: "#161b22",
+                  border: "1px solid #374151",
+                  borderRadius: 4,
+                  padding: "4px 8px",
+                  cursor: "pointer",
+                }}
+              >
+                {sessionXpCardOpen ? "Collapse" : "Expand"}
+              </button>
+            </div>
+            {sessionXpCardOpen ? (
+            <>
             <div
               style={{
                 fontSize: "10px",
@@ -3157,6 +3215,8 @@ export default function SessionGMManagementPanels({
                 {manualXpSaving ? "Saving..." : "Add XP"}
               </button>
             </div>
+            </>
+            ) : null}
           </div>
         ) : null}
         <div style={{ display: "grid", gap: 10 }}>

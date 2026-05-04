@@ -4,6 +4,24 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-05-04",
+    "version": null,
+    "sections": [
+      {
+        "title": "Documentation",
+        "items": [
+          "drop NPC harm clock; vulnerability clock only"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "stress as marked track; sheet ability rolls UX"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-05-02",
     "version": null,
     "sections": [
@@ -438,9 +456,7 @@ export const PATCH_NOTES = [
           "Merge pull request #22 from zoobavitel/copilot/inline-faction-creation-npc-sheet",
           "Add TypeScript dependency to package.json",
           "Address code review: bulk_create, consolidate heritage sync, use null for heritage",
-          "Merge branch 'master' into copilot/create-faction-for-npc",
-          "Add heritage, NPC type, and playbook abilities to NPC sheet",
-          "Merge pull request #19 from zoobavitel/copilot/update-repo-name-variables"
+          "Merge branch 'master' into copilot/create-faction-for-npc"
         ]
       },
       {

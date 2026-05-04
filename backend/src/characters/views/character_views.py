@@ -237,7 +237,10 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     "name": "Power",
                     "description": "Physical strength and destructive capability",
                 },
-                {"name": "Speed", "description": "Movement and reaction time"},
+                {
+                    "name": "Speed",
+                    "description": "How fast the Stand moves or acts; affects starting position in most conflicts.",
+                },
                 {
                     "name": "Range",
                     "description": "Distance the Stand can operate from the user",
