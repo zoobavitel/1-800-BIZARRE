@@ -36,7 +36,7 @@
         "name": "Parry and Break",
         "type": "standard",
         "category": "aggression",
-        "description": "On a successful resistance roll, counterattack with potency (+1 effect) on that strike: as the GM agrees, typically mark up to 3 segments on a clock—often a vulnerability clock—or remove a nameless opponent."
+        "description": "On a successful resistance roll, counterattack with potency (+1 effect) on that strike: as the GM agrees, mark clock ticks by effect level (lesser +1, standard +2, greater +3), often on a vulnerability clock, or remove a nameless opponent."
       }
     },
     {
