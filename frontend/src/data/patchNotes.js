@@ -4,6 +4,18 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-05-05",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "track modifier sources and improve session/NPC roll flow"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-05-04",
     "version": null,
     "sections": [
@@ -460,8 +472,7 @@ export const PATCH_NOTES = [
           "Delete .github/workflows/black.yml",
           "Merge branch 'master' into copilot/create-faction-for-npc",
           "Merge pull request #22 from zoobavitel/copilot/inline-faction-creation-npc-sheet",
-          "Add TypeScript dependency to package.json",
-          "Address code review: bulk_create, consolidate heritage sync, use null for heritage"
+          "Add TypeScript dependency to package.json"
         ]
       },
       {

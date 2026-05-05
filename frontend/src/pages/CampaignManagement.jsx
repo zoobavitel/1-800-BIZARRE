@@ -1232,32 +1232,11 @@ function CampaignDetail({
                 fontSize: "12px",
                 display: "flex",
                 alignItems: "center",
-                justifyContent: "space-between",
                 gap: "8px",
                 flexWrap: "wrap",
               }}
             >
               <span>No NPCs assigned to this campaign.</span>
-              {typeof onNavigateToNPC === "function" && (
-                <a
-                  href={buildRouteHref("npcs", { campaignId: campaign.id })}
-                  onClick={(e) =>
-                    handleSpaNavClick(e, () =>
-                      onNavigateToNPC(null, { campaignId: campaign.id }),
-                    )
-                  }
-                  style={{
-                    ...S.btn,
-                    fontSize: "10px",
-                    padding: "2px 6px",
-                    background: "#15803d",
-                    color: "#bbf7d0",
-                    textDecoration: "none",
-                  }}
-                >
-                  Create NPC for this campaign now
-                </a>
-              )}
             </div>
           ) : (
             (campaign.campaign_npcs || []).map((npc) => (
@@ -1395,6 +1374,34 @@ function CampaignDetail({
               >
                 Add
               </button>
+            </div>
+          )}
+          {typeof onNavigateToNPC === "function" && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginTop: "8px",
+              }}
+            >
+              <a
+                href={buildRouteHref("npcs", { campaignId: campaign.id })}
+                onClick={(e) =>
+                  handleSpaNavClick(e, () =>
+                    onNavigateToNPC(null, { campaignId: campaign.id }),
+                  )
+                }
+                style={{
+                  ...S.btn,
+                  fontSize: "10px",
+                  padding: "2px 6px",
+                  background: "#15803d",
+                  color: "#bbf7d0",
+                  textDecoration: "none",
+                }}
+              >
+                Create NPC for this campaign
+              </a>
             </div>
           )}
         </div>
@@ -2483,9 +2490,12 @@ function formatSessionRecordsRollSummary(r, showPositionEffect) {
       String(r.rolled_by_username || "").trim() ||
       String(r.character_name || "").trim() ||
       String(r.character ?? "");
-    const act = String(r.action_name || "").trim().toLowerCase() === "vice"
-      ? "Vice"
-      : String(r.action_name || "").trim() || "Clear stress";
+    const actionName = String(r.action_name || "").trim().toLowerCase();
+    const act = actionName === "vice"
+      ? "Downtime recovery (vice)"
+      : actionName === "recover" || actionName === "recovery"
+        ? "Recovery in play"
+        : String(r.action_name || "").trim() || "Clear stress";
     return `${actor || "unknown"} · ${act} · ${diceStr} → ${outcomeStr}${posEff}`;
   }
 
@@ -3095,15 +3105,20 @@ function SessionDetail({
           action_name: (manualRoll.resistanceAttr || "resolve").toLowerCase(),
           description: "Manual / offline resistance (GM)",
         });
-      } else if (kind === "CLEAR_STRESS") {
+      } else if (kind === "CLEAR_STRESS" || kind === "CLEAR_STRESS_IN_PLAY") {
         const note = String(manualRoll.viceNote || "").trim();
+        const inPlayRecovery = kind === "CLEAR_STRESS_IN_PLAY";
         await rollAPI.createRoll({
           ...base,
           roll_type: "CLEAR_STRESS",
-          action_name: "vice",
+          action_name: inPlayRecovery ? "recover" : "vice",
           description: note
-            ? `Manual vice (offline dice, GM). ${note}`
-            : "Manual vice (offline dice, GM)",
+            ? inPlayRecovery
+              ? `Manual recovery in play (offline dice, GM). ${note}`
+              : `Manual vice (offline dice, GM). ${note}`
+            : inPlayRecovery
+              ? "Manual recovery in play (offline dice, GM)"
+              : "Manual vice (offline dice, GM)",
         });
       } else {
         await rollAPI.createRoll({

@@ -1677,7 +1677,19 @@ Note that it’s the recovering character that takes the recovery action. Healin
 Whenever you suffer new harm, clear any ticks on your healing clock.
 
 **Recovery in Play:**  
-Get treatment to tick your healing clock (like a long-term project). When you fill a clock, each harm is reduced by one level.
+If the situation allows — there's a lull in the action, a healer is present, and the fiction supports it — a PC can receive treatment during a score. This works identically to the downtime Recover activity: the healer rolls **Tinker** and ticks the patient's healing clock. When the clock fills, each harm is reduced by one level.
+
+However, mid-score treatment has two hard constraints the GM must enforce:
+
+**You need time and safety.** Ticking someone's healing clock mid-score requires that the scene isn't actively dangerous around you. Treating a wound while enemies are swinging at you isn't a roll — it just doesn't happen unless a special ability says otherwise. The GM should demand fictional positioning: *where is the healer, is the patient still, what is everyone else doing?*
+
+**Taking new harm resets the clock.** If the patient suffers any harm between treatment sessions — even during the same score — all ticks on the healing clock are cleared immediately. A half-finished clock provides no benefit.
+
+**Mid-Score Without a Special Ability** A PC without a healing special ability can still attempt field treatment during a score if given time and safety. The healer rolls **Tinker**; the patient ticks their healing clock per the result. This is an action, so it costs the healer their moment in the scene and invites the GM to establish a consequence for the time spent.
+
+A PC attempting to treat *themselves* mid-score takes **2 stress** and rolls Tinker normally. Toughing it out with no treatment costs **1 stress** and rolls **0 dice** — you're hoping for a desperate crit.
+
+**Mid-Score With a Special Ability** Certain special abilities — such as the Spin Medico's **Spin Suture** — explicitly override the "time and safety" requirement. These are the only sanctioned path to harm reduction *during active combat*. If an ability says it works mid-combat, it does. If it doesn't say that, treat it as standard mid-score recovery (requiring a lull).
 
 Reduce Stars  
 Say how you reduce Stars on the crew and roll your action. Reduce stars according to the result level:

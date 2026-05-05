@@ -438,6 +438,10 @@ export default function SessionGMManagementPanels({
   const [factionSavingId, setFactionSavingId] = useState(null);
   const [factionDraftById, setFactionDraftById] = useState({});
   const [npcFactionSavingId, setNpcFactionSavingId] = useState(null);
+  const [collapsedCrewCards, setCollapsedCrewCards] = useState({});
+  const [collapsedFactionCards, setCollapsedFactionCards] = useState({});
+  const [collapsedNpcCards, setCollapsedNpcCards] = useState({});
+  const [collapsedPcCards, setCollapsedPcCards] = useState({});
   const [sessionQuickFactionName, setSessionQuickFactionName] = useState("");
   const [sessionQuickFactionBusy, setSessionQuickFactionBusy] = useState(false);
   const [xpLifetimeCharId, setXpLifetimeCharId] = useState("");
@@ -1147,15 +1151,46 @@ export default function SessionGMManagementPanels({
     background: "#0b1220",
   };
 
+  const toggleCollapsedCard = (setter, key) => {
+    setter((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
   const renderNpcSessionCard = (npc) => {
     const inv = invByNpc[npc.id] || {};
     const grades = rawStandToGrades(npc.stand_coin_stats);
     const busy = !!localNpcPatch[npc.id];
     const canEditStand = canEditNpcStandCoin(user, campaign, npc);
     const npcPortraitSrc = resolveMediaUrl(npc.image || npc.image_url || "");
+    const npcCollapseKey = String(npc.id);
+    const npcCollapsed = !!collapsedNpcCards[npcCollapseKey];
     return (
       <div key={npc.id} style={card}>
-        <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: "bold" }}>{npc.name || `NPC ${npc.id}`}</div>
+            <div style={{ fontSize: 10, color: "#9ca3af" }}>
+              {npc.stand_name || "—"}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => toggleCollapsedCard(setCollapsedNpcCards, npcCollapseKey)}
+            style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px" }}
+            title={npcCollapsed ? "Expand NPC card" : "Collapse NPC card"}
+          >
+            {npcCollapsed ? "Expand" : "Collapse"}
+          </button>
+        </div>
+        {!npcCollapsed ? (
+          <>
+            <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
           {npcPortraitSrc ? (
             <img
               src={npcPortraitSrc}
@@ -1175,10 +1210,6 @@ export default function SessionGMManagementPanels({
             />
           ) : null}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: "bold" }}>{npc.name || `NPC ${npc.id}`}</div>
-            <div style={{ fontSize: 10, color: "#9ca3af" }}>
-              {npc.stand_name || "—"}
-            </div>
             <a
               href={buildRouteHref("npcs", { npcId: npc.id })}
               onClick={(e) => handleSpaNavClick(e, () => onNavigateToNPC?.(npc.id))}
@@ -1297,6 +1328,8 @@ export default function SessionGMManagementPanels({
         >
           Remove from session
         </button>
+          </>
+        ) : null}
       </div>
     );
   };
@@ -1337,12 +1370,39 @@ export default function SessionGMManagementPanels({
                 ...prev,
                 [fid]: { ...(prev[fid] || draft), [field]: value },
               }));
+            const factionCollapseKey = String(fid);
+            const factionCollapsed = !!collapsedFactionCards[factionCollapseKey];
             return (
               <div key={`faction-${fid}`} style={factionGroupWrap}>
-                <div style={{ marginBottom: 10 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                    marginBottom: factionCollapsed ? 0 : 10,
+                  }}
+                >
                   <div style={{ fontWeight: "bold", fontSize: 13, color: "#a78bfa" }}>
-                    {name}
+                    {name}{" "}
+                    <span style={{ color: "#9ca3af", fontWeight: 500 }}>
+                      ({npcList.length} NPC{npcList.length === 1 ? "" : "s"})
+                    </span>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      toggleCollapsedCard(setCollapsedFactionCards, factionCollapseKey)
+                    }
+                    style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px" }}
+                    title={factionCollapsed ? "Expand faction card" : "Collapse faction card"}
+                  >
+                    {factionCollapsed ? "Expand" : "Collapse"}
+                  </button>
+                </div>
+                {!factionCollapsed ? (
+                  <>
+                    <div style={{ marginBottom: 10 }}>
                   <div
                     style={{
                       marginTop: 8,
@@ -1462,66 +1522,108 @@ export default function SessionGMManagementPanels({
                       Edit fields here; changes apply to this faction everywhere.
                     </span>
                   </div>
-                </div>
-                <div style={grid}>{npcList.map((npc) => renderNpcSessionCard(npc))}</div>
+                    </div>
+                    <div style={grid}>{npcList.map((npc) => renderNpcSessionCard(npc))}</div>
+                  </>
+                ) : null}
               </div>
             );
           })}
 
           {sessionFactionNpcGroups.ungrouped.length > 0 && (
             <div style={factionGroupWrap}>
-              <div style={{ fontWeight: "bold", fontSize: 13, color: "#a78bfa", marginBottom: 8 }}>
-                No faction
-              </div>
-              <div
-                style={{
-                  marginBottom: 12,
-                  padding: 10,
-                  background: "#111827",
-                  borderRadius: 6,
-                  border: "1px solid #374151",
-                }}
-              >
-                <div style={{ ...lbl, marginBottom: 6 }}>Create faction & assign</div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 8,
-                    alignItems: "center",
-                  }}
-                >
-                  <input
-                    type="text"
-                    value={sessionQuickFactionName}
-                    onChange={(e) => setSessionQuickFactionName(e.target.value)}
-                    placeholder="New faction name"
-                    style={{ ...S.inp, flex: "1 1 160px", minWidth: 140, fontSize: 11 }}
-                    disabled={sessionQuickFactionBusy || saving}
-                  />
-                  <button
-                    type="button"
-                    style={{ ...S.btnPrimary, fontSize: 11 }}
-                    onClick={handleCreateFactionAndAssignUngrouped}
-                    disabled={
-                      sessionQuickFactionBusy ||
-                      saving ||
-                      !campaign?.id ||
-                      !sessionQuickFactionName.trim()
-                    }
-                  >
-                    {sessionQuickFactionBusy
-                      ? "Working…"
-                      : `Create & assign ${sessionFactionNpcGroups.ungrouped.length} NPC(s)`}
-                  </button>
-                </div>
-                <div style={{ fontSize: 9, color: "#6b7280", marginTop: 6 }}>
-                  {`Adds a campaign faction and sets every unfactioned NPC listed below to it (same as choosing it in each card's dropdown after refresh).`}
-                </div>
-              </div>
-              <div style={grid}>
-                {sessionFactionNpcGroups.ungrouped.map((npc) => renderNpcSessionCard(npc))}
-              </div>
+              {(() => {
+                const ungroupedCollapseKey = "ungrouped";
+                const ungroupedCollapsed = !!collapsedFactionCards[ungroupedCollapseKey];
+                const ungroupedCount = sessionFactionNpcGroups.ungrouped.length;
+                return (
+                  <>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 8,
+                        marginBottom: ungroupedCollapsed ? 0 : 8,
+                      }}
+                    >
+                      <div style={{ fontWeight: "bold", fontSize: 13, color: "#a78bfa" }}>
+                        No faction{" "}
+                        <span style={{ color: "#9ca3af", fontWeight: 500 }}>
+                          ({ungroupedCount} NPC{ungroupedCount === 1 ? "" : "s"})
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          toggleCollapsedCard(setCollapsedFactionCards, ungroupedCollapseKey)
+                        }
+                        style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px" }}
+                        title={
+                          ungroupedCollapsed
+                            ? "Expand ungrouped faction card"
+                            : "Collapse ungrouped faction card"
+                        }
+                      >
+                        {ungroupedCollapsed ? "Expand" : "Collapse"}
+                      </button>
+                    </div>
+                    {!ungroupedCollapsed ? (
+                      <>
+                        <div
+                          style={{
+                            marginBottom: 12,
+                            padding: 10,
+                            background: "#111827",
+                            borderRadius: 6,
+                            border: "1px solid #374151",
+                          }}
+                        >
+                          <div style={{ ...lbl, marginBottom: 6 }}>Create faction & assign</div>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: 8,
+                              alignItems: "center",
+                            }}
+                          >
+                            <input
+                              type="text"
+                              value={sessionQuickFactionName}
+                              onChange={(e) => setSessionQuickFactionName(e.target.value)}
+                              placeholder="New faction name"
+                              style={{ ...S.inp, flex: "1 1 160px", minWidth: 140, fontSize: 11 }}
+                              disabled={sessionQuickFactionBusy || saving}
+                            />
+                            <button
+                              type="button"
+                              style={{ ...S.btnPrimary, fontSize: 11 }}
+                              onClick={handleCreateFactionAndAssignUngrouped}
+                              disabled={
+                                sessionQuickFactionBusy ||
+                                saving ||
+                                !campaign?.id ||
+                                !sessionQuickFactionName.trim()
+                              }
+                            >
+                              {sessionQuickFactionBusy
+                                ? "Working…"
+                                : `Create & assign ${sessionFactionNpcGroups.ungrouped.length} NPC(s)`}
+                            </button>
+                          </div>
+                          <div style={{ fontSize: 9, color: "#6b7280", marginTop: 6 }}>
+                            {`Adds a campaign faction and sets every unfactioned NPC listed below to it (same as choosing it in each card's dropdown after refresh).`}
+                          </div>
+                        </div>
+                        <div style={grid}>
+                          {sessionFactionNpcGroups.ungrouped.map((npc) => renderNpcSessionCard(npc))}
+                        </div>
+                      </>
+                    ) : null}
+                  </>
+                );
+              })()}
             </div>
           )}
 
@@ -1635,6 +1737,8 @@ export default function SessionGMManagementPanels({
             {(crews || []).map((crew) => {
               const d = crewDraftById[crew.id] || {};
               const busy = crewSavingId === crew.id;
+              const crewCollapseKey = String(crew.id);
+              const crewCollapsed = !!collapsedCrewCards[crewCollapseKey];
               const playbookLabel =
                 crew.playbook == null
                   ? "—"
@@ -1680,324 +1784,340 @@ export default function SessionGMManagementPanels({
                     <span style={{ fontWeight: "bold", color: "#a78bfa", fontSize: 12 }}>
                       Crew · {(d.name ?? crew.name)?.trim() || `Crew ${crew.id}`}
                     </span>
-                    {busy ? (
-                      <span style={{ fontSize: 10, color: "#9ca3af" }}>Saving…</span>
-                    ) : null}
-                  </div>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-                      gap: 10,
-                      marginTop: 10,
-                    }}
-                  >
-                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <span style={{ fontSize: 10, color: "#9ca3af" }}>Name</span>
-                      <input
-                        style={S.inp}
-                        value={d.name ?? ""}
-                        onChange={(e) =>
-                          setCrewDraftById((p) => ({
-                            ...p,
-                            [crew.id]: { ...(p[crew.id] || {}), name: e.target.value },
-                          }))
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      {busy ? (
+                        <span style={{ fontSize: 10, color: "#9ca3af" }}>Saving…</span>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          toggleCollapsedCard(setCollapsedCrewCards, crewCollapseKey)
                         }
-                        onBlur={() => {
-                          const v = String(d.name || "").trim();
-                          if (v !== String(crew.name || "").trim()) {
-                            patchCrewSnapshot(crew.id, { name: v });
-                          }
-                        }}
-                        disabled={busy}
-                      />
-                    </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <span style={{ fontSize: 10, color: "#9ca3af" }}>Level</span>
-                      <input
-                        style={S.inp}
-                        value={d.level ?? ""}
-                        inputMode="numeric"
-                        onChange={(e) =>
-                          setCrewDraftById((p) => ({
-                            ...p,
-                            [crew.id]: { ...(p[crew.id] || {}), level: e.target.value },
-                          }))
-                        }
-                        onBlur={() => {
-                          const n = parseInt(String(d.level).trim(), 10);
-                          if (!Number.isFinite(n) || n === crew.level) return;
-                          patchCrewSnapshot(crew.id, { level: n });
-                        }}
-                        disabled={busy}
-                      />
-                    </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <span style={{ fontSize: 10, color: "#9ca3af" }}>Hold</span>
-                      <input
-                        style={S.inp}
-                        value={d.hold ?? ""}
-                        onChange={(e) =>
-                          setCrewDraftById((p) => ({
-                            ...p,
-                            [crew.id]: { ...(p[crew.id] || {}), hold: e.target.value },
-                          }))
-                        }
-                        onBlur={() => {
-                          const s = String(d.hold || "").trim();
-                          if (s === String(crew.hold ?? "").trim()) return;
-                          patchCrewSnapshot(crew.id, { hold: s });
-                        }}
-                        disabled={busy}
-                      />
-                    </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <span style={{ fontSize: 10, color: "#9ca3af" }}>Rep</span>
-                      <input
-                        style={S.inp}
-                        value={d.rep ?? ""}
-                        inputMode="numeric"
-                        onChange={(e) =>
-                          setCrewDraftById((p) => ({
-                            ...p,
-                            [crew.id]: { ...(p[crew.id] || {}), rep: e.target.value },
-                          }))
-                        }
-                        onBlur={() => {
-                          const n = parseInt(String(d.rep).trim(), 10);
-                          if (!Number.isFinite(n) || n === crew.rep) return;
-                          patchCrewSnapshot(crew.id, { rep: n });
-                        }}
-                        disabled={busy}
-                      />
-                    </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <span style={{ fontSize: 10, color: "#9ca3af" }}>Wanted ★</span>
-                      <input
-                        style={S.inp}
-                        value={String(campaign?.wanted_stars ?? 0)}
-                        inputMode="numeric"
-                        readOnly
-                        disabled
-                      />
-                      <span style={{ fontSize: 9, color: "#6b7280" }}>
-                        Synced from campaign Wanted Level
-                      </span>
-                    </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <span style={{ fontSize: 10, color: "#9ca3af" }}>Turf (0–6)</span>
-                      <input
-                        style={S.inp}
-                        value={d.turf ?? ""}
-                        inputMode="numeric"
-                        onChange={(e) =>
-                          setCrewDraftById((p) => ({
-                            ...p,
-                            [crew.id]: { ...(p[crew.id] || {}), turf: e.target.value },
-                          }))
-                        }
-                        onBlur={() => {
-                          const n = parseInt(String(d.turf).trim(), 10);
-                          if (!Number.isFinite(n) || n === crew.turf) return;
-                          patchCrewSnapshot(crew.id, { turf: n });
-                        }}
-                        disabled={busy}
-                      />
-                    </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <span style={{ fontSize: 10, color: "#9ca3af" }}>Coin</span>
-                      <input
-                        style={S.inp}
-                        value={d.coin ?? ""}
-                        inputMode="numeric"
-                        onChange={(e) =>
-                          setCrewDraftById((p) => ({
-                            ...p,
-                            [crew.id]: { ...(p[crew.id] || {}), coin: e.target.value },
-                          }))
-                        }
-                        onBlur={() => {
-                          const n = parseInt(String(d.coin).trim(), 10);
-                          if (!Number.isFinite(n) || n === crew.coin) return;
-                          patchCrewSnapshot(crew.id, { coin: n });
-                        }}
-                        disabled={busy}
-                      />
-                    </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <span style={{ fontSize: 10, color: "#9ca3af" }}>Stash</span>
-                      <input
-                        style={S.inp}
-                        value={d.stash ?? ""}
-                        inputMode="numeric"
-                        onChange={(e) =>
-                          setCrewDraftById((p) => ({
-                            ...p,
-                            [crew.id]: { ...(p[crew.id] || {}), stash: e.target.value },
-                          }))
-                        }
-                        onBlur={() => {
-                          const n = parseInt(String(d.stash).trim(), 10);
-                          if (!Number.isFinite(n) || n === crew.stash) return;
-                          patchCrewSnapshot(crew.id, { stash: n });
-                        }}
-                        disabled={busy}
-                      />
-                    </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <span style={{ fontSize: 10, color: "#9ca3af" }}>XP</span>
-                      <input
-                        style={S.inp}
-                        value={d.xp ?? ""}
-                        inputMode="numeric"
-                        onChange={(e) =>
-                          setCrewDraftById((p) => ({
-                            ...p,
-                            [crew.id]: { ...(p[crew.id] || {}), xp: e.target.value },
-                          }))
-                        }
-                        onBlur={() => {
-                          const n = parseInt(String(d.xp).trim(), 10);
-                          if (!Number.isFinite(n) || n === crew.xp) return;
-                          patchCrewSnapshot(crew.id, { xp: n });
-                        }}
-                        disabled={busy}
-                      />
-                    </label>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      <span style={{ fontSize: 10, color: "#9ca3af" }}>
-                        Advancement pts
-                      </span>
-                      <input
-                        style={S.inp}
-                        value={d.advancement_points ?? ""}
-                        inputMode="numeric"
-                        onChange={(e) =>
-                          setCrewDraftById((p) => ({
-                            ...p,
-                            [crew.id]: {
-                              ...(p[crew.id] || {}),
-                              advancement_points: e.target.value,
-                            },
-                          }))
-                        }
-                        onBlur={() => {
-                          const n = parseInt(
-                            String(d.advancement_points).trim(),
-                            10,
-                          );
-                          if (
-                            !Number.isFinite(n) ||
-                            n === crew.advancement_points
-                          )
-                            return;
-                          patchCrewSnapshot(crew.id, {
-                            advancement_points: n,
-                          });
-                        }}
-                        disabled={busy}
-                      />
-                    </label>
-                  </div>
-                  <label
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 4,
-                      marginTop: 10,
-                    }}
-                  >
-                    <span style={{ fontSize: 10, color: "#9ca3af" }}>Description</span>
-                    <textarea
-                      style={{
-                        ...S.inp,
-                        minHeight: 56,
-                        resize: "vertical",
-                        fontFamily: "monospace",
-                        fontSize: 11,
-                      }}
-                      value={d.description ?? ""}
-                      onChange={(e) =>
-                        setCrewDraftById((p) => ({
-                          ...p,
-                          [crew.id]: {
-                            ...(p[crew.id] || {}),
-                            description: e.target.value,
-                          },
-                        }))
-                      }
-                      onBlur={() => {
-                        const v = String(d.description || "");
-                        if (v !== String(crew.description || "")) {
-                          patchCrewSnapshot(crew.id, { description: v });
-                        }
-                      }}
-                      disabled={busy}
-                    />
-                  </label>
-                  <label
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 4,
-                      marginTop: 8,
-                    }}
-                  >
-                    <span style={{ fontSize: 10, color: "#9ca3af" }}>Notes</span>
-                    <textarea
-                      style={{
-                        ...S.inp,
-                        minHeight: 44,
-                        resize: "vertical",
-                        fontFamily: "monospace",
-                        fontSize: 11,
-                      }}
-                      value={d.notes ?? ""}
-                      onChange={(e) =>
-                        setCrewDraftById((p) => ({
-                          ...p,
-                          [crew.id]: { ...(p[crew.id] || {}), notes: e.target.value },
-                        }))
-                      }
-                      onBlur={() => {
-                        const v = String(d.notes || "");
-                        if (v !== String(crew.notes || "")) {
-                          patchCrewSnapshot(crew.id, { notes: v });
-                        }
-                      }}
-                      disabled={busy}
-                    />
-                  </label>
-                  <div style={{ marginTop: 10, fontSize: 10, color: "#6b7280" }}>
-                    <div>
-                      <span style={{ color: "#9ca3af" }}>Playbook: </span>
-                      {playbookLabel}
+                        style={S.btnGhost}
+                        title={crewCollapsed ? "Expand crew card" : "Collapse crew card"}
+                      >
+                        {crewCollapsed ? "Expand" : "Collapse"}
+                      </button>
                     </div>
-                    {crew.proposed_name ? (
-                      <div style={{ marginTop: 4 }}>
-                        <span style={{ color: "#9ca3af" }}>Proposed name: </span>
-                        {crew.proposed_name}
-                      </div>
-                    ) : null}
-                    {memberNames ? (
-                      <div style={{ marginTop: 4 }}>
-                        <span style={{ color: "#9ca3af" }}>Members: </span>
-                        {memberNames}
-                      </div>
-                    ) : null}
-                    {relRows.length > 0 ? (
-                      <div style={{ marginTop: 4 }}>
-                        <span style={{ color: "#9ca3af" }}>Faction rep: </span>
-                        {relRows.join(" · ")}
-                      </div>
-                    ) : null}
-                    {stashFilled != null ? (
-                      <div style={{ marginTop: 4 }}>
-                        <span style={{ color: "#9ca3af" }}>Stash grid: </span>
-                        {stashFilled}/40 filled
-                      </div>
-                    ) : null}
                   </div>
+                  {!crewCollapsed ? (
+                    <>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                          gap: 10,
+                          marginTop: 10,
+                        }}
+                      >
+                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          <span style={{ fontSize: 10, color: "#9ca3af" }}>Name</span>
+                          <input
+                            style={S.inp}
+                            value={d.name ?? ""}
+                            onChange={(e) =>
+                              setCrewDraftById((p) => ({
+                                ...p,
+                                [crew.id]: { ...(p[crew.id] || {}), name: e.target.value },
+                              }))
+                            }
+                            onBlur={() => {
+                              const v = String(d.name || "").trim();
+                              if (v !== String(crew.name || "").trim()) {
+                                patchCrewSnapshot(crew.id, { name: v });
+                              }
+                            }}
+                            disabled={busy}
+                          />
+                        </label>
+                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          <span style={{ fontSize: 10, color: "#9ca3af" }}>Level</span>
+                          <input
+                            style={S.inp}
+                            value={d.level ?? ""}
+                            inputMode="numeric"
+                            onChange={(e) =>
+                              setCrewDraftById((p) => ({
+                                ...p,
+                                [crew.id]: { ...(p[crew.id] || {}), level: e.target.value },
+                              }))
+                            }
+                            onBlur={() => {
+                              const n = parseInt(String(d.level).trim(), 10);
+                              if (!Number.isFinite(n) || n === crew.level) return;
+                              patchCrewSnapshot(crew.id, { level: n });
+                            }}
+                            disabled={busy}
+                          />
+                        </label>
+                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          <span style={{ fontSize: 10, color: "#9ca3af" }}>Hold</span>
+                          <input
+                            style={S.inp}
+                            value={d.hold ?? ""}
+                            onChange={(e) =>
+                              setCrewDraftById((p) => ({
+                                ...p,
+                                [crew.id]: { ...(p[crew.id] || {}), hold: e.target.value },
+                              }))
+                            }
+                            onBlur={() => {
+                              const s = String(d.hold || "").trim();
+                              if (s === String(crew.hold ?? "").trim()) return;
+                              patchCrewSnapshot(crew.id, { hold: s });
+                            }}
+                            disabled={busy}
+                          />
+                        </label>
+                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          <span style={{ fontSize: 10, color: "#9ca3af" }}>Rep</span>
+                          <input
+                            style={S.inp}
+                            value={d.rep ?? ""}
+                            inputMode="numeric"
+                            onChange={(e) =>
+                              setCrewDraftById((p) => ({
+                                ...p,
+                                [crew.id]: { ...(p[crew.id] || {}), rep: e.target.value },
+                              }))
+                            }
+                            onBlur={() => {
+                              const n = parseInt(String(d.rep).trim(), 10);
+                              if (!Number.isFinite(n) || n === crew.rep) return;
+                              patchCrewSnapshot(crew.id, { rep: n });
+                            }}
+                            disabled={busy}
+                          />
+                        </label>
+                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          <span style={{ fontSize: 10, color: "#9ca3af" }}>Wanted ★</span>
+                          <input
+                            style={S.inp}
+                            value={String(campaign?.wanted_stars ?? 0)}
+                            inputMode="numeric"
+                            readOnly
+                            disabled
+                          />
+                          <span style={{ fontSize: 9, color: "#6b7280" }}>
+                            Synced from campaign Wanted Level
+                          </span>
+                        </label>
+                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          <span style={{ fontSize: 10, color: "#9ca3af" }}>Turf (0–6)</span>
+                          <input
+                            style={S.inp}
+                            value={d.turf ?? ""}
+                            inputMode="numeric"
+                            onChange={(e) =>
+                              setCrewDraftById((p) => ({
+                                ...p,
+                                [crew.id]: { ...(p[crew.id] || {}), turf: e.target.value },
+                              }))
+                            }
+                            onBlur={() => {
+                              const n = parseInt(String(d.turf).trim(), 10);
+                              if (!Number.isFinite(n) || n === crew.turf) return;
+                              patchCrewSnapshot(crew.id, { turf: n });
+                            }}
+                            disabled={busy}
+                          />
+                        </label>
+                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          <span style={{ fontSize: 10, color: "#9ca3af" }}>Coin</span>
+                          <input
+                            style={S.inp}
+                            value={d.coin ?? ""}
+                            inputMode="numeric"
+                            onChange={(e) =>
+                              setCrewDraftById((p) => ({
+                                ...p,
+                                [crew.id]: { ...(p[crew.id] || {}), coin: e.target.value },
+                              }))
+                            }
+                            onBlur={() => {
+                              const n = parseInt(String(d.coin).trim(), 10);
+                              if (!Number.isFinite(n) || n === crew.coin) return;
+                              patchCrewSnapshot(crew.id, { coin: n });
+                            }}
+                            disabled={busy}
+                          />
+                        </label>
+                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          <span style={{ fontSize: 10, color: "#9ca3af" }}>Stash</span>
+                          <input
+                            style={S.inp}
+                            value={d.stash ?? ""}
+                            inputMode="numeric"
+                            onChange={(e) =>
+                              setCrewDraftById((p) => ({
+                                ...p,
+                                [crew.id]: { ...(p[crew.id] || {}), stash: e.target.value },
+                              }))
+                            }
+                            onBlur={() => {
+                              const n = parseInt(String(d.stash).trim(), 10);
+                              if (!Number.isFinite(n) || n === crew.stash) return;
+                              patchCrewSnapshot(crew.id, { stash: n });
+                            }}
+                            disabled={busy}
+                          />
+                        </label>
+                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          <span style={{ fontSize: 10, color: "#9ca3af" }}>XP</span>
+                          <input
+                            style={S.inp}
+                            value={d.xp ?? ""}
+                            inputMode="numeric"
+                            onChange={(e) =>
+                              setCrewDraftById((p) => ({
+                                ...p,
+                                [crew.id]: { ...(p[crew.id] || {}), xp: e.target.value },
+                              }))
+                            }
+                            onBlur={() => {
+                              const n = parseInt(String(d.xp).trim(), 10);
+                              if (!Number.isFinite(n) || n === crew.xp) return;
+                              patchCrewSnapshot(crew.id, { xp: n });
+                            }}
+                            disabled={busy}
+                          />
+                        </label>
+                        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          <span style={{ fontSize: 10, color: "#9ca3af" }}>
+                            Advancement pts
+                          </span>
+                          <input
+                            style={S.inp}
+                            value={d.advancement_points ?? ""}
+                            inputMode="numeric"
+                            onChange={(e) =>
+                              setCrewDraftById((p) => ({
+                                ...p,
+                                [crew.id]: {
+                                  ...(p[crew.id] || {}),
+                                  advancement_points: e.target.value,
+                                },
+                              }))
+                            }
+                            onBlur={() => {
+                              const n = parseInt(
+                                String(d.advancement_points).trim(),
+                                10,
+                              );
+                              if (
+                                !Number.isFinite(n) ||
+                                n === crew.advancement_points
+                              )
+                                return;
+                              patchCrewSnapshot(crew.id, {
+                                advancement_points: n,
+                              });
+                            }}
+                            disabled={busy}
+                          />
+                        </label>
+                      </div>
+                      <label
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 4,
+                          marginTop: 10,
+                        }}
+                      >
+                        <span style={{ fontSize: 10, color: "#9ca3af" }}>Description</span>
+                        <textarea
+                          style={{
+                            ...S.inp,
+                            minHeight: 56,
+                            resize: "vertical",
+                            fontFamily: "monospace",
+                            fontSize: 11,
+                          }}
+                          value={d.description ?? ""}
+                          onChange={(e) =>
+                            setCrewDraftById((p) => ({
+                              ...p,
+                              [crew.id]: {
+                                ...(p[crew.id] || {}),
+                                description: e.target.value,
+                              },
+                            }))
+                          }
+                          onBlur={() => {
+                            const v = String(d.description || "");
+                            if (v !== String(crew.description || "")) {
+                              patchCrewSnapshot(crew.id, { description: v });
+                            }
+                          }}
+                          disabled={busy}
+                        />
+                      </label>
+                      <label
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 4,
+                          marginTop: 8,
+                        }}
+                      >
+                        <span style={{ fontSize: 10, color: "#9ca3af" }}>Notes</span>
+                        <textarea
+                          style={{
+                            ...S.inp,
+                            minHeight: 44,
+                            resize: "vertical",
+                            fontFamily: "monospace",
+                            fontSize: 11,
+                          }}
+                          value={d.notes ?? ""}
+                          onChange={(e) =>
+                            setCrewDraftById((p) => ({
+                              ...p,
+                              [crew.id]: { ...(p[crew.id] || {}), notes: e.target.value },
+                            }))
+                          }
+                          onBlur={() => {
+                            const v = String(d.notes || "");
+                            if (v !== String(crew.notes || "")) {
+                              patchCrewSnapshot(crew.id, { notes: v });
+                            }
+                          }}
+                          disabled={busy}
+                        />
+                      </label>
+                      <div style={{ marginTop: 10, fontSize: 10, color: "#6b7280" }}>
+                        <div>
+                          <span style={{ color: "#9ca3af" }}>Playbook: </span>
+                          {playbookLabel}
+                        </div>
+                        {crew.proposed_name ? (
+                          <div style={{ marginTop: 4 }}>
+                            <span style={{ color: "#9ca3af" }}>Proposed name: </span>
+                            {crew.proposed_name}
+                          </div>
+                        ) : null}
+                        {memberNames ? (
+                          <div style={{ marginTop: 4 }}>
+                            <span style={{ color: "#9ca3af" }}>Members: </span>
+                            {memberNames}
+                          </div>
+                        ) : null}
+                        {relRows.length > 0 ? (
+                          <div style={{ marginTop: 4 }}>
+                            <span style={{ color: "#9ca3af" }}>Faction rep: </span>
+                            {relRows.join(" · ")}
+                          </div>
+                        ) : null}
+                        {stashFilled != null ? (
+                          <div style={{ marginTop: 4 }}>
+                            <span style={{ color: "#9ca3af" }}>Stash grid: </span>
+                            {stashFilled}/40 filled
+                          </div>
+                        ) : null}
+                      </div>
+                    </>
+                  ) : null}
                 </div>
               );
             })}
@@ -2027,94 +2147,117 @@ export default function SessionGMManagementPanels({
               (c) => c.character === full.id && c.session === session.id,
             );
             const canSRank = full.gm_can_have_s_rank_stand_stats === true;
+            const pcCollapseKey = `quick-${full.id}`;
+            const pcCollapsed = !!collapsedPcCards[pcCollapseKey];
             return (
               <div key={full.id} style={{ ...card, width: 300 }}>
-                <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                  {portraitSrc ? (
-                    <img
-                      src={portraitSrc}
-                      alt=""
-                      style={{
-                        width: 64,
-                        height: 64,
-                        flexShrink: 0,
-                        objectFit: "cover",
-                        borderRadius: 6,
-                        border: "1px solid #30363d",
-                        background: "#111",
-                      }}
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                      }}
-                    />
-                  ) : null}
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontWeight: "bold" }}>{name}</div>
-                    <a
-                      href={buildRouteHref("character", { characterId: full.id })}
-                      onClick={(e) =>
-                        handleSpaNavClick(e, () => onNavigateToCharacter?.(full.id))
-                      }
-                      style={{ ...S.btn, fontSize: 10, marginTop: 4 }}
-                    >
-                      Open sheet
-                    </a>
-                  </div>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 8,
+                  }}
+                >
+                  <div style={{ fontWeight: "bold", minWidth: 0 }}>{name}</div>
+                  <button
+                    type="button"
+                    onClick={() => toggleCollapsedCard(setCollapsedPcCards, pcCollapseKey)}
+                    style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px" }}
+                    title={pcCollapsed ? "Expand PC card" : "Collapse PC card"}
+                  >
+                    {pcCollapsed ? "Expand" : "Collapse"}
+                  </button>
                 </div>
-                <div style={{ display: "flex", justifyContent: "center" }}>
-                  <NpcsStandCoin
-                    grades={grades}
-                    readouts={readoutsFromGrades(grades)}
-                    onStep={(k, d) => {
-                      const st = full.stand || {};
-                      const next = { ...grades, [k]: stepGrade(grades[k], d) };
-                      setSaving(true);
-                      characterAPI
-                        .patchCharacter(full.id, {
-                          stand: {
-                            ...st,
-                            power: next.power,
-                            speed: next.speed,
-                            range: next.range,
-                            durability: next.durability,
-                            precision: next.precision,
-                            development: next.development,
-                          },
-                        })
-                        .then(() => onRefresh())
-                        .catch((e) => setError(e.message))
-                        .finally(() => setSaving(false));
-                    }}
-                    variant="pc"
-                    pcMaxGrade={canSRank ? "S" : "A"}
-                  />
-                </div>
-                <div style={{ fontSize: 10, color: "#9ca3af", lineHeight: 1.35 }}>
-                  Speed sets mobility and starting-position pressure by comparison. Precision
-                  can swing position/effect. Range shapes distance penalties and practical
-                  effect. Durability maps to stress/armor pressure. Power frames destructive
-                  output. Development frames evolution and ability growth.
-                </div>
-                <div style={lbl}>Actions (dots)</div>
-                <div style={{ fontSize: 10, color: "#9ca3af", maxHeight: 56, overflow: "auto" }}>
-                  {flatActionDots(ad)
-                    .map(([a, d]) => `${a}: ${d}`)
-                    .join(" · ") || "—"}
-                </div>
-                <div style={lbl}>XP tracks</div>
-                <div style={{ fontSize: 10, color: "#9ca3af" }}>
-                  In {xp.insight ?? 0} · Pw {xp.prowess ?? 0} · Re {xp.resolve ?? 0} ·
-                  Pb {xp.playbook ?? 0}
-                </div>
-                <div style={lbl}>Clocks (this session)</div>
-                <ul style={{ margin: 0, paddingLeft: 14, color: "#6b7280" }}>
-                  {pcClks.slice(0, 4).map((c) => (
-                    <li key={c.id}>
-                      {c.name} ({c.filled_segments}/{c.max_segments})
-                    </li>
-                  ))}
-                  {pcClks.length === 0 && <li>—</li>}
-                </ul>
+                {!pcCollapsed ? (
+                  <>
+                    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                      {portraitSrc ? (
+                        <img
+                          src={portraitSrc}
+                          alt=""
+                          style={{
+                            width: 64,
+                            height: 64,
+                            flexShrink: 0,
+                            objectFit: "cover",
+                            borderRadius: 6,
+                            border: "1px solid #30363d",
+                            background: "#111",
+                          }}
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      ) : null}
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <a
+                          href={buildRouteHref("character", { characterId: full.id })}
+                          onClick={(e) =>
+                            handleSpaNavClick(e, () => onNavigateToCharacter?.(full.id))
+                          }
+                          style={{ ...S.btn, fontSize: 10, marginTop: 4 }}
+                        >
+                          Open sheet
+                        </a>
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "center" }}>
+                      <NpcsStandCoin
+                        grades={grades}
+                        readouts={readoutsFromGrades(grades)}
+                        onStep={(k, d) => {
+                          const st = full.stand || {};
+                          const next = { ...grades, [k]: stepGrade(grades[k], d) };
+                          setSaving(true);
+                          characterAPI
+                            .patchCharacter(full.id, {
+                              stand: {
+                                ...st,
+                                power: next.power,
+                                speed: next.speed,
+                                range: next.range,
+                                durability: next.durability,
+                                precision: next.precision,
+                                development: next.development,
+                              },
+                            })
+                            .then(() => onRefresh())
+                            .catch((e) => setError(e.message))
+                            .finally(() => setSaving(false));
+                        }}
+                        variant="pc"
+                        pcMaxGrade={canSRank ? "S" : "A"}
+                      />
+                    </div>
+                    <div style={{ fontSize: 10, color: "#9ca3af", lineHeight: 1.35 }}>
+                      Speed sets mobility and starting-position pressure by comparison. Precision
+                      can swing position/effect. Range shapes distance penalties and practical
+                      effect. Durability maps to stress/armor pressure. Power frames destructive
+                      output. Development frames evolution and ability growth.
+                    </div>
+                    <div style={lbl}>Actions (dots)</div>
+                    <div style={{ fontSize: 10, color: "#9ca3af", maxHeight: 56, overflow: "auto" }}>
+                      {flatActionDots(ad)
+                        .map(([a, d]) => `${a}: ${d}`)
+                        .join(" · ") || "—"}
+                    </div>
+                    <div style={lbl}>XP tracks</div>
+                    <div style={{ fontSize: 10, color: "#9ca3af" }}>
+                      In {xp.insight ?? 0} · Pw {xp.prowess ?? 0} · Re {xp.resolve ?? 0} ·
+                      Pb {xp.playbook ?? 0}
+                    </div>
+                    <div style={lbl}>Clocks (this session)</div>
+                    <ul style={{ margin: 0, paddingLeft: 14, color: "#6b7280" }}>
+                      {pcClks.slice(0, 4).map((c) => (
+                        <li key={c.id}>
+                          {c.name} ({c.filled_segments}/{c.max_segments})
+                        </li>
+                      ))}
+                      {pcClks.length === 0 && <li>—</li>}
+                    </ul>
+                  </>
+                ) : null}
               </div>
             );
           })}
@@ -2373,7 +2516,10 @@ export default function SessionGMManagementPanels({
               >
                 <option value="ACTION">Action</option>
                 <option value="RESISTANCE">Resistance</option>
-                <option value="CLEAR_STRESS">Vice / clear stress</option>
+                <option value="CLEAR_STRESS">Downtime recovery (vice)</option>
+                <option value="CLEAR_STRESS_IN_PLAY">
+                  Recovery in play (clear stress)
+                </option>
               </select>
             </div>
             <div>
@@ -3261,14 +3407,16 @@ export default function SessionGMManagementPanels({
             const fullCharacter =
               (characters || []).find((c) => Number(c?.id) === Number(id)) ||
               ch;
-            const peModifierHints =
+            const pePositionEffectHints =
               getPositionEffectModifierHints(fullCharacter);
-            const pePositionHints = peModifierHints.filter(
+            const pePositionHints = pePositionEffectHints.filter(
               (h) => h.kind === "position" || h.kind === "position/effect",
             );
-            const peEffectHints = peModifierHints.filter(
+            const peEffectHints = pePositionEffectHints.filter(
               (h) => h.kind === "effect" || h.kind === "position/effect",
             );
+            const peCollapseKey = `pe-${id}`;
+            const peCollapsed = !!collapsedPcCards[peCollapseKey];
             return (
               <div
                 key={id}
@@ -3304,34 +3452,36 @@ export default function SessionGMManagementPanels({
                   >
                     {ch.true_name || ch.name || id}
                   </a>
-                  <button
-                    type="button"
-                    onClick={() => mergePosEffect({ [id]: null })}
-                    style={{ ...S.btnGhost, fontSize: 10 }}
-                    disabled={saving}
-                    title="Use session default for this PC"
-                  >
-                    Reset
-                  </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <button
+                      type="button"
+                      onClick={() => mergePosEffect({ [id]: null })}
+                      style={{ ...S.btnGhost, fontSize: 10 }}
+                      disabled={saving}
+                      title="Use session default for this PC"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleCollapsedCard(setCollapsedPcCards, peCollapseKey)}
+                      style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px" }}
+                      title={peCollapsed ? "Expand PC card" : "Collapse PC card"}
+                    >
+                      {peCollapsed ? "Expand" : "Collapse"}
+                    </button>
+                  </div>
                 </div>
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 18,
-                    flexWrap: "wrap",
-                    alignItems: "flex-start",
-                  }}
-                >
+                {!peCollapsed ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 18,
+                      flexWrap: "wrap",
+                      alignItems: "flex-start",
+                    }}
+                  >
                   <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                    <PositionStack
-                      activePosition={pos}
-                      readOnly={saving}
-                      onSelect={(value) =>
-                        mergePosEffect({
-                          [id]: { position: value, effect: eff },
-                        })
-                      }
-                    />
                     <div
                       style={{
                         display: "flex",
@@ -3340,16 +3490,16 @@ export default function SessionGMManagementPanels({
                         gap: 6,
                       }}
                     >
-                      <EffectShapes
-                        activeEffect={eff}
+                      <PositionStack
+                        activePosition={pos}
                         readOnly={saving}
                         onSelect={(value) =>
                           mergePosEffect({
-                            [id]: { position: pos, effect: value },
+                            [id]: { position: value, effect: eff },
                           })
                         }
                       />
-                      {peModifierHints.length > 0 ? (
+                      {pePositionHints.length > 0 ? (
                         <div
                           style={{
                             fontSize: 9,
@@ -3367,38 +3517,72 @@ export default function SessionGMManagementPanels({
                               marginBottom: 2,
                             }}
                           >
-                            SRD ability modifiers (verify)
+                            Position modifiers (verify)
                           </div>
-                          {pePositionHints.length > 0 ? (
-                            <div style={{ color: "#9ca3af", marginBottom: 2 }}>
-                              <strong style={{ color: "#71717a" }}>Position:</strong>{" "}
-                              {pePositionHints.map((h, i) => (
-                                <span key={`pos-${h.bucket}-${h.name}`}>
-                                  {i > 0 ? " · " : ""}
-                                  <span
-                                    title={`${peModifierBucketLabel(h.bucket)} ability — verify on character sheet`}
-                                  >
-                                    {h.name}
-                                  </span>
+                          <div style={{ color: "#9ca3af" }}>
+                            {pePositionHints.map((h, i) => (
+                              <span key={`pos-${h.bucket}-${h.name}`}>
+                                {i > 0 ? " · " : ""}
+                                <span
+                                  title={`${peModifierBucketLabel(h.bucket)} ability — verify on character sheet`}
+                                >
+                                  [{peModifierBucketLabel(h.bucket)}] {h.name}
                                 </span>
-                              ))}
-                            </div>
-                          ) : null}
-                          {peEffectHints.length > 0 ? (
-                            <div style={{ color: "#9ca3af" }}>
-                              <strong style={{ color: "#71717a" }}>Effect:</strong>{" "}
-                              {peEffectHints.map((h, i) => (
-                                <span key={`eff-${h.bucket}-${h.name}`}>
-                                  {i > 0 ? " · " : ""}
-                                  <span
-                                    title={`${peModifierBucketLabel(h.bucket)} ability — verify on character sheet`}
-                                  >
-                                    {h.name}
-                                  </span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-start",
+                        gap: 6,
+                      }}
+                    >
+                      <EffectShapes
+                        activeEffect={eff}
+                        readOnly={saving}
+                        onSelect={(value) =>
+                          mergePosEffect({
+                            [id]: { position: pos, effect: value },
+                          })
+                        }
+                      />
+                      {peEffectHints.length > 0 ? (
+                        <div
+                          style={{
+                            fontSize: 9,
+                            color: "#6b7280",
+                            lineHeight: 1.35,
+                            maxWidth: 220,
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontWeight: 700,
+                              color: "#71717a",
+                              letterSpacing: "0.04em",
+                              textTransform: "uppercase",
+                              marginBottom: 2,
+                            }}
+                          >
+                            Effect modifiers (verify)
+                          </div>
+                          <div style={{ color: "#9ca3af" }}>
+                            {peEffectHints.map((h, i) => (
+                              <span key={`eff-${h.bucket}-${h.name}`}>
+                                {i > 0 ? " · " : ""}
+                                <span
+                                  title={`${peModifierBucketLabel(h.bucket)} ability — verify on character sheet`}
+                                >
+                                  [{peModifierBucketLabel(h.bucket)}] {h.name}
                                 </span>
-                              ))}
-                            </div>
-                          ) : null}
+                              </span>
+                            ))}
+                          </div>
                         </div>
                       ) : null}
                     </div>
@@ -3611,7 +3795,8 @@ export default function SessionGMManagementPanels({
                       ))}
                     </div>
                   </div>
-                </div>
+                  </div>
+                ) : null}
               </div>
             );
           })}

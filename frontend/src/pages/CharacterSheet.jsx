@@ -62,7 +62,6 @@ import {
   characterHasLegendaryGuard,
   characterHasPhantomPain,
   characterHasParryAndBreak,
-  ironWillBonusAppliesToResistanceAttr,
   resistanceOutcomeAllowsParryCounterattack,
 } from "../features/character-sheet/utils/abilityRollBonusMeta";
 import { getResistanceResultSheetAbilityReminders } from "../features/character-sheet/utils/sheetAbilityResistanceReminders";
@@ -554,7 +553,13 @@ const CharacterSheetWrapper = ({
   const canEditSheet = !character?.id || isGM || character?.user_id === user?.id;
   const canCreateManualHistoryRecord = isGM || character?.user_id === user?.id;
   const [activeMode, setActiveMode] = useState("CHARACTER MODE");
-  const charCampaign = campaigns?.find((c) => c.id === character?.campaign);
+  const campaignIdFromCharacter = (() => {
+    const c = character?.campaign;
+    return (typeof c === "object" ? c?.id : c) ?? "";
+  })();
+  const charCampaign = (campaigns || []).find(
+    (c) => String(c?.id ?? "") === String(campaignIdFromCharacter),
+  );
   const activeSessionId =
     charCampaign?.active_session ??
     (typeof charCampaign?.active_session === "object"
@@ -606,8 +611,7 @@ const CharacterSheetWrapper = ({
 
   // Campaign assignment (normalize: backend may send campaign as object or ID)
   const [campaignId, setCampaignId] = useState(() => {
-    const c = character?.campaign;
-    return (typeof c === "object" ? c?.id : c) ?? "";
+    return campaignIdFromCharacter;
   });
 
   // Portrait state
@@ -684,25 +688,40 @@ const CharacterSheetWrapper = ({
     character?.personal_crew_name,
   ]);
 
-  // Auto-populate crew from campaign context when this sheet has no crew yet.
+  // Validate/sync crew from campaign roster whenever campaign membership is present.
   useEffect(() => {
     setCharData((prev) => {
-      if ((prev.crew || "").trim() || prev.crewId) return prev;
       const roster = charCampaign?.campaign_characters || [];
+      if (!Array.isArray(roster) || roster.length === 0) return prev;
       const me = roster.find((c) => String(c.id) === String(characterId));
-      const meCrewName = (me?.crew || me?.personal_crew_name || "").trim();
-      if (me?.crewId || meCrewName) {
+      const meCrewId = me?.crewId ?? me?.crew_id ?? null;
+      const meCrewName = (
+        me?.crew ||
+        me?.crew_name ||
+        me?.personal_crew_name ||
+        ""
+      ).trim();
+      if (meCrewId || meCrewName) {
+        const nextCrewId = meCrewId ?? null;
+        const nextCrew = meCrewName || prev.crew;
+        if (
+          String(prev.crewId ?? "") === String(nextCrewId ?? "") &&
+          String(prev.crew || "") === String(nextCrew || "")
+        ) {
+          return prev;
+        }
         return {
           ...prev,
-          crewId: me?.crewId ?? null,
-          crew: meCrewName || prev.crew,
+          crewId: nextCrewId,
+          crew: nextCrew,
         };
       }
 
+      if ((prev.crew || "").trim() || prev.crewId) return prev;
       const crews = [];
       roster.forEach((c) => {
-        const name = (c?.crew || c?.personal_crew_name || "").trim();
-        const id = c?.crewId ?? null;
+        const name = (c?.crew || c?.crew_name || c?.personal_crew_name || "").trim();
+        const id = c?.crewId ?? c?.crew_id ?? null;
         if (name || id) {
           const key = String(id ?? name).toLowerCase();
           if (!crews.some((x) => x.key === key)) {
@@ -719,7 +738,7 @@ const CharacterSheetWrapper = ({
       }
       return prev;
     });
-  }, [charCampaign?.campaign_characters, characterId]);
+  }, [charCampaign?.id, charCampaign?.campaign_characters, characterId]);
 
   /** Persist crew label: shared campaign crew (PATCH crew) or personal_crew_name / create+link. Used in Character and Crew mode. */
   const commitCrewName = useCallback(async () => {
@@ -989,6 +1008,10 @@ const CharacterSheetWrapper = ({
   const [healingClock, setHealingClock] = useState(
     character?.healingClock ?? 0,
   );
+
+  const [healingRecoverBusy, setHealingRecoverBusy] = useState(false);
+  const [healingRecoverErr, setHealingRecoverErr] = useState(null);
+  const [healingRecoverMsg, setHealingRecoverMsg] = useState("");
 
   // Coin & Stash (API sends coin as array; sheet uses coinFilled number)
   const [coinFilled, setCoinFilled] = useState(
@@ -1391,6 +1414,7 @@ const CharacterSheetWrapper = ({
   const [crewFactionAddBusy, setCrewFactionAddBusy] = useState(false);
   const [crewFactionAddErr, setCrewFactionAddErr] = useState(null);
   const [crewHistoryEntries, setCrewHistoryEntries] = useState([]);
+  const [crewHistoryOpen, setCrewHistoryOpen] = useState(false);
   const crewHydratedRef = useRef(false);
 
   const buildCrewPatchPayload = useCallback(() => {
@@ -1817,6 +1841,7 @@ const CharacterSheetWrapper = ({
 
   // Roll modal for campaign/session context (position, effect, push)
   const [rollPending, setRollPending] = useState(null);
+  const [resistancePending, setResistancePending] = useState(null);
   const [rollModal, setRollModal] = useState({
     push_effect: false,
     push_dice: false,
@@ -1828,6 +1853,7 @@ const CharacterSheetWrapper = ({
   /** Phantom Pain: spend 1 stress when using the ability through cover/barriers (fiction). */
   const [phantomPainThroughCover, setPhantomPainThroughCover] = useState(false);
   const [resistanceAbilityBoost, setResistanceAbilityBoost] = useState({});
+  const [resistancePushDice, setResistancePushDice] = useState(false);
   /** After a successful resist: open action roll with Parry (+1 effect baked in). */
   const [resistanceFollowupChoice, setResistanceFollowupChoice] = useState("");
   const [resistanceMitigationChoice, setResistanceMitigationChoice] = useState("");
@@ -1932,20 +1958,211 @@ const CharacterSheetWrapper = ({
   }, [historyManual.rollType, historyManual.dice, stressFilled]);
 
   const clearHarmSlot = useCallback((target) => {
+    const downgradeMap = {
+      level4: "level3",
+      level3: "level2",
+      level2: "level1",
+      level1: null,
+    };
     const [level, idxRaw] = String(target || "").split(":");
     const idx = parseInt(String(idxRaw || ""), 10);
     if (!level || !Number.isFinite(idx)) return false;
-    let changed = false;
-    setHarm((prev) => {
-      const row = Array.isArray(prev?.[level]) ? [...prev[level]] : [];
-      if (!row.length || idx < 0 || idx >= row.length) return prev;
-      if (!String(row[idx] || "").trim()) return prev;
-      row[idx] = "";
-      changed = true;
-      return { ...prev, [level]: row };
-    });
-    return changed;
+    const cur = {
+      level4: Array.isArray(harm?.level4) ? [...harm.level4] : [""],
+      level3: Array.isArray(harm?.level3) ? [...harm.level3] : [""],
+      level2: Array.isArray(harm?.level2) ? [...harm.level2] : ["", ""],
+      level1: Array.isArray(harm?.level1) ? [...harm.level1] : ["", ""],
+    };
+    const row = cur[level];
+    if (!Array.isArray(row) || idx < 0 || idx >= row.length) return false;
+    const value = String(row[idx] || "").trim();
+    if (!value) return false;
+
+    const nextLevel = downgradeMap[level];
+    row[idx] = "";
+    if (!nextLevel) {
+      setHarm(cur);
+      return true;
+    }
+
+    const toRow = cur[nextLevel];
+    if (!Array.isArray(toRow) || toRow.length === 0) return false;
+    const preferredSlot = idx < toRow.length ? idx : -1;
+    let targetSlot = preferredSlot;
+    if (targetSlot < 0 || String(toRow[targetSlot] || "").trim()) {
+      targetSlot = toRow.findIndex((v) => !String(v || "").trim());
+    }
+    if (targetSlot < 0) return false;
+    toRow[targetSlot] = value;
+    setHarm(cur);
+    return true;
+  }, [harm]);
+
+  const downgradeAllHarmByOneLevel = useCallback((prev) => {
+    const p = normalizeHarmObject(prev);
+    const keep = (v) => String(v || "").trim().length > 0;
+    const l4 = keep(p.level4?.[0]) ? p.level4[0] : "";
+    const l3 = keep(p.level3?.[0]) ? p.level3[0] : "";
+    const l2a = keep(p.level2?.[0]) ? p.level2[0] : "";
+    const l2b = keep(p.level2?.[1]) ? p.level2[1] : "";
+    return {
+      level4: [""],
+      level3: [l4],
+      level2: [l3, ""],
+      level1: [l2a, l2b],
+    };
   }, []);
+
+  const handleHealingClockAdjust = useCallback(
+    (nextFilled) => {
+      const cap = 4;
+      setHealingClock((prev) => {
+        const cur = Math.max(0, Math.min(cap, Number(prev) || 0));
+        const next = Math.max(0, Math.min(cap, Number(nextFilled) || 0));
+        if (next <= cur) return next;
+        const completions = Math.floor(next / cap) - Math.floor(cur / cap);
+        const remainder = next % cap;
+        if (completions > 0) {
+          setHarm((hPrev) => {
+            let out = normalizeHarmObject(hPrev);
+            for (let i = 0; i < completions; i += 1) {
+              out = downgradeAllHarmByOneLevel(out);
+            }
+            return out;
+          });
+        }
+        return remainder;
+      });
+    },
+    [downgradeAllHarmByOneLevel],
+  );
+
+  const advanceHealingClockBySegments = useCallback(
+    (segmentsToAdd) => {
+      const cap = 4;
+      const add = Math.max(0, Math.floor(Number(segmentsToAdd) || 0));
+      if (!add) return;
+      setHealingClock((prev) => {
+        const cur = Math.max(0, Math.min(cap, Number(prev) || 0));
+        const total = cur + add;
+        const completions = Math.floor(total / cap) - Math.floor(cur / cap);
+        const remainder = total % cap;
+        if (completions > 0) {
+          setHarm((hPrev) => {
+            let out = normalizeHarmObject(hPrev);
+            for (let i = 0; i < completions; i += 1) {
+              out = downgradeAllHarmByOneLevel(out);
+            }
+            return out;
+          });
+        }
+        return remainder;
+      });
+    },
+    [downgradeAllHarmByOneLevel],
+  );
+
+  const rollRecoveryTreatment = useCallback((tinkerDice) => {
+    // SRD: Recover uses healer skill (Tinker) then advances healing clock.
+    // 1-3: +1 segment; 4/5: +2; 6: +3; critical (2+ sixes): +5.
+    const diceCount = Math.max(0, Math.floor(Number(tinkerDice) || 0));
+
+    let results = [];
+    let highest = 0;
+    let sixes = 0;
+    let critical = false;
+
+    if (diceCount <= 0) {
+      // No-Tinker approximation: treat like their existing "0 dice" flow by
+      // rolling 2d and taking the lower die.
+      const d1 = Math.floor(Math.random() * 6) + 1;
+      const d2 = Math.floor(Math.random() * 6) + 1;
+      results = [d1, d2];
+      highest = Math.min(d1, d2);
+      sixes = 0;
+      critical = false;
+    } else {
+      results = Array.from({ length: diceCount }, () => {
+        const d = Math.floor(Math.random() * 6) + 1;
+        return d;
+      });
+      highest = Math.max(...results);
+      sixes = results.filter((d) => d === 6).length;
+      critical = sixes >= 2;
+    }
+
+    const segments = critical
+      ? 5
+      : highest >= 6
+        ? 3
+        : highest >= 4
+          ? 2
+          : 1;
+
+    return {
+      results,
+      highest,
+      sixes,
+      critical,
+      segments,
+    };
+  }, []);
+
+  const performHealingRecover = useCallback(
+    (mode) => {
+      // mode: "downtime" | "mid-action"
+      if (!canEditSheet) return;
+      if (healingRecoverBusy) return;
+
+      const isDowntime = mode === "downtime";
+      const isMidAction = mode === "mid-action";
+      if (isDowntime && Boolean(activeSessionId)) return;
+      if (isMidAction && !activeSessionId) return;
+
+      const tinkerDice = Math.max(
+        0,
+        Math.floor(Number(actionRatings?.TINKER) || 0),
+      );
+
+      setHealingRecoverBusy(true);
+      setHealingRecoverErr(null);
+      setHealingRecoverMsg("");
+
+      try {
+        // SRD (self-treat): downtime self-recover takes 2 stress; mid-score self
+        // treatment takes 2 stress.
+        applyStressCost(2);
+
+        const roll = rollRecoveryTreatment(tinkerDice);
+        advanceHealingClockBySegments(roll.segments);
+
+        const bandText = roll.critical
+          ? "critical"
+          : roll.highest >= 6
+            ? "6"
+            : roll.highest >= 4
+              ? "4/5"
+              : "1-3";
+
+        setHealingRecoverMsg(
+          `${mode.replace("-", " ")}: Tinker (${tinkerDice}d) rolled ${bandText} → +${roll.segments} healing segments`,
+        );
+      } catch (e) {
+        setHealingRecoverErr(e?.message || "Recover failed");
+      } finally {
+        setHealingRecoverBusy(false);
+      }
+    },
+    [
+      activeSessionId,
+      actionRatings,
+      advanceHealingClockBySegments,
+      applyStressCost,
+      canEditSheet,
+      healingRecoverBusy,
+      rollRecoveryTreatment,
+    ],
+  );
 
   const xpReqSnapshot = useMemo(
     () =>
@@ -2635,6 +2852,15 @@ const CharacterSheetWrapper = ({
   ]);
 
   const heritageRollBonusOptions = useMemo(() => {
+    const supportsActionRollFromHeritage = (benefit) => {
+      const name = String(benefit?.name || "").trim().toLowerCase();
+      const desc = String(benefit?.description || "").trim().toLowerCase();
+      // Resistance-only bonuses (e.g., Superior Physiology) should not appear
+      // in action roll pool modifiers.
+      if (name === "superior physiology") return false;
+      if (/\bresist(?:ing|ance)?\b/.test(desc)) return false;
+      return true;
+    };
     const hid = charData?.heritage;
     const h =
       hid != null && Array.isArray(heritages) && heritages.length
@@ -2654,7 +2880,11 @@ const CharacterSheetWrapper = ({
         supportsDice: supportsAbilityBonusDice(b.description),
         supportsEffect: supportsAbilityBonusEffect(b.description),
       }))
-      .filter((hb) => hb.supportsDice || hb.supportsEffect);
+      .filter(
+        (hb) =>
+          supportsActionRollFromHeritage(hb) &&
+          (hb.supportsDice || hb.supportsEffect),
+      );
   }, [
     charData?.heritage,
     heritages,
@@ -3134,6 +3364,19 @@ const CharacterSheetWrapper = ({
         sourceType: "standard",
       });
     }
+    const hasSuperiorPhysiology = heritageAutoAbilities.some(
+      (a) => normalizeAbilityName(a?.name) === "superior physiology",
+    );
+    if (hasSuperiorPhysiology) {
+      opts.push({
+        id: "superior-physiology",
+        name: "Superior Physiology",
+        bonusDice: 1,
+        appliesTo: "PROWESS",
+        sourceType: "heritage",
+        description: "+1d to resisting physical harm.",
+      });
+    }
     const stayingPower = combinedAbilitiesForDisplay.find(
       (a) => normalizeAbilityName(a?.name) === "staying power",
     );
@@ -3151,7 +3394,47 @@ const CharacterSheetWrapper = ({
       });
     }
     return opts;
-  }, [combinedAbilitiesForDisplay, hasIronWillAbility]);
+  }, [combinedAbilitiesForDisplay, hasIronWillAbility, heritageAutoAbilities]);
+
+  const resistancePoolPreview = useMemo(() => {
+    if (!resistancePending) return null;
+    const attr = String(resistancePending.attr || "").toUpperCase();
+    const base = Math.max(0, Number(resistancePending.baseDice) || 0);
+    const options = resistanceAbilityOptions.filter((opt) => {
+      const appliesTo = String(opt.appliesTo || "").toUpperCase();
+      return appliesTo === "ALL" || appliesTo === attr;
+    });
+    const activeBonusOptions = options.filter(
+      (opt) =>
+        !!resistanceAbilityBoost[opt.id] &&
+        Math.max(0, Number(opt.bonusDice) || 0) > 0,
+    );
+    const bonusDice = activeBonusOptions.reduce(
+      (sum, opt) => sum + Math.max(0, Number(opt.bonusDice) || 0),
+      0,
+    );
+    const pushBonusDice = resistancePushDice ? 1 : 0;
+    const extraStress = resistancePushDice ? 2 : 0;
+    return {
+      attr,
+      base,
+      bonusDice,
+      pushBonusDice,
+      extraStress,
+      total: base + bonusDice + pushBonusDice,
+      zeroDice: base + bonusDice + pushBonusDice <= 0,
+      options,
+      activeBonusNames: activeBonusOptions.map(
+        (opt) => `${opt.name} (+${Math.max(0, Number(opt.bonusDice) || 0)}d)`,
+      ),
+      hasPostRollOptions: options.some((opt) => !!opt.mitigationOnly),
+    };
+  }, [
+    resistancePending,
+    resistanceAbilityOptions,
+    resistanceAbilityBoost,
+    resistancePushDice,
+  ]);
 
   const resistanceRollSheetReminderItems = useMemo(() => {
     if (
@@ -3180,6 +3463,7 @@ const CharacterSheetWrapper = ({
     extras,
   ) => {
     if (characterId && !isResistance) {
+      setResistancePending(null);
       setRollPending({
         actionName,
         diceCount,
@@ -3207,6 +3491,8 @@ const CharacterSheetWrapper = ({
     }
 
     if (isResistance) {
+      setResistancePending(null);
+      setResistancePushDice(false);
       setResistanceFollowupChoice("");
       setResistanceMitigationChoice("");
       setParryCounterattackActionDraft("");
@@ -3248,6 +3534,15 @@ const CharacterSheetWrapper = ({
         ? -1
         : Math.max(0, 6 - highest)
       : null;
+    const resistanceExtraStress =
+      isResistance &&
+      extras &&
+      typeof extras === "object" &&
+      Number(extras.resistanceExtraStress) > 0
+        ? Number(extras.resistanceExtraStress)
+        : 0;
+    const resistanceTotalStressCost =
+      isResistance ? Math.max(0, Number(stressCost) || 0) + resistanceExtraStress : null;
 
     const resistanceNote =
       extras &&
@@ -3283,6 +3578,15 @@ const CharacterSheetWrapper = ({
         timing: "post_roll",
       });
     }
+    if (isResistance && resistancePushDice) {
+      resistanceSourceRows.push({
+        kind: "push",
+        name: "Push yourself",
+        delta: "+1d",
+        category: "system",
+        timing: "pre_roll",
+      });
+    }
     if (isResistance && hasNoFeedDetriment && charData.fed_today === false) {
       resistanceSourceRows.push({
         kind: "feed_penalty",
@@ -3301,10 +3605,18 @@ const CharacterSheetWrapper = ({
       special,
       isResistance,
       stressCost,
+      resistanceExtraStress,
+      resistanceTotalStressCost,
       zeroDice: diceCount === 0,
       isDesperateAction,
       isCritical,
       resistanceSources: isResistance ? resistanceSourceRows : [],
+      ...(isResistance
+        ? {
+            resistanceHarmReductionCount: 0,
+            resistanceApplied: false,
+          }
+        : {}),
     });
     setResistanceApplyErr(null);
     setResistanceHarmTarget("");
@@ -3337,8 +3649,8 @@ const CharacterSheetWrapper = ({
           ),
           roller_stress_spent: Math.max(0, Number(stressCost) || 0),
           modifier_sources: resistanceSourceRows,
-          stress_sources:
-            stressCost > 0
+          stress_sources: [
+            ...(stressCost > 0
               ? [
                   {
                     kind: "resistance",
@@ -3347,7 +3659,19 @@ const CharacterSheetWrapper = ({
                     category: "system",
                   },
                 ]
-              : resistanceSourceRows.filter((x) => x.kind === "feed_penalty"),
+              : []),
+            ...(resistanceExtraStress > 0
+              ? [
+                  {
+                    kind: "push",
+                    name: "Push yourself",
+                    delta: `+${resistanceExtraStress} stress`,
+                    category: "system",
+                  },
+                ]
+              : []),
+            ...resistanceSourceRows.filter((x) => x.kind === "feed_penalty"),
+          ],
           position_effect_sources: [],
         });
         onCampaignRefresh?.();
@@ -3355,6 +3679,19 @@ const CharacterSheetWrapper = ({
         // Keep local resistance flow even if history save fails.
       }
     }
+  };
+
+  const openResistanceRollPreview = (attr, actions) => {
+    const base = Math.max(0, Number(getAttributeDice(actions)) || 0);
+    setRollPending(null);
+    setRollApiError(null);
+    setResistanceApplyErr(null);
+    setResistanceHarmTarget("");
+    setResistancePushDice(false);
+    setResistancePending({
+      attr: String(attr || "").toUpperCase(),
+      baseDice: base,
+    });
   };
 
   const addClock = () => {
@@ -3377,6 +3714,22 @@ const CharacterSheetWrapper = ({
     setNewClockShared(false);
     setClockEditorOpen(false);
   };
+
+  const addPerfectOrganismEntityClock = useCallback((sizeLabel, segments) => {
+    const segs = Math.max(1, Math.min(12, Number(segments) || 4));
+    const stamp = Date.now();
+    setClocks((p) => [
+      ...p,
+      {
+        id: `po-${stamp}-${Math.random().toString(16).slice(2, 8)}`,
+        name: `Perfect Organism — ${sizeLabel}`,
+        segments: segs,
+        filled: 0,
+        visible_to_party: false,
+      },
+    ]);
+    setClocksSectionExpanded(true);
+  }, []);
 
   const buildPayload = useCallback(() => {
     const backendId =
@@ -5745,16 +6098,8 @@ const CharacterSheetWrapper = ({
                                 setStressFilled((prev) =>
                                   Math.max(0, (Number(prev) || 0) - hi),
                                 );
-                                setViceRollResult((p) =>
-                                  p
-                                    ? {
-                                        ...p,
-                                        applied: true,
-                                        wantedApplyErr: null,
-                                        viceApplyErr: null,
-                                      }
-                                    : p,
-                                );
+                                // Once stress is applied, close the result card.
+                                setViceRollResult(null);
                               } catch (e) {
                                 setViceRollResult((p) =>
                                   p
@@ -5861,7 +6206,11 @@ const CharacterSheetWrapper = ({
                                 const row = Array.isArray(p[key])
                                   ? [...p[key]]
                                   : Array(count).fill("");
+                                const hadValue = String(row[0] || "").trim().length > 0;
                                 row[0] = e.target.value;
+                                const hasNewValue =
+                                  String(e.target.value || "").trim().length > 0;
+                                if (!hadValue && hasNewValue) setHealingClock(0);
                                 return { ...p, [key]: row };
                               })
                             }
@@ -5920,7 +6269,12 @@ const CharacterSheetWrapper = ({
                                     const row = Array.isArray(p[key])
                                       ? [...p[key]]
                                       : Array(count).fill("");
+                                    const hadValue =
+                                      String(row[idx] || "").trim().length > 0;
                                     row[idx] = e.target.value;
+                                    const hasNewValue =
+                                      String(e.target.value || "").trim().length > 0;
+                                    if (!hadValue && hasNewValue) setHealingClock(0);
                                     return { ...p, [key]: row };
                                   })
                                 }
@@ -5946,8 +6300,84 @@ const CharacterSheetWrapper = ({
                         segments={4}
                         filled={healingClock}
                         interactive
-                        onClick={setHealingClock}
+                        onClick={handleHealingClockAdjust}
                       />
+
+                      <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+                        <button
+                          type="button"
+                          onClick={() => performHealingRecover("downtime")}
+                          disabled={
+                            healingRecoverBusy ||
+                            !canEditSheet ||
+                            Boolean(activeSessionId)
+                          }
+                          style={{
+                            ...S.btn,
+                            fontSize: "11px",
+                            background: "#0f766e",
+                            color: "#f8fafc",
+                            opacity:
+                              healingRecoverBusy ||
+                              !canEditSheet ||
+                              Boolean(activeSessionId)
+                                ? 0.6
+                                : 1,
+                          }}
+                          title="Downtime Recover: treat yourself. SRD stress cost: 2. Roll Tinker for healing clock segments (1-3:+1, 4/5:+2, 6:+3, critical:+5)."
+                        >
+                          downtime recover
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => performHealingRecover("mid-action")}
+                          disabled={
+                            healingRecoverBusy ||
+                            !canEditSheet ||
+                            !Boolean(activeSessionId)
+                          }
+                          style={{
+                            ...S.btn,
+                            fontSize: "11px",
+                            background: "#4338ca",
+                            color: "#ffffff",
+                            opacity:
+                              healingRecoverBusy ||
+                              !canEditSheet ||
+                              !Boolean(activeSessionId)
+                                ? 0.6
+                                : 1,
+                          }}
+                          title="Mid-action recover: treat yourself mid-score. Requires time & safety (SRD). SRD stress cost: 2. Roll Tinker for healing clock segments (1-3:+1, 4/5:+2, 6:+3, critical:+5)."
+                        >
+                          mid-action recover
+                        </button>
+                      </div>
+
+                      {healingRecoverErr ? (
+                        <div
+                          style={{
+                            marginTop: "6px",
+                            fontSize: "11px",
+                            color: "#fca5a5",
+                            textAlign: "center",
+                          }}
+                        >
+                          {healingRecoverErr}
+                        </div>
+                      ) : null}
+                      {healingRecoverMsg ? (
+                        <div
+                          style={{
+                            marginTop: "6px",
+                            fontSize: "11px",
+                            color: "#a78bfa",
+                            textAlign: "center",
+                          }}
+                        >
+                          {healingRecoverMsg}
+                        </div>
+                      ) : null}
                     </div>
 
                     {/* FIX 4: Armor charges derived from Durability */}
@@ -7590,7 +8020,20 @@ const CharacterSheetWrapper = ({
                           attr: "RESOLVE",
                           actions: ["BIZARRE", "COMMAND", "CONSORT", "SWAY"],
                         },
-                      ].map(({ attr, actions }) => (
+                      ].map(({ attr, actions }) => {
+                        const baseResistanceDice = getAttributeDice(actions);
+                        const prowessPhysiologyBonus =
+                          String(attr || "").toUpperCase() === "PROWESS" &&
+                          !!resistanceAbilityBoost["superior-physiology"]
+                            ? 1
+                            : 0;
+                        const resistanceDiceWithBonuses =
+                          baseResistanceDice + prowessPhysiologyBonus;
+                        const resistanceDotSlots = Math.max(
+                          4,
+                          resistanceDiceWithBonuses,
+                        );
+                        return (
                         <div key={attr}>
                           <div
                             style={{
@@ -7629,39 +8072,7 @@ const CharacterSheetWrapper = ({
                                 {attr}
                               </button>
                               <button
-                                onClick={() => {
-                                  const base = getAttributeDice(actions);
-                                  const iwEnabled =
-                                    !!resistanceAbilityBoost["iron-will"] &&
-                                    ironWillBonusAppliesToResistanceAttr(attr);
-                                  const iw = iwEnabled ? 1 : 0;
-                                  const attrBonus = resistanceAbilityOptions
-                                    .filter((opt) => {
-                                      if (!resistanceAbilityBoost[opt.id]) return false;
-                                      if (opt.id === "iron-will") return iwEnabled;
-                                      return (
-                                        String(opt.appliesTo || "").toUpperCase() === "ALL" ||
-                                        String(opt.appliesTo || "").toUpperCase() ===
-                                          String(attr || "").toUpperCase()
-                                      );
-                                    })
-                                    .reduce(
-                                      (sum, opt) => sum + Math.max(0, Number(opt.bonusDice) || 0),
-                                      0,
-                                    );
-                                  rollDice(
-                                    attr,
-                                    base + attrBonus,
-                                    true,
-                                    false,
-                                    undefined,
-                                    iw
-                                      ? {
-                                          resistanceBonusNote: "+1d (Iron Will)",
-                                        }
-                                      : undefined,
-                                  );
-                                }}
+                                onClick={() => openResistanceRollPreview(attr, actions)}
                                 style={{
                                   fontSize: "14px",
                                   background: "none",
@@ -7672,14 +8083,22 @@ const CharacterSheetWrapper = ({
                                 }}
                                 title={
                                   RESISTANCE_ATTR_DESC[attr] ||
-                                  "Resistance Roll"
+                                  "Open resistance dice pool"
                                 }
                               >
                                 🎲
                               </button>
                             </span>
                             <div style={{ display: "flex", gap: "2px" }}>
-                              {[1, 2, 3, 4].map((d) => (
+                              {Array.from(
+                                { length: resistanceDotSlots },
+                                (_, idx) => {
+                                  const d = idx + 1;
+                                  const isBase = d <= baseResistanceDice;
+                                  const isBonus =
+                                    d > baseResistanceDice &&
+                                    d <= resistanceDiceWithBonuses;
+                                  return (
                                 <div
                                   key={d}
                                   style={{
@@ -7687,13 +8106,21 @@ const CharacterSheetWrapper = ({
                                     height: "7px",
                                     borderRadius: "50%",
                                     border: "1px solid #4b5563",
-                                    background:
-                                      d <= getAttributeDice(actions)
-                                        ? "#3b82f6"
+                                    background: isBase
+                                      ? "#3b82f6"
+                                      : isBonus
+                                        ? "#22c55e"
                                         : "#1f2937",
                                   }}
+                                  title={
+                                    isBonus
+                                      ? "Heritage / ability bonus on this resistance"
+                                      : undefined
+                                  }
                                 />
-                              ))}
+                                  );
+                                },
+                              )}
                             </div>
                           </div>
                           {resistanceAbilityOptions
@@ -7885,7 +8312,8 @@ const CharacterSheetWrapper = ({
                             );
                           })}
                         </div>
-                      ))}
+                      );
+                      })}
                     </div>
                   </div>
 
@@ -8734,8 +9162,238 @@ const CharacterSheetWrapper = ({
                     </div>
                   )}
 
+                  {resistancePending && characterId && (
+                    <div
+                      style={{
+                        background: "#1f2937",
+                        padding: "12px",
+                        borderRadius: "4px",
+                        border: "1px solid #2563eb",
+                        marginBottom: "14px",
+                        fontSize: "12px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: "bold",
+                          marginBottom: "4px",
+                          color: "#93c5fd",
+                        }}
+                      >
+                        Resistance dice pool — {resistancePending.attr}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          color: "#6b7280",
+                          marginBottom: "10px",
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        Review all dice before rolling. After result, apply harm reduction,
+                        mark stress from <code style={{ color: "#9ca3af" }}>6 - highest die</code>,
+                        then use any post-roll mitigation/follow-up options.
+                      </div>
+                      {resistancePoolPreview ? (
+                        <div
+                          style={{
+                            marginBottom: "12px",
+                            padding: "10px",
+                            background: "#0d1117",
+                            borderRadius: "8px",
+                            border: "1px solid #374151",
+                          }}
+                        >
+                          <DicePoolStrip
+                            label="Attribute rating (dots in this attribute)"
+                            count={resistancePoolPreview.base}
+                          />
+                          {resistancePoolPreview.bonusDice > 0 ? (
+                            <DicePoolStrip
+                              label={`Resistance bonuses (+${resistancePoolPreview.bonusDice}d)`}
+                              count={resistancePoolPreview.bonusDice}
+                              color="#22c55e"
+                            />
+                          ) : null}
+                          <div
+                            style={{
+                              marginTop: 10,
+                              fontSize: 11,
+                              color: "#9ca3af",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            {resistancePoolPreview.activeBonusNames.length > 0 ? (
+                              <div>
+                                Active: {resistancePoolPreview.activeBonusNames.join(" · ")}
+                              </div>
+                            ) : (
+                              <div>No pre-roll bonus dice selected for this attribute.</div>
+                            )}
+                            {resistancePoolPreview.hasPostRollOptions ? (
+                              <div style={{ marginTop: 4 }}>
+                                Post-roll mitigation options available if selected below.
+                              </div>
+                            ) : null}
+                            {resistancePoolPreview.extraStress > 0 ? (
+                              <div style={{ marginTop: 4, color: "#fbbf24" }}>
+                                Push stress to mark: +{resistancePoolPreview.extraStress}
+                              </div>
+                            ) : null}
+                          </div>
+                          {resistancePoolPreview.zeroDice ? (
+                            <div
+                              style={{
+                                marginTop: "8px",
+                                color: "#fca5a5",
+                                fontSize: "11px",
+                              }}
+                            >
+                              0 dice in pool — you roll 2d6 and keep the lower die.
+                            </div>
+                          ) : (
+                            <div
+                              style={{
+                                marginTop: "8px",
+                                color: "#d1d5db",
+                                fontSize: "11px",
+                              }}
+                            >
+                              Total dice: <strong>{resistancePoolPreview.total}</strong>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+                      {resistancePoolPreview?.options?.length > 0 ? (
+                        <div
+                          style={{
+                            marginBottom: "10px",
+                            padding: "8px",
+                            background: "#0d1117",
+                            border: "1px solid #374151",
+                            borderRadius: "6px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            Optional resistance bonuses
+                          </div>
+                          <div style={{ display: "grid", gap: "6px" }}>
+                            <label
+                              style={{
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!!resistancePushDice}
+                                onChange={(e) => setResistancePushDice(e.target.checked)}
+                              />
+                              Push yourself (+1d, +2 stress)
+                            </label>
+                            {resistancePoolPreview.options
+                              .filter((opt) => Math.max(0, Number(opt.bonusDice) || 0) > 0)
+                              .map((opt) => (
+                                <label
+                                  key={`res-preview-${opt.id}`}
+                                  style={{
+                                    fontSize: "10px",
+                                    color: "#9ca3af",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                    cursor: "pointer",
+                                  }}
+                                  title={opt.description || undefined}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={!!resistanceAbilityBoost[opt.id]}
+                                    onChange={(e) =>
+                                      setResistanceAbilityBoost((prev) => ({
+                                        ...prev,
+                                        [opt.id]: e.target.checked,
+                                      }))
+                                    }
+                                  />
+                                  {opt.name} (+{Math.max(0, Number(opt.bonusDice) || 0)}d)
+                                </label>
+                              ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const attr = String(resistancePending.attr || "").toUpperCase();
+                            const base = Math.max(
+                              0,
+                              Number(resistancePending.baseDice) || 0,
+                            );
+                            const activeBonusOptions = resistanceAbilityOptions.filter((opt) => {
+                              const appliesTo = String(opt.appliesTo || "").toUpperCase();
+                              const applies = appliesTo === "ALL" || appliesTo === attr;
+                              return (
+                                applies &&
+                                !!resistanceAbilityBoost[opt.id] &&
+                                Math.max(0, Number(opt.bonusDice) || 0) > 0
+                              );
+                            });
+                            const bonus = activeBonusOptions.reduce(
+                              (sum, opt) => sum + Math.max(0, Number(opt.bonusDice) || 0),
+                              0,
+                            );
+                            const pushBonus = resistancePushDice ? 1 : 0;
+                            const extraStress = resistancePushDice ? 2 : 0;
+                            const ironWillActive = activeBonusOptions.some(
+                              (opt) => opt.id === "iron-will",
+                            );
+                            rollDice(
+                              attr,
+                              base + bonus + pushBonus,
+                              true,
+                              false,
+                              undefined,
+                              {
+                                ...(ironWillActive
+                                  ? { resistanceBonusNote: "+1d (Iron Will)" }
+                                  : {}),
+                                resistanceExtraStress: extraStress,
+                              },
+                            );
+                          }}
+                          style={{
+                            ...S.btn,
+                            background: "#2563eb",
+                            color: "#fff",
+                          }}
+                        >
+                          Roll resistance
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setResistancePending(null)}
+                          style={S.btn}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Dice result — same slot under action ratings (after pool or resistance / offline roll) */}
-                  {diceResult && !rollPending && (
+                  {diceResult && !rollPending && !resistancePending && (
                     <div
                       style={{
                         background: "#1f2937",
@@ -8930,16 +9588,33 @@ const CharacterSheetWrapper = ({
                                       );
                                       return;
                                     }
-                                    setStressFilled((prev) =>
-                                      Math.max(0, (Number(prev) || 0) - 1),
-                                    );
+                                    if (!diceResult.resistanceApplied) {
+                                      setStressFilled((prev) => {
+                                        let next = Math.max(
+                                          0,
+                                          (Number(prev) || 0) - 1,
+                                        );
+                                        const extra =
+                                          Number(diceResult.resistanceExtraStress) || 0;
+                                        if (extra > 0) {
+                                          next = Math.min(maxStress, next + extra);
+                                        }
+                                        return next;
+                                      });
+                                    }
                                     setDiceResult((prev) =>
                                       prev
-                                        ? { ...prev, resistanceApplied: true }
+                                        ? {
+                                            ...prev,
+                                            resistanceApplied: true,
+                                            resistanceHarmReductionCount:
+                                              (Number(
+                                                prev.resistanceHarmReductionCount,
+                                              ) || 0) + 1,
+                                          }
                                         : prev,
                                     );
                                   }}
-                                  disabled={!!diceResult.resistanceApplied}
                                   style={{
                                     ...S.btn,
                                     background: "#92400e",
@@ -8947,11 +9622,22 @@ const CharacterSheetWrapper = ({
                                     fontSize: "11px",
                                   }}
                                 >
-                                  {diceResult.resistanceApplied
-                                    ? "Applied"
-                                    : "Reduce harm + clear 1 stress"}
+                                  Reduce selected harm
                                 </button>
                               </div>
+                              {(Number(diceResult.resistanceHarmReductionCount) ||
+                                0) >= 2 ? (
+                                <div
+                                  style={{
+                                    marginTop: "6px",
+                                    fontSize: "10px",
+                                    color: "#fcd34d",
+                                  }}
+                                >
+                                  Stress clear already applied for this roll. You can still
+                                  choose another harm slot or use post-roll options.
+                                </div>
+                              ) : null}
                             </>
                           ) : (
                             <>
@@ -8962,7 +9648,12 @@ const CharacterSheetWrapper = ({
                                   marginBottom: "2px",
                                 }}
                               >
-                                Stress Cost: {diceResult.stressCost}
+                                Stress Cost:{" "}
+                                {diceResult.resistanceTotalStressCost ??
+                                  diceResult.stressCost}
+                                {(Number(diceResult.resistanceExtraStress) || 0) > 0
+                                  ? ` (${Math.max(0, Number(diceResult.stressCost) || 0)} resist + ${Number(diceResult.resistanceExtraStress) || 0} push)`
+                                  : ""}
                               </div>
                               <div
                                 style={{
@@ -9013,8 +9704,13 @@ const CharacterSheetWrapper = ({
                                       );
                                       return;
                                     }
-                                    const cost = diceResult.stressCost ?? 0;
-                                    applyStressCost(cost);
+                                    if (!diceResult.resistanceApplied) {
+                                      const cost =
+                                        diceResult.resistanceTotalStressCost ??
+                                        diceResult.stressCost ??
+                                        0;
+                                      applyStressCost(cost);
+                                    }
                                     setDiceResult((prev) =>
                                       prev
                                         ? {
@@ -9022,11 +9718,14 @@ const CharacterSheetWrapper = ({
                                             resistanceApplied: true,
                                             mitigationAbility:
                                               resistanceMitigationChoice || "",
+                                            resistanceHarmReductionCount:
+                                              (Number(
+                                                prev.resistanceHarmReductionCount,
+                                              ) || 0) + 1,
                                           }
                                         : prev,
                                     );
                                   }}
-                                  disabled={!!diceResult.resistanceApplied}
                                   style={{
                                     ...S.btn,
                                     background: "#b45309",
@@ -9034,11 +9733,22 @@ const CharacterSheetWrapper = ({
                                     fontSize: "11px",
                                   }}
                                 >
-                                  {diceResult.resistanceApplied
-                                    ? "Applied"
-                                    : `Reduce harm + mark ${diceResult.stressCost} stress`}
+                                  Reduce selected harm
                                 </button>
                               </div>
+                              {(Number(diceResult.resistanceHarmReductionCount) ||
+                                0) >= 2 ? (
+                                <div
+                                  style={{
+                                    marginTop: "6px",
+                                    fontSize: "10px",
+                                    color: "#fcd34d",
+                                  }}
+                                >
+                                  Stress already marked for this roll. You can still pick
+                                  another harm slot or use a post-roll ability option.
+                                </div>
+                              ) : null}
                               {resistanceAbilityOptions.some(
                                 (opt) =>
                                   opt.mitigationOnly &&
@@ -9957,6 +10667,8 @@ const CharacterSheetWrapper = ({
                     {combinedAbilitiesForDisplay.map((ab, abIndex) => {
                       const abKey = ab.id || ab.name || `ability-${abIndex}`;
                       const isExpanded = expandedAbilityId === abKey;
+                      const isPerfectOrganism =
+                        normalizeAbilityName(ab?.name) === "perfect organism";
                       const standardRef =
                         ab.type === "standard" &&
                         standardAbilitiesList.find((a) => a.id === ab.id);
@@ -10048,6 +10760,48 @@ const CharacterSheetWrapper = ({
                                   ))}
                                 </ul>
                               )}
+                            {isExpanded && isPerfectOrganism ? (
+                              <div
+                                style={{
+                                  marginTop: "8px",
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: "6px",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <span style={{ fontSize: "10px", color: "#9ca3af" }}>
+                                  Create entity clock:
+                                </span>
+                                {[
+                                  ["Small", 4],
+                                  ["Medium", 6],
+                                  ["Large", 8],
+                                  ["Huge", 10],
+                                ].map(([label, ticks]) => (
+                                  <button
+                                    key={`${abKey}-${label}`}
+                                    type="button"
+                                    onClick={() =>
+                                      addPerfectOrganismEntityClock(
+                                        `${label} entity`,
+                                        ticks,
+                                      )
+                                    }
+                                    style={{
+                                      ...S.btn,
+                                      fontSize: "10px",
+                                      padding: "2px 8px",
+                                      background: "#1d4ed8",
+                                      color: "#fff",
+                                    }}
+                                    title={`Create ${ticks}-tick ${label.toLowerCase()} entity clock`}
+                                  >
+                                    {label} ({ticks})
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
                           {ab.type === "custom" && ab._uiOrigin === "sheet" && (
                             <button
@@ -12640,72 +13394,103 @@ const CharacterSheetWrapper = ({
                 style={{
                   ...S.card,
                   marginBottom: "12px",
-                  maxHeight: "220px",
-                  overflow: "auto",
                 }}
               >
-                <span style={S.lbl}>CREW MODIFICATION HISTORY</span>
                 <div
                   style={{
-                    fontSize: "11px",
-                    color: "#6b7280",
-                    marginTop: "4px",
-                    marginBottom: "8px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "8px",
+                    marginBottom: crewHistoryOpen ? "6px" : 0,
                   }}
                 >
-                  Saved changes to this crew (name, rep, turf, tier, wanted,
-                  coin, notes, upgrades, etc.).
-                </div>
-                {crewHistoryEntries.length === 0 ? (
-                  <div style={{ fontSize: "12px", color: "#6b7280" }}>
-                    No history entries yet.
-                  </div>
-                ) : (
-                  <ul
+                  <span style={S.lbl}>CREW MODIFICATION HISTORY</span>
+                  <button
+                    type="button"
+                    onClick={() => setCrewHistoryOpen((v) => !v)}
                     style={{
-                      margin: 0,
-                      paddingLeft: "18px",
-                      fontSize: "11px",
-                      color: "#d1d5db",
-                      lineHeight: 1.5,
+                      ...S.btn,
+                      fontSize: "10px",
+                      padding: "2px 8px",
+                      background: "#111827",
+                      color: "#c4b5fd",
                     }}
                   >
-                    {crewHistoryEntries.map((entry) => {
-                      const cf = entry.changed_fields || {};
-                      const keys = Object.keys(cf).filter((k) =>
-                        CREW_HISTORY_FIELD_KEYS.has(k),
-                      );
-                      if (!keys.length) return null;
-                      const when = entry.timestamp
-                        ? new Date(entry.timestamp).toLocaleString()
-                        : "";
-                      return (
-                        <li key={entry.id} style={{ marginBottom: "8px" }}>
-                          <div style={{ color: "#9ca3af" }}>
-                            {when}
-                            {entry.editor_username
-                              ? ` · ${entry.editor_username}`
-                              : ""}
-                          </div>
-                          {keys.map((k) => {
-                            const ch = cf[k] || {};
+                    {crewHistoryOpen ? "Collapse" : "Expand"}
+                  </button>
+                </div>
+                {crewHistoryOpen ? (
+                  <>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "#6b7280",
+                        marginTop: "4px",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      Saved changes to this crew (name, rep, turf, tier, wanted,
+                      coin, notes, upgrades, etc.).
+                    </div>
+                    <div style={{ maxHeight: "220px", overflow: "auto" }}>
+                      {crewHistoryEntries.length === 0 ? (
+                        <div style={{ fontSize: "12px", color: "#6b7280" }}>
+                          No history entries yet.
+                        </div>
+                      ) : (
+                        <ul
+                          style={{
+                            margin: 0,
+                            paddingLeft: "18px",
+                            fontSize: "11px",
+                            color: "#d1d5db",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          {crewHistoryEntries.map((entry) => {
+                            const cf = entry.changed_fields || {};
+                            const keys = Object.keys(cf).filter((k) =>
+                              CREW_HISTORY_FIELD_KEYS.has(k),
+                            );
+                            if (!keys.length) return null;
+                            const when = entry.timestamp
+                              ? new Date(entry.timestamp).toLocaleString()
+                              : "";
                             return (
-                              <div key={k}>
-                                <strong>{k}</strong>:{" "}
-                                <span style={{ color: "#fca5a5" }}>
-                                  {String(ch.old ?? "")}
-                                </span>{" "}
-                                →{" "}
-                                <span style={{ color: "#86efac" }}>
-                                  {String(ch.new ?? "")}
-                                </span>
-                              </div>
+                              <li key={entry.id} style={{ marginBottom: "8px" }}>
+                                <div style={{ color: "#9ca3af" }}>
+                                  {when}
+                                  {entry.editor_username
+                                    ? ` · ${entry.editor_username}`
+                                    : ""}
+                                </div>
+                                {keys.map((k) => {
+                                  const ch = cf[k] || {};
+                                  return (
+                                    <div key={k}>
+                                      <strong>{k}</strong>:{" "}
+                                      <span style={{ color: "#fca5a5" }}>
+                                        {String(ch.old ?? "")}
+                                      </span>{" "}
+                                      →{" "}
+                                      <span style={{ color: "#86efac" }}>
+                                        {String(ch.new ?? "")}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </li>
                             );
                           })}
-                        </li>
-                      );
-                    })}
-                  </ul>
+                        </ul>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                    Hidden. Expand to view crew edit history.
+                  </div>
                 )}
               </div>
             ) : null}
