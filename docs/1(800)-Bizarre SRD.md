@@ -90,7 +90,7 @@ When you play, you’ll make several key judgment calls. Everyone contributes, b
 
 - Which consequences are inflicted to manifest the dangers in a given circumstance? Does this fall from the roof break your leg? Do the mercenaries merely become suspicious or do they already have you trapped? The GM has final say.
 
-- Does this situation call for a dice roll, and which one? Is it your character’s turn in ***initiative***, or must they wait before the NPC with higher ***Speed*** goes? The GM has final say.
+- Does this situation call for a dice roll, and which one? Does the fiction give your character the opening to act, or is a faster threat already landing? The GM has final say.
 
 - Which events in the story match the experience (xp) triggers for character advancement? Did you express your character’s beliefs, drives, heritage, or background? You tell us. The players have final say.
 
@@ -494,7 +494,7 @@ F (0)
 
 At the beginning of a new game, distribute 6 points among:  
 \- Power (physical destructive power)  
-\- Speed (initiative & mobility)  
+\- Speed (mobility & position)  
 \- Range (operational distance of the stand & its abilities)  
 \- Durability (resistance, & armor)  
 \- Precision (accuracy & control)   
@@ -519,13 +519,13 @@ C: Can shatter stone and heavy structural materials
 D: Can break through standard materials (wood, metal plating)   
 F: Human-level strength; baseline to above-average human physical capability
 
-**\- Speed: Determines conflict position and mobility (same levels of speed as range):**   
-**S:** 200ft movement, always starts in at least Controlled position, may act twice before GM cuts to enemies.  
-**A:** 60(120)ft movement, starts in Risky or better when ambushed, push yourself to dash.  
-**B:** 40(80)ft movement, starts in Risky when ambushed against equal or slower threats, push yourself to dash.  
-**C:** 35(70)ft movement, starts in Desperate when ambushed, Risky against D or F speed attackers, push yourself to dash.  
-**D:** 30(60)ft movement, starts in Desperate when ambushed, push yourself to dash.  
-**F:** 25(50)ft movement, starts in Desperate when ambushed, push yourself to dash.
+**\- Speed: Determines mobility in conflict. Speed grade relative to your opponent sets starting position — see Combat & Initiative. (same levels of speed as range):**   
+S: 200ft movement  
+A: 60(120)ft movement, push yourself to dash.  
+B: 40(80)ft movement, push yourself to dash.  
+C: 35(70)ft movement, push yourself to dash.  
+D: 30(60)ft movement, push yourself to dash.  
+F: 25(50)ft movement, push yourself to dash.
 
 **\- Range:**   
 S: Unlimited range, no range penalties  
@@ -574,7 +574,6 @@ D: Level 1 harm
 F: No significant harm
 
 **\- Speed: Speed and mobility of an NPC’s stand.**  
-*NPC Speed grade vs. player Speed grade determines starting position when the NPC acts against players unexpectedly. If NPC Speed is higher, players begin Desperate. If equal, Risky. If lower, Risky or Controlled at GM discretion:*   
 S: 200 ft movement  
 A: 60 ft  
 B: 40 ft  
@@ -1335,11 +1334,9 @@ It is 5 xp to gain a \+1d in a skill rating. It is 10xp to gain a \+1 stand coin
 
 **COMBAT AND INITIATIVE**
 
-## 
+In 1(800)BIZARRE, the outcome of an All-Out-Brawl is determined by the player's wit and resources. Starting position in conflicts is influenced by relative Speed grades.
 
-In 1-800(BIZARRE), the outcome of an All-Out-Brawl is determined by the player's wit and resources. The order of combat and starting position in conflicts are influenced by relative Speed grades.
-
-Relative Speed determines starting position in unexpected conflicts. When players are ambushed or narratively unprepared, they begin in a Desperate position by default. If the GM calls for an immediate resistance roll before a player can take an action, that is itself a signal of Desperate position — the players are reactionary and the threat is already landing. Players with meaningfully higher Speed than the attacker may instead roll an action at Risky position, reflecting their ability to respond before the threat fully lands.
+Speed determines starting position whenever Stands clash directly. Compare grades — higher Speed starts at Risky or better, equal starts at Risky, lower starts at Desperate. The GM adjusts from there based on the fiction.
 
 All-Out-Brawls and other types of showdowns are presented by the GM during a mission or as an entanglement from gaining a Wanted Level.
 
@@ -2899,7 +2896,7 @@ Great \= two ticks on a 4-clock · Standard \= expected · Limited \= pa
 | ----- | ----- | ----- |
 | Controlled | Advantage | Level-1 harm / small clock |
 | Risky (default) | Tense | Level-2 harm / big clock |
-| Desperate | Life-or-limb | Level-3 harm / lost initiative |
+| Desperate | Life-or-limb | Level-3 harm / must use 2 stress to act |
 
 **Tier check:** Up-tier vs. target? player bumps Position *or* Effect; down-tier? GM drops one.
 

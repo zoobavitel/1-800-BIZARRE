@@ -8,6 +8,12 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Added",
+        "items": [
+          "SRD Speed & Bizarre Intuition; NPC rules; session GM panels"
+        ]
+      },
+      {
         "title": "Documentation",
         "items": [
           "drop NPC harm clock; vulnerability clock only"
@@ -455,8 +461,7 @@ export const PATCH_NOTES = [
           "Merge branch 'master' into copilot/create-faction-for-npc",
           "Merge pull request #22 from zoobavitel/copilot/inline-faction-creation-npc-sheet",
           "Add TypeScript dependency to package.json",
-          "Address code review: bulk_create, consolidate heritage sync, use null for heritage",
-          "Merge branch 'master' into copilot/create-faction-for-npc"
+          "Address code review: bulk_create, consolidate heritage sync, use null for heritage"
         ]
       },
       {

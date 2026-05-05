@@ -1047,6 +1047,10 @@ export const transformBackendToFrontend = (backendCharacter) => {
     selected_detriments: Array.isArray(backendCharacter.selected_detriments)
       ? backendCharacter.selected_detriments
       : [],
+    fed_today:
+      typeof backendCharacter.fed_today === "boolean"
+        ? backendCharacter.fed_today
+        : null,
   };
 };
 
@@ -1235,6 +1239,10 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     selected_detriments: Array.isArray(frontendCharacter.selected_detriments)
       ? frontendCharacter.selected_detriments
       : [],
+    fed_today:
+      typeof frontendCharacter.fed_today === "boolean"
+        ? frontendCharacter.fed_today
+        : null,
 
     coin_boxes: normalizeCoinBoxes(frontendCharacter.coin),
 

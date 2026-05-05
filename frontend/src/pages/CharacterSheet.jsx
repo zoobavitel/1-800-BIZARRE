@@ -195,6 +195,13 @@ function computeViceManualSummary(diceResults) {
   return { highest, outcome };
 }
 
+function normalizeAbilityName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
 const VICE_OVERINDULGE_CHOICES = [
   { value: "", label: "If overindulged, pick an outcome…" },
   {
@@ -593,6 +600,8 @@ const CharacterSheetWrapper = ({
     viceDetails: character?.viceDetails ?? character?.vice_details ?? "",
     crew: initialCrew.crew,
     crewId: initialCrew.crewId,
+    fed_today:
+      typeof character?.fed_today === "boolean" ? character.fed_today : null,
   });
 
   // Campaign assignment (normalize: backend may send campaign as object or ID)
@@ -786,6 +795,14 @@ const CharacterSheetWrapper = ({
     character?.viceDetails,
     character?.vice_details,
   ]);
+
+  useEffect(() => {
+    const fedToday =
+      typeof character?.fed_today === "boolean" ? character.fed_today : null;
+    setCharData((prev) =>
+      prev.fed_today !== fedToday ? { ...prev, fed_today: fedToday } : prev,
+    );
+  }, [character?.id, character?.fed_today]);
 
   // When parent merges id before full GET/list row arrives, fill empty identity from server (avoid PUT wiping true_name, etc.)
   useEffect(() => {
@@ -1135,6 +1152,74 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     setAbilities(character?.abilities || []);
   }, [character?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- only reset on sheet identity
+
+  const currentHeritage = useMemo(() => {
+    const hid = charData?.heritage;
+    if (hid == null || !Array.isArray(heritages) || heritages.length === 0) return null;
+    return heritages.find((h) => h && h.id === hid) || null;
+  }, [charData?.heritage, heritages]);
+
+  const heritageAutoAbilities = useMemo(() => {
+    if (!currentHeritage) return [];
+    const selectedBen = new Set(
+      (Array.isArray(selectedBenefits) ? selectedBenefits : []).map((x) => Number(x)),
+    );
+    const selectedDet = new Set(
+      (Array.isArray(selectedDetriments) ? selectedDetriments : []).map((x) => Number(x)),
+    );
+    const rows = [];
+    (currentHeritage.benefits || []).forEach((b) => {
+      if (!b) return;
+      const selected = Boolean(b.required) || selectedBen.has(Number(b.id));
+      if (!selected) return;
+      rows.push({
+        id: `heritage-benefit-${b.id ?? b.name}`,
+        name: String(b.name || "").trim(),
+        description: String(b.description || "").trim(),
+        type: "heritage",
+        heritageSource: "benefit",
+      });
+    });
+    (currentHeritage.detriments || []).forEach((d) => {
+      if (!d) return;
+      const selected = Boolean(d.required) || selectedDet.has(Number(d.id));
+      if (!selected) return;
+      rows.push({
+        id: `heritage-detriment-${d.id ?? d.name}`,
+        name: String(d.name || "").trim(),
+        description: String(d.description || "").trim(),
+        type: "heritage",
+        heritageSource: "detriment",
+      });
+    });
+    return rows.filter((x) => x.name);
+  }, [currentHeritage, selectedBenefits, selectedDetriments]);
+
+  const combinedAbilitiesForDisplay = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    (abilities || []).forEach((a, idx) => {
+      const key = `${String(a?.type || "").toLowerCase()}:${normalizeAbilityName(a?.name)}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ ...a, _uiOrigin: "sheet", _uiIndex: idx });
+    });
+    heritageAutoAbilities.forEach((a) => {
+      const key = `${String(a?.type || "").toLowerCase()}:${normalizeAbilityName(a?.name)}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ ...a, _uiOrigin: "heritage" });
+    });
+    return out;
+  }, [abilities, heritageAutoAbilities]);
+
+  const hasNoFeedDetriment = useMemo(() => {
+    return heritageAutoAbilities.some(
+      (a) =>
+        String(a.heritageSource || "") === "detriment" &&
+        /without feeding/i.test(String(a.name || "")),
+    );
+  }, [heritageAutoAbilities]);
 
   // Sync playbook label when character changes (API uses STAND/HAMON/SPIN; sheet uses Stand/Hamon/Spin)
   useEffect(() => {
@@ -1742,10 +1827,10 @@ const CharacterSheetWrapper = ({
   const [heritageRollBoost, setHeritageRollBoost] = useState({});
   /** Phantom Pain: spend 1 stress when using the ability through cover/barriers (fiction). */
   const [phantomPainThroughCover, setPhantomPainThroughCover] = useState(false);
-  /** Resolve-attribute resistance only; pairs with Iron Will (+1d). */
-  const [resistanceIronWillBonus, setResistanceIronWillBonus] = useState(false);
+  const [resistanceAbilityBoost, setResistanceAbilityBoost] = useState({});
   /** After a successful resist: open action roll with Parry (+1 effect baked in). */
   const [resistanceFollowupChoice, setResistanceFollowupChoice] = useState("");
+  const [resistanceMitigationChoice, setResistanceMitigationChoice] = useState("");
   const [parryCounterattackActionDraft, setParryCounterattackActionDraft] =
     useState("");
   const [rollApiError, setRollApiError] = useState(null);
@@ -2169,6 +2254,13 @@ const CharacterSheetWrapper = ({
                 if (/\[heritage:/i.test(d)) tags.push("Heritage");
                 return tags.length ? tags.join(" · ") : null;
               })(),
+              Array.isArray(r.modifier_sources) && r.modifier_sources.length > 0
+                ? `Sources: ${r.modifier_sources
+                    .map((s) => s?.name || s?.delta)
+                    .filter(Boolean)
+                    .slice(0, 3)
+                    .join(", ")}`
+                : null,
               r.push_for_dice ? "Push(+1d)" : null,
               r.push_for_effect ? "Push(+effect)" : null,
               r.uses_devil_bargain ? "Devil's bargain" : null,
@@ -2825,6 +2917,7 @@ const CharacterSheetWrapper = ({
         Math.min(1, Number(rollPending.parryCounterEffectSteps || 0)),
       );
       const phantomStress = phantomPainThroughCover ? 1 : 0;
+      const feedPenaltyActive = hasNoFeedDetriment && charData.fed_today === false;
       const abilityBonusesMerged = [
         ...abilityBonusAudit,
         ...(parryEffectStepsCommitted > 0
@@ -2832,6 +2925,68 @@ const CharacterSheetWrapper = ({
           : []),
         ...(phantomStress > 0
           ? [`Phantom Pain: ${phantomStress} stress (attack through cover)`]
+          : []),
+        ...(feedPenaltyActive
+          ? ["Loses Max Stress Without Feeding: stress detriment active"]
+          : []),
+      ];
+      const modifierSources = [
+        ...abilityBonusesMerged.map((name) => ({
+          kind: "ability",
+          name,
+          category: "ability",
+        })),
+      ];
+      if (bonusDiceFromAbilities > 0 || bonusDiceFromHeritage > 0) {
+        modifierSources.push({
+          kind: "ability",
+          name: "Sheet/heritage bonus dice",
+          delta: `+${totalBonusDiceFromAbilitiesAndHeritage}d`,
+          category: "ability",
+        });
+      }
+      const stressSources = [
+        ...(phantomStress > 0
+          ? [
+              {
+                kind: "ability",
+                name: "Phantom Pain",
+                delta: `+${phantomStress} stress`,
+                category: "ability",
+              },
+            ]
+          : []),
+        ...(feedPenaltyActive
+          ? [
+              {
+                kind: "feed_penalty",
+                name: "Loses Max Stress Without Feeding",
+                delta: "stress detriment active",
+                category: "heritage",
+              },
+            ]
+          : []),
+      ];
+      const positionEffectSources = [
+        ...(rollModal.push_effect
+          ? [
+              {
+                kind: "push",
+                name: "Push for effect",
+                delta: "+1 effect",
+                category: "system",
+              },
+            ]
+          : []),
+        ...(totalAbilityEffectSteps > 0
+          ? [
+              {
+                kind: "ability",
+                name: "Ability/heritage effect boosts",
+                delta: `+${totalAbilityEffectSteps} effect`,
+                category: "ability",
+              },
+            ]
           : []),
       ];
       const payload = {
@@ -2855,6 +3010,10 @@ const CharacterSheetWrapper = ({
           goalFromDraft || assignedRollGoalLabel || undefined,
         ability_bonuses:
           abilityBonusesMerged.length > 0 ? abilityBonusesMerged : undefined,
+        modifier_sources: modifierSources.length > 0 ? modifierSources : undefined,
+        stress_sources: stressSources.length > 0 ? stressSources : undefined,
+        position_effect_sources:
+          positionEffectSources.length > 0 ? positionEffectSources : undefined,
         ...(phantomStress > 0 ? { extra_roll_stress: phantomStress } : {}),
       };
       if (activeSessionId) {
@@ -2964,6 +3123,36 @@ const CharacterSheetWrapper = ({
     [abilities],
   );
 
+  const resistanceAbilityOptions = useMemo(() => {
+    const opts = [];
+    if (hasIronWillAbility) {
+      opts.push({
+        id: "iron-will",
+        name: "Iron Will",
+        bonusDice: 1,
+        appliesTo: "RESOLVE",
+        sourceType: "standard",
+      });
+    }
+    const stayingPower = combinedAbilitiesForDisplay.find(
+      (a) => normalizeAbilityName(a?.name) === "staying power",
+    );
+    if (stayingPower) {
+      opts.push({
+        id: "staying-power",
+        name: "Staying Power",
+        bonusDice: 0,
+        appliesTo: "ALL",
+        sourceType: stayingPower.type || "standard",
+        mitigationOnly: true,
+        description:
+          String(stayingPower.description || "").trim() ||
+          "May help reduce or absorb harm after resistance (table ruling).",
+      });
+    }
+    return opts;
+  }, [combinedAbilitiesForDisplay, hasIronWillAbility]);
+
   const resistanceRollSheetReminderItems = useMemo(() => {
     if (
       !diceResult?.isResistance ||
@@ -2982,7 +3171,7 @@ const CharacterSheetWrapper = ({
    * @param {unknown} [groupActionIdSnap] If set, POST includes this group_action_id even if activeGroupAction is cleared before submit.
    * @param {{ resistanceBonusNote?: string }} [extras] Extra display only (e.g. Iron Will note on resistance).
    */
-  const rollDice = (
+  const rollDice = async (
     actionName,
     diceCount,
     isResistance = false,
@@ -3019,6 +3208,7 @@ const CharacterSheetWrapper = ({
 
     if (isResistance) {
       setResistanceFollowupChoice("");
+      setResistanceMitigationChoice("");
       setParryCounterattackActionDraft("");
       setPhantomPainThroughCover(false);
     }
@@ -3069,6 +3259,40 @@ const CharacterSheetWrapper = ({
         ? `${criticalPart} · ${resistanceNote}`
         : resistanceNote || criticalPart;
 
+    const activeResistanceSources = isResistance
+      ? resistanceAbilityOptions.filter((opt) => {
+          if (!resistanceAbilityBoost[opt.id]) return false;
+          if (opt.appliesTo === "ALL") return true;
+          return String(opt.appliesTo || "").toUpperCase() === String(actionName || "").toUpperCase();
+        })
+      : [];
+
+    const resistanceSourceRows = activeResistanceSources.map((opt) => ({
+      kind: "ability",
+      name: opt.name,
+      delta: opt.bonusDice > 0 ? `+${opt.bonusDice}d` : "mitigation option",
+      category: String(opt.sourceType || "ability"),
+      timing: opt.mitigationOnly ? "post_roll" : "pre_roll",
+    }));
+    if (isResistance && resistanceMitigationChoice) {
+      resistanceSourceRows.push({
+        kind: "ability",
+        name: resistanceMitigationChoice,
+        delta: "mitigation used",
+        category: "ability",
+        timing: "post_roll",
+      });
+    }
+    if (isResistance && hasNoFeedDetriment && charData.fed_today === false) {
+      resistanceSourceRows.push({
+        kind: "feed_penalty",
+        name: "Loses Max Stress Without Feeding",
+        delta: "stress detriment active",
+        category: "heritage",
+        timing: "ongoing",
+      });
+    }
+
     setDiceResult({
       action: actionName,
       dice,
@@ -3080,6 +3304,7 @@ const CharacterSheetWrapper = ({
       zeroDice: diceCount === 0,
       isDesperateAction,
       isCritical,
+      resistanceSources: isResistance ? resistanceSourceRows : [],
     });
     setResistanceApplyErr(null);
     setResistanceHarmTarget("");
@@ -3087,6 +3312,48 @@ const CharacterSheetWrapper = ({
     if (isDesperateAction && !isResistance) {
       const attr = ACTION_ATTR[actionName];
       if (attr) setXp((p) => ({ ...p, [attr]: Math.min(p[attr] + 1, 5) }));
+    }
+    if (isResistance && characterId && activeSessionId) {
+      const outcomeApi = isCritical
+        ? "CRITICAL_SUCCESS"
+        : highest >= 6
+          ? "FULL_SUCCESS"
+          : highest >= 4
+            ? "PARTIAL_SUCCESS"
+            : "FAILURE";
+      try {
+        await rollAPI.createRoll({
+          character: characterId,
+          session: activeSessionId,
+          roll_type: "RESISTANCE",
+          action_name: String(actionName || "").toLowerCase(),
+          dice_pool: diceCount,
+          results: dice,
+          outcome: outcomeApi,
+          description: `Resistance ${String(actionName || "").toLowerCase()} roll`,
+          pool_bonus_dice: activeResistanceSources.reduce(
+            (sum, opt) => sum + Math.max(0, Number(opt.bonusDice) || 0),
+            0,
+          ),
+          roller_stress_spent: Math.max(0, Number(stressCost) || 0),
+          modifier_sources: resistanceSourceRows,
+          stress_sources:
+            stressCost > 0
+              ? [
+                  {
+                    kind: "resistance",
+                    name: "Resistance stress cost",
+                    delta: `+${stressCost} stress`,
+                    category: "system",
+                  },
+                ]
+              : resistanceSourceRows.filter((x) => x.kind === "feed_penalty"),
+          position_effect_sources: [],
+        });
+        onCampaignRefresh?.();
+      } catch (_) {
+        // Keep local resistance flow even if history save fails.
+      }
     }
   };
 
@@ -7364,15 +7631,27 @@ const CharacterSheetWrapper = ({
                               <button
                                 onClick={() => {
                                   const base = getAttributeDice(actions);
-                                  const iw =
-                                    ironWillBonusAppliesToResistanceAttr(attr) &&
-                                    resistanceIronWillBonus &&
-                                    hasIronWillAbility
-                                      ? 1
-                                      : 0;
+                                  const iwEnabled =
+                                    !!resistanceAbilityBoost["iron-will"] &&
+                                    ironWillBonusAppliesToResistanceAttr(attr);
+                                  const iw = iwEnabled ? 1 : 0;
+                                  const attrBonus = resistanceAbilityOptions
+                                    .filter((opt) => {
+                                      if (!resistanceAbilityBoost[opt.id]) return false;
+                                      if (opt.id === "iron-will") return iwEnabled;
+                                      return (
+                                        String(opt.appliesTo || "").toUpperCase() === "ALL" ||
+                                        String(opt.appliesTo || "").toUpperCase() ===
+                                          String(attr || "").toUpperCase()
+                                      );
+                                    })
+                                    .reduce(
+                                      (sum, opt) => sum + Math.max(0, Number(opt.bonusDice) || 0),
+                                      0,
+                                    );
                                   rollDice(
                                     attr,
-                                    base + iw,
+                                    base + attrBonus,
                                     true,
                                     false,
                                     undefined,
@@ -7417,29 +7696,43 @@ const CharacterSheetWrapper = ({
                               ))}
                             </div>
                           </div>
-                          {ironWillBonusAppliesToResistanceAttr(attr) &&
-                          hasIronWillAbility ? (
-                            <label
-                              style={{
-                                fontSize: "10px",
-                                color: "#9ca3af",
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "6px",
-                                marginBottom: "6px",
-                                cursor: "pointer",
-                              }}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={resistanceIronWillBonus}
-                                onChange={(e) =>
-                                  setResistanceIronWillBonus(e.target.checked)
-                                }
-                              />
-                              Iron Will (+1d Resolve resistance)
-                            </label>
-                          ) : null}
+                          {resistanceAbilityOptions
+                            .filter(
+                              (opt) =>
+                                String(opt.appliesTo || "").toUpperCase() === "ALL" ||
+                                String(opt.appliesTo || "").toUpperCase() ===
+                                  String(attr || "").toUpperCase(),
+                            )
+                            .map((opt) => (
+                              <label
+                                key={`${attr}-${opt.id}`}
+                                style={{
+                                  fontSize: "10px",
+                                  color: "#9ca3af",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "6px",
+                                  marginBottom: "6px",
+                                  cursor: "pointer",
+                                }}
+                                title={opt.description || undefined}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={!!resistanceAbilityBoost[opt.id]}
+                                  onChange={(e) =>
+                                    setResistanceAbilityBoost((prev) => ({
+                                      ...prev,
+                                      [opt.id]: e.target.checked,
+                                    }))
+                                  }
+                                />
+                                {opt.name}
+                                {opt.bonusDice > 0
+                                  ? ` (+${opt.bonusDice}d)`
+                                  : " (post-roll option)"}
+                              </label>
+                            ))}
                           {expandedActionInfo === attr && (
                             <div
                               style={{
@@ -8724,7 +9017,12 @@ const CharacterSheetWrapper = ({
                                     applyStressCost(cost);
                                     setDiceResult((prev) =>
                                       prev
-                                        ? { ...prev, resistanceApplied: true }
+                                        ? {
+                                            ...prev,
+                                            resistanceApplied: true,
+                                            mitigationAbility:
+                                              resistanceMitigationChoice || "",
+                                          }
                                         : prev,
                                     );
                                   }}
@@ -8741,6 +9039,34 @@ const CharacterSheetWrapper = ({
                                     : `Reduce harm + mark ${diceResult.stressCost} stress`}
                                 </button>
                               </div>
+                              {resistanceAbilityOptions.some(
+                                (opt) =>
+                                  opt.mitigationOnly &&
+                                  !!resistanceAbilityBoost[opt.id],
+                              ) ? (
+                                <div style={{ marginTop: "8px" }}>
+                                  <select
+                                    value={resistanceMitigationChoice}
+                                    onChange={(e) =>
+                                      setResistanceMitigationChoice(e.target.value)
+                                    }
+                                    style={{ ...S.sel, fontSize: "11px", width: "100%" }}
+                                  >
+                                    <option value="">No mitigation ability selected</option>
+                                    {resistanceAbilityOptions
+                                      .filter(
+                                        (opt) =>
+                                          opt.mitigationOnly &&
+                                          !!resistanceAbilityBoost[opt.id],
+                                      )
+                                      .map((opt) => (
+                                        <option key={opt.id} value={opt.name}>
+                                          {opt.name}
+                                        </option>
+                                      ))}
+                                  </select>
+                                </div>
+                              ) : null}
                             </>
                           )}
                           {(resistanceRollSheetReminderItems.length > 0 ||
@@ -9586,7 +9912,49 @@ const CharacterSheetWrapper = ({
                     </button>
                     {abilitiesSectionExpanded ? (
                       <div id="character-sheet-abilities-panel">
-                    {abilities.map((ab, abIndex) => {
+                    {hasNoFeedDetriment ? (
+                      <div
+                        style={{
+                          marginBottom: "8px",
+                          display: "flex",
+                          gap: "6px",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCharData((p) => ({ ...p, fed_today: true }))
+                          }
+                          style={{
+                            ...S.btn,
+                            fontSize: "11px",
+                            padding: "4px 8px",
+                            background: charData.fed_today === true ? "#15803d" : "#1f2937",
+                            color: "#fff",
+                          }}
+                        >
+                          You fed today
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCharData((p) => ({ ...p, fed_today: false }))
+                          }
+                          style={{
+                            ...S.btn,
+                            fontSize: "11px",
+                            padding: "4px 8px",
+                            background: charData.fed_today === false ? "#b45309" : "#1f2937",
+                            color: "#fff",
+                          }}
+                        >
+                          You did not feed today
+                        </button>
+                      </div>
+                    ) : null}
+                    {combinedAbilitiesForDisplay.map((ab, abIndex) => {
                       const abKey = ab.id || ab.name || `ability-${abIndex}`;
                       const isExpanded = expandedAbilityId === abKey;
                       const standardRef =
@@ -9644,7 +10012,8 @@ const CharacterSheetWrapper = ({
                               style={{
                                 marginLeft: "6px",
                                 padding: "1px 5px",
-                                background: "#7c3aed",
+                                background:
+                                  ab.type === "heritage" ? "#b45309" : "#7c3aed",
                                 borderRadius: "10px",
                                 fontSize: "10px",
                               }}
@@ -9680,7 +10049,7 @@ const CharacterSheetWrapper = ({
                                 </ul>
                               )}
                           </div>
-                          {ab.type === "custom" && (
+                          {ab.type === "custom" && ab._uiOrigin === "sheet" && (
                             <button
                               type="button"
                               aria-label={`Edit ${ab.name || "ability"}`}
@@ -9741,24 +10110,26 @@ const CharacterSheetWrapper = ({
                               ✏
                             </button>
                           )}
-                          <button
-                            type="button"
-                            aria-label={`Remove ${ab.name || "ability"}`}
-                            onClick={() =>
-                              setAbilities((p) =>
-                                p.filter((_, i) => i !== abIndex),
-                              )
-                            }
-                            style={{
-                              color: "#f87171",
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              fontSize: "15px",
-                            }}
-                          >
-                            ×
-                          </button>
+                          {ab._uiOrigin === "sheet" ? (
+                            <button
+                              type="button"
+                              aria-label={`Remove ${ab.name || "ability"}`}
+                              onClick={() =>
+                                setAbilities((p) =>
+                                  p.filter((_, i) => i !== ab._uiIndex),
+                                )
+                              }
+                              style={{
+                                color: "#f87171",
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                fontSize: "15px",
+                              }}
+                            >
+                              ×
+                            </button>
+                          ) : null}
                         </div>
                       );
                     })}

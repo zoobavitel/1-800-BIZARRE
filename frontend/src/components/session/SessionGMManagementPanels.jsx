@@ -15,6 +15,10 @@ import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import { ACTION_RATING_KEYS } from "../../features/character-sheet/constants/srd";
 import NpcsStandCoin from "../NpcsStandCoin";
 import { PositionStack, EffectShapes } from "../position-effect/PositionEffectIndicators";
+import {
+  getPositionEffectModifierHints,
+  peModifierBucketLabel,
+} from "./peModifierAbilityHints";
 
 const GRADES = ["F", "D", "C", "B", "A", "S"];
 
@@ -2085,6 +2089,12 @@ export default function SessionGMManagementPanels({
                     pcMaxGrade={canSRank ? "S" : "A"}
                   />
                 </div>
+                <div style={{ fontSize: 10, color: "#9ca3af", lineHeight: 1.35 }}>
+                  Speed sets mobility and starting-position pressure by comparison. Precision
+                  can swing position/effect. Range shapes distance penalties and practical
+                  effect. Durability maps to stress/armor pressure. Power frames destructive
+                  output. Development frames evolution and ability growth.
+                </div>
                 <div style={lbl}>Actions (dots)</div>
                 <div style={{ fontSize: 10, color: "#9ca3af", maxHeight: 56, overflow: "auto" }}>
                   {flatActionDots(ad)
@@ -3248,6 +3258,17 @@ export default function SessionGMManagementPanels({
             const row = peMap[String(id)] || peMap[id] || null;
             const pos = row?.position || defaultPos;
             const eff = row?.effect || defaultEff;
+            const fullCharacter =
+              (characters || []).find((c) => Number(c?.id) === Number(id)) ||
+              ch;
+            const peModifierHints =
+              getPositionEffectModifierHints(fullCharacter);
+            const pePositionHints = peModifierHints.filter(
+              (h) => h.kind === "position" || h.kind === "position/effect",
+            );
+            const peEffectHints = peModifierHints.filter(
+              (h) => h.kind === "effect" || h.kind === "position/effect",
+            );
             return (
               <div
                 key={id}
@@ -3267,9 +3288,22 @@ export default function SessionGMManagementPanels({
                     gap: 8,
                   }}
                 >
-                  <strong style={{ color: "#e5e7eb", fontSize: 12 }}>
+                  <a
+                    href={buildRouteHref("character", { characterId: id })}
+                    onClick={(e) =>
+                      handleSpaNavClick(e, () => onNavigateToCharacter?.(id))
+                    }
+                    style={{
+                      color: "#e5e7eb",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      textDecoration: "underline",
+                      textUnderlineOffset: "2px",
+                    }}
+                    title="Open character sheet"
+                  >
                     {ch.true_name || ch.name || id}
-                  </strong>
+                  </a>
                   <button
                     type="button"
                     onClick={() => mergePosEffect({ [id]: null })}
@@ -3298,15 +3332,76 @@ export default function SessionGMManagementPanels({
                         })
                       }
                     />
-                    <EffectShapes
-                      activeEffect={eff}
-                      readOnly={saving}
-                      onSelect={(value) =>
-                        mergePosEffect({
-                          [id]: { position: pos, effect: value },
-                        })
-                      }
-                    />
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "flex-start",
+                        gap: 6,
+                      }}
+                    >
+                      <EffectShapes
+                        activeEffect={eff}
+                        readOnly={saving}
+                        onSelect={(value) =>
+                          mergePosEffect({
+                            [id]: { position: pos, effect: value },
+                          })
+                        }
+                      />
+                      {peModifierHints.length > 0 ? (
+                        <div
+                          style={{
+                            fontSize: 9,
+                            color: "#6b7280",
+                            lineHeight: 1.35,
+                            maxWidth: 220,
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontWeight: 700,
+                              color: "#71717a",
+                              letterSpacing: "0.04em",
+                              textTransform: "uppercase",
+                              marginBottom: 2,
+                            }}
+                          >
+                            SRD ability modifiers (verify)
+                          </div>
+                          {pePositionHints.length > 0 ? (
+                            <div style={{ color: "#9ca3af", marginBottom: 2 }}>
+                              <strong style={{ color: "#71717a" }}>Position:</strong>{" "}
+                              {pePositionHints.map((h, i) => (
+                                <span key={`pos-${h.bucket}-${h.name}`}>
+                                  {i > 0 ? " · " : ""}
+                                  <span
+                                    title={`${peModifierBucketLabel(h.bucket)} ability — verify on character sheet`}
+                                  >
+                                    {h.name}
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                          {peEffectHints.length > 0 ? (
+                            <div style={{ color: "#9ca3af" }}>
+                              <strong style={{ color: "#71717a" }}>Effect:</strong>{" "}
+                              {peEffectHints.map((h, i) => (
+                                <span key={`eff-${h.bucket}-${h.name}`}>
+                                  {i > 0 ? " · " : ""}
+                                  <span
+                                    title={`${peModifierBucketLabel(h.bucket)} ability — verify on character sheet`}
+                                  >
+                                    {h.name}
+                                  </span>
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                   <div style={{ minWidth: 220, flex: "1 1 220px" }}>
                     <div
@@ -3396,6 +3491,56 @@ export default function SessionGMManagementPanels({
                                     : ""}
                                 </span>
                               ) : null}
+                              <details style={{ marginTop: 4 }}>
+                                <summary
+                                  style={{
+                                    cursor: "pointer",
+                                    color: "#6b7280",
+                                    fontSize: 9,
+                                  }}
+                                >
+                                  Properties
+                                </summary>
+                                <div
+                                  style={{
+                                    marginTop: 4,
+                                    fontSize: 9,
+                                    color: "#9ca3af",
+                                    lineHeight: 1.35,
+                                  }}
+                                >
+                                  {Array.isArray(r.modifier_sources) &&
+                                  r.modifier_sources.length > 0 ? (
+                                    <div>
+                                      Sources:{" "}
+                                      {r.modifier_sources
+                                        .map((s) => s?.name || s?.delta)
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                    </div>
+                                  ) : null}
+                                  {Array.isArray(r.stress_sources) &&
+                                  r.stress_sources.length > 0 ? (
+                                    <div>
+                                      Stress sources:{" "}
+                                      {r.stress_sources
+                                        .map((s) => s?.name || s?.delta)
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                    </div>
+                                  ) : null}
+                                  {Array.isArray(r.position_effect_sources) &&
+                                  r.position_effect_sources.length > 0 ? (
+                                    <div>
+                                      Position/effect sources:{" "}
+                                      {r.position_effect_sources
+                                        .map((s) => s?.name || s?.delta)
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </details>
                             </div>
                             <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                               <button

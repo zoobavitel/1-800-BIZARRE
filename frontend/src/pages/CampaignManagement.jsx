@@ -14,6 +14,8 @@ import { useAuth } from "../features/auth";
 import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 
+const NPC_SESSION_RETURN_KEY = "hftf-npc-return-to-session";
+
 const S = {
   page: {
     fontFamily: "monospace",
@@ -2597,6 +2599,10 @@ function SessionRecordsModal({ sessionId, sessionName, onClose }) {
                   Position & effect
                 </label>
               </div>
+              <div style={{ fontSize: "10px", color: "#6b7280", marginBottom: "6px" }}>
+                Combat flow stays fiction-first. Relative Speed frames starting position;
+                no fixed initiative track.
+              </div>
               {(data.rolls || []).length === 0 ? (
                 <div style={{ fontSize: "11px", color: "#6b7280" }}>
                   No rolls.
@@ -3258,9 +3264,24 @@ function SessionDetail({
                 type="button"
                 onClick={handleClearActiveSession}
                 style={S.btnGhost}
+                title="Ends live play on character sheets for this campaign. Applies one-time roll-based playbook XP from this session (abilities noted on rolls; vice/overindulge signals)—capped per session. Other triggers you award manually."
               >
-                Clear as current session
+                End live session
               </button>
+              <div
+                style={{
+                  width: "100%",
+                  marginTop: "4px",
+                  fontSize: "11px",
+                  color: "#9ca3af",
+                  lineHeight: 1.45,
+                  maxWidth: "560px",
+                }}
+              >
+                Ends live sheets for everyone and applies encoded playbook XP from
+                rolls for this session (once, with caps—see tooltip). Anything not
+                in the roll log you still grant as manual XP.
+              </div>
             </>
           ) : (
             <button
@@ -3671,6 +3692,61 @@ export default function CampaignManagement({
     }
   }, [initialCampaignId, campaigns]);
 
+  useEffect(() => {
+    if (selectedCampaignId == null || campaigns.length === 0) return;
+    let cancelled = false;
+    const raw = window.sessionStorage.getItem(NPC_SESSION_RETURN_KEY);
+    if (!raw) return;
+
+    let parsed = null;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      window.sessionStorage.removeItem(NPC_SESSION_RETURN_KEY);
+      return;
+    }
+
+    const campaignId = Number(parsed?.campaignId);
+    const sessionId = Number(parsed?.sessionId);
+    if (!Number.isFinite(campaignId) || !Number.isFinite(sessionId)) {
+      window.sessionStorage.removeItem(NPC_SESSION_RETURN_KEY);
+      return;
+    }
+    if (campaignId !== Number(selectedCampaignId)) {
+      window.sessionStorage.removeItem(NPC_SESSION_RETURN_KEY);
+      return;
+    }
+
+    // One-shot restore: consume immediately so stale entries cannot re-open later.
+    window.sessionStorage.removeItem(NPC_SESSION_RETURN_KEY);
+    const selected = campaigns.find((c) => c.id === selectedCampaignId);
+
+    const restore = async () => {
+      const embedded = (selected?.sessions || []).find(
+        (s) => Number(s?.id) === sessionId,
+      );
+      if (!cancelled && embedded) {
+        setSelectedSession(embedded);
+        setSessionView("detail");
+        return;
+      }
+      try {
+        const fetched = await sessionAPI.getSession(sessionId);
+        if (!cancelled && fetched?.id && Number(fetched.id) === sessionId) {
+          setSelectedSession(fetched);
+          setSessionView("detail");
+        }
+      } catch {
+        // Ignore: landing on campaign detail is safer than forcing bad session state.
+      }
+    };
+    restore();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [campaigns, selectedCampaignId]);
+
   const startCreate = () => {
     setEditing("new");
     setForm({ name: "", description: "" });
@@ -3740,7 +3816,18 @@ export default function CampaignManagement({
             }}
             onRefresh={refreshSelected}
             onNavigateToCharacter={onNavigateToCharacter}
-            onNavigateToNPC={onNavigateToNPC}
+            onNavigateToNPC={(npcId, opts) => {
+              if (npcId != null && selectedCampaign?.id && selectedSession?.id) {
+                window.sessionStorage.setItem(
+                  NPC_SESSION_RETURN_KEY,
+                  JSON.stringify({
+                    campaignId: selectedCampaign.id,
+                    sessionId: selectedSession.id,
+                  }),
+                );
+              }
+              onNavigateToNPC?.(npcId, opts);
+            }}
           />
         </div>
       </div>

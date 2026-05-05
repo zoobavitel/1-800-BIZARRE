@@ -202,6 +202,8 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
     look: payload.look ?? "",
     vice: payload.vice ?? "",
     viceDetails: payload.viceDetails ?? payload.vice_details ?? "",
+    fed_today:
+      typeof payload.fed_today === "boolean" ? payload.fed_today : null,
     crew: payload.crew ?? "",
     crewId: payload.crewId ?? null,
     personal_crew_name: payload.personal_crew_name ?? "",
@@ -243,6 +245,33 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
     image: Object.prototype.hasOwnProperty.call(payload || {}, "image")
       ? payload.image
       : undefined,
+  };
+}
+
+function mergeRequiredHeritageSelections(frontendPayload, heritageList) {
+  const heritageId = Number(frontendPayload?.heritage);
+  if (!Number.isFinite(heritageId)) return null;
+  const heritage = (heritageList || []).find((h) => Number(h?.id) === heritageId);
+  if (!heritage) return null;
+
+  const requiredBenefits = (heritage.benefits || [])
+    .filter((b) => b?.required)
+    .map((b) => b.id);
+  const requiredDetriments = (heritage.detriments || [])
+    .filter((d) => d?.required)
+    .map((d) => d.id);
+
+  const currentBenefits = Array.isArray(frontendPayload.selected_benefits)
+    ? frontendPayload.selected_benefits
+    : [];
+  const currentDetriments = Array.isArray(frontendPayload.selected_detriments)
+    ? frontendPayload.selected_detriments
+    : [];
+
+  return {
+    ...frontendPayload,
+    selected_benefits: [...new Set([...requiredBenefits, ...currentBenefits])],
+    selected_detriments: [...new Set([...requiredDetriments, ...currentDetriments])],
   };
 }
 
@@ -660,15 +689,41 @@ export default function CharacterPage({
           ? { imageFile: frontend.imageFile }
           : {}),
       };
+      const saveOnce = async (savePayload) => {
+        if (payload.id) return characterAPI.updateCharacter(payload.id, savePayload);
+        return characterAPI.createCharacter(savePayload);
+      };
       try {
         let saved;
-        if (payload.id) {
-          saved = await characterAPI.updateCharacter(payload.id, withFile);
-        } else {
-          saved = await characterAPI.createCharacter(withFile);
-          if (saved.id && typeof window !== "undefined")
-            window.location.hash = `character/${saved.id}`;
+        try {
+          saved = await saveOnce(withFile);
+        } catch (err) {
+          const msg = String(err?.message || "");
+          const needsRequiredSelections =
+            /Missing required benefits|Missing required detriments/i.test(msg);
+          if (!needsRequiredSelections) throw err;
+
+          const repairedFrontend = mergeRequiredHeritageSelections(
+            frontend,
+            heritageList,
+          );
+          if (!repairedFrontend) throw err;
+
+          const repairedBackend = transformFrontendToBackend({
+            ...repairedFrontend,
+            heritage: heritageValue,
+            campaign: payload.campaign ?? frontend.campaign,
+          });
+          const repairedWithFile = {
+            ...repairedBackend,
+            ...(isImageUploadPayload(frontend.imageFile)
+              ? { imageFile: frontend.imageFile }
+              : {}),
+          };
+          saved = await saveOnce(repairedWithFile);
         }
+        if (!payload.id && saved.id && typeof window !== "undefined")
+          window.location.hash = `character/${saved.id}`;
         let stashMerged = null;
         if (saved?.id && Array.isArray(frontend.stash)) {
           const crewPk =

@@ -329,6 +329,56 @@ class CharacterViewSet(viewsets.ModelViewSet):
         group_action_id = request.data.get("group_action_id")
         assist_helper_id_raw = request.data.get("assist_helper_id")
         assist_helper = None
+        extra_roll_stress = 0
+
+        def _normalize_source_rows(raw, fallback_kind):
+            out = []
+            if raw in (None, "", False):
+                return out
+            rows = raw if isinstance(raw, list) else [raw]
+            for row in rows:
+                item = None
+                if isinstance(row, str):
+                    name = row.strip()
+                    if name:
+                        item = {
+                            "kind": fallback_kind,
+                            "name": name[:160],
+                        }
+                elif isinstance(row, dict):
+                    kind = str(row.get("kind") or fallback_kind).strip().lower()
+                    if not kind:
+                        kind = fallback_kind
+                    name = str(row.get("name") or "").strip()
+                    delta = str(row.get("delta") or "").strip()
+                    category = str(row.get("category") or "").strip().lower()
+                    timing = str(row.get("timing") or "").strip().lower()
+                    notes = str(row.get("notes") or "").strip()
+                    item = {"kind": kind[:64]}
+                    if name:
+                        item["name"] = name[:160]
+                    if delta:
+                        item["delta"] = delta[:80]
+                    if category:
+                        item["category"] = category[:64]
+                    if timing:
+                        item["timing"] = timing[:64]
+                    if notes:
+                        item["notes"] = notes[:300]
+                if item:
+                    out.append(item)
+            return out[:64]
+
+        modifier_sources = _normalize_source_rows(
+            request.data.get("modifier_sources"), "modifier"
+        )
+        modifier_sources += _normalize_source_rows(
+            request.data.get("resistance_sources"), "resistance"
+        )
+        stress_sources = _normalize_source_rows(request.data.get("stress_sources"), "stress")
+        position_effect_sources = _normalize_source_rows(
+            request.data.get("position_effect_sources"), "position_effect"
+        )
 
         stress_cost = 0
         session = None
@@ -409,6 +459,14 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 )
             if incapacitated:
                 stress_cost += 2
+                stress_sources.append(
+                    {
+                        "kind": "system",
+                        "name": "Incapacitated action cost",
+                        "delta": "+2 stress",
+                        "category": "system",
+                    }
+                )
 
             # Devil's bargain: GM may set per-character text; player must confirm before +1d
             if session and devil_bargain_dice:
@@ -439,8 +497,24 @@ class CharacterViewSet(viewsets.ModelViewSet):
             # Optional push costs 2 stress each (in addition to incapacitated cost, if any)
             if push_effect:
                 stress_cost += 2
+                stress_sources.append(
+                    {
+                        "kind": "push",
+                        "name": "Push for effect",
+                        "delta": "+2 stress",
+                        "category": "system",
+                    }
+                )
             if push_dice:
                 stress_cost += 2
+                stress_sources.append(
+                    {
+                        "kind": "push",
+                        "name": "Push for dice",
+                        "delta": "+2 stress",
+                        "category": "system",
+                    }
+                )
             # Optional ability-linked spend (e.g. Phantom Pain: 1 stress to attack through cover).
             try:
                 extra_roll_stress_raw = int(request.data.get("extra_roll_stress") or 0)
@@ -449,6 +523,14 @@ class CharacterViewSet(viewsets.ModelViewSet):
             extra_roll_stress = max(0, min(6, extra_roll_stress_raw))
             if roll_type.upper() == "ACTION" and extra_roll_stress > 0:
                 stress_cost += extra_roll_stress
+                stress_sources.append(
+                    {
+                        "kind": "ability",
+                        "name": "Extra roll stress",
+                        "delta": f"+{extra_roll_stress} stress",
+                        "category": "system",
+                    }
+                )
             # Character.stress is **marked** boxes on the track (same as sheet stressFilled),
             # not "remaining budget". Spending stress marks more boxes.
             max_slots = max_stress_slots_for_character(character)
@@ -470,8 +552,24 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
             if push_effect:
                 effect = bump_effect(effect, 1)
+                position_effect_sources.append(
+                    {
+                        "kind": "push",
+                        "name": "Push for effect",
+                        "delta": "+1 effect",
+                        "category": "system",
+                    }
+                )
             if ability_effect_steps:
                 effect = bump_effect(effect, ability_effect_steps)
+                position_effect_sources.append(
+                    {
+                        "kind": "ability",
+                        "name": "Ability effect modifier",
+                        "delta": f"+{ability_effect_steps} effect",
+                        "category": "ability",
+                    }
+                )
 
         # Get action rating from action_dots (flat or nested) - skip for FORTUNE
         if roll_type.upper() != "FORTUNE":
@@ -486,9 +584,34 @@ class CharacterViewSet(viewsets.ModelViewSet):
             dice_pool = action_rating
             if push_dice:
                 dice_pool += 1
+                modifier_sources.append(
+                    {
+                        "kind": "push",
+                        "name": "Push for dice",
+                        "delta": "+1d",
+                        "category": "system",
+                    }
+                )
             if devil_bargain_dice:
                 dice_pool += 1
+                modifier_sources.append(
+                    {
+                        "kind": "devil_bargain",
+                        "name": "Devil's bargain",
+                        "delta": "+1d",
+                        "category": "system",
+                    }
+                )
             dice_pool += max(0, bonus_dice)
+            if bonus_dice > 0:
+                modifier_sources.append(
+                    {
+                        "kind": "ability",
+                        "name": "Ability/heritage bonus dice",
+                        "delta": f"+{bonus_dice}d",
+                        "category": "ability",
+                    }
+                )
 
             if assist_helper_id_raw not in (None, "", False):
                 try:
@@ -541,6 +664,14 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     assist_helper.stress = min(helper_max_stress, hs + 1)
                     assist_helper.save(update_fields=["stress"])
                     dice_pool += 1
+                    modifier_sources.append(
+                        {
+                            "kind": "assist",
+                            "name": f"Assist ({assist_helper.true_name})",
+                            "delta": "+1d",
+                            "category": "system",
+                        }
+                    )
 
         pool_before_roll = dice_pool
         # 0d action pool (Blades-style): roll 2d take the lowest for outcome tiers; mirrors offline rollDice().
@@ -654,6 +785,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 pool_assist_dice=rp_assist,
                 pool_bonus_dice=rp_bonus,
                 roller_stress_spent=rp_stress,
+                modifier_sources=modifier_sources,
+                stress_sources=stress_sources,
+                position_effect_sources=position_effect_sources,
                 devil_bargain_consequence=rp_devil_txt,
                 fortune_reveal_outcome=(
                     fortune_reveal_outcome if roll_type.upper() == "FORTUNE" else False
@@ -696,6 +830,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "group_action_id": roll.group_action_id if roll else None,
                 "assist_helper_id": assist_helper.id if assist_helper else None,
                 "assist_helper_stress": assist_helper.stress if assist_helper else None,
+                "modifier_sources": modifier_sources,
+                "stress_sources": stress_sources,
+                "position_effect_sources": position_effect_sources,
             }
         )
 

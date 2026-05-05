@@ -740,6 +740,9 @@ class RollSerializer(serializers.ModelSerializer):
             "pool_assist_dice",
             "pool_bonus_dice",
             "roller_stress_spent",
+            "modifier_sources",
+            "stress_sources",
+            "position_effect_sources",
             "devil_bargain_consequence",
             "fortune_reveal_outcome",
             "fortune_public_label",
@@ -819,6 +822,9 @@ class RollSerializer(serializers.ModelSerializer):
             data["pool_assist_dice"] = 0
             data["pool_bonus_dice"] = 0
             data["roller_stress_spent"] = 0
+            data["modifier_sources"] = []
+            data["stress_sources"] = []
+            data["position_effect_sources"] = []
             data["devil_bargain_consequence"] = ""
             public_label = (instance.fortune_public_label or "").strip()
             data["action_name"] = public_label or "Fortune"

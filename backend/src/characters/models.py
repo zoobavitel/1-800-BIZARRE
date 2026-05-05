@@ -602,6 +602,15 @@ class Character(models.Model):
     xp_clocks = models.JSONField(default=dict, blank=True)
     total_xp_spent = models.IntegerField(default=0)
     heritage_points_gained = models.IntegerField(default=0)
+    fed_today = models.BooleanField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text=(
+            "Manual vampire feeding tracker used by sheet detriments "
+            "that depend on whether the character fed today."
+        ),
+    )
     stand_coin_points_gained = models.IntegerField(default=0)
     action_dice_gained = models.IntegerField(default=0)
     inventory = models.JSONField(
@@ -1854,6 +1863,24 @@ class Roll(models.Model):
     pool_bonus_dice = models.PositiveSmallIntegerField(default=0)
     roller_stress_spent = models.PositiveSmallIntegerField(
         default=0, help_text="Stress spent by the rolling character (push, etc.)."
+    )
+    modifier_sources = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "Structured source rows describing dice/stress/effect modifiers "
+            "applied to this roll."
+        ),
+    )
+    stress_sources = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Structured source rows for stress spend/gain tied to this roll.",
+    )
+    position_effect_sources = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Structured source rows for position/effect adjustments on this roll.",
     )
     devil_bargain_consequence = models.CharField(max_length=500, blank=True)
     fortune_reveal_outcome = models.BooleanField(

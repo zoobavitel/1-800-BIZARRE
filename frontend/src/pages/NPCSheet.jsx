@@ -125,7 +125,7 @@ const SPEED_TABLE = {
     base: "200 ft",
     greater: "—",
     lesser: "—",
-    note: "At least Controlled · May act twice before GM cuts to enemies",
+    note: "Higher Speed usually starts Risky or better; GM adjusts by fiction",
   },
   A: { base: "60 ft", greater: "120 ft", lesser: "30 ft", note: "" },
   B: { base: "40 ft", greater: "80 ft", lesser: "20 ft", note: "" },
@@ -1681,11 +1681,11 @@ const NPCSheet = ({
                       >
                         Unexpected action vs PCs
                       </div>
-                      NPC Speed grade vs. player Speed grade sets starting
-                      position when the NPC acts against players unexpectedly. If
-                      NPC Speed is higher, players begin Desperate. If equal,
-                      Risky. If lower, Risky or Controlled at GM discretion.
-                      Turn order stays narrative — not a fixed initiative list.
+                      Speed sets starting position when Stands clash directly.
+                      Compare grades: higher usually starts Risky or better,
+                      equal starts Risky, lower starts Desperate. GM adjusts
+                      from fiction. Turn order stays narrative — not a fixed
+                      initiative list.
                     </div>
                   </div>
 
