@@ -8,8 +8,15 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Documentation",
+        "items": [
+          "clarify resistance counterattack tick scaling"
+        ]
+      },
+      {
         "title": "Added",
         "items": [
+          "improve session GM controls and recovery flow",
           "track modifier sources and improve session/NPC roll flow"
         ]
       }
@@ -471,8 +478,7 @@ export const PATCH_NOTES = [
           "Merge pull request #20 from zoobavitel/copilot/create-faction-for-npc",
           "Delete .github/workflows/black.yml",
           "Merge branch 'master' into copilot/create-faction-for-npc",
-          "Merge pull request #22 from zoobavitel/copilot/inline-faction-creation-npc-sheet",
-          "Add TypeScript dependency to package.json"
+          "Merge pull request #22 from zoobavitel/copilot/inline-faction-creation-npc-sheet"
         ]
       },
       {
@@ -483,8 +489,7 @@ export const PATCH_NOTES = [
           "restrict homepage characters to own user, add NPC delete button",
           "update URL hash when saving/opening NPC so refresh restores the sheet",
           "prevent duplicate faction names per campaign (backend + frontend)",
-          "parse campaign id to int on select change so factions populate",
-          "update package-lock.json to include typescript 5.9.3 as direct dev dependency"
+          "parse campaign id to int on select change so factions populate"
         ]
       },
       {

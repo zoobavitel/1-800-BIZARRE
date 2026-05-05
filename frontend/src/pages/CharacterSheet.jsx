@@ -72,6 +72,7 @@ const ALL_SHEET_ACTIONS_FOR_PARRY = [
   ...PROWESS_ACTIONS,
   ...RESOLVE_ACTIONS,
 ];
+const HEALING_ACTION_CHOICES = [...ALL_SHEET_ACTIONS_FOR_PARRY];
 
 const CREW_HISTORY_FIELD_KEYS = new Set([
   "name",
@@ -455,6 +456,125 @@ const ProgressClock = ({
   }
   return svg;
 };
+
+/**
+ * Exclude entries that are clearly not recover-in-play treatment bolsters:
+ * resistance→counterattack (Parry), recon/stealth (Scout), or offensive melee/attack(+1d) (Zoom Punch).
+ */
+function healBolsterCandidateExcludedFromRecoverPlay(combinedTextLower) {
+  const t = String(combinedTextLower || "").toLowerCase();
+  if (!t.trim()) return false;
+  const treatmentAdjacent =
+    /\b(heal(?:ing)?\b|\brecovery\b(?:\s+rolls?\b|\s+treatment\b)?|healing clock|recovery treatment|recovery rolls?|treatment roll|stabili|\bsuture\b|\bmedic|\bmedical|\btreat(?:ment)?\b|\bpatient\b|\btherapy\b|\breviv|\brestore\b|\bsegment\b|injur(?:y)?|harm\b|blood\b|bleed(?:ing)?)/i.test(
+      t,
+    );
+  if (
+    /\b(successful\s+)?resistance\s+rolls?\b/i.test(t) &&
+    /\bcounterattack\b/i.test(t) &&
+    !treatmentAdjacent
+  ) {
+    return true;
+  }
+  if (
+    /\b(gather\s+info\s+to\s+locate|locate\s+a\s+target|avoid\s+detection|camouflage)\b/i.test(
+      t,
+    ) &&
+    !treatmentAdjacent
+  ) {
+    return true;
+  }
+  if (
+    (/\bmelee\s+strike\b/.test(t) ||
+      /\+\s*1d\s+when\s+attacking\b/.test(t) ||
+      /\battack(?:ing)?\s+from\s+unexpected\s+angles\b/.test(t)) &&
+    !treatmentAdjacent
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Recover-in-play / healing bolster picker: narrows abilities + heritage copy (not overly broad generic "stress"). */
+function healBolsterCandidateMatchesCombinedText(
+  combinedTextLower,
+  hasRollDiceOrEffectFromDescription,
+) {
+  if (healBolsterCandidateExcludedFromRecoverPlay(combinedTextLower))
+    return false;
+  const hasHealFlavor =
+    /\b(healing|heal\b|recovery|recover(y)?\b|stabili[sz]|suture|\bmedic|operative|\btreat\b|patient|\btherapy|blood|bleed(?:ing)?|injur(?:y)?|hurt\b|repair\b|segment|operative|infusion|\brepair\b[^\n]{0,40}\bharm\b|restore\b)/i.test(
+      combinedTextLower,
+    );
+  const healClockOrRecoveryRoll =
+    /\b(healing clock|recovery roll|recovery rolls|treatment roll|recovery treatment)\b/i.test(
+      combinedTextLower,
+    );
+  const allyAid =
+    /\b(assist\s+a\s+teammate|protect\s+a\s+teammate|teammates?|allies|another\s+crew|another\s+pc)\b/i.test(
+      combinedTextLower,
+    );
+  const positionForSafety = /\+\s*\d\s*position\b|gain\s+.{0,24}position\b|better\s+position\b/i.test(
+    combinedTextLower,
+  );
+  const stressSpentHeal =
+    /\bstress\b/.test(combinedTextLower) &&
+    /\b(heal|segment|recovery|stabili|medic|treat|patient|suture|blood|reviv|restore)\b/i.test(
+      combinedTextLower,
+    );
+  if (hasHealFlavor || healClockOrRecoveryRoll || stressSpentHeal || positionForSafety)
+    return true;
+  if (
+    hasRollDiceOrEffectFromDescription &&
+    (hasHealFlavor || healClockOrRecoveryRoll || allyAid)
+  )
+    return true;
+  if (hasRollDiceOrEffectFromDescription && /\b(inject|surgery|first aid|field kit|tourniquet)\b/i.test(combinedTextLower))
+    return true;
+  return false;
+}
+
+/** Turns healing bolster picker keys into dice-pool `{ dice, effect }` toggles (max supported each). */
+function buildHealRollBoostPresetFromSelections(
+  selectedKeys,
+  candidates,
+  abilityRollBonusOptions,
+  heritageRollBonusOptions,
+) {
+  const keySet = new Set(
+    Array.isArray(selectedKeys) ? selectedKeys.map((k) => String(k)) : [],
+  );
+  const abilitiesPreset = {};
+  const heritagePreset = {};
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    return { abilities: abilitiesPreset, heritage: heritagePreset };
+  }
+  candidates.forEach((c) => {
+    if (!c || !keySet.has(String(c.key))) return;
+    const boostId = String(c.boostKey);
+    if (c.rollKind === "ability") {
+      const ab = abilityRollBonusOptions.find(
+        (x) => String(x.id ?? x.name) === boostId,
+      );
+      if (!ab) return;
+      abilitiesPreset[boostId] = {
+        dice: !!ab.supportsDice,
+        effect: !!ab.supportsEffect,
+      };
+      return;
+    }
+    if (c.rollKind === "heritage") {
+      const hb = heritageRollBonusOptions.find(
+        (x) => String(x.id ?? x.name) === boostId,
+      );
+      if (!hb) return;
+      heritagePreset[boostId] = {
+        dice: !!hb.supportsDice,
+        effect: !!hb.supportsEffect,
+      };
+    }
+  });
+  return { abilities: abilitiesPreset, heritage: heritagePreset };
+}
 
 // ─── CharacterSheetWrapper ────────────────────────────────────────────────────
 
@@ -1848,6 +1968,13 @@ const CharacterSheetWrapper = ({
     devil_bargain_dice: false,
     devil_bargain_note: "",
   });
+  const [healOtherRecoveryIntent, setHealOtherRecoveryIntent] = useState({
+    enabled: false,
+    actionName: "TINKER",
+    targetId: "",
+    selectedBolsterKeys: [],
+    bolsterNote: "",
+  });
   const [rollAbilityBoost, setRollAbilityBoost] = useState({});
   const [heritageRollBoost, setHeritageRollBoost] = useState({});
   /** Phantom Pain: spend 1 stress when using the ability through cover/barriers (fiction). */
@@ -1911,6 +2038,11 @@ const CharacterSheetWrapper = ({
   const [assistGrantBusy, setAssistGrantBusy] = useState(false);
   const [assistGrantMsg, setAssistGrantMsg] = useState(null);
   const [assistGrantErr, setAssistGrantErr] = useState(null);
+  const [healOtherDraft, setHealOtherDraft] = useState({
+    targetId: "",
+    actionName: "TINKER",
+    selectedBolsterKeys: [],
+  });
   const [rollGoalDraft, setRollGoalDraft] = useState("");
   const [showDevilsBargainModal, setShowDevilsBargainModal] = useState(false);
   const [devilBargainConfirmed, setDevilBargainConfirmed] = useState(false);
@@ -2062,6 +2194,81 @@ const CharacterSheetWrapper = ({
     [downgradeAllHarmByOneLevel],
   );
 
+  const applyRecoverySegmentsToTrack = useCallback(
+    (currentClock, currentHarm, segmentsToAdd) => {
+      const cap = 4;
+      const add = Math.max(0, Math.floor(Number(segmentsToAdd) || 0));
+      const clock = Math.max(0, Math.min(cap, Number(currentClock) || 0));
+      if (!add) {
+        return {
+          nextClock: clock,
+          nextHarm: normalizeHarmObject(currentHarm),
+        };
+      }
+      const total = clock + add;
+      const completions = Math.floor(total / cap) - Math.floor(clock / cap);
+      let nextHarm = normalizeHarmObject(currentHarm);
+      for (let i = 0; i < completions; i += 1) {
+        nextHarm = downgradeAllHarmByOneLevel(nextHarm);
+      }
+      return {
+        nextClock: total % cap,
+        nextHarm,
+      };
+    },
+    [downgradeAllHarmByOneLevel],
+  );
+
+  const extractHarmFromBackendCharacter = useCallback((rawCharacter) => {
+    const slot = (used, name) => (used ? String(name ?? "") : "");
+    return normalizeHarmObject({
+      level4: [
+        slot(rawCharacter?.harm_level4_used, rawCharacter?.harm_level4_name),
+      ],
+      level3: [
+        slot(rawCharacter?.harm_level3_used, rawCharacter?.harm_level3_name),
+      ],
+      level2: [
+        slot(rawCharacter?.harm_level2_used, rawCharacter?.harm_level2_name),
+        slot(
+          rawCharacter?.harm_level2_slot2_used,
+          rawCharacter?.harm_level2_slot2_name,
+        ),
+      ],
+      level1: [
+        slot(rawCharacter?.harm_level1_used, rawCharacter?.harm_level1_name),
+        slot(
+          rawCharacter?.harm_level1_slot2_used,
+          rawCharacter?.harm_level1_slot2_name,
+        ),
+      ],
+    });
+  }, []);
+
+  const buildHarmPatchPayload = useCallback((nextHarm) => {
+    const normalizeSlot = (value) => String(value ?? "").trim();
+    const l1a = normalizeSlot(nextHarm?.level1?.[0]);
+    const l1b = normalizeSlot(nextHarm?.level1?.[1]);
+    const l2a = normalizeSlot(nextHarm?.level2?.[0]);
+    const l2b = normalizeSlot(nextHarm?.level2?.[1]);
+    const l3 = normalizeSlot(nextHarm?.level3?.[0]);
+    const l4 = normalizeSlot(nextHarm?.level4?.[0]);
+    return {
+      harm_level1_used: !!l1a,
+      harm_level1_name: l1a,
+      harm_level1_slot2_used: !!l1b,
+      harm_level1_slot2_name: l1b,
+      harm_level2_used: !!l2a,
+      harm_level2_name: l2a,
+      harm_level2_slot2_used: !!l2b,
+      harm_level2_slot2_name: l2b,
+      harm_level3_used: !!l3,
+      harm_level3_name: l3,
+      harm_level4_used: !!l4,
+      harm_level4_name: l4,
+    };
+  }, []);
+
   const rollRecoveryTreatment = useCallback((tinkerDice) => {
     // SRD: Recover uses healer skill (Tinker) then advances healing clock.
     // 1-3: +1 segment; 4/5: +2; 6: +3; critical (2+ sixes): +5.
@@ -2114,9 +2321,7 @@ const CharacterSheetWrapper = ({
       if (!canEditSheet) return;
       if (healingRecoverBusy) return;
 
-      const isDowntime = mode === "downtime";
       const isMidAction = mode === "mid-action";
-      if (isDowntime && Boolean(activeSessionId)) return;
       if (isMidAction && !activeSessionId) return;
 
       const tinkerDice = Math.max(
@@ -2144,8 +2349,12 @@ const CharacterSheetWrapper = ({
               ? "4/5"
               : "1-3";
 
+        const modeLabel =
+          mode === "mid-action"
+            ? "Mid-action recover"
+            : "Downtime recover";
         setHealingRecoverMsg(
-          `${mode.replace("-", " ")}: Tinker (${tinkerDice}d) rolled ${bandText} → +${roll.segments} healing segments`,
+          `${modeLabel}: Tinker (${tinkerDice}d) rolled ${bandText} → +${roll.segments} healing segments`,
         );
       } catch (e) {
         setHealingRecoverErr(e?.message || "Recover failed");
@@ -2597,6 +2806,33 @@ const CharacterSheetWrapper = ({
     return roster.filter((c) => c.id !== characterId);
   }, [charCampaign?.campaign_characters, characterId, charData.crewId]);
 
+  const healOtherTargets = useMemo(() => {
+    const roster = charCampaign?.campaign_characters || [];
+    return roster.filter((c) => String(c.id) !== String(characterId));
+  }, [charCampaign?.campaign_characters, characterId]);
+
+  const healOtherRecoveryCandidates = useMemo(() => {
+    const roster = charCampaign?.campaign_characters || [];
+    return roster.filter((c) => String(c.id) !== String(characterId));
+  }, [charCampaign?.campaign_characters, characterId]);
+
+  const healingIntentActionName = useMemo(() => {
+    const selected = String(healOtherRecoveryIntent.actionName || "")
+      .trim()
+      .toUpperCase();
+    if (HEALING_ACTION_CHOICES.includes(selected)) return selected;
+    return "TINKER";
+  }, [healOtherRecoveryIntent.actionName]);
+
+  const rollActionName = useMemo(() => {
+    if (healOtherRecoveryIntent.enabled) return healingIntentActionName;
+    return String(rollPending?.actionName || "").trim().toUpperCase();
+  }, [
+    healOtherRecoveryIntent.enabled,
+    healingIntentActionName,
+    rollPending?.actionName,
+  ]);
+
   const groupParticipants = useMemo(() => {
     const roster = charCampaign?.campaign_characters || [];
     if (charData.crewId) {
@@ -2607,6 +2843,10 @@ const CharacterSheetWrapper = ({
   }, [charCampaign?.campaign_characters, charData.crewId]);
 
   const groupActionChoices = useMemo(
+    () => Object.keys(ACTION_ATTR || {}).sort(),
+    [],
+  );
+  const healRollActionChoices = useMemo(
     () => Object.keys(ACTION_ATTR || {}).sort(),
     [],
   );
@@ -2969,6 +3209,164 @@ const CharacterSheetWrapper = ({
   const totalAbilityEffectSteps =
     abilityEffectSteps + heritageEffectSteps + parryCounterEffectStepsActive;
 
+  const healOtherSelectedTarget = useMemo(
+    () =>
+      healOtherRecoveryCandidates.find(
+        (c) => String(c.id) === String(healOtherRecoveryIntent.targetId),
+      ) || null,
+    [healOtherRecoveryCandidates, healOtherRecoveryIntent.targetId],
+  );
+
+  /** Sheet abilities + selected heritage only; matches heal/recovery or roll mechanics relevant to treatment. */
+  const healBolsterAbilityCandidates = useMemo(() => {
+    const out = [];
+    const seen = new Set();
+    const rollAble = new Set(["standard", "spin", "hamon", "custom"]);
+
+    const push = (row) => {
+      if (!row.key || seen.has(row.key)) return;
+      seen.add(row.key);
+      out.push(row);
+    };
+
+    const optionsByBoostKey = new Map();
+    abilityRollBonusOptions.forEach((ab) => {
+      const k = ab.id ?? ab.name;
+      optionsByBoostKey.set(String(k), ab);
+    });
+    const heritageOptionsByBoostKey = new Map();
+    heritageRollBonusOptions.forEach((hb) => {
+      const k = hb.id ?? hb.name;
+      heritageOptionsByBoostKey.set(String(k), hb);
+    });
+
+    abilityRollBonusOptions.forEach((ab) => {
+      const desc = String(
+        ab.rollBonusResolvedDescription || ab.description || "",
+      ).toLowerCase();
+      const nm = String(ab.name || "").toLowerCase();
+      const combined = `${nm} ${desc}`;
+      const hasDe = !!(ab.supportsDice || ab.supportsEffect);
+      if (healBolsterCandidateMatchesCombinedText(combined, hasDe)) {
+        const boostKey = ab.id ?? ab.name;
+        push({
+          key: `ability:${String(ab.type || "sheet")}:${boostKey}`,
+          boostKey,
+          rollKind: "ability",
+          name: String(ab.name || "").trim(),
+          description: String(
+            ab.rollBonusResolvedDescription || ab.description || "",
+          ).trim(),
+        });
+      }
+    });
+
+    (abilities || []).forEach((ab) => {
+      const t = String(ab?.type || "").toLowerCase();
+      if (!ab || !rollAble.has(t)) return;
+      const boostKey = ab.id ?? ab.name;
+      const keyStr = String(boostKey);
+      if (optionsByBoostKey.has(keyStr)) return;
+      const resolved = String(
+        effectiveRollBonusAbilityDescription(ab) || "",
+      ).trim();
+      const adj = adjustActionRollBonusSupports(ab, {
+        supportsDice: supportsAbilityBonusDice(resolved),
+        supportsEffect: supportsAbilityBonusEffect(resolved),
+      });
+      const hasDe = !!(adj.supportsDice || adj.supportsEffect);
+      const nm = String(ab.name || "").toLowerCase();
+      const combined = `${nm} ${resolved.toLowerCase()}`;
+      if (!healBolsterCandidateMatchesCombinedText(combined, hasDe)) return;
+      push({
+        key: `ability:${String(t)}:${keyStr}`,
+        boostKey,
+        rollKind: "ability",
+        name: String(ab.name || "").trim(),
+        description: resolved,
+      });
+    });
+
+    heritageRollBonusOptions.forEach((hb) => {
+      const desc = String(hb.description || "").toLowerCase();
+      const nm = String(hb.name || "").toLowerCase();
+      const combined = `${nm} ${desc}`;
+      const hasDe = !!(hb.supportsDice || hb.supportsEffect);
+      if (healBolsterCandidateMatchesCombinedText(combined, hasDe)) {
+        const boostKey = hb.id ?? hb.name;
+        push({
+          key: `heritage-benefit:${boostKey}`,
+          boostKey,
+          rollKind: "heritage",
+          name: String(hb.name || "").trim(),
+          description: String(hb.description || "").trim(),
+        });
+      }
+    });
+
+    const hid = charData?.heritage;
+    const h =
+      hid != null && Array.isArray(heritages) && heritages.length
+        ? heritages.find((x) => x.id === hid)
+        : null;
+    (h?.benefits || []).forEach((b) => {
+      if (!b) return;
+      const selected =
+        Boolean(b.required) ||
+        (Array.isArray(selectedBenefits) && selectedBenefits.includes(b.id));
+      if (!selected) return;
+      const hbKey = b.id ?? b.name;
+      if (heritageOptionsByBoostKey.has(String(hbKey))) return;
+      const desc = String(b.description || "").toLowerCase();
+      const nm = String(b.name || "").toLowerCase();
+      const combined = `${nm} ${desc}`;
+      if (!healBolsterCandidateMatchesCombinedText(combined, false)) return;
+      push({
+        key: `heritage-benefit-extra:${hbKey}`,
+        boostKey: hbKey,
+        rollKind: "heritage",
+        name: String(b.name || "").trim(),
+        description: String(b.description || "").trim(),
+      });
+    });
+
+    out.sort((a, b) =>
+      `${a.rollKind}:${a.name}`.localeCompare(`${b.rollKind}:${b.name}`, "en"),
+    );
+    return out;
+  }, [
+    abilities,
+    abilityRollBonusOptions,
+    heritageRollBonusOptions,
+    charData?.heritage,
+    heritages,
+    selectedBenefits,
+    effectiveRollBonusAbilityDescription,
+    supportsAbilityBonusDice,
+    supportsAbilityBonusEffect,
+  ]);
+
+  const healOtherRecoveryBolsterSources = useMemo(() => {
+    const keys = new Set(
+      Array.isArray(healOtherRecoveryIntent.selectedBolsterKeys)
+        ? healOtherRecoveryIntent.selectedBolsterKeys.map((k) => String(k))
+        : [],
+    );
+    if (keys.size === 0) return [];
+    return healBolsterAbilityCandidates
+      .filter((c) => keys.has(c.key))
+      .map((c) => `${c.name} (${c.rollKind})`);
+  }, [
+    healBolsterAbilityCandidates,
+    healOtherRecoveryIntent.selectedBolsterKeys,
+  ]);
+  const healAttemptSelectedBoostSummary = useMemo(() => {
+    const picked = [...abilityBonusAudit, ...heritageBonusAudit].map((x) =>
+      String(x || "").trim(),
+    );
+    return picked.filter(Boolean);
+  }, [abilityBonusAudit, heritageBonusAudit]);
+
   /** Session default + push + ability/heritage/Parry steps — matches server roll_action order. */
   const rollModalPreviewEffect = useMemo(() => {
     const base =
@@ -3065,9 +3463,9 @@ const CharacterSheetWrapper = ({
   );
 
   const rollPoolPreview = useMemo(() => {
-    if (!rollPending) return null;
+    if (!rollPending || !rollActionName) return null;
     const { action_rating, basePool } = computeActionPoolBreakdown(
-      rollPending.actionName,
+      rollActionName,
       actionRatings,
     );
     let mod = 0;
@@ -3091,6 +3489,7 @@ const CharacterSheetWrapper = ({
     };
   }, [
     rollPending,
+    rollActionName,
     actionRatings,
     rollModal.push_dice,
     rollModal.push_effect,
@@ -3148,8 +3547,46 @@ const CharacterSheetWrapper = ({
       );
       const phantomStress = phantomPainThroughCover ? 1 : 0;
       const feedPenaltyActive = hasNoFeedDetriment && charData.fed_today === false;
+      const selectedRollAction =
+        rollActionName ||
+        String(rollPending.actionName || "")
+          .trim()
+          .toUpperCase();
+      const isRecoveryTreatmentRoll = !!selectedRollAction;
+      const targetName = (
+        healOtherSelectedTarget?.true_name ||
+        healOtherSelectedTarget?.name ||
+        ""
+      ).trim();
+      const healIntentActive =
+        isRecoveryTreatmentRoll &&
+        healOtherRecoveryIntent.enabled &&
+        String(healOtherRecoveryIntent.targetId || "").trim().length > 0 &&
+        !!targetName;
+      const healIntentIsSelf =
+        healIntentActive &&
+        String(healOtherRecoveryIntent.targetId) === String(characterId);
+      const healIntentActionSummary = healIntentActive
+        ? `Recovery action declared: ${selectedRollAction}.`
+        : "";
+      const healIntentSummary = healIntentActive
+        ? `Recovery treatment declared: healer ${
+            charData?.true_name || charData?.name || "PC"
+          } -> ${targetName}${healIntentIsSelf ? " (self)" : ""}.`
+        : "";
+      const healIntentBolsterSummary =
+        healIntentActive && healOtherRecoveryBolsterSources.length > 0
+          ? `Recovery bolsters declared: ${healOtherRecoveryBolsterSources.join("; ")}.`
+          : "";
+      const healIntentNote = healIntentActive
+        ? String(healOtherRecoveryIntent.bolsterNote || "").trim()
+        : "";
       const abilityBonusesMerged = [
         ...abilityBonusAudit,
+        ...(healIntentActionSummary ? [healIntentActionSummary] : []),
+        ...(healIntentSummary ? [healIntentSummary] : []),
+        ...(healIntentBolsterSummary ? [healIntentBolsterSummary] : []),
+        ...(healIntentNote ? [`Recovery bolster note: ${healIntentNote}`] : []),
         ...(parryEffectStepsCommitted > 0
           ? ["Parry and Break: +1 effect (counterattack)"]
           : []),
@@ -3167,12 +3604,111 @@ const CharacterSheetWrapper = ({
           category: "ability",
         })),
       ];
+      const healAttemptFromRoll =
+        rollPending.healAttempt && typeof rollPending.healAttempt === "object"
+          ? rollPending.healAttempt
+          : null;
+      const bolsterStringsFromRoll =
+        healAttemptFromRoll &&
+        Array.isArray(healAttemptFromRoll.selectedAbilityBolsters)
+          ? healAttemptFromRoll.selectedAbilityBolsters
+              .map((x) => String(x || "").trim())
+              .filter(Boolean)
+          : [];
+      const mergedHealBolsterStrings =
+        bolsterStringsFromRoll.length > 0
+          ? bolsterStringsFromRoll
+          : healIntentActive && healOtherRecoveryBolsterSources.length > 0
+            ? [...healOtherRecoveryBolsterSources]
+            : [];
+      const healAttemptMeta =
+        healAttemptFromRoll ||
+        (healIntentActive
+          ? {
+              kind: "session_recover_intent",
+              targetName,
+              bolsterNote: healOtherRecoveryIntent.bolsterNote || "",
+              careNote: "",
+            }
+          : null);
+      if (healAttemptMeta) {
+        const healMetaTargetDisplay = String(
+          healAttemptMeta.targetName || "",
+        ).trim();
+        const bolsterNote = String(healAttemptMeta.bolsterNote || "").trim();
+        const careNote = String(healAttemptMeta.careNote || "").trim();
+        modifierSources.push({
+          kind: "healing",
+          name: healMetaTargetDisplay
+            ? `Heal target: ${healMetaTargetDisplay}`
+            : "Heal another player",
+          category: "intent",
+        });
+        if (mergedHealBolsterStrings.length > 0) {
+          modifierSources.push({
+            kind: "healing",
+            name: `Ability bolsters: ${mergedHealBolsterStrings.join("; ")}`,
+            category: "ability",
+          });
+        }
+        if (bolsterNote) {
+          modifierSources.push({
+            kind: "healing",
+            name: `Bolster note: ${bolsterNote}`,
+            category: "ability",
+          });
+        }
+        if (careNote) {
+          modifierSources.push({
+            kind: "healing",
+            name: `Approach note: ${careNote}`,
+            category: "intent",
+          });
+        }
+        modifierSources.push({
+          kind: "recovery_resolution",
+          name: "GM recovery resolution needed",
+          category: "recovery",
+          timing: "post_roll",
+          notes:
+            "Apply recovery ticks to linked target per SRD cadence when fiction/time allows.",
+        });
+      }
       if (bonusDiceFromAbilities > 0 || bonusDiceFromHeritage > 0) {
         modifierSources.push({
           kind: "ability",
           name: "Sheet/heritage bonus dice",
           delta: `+${totalBonusDiceFromAbilitiesAndHeritage}d`,
           category: "ability",
+        });
+      }
+      if (healIntentActive) {
+        modifierSources.push({
+          kind: "recovery_treatment",
+          name: "Heal another player",
+          delta: "declared pre-roll",
+          category: "recovery",
+          timing: "pre_roll",
+          notes: `healer=${charData?.true_name || charData?.name || "PC"}; action=${selectedRollAction}; target=${targetName}; target_id=${healOtherRecoveryIntent.targetId}; self=${healIntentIsSelf ? "true" : "false"}`,
+        });
+      }
+      if (healIntentActive && healOtherRecoveryBolsterSources.length > 0) {
+        modifierSources.push({
+          kind: "recovery_bolster",
+          name: "Declared recovery bolsters",
+          delta: `${healOtherRecoveryBolsterSources.length} source(s)`,
+          category: "ability",
+          timing: "pre_roll",
+          notes: healOtherRecoveryBolsterSources.join("; "),
+        });
+      }
+      if (healIntentActive && healIntentNote) {
+        modifierSources.push({
+          kind: "recovery_bolster",
+          name: "Recovery bolster note",
+          category: "recovery",
+          timing: "pre_roll",
+          notes: healIntentNote,
         });
       }
       const stressSources = [
@@ -3220,7 +3756,7 @@ const CharacterSheetWrapper = ({
           : []),
       ];
       const payload = {
-        action: rollPending.actionName.toLowerCase(),
+        action: selectedRollAction.toLowerCase(),
         push_effect: rollModal.push_effect,
         push_dice: rollModal.push_dice,
         devil_bargain_dice: rollModal.devil_bargain_dice,
@@ -3244,7 +3780,36 @@ const CharacterSheetWrapper = ({
         stress_sources: stressSources.length > 0 ? stressSources : undefined,
         position_effect_sources:
           positionEffectSources.length > 0 ? positionEffectSources : undefined,
+        description:
+          healAttemptMeta != null
+            ? [
+                "Healing attempt",
+                String(healAttemptMeta.targetName || "").trim()
+                  ? `target=${String(healAttemptMeta.targetName).trim()}`
+                  : null,
+                String(healAttemptMeta.bolsterNote || "").trim()
+                  ? `bolster=${String(healAttemptMeta.bolsterNote).trim()}`
+                  : null,
+                mergedHealBolsterStrings.length > 0
+                  ? `bolsters=${mergedHealBolsterStrings.join(",")}`
+                  : null,
+                String(healAttemptMeta.careNote || "").trim()
+                  ? `note=${String(healAttemptMeta.careNote).trim()}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" | ")
+            : undefined,
         ...(phantomStress > 0 ? { extra_roll_stress: phantomStress } : {}),
+        ...(healIntentActive
+          ? {
+              recovery_target_character_id: Number(
+                healOtherRecoveryIntent.targetId,
+              ),
+              recovery_roll_action: selectedRollAction.toLowerCase(),
+              recovery_is_self_treatment: healIntentIsSelf,
+            }
+          : {}),
       };
       if (activeSessionId) {
         payload.session_id = activeSessionId;
@@ -3253,13 +3818,56 @@ const CharacterSheetWrapper = ({
           payload.group_action_id = snappedGa;
         } else if (
           activeGroupAction?.id &&
-          String(rollPending.actionName || "").toLowerCase() ===
+          String(selectedRollAction || "").toLowerCase() ===
             String(activeGroupAction.action_name || "").toLowerCase()
         ) {
           payload.group_action_id = activeGroupAction.id;
         }
       }
       const res = await characterAPI.rollAction(characterId, payload);
+      if (healIntentActive && !healIntentIsSelf) {
+        const rolledDice = Array.isArray(res?.dice_results)
+          ? res.dice_results.map((d) => Number(d)).filter(Number.isFinite)
+          : [];
+        const highest = Number.isFinite(Number(res?.highest))
+          ? Number(res.highest)
+          : rolledDice.length > 0
+            ? Math.max(...rolledDice)
+            : 0;
+        const isCritical = rolledDice.filter((d) => d === 6).length >= 2;
+        const recoverySegments = isCritical
+          ? 5
+          : highest >= 6
+            ? 3
+            : highest >= 4
+              ? 2
+              : 1;
+        const targetCharacterId = Number(healOtherRecoveryIntent.targetId);
+        if (Number.isFinite(targetCharacterId) && targetCharacterId > 0) {
+          try {
+            const targetRaw = await characterAPI.getCharacter(targetCharacterId);
+            const targetClock = Math.max(
+              0,
+              Math.min(4, Number(targetRaw?.healing_clock_filled) || 0),
+            );
+            const targetHarm = extractHarmFromBackendCharacter(targetRaw);
+            const targetRecovery = applyRecoverySegmentsToTrack(
+              targetClock,
+              targetHarm,
+              recoverySegments,
+            );
+            await characterAPI.patchCharacter(targetCharacterId, {
+              healing_clock_filled: targetRecovery.nextClock,
+              ...buildHarmPatchPayload(targetRecovery.nextHarm),
+            });
+            onCampaignRefresh?.();
+          } catch {
+            setRollApiError(
+              "Roll saved, but target healing update failed. Ask GM to resolve recover ticks manually.",
+            );
+          }
+        }
+      }
       // Match roll modal + session GM map: per-PC session override beats API echo (same order as PositionStack preview).
       const effectivePosition =
         sessionOverridePositionEffect?.position ||
@@ -3302,7 +3910,7 @@ const CharacterSheetWrapper = ({
         onCampaignRefresh?.();
       }
       setDiceResult({
-        action: rollPending.actionName,
+        action: selectedRollAction,
         dice: res.dice_results || [],
         result: res.highest ?? Math.max(...(res.dice_results || [0])),
         outcome: (res.outcome || "").replace(/_/g, " "),
@@ -3338,6 +3946,13 @@ const CharacterSheetWrapper = ({
       setRollAbilityBoost({});
       setHeritageRollBoost({});
       setPhantomPainThroughCover(false);
+      setHealOtherRecoveryIntent({
+        enabled: false,
+        actionName: "TINKER",
+        targetId: "",
+        selectedBolsterKeys: [],
+        bolsterNote: "",
+      });
     } catch (e) {
       setRollApiError(e.message);
     }
@@ -3463,28 +4078,58 @@ const CharacterSheetWrapper = ({
     extras,
   ) => {
     if (characterId && !isResistance) {
+      const rawExtras = extras && typeof extras === "object" ? extras : {};
+      const { rollBoostPreset, ...rollPendingExtras } = rawExtras;
+      const goalTargetName =
+        extras &&
+        typeof extras === "object" &&
+        extras.healAttempt &&
+        String(extras.healAttempt.targetName || "").trim();
       setResistancePending(null);
       setRollPending({
         actionName,
         diceCount,
         isDesperateAction,
+        ...rollPendingExtras,
         ...(groupActionIdSnap != null
           ? { group_action_id: groupActionIdSnap }
           : {}),
       });
-      setRollAbilityBoost({});
-      setHeritageRollBoost({});
+      const preset =
+        rollBoostPreset && typeof rollBoostPreset === "object"
+          ? rollBoostPreset
+          : null;
+      setRollAbilityBoost(
+        preset?.abilities && typeof preset.abilities === "object"
+          ? preset.abilities
+          : {},
+      );
+      setHeritageRollBoost(
+        preset?.heritage && typeof preset.heritage === "object"
+          ? preset.heritage
+          : {},
+      );
       setPhantomPainThroughCover(false);
       setDevilBargainConfirmed(false);
       const asdGoal = (
         assignedRollGoalLabel || ""
       ).trim();
-      setRollGoalDraft(asdGoal);
+      setRollGoalDraft(
+        asdGoal ||
+          (goalTargetName ? `Heal ${goalTargetName}'s harm` : ""),
+      );
       setRollModal({
         push_effect: false,
         push_dice: false,
         devil_bargain_dice: false,
         devil_bargain_note: "",
+      });
+      setHealOtherRecoveryIntent({
+        enabled: false,
+        actionName: "TINKER",
+        targetId: "",
+        selectedBolsterKeys: [],
+        bolsterNote: "",
       });
       setRollApiError(null);
       return;
@@ -6307,24 +6952,16 @@ const CharacterSheetWrapper = ({
                         <button
                           type="button"
                           onClick={() => performHealingRecover("downtime")}
-                          disabled={
-                            healingRecoverBusy ||
-                            !canEditSheet ||
-                            Boolean(activeSessionId)
-                          }
+                          disabled={healingRecoverBusy || !canEditSheet}
                           style={{
                             ...S.btn,
                             fontSize: "11px",
                             background: "#0f766e",
                             color: "#f8fafc",
                             opacity:
-                              healingRecoverBusy ||
-                              !canEditSheet ||
-                              Boolean(activeSessionId)
-                                ? 0.6
-                                : 1,
+                              healingRecoverBusy || !canEditSheet ? 0.6 : 1,
                           }}
-                          title="Downtime Recover: treat yourself. SRD stress cost: 2. Roll Tinker for healing clock segments (1-3:+1, 4/5:+2, 6:+3, critical:+5)."
+                          title="Downtime recover: treat yourself when you have downtime or an equivalent pause—even during a gaming session—when GM/table agrees. SRD stress: 2. Roll Tinker for healing clock segments (1-3:+1, 4/5:+2, 6:+3, critical:+5)."
                         >
                           downtime recover
                         </button>
@@ -8315,6 +8952,113 @@ const CharacterSheetWrapper = ({
                       );
                       })}
                     </div>
+                    {false && activeSessionId && characterId && (
+                      <div
+                        style={{
+                          marginTop: "10px",
+                          padding: "8px",
+                          borderRadius: "6px",
+                          border: "1px solid #374151",
+                          background: "#0f172a",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "11px",
+                            color: "#d1d5db",
+                            fontWeight: 700,
+                            marginBottom: "6px",
+                          }}
+                        >
+                          Heal another player (in-session)
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "6px",
+                          }}
+                        >
+                          <select
+                            style={{ ...S.sel, width: "100%" }}
+                            value={healOtherDraft.targetId}
+                            onChange={(e) =>
+                              setHealOtherDraft((p) => ({
+                                ...p,
+                                targetId: e.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">Target character</option>
+                            {healOtherTargets.map((c) => {
+                              const isSelf = String(c.id) === String(characterId);
+                              return (
+                                <option key={c.id} value={String(c.id)}>
+                                  {(c.true_name || c.name || `PC ${c.id}`) +
+                                    (isSelf
+                                      ? " (Self - only if fiction supports)"
+                                      : "")}
+                                </option>
+                              );
+                            })}
+                          </select>
+                          <select
+                            style={{ ...S.sel, width: "100%" }}
+                            value={healOtherDraft.actionName}
+                            onChange={(e) =>
+                              setHealOtherDraft((p) => ({
+                                ...p,
+                                actionName: String(e.target.value || "").toUpperCase(),
+                              }))
+                            }
+                          >
+                            {healRollActionChoices.map((action) => (
+                              <option key={action} value={action}>
+                                {action}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            style={{
+                              ...S.btn,
+                              background: "#0f766e",
+                              color: "#f8fafc",
+                              fontSize: "11px",
+                            }}
+                            disabled={!healOtherDraft.targetId}
+                            onClick={() => {
+                              const action = String(
+                                healOtherDraft.actionName || "TINKER",
+                              )
+                                .trim()
+                                .toUpperCase();
+                              const target = healOtherTargets.find(
+                                (c) => String(c.id) === String(healOtherDraft.targetId),
+                              );
+                              const rating = Math.max(
+                                0,
+                                Number(actionRatings[action] || 0),
+                              );
+                              rollDice(action, rating, false, false, undefined, {
+                                healAttempt: {
+                                  kind: "heal_other",
+                                  targetId: Number(healOtherDraft.targetId),
+                                  targetName:
+                                    target?.true_name ||
+                                    target?.name ||
+                                    `PC ${healOtherDraft.targetId}`,
+                                  bolsterNote: "",
+                                  careNote: "",
+                                },
+                              });
+                            }}
+                          >
+                            Open heal roll dice pool
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Action roll — dice pool preview (session) or roll result; same slot under action ratings */}
@@ -8338,7 +9082,10 @@ const CharacterSheetWrapper = ({
                           color: "#a78bfa",
                         }}
                       >
-                        Dice pool — {rollPending.actionName}
+                        Dice pool — {rollActionName || rollPending.actionName}
+                        {rollPending?.healAttempt?.targetName
+                          ? ` — Healing ${rollPending.healAttempt.targetName}`
+                          : ""}
                         {Number(rollPending.parryCounterEffectSteps || 0) > 0
                           ? " — Parry and Break counterattack"
                           : ""}
@@ -8368,6 +9115,67 @@ const CharacterSheetWrapper = ({
                           </span>
                         ) : null}
                       </div>
+                      {rollPending?.healAttempt && (
+                        <div
+                          style={{
+                            marginBottom: "12px",
+                            padding: "8px",
+                            borderRadius: "6px",
+                            border: "1px solid #0f766e",
+                            background: "#0f172a",
+                            color: "#99f6e4",
+                            fontSize: "11px",
+                            lineHeight: 1.35,
+                          }}
+                        >
+                          <div>
+                            Declared heal target:{" "}
+                            <strong style={{ color: "#e5e7eb" }}>
+                              {rollPending.healAttempt.targetName || "teammate"}
+                            </strong>
+                          </div>
+                          {String(rollPending.healAttempt.bolsterNote || "").trim() ? (
+                            <div style={{ marginTop: "4px" }}>
+                              Bolsters:{" "}
+                              {String(rollPending.healAttempt.bolsterNote).trim()}
+                            </div>
+                          ) : null}
+                          {(() => {
+                            const ht = rollPending.healAttempt;
+                            const fromRoll =
+                              ht &&
+                              Array.isArray(ht.selectedAbilityBolsters) &&
+                              ht.selectedAbilityBolsters.length > 0
+                                ? ht.selectedAbilityBolsters
+                                : [];
+                            const list =
+                              fromRoll.length > 0 ? fromRoll : healOtherRecoveryBolsterSources;
+                            return list.length > 0 ? (
+                              <div style={{ marginTop: "4px" }}>
+                                Ability bolsters:&nbsp;
+                                <span style={{ color: "#e5e7eb" }}>
+                                  {list.join("; ")}
+                                </span>
+                              </div>
+                            ) : null;
+                          })()}
+                          {String(rollPending.healAttempt.careNote || "").trim() ? (
+                            <div style={{ marginTop: "4px" }}>
+                              Notes: {String(rollPending.healAttempt.careNote).trim()}
+                            </div>
+                          ) : null}
+                          <div style={{ marginTop: "4px" }}>
+                            Boosts selected:{" "}
+                            {healAttemptSelectedBoostSummary.length > 0
+                              ? healAttemptSelectedBoostSummary.join("; ")
+                              : "none selected yet"}
+                          </div>
+                          <div style={{ marginTop: "4px", color: "#94a3b8" }}>
+                            GM follow-up: resolve linked recovery ticks for the
+                            target per SRD treatment cadence.
+                          </div>
+                        </div>
+                      )}
                       {harmLevel3Used && (
                           <div
                             style={{
@@ -8482,6 +9290,268 @@ const CharacterSheetWrapper = ({
                           }}
                         />
                       </div>
+                      {activeSessionId ? (
+                        <div
+                          style={{
+                            marginBottom: "12px",
+                            padding: "10px",
+                            background: "#0d1117",
+                            borderRadius: "8px",
+                            border: "1px solid #374151",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "11px",
+                              color: "#a78bfa",
+                              marginBottom: "6px",
+                              fontWeight: "bold",
+                            }}
+                          >
+                            Session recover-in-play intent (not downtime)
+                          </div>
+                          <label
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              fontSize: "11px",
+                              color: "#d1d5db",
+                              marginBottom: "8px",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={healOtherRecoveryIntent.enabled}
+                              onChange={(e) =>
+                                setHealOtherRecoveryIntent((p) => ({
+                                  ...p,
+                                  enabled: e.target.checked,
+                                  ...(e.target.checked ? {} : { selectedBolsterKeys: [] }),
+                                }))
+                              }
+                            />
+                            Declare this roll as recover-in-play treatment
+                          </label>
+                          {healOtherRecoveryIntent.enabled ? (
+                            <>
+                              <div
+                                style={{
+                                  display: "grid",
+                                  gridTemplateColumns:
+                                    "repeat(auto-fit, minmax(180px, 1fr))",
+                                  gap: "8px",
+                                  marginBottom: "8px",
+                                }}
+                              >
+                                <label
+                                  style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: "4px",
+                                    fontSize: "11px",
+                                    color: "#d1d5db",
+                                  }}
+                                >
+                                  Healing action
+                                  <select
+                                    style={{ ...S.sel, width: "100%" }}
+                                    value={healingIntentActionName}
+                                    onChange={(e) =>
+                                      setHealOtherRecoveryIntent((p) => ({
+                                        ...p,
+                                        actionName: String(e.target.value || "TINKER")
+                                          .toUpperCase(),
+                                      }))
+                                    }
+                                  >
+                                    {HEALING_ACTION_CHOICES.map((action) => (
+                                      <option key={action} value={action}>
+                                        {action} (
+                                        {ACTION_ATTR[action]?.toUpperCase() || "action"}
+                                        )
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                                <label
+                                  style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    gap: "4px",
+                                    fontSize: "11px",
+                                    color: "#d1d5db",
+                                  }}
+                                >
+                                  Teammate patient
+                                  <select
+                                    style={{ ...S.sel, width: "100%" }}
+                                    value={healOtherRecoveryIntent.targetId}
+                                    onChange={(e) =>
+                                      setHealOtherRecoveryIntent((p) => ({
+                                        ...p,
+                                        targetId: e.target.value,
+                                      }))
+                                    }
+                                  >
+                                    <option value="">Choose teammate patient</option>
+                                    {healOtherRecoveryCandidates.map((c) => (
+                                      <option key={c.id} value={String(c.id)}>
+                                        {c.true_name || c.name || `PC ${c.id}`}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </label>
+                              </div>
+                              <div
+                                style={{
+                                  marginBottom: "8px",
+                                  border: "1px solid #374151",
+                                  borderRadius: "6px",
+                                  padding: "6px 8px",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    fontSize: "10px",
+                                    color: "#9ca3af",
+                                    marginBottom: "6px",
+                                  }}
+                                >
+                                  Recover-in-play bolsters (from your abilities &
+                                  heritage)
+                                </div>
+                                {healBolsterAbilityCandidates.length === 0 ? (
+                                  <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                                    None match healing / recovery modifiers on this sheet.
+                                  </div>
+                                ) : (
+                                  <div style={{ display: "grid", gap: "4px" }}>
+                                    {healBolsterAbilityCandidates.map((c) => (
+                                      <label
+                                        key={c.key}
+                                        title={c.description || undefined}
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "center",
+                                          gap: "6px",
+                                          fontSize: "11px",
+                                          color: "#d1d5db",
+                                          cursor: "pointer",
+                                        }}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={
+                                            Array.isArray(
+                                              healOtherRecoveryIntent.selectedBolsterKeys,
+                                            ) &&
+                                            healOtherRecoveryIntent.selectedBolsterKeys.includes(
+                                              c.key,
+                                            )
+                                          }
+                                          onChange={(e) =>
+                                            setHealOtherRecoveryIntent((p) => {
+                                              const prev = Array.isArray(
+                                                p.selectedBolsterKeys,
+                                              )
+                                                ? p.selectedBolsterKeys
+                                                : [];
+                                              const next = e.target.checked
+                                                ? prev.includes(c.key)
+                                                  ? prev
+                                                  : [...prev, c.key]
+                                                : prev.filter((k) => k !== c.key);
+                                              return { ...p, selectedBolsterKeys: next };
+                                            })
+                                          }
+                                        />
+                                        <span>{c.name}</span>
+                                        <span
+                                          style={{
+                                            fontSize: "10px",
+                                            color: "#6b7280",
+                                          }}
+                                        >
+                                          ({c.rollKind})
+                                        </span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                              <textarea
+                                value={healOtherRecoveryIntent.bolsterNote}
+                                onChange={(e) =>
+                                  setHealOtherRecoveryIntent((p) => ({
+                                    ...p,
+                                    bolsterNote: e.target.value,
+                                  }))
+                                }
+                                placeholder="Optional bolster note (fiction, tools, setup, etc.)"
+                                rows={2}
+                                style={{
+                                  width: "100%",
+                                  boxSizing: "border-box",
+                                  background: "#111827",
+                                  color: "#e5e7eb",
+                                  border: "1px solid #374151",
+                                  borderRadius: "6px",
+                                  padding: "8px",
+                                  fontSize: "11px",
+                                  resize: "vertical",
+                                }}
+                              />
+                              <div
+                                style={{
+                                  marginTop: "8px",
+                                  fontSize: "10px",
+                                  color:
+                                    healOtherSelectedTarget &&
+                                    healOtherRecoveryIntent.targetId
+                                      ? "#6ee7b7"
+                                      : "#fca5a5",
+                                  lineHeight: 1.35,
+                                }}
+                              >
+                                {healOtherSelectedTarget &&
+                                healOtherRecoveryIntent.targetId
+                                  ? `Intent: ${charData?.true_name || charData?.name || "PC"} uses ${healingIntentActionName} to treat ${healOtherSelectedTarget.true_name || healOtherSelectedTarget.name || `PC ${healOtherSelectedTarget.id}`}.`
+                                  : "Pick a teammate patient so recover-in-play intent is recorded on this session action roll."}
+                              </div>
+                              {(healOtherRecoveryIntent.selectedBolsterKeys || [])
+                                .length > 0 ? (
+                                <div
+                                  style={{
+                                    marginTop: "6px",
+                                    fontSize: "10px",
+                                    color: "#a7f3d0",
+                                  }}
+                                >
+                                  Bolster sources:{" "}
+                                  {healOtherRecoveryBolsterSources.length > 0
+                                    ? healOtherRecoveryBolsterSources.join("; ")
+                                    : "none selected yet"}
+                                </div>
+                              ) : null}
+                              <div
+                                style={{
+                                  marginTop: "6px",
+                                  fontSize: "10px",
+                                  color: "#9ca3af",
+                                  lineHeight: 1.35,
+                                }}
+                              >
+                                Session recover-in-play only: attempt when fiction
+                                gives enough time and safety. Downtime recover remains
+                                separate, but uses the same tick cadence (1-3:+1,
+                                4/5:+2, 6:+3, crit:+5).
+                              </div>
+                            </>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {rollPoolPreview && (
                         <div
                           style={{
@@ -9122,6 +10192,8 @@ const CharacterSheetWrapper = ({
                         <button
                           onClick={handleRollWithSession}
                           disabled={
+                            (healOtherRecoveryIntent.enabled &&
+                              !String(healOtherRecoveryIntent.targetId || "").trim()) ||
                             (rollModal.devil_bargain_dice &&
                               ((gmDevilBargainText && !devilBargainConfirmed) ||
                                 (!gmDevilBargainText &&
@@ -9147,6 +10219,13 @@ const CharacterSheetWrapper = ({
                             setPhantomPainThroughCover(false);
                             setRollGoalDraft("");
                             setDevilBargainConfirmed(false);
+                            setHealOtherRecoveryIntent({
+                              enabled: false,
+                              actionName: "TINKER",
+                              targetId: "",
+                              selectedBolsterKeys: [],
+                              bolsterNote: "",
+                            });
                             setRollModal({
                               push_effect: false,
                               push_dice: false,
@@ -10144,6 +11223,217 @@ const CharacterSheetWrapper = ({
                           {assistGrantErr}
                         </div>
                       ) : null}
+                      <div
+                        style={{
+                          marginBottom: "12px",
+                          paddingTop: "8px",
+                          borderTop: "1px solid #374151",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "11px",
+                            color: "#d1d5db",
+                            fontWeight: 700,
+                            marginBottom: "6px",
+                          }}
+                        >
+                          Heal teammate (session recover-in-play)
+                        </div>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                            gap: "8px",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          <select
+                            style={{ ...S.sel, width: "100%" }}
+                            value={healOtherDraft.targetId}
+                            onChange={(e) =>
+                              setHealOtherDraft((p) => ({
+                                ...p,
+                                targetId: e.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">Target teammate (not you)</option>
+                            {healOtherTargets.map((c) => (
+                              <option key={c.id} value={String(c.id)}>
+                                {c.true_name || c.name || `PC ${c.id}`}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            style={{ ...S.sel, width: "100%" }}
+                            value={healOtherDraft.actionName}
+                            onChange={(e) =>
+                              setHealOtherDraft((p) => ({
+                                ...p,
+                                actionName: String(e.target.value || "").toUpperCase(),
+                              }))
+                            }
+                          >
+                            {healRollActionChoices.map((action) => (
+                              <option key={action} value={action}>
+                                {action}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                            gap: "8px",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              border: "1px solid #374151",
+                              borderRadius: "6px",
+                              padding: "6px 8px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              Ability bolsters (matching selected abilities)
+                            </div>
+                            {healBolsterAbilityCandidates.length === 0 ? (
+                              <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                                No current ability matches healing/recovery/roll modifiers.
+                              </div>
+                            ) : (
+                              <div style={{ display: "grid", gap: "4px" }}>
+                                {healBolsterAbilityCandidates.map((c) => (
+                                  <label
+                                    key={c.key}
+                                    title={c.description || undefined}
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "6px",
+                                      fontSize: "11px",
+                                      color: "#d1d5db",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={
+                                        Array.isArray(healOtherDraft.selectedBolsterKeys) &&
+                                        healOtherDraft.selectedBolsterKeys.includes(c.key)
+                                      }
+                                      onChange={(e) =>
+                                        setHealOtherDraft((p) => {
+                                          const prev = Array.isArray(p.selectedBolsterKeys)
+                                            ? p.selectedBolsterKeys
+                                            : [];
+                                          const next = e.target.checked
+                                            ? prev.includes(c.key)
+                                              ? prev
+                                              : [...prev, c.key]
+                                            : prev.filter((k) => k !== c.key);
+                                          return { ...p, selectedBolsterKeys: next };
+                                        })
+                                      }
+                                    />
+                                    <span>{c.name}</span>
+                                    <span
+                                      style={{ fontSize: "10px", color: "#6b7280" }}
+                                    >
+                                      ({c.rollKind})
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "8px",
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            style={{
+                              ...S.btn,
+                              background: "#0f766e",
+                              color: "#f8fafc",
+                              fontSize: "11px",
+                            }}
+                            disabled={!healOtherDraft.targetId}
+                            onClick={() => {
+                              const action = String(
+                                healOtherDraft.actionName || "TINKER",
+                              )
+                                .trim()
+                                .toUpperCase();
+                              const target = healOtherTargets.find(
+                                (c) => String(c.id) === String(healOtherDraft.targetId),
+                              );
+                              const rating = Math.max(
+                                0,
+                                Number(actionRatings[action] || 0),
+                              );
+                              const selKeys = Array.isArray(
+                                healOtherDraft.selectedBolsterKeys,
+                              )
+                                ? healOtherDraft.selectedBolsterKeys
+                                : [];
+                              const bolsterLabels = healBolsterAbilityCandidates
+                                .filter((c) => selKeys.includes(c.key))
+                                .map((c) => `${c.name} (${c.rollKind})`);
+                              const rollBoostPreset =
+                                buildHealRollBoostPresetFromSelections(
+                                  selKeys,
+                                  healBolsterAbilityCandidates,
+                                  abilityRollBonusOptions,
+                                  heritageRollBonusOptions,
+                                );
+                              rollDice(action, rating, false, false, undefined, {
+                                rollBoostPreset,
+                                healAttempt: {
+                                  kind: "heal_other",
+                                  targetId: Number(healOtherDraft.targetId),
+                                  targetName:
+                                    target?.true_name ||
+                                    target?.name ||
+                                    `PC ${healOtherDraft.targetId}`,
+                                  selectedAbilityBolsters: bolsterLabels,
+                                  abilityBolsterDeclared: bolsterLabels.length > 0,
+                                  bolsterNote: "",
+                                  careNote: "",
+                                  actionName: action,
+                                },
+                              });
+                            }}
+                            title="Open dice pool preview for this healing attempt"
+                          >
+                            Open healing roll preview
+                          </button>
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                            }}
+                          >
+                            Active-session only. Uses action roll dice pool +
+                            ability toggles; downtime recover remains separate.
+                          </span>
+                        </div>
+                      </div>
                       <button
                         type="button"
                         onClick={() =>
@@ -10725,7 +12015,11 @@ const CharacterSheetWrapper = ({
                                 marginLeft: "6px",
                                 padding: "1px 5px",
                                 background:
-                                  ab.type === "heritage" ? "#b45309" : "#7c3aed",
+                                  ab.type === "heritage"
+                                    ? "#b45309"
+                                    : ab.type === "hamon"
+                                      ? "#b91c1c"
+                                      : "#7c3aed",
                                 borderRadius: "10px",
                                 fontSize: "10px",
                               }}
