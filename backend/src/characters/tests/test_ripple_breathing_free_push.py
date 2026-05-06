@@ -48,7 +48,6 @@ class RippleBreathingFreePushTests(TestCase):
         }
         self.actor = Character.objects.create(
             true_name="Hamon PC",
-            name="Hamon PC",
             user=self.user,
             campaign=self.campaign,
             crew=self.crew,
