@@ -661,6 +661,105 @@ function pickHealClockAction(candidate) {
   return keys.includes(u) ? u : "TINKER";
 }
 
+/**
+ * Downtime recovery tick table from a persisted action roll (`roll_action`) result.
+ * Self-treatment in downtime (−1 tick) per SRD. Matches server segment logic otherwise.
+ */
+function downtimeHealingTicksFromApiRoll(res, subtractOneForSelfTreatment) {
+  const rolled = Array.isArray(res?.dice_results)
+    ? res.dice_results
+        .map((d) => Number(d))
+        .filter((n) => Number.isFinite(n))
+    : [];
+  const critical = rolled.filter((d) => d === 6).length >= 2;
+  const hi = Number.isFinite(Number(res?.highest))
+    ? Number(res.highest)
+    : rolled.length > 0
+      ? Math.max(...rolled)
+      : 0;
+  let ticks = critical ? 5 : hi >= 6 ? 3 : hi >= 4 ? 2 : 1;
+  if (subtractOneForSelfTreatment) ticks = Math.max(0, ticks - 1);
+  const bandLabel = critical ? "Critical" : hi >= 6 ? "6" : hi >= 4 ? "4/5" : "1–3";
+  return { ticks, bandLabel, critical };
+}
+
+/** True when this roll is downtime healing-clock treatment (not recover-in-play P/E). */
+function isDowntimeHealingHealAttempt(ht) {
+  if (!ht || typeof ht !== "object") return false;
+  const cad = String(ht.treatmentCadence ?? ht.treatment_cadence ?? "")
+    .trim()
+    .toLowerCase();
+  if (cad === "downtime") return true;
+  if (cad === "mid_action") return false;
+  if (
+    String(ht.kind || "").toLowerCase() === "heal_other" &&
+    ht.recoverInPlayTreatment === false &&
+    ht.usesSessionPositionEffect === false
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function readCharSheetBool(characterId, section, defaultValue) {
+  if (characterId == null || characterId === "") return defaultValue;
+  try {
+    const raw = window.localStorage.getItem(
+      `biz:char-sheet:${section}:${characterId}`,
+    );
+    if (raw == null || raw === "") return defaultValue;
+    const v = JSON.parse(raw);
+    return typeof v === "boolean" ? v : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+}
+
+function writeCharSheetBool(characterId, section, value) {
+  if (characterId == null || characterId === "") return;
+  try {
+    window.localStorage.setItem(
+      `biz:char-sheet:${section}:${characterId}`,
+      JSON.stringify(!!value),
+    );
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function readCharSheetNotesInventory(characterId, defaultValue) {
+  if (characterId == null || characterId === "") return defaultValue;
+  try {
+    const raw = window.localStorage.getItem(
+      `biz:char-sheet:notes-inventory:${characterId}`,
+    );
+    if (raw == null || raw === "") return defaultValue;
+    const o = JSON.parse(raw);
+    if (!o || typeof o !== "object") return defaultValue;
+    return {
+      notes: typeof o.notes === "boolean" ? o.notes : defaultValue.notes,
+      inventory:
+        typeof o.inventory === "boolean"
+          ? o.inventory
+          : defaultValue.inventory,
+    };
+  } catch {
+    return defaultValue;
+  }
+}
+
+function writeCharSheetNotesInventory(characterId, value) {
+  if (characterId == null || characterId === "") return;
+  try {
+    window.localStorage.setItem(
+      `biz:char-sheet:notes-inventory:${characterId}`,
+      JSON.stringify(value),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
 const CharacterSheetWrapper = ({
   character,
   onClose,
@@ -679,6 +778,8 @@ const CharacterSheetWrapper = ({
   onDraftMetaChange,
   /** Incremented when CharacterPage finishes a remote sync (poll, SSE, visibility) so session rolls refetch. */
   sessionDataPollTick = 0,
+  /** When true, skip merging server character snapshots into XP / stand / action state (avoids poll overwriting local spends before autosave). */
+  sheetDraftIsDirty = false,
 }) => {
   const { user } = useAuth();
   const ownerUsername =
@@ -1069,6 +1170,7 @@ const CharacterSheetWrapper = ({
 
   // Sync standStats when character changes (e.g. switching tabs)
   useEffect(() => {
+    if (sheetDraftIsDirty) return;
     const next = character?.standStats;
     if (next && typeof next === "object") {
       setStandStats((prev) => {
@@ -1084,7 +1186,7 @@ const CharacterSheetWrapper = ({
         return changed ? { ...prev, ...next } : prev;
       });
     }
-  }, [character?.id, character?.standStats]);
+  }, [character?.id, character?.standStats, sheetDraftIsDirty]);
 
   // FIX 1: Action ratings — creation enforces 7 total / max 2 per action
   const [actionRatings, setActionRatings] = useState(
@@ -1106,6 +1208,7 @@ const CharacterSheetWrapper = ({
 
   // Sync action dots when loaded character arrives (missing sync caused blank action_dots on save)
   useEffect(() => {
+    if (sheetDraftIsDirty) return;
     const next = character?.actionRatings;
     if (!next || typeof next !== "object") return;
     setActionRatings((prev) => {
@@ -1115,7 +1218,7 @@ const CharacterSheetWrapper = ({
       );
       return changed ? { ...prev, ...next } : prev;
     });
-  }, [character?.id, character?.actionRatings]);
+  }, [character?.id, character?.actionRatings, sheetDraftIsDirty]);
 
   // Stress — tracked as filled count; max derived from Durability
   const [stressFilled, setStressFilled] = useState(
@@ -1216,6 +1319,7 @@ const CharacterSheetWrapper = ({
   }, [character?.id, character?.healingClock]);
 
   useEffect(() => {
+    if (sheetDraftIsDirty) return;
     const nx = character?.xp;
     if (!nx || typeof nx !== "object") return;
     setXp((prev) => {
@@ -1223,7 +1327,7 @@ const CharacterSheetWrapper = ({
       const changed = keys.some((k) => (prev[k] ?? 0) !== (nx[k] ?? 0));
       return changed ? { ...prev, ...nx } : prev;
     });
-  }, [character?.id, character?.xp]);
+  }, [character?.id, character?.xp, sheetDraftIsDirty]);
 
   // Hydrate coin/stash only when switching characters (id change). Parent refresh (campaign list refetch,
   // getCharacters) reuses the same id with a new object; syncing on character.coin/stash then wiped
@@ -1472,13 +1576,18 @@ const CharacterSheetWrapper = ({
   const [hamonAbilityPickerOpen, setHamonAbilityPickerOpen] = useState(false);
   const hamonAbilityPickerRef = useRef(null);
   const [expandedAbilityId, setExpandedAbilityId] = useState(null);
-  const [abilitiesSectionExpanded, setAbilitiesSectionExpanded] =
-    useState(true);
-  const [clocksSectionExpanded, setClocksSectionExpanded] = useState(true);
-  const [notesInventoryExpanded, setNotesInventoryExpanded] = useState({
-    notes: true,
-    inventory: true,
-  });
+  const [abilitiesSectionExpanded, setAbilitiesSectionExpanded] = useState(() =>
+    readCharSheetBool(characterId, "abilities", true),
+  );
+  const [clocksSectionExpanded, setClocksSectionExpanded] = useState(() =>
+    readCharSheetBool(characterId, "clocks", true),
+  );
+  const [notesInventoryExpanded, setNotesInventoryExpanded] = useState(() =>
+    readCharSheetNotesInventory(characterId, {
+      notes: true,
+      inventory: true,
+    }),
+  );
 
   // Close standard / spin / hamon ability pickers when clicking outside
   useEffect(() => {
@@ -1570,7 +1679,9 @@ const CharacterSheetWrapper = ({
   const [crewFactionAddBusy, setCrewFactionAddBusy] = useState(false);
   const [crewFactionAddErr, setCrewFactionAddErr] = useState(null);
   const [crewHistoryEntries, setCrewHistoryEntries] = useState([]);
-  const [crewHistoryOpen, setCrewHistoryOpen] = useState(false);
+  const [crewHistoryOpen, setCrewHistoryOpen] = useState(() =>
+    readCharSheetBool(characterId, "crew-history", false),
+  );
   const crewHydratedRef = useRef(false);
 
   const buildCrewPatchPayload = useCallback(() => {
@@ -2030,7 +2141,11 @@ const CharacterSheetWrapper = ({
   const [resistancePushDice, setResistancePushDice] = useState(false);
   const [resistanceMitigationChoice, setResistanceMitigationChoice] = useState("");
   const [rollApiError, setRollApiError] = useState(null);
-  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  /** User confirms SRD-aligned stress overflow (trauma) when push/incap/etc. exceeds empty boxes. */
+  const [stressOverflowConfirmed, setStressOverflowConfirmed] = useState(false);
+  const [showHistoryPanel, setShowHistoryPanel] = useState(() =>
+    readCharSheetBool(characterId, "history-panel", false),
+  );
   const [historyMode, setHistoryMode] = useState("session");
   const [historyRows, setHistoryRows] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -2076,9 +2191,15 @@ const CharacterSheetWrapper = ({
   const [groupActionLoading, setGroupActionLoading] = useState(false);
   /** Last session+group id we showed full-panel spinner for; unchanged on sheet poll tick → silent refetch */
   const groupRollFetchSpinnerKeyRef = useRef("");
-  const [crewGroupExpanded, setCrewGroupExpanded] = useState(false);
-  const [crewAssistExpanded, setCrewAssistExpanded] = useState(true);
-  const [crewHealExpanded, setCrewHealExpanded] = useState(true);
+  const [crewGroupExpanded, setCrewGroupExpanded] = useState(() =>
+    readCharSheetBool(characterId, "crew-group", false),
+  );
+  const [crewAssistExpanded, setCrewAssistExpanded] = useState(() =>
+    readCharSheetBool(characterId, "crew-assist", true),
+  );
+  const [crewHealExpanded, setCrewHealExpanded] = useState(() =>
+    readCharSheetBool(characterId, "crew-heal", true),
+  );
   const [assistTargetId, setAssistTargetId] = useState("");
   const [assistGrantBusy, setAssistGrantBusy] = useState(false);
   const [assistGrantMsg, setAssistGrantMsg] = useState(null);
@@ -2094,6 +2215,111 @@ const CharacterSheetWrapper = ({
   const [showDevilsBargainModal, setShowDevilsBargainModal] = useState(false);
   const [devilBargainConfirmed, setDevilBargainConfirmed] = useState(false);
   const [expandedActionInfo, setExpandedActionInfo] = useState(null);
+
+  useEffect(() => {
+    const defaultsNoId = () => {
+      setAbilitiesSectionExpanded(true);
+      setClocksSectionExpanded(true);
+      setNotesInventoryExpanded({ notes: true, inventory: true });
+      setShowHistoryPanel(false);
+      setCrewGroupExpanded(false);
+      setCrewAssistExpanded(true);
+      setCrewHealExpanded(true);
+      setCrewHistoryOpen(false);
+    };
+    if (characterId == null || characterId === "") {
+      defaultsNoId();
+      return;
+    }
+    setAbilitiesSectionExpanded(
+      readCharSheetBool(characterId, "abilities", true),
+    );
+    setClocksSectionExpanded(readCharSheetBool(characterId, "clocks", true));
+    setNotesInventoryExpanded(
+      readCharSheetNotesInventory(characterId, {
+        notes: true,
+        inventory: true,
+      }),
+    );
+    setShowHistoryPanel(
+      readCharSheetBool(characterId, "history-panel", false),
+    );
+    setCrewGroupExpanded(
+      readCharSheetBool(characterId, "crew-group", false),
+    );
+    setCrewAssistExpanded(
+      readCharSheetBool(characterId, "crew-assist", true),
+    );
+    setCrewHealExpanded(readCharSheetBool(characterId, "crew-heal", true));
+    setCrewHistoryOpen(
+      readCharSheetBool(characterId, "crew-history", false),
+    );
+  }, [characterId]);
+
+  const setAbilitiesSectionExpandedPersist = useCallback((updater) => {
+    setAbilitiesSectionExpanded((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetBool(characterId, "abilities", next);
+      return next;
+    });
+  }, [characterId]);
+
+  const setClocksSectionExpandedPersist = useCallback((updater) => {
+    setClocksSectionExpanded((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetBool(characterId, "clocks", next);
+      return next;
+    });
+  }, [characterId]);
+
+  const setNotesInventoryExpandedPersist = useCallback((updater) => {
+    setNotesInventoryExpanded((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetNotesInventory(characterId, next);
+      return next;
+    });
+  }, [characterId]);
+
+  const setShowHistoryPanelPersist = useCallback((updater) => {
+    setShowHistoryPanel((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetBool(characterId, "history-panel", next);
+      return next;
+    });
+  }, [characterId]);
+
+  const setCrewGroupExpandedPersist = useCallback((updater) => {
+    setCrewGroupExpanded((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetBool(characterId, "crew-group", next);
+      return next;
+    });
+  }, [characterId]);
+
+  const setCrewAssistExpandedPersist = useCallback((updater) => {
+    setCrewAssistExpanded((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetBool(characterId, "crew-assist", next);
+      return next;
+    });
+  }, [characterId]);
+
+  const setCrewHealExpandedPersist = useCallback((updater) => {
+    setCrewHealExpanded((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetBool(characterId, "crew-heal", next);
+      return next;
+    });
+  }, [characterId]);
+
+  const setCrewHistoryOpenPersist = useCallback((updater) => {
+    setCrewHistoryOpen((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetBool(characterId, "crew-history", next);
+      return next;
+    });
+  }, [characterId]);
+
   const [campaignAssignStatus, setCampaignAssignStatus] = useState(null);
   const [campaignAssignError, setCampaignAssignError] = useState(null);
   const [resistanceHarmTarget, setResistanceHarmTarget] = useState("");
@@ -2526,12 +2752,12 @@ const CharacterSheetWrapper = ({
     if (!showHistoryPanel) return;
     const onKeyDown = (e) => {
       if (e.key === "Escape") {
-        setShowHistoryPanel(false);
+        setShowHistoryPanelPersist(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showHistoryPanel]);
+  }, [showHistoryPanel, setShowHistoryPanelPersist]);
 
   useEffect(() => {
     if (!showXpHistoryModal || !characterId) return;
@@ -3047,9 +3273,9 @@ const CharacterSheetWrapper = ({
 
   useEffect(() => {
     if (activeGroupAction?.id) {
-      setCrewGroupExpanded(true);
+      setCrewGroupExpandedPersist(true);
     }
-  }, [activeGroupAction?.id]);
+  }, [activeGroupAction?.id, setCrewGroupExpandedPersist]);
 
   useEffect(() => {
     if (!activeGroupAction?.id) {
@@ -3562,6 +3788,20 @@ const CharacterSheetWrapper = ({
     return true;
   }, [rollPending?.healAttempt]);
 
+  /** Healing-clock treatment using downtime cadence — no push-for-effect per SRD frame. */
+  const healAttemptIsDowntimeRecovery = useMemo(() => {
+    const ht = rollPending?.healAttempt;
+    return isDowntimeHealingHealAttempt(ht);
+  }, [rollPending?.healAttempt]);
+
+  useLayoutEffect(() => {
+    if (!healAttemptIsDowntimeRecovery) return;
+    setRollModal((prev) =>
+      prev.push_effect ? { ...prev, push_effect: false } : prev,
+    );
+    setRippleBreathingFreePush(false);
+  }, [healAttemptIsDowntimeRecovery]);
+
   /** Session default + push + ability/heritage steps — matches server roll_action order. */
   const rollModalPreviewEffect = useMemo(() => {
     const base =
@@ -3756,6 +3996,16 @@ const CharacterSheetWrapper = ({
   const pushStressCost = rollPoolPreview?.pushStress || 0;
   const pushWouldCauseTrauma =
     pushStressCost > 0 && stressFilled + pushStressCost > maxStress;
+
+  useEffect(() => {
+    setStressOverflowConfirmed(false);
+  }, [
+    rollPending,
+    rollModal.push_effect,
+    rollModal.push_dice,
+    phantomPainThroughCover,
+    harmLevel3Used,
+  ]);
 
   useLayoutEffect(() => {
     if (!rollPending || !characterId) {
@@ -4049,6 +4299,9 @@ const CharacterSheetWrapper = ({
         ...(rippleEligibleForWaiver
           ? { ripple_breathing_free_push: true }
           : {}),
+        ...(pushWouldCauseTrauma && stressOverflowConfirmed
+          ? { stress_overflow_accepted: true }
+          : {}),
         ...(healIntentActive
           ? {
               recovery_target_character_id: Number(
@@ -4073,27 +4326,75 @@ const CharacterSheetWrapper = ({
         }
       }
       const res = await characterAPI.rollAction(characterId, payload);
-      if (healIntentActive && !healIntentIsSelf) {
-        const rolledDice = Array.isArray(res?.dice_results)
-          ? res.dice_results.map((d) => Number(d)).filter(Number.isFinite)
-          : [];
-        const highest = Number.isFinite(Number(res?.highest))
-          ? Number(res.highest)
-          : rolledDice.length > 0
-            ? Math.max(...rolledDice)
-            : 0;
-        const isCritical = rolledDice.filter((d) => d === 6).length >= 2;
-        const recoverySegments = isCritical
-          ? 5
-          : highest >= 6
-            ? 3
-            : highest >= 4
-              ? 2
-              : 1;
-        const targetCharacterId = Number(healOtherRecoveryIntent.targetId);
-        if (Number.isFinite(targetCharacterId) && targetCharacterId > 0) {
+      const downtimeHealCadence = isDowntimeHealingHealAttempt(healAttemptFromRoll);
+      const downtimeSelfTreatment =
+        downtimeHealCadence &&
+        (healIntentIsSelf ||
+          Number(healAttemptFromRoll?.targetId) === Number(characterId));
+      let recoveryPresentation = null;
+      if (downtimeHealCadence) {
+        const tickParts = downtimeHealingTicksFromApiRoll(
+          res,
+          downtimeSelfTreatment,
+        );
+        recoveryPresentation = {
+          cadence: "downtime",
+          ticks: tickParts.ticks,
+          bandLabel: tickParts.bandLabel,
+          critical: tickParts.critical,
+          selfTreatment: downtimeSelfTreatment,
+          targetName: String(healAttemptFromRoll?.targetName || "").trim() || null,
+        };
+      }
+      // Advance patient healing clock using same tick count as the result UI (no duplicate paths).
+      const isDowntimeRecoveryClock =
+        downtimeHealCadence &&
+        recoveryPresentation &&
+        recoveryPresentation.ticks > 0;
+      const isMidActionHealOtherClock =
+        !downtimeHealCadence &&
+        healIntentActive &&
+        !healIntentIsSelf;
+      if (isDowntimeRecoveryClock || isMidActionHealOtherClock) {
+        let patientId = null;
+        let segments = 0;
+        if (isDowntimeRecoveryClock) {
+          segments = recoveryPresentation.ticks;
+          if (recoveryPresentation.selfTreatment) {
+            patientId = Number(characterId);
+          } else {
+            const fromRoll = Number(healAttemptFromRoll?.targetId);
+            if (Number.isFinite(fromRoll) && fromRoll > 0) {
+              patientId = fromRoll;
+            } else {
+              const fromIntent = Number(healOtherRecoveryIntent.targetId);
+              if (Number.isFinite(fromIntent) && fromIntent > 0) {
+                patientId = fromIntent;
+              }
+            }
+          }
+        } else {
+          const rolledDice = Array.isArray(res?.dice_results)
+            ? res.dice_results.map((d) => Number(d)).filter(Number.isFinite)
+            : [];
+          const highest = Number.isFinite(Number(res?.highest))
+            ? Number(res.highest)
+            : rolledDice.length > 0
+              ? Math.max(...rolledDice)
+              : 0;
+          const isCritical = rolledDice.filter((d) => d === 6).length >= 2;
+          segments = isCritical
+            ? 5
+            : highest >= 6
+              ? 3
+              : highest >= 4
+                ? 2
+                : 1;
+          patientId = Number(healOtherRecoveryIntent.targetId);
+        }
+        if (Number.isFinite(patientId) && patientId > 0 && segments > 0) {
           try {
-            const targetRaw = await characterAPI.getCharacter(targetCharacterId);
+            const targetRaw = await characterAPI.getCharacter(patientId);
             const targetClock = Math.max(
               0,
               Math.min(4, Number(targetRaw?.healing_clock_filled) || 0),
@@ -4102,18 +4403,22 @@ const CharacterSheetWrapper = ({
             const targetRecovery = applyRecoverySegmentsToTrack(
               targetClock,
               targetHarm,
-              recoverySegments,
+              segments,
             );
-            await characterAPI.patchCharacter(targetCharacterId, {
+            await characterAPI.patchCharacter(patientId, {
               healing_clock_filled: targetRecovery.nextClock,
               ...buildHarmPatchPayload(targetRecovery.nextHarm),
             });
             onCampaignRefresh?.();
           } catch {
             setRollApiError(
-              "Roll saved, but target healing update failed. Ask GM to resolve recover ticks manually.",
+              "Roll saved, but healing clock update failed. Ask the GM to apply recover ticks manually.",
             );
           }
+        } else if (segments > 0) {
+          setRollApiError(
+            "Roll saved, but could not resolve the heal target for the healing clock. Check the target and try again, or ask the GM to update the clock.",
+          );
         }
       }
       // Match roll modal + session GM map: per-PC session override beats API echo (same order as PositionStack preview).
@@ -4161,20 +4466,25 @@ const CharacterSheetWrapper = ({
         action: selectedRollAction,
         dice: res.dice_results || [],
         result: res.highest ?? Math.max(...(res.dice_results || [0])),
-        outcome: (res.outcome || "").replace(/_/g, " "),
-        special:
-          res.dice_results?.filter((d) => d === 6).length >= 2
+        outcome: downtimeHealCadence
+          ? ""
+          : (res.outcome || "").replace(/_/g, " "),
+        special: downtimeHealCadence
+          ? ""
+          : res.dice_results?.filter((d) => d === 6).length >= 2
             ? `Critical! (${res.dice_results?.filter((d) => d === 6).length} sixes)`
             : "",
         isResistance: false,
         stressCost: res.stress_spent || null,
         zeroDice: (Number(res.total_dice) || 0) === 0,
-        isDesperateAction:
-          String(effectivePosition || "").toLowerCase() === "desperate",
+        isDesperateAction: downtimeHealCadence
+          ? false
+          : String(effectivePosition || "").toLowerCase() === "desperate",
         isCritical: (res.dice_results || []).filter((d) => d === 6).length >= 2,
-        position: effectivePosition,
-        effect: effectiveEffect,
+        position: downtimeHealCadence ? undefined : effectivePosition,
+        effect: downtimeHealCadence ? undefined : effectiveEffect,
         xpGained: res.xp_gained || 0,
+        recoveryPresentation,
       });
       if (res.xp_gained > 0 && res.xp_track) {
         setXp((p) => ({
@@ -4490,6 +4800,36 @@ const CharacterSheetWrapper = ({
         ? `${criticalPart} · ${resistanceNote}`
         : resistanceNote || criticalPart;
 
+    const healAttemptOffline =
+      extras &&
+      typeof extras === "object" &&
+      extras.healAttempt &&
+      typeof extras.healAttempt === "object"
+        ? extras.healAttempt
+        : null;
+    const offlineDowntimeHeal =
+      !isResistance && isDowntimeHealingHealAttempt(healAttemptOffline);
+    const offlineDowntimeSelfTreatment =
+      offlineDowntimeHeal &&
+      Number(healAttemptOffline?.targetId) === Number(characterId);
+    const offlineRecoveryPresentation = offlineDowntimeHeal
+      ? (() => {
+          const tickParts = downtimeHealingTicksFromApiRoll(
+            { dice_results: dice, highest },
+            offlineDowntimeSelfTreatment,
+          );
+          return {
+            cadence: "downtime",
+            ticks: tickParts.ticks,
+            bandLabel: tickParts.bandLabel,
+            critical: tickParts.critical,
+            selfTreatment: offlineDowntimeSelfTreatment,
+            targetName:
+              String(healAttemptOffline?.targetName || "").trim() || null,
+          };
+        })()
+      : null;
+
     const activeResistanceSources = isResistance
       ? resistanceAbilityOptions.filter((opt) => {
           if (!resistanceAbilityBoost[opt.id]) return false;
@@ -4533,20 +4873,44 @@ const CharacterSheetWrapper = ({
       });
     }
 
+    const asdOffline = charCampaign?.active_session_detail;
+    const offlinePosLabel = String(
+      sessionOverridePositionEffect?.position ||
+        asdOffline?.default_position ||
+        "",
+    ).toLowerCase();
+    const offlineEffLabel = String(
+      sessionOverridePositionEffect?.effect ||
+        asdOffline?.default_effect ||
+        "",
+    ).toLowerCase();
+    const sessionSaysDesperate =
+      !!activeSessionId && offlinePosLabel === "desperate";
+    const effectiveDesperateAction =
+      !isResistance &&
+      !offlineDowntimeHeal &&
+      (sessionSaysDesperate || !!isDesperateAction);
+
     setDiceResult({
       action: actionName,
       dice,
       result: highest,
-      outcome,
-      special,
+      outcome: offlineDowntimeHeal ? "" : outcome,
+      special: offlineDowntimeHeal ? "" : special,
       isResistance,
       stressCost,
       resistanceExtraStress,
       resistanceTotalStressCost,
       zeroDice: diceCount === 0,
-      isDesperateAction,
+      isDesperateAction: effectiveDesperateAction,
       isCritical,
       resistanceSources: isResistance ? resistanceSourceRows : [],
+      ...(!isResistance && activeSessionId && !offlineDowntimeHeal
+        ? { position: offlinePosLabel || undefined, effect: offlineEffLabel || undefined }
+        : {}),
+      ...(offlineRecoveryPresentation
+        ? { recoveryPresentation: offlineRecoveryPresentation }
+        : {}),
       ...(isResistance
         ? {
             resistanceHarmReductionCount: 0,
@@ -4557,9 +4921,14 @@ const CharacterSheetWrapper = ({
     setResistanceApplyErr(null);
     setResistanceHarmTarget("");
 
-    if (isDesperateAction && !isResistance) {
-      const attr = ACTION_ATTR[actionName];
-      if (attr) setXp((p) => ({ ...p, [attr]: Math.min(p[attr] + 1, 5) }));
+    if (effectiveDesperateAction) {
+      const attr = ACTION_ATTR[String(actionName || "").toUpperCase()];
+      if (attr)
+        setXp((p) =>
+          (p[attr] ?? 0) >= 5
+            ? p
+            : { ...p, [attr]: Math.min((p[attr] || 0) + 1, 5) },
+        );
     }
     if (isResistance && characterId && activeSessionId) {
       const outcomeApi = isCritical
@@ -4664,8 +5033,8 @@ const CharacterSheetWrapper = ({
         visible_to_party: false,
       },
     ]);
-    setClocksSectionExpanded(true);
-  }, []);
+    setClocksSectionExpandedPersist(true);
+  }, [setClocksSectionExpandedPersist]);
 
   const buildPayload = useCallback(() => {
     const backendId =
@@ -5164,7 +5533,7 @@ const CharacterSheetWrapper = ({
                     {characterId && (
                       <button
                         type="button"
-                        onClick={() => setShowHistoryPanel((x) => !x)}
+                        onClick={() => setShowHistoryPanelPersist((x) => !x)}
                         title={
                           showHistoryPanel
                             ? "Hide history"
@@ -5250,7 +5619,7 @@ const CharacterSheetWrapper = ({
                         justifyContent: "center",
                         paddingTop: "80px",
                       }}
-                      onClick={() => setShowHistoryPanel(false)}
+                      onClick={() => setShowHistoryPanelPersist(false)}
                     >
                     <div
                       onClick={(e) => e.stopPropagation()}
@@ -5289,7 +5658,7 @@ const CharacterSheetWrapper = ({
                           </span>
                           <button
                             type="button"
-                            onClick={() => setShowHistoryPanel(false)}
+                            onClick={() => setShowHistoryPanelPersist(false)}
                             style={{ ...S.btn, padding: "2px 8px", fontSize: 10 }}
                           >
                             Close
@@ -7729,6 +8098,7 @@ const CharacterSheetWrapper = ({
                           ))}
                         </select>
                         <button
+                          type="button"
                           onClick={spendXPForDot}
                           disabled={
                             totalXP < 5 ||
@@ -9685,16 +10055,6 @@ const CharacterSheetWrapper = ({
                             lineHeight: 1.45,
                           }}
                         >
-                          <div
-                            style={{
-                              fontWeight: 600,
-                              color: "#6ee7b7",
-                              marginBottom: "8px",
-                              fontSize: "11px",
-                            }}
-                          >
-                            Position and effect — what drives this preview
-                          </div>
                           <div style={{ marginBottom: "4px", color: "#a78bfa" }}>
                             Effect tier steps applied in this roll:
                           </div>
@@ -10227,7 +10587,14 @@ const CharacterSheetWrapper = ({
                           ["none", harmLevel3Used ? "None (incapacitated cost still applies)" : "None"],
                           ...(!harmLevel3Used
                             ? [
-                                ["push_effect", "Push for +1 effect (2 stress)"],
+                                ...(!healAttemptIsDowntimeRecovery
+                                  ? [
+                                      [
+                                        "push_effect",
+                                        "Push for +1 effect (2 stress)",
+                                      ],
+                                    ]
+                                  : []),
                                 ["push_dice", "Push for +1d (2 stress)"],
                               ]
                             : []),
@@ -10451,17 +10818,45 @@ const CharacterSheetWrapper = ({
                         </div>
                       )}
                       {pushWouldCauseTrauma && (
-                        <div
-                          style={{
-                            color: "#f59e0b",
-                            fontSize: "11px",
-                            marginBottom: "8px",
-                          }}
-                        >
-                          Warning: marking stress from this roll (push /
-                          incapacity / Phantom Pain / etc.) will overflow your
-                          stress track and mark trauma.
-                        </div>
+                        <>
+                          <div
+                            style={{
+                              color: "#f59e0b",
+                              fontSize: "11px",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            Warning: marking stress from this roll (push /
+                            incapacity / Phantom Pain / etc.) exceeds your empty
+                            stress boxes (SRD: suffer trauma — mark on your sheet
+                            with the table now or right after resolving the roll).
+                          </div>
+                          <label
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: "8px",
+                              fontSize: "11px",
+                              color: "#e5e7eb",
+                              marginBottom: "10px",
+                              cursor: "pointer",
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={stressOverflowConfirmed}
+                              onChange={(e) =>
+                                setStressOverflowConfirmed(e.target.checked)
+                              }
+                              style={{ marginTop: "2px" }}
+                            />
+                            <span>
+                              I take the trauma consequence and proceed with this roll
+                              (required when stress would overflow).
+                            </span>
+                          </label>
+                        </>
                       )}
                       <div
                         style={{
@@ -10480,7 +10875,8 @@ const CharacterSheetWrapper = ({
                                 (!gmDevilBargainText &&
                                   !(
                                     rollModal.devil_bargain_note || ""
-                                  ).trim())))
+                                  ).trim()))) ||
+                            (pushWouldCauseTrauma && !stressOverflowConfirmed)
                           }
                           style={{
                             ...S.btn,
@@ -10499,6 +10895,7 @@ const CharacterSheetWrapper = ({
                             setHeritageRollBoost({});
                             setPhantomPainThroughCover(false);
                             setRippleBreathingFreePush(false);
+                            setStressOverflowConfirmed(false);
                             setRollGoalDraft("");
                             setDevilBargainConfirmed(false);
                             setHealOtherRecoveryIntent({
@@ -10772,19 +11169,46 @@ const CharacterSheetWrapper = ({
                           marginBottom: "6px",
                         }}
                       >
-                        {diceResult.action}{" "}
-                        {diceResult.isResistance
-                          ? "Resistance Roll"
-                          : "Action Roll"}
-                        {diceResult.zeroDice && (
-                          <span style={{ color: "#f87171", marginLeft: "8px" }}>
-                            (2d6 — lower counts)
-                          </span>
-                        )}
-                        {diceResult.isDesperateAction && (
-                          <span style={{ color: "#f97316", marginLeft: "8px" }}>
-                            (Desperate — XP marked)
-                          </span>
+                        {diceResult.recoveryPresentation?.cadence === "downtime" ? (
+                          <>
+                            <span style={{ color: "#5eead4" }}>
+                              Downtime healing clock
+                            </span>{" "}
+                            <span style={{ color: "#a78bfa" }}>
+                              ({diceResult.action} treatment roll)
+                            </span>
+                            <div
+                              style={{
+                                marginTop: "4px",
+                                fontSize: "10px",
+                                color: "#94a3b8",
+                                fontWeight: 400,
+                                lineHeight: 1.35,
+                              }}
+                            >
+                              No position or effect — not under action-roll pressure. If an
+                              NPC is the primary healer, the referee uses a Fortune pool
+                              (1d–4d by competence) instead of this PC rating roll; coin can
+                              still bump after any care roll.
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            {diceResult.action}{" "}
+                            {diceResult.isResistance
+                              ? "Resistance Roll"
+                              : "Action Roll"}
+                            {diceResult.zeroDice && (
+                              <span style={{ color: "#f87171", marginLeft: "8px" }}>
+                                (2d6 — lower counts)
+                              </span>
+                            )}
+                            {diceResult.isDesperateAction && (
+                              <span style={{ color: "#f97316", marginLeft: "8px" }}>
+                                (Desperate — XP marked)
+                              </span>
+                            )}
+                          </>
                         )}
                       </div>
                       <div
@@ -10797,7 +11221,7 @@ const CharacterSheetWrapper = ({
                         }}
                       >
                         <div style={{ display: "flex", gap: "3px" }}>
-                          {diceResult.dice.map((die, i) => (
+                          {(diceResult.dice || []).map((die, i) => (
                             <span
                               key={i}
                               style={{
@@ -10827,29 +11251,30 @@ const CharacterSheetWrapper = ({
                             </span>
                           ))}
                         </div>
-                        {!diceResult.isResistance && (
-                          <span
-                            style={{
-                              fontWeight: "bold",
-                              color: diceResult.outcome.includes("Critical")
-                                ? "#fbbf24"
-                                : diceResult.outcome === "Success"
-                                  ? "#22c55e"
-                                  : diceResult.outcome.includes("Partial")
-                                    ? "#eab308"
-                                    : "#ef4444",
-                            }}
-                          >
-                            {diceResult.outcome}
-                          </span>
-                        )}
-                        {diceResult.special && (
-                          <span style={{ color: "#fbbf24" }}>
-                            {diceResult.special}
-                          </span>
-                        )}
+                        {!diceResult.isResistance &&
+                          diceResult.recoveryPresentation?.cadence !== "downtime" && (
+                            <span
+                              style={{
+                                fontWeight: "bold",
+                                color: diceResult.outcome.includes("Critical")
+                                  ? "#fbbf24"
+                                  : diceResult.outcome === "Success"
+                                    ? "#22c55e"
+                                    : diceResult.outcome.includes("Partial")
+                                      ? "#eab308"
+                                      : "#ef4444",
+                              }}
+                            >
+                              {diceResult.outcome}
+                            </span>
+                          )}
+                        {diceResult.recoveryPresentation?.cadence !== "downtime" &&
+                          diceResult.special && (
+                            <span style={{ color: "#fbbf24" }}>{diceResult.special}</span>
+                          )}
                         {(diceResult.position || diceResult.effect) &&
-                          !diceResult.isResistance && (
+                          !diceResult.isResistance &&
+                          diceResult.recoveryPresentation?.cadence !== "downtime" && (
                             <span
                               style={{
                                 color: "#6b7280",
@@ -10877,6 +11302,62 @@ const CharacterSheetWrapper = ({
                           </span>
                         )}
                       </div>
+
+                      {diceResult.recoveryPresentation?.cadence === "downtime" ? (
+                        <div
+                          style={{
+                            marginBottom: "10px",
+                            padding: "10px 12px",
+                            borderRadius: "6px",
+                            border: "1px solid #0f766e",
+                            background: "#0f172a",
+                            fontSize: "11px",
+                            color: "#ccfbf1",
+                            lineHeight: 1.45,
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, marginBottom: "6px" }}>
+                            Healing-clock ticks{" "}
+                            <span style={{ fontWeight: 400, color: "#99f6e4" }}>
+                              (downtime procedure)
+                            </span>
+                          </div>
+                          <div style={{ color: "#a7f3d0", marginBottom: "6px" }}>
+                            <strong>Critical</strong> (two sixes):{" "}
+                            <strong>5 ticks</strong> · Single <strong>6</strong>:{" "}
+                            <strong>3 ticks</strong> · <strong>4–5</strong>:{" "}
+                            <strong>2 ticks</strong> · <strong>1–3</strong>:{" "}
+                            <strong>1 tick</strong>
+                          </div>
+                          {diceResult.recoveryPresentation.selfTreatment ? (
+                            <div style={{ marginBottom: "8px", color: "#fcd34d" }}>
+                              Self-treatment downtime: <strong>−1 tick</strong> from the
+                              raw band is folded into the total below (SRD).
+                            </div>
+                          ) : null}
+                          <div style={{ color: "#ecfdf5" }}>
+                            Rolled band (from pool dice):{" "}
+                            <strong>{diceResult.recoveryPresentation.bandLabel}</strong> →{" "}
+                            <strong style={{ color: "#34d399" }}>
+                              +{diceResult.recoveryPresentation.ticks} tick(s)
+                            </strong>{" "}
+                            toward the healing clock resolution (coin bump to critical can
+                            still stack before GM resolves harm steps).
+                          </div>
+                          <div
+                            style={{
+                              marginTop: "8px",
+                              fontSize: "10px",
+                              color: "#94a3b8",
+                            }}
+                          >
+                            Treating someone else here does not consume the healer&apos;s own
+                            downtime activity (SRD). Toughing it out with no aid: mark stress
+                            and roll with <strong>0 dice</strong>. New harm clears ticking
+                            progress on the healing clock.
+                          </div>
+                        </div>
+                      ) : null}
 
                       {diceResult.isResistance && (
                         <div
@@ -11276,32 +11757,6 @@ const CharacterSheetWrapper = ({
                         </div>
                       )}
 
-                      {!diceResult.isResistance &&
-                        !diceResult.isDesperateAction && (
-                          <button
-                            onClick={() => {
-                              const attr = ACTION_ATTR[diceResult.action];
-                              if (attr)
-                                setXp((p) => ({
-                                  ...p,
-                                  [attr]: Math.min(p[attr] + 1, 5),
-                                }));
-                              setDiceResult((p) => ({
-                                ...p,
-                                isDesperateAction: true,
-                              }));
-                            }}
-                            style={{
-                              ...S.btn,
-                              background: "#c2410c",
-                              color: "#fff",
-                              marginTop: "6px",
-                              fontSize: "11px",
-                            }}
-                          >
-                            Mark as Desperate (+1 XP)
-                          </button>
-                        )}
                       <button
                         onClick={() => {
                           setDiceResult(null);
@@ -11347,7 +11802,7 @@ const CharacterSheetWrapper = ({
                       ) : null}
                       <button
                         type="button"
-                        onClick={() => setCrewAssistExpanded((v) => !v)}
+                        onClick={() => setCrewAssistExpandedPersist((v) => !v)}
                         style={{
                           display: "flex",
                           width: "100%",
@@ -11483,7 +11938,7 @@ const CharacterSheetWrapper = ({
                       >
                         <button
                           type="button"
-                          onClick={() => setCrewGroupExpanded((v) => !v)}
+                          onClick={() => setCrewGroupExpandedPersist((v) => !v)}
                           style={{
                             display: "flex",
                             width: "100%",
@@ -11827,7 +12282,7 @@ const CharacterSheetWrapper = ({
                       </div>
                       <button
                         type="button"
-                        onClick={() => setCrewHealExpanded((v) => !v)}
+                        onClick={() => setCrewHealExpandedPersist((v) => !v)}
                         style={{
                           display: "flex",
                           width: "100%",
@@ -12238,7 +12693,7 @@ const CharacterSheetWrapper = ({
                       type="button"
                       id="character-sheet-abilities-heading"
                       onClick={() =>
-                        setAbilitiesSectionExpanded((prev) => {
+                        setAbilitiesSectionExpandedPersist((prev) => {
                           if (prev) {
                             setCustomAbilityModal(null);
                             setStandardAbilityPickerOpen(false);
@@ -13754,7 +14209,7 @@ const CharacterSheetWrapper = ({
                     <button
                       type="button"
                       onClick={() =>
-                        setClocksSectionExpanded((prev) => {
+                        setClocksSectionExpandedPersist((prev) => {
                           if (prev) {
                             setClockEditorOpen(false);
                             setNewClockName("");
@@ -14248,7 +14703,7 @@ const CharacterSheetWrapper = ({
                     <button
                       type="button"
                       onClick={() =>
-                        setNotesInventoryExpanded((prev) => ({
+                        setNotesInventoryExpandedPersist((prev) => ({
                           ...prev,
                           notes: !prev.notes,
                         }))
@@ -14315,7 +14770,7 @@ const CharacterSheetWrapper = ({
                     <button
                       type="button"
                       onClick={() =>
-                        setNotesInventoryExpanded((prev) => ({
+                        setNotesInventoryExpandedPersist((prev) => ({
                           ...prev,
                           inventory: !prev.inventory,
                         }))
@@ -15084,7 +15539,7 @@ const CharacterSheetWrapper = ({
                   <span style={S.lbl}>CREW MODIFICATION HISTORY</span>
                   <button
                     type="button"
-                    onClick={() => setCrewHistoryOpen((v) => !v)}
+                    onClick={() => setCrewHistoryOpenPersist((v) => !v)}
                     style={{
                       ...S.btn,
                       fontSize: "10px",
@@ -15483,6 +15938,7 @@ const CharacterSheetWrapper = ({
 
             <div style={{ display: "flex", gap: "8px" }}>
               <button
+                type="button"
                 onClick={confirmLevelUp}
                 style={{
                   ...S.btn,
@@ -15495,6 +15951,7 @@ const CharacterSheetWrapper = ({
                 Confirm (−10 XP)
               </button>
               <button
+                type="button"
                 onClick={() => setShowLevelUp(false)}
                 style={{ ...S.btn, background: "#374151", color: "#fff" }}
               >

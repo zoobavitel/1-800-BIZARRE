@@ -903,10 +903,13 @@ class SessionRecordsSerializer(serializers.ModelSerializer):
             "xp_entries",
             "rolls",
             "roll_goal_label",
+            "roll_goal_by_character",
             "show_position_effect_to_players",
             "default_position",
             "default_effect",
+            "position_effect_by_character",
             "devils_bargain_by_character",
+            "ripple_breathing_free_push_claimed_by_character",
         ]
 
     def get_npcs_involved(self, obj):

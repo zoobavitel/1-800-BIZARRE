@@ -314,6 +314,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
         devil_bargain_confirmed = bool(
             request.data.get("devil_bargain_confirmed", False)
         )
+        stress_overflow_accepted = _as_bool(
+            request.data.get("stress_overflow_accepted", False)
+        )
         fortune_reveal_outcome = bool(
             request.data.get("fortune_reveal_outcome", False)
         )
@@ -719,7 +722,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 0, min(max_slots, int(getattr(character, "stress", 0) or 0))
             )
             free_slots = max(0, max_slots - stress_marked)
-            if stress_cost > free_slots:
+            if stress_cost > free_slots and not stress_overflow_accepted:
                 return Response(
                     {
                         "error": (

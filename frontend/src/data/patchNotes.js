@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
+          "session NPC clocks, Staying Power on L4, Parry/Break cleanup",
           "ripple free-push, recovery rolls, NPC sheet heals",
           "heal bolsters picker, exclusions, downtime recover",
           "improve session GM controls and recovery flow",
@@ -477,8 +478,7 @@ export const PATCH_NOTES = [
           "Initial plan",
           "Create copilot-instructions.md file with initial content",
           "Merge pull request #21 from zoobavitel/copilot/add-heritage-and-user-types-to-npc",
-          "Merge pull request #20 from zoobavitel/copilot/create-faction-for-npc",
-          "Delete .github/workflows/black.yml"
+          "Merge pull request #20 from zoobavitel/copilot/create-faction-for-npc"
         ]
       },
       {
