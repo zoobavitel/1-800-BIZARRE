@@ -1596,6 +1596,10 @@ export default function CharacterPage({
           <CharacterSheetWrapper
             key={activeCharTab?.tabId ?? "new"}
             character={sheetCharacter}
+            sheetDraftIsDirty={
+              activeCharTabId != null &&
+              Boolean(charTabUnsavedMeta[activeCharTabId]?.isDirty)
+            }
             heritages={heritages}
             heritagesLoading={heritagesLoading}
             heritagesError={heritagesError}
