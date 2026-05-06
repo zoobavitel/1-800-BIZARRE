@@ -8,6 +8,24 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Other",
+        "items": [
+          "Merge pull request #70 from zoobavitel/cursor/session-xp-gm-sheet-history"
+        ]
+      },
+      {
+        "title": "Tests",
+        "items": [
+          "fix Ripple Breathing Character create (drop invalid name kw)"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "Copilot review — XP settlement on session delete, multi-tracker rolls, faction image clear, history ACL"
+        ]
+      },
+      {
         "title": "Added",
         "items": [
           "remove healing UI components and related files",
@@ -486,10 +504,7 @@ export const PATCH_NOTES = [
           "Initial plan for em-dash 500 fix",
           "added merge migration",
           "Merge pull request #23 from zoobavitel/copilot/fix-npc-500-error-gm-locked-fields",
-          "Add clarifying comment on ability ID in regression test",
-          "Remove accidentally committed debug.log",
-          "Fix 500 on NPC PUT: merge conflicting 0038 migrations, harden Character.save(), add regression tests",
-          "Initial plan"
+          "Add clarifying comment on ability ID in regression test"
         ]
       },
       {
