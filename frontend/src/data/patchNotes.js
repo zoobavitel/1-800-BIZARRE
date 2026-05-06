@@ -4,6 +4,19 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-05-06",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "add sheetDraftIsDirty prop to CharacterSheetWrapper",
+          "session retrieve P/E, stress overflow, downtime recovery UI"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-05-05",
     "version": null,
     "sections": [
@@ -476,9 +489,7 @@ export const PATCH_NOTES = [
           "Remove accidentally committed debug.log",
           "Fix 500 on NPC PUT: merge conflicting 0038 migrations, harden Character.save(), add regression tests",
           "Initial plan",
-          "Create copilot-instructions.md file with initial content",
-          "Merge pull request #21 from zoobavitel/copilot/add-heritage-and-user-types-to-npc",
-          "Merge pull request #20 from zoobavitel/copilot/create-faction-for-npc"
+          "Create copilot-instructions.md file with initial content"
         ]
       },
       {
