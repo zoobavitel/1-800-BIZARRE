@@ -541,8 +541,16 @@ export function buildMultipartOrJson(data) {
     }
     return { multipart: true, body: fd };
   }
-  const { imageFile: _if, image: _img, ...rest } = data || {};
-  return { multipart: false, body: JSON.stringify(rest) };
+  const dataObj = data || {};
+  const { imageFile: _if, image, ...rest } = dataObj;
+  const jsonPayload = { ...rest };
+  if (
+    Object.prototype.hasOwnProperty.call(dataObj, "image") &&
+    image === null
+  ) {
+    jsonPayload.image = null;
+  }
+  return { multipart: false, body: JSON.stringify(jsonPayload) };
 }
 
 // NPC API functions (GM / campaign NPCs)

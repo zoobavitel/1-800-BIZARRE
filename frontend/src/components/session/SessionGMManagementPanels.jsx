@@ -3995,8 +3995,15 @@ export default function SessionGMManagementPanels({
                               {(r.action_name || "action").toUpperCase()} ·{" "}
                               {(r.results || []).join(", ")} →{" "}
                               {(r.outcome || "").replace(/_/g, " ")}
-                              {r.xp_award_detail ? (
+                              {(Array.isArray(r.xp_award_details) &&
+                              r.xp_award_details.length > 0
+                                ? r.xp_award_details
+                                : r.xp_award_detail
+                                  ? [r.xp_award_detail]
+                                  : []
+                              ).map((xpRow, xpIdx) => (
                                 <span
+                                  key={`xp-${r.id}-${xpIdx}`}
                                   style={{
                                     display: "block",
                                     marginTop: 3,
@@ -4005,20 +4012,19 @@ export default function SessionGMManagementPanels({
                                     lineHeight: 1.35,
                                   }}
                                 >
-                                  +{r.xp_award_detail.xp_gained} XP ·{" "}
-                                  {r.xp_award_detail.trigger_label ||
-                                    r.xp_award_detail.trigger}
-                                  {r.xp_award_detail.track &&
-                                  r.xp_award_detail.track_total != null &&
-                                  r.xp_award_detail.track_total !== undefined
-                                    ? ` · ${String(r.xp_award_detail.track)} ${r.xp_award_detail.track_total}`
+                                  +{xpRow.xp_gained} XP ·{" "}
+                                  {xpRow.trigger_label || xpRow.trigger}
+                                  {xpRow.track &&
+                                  xpRow.track_total != null &&
+                                  xpRow.track_total !== undefined
+                                    ? ` · ${String(xpRow.track)} ${xpRow.track_total}`
                                     : ""}
-                                  {r.xp_award_detail.all_tracks_total != null &&
-                                  r.xp_award_detail.all_tracks_total !== undefined
-                                    ? ` · all clocks ${r.xp_award_detail.all_tracks_total}`
+                                  {xpRow.all_tracks_total != null &&
+                                  xpRow.all_tracks_total !== undefined
+                                    ? ` · all clocks ${xpRow.all_tracks_total}`
                                     : ""}
                                 </span>
-                              ) : null}
+                              ))}
                               <details style={{ marginTop: 4 }}>
                                 <summary
                                   style={{

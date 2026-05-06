@@ -725,6 +725,7 @@ class RollSerializer(serializers.ModelSerializer):
     recovery_target_character_name = serializers.SerializerMethodField()
     xp_awarded = serializers.SerializerMethodField()
     xp_award_detail = serializers.SerializerMethodField()
+    xp_award_details = serializers.SerializerMethodField()
 
     class Meta:
         model = Roll
@@ -748,6 +749,7 @@ class RollSerializer(serializers.ModelSerializer):
             "timestamp",
             "xp_awarded",
             "xp_award_detail",
+            "xp_award_details",
             "pool_action_rating",
             "pool_attribute_dice",
             "push_for_effect",
@@ -784,38 +786,78 @@ class RollSerializer(serializers.ModelSerializer):
 
         return ExperienceTracker.objects.filter(roll=obj).exists()
 
-    def get_xp_award_detail(self, obj):
-        """If this roll created an ExperienceTracker row, expose XP for session UI."""
-        from .models import ExperienceTracker
+    def _xp_display_track_for_trigger(self, roll, trigger: str):
         from .roll_helpers import xp_track_for_action_name
 
-        et = (
+        t = (trigger or "").upper()
+        if t in ("DESPERATE_ROLL", "DESPERATE"):
+            return xp_track_for_action_name(roll.action_name or "")
+        if t == "BELIEFS":
+            return "heritage"
+        if t in ("STRUGGLE", "STANDOUT"):
+            return "playbook"
+        return None
+
+    def _build_xp_award_details(self, obj):
+        """All ExperienceTracker rows for this roll (ordered by pk); used by session UI."""
+        from .models import ExperienceTracker
+
+        ets = list(
             ExperienceTracker.objects.filter(roll=obj)
             .select_related("character")
-            .first()
+            .order_by("pk")
         )
-        if not et:
-            return None
-        track = xp_track_for_action_name(obj.action_name or "")
-        char = et.character
-        try:
-            char.refresh_from_db(fields=["xp_clocks"])
-        except Exception:
-            pass
-        clocks = dict(char.xp_clocks or {})
-        track_total = None
-        if track:
-            track_total = int(clocks.get(track, 0) or 0)
-        all_tracks_total = sum(int(v or 0) for v in clocks.values())
-        return {
-            "xp_gained": int(et.xp_gained or 0),
-            "trigger": et.trigger,
-            "trigger_label": et.get_trigger_display(),
-            "track": track,
-            "track_total": track_total,
-            "all_tracks_total": all_tracks_total,
-            "description": (et.description or "")[:500],
-        }
+        if not ets:
+            return []
+        char_ids = {et.character_id for et in ets}
+        shared_clocks = {}
+        shared_all_total = 0
+        if len(char_ids) == 1:
+            char = ets[0].character
+            try:
+                char.refresh_from_db(fields=["xp_clocks"])
+            except Exception:
+                pass
+            shared_clocks = dict(char.xp_clocks or {})
+            shared_all_total = sum(int(v or 0) for v in shared_clocks.values())
+
+        out = []
+        for et in ets:
+            if len(char_ids) == 1:
+                clocks = shared_clocks
+                all_tracks_total = shared_all_total
+            else:
+                c = et.character
+                try:
+                    c.refresh_from_db(fields=["xp_clocks"])
+                except Exception:
+                    pass
+                clocks = dict(c.xp_clocks or {})
+                all_tracks_total = sum(int(v or 0) for v in clocks.values())
+            track = self._xp_display_track_for_trigger(obj, et.trigger)
+            track_total = None
+            if track:
+                track_total = int(clocks.get(track, 0) or 0)
+            out.append(
+                {
+                    "xp_gained": int(et.xp_gained or 0),
+                    "trigger": et.trigger,
+                    "trigger_label": et.get_trigger_display(),
+                    "track": track,
+                    "track_total": track_total,
+                    "all_tracks_total": all_tracks_total,
+                    "description": (et.description or "")[:500],
+                }
+            )
+        return out
+
+    def get_xp_award_details(self, obj):
+        return self._build_xp_award_details(obj)
+
+    def get_xp_award_detail(self, obj):
+        """First XP row for this roll (by pk); prefer ``xp_award_details`` for full list."""
+        details = self._build_xp_award_details(obj)
+        return details[0] if details else None
 
     def to_representation(self, instance):
         data = super().to_representation(instance)

@@ -564,6 +564,9 @@ function CampaignDetail({
     if (f.imageFile) {
       payload.imageFile = f.imageFile;
     }
+    if (f.id && !f.imageFile && f.image == null) {
+      payload.image = null;
+    }
     return payload;
   };
 

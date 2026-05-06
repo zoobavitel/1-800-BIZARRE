@@ -10,6 +10,7 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
+          "remove healing UI components and related files",
           "add sheetDraftIsDirty prop to CharacterSheetWrapper",
           "session retrieve P/E, stress overflow, downtime recovery UI"
         ]
@@ -488,8 +489,7 @@ export const PATCH_NOTES = [
           "Add clarifying comment on ability ID in regression test",
           "Remove accidentally committed debug.log",
           "Fix 500 on NPC PUT: merge conflicting 0038 migrations, harden Character.save(), add regression tests",
-          "Initial plan",
-          "Create copilot-instructions.md file with initial content"
+          "Initial plan"
         ]
       },
       {

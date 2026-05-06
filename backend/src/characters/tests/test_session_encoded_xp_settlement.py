@@ -2,6 +2,7 @@
 from django.contrib.auth.models import User
 from django.db.models import Sum
 from django.test import TestCase
+from rest_framework.test import APIClient
 
 from characters.models import (
     Campaign,
@@ -140,3 +141,24 @@ class SessionEncodedXpSettlementTests(TestCase):
             or 0
         )
         self.assertEqual(total_struggle_xp, 2)
+
+    def test_settlement_runs_before_delete_active_session(self):
+        """Deleting the campaign's active session must still apply encoded session XP."""
+        client = APIClient()
+        client.force_authenticate(user=self.gm)
+        self.campaign.active_session = self.session
+        self.campaign.save(update_fields=["active_session"])
+        self._roll(
+            roll_type="CLEAR_STRESS",
+            action_name="vice",
+            outcome="FAILURE",
+            description="did not clear",
+        )
+        sid = self.session.id
+        res = client.delete(f"/api/sessions/{sid}/")
+        self.assertIn(res.status_code, (200, 204), getattr(res, "data", res.content))
+        self.assertFalse(Session.objects.filter(pk=sid).exists())
+        self.campaign.refresh_from_db()
+        self.assertIsNone(self.campaign.active_session_id)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.xp_clocks.get("playbook", 0), 6)

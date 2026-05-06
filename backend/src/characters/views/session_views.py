@@ -78,6 +78,21 @@ class SessionViewSet(viewsets.ModelViewSet):
                     instance.id,
                 )
 
+    def perform_destroy(self, instance):
+        try:
+            from ..services.session_xp_settlement import (
+                settle_encoded_session_xp,
+            )
+
+            settle_encoded_session_xp(instance, self.request.user)
+        except Exception:
+            logger.exception(
+                "Encoded session XP settlement failed before session DELETE "
+                "(session=%s)",
+                instance.id,
+            )
+        super().perform_destroy(instance)
+
     @action(detail=True, methods=['post'], url_path='propose-score')
     def propose_score(self, request, pk=None):
         """Propose a score for the session."""

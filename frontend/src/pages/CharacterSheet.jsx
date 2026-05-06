@@ -3043,9 +3043,18 @@ const CharacterSheetWrapper = ({
               r.push_for_effect ? "Push(+effect)" : null,
               r.uses_devil_bargain ? "Devil's bargain" : null,
               r.roller_stress_spent ? `Stress ${r.roller_stress_spent}` : null,
-              r.xp_award_detail?.xp_gained
-                ? `+${r.xp_award_detail.xp_gained} XP (${r.xp_award_detail.trigger_label || r.xp_award_detail.trigger || "roll"})`
-                : null,
+              ...(Array.isArray(r.xp_award_details) &&
+              r.xp_award_details.length > 0
+                ? r.xp_award_details
+                : r.xp_award_detail
+                  ? [r.xp_award_detail]
+                  : []
+              )
+                .filter((d) => d?.xp_gained)
+                .map(
+                  (d) =>
+                    `+${d.xp_gained} XP (${d.trigger_label || d.trigger || "roll"})`,
+                ),
             ].filter(Boolean),
           });
         });

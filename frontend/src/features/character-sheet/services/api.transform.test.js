@@ -320,4 +320,14 @@ describe("buildMultipartOrJson", () => {
     expect(parsed.image).toBeUndefined();
     expect(parsed.image_url).toBe("https://example.com/ok.jpg");
   });
+
+  it("includes explicit image null on JSON PUT so server clears an image field", () => {
+    const { multipart, body } = buildMultipartOrJson({
+      name: "Faction",
+      campaign: 1,
+      image: null,
+    });
+    expect(multipart).toBe(false);
+    expect(JSON.parse(body).image).toBe(null);
+  });
 });

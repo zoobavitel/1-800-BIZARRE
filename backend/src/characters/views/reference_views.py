@@ -102,7 +102,6 @@ class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
             if char.campaign_id:
                 camp = char.campaign
                 can_view = can_view or camp.gm_id == user.id
-                can_view = can_view or camp.players.filter(pk=user.id).exists()
             if not can_view:
                 return CharacterHistory.objects.none()
             if campaign_id:
