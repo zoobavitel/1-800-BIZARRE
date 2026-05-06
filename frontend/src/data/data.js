@@ -53,7 +53,6 @@ export const standardAbilities = [
   "Ambush",
   "Cascade Effect",
   "Final Barrage",
-  "Parry and Break",
   "Phantom Pain",
   "Savage",
   "Spin-Boosted Blow",

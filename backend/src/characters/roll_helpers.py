@@ -1,5 +1,7 @@
 """Shared dice roll helpers: effect normalization and desperate action XP."""
 
+import random
+
 from .models import ExperienceTracker
 from .services.session_xp_settlement import grant_encoded_trigger_xp
 
@@ -34,6 +36,48 @@ def bump_effect(effect, steps):
     i = EFFECT_ORDER.index(eff)
     j = max(0, min(len(EFFECT_ORDER) - 1, i + int(steps)))
     return EFFECT_ORDER[j]
+
+
+def recovery_healing_clock_segments(pool_before_roll, dice_results=None):
+    """
+    Healing-clock segments from a recover roll (mirrors CharacterSheet.rollRecoveryTreatment).
+    0 dice: roll 2d and take the lower die's band. Critical = two sixes (only when pool >= 2).
+    Bands: critical +5 segments; highest 6 -> +3; 4-5 -> +2; 1-3 -> +1.
+    """
+    pool = max(0, int(pool_before_roll or 0))
+    if pool <= 0:
+        dice_results = list(dice_results) if dice_results else []
+        if len(dice_results) < 2:
+            dice_results = [random.randint(1, 6), random.randint(1, 6)]
+        highest = min(int(dice_results[0]), int(dice_results[1]))
+        sixes = 0
+        critical = False
+    else:
+        if not dice_results:
+            dice_results = [random.randint(1, 6) for _ in range(pool)]
+        cleaned = [int(x) for x in dice_results[: pool + 24]]
+        if len(cleaned) < pool:
+            cleaned.extend(
+                random.randint(1, 6) for _ in range(pool - len(cleaned))
+            )
+        highest = max(cleaned)
+        sixes = sum(1 for d in cleaned if int(d) == 6)
+        critical = pool >= 2 and sixes >= 2
+    if critical:
+        segments = 5
+    elif highest >= 6:
+        segments = 3
+    elif highest >= 4:
+        segments = 2
+    else:
+        segments = 1
+    band = (
+        "critical"
+        if critical
+        else ("6" if highest >= 6 else ("4/5" if highest >= 4 else "1-3"))
+    )
+    out_dice = dice_results[:2] if pool <= 0 else cleaned
+    return segments, out_dice, highest, critical, band
 
 
 def action_rating_from_action_dots(action_dots, action_name_raw):

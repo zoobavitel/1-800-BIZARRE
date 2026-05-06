@@ -8,16 +8,17 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
-        "title": "Documentation",
+        "title": "Added",
         "items": [
-          "clarify resistance counterattack tick scaling"
+          "heal bolsters picker, exclusions, downtime recover",
+          "improve session GM controls and recovery flow",
+          "track modifier sources and improve session/NPC roll flow"
         ]
       },
       {
-        "title": "Added",
+        "title": "Documentation",
         "items": [
-          "improve session GM controls and recovery flow",
-          "track modifier sources and improve session/NPC roll flow"
+          "clarify resistance counterattack tick scaling"
         ]
       }
     ]
@@ -477,8 +478,7 @@ export const PATCH_NOTES = [
           "Merge pull request #21 from zoobavitel/copilot/add-heritage-and-user-types-to-npc",
           "Merge pull request #20 from zoobavitel/copilot/create-faction-for-npc",
           "Delete .github/workflows/black.yml",
-          "Merge branch 'master' into copilot/create-faction-for-npc",
-          "Merge pull request #22 from zoobavitel/copilot/inline-faction-creation-npc-sheet"
+          "Merge branch 'master' into copilot/create-faction-for-npc"
         ]
       },
       {

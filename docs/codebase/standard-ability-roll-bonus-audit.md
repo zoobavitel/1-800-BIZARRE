@@ -28,7 +28,6 @@ Treat like standard **A** unless description is ally/follow-up: e.g. “They gai
 | Ambush | A | +1d hiding/trap |
 | Cascade Effect | — | No pool keyword |
 | Final Barrage | — | |
-| Parry and Break | C | +1 effect is **after** resist, counterattack — **effect tick suppressed** in generic action modal; use **resistance result** follow-up: pick “Parry and Break — counterattack…”, choose action, **Open dice pool** (bakes +1 effect into that roll; see `CharacterSheet.jsx`) |
 | Phantom Pain | — | |
 | Savage | A | +1d command + frightened |
 | Spin-Boosted Blow | D | +1d +1 effect same strike |

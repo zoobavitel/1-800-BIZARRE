@@ -172,6 +172,71 @@ class ExperienceTrackerViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ExperienceTrackerSerializer
 
     def get_queryset(self):
+        # #region agent log
+        import json
+        import time as _dbg_time_ref
+
+        def _dbg_experience_tracker_log():
+            try:
+                from django.db import connection
+                from django.db.migrations.recorder import MigrationRecorder
+
+                mig_0065 = MigrationRecorder.Migration.objects.filter(
+                    app="characters",
+                    name="0065_session_ripple_breathing_free_push",
+                ).exists()
+                col_present = None
+                if connection.vendor == "sqlite":
+                    with connection.cursor() as cur:
+                        cur.execute("PRAGMA table_info(characters_session)")
+                        names = {row[1] for row in cur.fetchall()}
+                    col_present = (
+                        "ripple_breathing_free_push_claimed_by_character" in names
+                    )
+                db_name = connection.settings_dict.get("NAME")
+                payload = {
+                    "sessionId": "068d9a",
+                    "runId": "pre-fix",
+                    "hypothesisId": "H1",
+                    "location": "reference_views.ExperienceTrackerViewSet.get_queryset",
+                    "message": "migrate 0065 vs sqlite column characters_session",
+                    "data": {
+                        "mig_0065_applied": mig_0065,
+                        "ripple_col_in_db": col_present,
+                        "db_vendor": connection.vendor,
+                        "db_name_repr": repr(db_name),
+                    },
+                    "timestamp": int(_dbg_time_ref.time() * 1000),
+                }
+                path = "$HOME/git/jojo-ttrpg-platform/.cursor/debug-068d9a.log"
+                with open(path, "a", encoding="utf-8") as df:
+                    df.write(json.dumps(payload) + "\n")
+            except Exception as ex:
+                try:
+                    with open(
+                        "$HOME/git/jojo-ttrpg-platform/.cursor/debug-068d9a.log",
+                        "a",
+                        encoding="utf-8",
+                    ) as df:
+                        df.write(
+                            json.dumps(
+                                {
+                                    "sessionId": "068d9a",
+                                    "runId": "pre-fix",
+                                    "hypothesisId": "H1",
+                                    "location": "reference_views.ExperienceTrackerViewSet.get_queryset",
+                                    "message": "debug log exception",
+                                    "data": {"error": repr(ex)},
+                                    "timestamp": int(_dbg_time_ref.time() * 1000),
+                                }
+                            )
+                            + "\n"
+                        )
+                except Exception:
+                    pass
+
+        _dbg_experience_tracker_log()
+        # #endregion
         qs = ExperienceTracker.objects.all().select_related('character', 'session', 'character__campaign')
         user = self.request.user
         if user.is_staff:

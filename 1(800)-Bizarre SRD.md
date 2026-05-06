@@ -2753,7 +2753,6 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 * **Ambush:** When you attack from hiding or spring a trap, you get **\+1d.**  
 * **Cascade Effect:** If you roll a 6 from your resistance roll to resist a physical or bizarre consequence, the attacker suffers a mirrored backlash.  
 * **Final Barrage:** When reduced to 0 HP or Level 4 harm, make a **potent Stand attack** before going down.  
-* **Parry and Break:** On a successful resistance roll, counterattack with **potency (+1 effect)**.  
 * **Phantom Pain:** Spend 1 stress to make your stand attack through cover, walls, or barriers that would otherwise block it. Works within your stand range.   
 * **Savage:** When you unleash physical violence, it's especially frightening. **When you command a frightened target, take \+1d**.  
 * **Spin-Boosted Blow:** Add Spin to your next Stand attack to supercharge a single strike (adds \+1 effect and \+1d).  

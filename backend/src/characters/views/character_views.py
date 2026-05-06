@@ -15,6 +15,7 @@ import random
 from ..models import (
     Campaign,
     Character,
+    CharacterHamonAbility,
     ExperienceTracker,
     GroupAction,
     Session,
@@ -33,6 +34,7 @@ from ..roll_helpers import (
     normalize_effect,
     normalize_position,
     outcome_from_action_roll,
+    recovery_healing_clock_segments,
     tier_die_from_action_pool,
     award_struggle_for_new_traumas,
 )
@@ -381,6 +383,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         )
 
         stress_cost = 0
+        ripple_mark_character_key = None
         session = None
         if session_id:
             try:
@@ -392,6 +395,118 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     )
             except Session.DoesNotExist:
                 session = None
+
+        recovery_ctx_sheet = (
+            request.data.get("recovery_context") or ""
+        ).strip().lower()
+        if recovery_ctx_sheet in ("self_downtime", "self_mid_action"):
+            if recovery_ctx_sheet == "self_mid_action" and not session_id:
+                return Response(
+                    {"error": "Mid-action recover requires an active session."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not session:
+                return Response(
+                    {
+                        "error": (
+                            "Link your campaign’s active session so this recovery appears "
+                            "in Session History."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not action_name:
+                return Response(
+                    {"error": "Action name is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            bonus_rec = max(0, int(request.data.get("bonus_dice") or 0))
+            rating_rec = action_rating_from_action_dots(
+                character.action_dots, action_name
+            )
+            pool_rec = rating_rec + bonus_rec
+            dice_for_seg = (
+                [random.randint(1, 6) for _ in range(pool_rec)]
+                if pool_rec > 0
+                else None
+            )
+            (
+                seg,
+                dice_out,
+                hi_rec,
+                crit_rec,
+                band_rec,
+            ) = recovery_healing_clock_segments(pool_rec, dice_for_seg)
+            stress_recovery = 2
+            max_slots = max_stress_slots_for_character(character)
+            stress_marked = max(
+                0,
+                min(max_slots, int(getattr(character, "stress", 0) or 0)),
+            )
+            free_slots = max(0, max_slots - stress_marked)
+            if stress_recovery > free_slots:
+                return Response(
+                    {
+                        "error": (
+                            "Not enough empty stress boxes for self-recovery "
+                            "(SRD: 2 stress)."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            mode_hr = (
+                "Mid-action self-recover"
+                if recovery_ctx_sheet == "self_mid_action"
+                else "Downtime self-recover"
+            )
+            pool_note = (
+                f"{rating_rec}+1 Invigorated ({pool_rec}d total)"
+                if bonus_rec
+                else f"{pool_rec}d"
+            )
+            desc_hr = (
+                f"{mode_hr}: {str(action_name).upper()} ({pool_note}) rolled {band_rec} "
+                f"→ +{seg} healing clock segments"
+            )
+            with transaction.atomic():
+                character.stress = min(max_slots, stress_marked + stress_recovery)
+                character.save(update_fields=["stress"])
+                rh_roll = Roll.objects.create(
+                    character=character,
+                    session=session,
+                    roll_type="OTHER",
+                    action_name=action_name or "",
+                    position="controlled",
+                    effect="standard",
+                    dice_pool=pool_rec,
+                    results=dice_out,
+                    outcome="PARTIAL_SUCCESS",
+                    description=desc_hr,
+                    goal_label="Healing clock recover",
+                    rolled_by=request.user,
+                    pool_action_rating=rating_rec,
+                    pool_bonus_dice=bonus_rec,
+                    roller_stress_spent=stress_recovery,
+                    recovery_context=recovery_ctx_sheet,
+                )
+                RollHistory.objects.create(campaign=session.campaign, roll=rh_roll)
+            return Response(
+                {
+                    "action": action_name,
+                    "rating": rating_rec,
+                    "total_dice": pool_rec,
+                    "dice_results": dice_out,
+                    "highest": hi_rec,
+                    "position": rh_roll.position,
+                    "effect": rh_roll.effect,
+                    "outcome": "partial success",
+                    "roll_id": rh_roll.id,
+                    "stress_spent": stress_recovery,
+                    "recovery_segments": seg,
+                    "recovery_critical": crit_rec,
+                    "recovery_band": band_rec,
+                }
+            )
 
         position = normalize_position(request.data.get("position"))
         effect = normalize_effect(request.data.get("effect") or "standard")
@@ -531,6 +646,72 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         "category": "system",
                     }
                 )
+            ripple_free_push_claim = _as_bool(
+                request.data.get("ripple_breathing_free_push", False)
+            )
+            if ripple_free_push_claim:
+                if roll_type.upper() != "ACTION":
+                    return Response(
+                        {
+                            "error": (
+                                "Ripple Breathing free push applies only on action rolls."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if not session:
+                    return Response(
+                        {
+                            "error": (
+                                "Ripple Breathing free push requires an active session "
+                                "(tracked once per session per character)."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if not (push_effect or push_dice):
+                    return Response(
+                        {
+                            "error": (
+                                "Ripple Breathing waives stress only when you push for "
+                                "+1 effect or push for +1d."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                claimed_map = getattr(
+                    session, "ripple_breathing_free_push_claimed_by_character", None
+                )
+                if not isinstance(claimed_map, dict):
+                    claimed_map = {}
+                ck = str(character.pk)
+                if claimed_map.get(ck):
+                    return Response(
+                        {
+                            "error": (
+                                "Ripple Breathing free push was already used this session."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if not CharacterHamonAbility.objects.filter(
+                    character=character,
+                    hamon_ability__name__iexact="Ripple Breathing",
+                ).exists():
+                    return Response(
+                        {"error": "Character does not have Ripple Breathing."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                stress_cost = max(0, int(stress_cost) - 2)
+                stress_sources.append(
+                    {
+                        "kind": "ability",
+                        "name": "Ripple Breathing",
+                        "delta": "-2 stress (free push, once/session)",
+                        "category": "ability",
+                    }
+                )
+                ripple_mark_character_key = ck
             # Character.stress is **marked** boxes on the track (same as sheet stressFilled),
             # not "remaining budget". Spending stress marks more boxes.
             max_slots = max_stress_slots_for_character(character)
@@ -716,6 +897,33 @@ class CharacterViewSet(viewsets.ModelViewSet):
             _hb_aud = heritage_bonus_labels(heritage_bonuses_raw)
             if _hb_aud:
                 desc += f" [Heritage: {', '.join(_hb_aud)}]"
+            recovery_roll_target = None
+            recovery_ctx_for_roll = ""
+            rtc_raw = request.data.get("recovery_target_character_id")
+            if rtc_raw not in (None, "", False):
+                try:
+                    tid_rtc = int(rtc_raw)
+                    candidate_rt = Character.objects.filter(
+                        pk=tid_rtc, campaign_id=character.campaign_id
+                    ).first()
+                    if candidate_rt and candidate_rt.id != character.id:
+                        recovery_roll_target = candidate_rt
+                        recovery_ctx_for_roll = "ally"
+                        desc += f" [Recovery patient: {recovery_roll_target.true_name}]"
+                except (TypeError, ValueError):
+                    pass
+            if (
+                recovery_ctx_for_roll != "ally"
+                and recovery_ctx_sheet not in ("self_downtime", "self_mid_action")
+                and _as_bool(request.data.get("recovery_is_self_treatment", False))
+                and rtc_raw not in (None, "", False)
+            ):
+                try:
+                    sid_self = int(rtc_raw)
+                    if sid_self == character.id:
+                        recovery_ctx_for_roll = "self_treatment_roll"
+                except (TypeError, ValueError):
+                    pass
             ga_obj = None
             if group_action_id:
                 ga_obj = GroupAction.objects.filter(
@@ -795,8 +1003,23 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 fortune_public_label=(
                     fortune_public_label if roll_type.upper() == "FORTUNE" else ""
                 ),
+                recovery_target=recovery_roll_target,
+                recovery_context=recovery_ctx_for_roll,
             )
             RollHistory.objects.create(campaign=session.campaign, roll=roll)
+
+            if ripple_mark_character_key:
+                cmap = getattr(
+                    session, "ripple_breathing_free_push_claimed_by_character", None
+                )
+                if not isinstance(cmap, dict):
+                    cmap = {}
+                cmap = dict(cmap)
+                cmap[str(ripple_mark_character_key)] = True
+                Session.objects.filter(pk=session.pk).update(
+                    ripple_breathing_free_push_claimed_by_character=cmap
+                )
+                session.ripple_breathing_free_push_claimed_by_character = cmap
 
             if (
                 position == "desperate"

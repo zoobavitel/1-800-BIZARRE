@@ -1,0 +1,211 @@
+                      <div
+                        style={{
+                          marginBottom: "12px",
+                          paddingTop: "8px",
+                          borderTop: "1px solid #374151",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "11px",
+                            color: "#d1d5db",
+                            fontWeight: 700,
+                            marginBottom: "6px",
+                          }}
+                        >
+                          Heal teammate (session recover-in-play)
+                        </div>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                            gap: "8px",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          <select
+                            style={{ ...S.sel, width: "100%" }}
+                            value={healOtherDraft.targetId}
+                            onChange={(e) =>
+                              setHealOtherDraft((p) => ({
+                                ...p,
+                                targetId: e.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">Target teammate (not you)</option>
+                            {healOtherTargets.map((c) => (
+                              <option key={c.id} value={String(c.id)}>
+                                {c.true_name || c.name || `PC ${c.id}`}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            style={{ ...S.sel, width: "100%" }}
+                            value={healOtherDraft.actionName}
+                            onChange={(e) =>
+                              setHealOtherDraft((p) => ({
+                                ...p,
+                                actionName: String(e.target.value || "").toUpperCase(),
+                              }))
+                            }
+                          >
+                            {healRollActionChoices.map((action) => (
+                              <option key={action} value={action}>
+                                {action}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                            gap: "8px",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              border: "1px solid #374151",
+                              borderRadius: "6px",
+                              padding: "6px 8px",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              Ability bolsters (matching selected abilities)
+                            </div>
+                            {healBolsterAbilityCandidates.length === 0 ? (
+                              <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                                No current ability matches healing/recovery/roll modifiers.
+                              </div>
+                            ) : (
+                              <div style={{ display: "grid", gap: "4px" }}>
+                                {healBolsterAbilityCandidates.map((c) => (
+                                  <label
+                                    key={c.key}
+                                    title={c.description || undefined}
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "6px",
+                                      fontSize: "11px",
+                                      color: "#d1d5db",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={
+                                        Array.isArray(healOtherDraft.selectedBolsterKeys) &&
+                                        healOtherDraft.selectedBolsterKeys.includes(c.key)
+                                      }
+                                      onChange={(e) =>
+                                        setHealOtherDraft((p) => {
+                                          const prev = Array.isArray(p.selectedBolsterKeys)
+                                            ? p.selectedBolsterKeys
+                                            : [];
+                                          const next = e.target.checked
+                                            ? prev.includes(c.key)
+                                              ? prev
+                                              : [...prev, c.key]
+                                            : prev.filter((k) => k !== c.key);
+                                          return { ...p, selectedBolsterKeys: next };
+                                        })
+                                      }
+                                    />
+                                    <span>{c.name}</span>
+                                    <span
+                                      style={{ fontSize: "10px", color: "#6b7280" }}
+                                    >
+                                      ({c.rollKind})
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "8px",
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            style={{
+                              ...S.btn,
+                              background: "#0f766e",
+                              color: "#f8fafc",
+                              fontSize: "11px",
+                            }}
+                            disabled={!healOtherDraft.targetId}
+                            onClick={() => {
+                              const action = String(
+                                healOtherDraft.actionName || "TINKER",
+                              )
+                                .trim()
+                                .toUpperCase();
+                              const target = healOtherTargets.find(
+                                (c) => String(c.id) === String(healOtherDraft.targetId),
+                              );
+                              const rating = Math.max(
+                                0,
+                                Number(actionRatings[action] || 0),
+                              );
+                              const selKeys = Array.isArray(
+                                healOtherDraft.selectedBolsterKeys,
+                              )
+                                ? healOtherDraft.selectedBolsterKeys
+                                : [];
+                              const bolsterLabels = healBolsterAbilityCandidates
+                                .filter((c) => selKeys.includes(c.key))
+                                .map((c) => `${c.name} (${c.rollKind})`);
+                              const rollBoostPreset =
+                                buildHealRollBoostPresetFromSelections(
+                                  selKeys,
+                                  healBolsterAbilityCandidates,
+                                  abilityRollBonusOptions,
+                                  heritageRollBonusOptions,
+                                );
+                              rollDice(action, rating, false, false, undefined, {
+                                rollBoostPreset,
+                                healAttempt: {
+                                  kind: "heal_other",
+                                  targetId: Number(healOtherDraft.targetId),
+                                  targetName:
+                                    target?.true_name ||
+                                    target?.name ||
+                                    `PC ${healOtherDraft.targetId}`,
+                                  selectedAbilityBolsters: bolsterLabels,
+                                  abilityBolsterDeclared: bolsterLabels.length > 0,
+                                  bolsterNote: "",
+                                  careNote: "",
+                                  actionName: action,
+                                },
+                              });
+                            }}
+                            title="Open dice pool preview for this healing attempt"
+                          >
+                            Open healing roll preview
+                          </button>
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                            }}
+                          >
+                            Active-session only. Uses action roll dice pool +
+                            ability toggles; downtime recover remains separate.
+                          </span>
+                        </div>
+                      </div>

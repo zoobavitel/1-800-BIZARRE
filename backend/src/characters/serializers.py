@@ -707,6 +707,7 @@ class RollSerializer(serializers.ModelSerializer):
     rolled_by_username = serializers.CharField(
         source="rolled_by.username", read_only=True
     )
+    recovery_target_character_name = serializers.SerializerMethodField()
     xp_awarded = serializers.SerializerMethodField()
     xp_award_detail = serializers.SerializerMethodField()
 
@@ -746,8 +747,17 @@ class RollSerializer(serializers.ModelSerializer):
             "devil_bargain_consequence",
             "fortune_reveal_outcome",
             "fortune_public_label",
+            "recovery_context",
+            "recovery_target",
+            "recovery_target_character_name",
         ]
         read_only_fields = ["timestamp", "rolled_by"]
+
+    def get_recovery_target_character_name(self, obj):
+        t = getattr(obj, "recovery_target", None)
+        if t is None:
+            return ""
+        return getattr(t, "true_name", None) or getattr(t, "alias", "") or ""
 
     def validate_effect(self, value):
         from .roll_helpers import normalize_effect
@@ -2107,6 +2117,10 @@ class CampaignSerializer(serializers.ModelSerializer):
             or {},
             "devils_bargain_by_character": getattr(
                 s, "devils_bargain_by_character", None
+            )
+            or {},
+            "ripple_breathing_free_push_claimed_by_character": getattr(
+                s, "ripple_breathing_free_push_claimed_by_character", None
             )
             or {},
             "position_effect_by_character": getattr(

@@ -1051,6 +1051,12 @@ export const transformBackendToFrontend = (backendCharacter) => {
       typeof backendCharacter.fed_today === "boolean"
         ? backendCharacter.fed_today
         : null,
+
+    /** +1 Stand Coin ranks bought with XP beyond chargen (10 XP each on backend); chargen baseline is excluded. */
+    standCoinPointsGained: Math.max(
+      0,
+      Number(backendCharacter.stand_coin_points_gained) || 0,
+    ),
   };
 };
 

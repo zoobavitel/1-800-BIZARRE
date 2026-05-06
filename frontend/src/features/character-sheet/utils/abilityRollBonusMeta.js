@@ -14,46 +14,24 @@ function normName(name) {
 
 /** Effect bonus on the *action roll modal* does not apply to this ability's fiction. */
 const ACTION_MODAL_SUPPRESS_EFFECT_NAMES = new Set(
-  [
-    "Parry and Break",
-    "Stand Proud",
-  ].map(normName),
+  ["Stand Proud"].map(normName),
 );
 
 /** Dice bonus on the *action roll modal* is wrong surface (ally-only or resistance-only). */
 const ACTION_MODAL_SUPPRESS_DICE_NAMES = new Set(
-  ["Aura of Confidence", "Iron Will"].map(normName),
+  ["Aura of Confidence", "Iron Will", "Ripple Breathing"].map(normName),
 );
 
 const IRON_WILL_NAMES = new Set(["Iron Will"].map(normName));
-
-const PARRY_AND_BREAK_NAMES = new Set(["Parry and Break"].map(normName));
 
 const LEGENDARY_GUARD_NAMES = new Set(["Legendary Guard"].map(normName));
 
 const PHANTOM_PAIN_NAMES = new Set(["Phantom Pain"].map(normName));
 
-/**
- * After a resist, partial / full / critical all reduce consequence; only failure skips counterattack.
- * @param {string | undefined} outcome e.g. "Failure", "Partial Success", "Critical Success"
- */
-export function resistanceOutcomeAllowsParryCounterattack(outcome) {
-  const o = String(outcome || "").trim().toLowerCase();
-  return o.length > 0 && !o.includes("failure");
-}
+const INVIGORATED_NAMES = new Set(["invigorated"]);
 
-/**
- * @param {Array<{ type?: string, name?: string }> | undefined} abilities
- */
-export function characterHasParryAndBreak(abilities) {
-  if (!Array.isArray(abilities)) return false;
-  return abilities.some(
-    (a) =>
-      a &&
-      String(a.type || "").toLowerCase() === "standard" &&
-      PARRY_AND_BREAK_NAMES.has(normName(a.name)),
-  );
-}
+/** Hamon Ripple Breathing: +1d only on qualifying resistance rolls, not generic action pools. */
+const RIPPLE_BREATHING_NAMES = new Set(["Ripple Breathing"].map(normName));
 
 /**
  * Standard ability — once/score negate one harm (fiction; not tied to armor box clicks).
@@ -81,6 +59,50 @@ export function characterHasPhantomPain(abilities) {
       String(a.type || "").toLowerCase() === "standard" &&
       PHANTOM_PAIN_NAMES.has(normName(a.name)),
   );
+}
+
+/**
+ * Standard ability — +1d on healing treatment rolls (SRD); used for auto pool on heal flows.
+ * @param {Array<{ type?: string, name?: string }> | undefined} abilities
+ */
+export function characterHasInvigorated(abilities) {
+  if (!Array.isArray(abilities)) return false;
+  return abilities.some(
+    (a) =>
+      a &&
+      String(a.type || "").toLowerCase() === "standard" &&
+      INVIGORATED_NAMES.has(normName(a.name)),
+  );
+}
+
+/**
+ * +1d to healing treatment (SRD Invigorated). Any sheet row matching the catalog name —
+ * standard pick, heritage echo, or server-hydrated `character.abilities` — counts.
+ */
+export function invigoratedHealingBonusApplies(rows) {
+  if (!Array.isArray(rows)) return false;
+  return rows.some((a) => a && INVIGORATED_NAMES.has(normName(a.name)));
+}
+
+/**
+ * @param {Array<{ type?: string, name?: string }> | undefined} abilities
+ */
+export function characterHasRippleBreathing(abilities) {
+  if (!Array.isArray(abilities)) return false;
+  return abilities.some(
+    (a) =>
+      a &&
+      String(a.type || "").toLowerCase() === "hamon" &&
+      RIPPLE_BREATHING_NAMES.has(normName(a.name)),
+  );
+}
+
+/**
+ * Never offer +1d/+1effect checkboxes on the action-roll modal (wrong surface).
+ * @param {string | undefined} name Ability display name (case-insensitive)
+ */
+export function abilityExcludedFromActionRollDicePoolBonuses(name) {
+  return RIPPLE_BREATHING_NAMES.has(normName(name));
 }
 
 /**

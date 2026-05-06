@@ -926,6 +926,8 @@ Your character suffers the penalty indicated at the end of the row if any or all
 
 If you need to mark a harm level, but the row is already filled, the harm moves up to the next row above. So, if you suffered standard harm (level 2\) but had no empty spaces in the second row, you’d have to record severe harm (level 3), instead. If you run out of spaces on the top row and need to mark harm there, your character suffers a catastrophic, permanent consequence (loss of a limb, sudden death, etc., depending on the circumstances).
 
+Suffering any new harm immediately clears all ticks on your healing clock. See **Recover**.
+
 ![][image2]  
 This character has three harm: a “Shattered Right Leg” (level 3\) plus “Drained” and “Battered” (level 1). If they suffer another level 1 harm, it will move up to level 2\. If they suffer another level 3 harm, it will move up to level 4: Fatal.
 
@@ -1656,19 +1658,49 @@ Work on a long-term project, if you have the means.
 
 Mark segments on the clock according to your result:
 
-Critical: Five ticks.  
-6: Three ticks.  
-4/5: Two ticks.  
-1-3: One tick.
+(on a standard effect) A partial success gives one tick, a fail gives 0 ticks, and a full success gives two ticks. adjust for greater effect and add \+1 tick to all results. Lesser effect is minus 1 tick to all results
 
-**Recover:**  
-When you recover, you seek treatment and heal your harm. You might visit a physicker who can stitch your wounds and soothe your mind with anatomical science or a witch who specializes in healing charms and restorative alchemy.
+6: Two ticks. 4/5: One tick. 1-3: 0 ticks.
 
-Recovery is like a long-term project. Your healer skills (perhaps Tinker or Attune for a PC with a healing special ability or the quality level of an NPC) and then you mark a number of segments on your healing clock. 1-3: one segment, 4/5: two segments, 6: three segments, critical: five segments.
+"Without a medical ability or proper kit, subtract 1 tick from whatever the roll result would normally give you, minimum 0."
 
-When you fill your healing clock, reduce each instance of harm on your sheet by one level, then clear the clock. If you have more segments to mark, they “roll over.”
+**Recover:**
 
-Healing Project ClockCross has two injuries: a level 3 “Shattered Right Leg” and level 1 “Battered.” During downtime, he gets treatment from Quellyn, a witch friend of the crew’s Whisper. Quellyn is a competent healer, so the GM says quality 2 makes sense. The player rolls 2d to recover and gets a 6: three segments on the healing clock. He decides to spend 1 coin to improve the result to a critical to get five segments instead. Four segments fill the clock—all of Cross’s harm is reduced by one level, then he clears the clock and marks one more segment. His level 3 harm “Shattered Right Leg” is reduced to level 2 harm. His level 1 harm “Battered” is reduced to zero and goes away. Cross is left with one injury on his sheet: level 2 “Broken Leg.”
+When you recover, you seek treatment and heal your harm. You might find a back-alley medic who can stitch you up off the books, seek out a Hamon practitioner whose touch accelerates natural healing, or call in a favor with a Spin user trained in field restoration.
+
+During downtime, recovery works like a long-term project. The healer rolls **Tinker** and marks ticks on your **healing clock**. When the clock fills, reduce each instance of harm on your sheet by one level, then clear the clock. If you have segments left over, they roll over.
+
+**Without a medical ability or proper kit**, subtract 1 tick from the result, minimum 0\.
+
+**Downtime Recovery**
+
+During downtime you're not under pressure — no position or effect applies. Use the fixed table:
+
+| Roll | Ticks |
+| ----- | ----- |
+| Critical | 5 ticks |
+| 6 | 3 ticks |
+| 4/5 | 2 ticks |
+| 1–3 | 1 tick |
+
+**NPC Healers → Fortune Roll:**
+
+Don't roll Tinker — the GM makes a fortune roll instead, with a pool based on how competent that NPC is fictionally:
+
+* **1d** — rough idea of first aid, no real training  
+* **2d** — competent; a street medic, a clinic doc  
+* **3d** — expert; a trained surgeon, a healer with a real reputation  
+* **4d** — elite; the best in the city, sought out for serious cases
+
+The patient can still spend coin after any roll to bump the result — you're paying for better care.
+
+**Self-treatment** during downtime costs 2 stress to push yourself through it, and you subtract 1 tick from the result (no outside perspective, limited reach). Toughing it out with no treatment at all: push yourself, roll 0 dice.
+
+Note that the recovering character takes the recovery action. Treating someone else does not cost the healer a downtime activity.
+
+Whenever you suffer new harm, clear all ticks on your healing clock.
+
+***Example:** Cross has a level 3 "Shattered Right Leg" and level 1 "Battered." The crew arranges treatment from Rosario, a back-alley medic out of a Tenderloin acupuncture shop — competent, not exceptional. The GM makes a 2d fortune roll and gets a 6: 3 ticks. Cross spends 1 coin to bump it to a critical: 5 ticks. Four ticks fill the clock — every harm drops one level. He clears the clock and banks the remaining tick. His level 3 becomes level 2\. His level 1 disappears. Cross walks away with one injury: level 2 "Broken Leg."*
 
 You may heal yourself, but you take 2 stress when you do so. You can also choose to simply tough it out and attempt to heal without any treatment—in this case, take 1 stress and roll 0d.
 
@@ -1677,7 +1709,9 @@ Note that it’s the recovering character that takes the recovery action. Healin
 Whenever you suffer new harm, clear any ticks on your healing clock.
 
 **Recovery in Play:**  
-If the situation allows — there's a lull in the action, a healer is present, and the fiction supports it — a PC can receive treatment during a score. This works identically to the downtime Recover activity: the healer rolls **Tinker** and ticks the patient's healing clock. When the clock fills, each harm is reduced by one level.
+If there's a lull in the action and the fiction supports it, a PC can receive treatment during a score. This is a skill check — **position and effect apply** like any other roll.
+
+The healer rolls **Tinker**. Ticks are determined by effect level:
 
 However, mid-score treatment has two hard constraints the GM must enforce:
 
@@ -1687,7 +1721,7 @@ However, mid-score treatment has two hard constraints the GM must enforce:
 
 **Mid-Score Without a Special Ability** A PC without a healing special ability can still attempt field treatment during a score if given time and safety. The healer rolls **Tinker**; the patient ticks their healing clock per the result. This is an action, so it costs the healer their moment in the scene and invites the GM to establish a consequence for the time spent.
 
-A PC attempting to treat *themselves* mid-score takes **2 stress** and rolls Tinker normally. Toughing it out with no treatment costs **1 stress** and rolls **0 dice** — you're hoping for a desperate crit.
+A PC attempting to treat *themselves* mid-score takes **2 stress** to push and roll Tinker normally. Toughing it out with no treatment costs **1 stress** and rolls **0 dice** — you're hoping for a desperate crit.
 
 **Mid-Score With a Special Ability** Certain special abilities — such as the Spin Medico's **Spin Suture** — explicitly override the "time and safety" requirement. These are the only sanctioned path to harm reduction *during active combat*. If an ability says it works mid-combat, it does. If it doesn't say that, treat it as standard mid-score recovery (requiring a lull).
 
@@ -2719,7 +2753,6 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 * **Ambush:** When you attack from hiding or spring a trap, you get **\+1d.**  
 * **Cascade Effect:** If you roll a 6 from your resistance roll to resist a physical or bizarre consequence, the attacker suffers a mirrored backlash.  
 * **Final Barrage:** When reduced to 0 HP or Level 4 harm, make a **potent Stand attack** before going down.  
-* **Parry and Break:** On a successful resistance roll, counterattack with **potency (+1 effect)**.  
 * **Phantom Pain:** Spend 1 stress to make your stand attack through cover, walls, or barriers that would otherwise block it. Works within your stand range.   
 * **Savage:** When you unleash physical violence, it's especially frightening. **When you command a frightened target, take \+1d**.  
 * **Spin-Boosted Blow:** Add Spin to your next Stand attack to supercharge a single strike (adds \+1 effect and \+1d).  

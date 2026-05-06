@@ -8,17 +8,6 @@ import NpcsStandCoin from "../components/NpcsStandCoin";
 
 // ─── SRD Data Tables ──────────────────────────────────────────────────────────
 
-const CATEGORY_LABELS = {
-  aggression: "Aggression",
-  endurance: "Endurance",
-  cunning: "Cunning",
-  awareness: "Awareness",
-  presence: "Presence",
-  teamwork: "Teamwork",
-  adaptability: "Adaptability",
-  stand_nature: "Stand Nature",
-};
-
 // NOTE: SRD has two level formulas — one doc says -9, another says -10.
 // Change this constant to whichever is confirmed correct.
 const LEVEL_OFFSET = 9;
@@ -108,6 +97,22 @@ function sanitizeNpcPlaybookAbilityDescription(raw) {
     s = s.charAt(0).toUpperCase() + s.slice(1);
   }
   return s;
+}
+
+/** Legacy rows linked standard-catalog abilities; NPC sheet uses freeform rows only now. */
+function normalizeNpcSheetAbilitiesNoStandard(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((ab) => {
+    if (!ab || typeof ab !== "object") {
+      return { id: Date.now(), name: "", description: "", type: "unique" };
+    }
+    const out = { ...ab };
+    delete out.standardId;
+    if (String(out.type || "").toLowerCase() === "standard") {
+      out.type = "unique";
+    }
+    return out;
+  });
 }
 
 const POWER_TABLE = {
@@ -754,8 +759,9 @@ const NPCSheet = ({
     npc?.special_armor_used ?? npc?.specialUsed ?? 0,
   );
 
-  const [abilities, setAbilities] = useState(npc?.abilities ?? []);
-  const [standardAbilitiesList, setStandardAbilitiesList] = useState([]);
+  const [abilities, setAbilities] = useState(() =>
+    normalizeNpcSheetAbilitiesNoStandard(npc?.abilities ?? []),
+  );
 
   // Heritage and NPC type
   const [heritage, setHeritage] = useState(
@@ -777,6 +783,7 @@ const NPCSheet = ({
     setPlaybook(npc?.playbook ?? "STAND");
     setSelectedHamonIds(npc?.selected_hamon_abilities ?? []);
     setSelectedSpinIds(npc?.selected_spin_abilities ?? []);
+    setAbilities(normalizeNpcSheetAbilitiesNoStandard(npc?.abilities ?? []));
   }, [npc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hamon / Spin playbook abilities
@@ -809,32 +816,6 @@ const NPCSheet = ({
     setSelectedSpinIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
-
-  useEffect(() => {
-    referenceAPI
-      .getAbilities()
-      .then((list) => setStandardAbilitiesList(list || []))
-      .catch(() => setStandardAbilitiesList([]));
-  }, []);
-
-  const [standardPickerAbId, setStandardPickerAbId] = useState(null);
-  const [standardPickerSearch, setStandardPickerSearch] = useState("");
-  const standardPickerRef = useRef(null);
-
-  useEffect(() => {
-    if (!standardPickerAbId) return;
-    const handleClick = (e) => {
-      if (
-        standardPickerRef.current &&
-        !standardPickerRef.current.contains(e.target)
-      ) {
-        setStandardPickerAbId(null);
-        setStandardPickerSearch("");
-      }
-    };
-    document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
-  }, [standardPickerAbId]);
 
   // Portrait state
   const [imageFile, setImageFile] = useState(null);
@@ -988,7 +969,7 @@ const NPCSheet = ({
       vulnerability_clock_current: vulnFilled,
       regular_armor_used: regularUsed,
       special_armor_used: specialUsed,
-      abilities,
+      abilities: normalizeNpcSheetAbilitiesNoStandard(abilities),
       hamon_ability_ids: selectedHamonIds,
       spin_ability_ids: selectedSpinIds,
       campaign: campaign || null,
@@ -1767,36 +1748,10 @@ const NPCSheet = ({
                     Narrative descriptions only — no mechanical dots
                   </div>
                   {abilities.map((ab) => {
-                    const standardOptions = standardAbilitiesList.filter(
-                      (a) =>
-                        (a.type || "").toLowerCase() === "standard" || !a.type,
-                    );
-                    const q = (
-                      standardPickerAbId === ab.id ? standardPickerSearch : ""
-                    )
-                      .trim()
-                      .toLowerCase();
-                    const filteredStandard = q
-                      ? standardOptions.filter(
-                          (a) =>
-                            (a.name || "").toLowerCase().includes(q) ||
-                            (a.description || "").toLowerCase().includes(q) ||
-                            (CATEGORY_LABELS[a.category] || "")
-                              .toLowerCase()
-                              .includes(q),
-                        )
-                      : standardOptions;
-                    const selectedStandard = ab.standardId
-                      ? standardAbilitiesList.find(
-                          (a) => a.id === ab.standardId,
-                        )
-                      : standardOptions.find((a) => a.name === ab.name);
-                    const isStandard =
-                      ab.type === "standard" ||
-                      !!ab.standardId ||
-                      !!selectedStandard;
-                    const pickerOpen = standardPickerAbId === ab.id;
-
+                    const typeVal =
+                      String(ab.type || "").toLowerCase() === "passive"
+                        ? "passive"
+                        : "unique";
                     return (
                       <div
                         key={ab.id}
@@ -1825,143 +1780,29 @@ const NPCSheet = ({
                                 flexWrap: "wrap",
                               }}
                             >
-                              {isStandard ? (
-                                <div
-                                  style={{
-                                    position: "relative",
-                                    flex: 1,
-                                    minWidth: "140px",
-                                  }}
-                                  ref={pickerOpen ? standardPickerRef : null}
-                                >
-                                  <input
-                                    value={
-                                      pickerOpen
-                                        ? standardPickerSearch
-                                        : selectedStandard?.name ||
-                                          ab.name ||
-                                          "Select standard ability..."
-                                    }
-                                    onChange={(e) => {
-                                      setStandardPickerSearch(e.target.value);
-                                      setStandardPickerAbId(ab.id);
-                                    }}
-                                    onFocus={() => {
-                                      setStandardPickerAbId(ab.id);
-                                      setStandardPickerSearch("");
-                                    }}
-                                    placeholder="Select standard ability..."
-                                    style={{
-                                      ...S.inp,
-                                      fontWeight: "bold",
-                                      borderBottom: "1px solid #4b2d8f",
-                                      fontSize: "12px",
-                                      border: "1px solid #2d1f52",
-                                      padding: "4px 8px",
-                                    }}
-                                  />
-                                  {pickerOpen && (
-                                    <div
-                                      style={{
-                                        position: "absolute",
-                                        top: "100%",
-                                        left: 0,
-                                        right: 0,
-                                        marginTop: "2px",
-                                        background: "#111827",
-                                        border: "1px solid #374151",
-                                        borderRadius: "4px",
-                                        maxHeight: "180px",
-                                        overflowY: "auto",
-                                        zIndex: 100,
-                                        boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
-                                      }}
-                                    >
-                                      {filteredStandard.length === 0 ? (
-                                        <div
-                                          style={{
-                                            padding: "12px",
-                                            fontSize: "11px",
-                                            color: "#6b7280",
-                                          }}
-                                        >
-                                          No matching abilities
-                                        </div>
-                                      ) : (
-                                        filteredStandard.map((a) => (
-                                          <div
-                                            key={a.id}
-                                            onClick={() => {
-                                              setAbilities((p) =>
-                                                p.map((x) =>
-                                                  x.id === ab.id
-                                                    ? {
-                                                        ...x,
-                                                        name: a.name,
-                                                        description:
-                                                          a.description || "",
-                                                        standardId: a.id,
-                                                        type: "standard",
-                                                      }
-                                                    : x,
-                                                ),
-                                              );
-                                              setStandardPickerAbId(null);
-                                              setStandardPickerSearch("");
-                                            }}
-                                            style={{
-                                              padding: "8px 10px",
-                                              cursor: "pointer",
-                                              fontSize: "12px",
-                                              borderBottom: "1px solid #1f2937",
-                                              background:
-                                                selectedStandard?.id === a.id
-                                                  ? "#374151"
-                                                  : "transparent",
-                                            }}
-                                          >
-                                            {a.name}
-                                            {a.category && (
-                                              <span
-                                                style={{
-                                                  fontSize: "10px",
-                                                  color: "#6b7280",
-                                                  marginLeft: "6px",
-                                                }}
-                                              >
-                                                {CATEGORY_LABELS[a.category] ||
-                                                  a.category}
-                                              </span>
-                                            )}
-                                          </div>
-                                        ))
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <input
-                                  value={ab.name}
-                                  onChange={(e) =>
-                                    setAbilities((p) =>
-                                      p.map((a) =>
-                                        a.id === ab.id
-                                          ? { ...a, name: e.target.value }
-                                          : a,
-                                      ),
-                                    )
-                                  }
-                                  style={{
-                                    ...S.inp,
-                                    fontWeight: "bold",
-                                    borderBottom: "1px solid #4b2d8f",
-                                    fontSize: "12px",
-                                  }}
-                                  placeholder="Ability name"
-                                />
-                              )}
+                              <input
+                                value={ab.name}
+                                onChange={(e) =>
+                                  setAbilities((p) =>
+                                    p.map((a) =>
+                                      a.id === ab.id
+                                        ? { ...a, name: e.target.value }
+                                        : a,
+                                    ),
+                                  )
+                                }
+                                style={{
+                                  ...S.inp,
+                                  flex: 1,
+                                  minWidth: "140px",
+                                  fontWeight: "bold",
+                                  borderBottom: "1px solid #4b2d8f",
+                                  fontSize: "12px",
+                                }}
+                                placeholder="Ability name"
+                              />
                               <select
-                                value={ab.type}
+                                value={typeVal}
                                 onChange={(e) =>
                                   setAbilities((p) =>
                                     p.map((a) =>
@@ -1978,85 +1819,34 @@ const NPCSheet = ({
                                 }}
                               >
                                 <option value="unique">Unique</option>
-                                <option value="standard">Standard</option>
                                 <option value="passive">Passive</option>
                               </select>
                             </div>
-                            {isStandard && selectedStandard && (
-                              <div
-                                style={{
-                                  marginBottom: "8px",
-                                  padding: "8px",
-                                  background: "#1f2937",
-                                  borderRadius: "4px",
-                                  border: "1px solid #374151",
-                                  fontSize: "11px",
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    fontWeight: "bold",
-                                    marginBottom: "4px",
-                                  }}
-                                >
-                                  {selectedStandard.name}
-                                </div>
-                                {selectedStandard.category && (
-                                  <span
-                                    style={{
-                                      display: "inline-block",
-                                      padding: "1px 6px",
-                                      background: "#374151",
-                                      borderRadius: "4px",
-                                      fontSize: "10px",
-                                      marginBottom: "6px",
-                                    }}
-                                  >
-                                    {CATEGORY_LABELS[
-                                      selectedStandard.category
-                                    ] || selectedStandard.category}
-                                  </span>
-                                )}
-                                {selectedStandard.description && (
-                                  <div
-                                    style={{
-                                      color: "#9ca3af",
-                                      lineHeight: "1.4",
-                                      marginTop: "6px",
-                                    }}
-                                  >
-                                    {selectedStandard.description}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            {!isStandard && (
-                              <textarea
-                                value={ab.description}
-                                onChange={(e) =>
-                                  setAbilities((p) =>
-                                    p.map((a) =>
-                                      a.id === ab.id
-                                        ? { ...a, description: e.target.value }
-                                        : a,
-                                    ),
-                                  )
-                                }
-                                placeholder="What does this ability do narratively?"
-                                style={{
-                                  width: "100%",
-                                  background: "transparent",
-                                  color: "#d1d5db",
-                                  border: "none",
-                                  fontFamily: "monospace",
-                                  fontSize: "11px",
-                                  resize: "vertical",
-                                  outline: "none",
-                                  minHeight: "40px",
-                                  boxSizing: "border-box",
-                                }}
-                              />
-                            )}
+                            <textarea
+                              value={ab.description}
+                              onChange={(e) =>
+                                setAbilities((p) =>
+                                  p.map((a) =>
+                                    a.id === ab.id
+                                      ? { ...a, description: e.target.value }
+                                      : a,
+                                  ),
+                                )
+                              }
+                              placeholder="What does this ability do narratively?"
+                              style={{
+                                width: "100%",
+                                background: "transparent",
+                                color: "#d1d5db",
+                                border: "none",
+                                fontFamily: "monospace",
+                                fontSize: "11px",
+                                resize: "vertical",
+                                outline: "none",
+                                minHeight: "40px",
+                                boxSizing: "border-box",
+                              }}
+                            />
                           </div>
                           <button
                             onClick={() =>
@@ -2139,10 +1929,10 @@ const NPCSheet = ({
                         </div>
                         <div>
                           This NPC does not draw from the Hamon or Spin
-                          playbooks. Any standard abilities assigned do{" "}
-                          <strong>not</strong> automatically grant a Stand —
-                          Stand manifestation requires a narrative beat (GM
-                          decision).
+                          playbooks. Stand Ability blurbs in this sheet are
+                          narration only — they do <strong>not</strong>{" "}
+                          automatically grant a Stand; manifestation needs a GM
+                          beat.
                         </div>
                       </div>
                     )}

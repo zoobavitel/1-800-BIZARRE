@@ -10,7 +10,7 @@ Implementation-oriented docs: what each major area of the repo does and where to
 | [backend-characters-views.md](backend-characters-views.md) | [`backend/src/characters/views/`](../../backend/src/characters/views/) — DRF view modules |
 | [backend-commands.md](backend-commands.md) | Management commands + loose `backend/src/*.py` scripts |
 | [frontend.md](frontend.md) | [`frontend/src/`](../../frontend/src/) — hash routing, config, features, pages |
-| [standard-ability-roll-bonus-audit.md](standard-ability-roll-bonus-audit.md) | Ability `+1d` / `+1 effect` UI rules, Parry counterattack follow-up, curated overrides |
+| [standard-ability-roll-bonus-audit.md](standard-ability-roll-bonus-audit.md) | Ability `+1d` / `+1 effect` UI rules and curated overrides |
 
 ## Source index (quick)
 

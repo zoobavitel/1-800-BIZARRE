@@ -99,10 +99,18 @@ export const useDiceRolling = (characterId, xpTracks, setXpTracks) => {
       const dice1 = Math.floor(Math.random() * 6) + 1;
       const dice2 = Math.floor(Math.random() * 6) + 1;
       const result = Math.min(dice1, dice2);
+      const zeroDiceSixes =
+        dice1 === 6 && dice2 === 6 ? 2 : dice1 === 6 || dice2 === 6 ? 1 : 0;
 
       let outcome = "Failure";
       if (result >= 6) outcome = "Success";
       else if (result >= 4) outcome = "Partial Success";
+
+      const zeroDiceResistanceStress = isResistanceRoll
+        ? zeroDiceSixes >= 2
+          ? -1
+          : Math.max(1, 6 - result)
+        : null;
 
       setDiceResult({
         action: actionName,
@@ -111,7 +119,7 @@ export const useDiceRolling = (characterId, xpTracks, setXpTracks) => {
         outcome: outcome,
         special: "0 dice: Roll 2d6, take lower",
         isResistance: isResistanceRoll,
-        stressCost: isResistanceRoll ? 6 - result : null,
+        stressCost: zeroDiceResistanceStress,
         zeroDice: true,
         isDesperateAction: isDesperateAction,
       });
@@ -130,6 +138,10 @@ export const useDiceRolling = (characterId, xpTracks, setXpTracks) => {
         outcome = "Partial Success";
       }
 
+      const resistanceStress =
+        isResistanceRoll &&
+        (sixes >= 2 ? -1 : Math.max(1, 6 - highest));
+
       setDiceResult({
         action: actionName,
         dice: dice,
@@ -137,7 +149,7 @@ export const useDiceRolling = (characterId, xpTracks, setXpTracks) => {
         outcome: outcome,
         special: sixes > 1 ? `Critical! (${sixes} sixes)` : "",
         isResistance: isResistanceRoll,
-        stressCost: isResistanceRoll ? 6 - highest : null,
+        stressCost: isResistanceRoll ? resistanceStress : null,
         zeroDice: false,
         isDesperateAction: isDesperateAction,
       });

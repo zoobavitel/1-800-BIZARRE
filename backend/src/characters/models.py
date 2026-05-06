@@ -1589,6 +1589,14 @@ class Session(models.Model):
         blank=True,
         help_text="Map of character id (string) to GM-written devil's bargain consequence; player must confirm before rolling with +1d.",
     )
+    ripple_breathing_free_push_claimed_by_character = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Map of character id (string) to true after that PC uses Ripple Breathing "
+            "free push once for this session episode."
+        ),
+    )
     position_effect_by_character = models.JSONField(
         default=dict,
         blank=True,
@@ -1891,6 +1899,22 @@ class Roll(models.Model):
         max_length=120,
         blank=True,
         help_text="Optional public-facing label explaining what the fortune roll was for.",
+    )
+    recovery_context = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        help_text=(
+            "self_downtime | self_mid_action | ally | empty — session history / recovery audits."
+        ),
+    )
+    recovery_target = models.ForeignKey(
+        "Character",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recovery_rolls_received",
+        help_text="Patient when another PC rolls recovery treatment for them.",
     )
 
     def __str__(self):
