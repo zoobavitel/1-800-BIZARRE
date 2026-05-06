@@ -4274,6 +4274,33 @@ const CharacterSheetWrapper = ({
     heritageAutoAbilities,
   ]);
 
+  const hasFatalHarm = useMemo(
+    () => !!String(harm?.level4?.[0] ?? "").trim(),
+    [harm],
+  );
+  const hasStayingPowerAbility = useMemo(
+    () => resistanceAbilityOptions.some((o) => o.id === "staying-power"),
+    [resistanceAbilityOptions],
+  );
+
+  useEffect(() => {
+    if (!hasStayingPowerAbility) return;
+    if (hasFatalHarm) {
+      setResistanceAbilityBoost((prev) =>
+        prev?.["staying-power"]
+          ? prev
+          : { ...(prev || {}), "staying-power": true },
+      );
+    } else {
+      setResistanceAbilityBoost((prev) => {
+        if (!prev?.["staying-power"]) return prev;
+        const next = { ...prev };
+        delete next["staying-power"];
+        return next;
+      });
+    }
+  }, [hasFatalHarm, hasStayingPowerAbility]);
+
   const resistancePoolPreview = useMemo(() => {
     if (!resistancePending) return null;
     const attr = String(resistancePending.attr || "").toUpperCase();
@@ -7126,6 +7153,27 @@ const CharacterSheetWrapper = ({
                           />
                         </div>
                       ))}
+                      {hasFatalHarm && hasStayingPowerAbility ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#fda4af",
+                            lineHeight: 1.35,
+                            marginBottom: "8px",
+                            padding: "6px 8px",
+                            background: "#1c1917",
+                            border: "1px solid #9f1239",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <strong>Staying Power:</strong> Fatal (Level 4) harm is
+                          marked. If resistance or other effects cannot remove
+                          this KO, work with the GM to exercise Staying Power
+                          (e.g. limb or severe complication instead) using the
+                          post-roll option above— it turns on automatically while
+                          this slot is filled.
+                        </div>
+                      ) : null}
                       {(
                         [
                           { key: "level2", label: "-1D", count: 2 },
@@ -8973,6 +9021,57 @@ const CharacterSheetWrapper = ({
                       </div>
                     )}
 
+                    {resistanceAbilityOptions.some((o) => o.mitigationOnly) ? (
+                      <div
+                        style={{
+                          marginBottom: "10px",
+                          padding: "8px 10px",
+                          background: "#111827",
+                          border: "1px solid #374151",
+                          borderRadius: "6px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#9ca3af",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          Post-roll resistance (after harm is applied)
+                        </div>
+                        {resistanceAbilityOptions
+                          .filter((o) => o.mitigationOnly)
+                          .map((opt) => (
+                            <label
+                              key={opt.id}
+                              style={{
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                marginBottom: "4px",
+                                cursor: "pointer",
+                              }}
+                              title={opt.description || undefined}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!!resistanceAbilityBoost[opt.id]}
+                                onChange={(e) =>
+                                  setResistanceAbilityBoost((prev) => ({
+                                    ...prev,
+                                    [opt.id]: e.target.checked,
+                                  }))
+                                }
+                              />
+                              {opt.name} (post-roll option)
+                            </label>
+                          ))}
+                      </div>
+                    ) : null}
+
                     <div style={S.g3}>
                       {[
                         {
@@ -9093,9 +9192,11 @@ const CharacterSheetWrapper = ({
                           {resistanceAbilityOptions
                             .filter(
                               (opt) =>
-                                String(opt.appliesTo || "").toUpperCase() === "ALL" ||
-                                String(opt.appliesTo || "").toUpperCase() ===
-                                  String(attr || "").toUpperCase(),
+                                !opt.mitigationOnly &&
+                                (String(opt.appliesTo || "").toUpperCase() ===
+                                  "ALL" ||
+                                  String(opt.appliesTo || "").toUpperCase() ===
+                                    String(attr || "").toUpperCase()),
                             )
                             .map((opt) => (
                               <label
@@ -10793,6 +10894,41 @@ const CharacterSheetWrapper = ({
                                 }),
                           }}
                         >
+                          {hasStayingPowerAbility &&
+                          (hasFatalHarm ||
+                            diceResult.outcome === "Failure" ||
+                            diceResult.outcome === "Partial Success") ? (
+                            <div
+                              style={{
+                                marginBottom: "10px",
+                                padding: "6px 8px",
+                                background: "#1c1917",
+                                border: "1px solid #9f1239",
+                                borderRadius: "4px",
+                                fontSize: "10px",
+                                color: "#fecdd3",
+                                lineHeight: 1.35,
+                              }}
+                            >
+                              <strong>Staying Power:</strong>{" "}
+                              {hasFatalHarm ? (
+                                <>
+                                  Level 4 harm is already on your sheet. If you
+                                  cannot clear it with this resistance outcome,
+                                  negotiate the Staying Power fiction (limb /
+                                  severe cost) with the GM— the post-roll option
+                                  stays on while fatal harm is marked.
+                                </>
+                              ) : (
+                                <>
+                                  If this consequence still lands as Level 4
+                                  lethal harm and you cannot eliminate it,
+                                  Staying Power may apply (GM/table)— the
+                                  post-roll option is under Action Ratings.
+                                </>
+                              )}
+                            </div>
+                          ) : null}
                           {diceResult.isCritical ? (
                             <>
                               <div

@@ -9,6 +9,7 @@ def remove_parry_and_break(apps, schema_editor):
     Ability = apps.get_model("characters", "Ability")
     Character = apps.get_model("characters", "Character")
     NPC = apps.get_model("characters", "NPC")
+    Stand = apps.get_model("characters", "Stand")
     StandAbility = apps.get_model("characters", "StandAbility")
 
     def filtered_json_list(lst):
@@ -50,8 +51,18 @@ def remove_parry_and_break(apps, schema_editor):
                 npc.abilities = filtered
                 npc.save(update_fields=["abilities"])
 
+    parry_objs = list(Ability.objects.filter(name__iexact="Parry and Break"))
+    parry_pk_list = [a.pk for a in parry_objs]
     StandAbility.objects.filter(name__iexact="Parry and Break").delete()
-    Ability.objects.filter(name__iexact="Parry and Break").delete()
+    if parry_pk_list:
+        Stand.objects.filter(standard_ability_id__in=parry_pk_list).update(
+            standard_ability_id=None
+        )
+        for ab in parry_objs:
+            linked = Character.objects.filter(standard_abilities__pk=ab.pk)
+            for ch in linked.distinct():
+                ch.standard_abilities.remove(ab)
+    Ability.objects.filter(pk__in=parry_pk_list).delete()
 
 
 class Migration(migrations.Migration):

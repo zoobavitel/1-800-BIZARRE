@@ -393,6 +393,21 @@ def _normalized_list(raw, cast=None):
     return out
 
 
+def _json_clock_show_to_players(c):
+    """True when NPC conflict/alt clock JSON marks this row visible to players."""
+    if not isinstance(c, dict):
+        return False
+    for key in ("show_to_players", "visible_to_players"):
+        v = c.get(key)
+        if v is True:
+            return True
+        if isinstance(v, str) and v.strip().lower() in ("1", "true", "yes", "on"):
+            return True
+        if isinstance(v, (int, float)) and int(v) == 1:
+            return True
+    return False
+
+
 def _ensure_npc_belongs_to_session_campaign(npc, session_campaign_id):
     """Session NPCs must belong to the same campaign as the session."""
     if session_campaign_id is None:
@@ -2003,6 +2018,7 @@ class CampaignSerializer(serializers.ModelSerializer):
                 c
                 for c in (npc.conflict_clocks or [])
                 if str(c.get("name") or "") in revealed_conflict
+                or _json_clock_show_to_players(c)
             ]
         )
         alt_clocks = (
@@ -2012,6 +2028,7 @@ class CampaignSerializer(serializers.ModelSerializer):
                 c
                 for c in (npc.alt_clocks or [])
                 if str(c.get("name") or "") in revealed_alt
+                or _json_clock_show_to_players(c)
             ]
         )
         stand_stats = {}

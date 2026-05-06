@@ -10,6 +10,7 @@ import {
   experienceTrackerAPI,
   xpHistoryAPI,
   characterHistoryAPI,
+  progressClockAPI,
 } from "../../features/character-sheet/services/api";
 import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import { ACTION_RATING_KEYS } from "../../features/character-sheet/constants/srd";
@@ -82,6 +83,17 @@ function unwrapApiArray(data) {
   if (Array.isArray(data?.results)) return data.results;
   return [];
 }
+
+/** Progress clocks scoped to campaign session (aligned with CampaignManagement ClockManager). */
+const SESSION_PC_CLOCK_SEGMENTS = [4, 6, 8, 12];
+const SESSION_PC_CLOCK_TYPES = [
+  { value: "CUSTOM", label: "Custom" },
+  { value: "DANGER", label: "Danger" },
+  { value: "MISSION", label: "Mission" },
+  { value: "HEALING", label: "Healing" },
+  { value: "PROJECT", label: "Long-term Project" },
+  { value: "COUNTDOWN", label: "Countdown" },
+];
 
 const XP_LEDGER_HISTORY_KEYS = new Set([
   "xp_clocks",
@@ -457,6 +469,16 @@ export default function SessionGMManagementPanels({
     sessionAdvancementHistoryLoaded,
     setSessionAdvancementHistoryLoaded,
   ] = useState(false);
+
+  /** Inline create for per-PC progress clocks on this session (roster card). */
+  const [pcSessionClockDraftFor, setPcSessionClockDraftFor] = useState(null);
+  const [pcSessionClockDraft, setPcSessionClockDraft] = useState({
+    name: "",
+    max_segments: 8,
+    clock_type: "CUSTOM",
+    visible_to_players: false,
+  });
+  const [pcSessionClockBusyCharId, setPcSessionClockBusyCharId] = useState(null);
 
   const npcInvolvements = useMemo(
     () => sessionData?.npc_involvements || [],
@@ -2144,7 +2166,9 @@ export default function SessionGMManagementPanels({
             const ad = full.action_dots || {};
             const name = full.true_name || full.name || `PC ${full.id}`;
             const pcClks = (clocks || []).filter(
-              (c) => c.character === full.id && c.session === session.id,
+              (c) =>
+                Number(c.character) === Number(full.id) &&
+                Number(c.session) === Number(session.id),
             );
             const canSRank = full.gm_can_have_s_rank_stand_stats === true;
             const pcCollapseKey = `quick-${full.id}`;
@@ -2247,14 +2271,334 @@ export default function SessionGMManagementPanels({
                       In {xp.insight ?? 0} · Pw {xp.prowess ?? 0} · Re {xp.resolve ?? 0} ·
                       Pb {xp.playbook ?? 0}
                     </div>
-                    <div style={lbl}>Clocks (this session)</div>
-                    <ul style={{ margin: 0, paddingLeft: 14, color: "#6b7280" }}>
-                      {pcClks.slice(0, 4).map((c) => (
-                        <li key={c.id}>
-                          {c.name} ({c.filled_segments}/{c.max_segments})
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 6,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div style={lbl}>Clocks (this session)</div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (pcSessionClockDraftFor === full.id) {
+                            setPcSessionClockDraftFor(null);
+                          } else {
+                            setPcSessionClockDraft({
+                              name: "",
+                              max_segments: 8,
+                              clock_type: "CUSTOM",
+                              visible_to_players: false,
+                            });
+                            setPcSessionClockDraftFor(full.id);
+                          }
+                        }}
+                        style={{
+                          ...S.btn,
+                          fontSize: 10,
+                          padding: "2px 8px",
+                          background: "#1e3a5f",
+                          color: "#bae6fd",
+                        }}
+                      >
+                        {pcSessionClockDraftFor === full.id ? "Close" : "+ Clock"}
+                      </button>
+                    </div>
+                    {pcSessionClockDraftFor === full.id ? (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          marginBottom: 8,
+                          padding: 8,
+                          borderRadius: 6,
+                          border: "1px solid #374151",
+                          background: "#0d1117",
+                          display: "grid",
+                          gap: 8,
+                        }}
+                      >
+                        <input
+                          style={S.inp}
+                          placeholder="Clock name"
+                          value={pcSessionClockDraft.name}
+                          onChange={(e) =>
+                            setPcSessionClockDraft((d) => ({
+                              ...d,
+                              name: e.target.value,
+                            }))
+                          }
+                        />
+                        <div
+                          style={{ display: "flex", flexWrap: "wrap", gap: 8 }}
+                        >
+                          <label style={{ fontSize: 10, color: "#9ca3af" }}>
+                            Segments
+                            <select
+                              style={{ ...S.select, marginLeft: 6 }}
+                              value={pcSessionClockDraft.max_segments}
+                              onChange={(e) =>
+                                setPcSessionClockDraft((d) => ({
+                                  ...d,
+                                  max_segments: Number(e.target.value),
+                                }))
+                              }
+                            >
+                              {SESSION_PC_CLOCK_SEGMENTS.map((n) => (
+                                <option key={n} value={n}>
+                                  {n}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label style={{ fontSize: 10, color: "#9ca3af" }}>
+                            Type
+                            <select
+                              style={{ ...S.select, marginLeft: 6 }}
+                              value={pcSessionClockDraft.clock_type}
+                              onChange={(e) =>
+                                setPcSessionClockDraft((d) => ({
+                                  ...d,
+                                  clock_type: e.target.value,
+                                }))
+                              }
+                            >
+                              {SESSION_PC_CLOCK_TYPES.map((o) => (
+                                <option key={o.value} value={o.value}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        </div>
+                        <label
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            fontSize: 10,
+                            color: "#a7f3d0",
+                            cursor: "pointer",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={pcSessionClockDraft.visible_to_players}
+                            onChange={(e) =>
+                              setPcSessionClockDraft((d) => ({
+                                ...d,
+                                visible_to_players: e.target.checked,
+                              }))
+                            }
+                          />
+                          Visible to players
+                        </label>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <button
+                            type="button"
+                            style={S.btnPrimary}
+                            disabled={pcSessionClockBusyCharId === full.id}
+                            onClick={async () => {
+                              const nm = String(
+                                pcSessionClockDraft.name || "",
+                              ).trim();
+                              if (!nm) {
+                                setError("Enter a name for the clock.");
+                                return;
+                              }
+                              setPcSessionClockBusyCharId(full.id);
+                              setError(null);
+                              try {
+                                await progressClockAPI.createProgressClock({
+                                  campaign: campaign.id,
+                                  session: session.id,
+                                  character: full.id,
+                                  name: nm,
+                                  clock_type:
+                                    pcSessionClockDraft.clock_type || "CUSTOM",
+                                  max_segments:
+                                    pcSessionClockDraft.max_segments || 8,
+                                  filled_segments: 0,
+                                  visible_to_players:
+                                    !!pcSessionClockDraft.visible_to_players,
+                                });
+                                setPcSessionClockDraftFor(null);
+                                setPcSessionClockDraft({
+                                  name: "",
+                                  max_segments: 8,
+                                  clock_type: "CUSTOM",
+                                  visible_to_players: false,
+                                });
+                                await onRefresh();
+                              } catch (e) {
+                                setError(
+                                  e?.message ||
+                                    "Could not create progress clock.",
+                                );
+                              } finally {
+                                setPcSessionClockBusyCharId(null);
+                              }
+                            }}
+                          >
+                            {pcSessionClockBusyCharId === full.id
+                              ? "Saving…"
+                              : "Create"}
+                          </button>
+                          <button
+                            type="button"
+                            style={S.btnGhost}
+                            onClick={() => {
+                              setPcSessionClockDraftFor(null);
+                              setPcSessionClockDraft({
+                                name: "",
+                                max_segments: 8,
+                                clock_type: "CUSTOM",
+                                visible_to_players: false,
+                              });
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                    <ul
+                      style={{
+                        margin: 0,
+                        paddingLeft: 14,
+                        color: "#6b7280",
+                        maxHeight: 120,
+                        overflowY: "auto",
+                      }}
+                    >
+                      {pcClks.map((c) => (
+                        <li
+                          key={c.id}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                            flexWrap: "wrap",
+                            marginBottom: 4,
+                          }}
+                        >
+                          <span style={{ flex: "1 1 120px" }}>
+                            {c.name} ({c.filled_segments}/{c.max_segments})
+                            {c.visible_to_players ? (
+                              <span style={{ color: "#6ee7b7", fontSize: 9 }}>
+                                {" "}
+                                · players
+                              </span>
+                            ) : null}
+                          </span>
+                          <span style={{ display: "flex", gap: 4 }}>
+                            <button
+                              type="button"
+                              style={{
+                                ...S.btnGhost,
+                                fontSize: 9,
+                                padding: "1px 6px",
+                              }}
+                              title="Fewer ticks"
+                              disabled={pcSessionClockBusyCharId === full.id}
+                              onClick={async () => {
+                                const next = Math.max(
+                                  0,
+                                  (Number(c.filled_segments) || 0) - 1,
+                                );
+                                setPcSessionClockBusyCharId(full.id);
+                                try {
+                                  await progressClockAPI.updateProgressClock(
+                                    c.id,
+                                    { filled_segments: next },
+                                  );
+                                  await onRefresh();
+                                } catch (e) {
+                                  setError(
+                                    e?.message || "Could not update clock.",
+                                  );
+                                } finally {
+                                  setPcSessionClockBusyCharId(null);
+                                }
+                              }}
+                            >
+                              −
+                            </button>
+                            <button
+                              type="button"
+                              style={{
+                                ...S.btnGhost,
+                                fontSize: 9,
+                                padding: "1px 6px",
+                              }}
+                              title="More ticks"
+                              disabled={pcSessionClockBusyCharId === full.id}
+                              onClick={async () => {
+                                const cap = Number(c.max_segments) || 8;
+                                const next = Math.min(
+                                  cap,
+                                  (Number(c.filled_segments) || 0) + 1,
+                                );
+                                setPcSessionClockBusyCharId(full.id);
+                                try {
+                                  await progressClockAPI.updateProgressClock(
+                                    c.id,
+                                    { filled_segments: next },
+                                  );
+                                  await onRefresh();
+                                } catch (e) {
+                                  setError(
+                                    e?.message || "Could not update clock.",
+                                  );
+                                } finally {
+                                  setPcSessionClockBusyCharId(null);
+                                }
+                              }}
+                            >
+                              +
+                            </button>
+                            <button
+                              type="button"
+                              style={{
+                                ...S.btnGhost,
+                                fontSize: 9,
+                                padding: "1px 6px",
+                                color: "#f87171",
+                              }}
+                              disabled={pcSessionClockBusyCharId === full.id}
+                              onClick={async () => {
+                                if (
+                                  !window.confirm(
+                                    `Delete clock "${c.name || "clock"}"?`,
+                                  )
+                                )
+                                  return;
+                                setPcSessionClockBusyCharId(full.id);
+                                try {
+                                  await progressClockAPI.deleteProgressClock(
+                                    c.id,
+                                  );
+                                  await onRefresh();
+                                } catch (e) {
+                                  setError(
+                                    e?.message || "Could not delete clock.",
+                                  );
+                                } finally {
+                                  setPcSessionClockBusyCharId(null);
+                                }
+                              }}
+                            >
+                              ✕
+                            </button>
+                          </span>
                         </li>
                       ))}
-                      {pcClks.length === 0 && <li>—</li>}
+                      {pcClks.length === 0 &&
+                      pcSessionClockDraftFor !== full.id ? (
+                        <li>—</li>
+                      ) : null}
                     </ul>
                   </>
                 ) : null}

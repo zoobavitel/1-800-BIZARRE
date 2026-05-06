@@ -41,11 +41,18 @@ function normalizeNpcClockEntry(c) {
     Number.isFinite(filledRaw) && filledRaw >= 0
       ? Math.min(segments, filledRaw)
       : 0;
+  const rawShow = c.show_to_players ?? c.visible_to_players;
+  const show_to_players =
+    rawShow === true ||
+    rawShow === 1 ||
+    (typeof rawShow === "string" &&
+      ["1", "true", "yes", "on"].includes(String(rawShow).toLowerCase()));
   return {
     id: c.id,
     name: String(c.name ?? ""),
     segments,
     filled,
+    show_to_players,
   };
 }
 
@@ -322,6 +329,142 @@ const ProgressClock = ({
     </div>
   );
 };
+
+const npcClockAddCardInputStyle = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "6px 8px",
+  borderRadius: "4px",
+  border: "1px solid #4b5563",
+  background: "#0a0a14",
+  color: "#e5e7eb",
+  fontFamily: "monospace",
+  fontSize: "12px",
+};
+
+/** Inline add-clock form (avoids browser prompt / modal feel). */
+function NpcClockAddCard({
+  draft,
+  error,
+  onFieldChange,
+  onCommit,
+  onCancel,
+  namePlaceholder,
+  borderColor,
+  createBg,
+  createColor,
+  createLabel,
+}) {
+  if (!draft) return null;
+  return (
+    <div
+      style={{
+        marginBottom: "12px",
+        padding: "10px 12px",
+        background: "#111827",
+        border: `1px solid ${borderColor}`,
+        borderRadius: "6px",
+      }}
+    >
+      <div style={{ fontSize: "10px", color: "#9ca3af", marginBottom: "8px" }}>
+        New clock
+      </div>
+      <input
+        type="text"
+        value={draft.name}
+        onChange={(e) => onFieldChange({ name: e.target.value })}
+        placeholder={namePlaceholder}
+        style={npcClockAddCardInputStyle}
+        autoFocus
+      />
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          marginTop: "8px",
+          flexWrap: "wrap",
+        }}
+      >
+        <label
+          style={{
+            fontSize: "11px",
+            color: "#9ca3af",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+          }}
+        >
+          Segments
+          <select
+            value={draft.segments}
+            onChange={(e) =>
+              onFieldChange({ segments: Number(e.target.value) })
+            }
+            style={{
+              ...npcClockAddCardInputStyle,
+              width: "auto",
+              cursor: "pointer",
+            }}
+          >
+            {[4, 6, 8, 12].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {error ? (
+        <div style={{ fontSize: "10px", color: "#f87171", marginTop: "6px" }}>
+          {error}
+        </div>
+      ) : null}
+      <div
+        style={{
+          display: "flex",
+          gap: "8px",
+          marginTop: "10px",
+          justifyContent: "flex-end",
+        }}
+      >
+        <button
+          type="button"
+          onClick={onCancel}
+          style={{
+            padding: "4px 10px",
+            fontSize: "11px",
+            cursor: "pointer",
+            borderRadius: "4px",
+            border: "1px solid #4b5563",
+            background: "transparent",
+            color: "#9ca3af",
+            fontFamily: "monospace",
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onCommit}
+          style={{
+            padding: "4px 10px",
+            fontSize: "11px",
+            cursor: "pointer",
+            borderRadius: "4px",
+            border: "none",
+            background: createBg,
+            color: createColor,
+            fontFamily: "monospace",
+            fontWeight: "bold",
+          }}
+        >
+          {createLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ─── ArmorTracker ─────────────────────────────────────────────────────────────
 
@@ -726,6 +869,10 @@ const NPCSheet = ({
     normalizeClockList(npc?.alt_clocks ?? npc?.altClocks ?? []),
   );
 
+  /** Inline add form for conflict / alt clocks (replaces window.prompt). */
+  const [clockDraftCard, setClockDraftCard] = useState(null);
+  const [clockDraftError, setClockDraftError] = useState("");
+
   const npcConflictClocksSnap = useMemo(() => {
     if (npc?.id == null) return "";
     return JSON.stringify(npc?.conflict_clocks ?? npc?.conflictClocks ?? []);
@@ -784,6 +931,8 @@ const NPCSheet = ({
     setSelectedHamonIds(npc?.selected_hamon_abilities ?? []);
     setSelectedSpinIds(npc?.selected_spin_abilities ?? []);
     setAbilities(normalizeNpcSheetAbilitiesNoStandard(npc?.abilities ?? []));
+    setClockDraftCard(null);
+    setClockDraftError("");
   }, [npc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hamon / Spin playbook abilities
@@ -904,33 +1053,46 @@ const NPCSheet = ({
 
   // ── Clock helpers ─────────────────────────────────────────────────────────────
 
-  const addConflictClock = () => {
-    const name = prompt(
-      'Clock name (e.g. "Defeat Diavolo", "Expose the User"):',
+  const toggleClockDraftCard = (kind) => {
+    setClockDraftError("");
+    setClockDraftCard((prev) =>
+      prev?.kind === kind ? null : { kind, name: "", segments: 8 },
     );
-    if (!name) return;
-    const segs = parseInt(prompt("Segments (4, 6, 8, 12):") || "8");
-    if (![4, 6, 8, 12].includes(segs)) {
-      alert("Must be 4, 6, 8, or 12.");
-      return;
-    }
-    setConflictClocks((p) => [
-      ...p,
-      { id: Date.now(), name, segments: segs, filled: 0 },
-    ]);
   };
 
-  const addAltClock = () => {
-    const name = prompt(
-      'Alternative win condition (e.g. "Expose User", "Break Stand Logic"):',
-    );
-    if (!name) return;
-    const segs = parseInt(prompt("Segments (4, 6, 8, 12):") || "8");
-    if (![4, 6, 8, 12].includes(segs)) return;
-    setAltClocks((p) => [
-      ...p,
-      { id: Date.now(), name, segments: segs, filled: 0 },
-    ]);
+  const patchClockDraft = (patch) => {
+    setClockDraftCard((d) => (d ? { ...d, ...patch } : d));
+    setClockDraftError("");
+  };
+
+  const cancelClockDraftCard = () => {
+    setClockDraftError("");
+    setClockDraftCard(null);
+  };
+
+  const commitClockDraftCard = () => {
+    if (!clockDraftCard) return;
+    const name = clockDraftCard.name.trim();
+    if (!name) {
+      setClockDraftError("Enter a name for this clock.");
+      return;
+    }
+    setClockDraftError("");
+    let segs = Number(clockDraftCard.segments);
+    if (![4, 6, 8, 12].includes(segs)) segs = 8;
+    const row = {
+      id: Date.now(),
+      name,
+      segments: segs,
+      filled: 0,
+      show_to_players: false,
+    };
+    if (clockDraftCard.kind === "conflict") {
+      setConflictClocks((p) => [...p, row]);
+    } else {
+      setAltClocks((p) => [...p, row]);
+    }
+    setClockDraftCard(null);
   };
 
   const updateConflictClock = (id, filled) =>
@@ -2220,7 +2382,8 @@ const NPCSheet = ({
                       >
                         <span style={S.lbl}>Alternative Win Conditions</span>
                         <button
-                          onClick={addAltClock}
+                          type="button"
+                          onClick={() => toggleClockDraftCard("alt")}
                           style={{
                             ...S.btn,
                             background: "#166534",
@@ -2231,6 +2394,25 @@ const NPCSheet = ({
                           + Add Clock
                         </button>
                       </div>
+                      <NpcClockAddCard
+                        draft={
+                          clockDraftCard?.kind === "alt"
+                            ? clockDraftCard
+                            : null
+                        }
+                        error={clockDraftCard?.kind === "alt" ? clockDraftError : ""}
+                        onFieldChange={patchClockDraft}
+                        onCommit={() => {
+                          if (clockDraftCard?.kind === "alt")
+                            commitClockDraftCard();
+                        }}
+                        onCancel={cancelClockDraftCard}
+                        namePlaceholder='e.g. "Expose User", "Break Stand Logic"'
+                        borderColor="#166534"
+                        createBg="#14532d"
+                        createColor="#86efac"
+                        createLabel="Add clock"
+                      />
                       {altClocks.length === 0 && (
                         <div style={{ ...S.warn, textAlign: "center" }}>
                           S-DUR NPCs must have at least one alternative win
@@ -2265,6 +2447,7 @@ const NPCSheet = ({
                               sublabel={`${clk.segments}-segment clock`}
                             />
                             <button
+                              type="button"
                               onClick={() => deleteAltClock(clk.id)}
                               style={{
                                 position: "absolute",
@@ -2284,7 +2467,39 @@ const NPCSheet = ({
                             >
                               ×
                             </button>
+                            <label
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "6px",
+                                marginTop: "4px",
+                                fontSize: "10px",
+                                color: "#86efac",
+                                cursor: "pointer",
+                                userSelect: "none",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!!clk.show_to_players}
+                                onChange={(e) =>
+                                  setAltClocks((p) =>
+                                    p.map((c) =>
+                                      npcClockIdsMatch(c.id, clk.id)
+                                        ? {
+                                            ...c,
+                                            show_to_players: e.target.checked,
+                                          }
+                                        : c,
+                                    ),
+                                  )
+                                }
+                              />
+                              Players see
+                            </label>
                             <button
+                              type="button"
                               onClick={() => {
                                 const newName = prompt(
                                   "Rename clock:",
@@ -2522,11 +2737,14 @@ const NPCSheet = ({
                         }}
                       >
                         PCs roll action ratings to fill these. Limited=1 tick,
-                        Standard=2, Greater=3.
+                        Standard=2, Greater=3. Use{" "}
+                        <strong>Players see</strong> to show individual clocks on
+                        session-linked PC sheets without revealing every clock.
                       </div>
                     </div>
                     <button
-                      onClick={addConflictClock}
+                      type="button"
+                      onClick={() => toggleClockDraftCard("conflict")}
                       style={{
                         ...S.btn,
                         background: "#4c1d95",
@@ -2537,6 +2755,30 @@ const NPCSheet = ({
                       + Clock
                     </button>
                   </div>
+
+                  <NpcClockAddCard
+                    draft={
+                      clockDraftCard?.kind === "conflict"
+                        ? clockDraftCard
+                        : null
+                    }
+                    error={
+                      clockDraftCard?.kind === "conflict"
+                        ? clockDraftError
+                        : ""
+                    }
+                    onFieldChange={patchClockDraft}
+                    onCommit={() => {
+                      if (clockDraftCard?.kind === "conflict")
+                        commitClockDraftCard();
+                    }}
+                    onCancel={cancelClockDraftCard}
+                    namePlaceholder='e.g. "Defeat antagonist", "Expose the User"'
+                    borderColor="#6d28d9"
+                    createBg="#4c1d95"
+                    createColor="#e9d5ff"
+                    createLabel="Add clock"
+                  />
 
                   {conflictClocks.length === 0 && (
                     <div
@@ -2599,49 +2841,89 @@ const NPCSheet = ({
                           />
                           <div
                             style={{
-                              marginTop: "4px",
+                              marginTop: "6px",
                               display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
                               gap: "4px",
-                              justifyContent: "center",
                             }}
                           >
-                            <button
-                              onClick={() => {
-                                const newName = prompt(
-                                  "Rename clock:",
-                                  clk.name,
-                                );
-                                if (newName)
+                            <label
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                fontSize: "10px",
+                                color: "#a78bfa",
+                                cursor: "pointer",
+                                userSelect: "none",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!!clk.show_to_players}
+                                onChange={(e) =>
                                   setConflictClocks((p) =>
                                     p.map((c) =>
                                       npcClockIdsMatch(c.id, clk.id)
-                                        ? { ...c, name: newName }
+                                        ? {
+                                            ...c,
+                                            show_to_players: e.target.checked,
+                                          }
                                         : c,
                                     ),
+                                  )
+                                }
+                              />
+                              Players see
+                            </label>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: "4px",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newName = prompt(
+                                    "Rename clock:",
+                                    clk.name,
                                   );
-                              }}
-                              style={{
-                                color: "#6b7280",
-                                background: "none",
-                                border: "none",
-                                cursor: "pointer",
-                                fontSize: "10px",
-                              }}
-                            >
-                              rename
-                            </button>
-                            <button
-                              onClick={() => deleteConflictClock(clk.id)}
-                              style={{
-                                color: "#f87171",
-                                background: "none",
-                                border: "none",
-                                cursor: "pointer",
-                                fontSize: "10px",
-                              }}
-                            >
-                              delete
-                            </button>
+                                  if (newName)
+                                    setConflictClocks((p) =>
+                                      p.map((c) =>
+                                        npcClockIdsMatch(c.id, clk.id)
+                                          ? { ...c, name: newName }
+                                          : c,
+                                      ),
+                                    );
+                                }}
+                                style={{
+                                  color: "#6b7280",
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  fontSize: "10px",
+                                }}
+                              >
+                                rename
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteConflictClock(clk.id)}
+                                style={{
+                                  color: "#f87171",
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  fontSize: "10px",
+                                }}
+                              >
+                                delete
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );
