@@ -166,8 +166,8 @@ The `NPC` model contains fields tailored for GM utility and narrative purposes:
 *   **Core Identity**: `name`, `level`, `appearance`, `role`.
 *   **Personality & Narrative Hooks**: `weakness`, `need`, `desire`, `rumour`, `secret`, `passion`, `description`.
 *   **Relationships**: `relationships` (a `JSONField` for flexible tracking of connections to other entities).
-*   **Simplified Combat Tracking**: `harm_clock_current`, `vulnerability_clock_current`. These are simpler than the detailed harm levels of PCs. Armor is calculated dynamically based on durability.
-*   **Calculated Properties**: `harm_clock_max`, `regular_armor_charges`, `special_armor_charges`, and `vulnerability_clock_max` are properties that derive their values based on other NPC attributes (e.g., `stand_coin_stats`). The armor system provides two types of protection:
+*   **Simplified Combat Tracking**: `vulnerability_clock_current`. This is simpler than the detailed harm levels of PCs. Armor is calculated dynamically based on durability.
+*   **Calculated Properties**: `regular_armor_charges`, `special_armor_charges`, and `vulnerability_clock_max` are properties that derive their values based on other NPC attributes (e.g., `stand_coin_stats`). The armor system provides two types of protection:
     *   **Regular Armor**: Reduces harm/consequences by 1 level (1 charge for F-rank to 5 charges for S-rank)
     *   **Special Armor**: Completely negates a consequence or harm (0 charges for F-rank to 3 charges for S/A-rank)
 *   **Stand Information**: `stand_coin_stats` (a `JSONField` for flexible Stand stat representation), `stand_description`, `stand_appearance`, `stand_manifestation`, `special_traits`.
@@ -181,7 +181,7 @@ The `NPCSerializer` handles the serialization and deserialization of NPC data:
 
 *   It includes all fields from the `NPC` model.
 *   The `creator` field is automatically set to the current authenticated user during creation (`read_only=True, default=serializers.CurrentUserDefault()`).
-*   The calculated properties (`harm_clock_max`, `regular_armor_charges`, `special_armor_charges`, `vulnerability_clock_max`) are included as `read_only` fields.
+*   The calculated properties (`regular_armor_charges`, `special_armor_charges`, `vulnerability_clock_max`) are included as `read_only` fields.
 
 ### 4.3. NPCViewSet (`backend/src/characters/views.py`)
 
@@ -198,7 +198,7 @@ NPCs are intentionally less complex than Player Characters to facilitate quicker
 *   **Simplified Data Model**: NPCs have a flatter data structure. For instance, their Stand stats are stored in a flexible `JSONField` (`stand_coin_stats`), whereas PCs have a dedicated `Stand` model with individual fields for each stat and associated validation.
 *   **No Complex Validation Logic**: Unlike PCs, NPCs do not undergo the rigorous validation checks for action dot distribution, XP advancements, or detailed ability prerequisites. Their creation is more free-form, allowing GMs to quickly define them as needed for the narrative.
 *   **GM-Centric Fields**: NPCs include fields like `role`, `weakness`, `need`, `desire`, `rumour`, `secret`, `passion`, `relationships`, `purveyor`, `notes`, `items`, `contacts`, `faction_status`, and `inventory` that are primarily for GM use in developing the game world and story, and are not present on player characters.
-*   **Harm Tracking**: NPCs use a simpler harm clock system, while PCs have a more granular system of named harm levels.
+*   **Harm Tracking**: NPCs are tracked primarily via their **vulnerability clock** (and armor), while PCs use named harm slots and severity levels on the sheet.
 *   **Ability Selection**: NPCs have a simple `playbook` choice, while PCs have detailed mechanisms for selecting standard, Hamon, and Spin abilities, often with prerequisites tied to their Stand's A-rank stats.
 *   **No Direct XP/Advancement Tracking**: NPCs do not have the detailed XP clocks, total XP spent, or advancement tracking fields that are central to PC progression. Their power level (`level`) is typically set directly by the GM.
 

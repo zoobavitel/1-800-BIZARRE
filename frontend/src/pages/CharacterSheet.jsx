@@ -1,6 +1,7 @@
 import React, {
   useState,
   useEffect,
+  useLayoutEffect,
   useRef,
   useCallback,
   useMemo,
@@ -10,6 +11,7 @@ import {
   INDEX_TO_GRADE,
   MAX_CREATION_DOTS,
   MAX_DOTS_PER_ACTION_CREATION,
+  STAND_COIN_CREATION_POINT_SUM,
   PC_STAT_DESC,
   STAND_STAT_KEYS,
   DUR_TABLE,
@@ -37,6 +39,7 @@ import {
   characterHistoryAPI,
   sessionAPI,
   normalizeHarmObject,
+  resolveMediaUrl,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -44,11 +47,35 @@ import {
   EffectShapes,
   HistoryBranchIcon,
 } from "../components/position-effect/PositionEffectIndicators";
-import { computeActionPoolBreakdown } from "../features/character-sheet/utils/actionDicePool";
+import {
+  computeActionPoolBreakdown,
+  INSIGHT_ACTIONS,
+  PROWESS_ACTIONS,
+  RESOLVE_ACTIONS,
+} from "../features/character-sheet/utils/actionDicePool";
+import { bumpEffectTier } from "../features/character-sheet/utils/rollEffectPreview";
 import {
   buildXpRequirementSnapshot,
   formatAttrTally,
 } from "../features/character-sheet/utils/xpRequirements";
+import {
+  adjustActionRollBonusSupports,
+  abilityExcludedFromActionRollDicePoolBonuses,
+  characterHasIronWill,
+  invigoratedHealingBonusApplies,
+  characterHasLegendaryGuard,
+  characterHasPhantomPain,
+  characterHasRippleBreathing,
+} from "../features/character-sheet/utils/abilityRollBonusMeta";
+import { getResistanceResultSheetAbilityReminders } from "../features/character-sheet/utils/sheetAbilityResistanceReminders";
+
+/** Same ordering as Insight / Prowess / Resolve columns on the sheet. */
+const SHEET_STANDARD_ACTION_COLUMNS = [
+  ...INSIGHT_ACTIONS,
+  ...PROWESS_ACTIONS,
+  ...RESOLVE_ACTIONS,
+];
+const HEALING_ACTION_CHOICES = [...SHEET_STANDARD_ACTION_COLUMNS];
 
 const CREW_HISTORY_FIELD_KEYS = new Set([
   "name",
@@ -145,7 +172,7 @@ function computeResistanceSummary(diceResults) {
   const highest = sorted.length ? Math.max(...sorted) : 0;
   const sixes = sorted.filter((d) => d === 6).length;
   const isCritical = sixes >= 2;
-  const stressCost = isCritical ? -1 : Math.max(0, 6 - highest);
+  const stressCost = isCritical ? -1 : Math.max(1, 6 - highest);
   const outcome = isCritical
     ? "CRITICAL_SUCCESS"
     : highest >= 6
@@ -169,6 +196,21 @@ function computeViceManualSummary(diceResults) {
         ? "PARTIAL_SUCCESS"
         : "FAILURE";
   return { highest, outcome };
+}
+
+function normalizeAbilityName(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+const RETIRED_SHEET_ABILITY_NAMES = new Set(["parry and break"]);
+
+function stripRetiredSheetAbilities(list) {
+  return (Array.isArray(list) ? list : []).filter(
+    (a) => !RETIRED_SHEET_ABILITY_NAMES.has(normalizeAbilityName(a?.name)),
+  );
 }
 
 const VICE_OVERINDULGE_CHOICES = [
@@ -220,7 +262,6 @@ const HISTORY_FIELD_LABELS = {
   armor_charges: "Armor",
   regular_armor_used: "Armor spent",
   special_armor_used: "Special armor spent",
-  harm_clock_current: "Healing clock",
   harm_level1_name: "Harm Lv1",
   harm_level1_slot2_name: "Harm Lv1 (slot 2)",
   harm_level2_name: "Harm Lv2",
@@ -235,6 +276,10 @@ const HISTORY_FIELD_LABELS = {
   crew: "Crew",
   action_dots: "Action dots",
   xp_clocks: "XP tracks",
+  total_xp_spent: "Total XP spent",
+  heritage_points_gained: "Heritage points gained",
+  stand_coin_points_gained: "Stand coin points gained",
+  action_dice_gained: "Action dice gained",
 };
 
 function historyFieldLabel(key) {
@@ -250,6 +295,61 @@ function stringifyValue(v) {
   } catch (_err) {
     return String(v);
   }
+}
+
+const XP_LEDGER_HISTORY_KEYS = new Set([
+  "xp_clocks",
+  "total_xp_spent",
+  "heritage_points_gained",
+  "stand_coin_points_gained",
+  "action_dice_gained",
+  "action_dots",
+]);
+
+/** One-line summary when a sheet save touched XP / advancement fields. */
+function summarizeXpSpendFromHistoryEntry(entry) {
+  const changed = entry?.changed_fields;
+  if (!changed || typeof changed !== "object") return null;
+  const parts = [];
+  for (const key of Object.keys(changed)) {
+    if (!XP_LEDGER_HISTORY_KEYS.has(key)) continue;
+    const chunk = changed[key];
+    if (!chunk || typeof chunk !== "object") continue;
+    if (key === "xp_clocks") {
+      const oldXC = chunk.old;
+      const newXC = chunk.new;
+      if (
+        oldXC &&
+        newXC &&
+        typeof oldXC === "object" &&
+        typeof newXC === "object"
+      ) {
+        const keys = new Set([
+          ...Object.keys(oldXC),
+          ...Object.keys(newXC),
+        ]);
+        for (const k of keys) {
+          const o = Number(oldXC[k]) || 0;
+          const n = Number(newXC[k]) || 0;
+          if (n === o) continue;
+          parts.push(
+            `${k}: ${o}→${n}${
+              n < o ? ` (−${o - n} on track)` : ` (+${n - o} on track)`
+            }`,
+          );
+        }
+      }
+      continue;
+    }
+    const o = chunk.old;
+    const n = chunk.new;
+    if (JSON.stringify(o) === JSON.stringify(n)) continue;
+    parts.push(
+      `${historyFieldLabel(key)}: ${stringifyValue(o)} → ${stringifyValue(n)}`,
+    );
+  }
+  if (!parts.length) return null;
+  return `Advancement / XP: ${parts.join("; ")}`;
 }
 
 // ─── Dice pool (pre-roll preview) ─────────────────────────────────────────────
@@ -368,6 +468,125 @@ const ProgressClock = ({
   return svg;
 };
 
+/**
+ * Exclude entries that are clearly not recover-in-play treatment bolsters:
+ * recon/stealth (Scout), offensive melee/attack (+1d) (Zoom Punch), or non-treatment resistance/counterattack wording.
+ */
+function healBolsterCandidateExcludedFromRecoverPlay(combinedTextLower) {
+  const t = String(combinedTextLower || "").toLowerCase();
+  if (!t.trim()) return false;
+  const treatmentAdjacent =
+    /\b(heal(?:ing)?\b|\brecovery\b(?:\s+rolls?\b|\s+treatment\b)?|healing clock|recovery treatment|recovery rolls?|treatment roll|stabili|\bsuture\b|\bmedic|\bmedical|\btreat(?:ment)?\b|\bpatient\b|\btherapy\b|\breviv|\brestore\b|\bsegment\b|injur(?:y)?|harm\b|blood\b|bleed(?:ing)?)/i.test(
+      t,
+    );
+  if (
+    /\b(successful\s+)?resistance\s+rolls?\b/i.test(t) &&
+    /\bcounterattack\b/i.test(t) &&
+    !treatmentAdjacent
+  ) {
+    return true;
+  }
+  if (
+    /\b(gather\s+info\s+to\s+locate|locate\s+a\s+target|avoid\s+detection|camouflage)\b/i.test(
+      t,
+    ) &&
+    !treatmentAdjacent
+  ) {
+    return true;
+  }
+  if (
+    (/\bmelee\s+strike\b/.test(t) ||
+      /\+\s*1d\s+when\s+attacking\b/.test(t) ||
+      /\battack(?:ing)?\s+from\s+unexpected\s+angles\b/.test(t)) &&
+    !treatmentAdjacent
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Recover-in-play / healing bolster picker: narrows abilities + heritage copy (not overly broad generic "stress"). */
+function healBolsterCandidateMatchesCombinedText(
+  combinedTextLower,
+  hasRollDiceOrEffectFromDescription,
+) {
+  if (healBolsterCandidateExcludedFromRecoverPlay(combinedTextLower))
+    return false;
+  const hasHealFlavor =
+    /\b(healing|heal\b|recovery|recover(y)?\b|stabili[sz]|suture|\bmedic|operative|\btreat\b|patient|\btherapy|blood|bleed(?:ing)?|injur(?:y)?|hurt\b|repair\b|segment|operative|infusion|\brepair\b[^\n]{0,40}\bharm\b|restore\b)/i.test(
+      combinedTextLower,
+    );
+  const healClockOrRecoveryRoll =
+    /\b(healing clock|recovery roll|recovery rolls|treatment roll|recovery treatment)\b/i.test(
+      combinedTextLower,
+    );
+  const allyAid =
+    /\b(assist\s+a\s+teammate|protect\s+a\s+teammate|teammates?|allies|another\s+crew|another\s+pc)\b/i.test(
+      combinedTextLower,
+    );
+  const positionForSafety = /\+\s*\d\s*position\b|gain\s+.{0,24}position\b|better\s+position\b/i.test(
+    combinedTextLower,
+  );
+  const stressSpentHeal =
+    /\bstress\b/.test(combinedTextLower) &&
+    /\b(heal|segment|recovery|stabili|medic|treat|patient|suture|blood|reviv|restore)\b/i.test(
+      combinedTextLower,
+    );
+  if (hasHealFlavor || healClockOrRecoveryRoll || stressSpentHeal || positionForSafety)
+    return true;
+  if (
+    hasRollDiceOrEffectFromDescription &&
+    (hasHealFlavor || healClockOrRecoveryRoll || allyAid)
+  )
+    return true;
+  if (hasRollDiceOrEffectFromDescription && /\b(inject|surgery|first aid|field kit|tourniquet)\b/i.test(combinedTextLower))
+    return true;
+  return false;
+}
+
+/** Turns healing bolster picker keys into dice-pool `{ dice, effect }` toggles (max supported each). */
+function buildHealRollBoostPresetFromSelections(
+  selectedKeys,
+  candidates,
+  abilityRollBonusOptions,
+  heritageRollBonusOptions,
+) {
+  const keySet = new Set(
+    Array.isArray(selectedKeys) ? selectedKeys.map((k) => String(k)) : [],
+  );
+  const abilitiesPreset = {};
+  const heritagePreset = {};
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    return { abilities: abilitiesPreset, heritage: heritagePreset };
+  }
+  candidates.forEach((c) => {
+    if (!c || !keySet.has(String(c.key))) return;
+    const boostId = String(c.boostKey);
+    if (c.rollKind === "ability") {
+      const ab = abilityRollBonusOptions.find(
+        (x) => String(x.id ?? x.name) === boostId,
+      );
+      if (!ab) return;
+      abilitiesPreset[boostId] = {
+        dice: !!ab.supportsDice,
+        effect: !!ab.supportsEffect,
+      };
+      return;
+    }
+    if (c.rollKind === "heritage") {
+      const hb = heritageRollBonusOptions.find(
+        (x) => String(x.id ?? x.name) === boostId,
+      );
+      if (!hb) return;
+      heritagePreset[boostId] = {
+        dice: !!hb.supportsDice,
+        effect: !!hb.supportsEffect,
+      };
+    }
+  });
+  return { abilities: abilitiesPreset, heritage: heritagePreset };
+}
+
 // ─── CharacterSheetWrapper ────────────────────────────────────────────────────
 
 const CATEGORY_LABELS = {
@@ -435,6 +654,112 @@ function hasMeaningfulDraftChanges(payload) {
   return false;
 }
 
+/** Healing-clock self-recover rolls: must match ACTION_ATTR; invalid → Tinker. */
+function pickHealClockAction(candidate) {
+  const keys = Object.keys(ACTION_ATTR || {});
+  const u = String(candidate || "TINKER").trim().toUpperCase();
+  return keys.includes(u) ? u : "TINKER";
+}
+
+/**
+ * Downtime recovery tick table from a persisted action roll (`roll_action`) result.
+ * Self-treatment in downtime (−1 tick) per SRD. Matches server segment logic otherwise.
+ */
+function downtimeHealingTicksFromApiRoll(res, subtractOneForSelfTreatment) {
+  const rolled = Array.isArray(res?.dice_results)
+    ? res.dice_results
+        .map((d) => Number(d))
+        .filter((n) => Number.isFinite(n))
+    : [];
+  const critical = rolled.filter((d) => d === 6).length >= 2;
+  const hi = Number.isFinite(Number(res?.highest))
+    ? Number(res.highest)
+    : rolled.length > 0
+      ? Math.max(...rolled)
+      : 0;
+  let ticks = critical ? 5 : hi >= 6 ? 3 : hi >= 4 ? 2 : 1;
+  if (subtractOneForSelfTreatment) ticks = Math.max(0, ticks - 1);
+  const bandLabel = critical ? "Critical" : hi >= 6 ? "6" : hi >= 4 ? "4/5" : "1–3";
+  return { ticks, bandLabel, critical };
+}
+
+/** True when this roll is downtime healing-clock treatment (not recover-in-play P/E). */
+function isDowntimeHealingHealAttempt(ht) {
+  if (!ht || typeof ht !== "object") return false;
+  const cad = String(ht.treatmentCadence ?? ht.treatment_cadence ?? "")
+    .trim()
+    .toLowerCase();
+  if (cad === "downtime") return true;
+  if (cad === "mid_action") return false;
+  if (
+    String(ht.kind || "").toLowerCase() === "heal_other" &&
+    ht.recoverInPlayTreatment === false &&
+    ht.usesSessionPositionEffect === false
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function readCharSheetBool(characterId, section, defaultValue) {
+  if (characterId == null || characterId === "") return defaultValue;
+  try {
+    const raw = window.localStorage.getItem(
+      `biz:char-sheet:${section}:${characterId}`,
+    );
+    if (raw == null || raw === "") return defaultValue;
+    const v = JSON.parse(raw);
+    return typeof v === "boolean" ? v : defaultValue;
+  } catch {
+    return defaultValue;
+  }
+}
+
+function writeCharSheetBool(characterId, section, value) {
+  if (characterId == null || characterId === "") return;
+  try {
+    window.localStorage.setItem(
+      `biz:char-sheet:${section}:${characterId}`,
+      JSON.stringify(!!value),
+    );
+  } catch {
+    /* ignore quota / private mode */
+  }
+}
+
+function readCharSheetNotesInventory(characterId, defaultValue) {
+  if (characterId == null || characterId === "") return defaultValue;
+  try {
+    const raw = window.localStorage.getItem(
+      `biz:char-sheet:notes-inventory:${characterId}`,
+    );
+    if (raw == null || raw === "") return defaultValue;
+    const o = JSON.parse(raw);
+    if (!o || typeof o !== "object") return defaultValue;
+    return {
+      notes: typeof o.notes === "boolean" ? o.notes : defaultValue.notes,
+      inventory:
+        typeof o.inventory === "boolean"
+          ? o.inventory
+          : defaultValue.inventory,
+    };
+  } catch {
+    return defaultValue;
+  }
+}
+
+function writeCharSheetNotesInventory(characterId, value) {
+  if (characterId == null || characterId === "") return;
+  try {
+    window.localStorage.setItem(
+      `biz:char-sheet:notes-inventory:${characterId}`,
+      JSON.stringify(value),
+    );
+  } catch {
+    /* ignore */
+  }
+}
+
 const CharacterSheetWrapper = ({
   character,
   onClose,
@@ -453,6 +778,8 @@ const CharacterSheetWrapper = ({
   onDraftMetaChange,
   /** Incremented when CharacterPage finishes a remote sync (poll, SSE, visibility) so session rolls refetch. */
   sessionDataPollTick = 0,
+  /** When true, skip merging server character snapshots into XP / stand / action state (avoids poll overwriting local spends before autosave). */
+  sheetDraftIsDirty = false,
 }) => {
   const { user } = useAuth();
   const ownerUsername =
@@ -465,7 +792,13 @@ const CharacterSheetWrapper = ({
   const canEditSheet = !character?.id || isGM || character?.user_id === user?.id;
   const canCreateManualHistoryRecord = isGM || character?.user_id === user?.id;
   const [activeMode, setActiveMode] = useState("CHARACTER MODE");
-  const charCampaign = campaigns?.find((c) => c.id === character?.campaign);
+  const campaignIdFromCharacter = (() => {
+    const c = character?.campaign;
+    return (typeof c === "object" ? c?.id : c) ?? "";
+  })();
+  const charCampaign = (campaigns || []).find(
+    (c) => String(c?.id ?? "") === String(campaignIdFromCharacter),
+  );
   const activeSessionId =
     charCampaign?.active_session ??
     (typeof charCampaign?.active_session === "object"
@@ -511,12 +844,13 @@ const CharacterSheetWrapper = ({
     viceDetails: character?.viceDetails ?? character?.vice_details ?? "",
     crew: initialCrew.crew,
     crewId: initialCrew.crewId,
+    fed_today:
+      typeof character?.fed_today === "boolean" ? character.fed_today : null,
   });
 
   // Campaign assignment (normalize: backend may send campaign as object or ID)
   const [campaignId, setCampaignId] = useState(() => {
-    const c = character?.campaign;
-    return (typeof c === "object" ? c?.id : c) ?? "";
+    return campaignIdFromCharacter;
   });
 
   // Portrait state
@@ -593,25 +927,40 @@ const CharacterSheetWrapper = ({
     character?.personal_crew_name,
   ]);
 
-  // Auto-populate crew from campaign context when this sheet has no crew yet.
+  // Validate/sync crew from campaign roster whenever campaign membership is present.
   useEffect(() => {
     setCharData((prev) => {
-      if ((prev.crew || "").trim() || prev.crewId) return prev;
       const roster = charCampaign?.campaign_characters || [];
+      if (!Array.isArray(roster) || roster.length === 0) return prev;
       const me = roster.find((c) => String(c.id) === String(characterId));
-      const meCrewName = (me?.crew || me?.personal_crew_name || "").trim();
-      if (me?.crewId || meCrewName) {
+      const meCrewId = me?.crewId ?? me?.crew_id ?? null;
+      const meCrewName = (
+        me?.crew ||
+        me?.crew_name ||
+        me?.personal_crew_name ||
+        ""
+      ).trim();
+      if (meCrewId || meCrewName) {
+        const nextCrewId = meCrewId ?? null;
+        const nextCrew = meCrewName || prev.crew;
+        if (
+          String(prev.crewId ?? "") === String(nextCrewId ?? "") &&
+          String(prev.crew || "") === String(nextCrew || "")
+        ) {
+          return prev;
+        }
         return {
           ...prev,
-          crewId: me?.crewId ?? null,
-          crew: meCrewName || prev.crew,
+          crewId: nextCrewId,
+          crew: nextCrew,
         };
       }
 
+      if ((prev.crew || "").trim() || prev.crewId) return prev;
       const crews = [];
       roster.forEach((c) => {
-        const name = (c?.crew || c?.personal_crew_name || "").trim();
-        const id = c?.crewId ?? null;
+        const name = (c?.crew || c?.crew_name || c?.personal_crew_name || "").trim();
+        const id = c?.crewId ?? c?.crew_id ?? null;
         if (name || id) {
           const key = String(id ?? name).toLowerCase();
           if (!crews.some((x) => x.key === key)) {
@@ -628,7 +977,7 @@ const CharacterSheetWrapper = ({
       }
       return prev;
     });
-  }, [charCampaign?.campaign_characters, characterId]);
+  }, [charCampaign?.id, charCampaign?.campaign_characters, characterId]);
 
   /** Persist crew label: shared campaign crew (PATCH crew) or personal_crew_name / create+link. Used in Character and Crew mode. */
   const commitCrewName = useCallback(async () => {
@@ -704,6 +1053,14 @@ const CharacterSheetWrapper = ({
     character?.viceDetails,
     character?.vice_details,
   ]);
+
+  useEffect(() => {
+    const fedToday =
+      typeof character?.fed_today === "boolean" ? character.fed_today : null;
+    setCharData((prev) =>
+      prev.fed_today !== fedToday ? { ...prev, fed_today: fedToday } : prev,
+    );
+  }, [character?.id, character?.fed_today]);
 
   // When parent merges id before full GET/list row arrives, fill empty identity from server (avoid PUT wiping true_name, etc.)
   useEffect(() => {
@@ -813,6 +1170,7 @@ const CharacterSheetWrapper = ({
 
   // Sync standStats when character changes (e.g. switching tabs)
   useEffect(() => {
+    if (sheetDraftIsDirty) return;
     const next = character?.standStats;
     if (next && typeof next === "object") {
       setStandStats((prev) => {
@@ -828,7 +1186,7 @@ const CharacterSheetWrapper = ({
         return changed ? { ...prev, ...next } : prev;
       });
     }
-  }, [character?.id, character?.standStats]);
+  }, [character?.id, character?.standStats, sheetDraftIsDirty]);
 
   // FIX 1: Action ratings — creation enforces 7 total / max 2 per action
   const [actionRatings, setActionRatings] = useState(
@@ -850,6 +1208,7 @@ const CharacterSheetWrapper = ({
 
   // Sync action dots when loaded character arrives (missing sync caused blank action_dots on save)
   useEffect(() => {
+    if (sheetDraftIsDirty) return;
     const next = character?.actionRatings;
     if (!next || typeof next !== "object") return;
     setActionRatings((prev) => {
@@ -859,7 +1218,7 @@ const CharacterSheetWrapper = ({
       );
       return changed ? { ...prev, ...next } : prev;
     });
-  }, [character?.id, character?.actionRatings]);
+  }, [character?.id, character?.actionRatings, sheetDraftIsDirty]);
 
   // Stress — tracked as filled count; max derived from Durability
   const [stressFilled, setStressFilled] = useState(
@@ -890,6 +1249,13 @@ const CharacterSheetWrapper = ({
   const [healingClock, setHealingClock] = useState(
     character?.healingClock ?? 0,
   );
+
+  const [healingRecoverBusy, setHealingRecoverBusy] = useState(false);
+  const [healingRecoverErr, setHealingRecoverErr] = useState(null);
+  const [healingRecoverMsg, setHealingRecoverMsg] = useState("");
+  /** Action rating used for downtime + mid-action healing-clock recover (default Tinker); per-character localStorage. */
+  const [selfHealingRecoverAction, setSelfHealingRecoverAction] =
+    useState("TINKER");
 
   // Coin & Stash (API sends coin as array; sheet uses coinFilled number)
   const [coinFilled, setCoinFilled] = useState(
@@ -953,6 +1319,7 @@ const CharacterSheetWrapper = ({
   }, [character?.id, character?.healingClock]);
 
   useEffect(() => {
+    if (sheetDraftIsDirty) return;
     const nx = character?.xp;
     if (!nx || typeof nx !== "object") return;
     setXp((prev) => {
@@ -960,7 +1327,7 @@ const CharacterSheetWrapper = ({
       const changed = keys.some((k) => (prev[k] ?? 0) !== (nx[k] ?? 0));
       return changed ? { ...prev, ...nx } : prev;
     });
-  }, [character?.id, character?.xp]);
+  }, [character?.id, character?.xp, sheetDraftIsDirty]);
 
   // Hydrate coin/stash only when switching characters (id change). Parent refresh (campaign list refetch,
   // getCharacters) reuses the same id with a new object; syncing on character.coin/stash then wiped
@@ -1021,7 +1388,9 @@ const CharacterSheetWrapper = ({
   const [minorAdvanceAction, setMinorAdvanceAction] = useState("HUNT");
 
   // Abilities & Clocks
-  const [abilities, setAbilities] = useState(character?.abilities || []);
+  const [abilities, setAbilities] = useState(
+    stripRetiredSheetAbilities(character?.abilities || []),
+  );
   const [standardAbilitiesList, setStandardAbilitiesList] = useState([]);
 
   // Fetch standard abilities for dropdown
@@ -1051,8 +1420,89 @@ const CharacterSheetWrapper = ({
   // Load abilities when switching character only — do not re-sync on every `character.abilities`
   // reference change or removals are overwritten by stale server data before autosave completes.
   useEffect(() => {
-    setAbilities(character?.abilities || []);
+    setAbilities(stripRetiredSheetAbilities(character?.abilities || []));
   }, [character?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- only reset on sheet identity
+
+  const currentHeritage = useMemo(() => {
+    const hid = charData?.heritage;
+    if (hid == null || !Array.isArray(heritages) || heritages.length === 0) return null;
+    return heritages.find((h) => h && h.id === hid) || null;
+  }, [charData?.heritage, heritages]);
+
+  const heritageAutoAbilities = useMemo(() => {
+    if (!currentHeritage) return [];
+    const selectedBen = new Set(
+      (Array.isArray(selectedBenefits) ? selectedBenefits : []).map((x) => Number(x)),
+    );
+    const selectedDet = new Set(
+      (Array.isArray(selectedDetriments) ? selectedDetriments : []).map((x) => Number(x)),
+    );
+    const rows = [];
+    (currentHeritage.benefits || []).forEach((b) => {
+      if (!b) return;
+      const selected = Boolean(b.required) || selectedBen.has(Number(b.id));
+      if (!selected) return;
+      rows.push({
+        id: `heritage-benefit-${b.id ?? b.name}`,
+        name: String(b.name || "").trim(),
+        description: String(b.description || "").trim(),
+        type: "heritage",
+        heritageSource: "benefit",
+      });
+    });
+    (currentHeritage.detriments || []).forEach((d) => {
+      if (!d) return;
+      const selected = Boolean(d.required) || selectedDet.has(Number(d.id));
+      if (!selected) return;
+      rows.push({
+        id: `heritage-detriment-${d.id ?? d.name}`,
+        name: String(d.name || "").trim(),
+        description: String(d.description || "").trim(),
+        type: "heritage",
+        heritageSource: "detriment",
+      });
+    });
+    return rows.filter((x) => x.name);
+  }, [currentHeritage, selectedBenefits, selectedDetriments]);
+
+  const combinedAbilitiesForDisplay = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    (abilities || []).forEach((a, idx) => {
+      const key = `${String(a?.type || "").toLowerCase()}:${normalizeAbilityName(a?.name)}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ ...a, _uiOrigin: "sheet", _uiIndex: idx });
+    });
+    heritageAutoAbilities.forEach((a) => {
+      const key = `${String(a?.type || "").toLowerCase()}:${normalizeAbilityName(a?.name)}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ ...a, _uiOrigin: "heritage" });
+    });
+    return out.filter(
+      (a) => !RETIRED_SHEET_ABILITY_NAMES.has(normalizeAbilityName(a?.name)),
+    );
+  }, [abilities, heritageAutoAbilities]);
+
+  /** SRD Invigorated on self-recover — read sheet state, server `character.abilities`, and heritage echoes. */
+  const selfRecoverInvigoratedDice = useMemo(
+    () =>
+      invigoratedHealingBonusApplies(abilities) ||
+      invigoratedHealingBonusApplies(character?.abilities) ||
+      invigoratedHealingBonusApplies(heritageAutoAbilities)
+        ? 1
+        : 0,
+    [abilities, character?.abilities, heritageAutoAbilities],
+  );
+
+  const hasNoFeedDetriment = useMemo(() => {
+    return heritageAutoAbilities.some(
+      (a) =>
+        String(a.heritageSource || "") === "detriment" &&
+        /without feeding/i.test(String(a.name || "")),
+    );
+  }, [heritageAutoAbilities]);
 
   // Sync playbook label when character changes (API uses STAND/HAMON/SPIN; sheet uses Stand/Hamon/Spin)
   useEffect(() => {
@@ -1126,6 +1576,18 @@ const CharacterSheetWrapper = ({
   const [hamonAbilityPickerOpen, setHamonAbilityPickerOpen] = useState(false);
   const hamonAbilityPickerRef = useRef(null);
   const [expandedAbilityId, setExpandedAbilityId] = useState(null);
+  const [abilitiesSectionExpanded, setAbilitiesSectionExpanded] = useState(() =>
+    readCharSheetBool(characterId, "abilities", true),
+  );
+  const [clocksSectionExpanded, setClocksSectionExpanded] = useState(() =>
+    readCharSheetBool(characterId, "clocks", true),
+  );
+  const [notesInventoryExpanded, setNotesInventoryExpanded] = useState(() =>
+    readCharSheetNotesInventory(characterId, {
+      notes: true,
+      inventory: true,
+    }),
+  );
 
   // Close standard / spin / hamon ability pickers when clicking outside
   useEffect(() => {
@@ -1204,9 +1666,22 @@ const CharacterSheetWrapper = ({
       },
     },
     notes: "",
+    image: "",
+    image_url: "",
   });
+  const [crewPortraitUrlDraft, setCrewPortraitUrlDraft] = useState("");
+  const [crewPortraitSaving, setCrewPortraitSaving] = useState(false);
+  const [crewPortraitMsg, setCrewPortraitMsg] = useState(null);
   const [crewFactionLinks, setCrewFactionLinks] = useState([]);
+  const [crewFactionAddName, setCrewFactionAddName] = useState("");
+  const [crewFactionAddExistingId, setCrewFactionAddExistingId] = useState("");
+  const [crewFactionAddRep, setCrewFactionAddRep] = useState(0);
+  const [crewFactionAddBusy, setCrewFactionAddBusy] = useState(false);
+  const [crewFactionAddErr, setCrewFactionAddErr] = useState(null);
   const [crewHistoryEntries, setCrewHistoryEntries] = useState([]);
+  const [crewHistoryOpen, setCrewHistoryOpen] = useState(() =>
+    readCharSheetBool(characterId, "crew-history", false),
+  );
   const crewHydratedRef = useRef(false);
 
   const buildCrewPatchPayload = useCallback(() => {
@@ -1222,6 +1697,11 @@ const CharacterSheetWrapper = ({
       upgrade_progress: upgradesToProgress(crewData.upgrades),
     };
   }, [crewData]);
+
+  const crewPortraitSrc = useMemo(
+    () => resolveMediaUrl(crewData.image || crewData.image_url || ""),
+    [crewData.image, crewData.image_url],
+  );
 
   useEffect(() => {
     if (activeMode !== "CREW MODE" || !charData.crewId) {
@@ -1245,12 +1725,15 @@ const CharacterSheetWrapper = ({
           hold: d.hold === "weak" || d.hold === "strong" ? d.hold : p.hold,
           description: d.description ?? "",
           notes: d.notes ?? "",
+          image: d.image ?? "",
+          image_url: d.image_url ?? "",
           upgrades: progressToUpgrades(d.upgrade_progress),
           specialAbilities: (d.special_abilities || []).map((a) => ({
             name: a.name,
             description: a.description || "",
           })),
         }));
+        setCrewPortraitUrlDraft(String(d.image_url || "").trim());
         setCrewFactionLinks(d.faction_relationships || []);
         crewHydratedRef.current = true;
       })
@@ -1316,6 +1799,80 @@ const CharacterSheetWrapper = ({
 
   // ─── Derived Values ──────────────────────────────────────────────────────────
 
+  const campaignForCrewFactionAdd = useMemo(
+    () =>
+      (campaigns || []).find(
+        (c) =>
+          Number(c.id) ===
+          Number.parseInt(String(campaignId || "").trim(), 10),
+      ) ?? null,
+    [campaigns, campaignId],
+  );
+
+  const crewLinkableFactions = useMemo(() => {
+    const facs = campaignForCrewFactionAdd?.factions || [];
+    const linkedIds = new Set(
+      (crewFactionLinks || []).map((r) => Number(r.faction_id)),
+    );
+    return facs.filter((f) => f?.id != null && !linkedIds.has(Number(f.id)));
+  }, [campaignForCrewFactionAdd?.factions, crewFactionLinks]);
+
+  const handleAddCrewFactionLink = useCallback(async () => {
+    if (!charData.crewId || !campaignId) return;
+    const nameTrim = crewFactionAddName.trim();
+    const exId = Number.parseInt(String(crewFactionAddExistingId || ""), 10);
+    const rep = Math.min(3, Math.max(-3, Number(crewFactionAddRep) || 0));
+    if (nameTrim && Number.isFinite(exId)) {
+      setCrewFactionAddErr("Use either a new name or an existing faction, not both.");
+      return;
+    }
+    if (!nameTrim && !Number.isFinite(exId)) {
+      setCrewFactionAddErr("Enter a new faction name or pick an existing faction.");
+      return;
+    }
+    setCrewFactionAddBusy(true);
+    setCrewFactionAddErr(null);
+    try {
+      let fid = null;
+      if (nameTrim) {
+        const created = await factionAPI.createFaction({
+          campaign: Number.parseInt(String(campaignId), 10),
+          name: nameTrim,
+          visible_to_players: false,
+        });
+        fid = created?.id ?? created?.pk;
+      } else {
+        fid = exId;
+      }
+      if (!fid) {
+        setCrewFactionAddErr("Could not resolve faction to link.");
+        return;
+      }
+      await crewAPI.patchCrew(charData.crewId, {
+        faction_relationships: [{ faction_id: fid, reputation_value: rep }],
+      });
+      const crewRes = await crewAPI.getCrew(charData.crewId);
+      setCrewFactionLinks(crewRes.faction_relationships || []);
+      setCrewFactionAddName("");
+      setCrewFactionAddExistingId("");
+      setCrewFactionAddRep(0);
+      onCampaignRefresh?.();
+    } catch (e) {
+      setCrewFactionAddErr(
+        e?.message || "Could not create or link faction. Try a different name.",
+      );
+    } finally {
+      setCrewFactionAddBusy(false);
+    }
+  }, [
+    charData.crewId,
+    campaignId,
+    crewFactionAddName,
+    crewFactionAddExistingId,
+    crewFactionAddRep,
+    onCampaignRefresh,
+  ]);
+
   const durVal = Math.min(5, Math.max(0, Number(standStats.durability) || 1));
   const devVal = Math.min(5, Math.max(0, Number(standStats.development) || 1));
   const maxStress = 9 + (DUR_TABLE[durVal]?.stressBonus ?? 0);
@@ -1348,6 +1905,12 @@ const CharacterSheetWrapper = ({
     0,
   );
   const totalStandPoints = Object.values(standStats).reduce((s, v) => s + v, 0);
+  /** Chargen baseline 6 + XP-bought ranks (server); if total sum ran ahead of a stale counter, match the sheet so we do not false-alarm. */
+  const standCoinIndexBudget = Math.max(
+    STAND_COIN_CREATION_POINT_SUM +
+      Math.max(0, Number(character?.standCoinPointsGained) || 0),
+    totalStandPoints,
+  );
   const aRankCount = Object.values(standStats).reduce(
     (n, idx) => n + (INDEX_TO_GRADE(idx) === "A" ? 1 : 0),
     0,
@@ -1551,15 +2114,38 @@ const CharacterSheetWrapper = ({
 
   // Roll modal for campaign/session context (position, effect, push)
   const [rollPending, setRollPending] = useState(null);
+  /** Scroll Action ratings dice-preview into view when opened from deeper sections (e.g. CREW ACTIONS heal teammate). */
+  const actionRollDicePoolPreviewElRef = useRef(null);
+  const lastScrolledRollPendingKeyRef = useRef("");
+  const [resistancePending, setResistancePending] = useState(null);
   const [rollModal, setRollModal] = useState({
     push_effect: false,
     push_dice: false,
     devil_bargain_dice: false,
     devil_bargain_note: "",
   });
+  const [healOtherRecoveryIntent, setHealOtherRecoveryIntent] = useState({
+    enabled: false,
+    actionName: "TINKER",
+    targetId: "",
+    selectedBolsterKeys: [],
+    bolsterNote: "",
+  });
   const [rollAbilityBoost, setRollAbilityBoost] = useState({});
+  const [heritageRollBoost, setHeritageRollBoost] = useState({});
+  /** Phantom Pain: spend 1 stress when using the ability through cover/barriers (fiction). */
+  const [phantomPainThroughCover, setPhantomPainThroughCover] = useState(false);
+  /** Ripple Breathing: waive push stress (2) once per active session episode. */
+  const [rippleBreathingFreePush, setRippleBreathingFreePush] = useState(false);
+  const [resistanceAbilityBoost, setResistanceAbilityBoost] = useState({});
+  const [resistancePushDice, setResistancePushDice] = useState(false);
+  const [resistanceMitigationChoice, setResistanceMitigationChoice] = useState("");
   const [rollApiError, setRollApiError] = useState(null);
-  const [showHistoryPanel, setShowHistoryPanel] = useState(false);
+  /** User confirms SRD-aligned stress overflow (trauma) when push/incap/etc. exceeds empty boxes. */
+  const [stressOverflowConfirmed, setStressOverflowConfirmed] = useState(false);
+  const [showHistoryPanel, setShowHistoryPanel] = useState(() =>
+    readCharSheetBool(characterId, "history-panel", false),
+  );
   const [historyMode, setHistoryMode] = useState("session");
   const [historyRows, setHistoryRows] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -1586,6 +2172,9 @@ const CharacterSheetWrapper = ({
     helpDie: false,
     groupAction: false,
     groupActionId: "",
+    xpTrack: "playbook",
+    xpAmount: "1",
+    xpReason: "",
   });
   const [showXpHistoryModal, setShowXpHistoryModal] = useState(false);
   const [xpTimelineLoading, setXpTimelineLoading] = useState(false);
@@ -1602,15 +2191,135 @@ const CharacterSheetWrapper = ({
   const [groupActionLoading, setGroupActionLoading] = useState(false);
   /** Last session+group id we showed full-panel spinner for; unchanged on sheet poll tick → silent refetch */
   const groupRollFetchSpinnerKeyRef = useRef("");
-  const [showGroupActionCard, setShowGroupActionCard] = useState(false);
+  const [crewGroupExpanded, setCrewGroupExpanded] = useState(() =>
+    readCharSheetBool(characterId, "crew-group", false),
+  );
+  const [crewAssistExpanded, setCrewAssistExpanded] = useState(() =>
+    readCharSheetBool(characterId, "crew-assist", true),
+  );
+  const [crewHealExpanded, setCrewHealExpanded] = useState(() =>
+    readCharSheetBool(characterId, "crew-heal", true),
+  );
   const [assistTargetId, setAssistTargetId] = useState("");
   const [assistGrantBusy, setAssistGrantBusy] = useState(false);
   const [assistGrantMsg, setAssistGrantMsg] = useState(null);
   const [assistGrantErr, setAssistGrantErr] = useState(null);
+  const [healOtherDraft, setHealOtherDraft] = useState({
+    targetId: "",
+    actionName: "TINKER",
+    selectedBolsterKeys: [],
+    /** 'recover_in_play' | legacy 'score' = recover-in-play, show P/E; 'downtime' = downtime, hide P/E */
+    treatmentPhase: "recover_in_play",
+  });
   const [rollGoalDraft, setRollGoalDraft] = useState("");
   const [showDevilsBargainModal, setShowDevilsBargainModal] = useState(false);
   const [devilBargainConfirmed, setDevilBargainConfirmed] = useState(false);
   const [expandedActionInfo, setExpandedActionInfo] = useState(null);
+
+  useEffect(() => {
+    const defaultsNoId = () => {
+      setAbilitiesSectionExpanded(true);
+      setClocksSectionExpanded(true);
+      setNotesInventoryExpanded({ notes: true, inventory: true });
+      setShowHistoryPanel(false);
+      setCrewGroupExpanded(false);
+      setCrewAssistExpanded(true);
+      setCrewHealExpanded(true);
+      setCrewHistoryOpen(false);
+    };
+    if (characterId == null || characterId === "") {
+      defaultsNoId();
+      return;
+    }
+    setAbilitiesSectionExpanded(
+      readCharSheetBool(characterId, "abilities", true),
+    );
+    setClocksSectionExpanded(readCharSheetBool(characterId, "clocks", true));
+    setNotesInventoryExpanded(
+      readCharSheetNotesInventory(characterId, {
+        notes: true,
+        inventory: true,
+      }),
+    );
+    setShowHistoryPanel(
+      readCharSheetBool(characterId, "history-panel", false),
+    );
+    setCrewGroupExpanded(
+      readCharSheetBool(characterId, "crew-group", false),
+    );
+    setCrewAssistExpanded(
+      readCharSheetBool(characterId, "crew-assist", true),
+    );
+    setCrewHealExpanded(readCharSheetBool(characterId, "crew-heal", true));
+    setCrewHistoryOpen(
+      readCharSheetBool(characterId, "crew-history", false),
+    );
+  }, [characterId]);
+
+  const setAbilitiesSectionExpandedPersist = useCallback((updater) => {
+    setAbilitiesSectionExpanded((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetBool(characterId, "abilities", next);
+      return next;
+    });
+  }, [characterId]);
+
+  const setClocksSectionExpandedPersist = useCallback((updater) => {
+    setClocksSectionExpanded((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetBool(characterId, "clocks", next);
+      return next;
+    });
+  }, [characterId]);
+
+  const setNotesInventoryExpandedPersist = useCallback((updater) => {
+    setNotesInventoryExpanded((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetNotesInventory(characterId, next);
+      return next;
+    });
+  }, [characterId]);
+
+  const setShowHistoryPanelPersist = useCallback((updater) => {
+    setShowHistoryPanel((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetBool(characterId, "history-panel", next);
+      return next;
+    });
+  }, [characterId]);
+
+  const setCrewGroupExpandedPersist = useCallback((updater) => {
+    setCrewGroupExpanded((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetBool(characterId, "crew-group", next);
+      return next;
+    });
+  }, [characterId]);
+
+  const setCrewAssistExpandedPersist = useCallback((updater) => {
+    setCrewAssistExpanded((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetBool(characterId, "crew-assist", next);
+      return next;
+    });
+  }, [characterId]);
+
+  const setCrewHealExpandedPersist = useCallback((updater) => {
+    setCrewHealExpanded((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetBool(characterId, "crew-heal", next);
+      return next;
+    });
+  }, [characterId]);
+
+  const setCrewHistoryOpenPersist = useCallback((updater) => {
+    setCrewHistoryOpen((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      writeCharSheetBool(characterId, "crew-history", next);
+      return next;
+    });
+  }, [characterId]);
+
   const [campaignAssignStatus, setCampaignAssignStatus] = useState(null);
   const [campaignAssignError, setCampaignAssignError] = useState(null);
   const [resistanceHarmTarget, setResistanceHarmTarget] = useState("");
@@ -1654,20 +2363,341 @@ const CharacterSheetWrapper = ({
   }, [historyManual.rollType, historyManual.dice, stressFilled]);
 
   const clearHarmSlot = useCallback((target) => {
+    const downgradeMap = {
+      level4: "level3",
+      level3: "level2",
+      level2: "level1",
+      level1: null,
+    };
     const [level, idxRaw] = String(target || "").split(":");
     const idx = parseInt(String(idxRaw || ""), 10);
     if (!level || !Number.isFinite(idx)) return false;
-    let changed = false;
-    setHarm((prev) => {
-      const row = Array.isArray(prev?.[level]) ? [...prev[level]] : [];
-      if (!row.length || idx < 0 || idx >= row.length) return prev;
-      if (!String(row[idx] || "").trim()) return prev;
-      row[idx] = "";
-      changed = true;
-      return { ...prev, [level]: row };
-    });
-    return changed;
+    const cur = {
+      level4: Array.isArray(harm?.level4) ? [...harm.level4] : [""],
+      level3: Array.isArray(harm?.level3) ? [...harm.level3] : [""],
+      level2: Array.isArray(harm?.level2) ? [...harm.level2] : ["", ""],
+      level1: Array.isArray(harm?.level1) ? [...harm.level1] : ["", ""],
+    };
+    const row = cur[level];
+    if (!Array.isArray(row) || idx < 0 || idx >= row.length) return false;
+    const value = String(row[idx] || "").trim();
+    if (!value) return false;
+
+    const nextLevel = downgradeMap[level];
+    row[idx] = "";
+    if (!nextLevel) {
+      setHarm(cur);
+      return true;
+    }
+
+    const toRow = cur[nextLevel];
+    if (!Array.isArray(toRow) || toRow.length === 0) return false;
+    const preferredSlot = idx < toRow.length ? idx : -1;
+    let targetSlot = preferredSlot;
+    if (targetSlot < 0 || String(toRow[targetSlot] || "").trim()) {
+      targetSlot = toRow.findIndex((v) => !String(v || "").trim());
+    }
+    if (targetSlot < 0) return false;
+    toRow[targetSlot] = value;
+    setHarm(cur);
+    return true;
+  }, [harm]);
+
+  const downgradeAllHarmByOneLevel = useCallback((prev) => {
+    const p = normalizeHarmObject(prev);
+    const keep = (v) => String(v || "").trim().length > 0;
+    const l4 = keep(p.level4?.[0]) ? p.level4[0] : "";
+    const l3 = keep(p.level3?.[0]) ? p.level3[0] : "";
+    const l2a = keep(p.level2?.[0]) ? p.level2[0] : "";
+    const l2b = keep(p.level2?.[1]) ? p.level2[1] : "";
+    return {
+      level4: [""],
+      level3: [l4],
+      level2: [l3, ""],
+      level1: [l2a, l2b],
+    };
   }, []);
+
+  const handleHealingClockAdjust = useCallback(
+    (nextFilled) => {
+      const cap = 4;
+      setHealingClock((prev) => {
+        const cur = Math.max(0, Math.min(cap, Number(prev) || 0));
+        const next = Math.max(0, Math.min(cap, Number(nextFilled) || 0));
+        if (next <= cur) return next;
+        const completions = Math.floor(next / cap) - Math.floor(cur / cap);
+        const remainder = next % cap;
+        if (completions > 0) {
+          setHarm((hPrev) => {
+            let out = normalizeHarmObject(hPrev);
+            for (let i = 0; i < completions; i += 1) {
+              out = downgradeAllHarmByOneLevel(out);
+            }
+            return out;
+          });
+        }
+        return remainder;
+      });
+    },
+    [downgradeAllHarmByOneLevel],
+  );
+
+  const advanceHealingClockBySegments = useCallback(
+    (segmentsToAdd) => {
+      const cap = 4;
+      const add = Math.max(0, Math.floor(Number(segmentsToAdd) || 0));
+      if (!add) return;
+      setHealingClock((prev) => {
+        const cur = Math.max(0, Math.min(cap, Number(prev) || 0));
+        const total = cur + add;
+        const completions = Math.floor(total / cap) - Math.floor(cur / cap);
+        const remainder = total % cap;
+        if (completions > 0) {
+          setHarm((hPrev) => {
+            let out = normalizeHarmObject(hPrev);
+            for (let i = 0; i < completions; i += 1) {
+              out = downgradeAllHarmByOneLevel(out);
+            }
+            return out;
+          });
+        }
+        return remainder;
+      });
+    },
+    [downgradeAllHarmByOneLevel],
+  );
+
+  const applyRecoverySegmentsToTrack = useCallback(
+    (currentClock, currentHarm, segmentsToAdd) => {
+      const cap = 4;
+      const add = Math.max(0, Math.floor(Number(segmentsToAdd) || 0));
+      const clock = Math.max(0, Math.min(cap, Number(currentClock) || 0));
+      if (!add) {
+        return {
+          nextClock: clock,
+          nextHarm: normalizeHarmObject(currentHarm),
+        };
+      }
+      const total = clock + add;
+      const completions = Math.floor(total / cap) - Math.floor(clock / cap);
+      let nextHarm = normalizeHarmObject(currentHarm);
+      for (let i = 0; i < completions; i += 1) {
+        nextHarm = downgradeAllHarmByOneLevel(nextHarm);
+      }
+      return {
+        nextClock: total % cap,
+        nextHarm,
+      };
+    },
+    [downgradeAllHarmByOneLevel],
+  );
+
+  const extractHarmFromBackendCharacter = useCallback((rawCharacter) => {
+    const slot = (used, name) => (used ? String(name ?? "") : "");
+    return normalizeHarmObject({
+      level4: [
+        slot(rawCharacter?.harm_level4_used, rawCharacter?.harm_level4_name),
+      ],
+      level3: [
+        slot(rawCharacter?.harm_level3_used, rawCharacter?.harm_level3_name),
+      ],
+      level2: [
+        slot(rawCharacter?.harm_level2_used, rawCharacter?.harm_level2_name),
+        slot(
+          rawCharacter?.harm_level2_slot2_used,
+          rawCharacter?.harm_level2_slot2_name,
+        ),
+      ],
+      level1: [
+        slot(rawCharacter?.harm_level1_used, rawCharacter?.harm_level1_name),
+        slot(
+          rawCharacter?.harm_level1_slot2_used,
+          rawCharacter?.harm_level1_slot2_name,
+        ),
+      ],
+    });
+  }, []);
+
+  const buildHarmPatchPayload = useCallback((nextHarm) => {
+    const normalizeSlot = (value) => String(value ?? "").trim();
+    const l1a = normalizeSlot(nextHarm?.level1?.[0]);
+    const l1b = normalizeSlot(nextHarm?.level1?.[1]);
+    const l2a = normalizeSlot(nextHarm?.level2?.[0]);
+    const l2b = normalizeSlot(nextHarm?.level2?.[1]);
+    const l3 = normalizeSlot(nextHarm?.level3?.[0]);
+    const l4 = normalizeSlot(nextHarm?.level4?.[0]);
+    return {
+      harm_level1_used: !!l1a,
+      harm_level1_name: l1a,
+      harm_level1_slot2_used: !!l1b,
+      harm_level1_slot2_name: l1b,
+      harm_level2_used: !!l2a,
+      harm_level2_name: l2a,
+      harm_level2_slot2_used: !!l2b,
+      harm_level2_slot2_name: l2b,
+      harm_level3_used: !!l3,
+      harm_level3_name: l3,
+      harm_level4_used: !!l4,
+      harm_level4_name: l4,
+    };
+  }, []);
+
+  const rollRecoveryTreatment = useCallback((tinkerDice) => {
+    // SRD: Recover uses healer skill (Tinker) then advances healing clock.
+    // 1-3: +1 segment; 4/5: +2; 6: +3; critical (2+ sixes): +5.
+    const diceCount = Math.max(0, Math.floor(Number(tinkerDice) || 0));
+
+    let results = [];
+    let highest = 0;
+    let sixes = 0;
+    let critical = false;
+
+    if (diceCount <= 0) {
+      // No-Tinker approximation: treat like their existing "0 dice" flow by
+      // rolling 2d and taking the lower die.
+      const d1 = Math.floor(Math.random() * 6) + 1;
+      const d2 = Math.floor(Math.random() * 6) + 1;
+      results = [d1, d2];
+      highest = Math.min(d1, d2);
+      sixes = 0;
+      critical = false;
+    } else {
+      results = Array.from({ length: diceCount }, () => {
+        const d = Math.floor(Math.random() * 6) + 1;
+        return d;
+      });
+      highest = Math.max(...results);
+      sixes = results.filter((d) => d === 6).length;
+      critical = sixes >= 2;
+    }
+
+    const segments = critical
+      ? 5
+      : highest >= 6
+        ? 3
+        : highest >= 4
+          ? 2
+          : 1;
+
+    return {
+      results,
+      highest,
+      sixes,
+      critical,
+      segments,
+    };
+  }, []);
+
+  const performHealingRecover = useCallback(
+    async (mode) => {
+      // mode: "downtime" | "mid-action"
+      if (!canEditSheet) return;
+      if (healingRecoverBusy) return;
+
+      const isMidAction = mode === "mid-action";
+      if (isMidAction && !activeSessionId) return;
+
+      const recoveryActionName = pickHealClockAction(selfHealingRecoverAction);
+      const baseRecoverDice = Math.max(
+        0,
+        Math.floor(Number(actionRatings?.[recoveryActionName]) || 0),
+      );
+      const invigoratedDice = selfRecoverInvigoratedDice;
+      const healingDiceCount = baseRecoverDice + invigoratedDice;
+      /** Log downtime recover into Session History via campaign active session when open session id missing. */
+      const logSessionRaw = isMidAction
+        ? activeSessionId
+        : activeSessionId || charCampaign?.active_session;
+      const logSessionId =
+        typeof logSessionRaw === "object" && logSessionRaw?.id != null
+          ? logSessionRaw.id
+          : logSessionRaw;
+
+      setHealingRecoverBusy(true);
+      setHealingRecoverErr(null);
+      setHealingRecoverMsg("");
+
+      try {
+        if (characterId && logSessionId) {
+          const res = await characterAPI.rollAction(characterId, {
+            session_id: logSessionId,
+            recovery_context:
+              mode === "mid-action" ? "self_mid_action" : "self_downtime",
+            action: recoveryActionName.toLowerCase(),
+            bonus_dice: invigoratedDice,
+          });
+          const segs = Math.max(
+            0,
+            Math.floor(Number(res?.recovery_segments) || 0),
+          );
+          if (Number(res?.stress_spent) > 0) {
+            applyStressCost(Number(res.stress_spent));
+          }
+          if (segs > 0) {
+            advanceHealingClockBySegments(segs);
+          }
+          const modeLabel =
+            mode === "mid-action"
+              ? "Mid-action recover"
+              : "Downtime recover";
+          const bandText = String(res?.recovery_band || "").trim() || "—";
+          const poolLabel =
+            invigoratedDice > 0
+              ? `${baseRecoverDice}+1 Invigorated (${healingDiceCount}d total)`
+              : `${healingDiceCount}d`;
+          setHealingRecoverMsg(
+            `${modeLabel}: ${recoveryActionName} (${poolLabel}) rolled ${bandText} → +${segs} healing segments (logged to session ${logSessionId})`,
+          );
+          setHistoryRefreshTick((x) => x + 1);
+          onCampaignRefresh?.();
+          return;
+        }
+
+        // SRD: 2 stress; no session-linked log when there is nowhere to persist a Roll.
+        applyStressCost(2);
+        const roll = rollRecoveryTreatment(healingDiceCount);
+        advanceHealingClockBySegments(roll.segments);
+
+        const bandText = roll.critical
+          ? "critical"
+          : roll.highest >= 6
+            ? "6"
+            : roll.highest >= 4
+              ? "4/5"
+              : "1-3";
+
+        const modeLabel =
+          mode === "mid-action"
+            ? "Mid-action recover"
+            : "Downtime recover";
+        const poolLabel =
+          invigoratedDice > 0
+            ? `${baseRecoverDice}+1 Invigorated (${healingDiceCount}d total)`
+            : `${healingDiceCount}d`;
+        setHealingRecoverMsg(
+          `${modeLabel}: ${recoveryActionName} (${poolLabel}) rolled ${bandText} → +${roll.segments} healing segments (offline — choose a session above to save to Session History).`,
+        );
+      } catch (e) {
+        setHealingRecoverErr(e?.message || "Recover failed");
+      } finally {
+        setHealingRecoverBusy(false);
+      }
+    },
+    [
+      selfRecoverInvigoratedDice,
+      activeSessionId,
+      charCampaign?.active_session,
+      characterId,
+      actionRatings,
+      advanceHealingClockBySegments,
+      applyStressCost,
+      canEditSheet,
+      healingRecoverBusy,
+      rollRecoveryTreatment,
+      selfHealingRecoverAction,
+      onCampaignRefresh,
+    ],
+  );
 
   const xpReqSnapshot = useMemo(
     () =>
@@ -1722,12 +2752,12 @@ const CharacterSheetWrapper = ({
     if (!showHistoryPanel) return;
     const onKeyDown = (e) => {
       if (e.key === "Escape") {
-        setShowHistoryPanel(false);
+        setShowHistoryPanelPersist(false);
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showHistoryPanel]);
+  }, [showHistoryPanel, setShowHistoryPanelPersist]);
 
   useEffect(() => {
     if (!showXpHistoryModal || !characterId) return;
@@ -1768,31 +2798,57 @@ const CharacterSheetWrapper = ({
     setHistoryError(null);
     const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
     if (historyMode === "sheet") {
-      characterHistoryAPI
-        .list({
-          character: characterId,
-          ...(charCampaign?.id ? { campaign: charCampaign.id } : {}),
-        })
-        .then((res) => {
-          const rows = asArray(res)
-            .map((entry) => {
-              const changed = entry.changed_fields || {};
-              const details = Object.keys(changed).map((k) => ({
-                key: k,
-                label: historyFieldLabel(k),
-                oldValue: stringifyValue(changed[k]?.old),
-                newValue: stringifyValue(changed[k]?.new),
-              }));
-              return {
-                key: `sheet-${entry.id}`,
-                timestamp: entry.timestamp,
-                actor: entry.editor_username || "system",
-                type: "sheet_edit",
-                sessionTag: "Out of session",
-                details,
-              };
-            })
-            .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      Promise.all([
+        characterHistoryAPI.list({ character: characterId }),
+        experienceTrackerAPI.list({ character: characterId }).catch(() => []),
+        xpHistoryAPI.list({ character: characterId }).catch(() => []),
+      ])
+        .then(([histRes, etRes, xhRes]) => {
+          const rows = [];
+          asArray(histRes).forEach((entry) => {
+            const changed = entry.changed_fields || {};
+            const details = Object.keys(changed).map((k) => ({
+              key: k,
+              label: historyFieldLabel(k),
+              oldValue: stringifyValue(changed[k]?.old),
+              newValue: stringifyValue(changed[k]?.new),
+            }));
+            rows.push({
+              key: `sheet-${entry.id}`,
+              timestamp: entry.timestamp,
+              actor: entry.editor_username || "system",
+              type: "sheet_edit",
+              sessionTag: "Out of session",
+              details,
+            });
+          });
+          asArray(etRes).forEach((e) => {
+            rows.push({
+              key: `et-all-${e.id}`,
+              timestamp: e.session_date,
+              actor: "xp (tracker)",
+              characterId: e.character ?? characterId,
+              type: "xp_tracker",
+              text: `+${e.xp_gained ?? 0} XP — ${e.trigger_display || e.trigger || "XP"}: ${e.description || "—"}`,
+              modifiers: e.session
+                ? [`Session #${e.session}`]
+                : ["No session link"],
+            });
+          });
+          asArray(xhRes).forEach((x) => {
+            rows.push({
+              key: `xh-all-${x.id}`,
+              timestamp: x.timestamp,
+              actor: "xp (ledger)",
+              characterId: x.character ?? characterId,
+              type: "xp_ledger",
+              text: `+${x.amount ?? 0} XP — ${x.reason || "—"}`,
+              modifiers: x.session
+                ? [`Session #${x.session}`]
+                : [],
+            });
+          });
+          rows.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
           setHistoryRows(rows);
         })
         .catch((e) => setHistoryError(e.message))
@@ -1801,8 +2857,91 @@ const CharacterSheetWrapper = ({
     }
 
     if (!historySessionId) {
-      setHistoryRows([]);
-      setHistoryLoading(false);
+      const roster = charCampaign?.campaign_characters || [];
+      let targetIds = [];
+      if (historyCharacterFilter === "all" && isGM && roster.length) {
+        targetIds = roster.map((c) => c.id).filter((id) => id != null);
+      } else {
+        const tid = parseInt(
+          String(historyCharacterFilter || characterId || ""),
+          10,
+        );
+        if (Number.isFinite(tid)) targetIds = [tid];
+      }
+      if (!targetIds.length) {
+        setHistoryRows([]);
+        setHistoryLoading(false);
+        return;
+      }
+      const nameById = new Map(
+        roster.map((c) => [
+          c.id,
+          c.true_name || c.name || `PC ${c.id}`,
+        ]),
+      );
+      Promise.all(
+        targetIds.map((cid) =>
+          Promise.all([
+            experienceTrackerAPI.list({ character: cid }).catch(() => []),
+            xpHistoryAPI.list({ character: cid }).catch(() => []),
+            characterHistoryAPI.list({ character: cid }).catch(() => []),
+          ]).then(([et, xh, hist]) => ({
+            cid,
+            et: asArray(et),
+            xh: asArray(xh),
+            hist: asArray(hist),
+          })),
+        ),
+      )
+        .then((bundles) => {
+          const rows = [];
+          for (const b of bundles) {
+            const cname = nameById.get(b.cid) || `PC ${b.cid}`;
+            b.et.forEach((e) => {
+              rows.push({
+                key: `et-${e.id}-${b.cid}`,
+                timestamp: e.session_date,
+                actor: "xp (tracker)",
+                characterId: b.cid,
+                type: "xp_tracker",
+                text: `[${cname}] +${e.xp_gained ?? 0} XP — ${e.trigger_display || e.trigger || "XP"}: ${e.description || "—"}`,
+                modifiers: e.session
+                  ? [`Session #${e.session}`]
+                  : [],
+              });
+            });
+            b.xh.forEach((x) => {
+              rows.push({
+                key: `xh-${x.id}-${b.cid}`,
+                timestamp: x.timestamp,
+                actor: "xp (ledger)",
+                characterId: b.cid,
+                type: "xp_ledger",
+                text: `[${cname}] +${x.amount ?? 0} XP — ${x.reason || "—"}`,
+                modifiers: x.session
+                  ? [`Session #${x.session}`]
+                  : [],
+              });
+            });
+            b.hist.forEach((entry) => {
+              const spend = summarizeXpSpendFromHistoryEntry(entry);
+              if (!spend) return;
+              rows.push({
+                key: `xpspend-${entry.id}-${b.cid}`,
+                timestamp: entry.timestamp,
+                actor: entry.editor_username || "sheet",
+                characterId: b.cid,
+                type: "xp_spend",
+                text: `[${cname}] ${spend}`,
+                modifiers: [],
+              });
+            });
+          }
+          rows.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          setHistoryRows(rows);
+        })
+        .catch((e) => setHistoryError(e.message))
+        .finally(() => setHistoryLoading(false));
       return;
     }
     Promise.all([
@@ -1821,11 +2960,32 @@ const CharacterSheetWrapper = ({
           const isFortune = String(r.roll_type || "").toUpperCase() === "FORTUNE";
           // GM Fortune rolls stay out of player history until GM reveals outcomes.
           if (isFortune && !r.fortune_reveal_outcome) return;
+          const diceStr = []
+            .concat(r.results || [])
+            .join(", ");
+          const outcomeDisp = String(r.outcome || "").replace(/_/g, " ");
+          const recCtx = String(
+            r.recovery_context ?? r.recoveryContext ?? "",
+          ).toLowerCase();
+          const recTgtNm = String(
+            r.recovery_target_character_name ??
+              r.recoveryTargetCharacterName ??
+              "",
+          ).trim();
+          const recoveryTgtRaw =
+            r.recovery_target ?? r.recoveryTarget ?? null;
+          const recoveryTargetId =
+            recoveryTgtRaw == null ? null : Number(recoveryTgtRaw);
+
           rows.push({
             key: `roll-${r.id}`,
             timestamp: r.timestamp,
             actor: r.rolled_by_username || r.character_name || "unknown",
             characterId: r.character,
+            recoveryTargetId:
+              recoveryTargetId != null && Number.isFinite(recoveryTargetId)
+                ? recoveryTargetId
+                : null,
             type: "roll",
             rollType: r.roll_type,
             text:
@@ -1851,16 +3011,50 @@ const CharacterSheetWrapper = ({
                         overTail ? ` · ${overTail}` : ""
                       }`;
                     })()
-                  : `${r.action_name || "Roll"} · ${[]
-                      .concat(r.results || [])
-                      .join(", ")} → ${r.outcome || ""}`,
+                  : recCtx === "self_downtime" || recCtx === "self_mid_action"
+                    ? (String(r.description || "").trim() ||
+                        `${r.action_name || "recover"} · ${diceStr} → ${outcomeDisp}`)
+                    : recCtx === "ally" && recTgtNm
+                      ? `Recovery → ${recTgtNm}: ${r.action_name || "recover"} · ${diceStr} → ${outcomeDisp}`
+                      : recCtx === "self_treatment_roll"
+                        ? `Recovery (self treatment): ${r.action_name || "recover"} · ${diceStr} → ${outcomeDisp}`
+                        : `${r.action_name || "Roll"} · ${diceStr} → ${outcomeDisp}`,
             modifiers: [
               r.position ? `Pos ${r.position}` : null,
               r.effect ? `Eff ${r.effect}` : null,
+              Number(r.pool_bonus_dice) > 0
+                ? `Pool +${r.pool_bonus_dice}d (abilities / heritage)`
+                : null,
+              (() => {
+                const d = String(r.description || "");
+                const tags = [];
+                if (/\[abilities:/i.test(d)) tags.push("Abilities");
+                if (/\[heritage:/i.test(d)) tags.push("Heritage");
+                return tags.length ? tags.join(" · ") : null;
+              })(),
+              Array.isArray(r.modifier_sources) && r.modifier_sources.length > 0
+                ? `Sources: ${r.modifier_sources
+                    .map((s) => s?.name || s?.delta)
+                    .filter(Boolean)
+                    .slice(0, 3)
+                    .join(", ")}`
+                : null,
               r.push_for_dice ? "Push(+1d)" : null,
               r.push_for_effect ? "Push(+effect)" : null,
               r.uses_devil_bargain ? "Devil's bargain" : null,
               r.roller_stress_spent ? `Stress ${r.roller_stress_spent}` : null,
+              ...(Array.isArray(r.xp_award_details) &&
+              r.xp_award_details.length > 0
+                ? r.xp_award_details
+                : r.xp_award_detail
+                  ? [r.xp_award_detail]
+                  : []
+              )
+                .filter((d) => d?.xp_gained)
+                .map(
+                  (d) =>
+                    `+${d.xp_gained} XP (${d.trigger_label || d.trigger || "roll"})`,
+                ),
             ].filter(Boolean),
           });
         });
@@ -1887,16 +3081,43 @@ const CharacterSheetWrapper = ({
         }));
         rows.push(...stressRows);
 
-        const xpRows = (sessionRes?.xp_entries || []).map((x) => ({
-          key: `xp-${x.id}`,
-          timestamp: x.session_date || sessionRes?.session_date,
-          actor: "xp",
-          characterId: x.character || null,
-          type: "xp",
-          text: `XP +${x.xp_gained} (${x.trigger_display || x.trigger || "trigger"})`,
-          modifiers: [],
-        }));
+        const charFilter =
+          historyCharacterFilter === "all"
+            ? null
+            : String(historyCharacterFilter);
+        const xpEntryMatches = (x) =>
+          !charFilter || String(x.character || "") === charFilter;
+        const xpHistMatches = (x) =>
+          !charFilter || String(x.character || "") === charFilter;
+
+        const xpRows = (sessionRes?.xp_entries || [])
+          .filter(xpEntryMatches)
+          .map((x) => {
+            const desc = String(x.description || "").trim();
+            return {
+              key: `xp-${x.id}`,
+              timestamp: x.session_date || sessionRes?.session_date,
+              actor: "xp (tracker)",
+              characterId: x.character || null,
+              type: "xp",
+              text: `+${x.xp_gained ?? 0} XP — ${x.trigger_display || x.trigger || "trigger"}${desc ? `: ${desc}` : ""}`,
+              modifiers: [],
+            };
+          });
         rows.push(...xpRows);
+
+        const legacyXpRows = (sessionRes?.xp_history || [])
+          .filter(xpHistMatches)
+          .map((x) => ({
+            key: `xph-${x.id}`,
+            timestamp: x.timestamp,
+            actor: "xp (ledger)",
+            characterId: x.character || null,
+            type: "xp_ledger",
+            text: `+${x.amount ?? 0} XP — ${x.reason || "—"}`,
+            modifiers: [],
+          }));
+        rows.push(...legacyXpRows);
 
         asArray(clocksRes).forEach((clk) => {
           rows.push({
@@ -1917,7 +3138,11 @@ const CharacterSheetWrapper = ({
           historyCharacterFilter === "all"
             ? rows
             : rows.filter(
-                (r) => String(r.characterId || "") === String(historyCharacterFilter),
+                (rw) =>
+                  String(rw.characterId || "") ===
+                    String(historyCharacterFilter) ||
+                  String(rw.recoveryTargetId ?? "") ===
+                    String(historyCharacterFilter),
               );
         filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
         setHistoryRows(filtered);
@@ -1931,6 +3156,8 @@ const CharacterSheetWrapper = ({
     historyCharacterFilter,
     characterId,
     charCampaign?.id,
+    charCampaign?.campaign_characters,
+    isGM,
     historyRefreshTick,
   ]);
 
@@ -1943,6 +3170,33 @@ const CharacterSheetWrapper = ({
     if (same.length) return same;
     return roster.filter((c) => c.id !== characterId);
   }, [charCampaign?.campaign_characters, characterId, charData.crewId]);
+
+  const healOtherTargets = useMemo(() => {
+    const roster = charCampaign?.campaign_characters || [];
+    return roster.filter((c) => String(c.id) !== String(characterId));
+  }, [charCampaign?.campaign_characters, characterId]);
+
+  const healOtherRecoveryCandidates = useMemo(() => {
+    const roster = charCampaign?.campaign_characters || [];
+    return roster.filter((c) => String(c.id) !== String(characterId));
+  }, [charCampaign?.campaign_characters, characterId]);
+
+  const healingIntentActionName = useMemo(() => {
+    const selected = String(healOtherRecoveryIntent.actionName || "")
+      .trim()
+      .toUpperCase();
+    if (HEALING_ACTION_CHOICES.includes(selected)) return selected;
+    return "TINKER";
+  }, [healOtherRecoveryIntent.actionName]);
+
+  const rollActionName = useMemo(() => {
+    if (healOtherRecoveryIntent.enabled) return healingIntentActionName;
+    return String(rollPending?.actionName || "").trim().toUpperCase();
+  }, [
+    healOtherRecoveryIntent.enabled,
+    healingIntentActionName,
+    rollPending?.actionName,
+  ]);
 
   const groupParticipants = useMemo(() => {
     const roster = charCampaign?.campaign_characters || [];
@@ -1957,6 +3211,25 @@ const CharacterSheetWrapper = ({
     () => Object.keys(ACTION_ATTR || {}).sort(),
     [],
   );
+  const healRollActionChoices = useMemo(
+    () => Object.keys(ACTION_ATTR || {}).sort(),
+    [],
+  );
+
+  useEffect(() => {
+    if (!characterId) {
+      setSelfHealingRecoverAction("TINKER");
+      return;
+    }
+    try {
+      const stored = window.localStorage.getItem(
+        `biz:self-healing-recover-action:${characterId}`,
+      );
+      setSelfHealingRecoverAction(pickHealClockAction(stored));
+    } catch {
+      setSelfHealingRecoverAction("TINKER");
+    }
+  }, [characterId]);
 
   useEffect(() => {
     if (!activeSessionId) {
@@ -2008,8 +3281,10 @@ const CharacterSheetWrapper = ({
   ]);
 
   useEffect(() => {
-    if (activeGroupAction?.id) setShowGroupActionCard(true);
-  }, [activeGroupAction?.id]);
+    if (activeGroupAction?.id) {
+      setCrewGroupExpandedPersist(true);
+    }
+  }, [activeGroupAction?.id, setCrewGroupExpandedPersist]);
 
   useEffect(() => {
     if (!activeGroupAction?.id) {
@@ -2130,22 +3405,140 @@ const CharacterSheetWrapper = ({
   const canEditGroupActionSetupFields =
     !activeGroupAction?.id || isOpenGroupLeader;
 
+  const supportsAbilityBonusDice = useCallback((description) => {
+    return /\+1d\b|\bplus\s*1d\b/i.test(String(description || ""));
+  }, []);
+  const supportsAbilityBonusEffect = useCallback((description) => {
+    return /\+1\s*effect\b|\bplus\s*1\s*effect\b/i.test(
+      String(description || ""),
+    );
+  }, []);
+
+  /**
+   * Catalog abilities added with "Add to sheet" often store only { id, name, type }
+   * on `character.abilities` — roll bonuses must mirror the abilities panel, which
+   * resolves description from `/api/abilities/` reference lists by id + type.
+   */
+  const effectiveRollBonusAbilityDescription = useCallback(
+    (ab) => {
+      const raw = String(ab?.description ?? "").trim();
+      if (raw) return ab.description || "";
+      if (ab.type === "standard") {
+        const ref = standardAbilitiesList.find(
+          (x) => String(x.id) === String(ab.id),
+        );
+        return ref?.description || "";
+      }
+      if (ab.type === "spin") {
+        const ref = spinAbilitiesList.find(
+          (x) => String(x.id) === String(ab.id),
+        );
+        return ref?.description || "";
+      }
+      if (ab.type === "hamon") {
+        const ref = hamonAbilitiesList.find(
+          (x) => String(x.id) === String(ab.id),
+        );
+        return ref?.description || "";
+      }
+      return "";
+    },
+    [standardAbilitiesList, spinAbilitiesList, hamonAbilitiesList],
+  );
+
   const abilityRollBonusOptions = useMemo(() => {
-    const supportsBonusDice = (description) =>
-      /\+1d\b|\bplus\s*1d\b/i.test(String(description || ""));
-    const supportsBonusEffect = (description) =>
-      /\+1\s*effect\b|\bplus\s*1\s*effect\b/i.test(
-        String(description || ""),
-      );
+    const rollAbleTypes = new Set(["standard", "spin", "hamon", "custom"]);
     return (abilities || [])
-      .filter((a) => a.type === "standard")
-      .map((ab) => ({
-        ...ab,
-        supportsDice: supportsBonusDice(ab.description),
-        supportsEffect: supportsBonusEffect(ab.description),
-      }))
+      .filter((a) => a && rollAbleTypes.has(a.type))
+      .map((ab) => {
+        const resolvedDesc = effectiveRollBonusAbilityDescription(ab);
+        const baseDice = supportsAbilityBonusDice(resolvedDesc);
+        const baseEffect = supportsAbilityBonusEffect(resolvedDesc);
+        const adj = adjustActionRollBonusSupports(ab, {
+          supportsDice: baseDice,
+          supportsEffect: baseEffect,
+        });
+        return {
+          ...ab,
+          rollBonusResolvedDescription: resolvedDesc,
+          supportsDice: adj.supportsDice,
+          supportsEffect: adj.supportsEffect,
+        };
+      })
+      .filter((ab) => !abilityExcludedFromActionRollDicePoolBonuses(ab?.name))
       .filter((ab) => ab.supportsDice || ab.supportsEffect);
-  }, [abilities]);
+  }, [
+    abilities,
+    effectiveRollBonusAbilityDescription,
+    supportsAbilityBonusDice,
+    supportsAbilityBonusEffect,
+  ]);
+
+  const heritageRollBonusOptions = useMemo(() => {
+    const supportsActionRollFromHeritage = (benefit) => {
+      const name = String(benefit?.name || "").trim().toLowerCase();
+      const desc = String(benefit?.description || "").trim().toLowerCase();
+      // Resistance-only bonuses (e.g., Superior Physiology) should not appear
+      // in action roll pool modifiers.
+      if (name === "superior physiology") return false;
+      if (/\bresist(?:ing|ance)?\b/.test(desc)) return false;
+      return true;
+    };
+    const hid = charData?.heritage;
+    const h =
+      hid != null && Array.isArray(heritages) && heritages.length
+        ? heritages.find((x) => x.id === hid)
+        : null;
+    if (!h?.benefits?.length) return [];
+    return h.benefits
+      .filter(
+        (b) =>
+          b &&
+          ((Array.isArray(selectedBenefits) &&
+            selectedBenefits.includes(b.id)) ||
+            b.required),
+      )
+      .map((b) => ({
+        ...b,
+        supportsDice: supportsAbilityBonusDice(b.description),
+        supportsEffect: supportsAbilityBonusEffect(b.description),
+      }))
+      .filter(
+        (hb) =>
+          supportsActionRollFromHeritage(hb) &&
+          (hb.supportsDice || hb.supportsEffect),
+      );
+  }, [
+    charData?.heritage,
+    heritages,
+    selectedBenefits,
+    supportsAbilityBonusDice,
+    supportsAbilityBonusEffect,
+  ]);
+
+  const phantomPainRollDescription = useMemo(() => {
+    if (!characterHasPhantomPain(abilities)) return "";
+    const ab =
+      abilities.find(
+        (a) =>
+          a &&
+          String(a.type || "").toLowerCase() === "standard" &&
+          String(a.name || "").trim().toLowerCase() === "phantom pain",
+      ) || null;
+    return ab ? String(effectiveRollBonusAbilityDescription(ab) || "").trim() : "";
+  }, [abilities, effectiveRollBonusAbilityDescription]);
+
+  /** SRD Invigorated: +1d to healing treatment — auto when pool is explicitly a heal/recovery declaration. */
+  const healingTreatmentBonusContext = useMemo(() => {
+    if (rollPending?.healAttempt && typeof rollPending.healAttempt === "object")
+      return true;
+    const tid = String(healOtherRecoveryIntent.targetId || "").trim();
+    return Boolean(healOtherRecoveryIntent.enabled && tid.length > 0);
+  }, [
+    rollPending?.healAttempt,
+    healOtherRecoveryIntent.enabled,
+    healOtherRecoveryIntent.targetId,
+  ]);
 
   const { bonusDiceFromAbilities, abilityEffectSteps, abilityBonusAudit } =
     useMemo(() => {
@@ -2155,12 +3548,21 @@ const CharacterSheetWrapper = ({
       abilityRollBonusOptions.forEach((ab) => {
         const id = ab.id ?? ab.name;
         const b = rollAbilityBoost[id];
-        if (!b) return;
-        if (ab.supportsDice && b.dice) {
+        const invigoratedHeal =
+          healingTreatmentBonusContext &&
+          String(ab?.name || "")
+            .trim()
+            .toLowerCase() === "invigorated" &&
+          ab.supportsDice;
+        if (ab.supportsDice && (invigoratedHeal || (b && b.dice))) {
           d += 1;
-          audit.push(`${ab.name}: +1d`);
+          audit.push(
+            invigoratedHeal
+              ? `${ab.name}: +1d (healing treatment — auto)`
+              : `${ab.name}: +1d`,
+          );
         }
-        if (ab.supportsEffect && b.effect) {
+        if (ab.supportsEffect && b && b.effect) {
           e += 1;
           audit.push(`${ab.name}: +1 effect`);
         }
@@ -2170,7 +3572,303 @@ const CharacterSheetWrapper = ({
         abilityEffectSteps: e,
         abilityBonusAudit: audit,
       };
-    }, [abilityRollBonusOptions, rollAbilityBoost]);
+    }, [
+      abilityRollBonusOptions,
+      rollAbilityBoost,
+      healingTreatmentBonusContext,
+    ]);
+
+  const {
+    bonusDiceFromHeritage,
+    heritageEffectSteps,
+    heritageBonusAudit,
+  } = useMemo(() => {
+    let d = 0;
+    let e = 0;
+    const audit = [];
+    heritageRollBonusOptions.forEach((hb) => {
+      const id = hb.id ?? hb.name;
+      const b = heritageRollBoost[id];
+      if (!b) return;
+      if (hb.supportsDice && b.dice) {
+        d += 1;
+        audit.push(`${hb.name}: +1d (heritage)`);
+      }
+      if (hb.supportsEffect && b.effect) {
+        e += 1;
+        audit.push(`${hb.name}: +1 effect (heritage)`);
+      }
+    });
+    return {
+      bonusDiceFromHeritage: d,
+      heritageEffectSteps: e,
+      heritageBonusAudit: audit,
+    };
+  }, [heritageRollBonusOptions, heritageRollBoost]);
+
+  const totalBonusDiceFromAbilitiesAndHeritage =
+    bonusDiceFromAbilities + bonusDiceFromHeritage;
+
+  const hasRippleBreathingAbility = useMemo(
+    () => characterHasRippleBreathing(abilities),
+    [abilities],
+  );
+
+  const rippleBreathingFreePushClaimedThisSession = useMemo(() => {
+    const raw =
+      charCampaign?.active_session_detail
+        ?.ripple_breathing_free_push_claimed_by_character;
+    if (!raw || typeof raw !== "object") return false;
+    return Boolean(
+      raw[String(characterId ?? "")] ?? raw[characterId ?? ""],
+    );
+  }, [charCampaign?.active_session_detail, characterId]);
+
+  const totalAbilityEffectSteps =
+    abilityEffectSteps + heritageEffectSteps;
+
+  const healOtherSelectedTarget = useMemo(
+    () =>
+      healOtherRecoveryCandidates.find(
+        (c) => String(c.id) === String(healOtherRecoveryIntent.targetId),
+      ) || null,
+    [healOtherRecoveryCandidates, healOtherRecoveryIntent.targetId],
+  );
+
+  /** Sheet abilities + selected heritage only; matches heal/recovery or roll mechanics relevant to treatment. */
+  const healBolsterAbilityCandidates = useMemo(() => {
+    const out = [];
+    const seen = new Set();
+    const rollAble = new Set(["standard", "spin", "hamon", "custom"]);
+
+    const push = (row) => {
+      if (!row.key || seen.has(row.key)) return;
+      seen.add(row.key);
+      out.push(row);
+    };
+
+    const optionsByBoostKey = new Map();
+    abilityRollBonusOptions.forEach((ab) => {
+      const k = ab.id ?? ab.name;
+      optionsByBoostKey.set(String(k), ab);
+    });
+    const heritageOptionsByBoostKey = new Map();
+    heritageRollBonusOptions.forEach((hb) => {
+      const k = hb.id ?? hb.name;
+      heritageOptionsByBoostKey.set(String(k), hb);
+    });
+
+    abilityRollBonusOptions.forEach((ab) => {
+      const desc = String(
+        ab.rollBonusResolvedDescription || ab.description || "",
+      ).toLowerCase();
+      const nm = String(ab.name || "").toLowerCase();
+      const combined = `${nm} ${desc}`;
+      const hasDe = !!(ab.supportsDice || ab.supportsEffect);
+      if (healBolsterCandidateMatchesCombinedText(combined, hasDe)) {
+        const boostKey = ab.id ?? ab.name;
+        push({
+          key: `ability:${String(ab.type || "sheet")}:${boostKey}`,
+          boostKey,
+          rollKind: "ability",
+          name: String(ab.name || "").trim(),
+          description: String(
+            ab.rollBonusResolvedDescription || ab.description || "",
+          ).trim(),
+        });
+      }
+    });
+
+    (abilities || []).forEach((ab) => {
+      const t = String(ab?.type || "").toLowerCase();
+      if (!ab || !rollAble.has(t)) return;
+      if (abilityExcludedFromActionRollDicePoolBonuses(ab?.name)) return;
+      const boostKey = ab.id ?? ab.name;
+      const keyStr = String(boostKey);
+      if (optionsByBoostKey.has(keyStr)) return;
+      const resolved = String(
+        effectiveRollBonusAbilityDescription(ab) || "",
+      ).trim();
+      const adj = adjustActionRollBonusSupports(ab, {
+        supportsDice: supportsAbilityBonusDice(resolved),
+        supportsEffect: supportsAbilityBonusEffect(resolved),
+      });
+      const hasDe = !!(adj.supportsDice || adj.supportsEffect);
+      const nm = String(ab.name || "").toLowerCase();
+      const combined = `${nm} ${resolved.toLowerCase()}`;
+      if (!healBolsterCandidateMatchesCombinedText(combined, hasDe)) return;
+      push({
+        key: `ability:${String(t)}:${keyStr}`,
+        boostKey,
+        rollKind: "ability",
+        name: String(ab.name || "").trim(),
+        description: resolved,
+      });
+    });
+
+    heritageRollBonusOptions.forEach((hb) => {
+      const desc = String(hb.description || "").toLowerCase();
+      const nm = String(hb.name || "").toLowerCase();
+      const combined = `${nm} ${desc}`;
+      const hasDe = !!(hb.supportsDice || hb.supportsEffect);
+      if (healBolsterCandidateMatchesCombinedText(combined, hasDe)) {
+        const boostKey = hb.id ?? hb.name;
+        push({
+          key: `heritage-benefit:${boostKey}`,
+          boostKey,
+          rollKind: "heritage",
+          name: String(hb.name || "").trim(),
+          description: String(hb.description || "").trim(),
+        });
+      }
+    });
+
+    const hid = charData?.heritage;
+    const h =
+      hid != null && Array.isArray(heritages) && heritages.length
+        ? heritages.find((x) => x.id === hid)
+        : null;
+    (h?.benefits || []).forEach((b) => {
+      if (!b) return;
+      const selected =
+        Boolean(b.required) ||
+        (Array.isArray(selectedBenefits) && selectedBenefits.includes(b.id));
+      if (!selected) return;
+      const hbKey = b.id ?? b.name;
+      if (heritageOptionsByBoostKey.has(String(hbKey))) return;
+      const desc = String(b.description || "").toLowerCase();
+      const nm = String(b.name || "").toLowerCase();
+      const combined = `${nm} ${desc}`;
+      if (!healBolsterCandidateMatchesCombinedText(combined, false)) return;
+      push({
+        key: `heritage-benefit-extra:${hbKey}`,
+        boostKey: hbKey,
+        rollKind: "heritage",
+        name: String(b.name || "").trim(),
+        description: String(b.description || "").trim(),
+      });
+    });
+
+    out.sort((a, b) =>
+      `${a.rollKind}:${a.name}`.localeCompare(`${b.rollKind}:${b.name}`, "en"),
+    );
+    return out;
+  }, [
+    abilities,
+    abilityRollBonusOptions,
+    heritageRollBonusOptions,
+    charData?.heritage,
+    heritages,
+    selectedBenefits,
+    effectiveRollBonusAbilityDescription,
+    supportsAbilityBonusDice,
+    supportsAbilityBonusEffect,
+  ]);
+
+  const healOtherRecoveryBolsterSources = useMemo(() => {
+    const keys = new Set(
+      Array.isArray(healOtherRecoveryIntent.selectedBolsterKeys)
+        ? healOtherRecoveryIntent.selectedBolsterKeys.map((k) => String(k))
+        : [],
+    );
+    if (keys.size === 0) return [];
+    return healBolsterAbilityCandidates
+      .filter((c) => keys.has(c.key))
+      .map((c) => `${c.name} (${c.rollKind})`);
+  }, [
+    healBolsterAbilityCandidates,
+    healOtherRecoveryIntent.selectedBolsterKeys,
+  ]);
+  const healAttemptSelectedBoostSummary = useMemo(() => {
+    const picked = [...abilityBonusAudit, ...heritageBonusAudit].map((x) =>
+      String(x || "").trim(),
+    );
+    return picked.filter(Boolean);
+  }, [abilityBonusAudit, heritageBonusAudit]);
+
+  /**
+   * Position / Effect preview only for ordinary action rolls, or heals that are
+   * explicitly recover-in-play (not downtime). healAttempt must set usesSessionPositionEffect === true for that path.
+   */
+  const showDiceRollModalPositionEffect = useMemo(() => {
+    const ht = rollPending?.healAttempt;
+    const hasHealPayload = ht != null && typeof ht === "object";
+    if (hasHealPayload) return ht.usesSessionPositionEffect === true;
+    return true;
+  }, [rollPending?.healAttempt]);
+
+  /** Healing-clock treatment using downtime cadence — no push-for-effect per SRD frame. */
+  const healAttemptIsDowntimeRecovery = useMemo(() => {
+    const ht = rollPending?.healAttempt;
+    return isDowntimeHealingHealAttempt(ht);
+  }, [rollPending?.healAttempt]);
+
+  useLayoutEffect(() => {
+    if (!healAttemptIsDowntimeRecovery) return;
+    setRollModal((prev) =>
+      prev.push_effect ? { ...prev, push_effect: false } : prev,
+    );
+    setRippleBreathingFreePush(false);
+  }, [healAttemptIsDowntimeRecovery]);
+
+  /** Session default + push + ability/heritage steps — matches server roll_action order. */
+  const rollModalPreviewEffect = useMemo(() => {
+    const base =
+      sessionOverridePositionEffect?.effect ||
+      charCampaign?.active_session_detail?.default_effect ||
+      "standard";
+    const pushSteps = rollModal.push_effect ? 1 : 0;
+    return bumpEffectTier(base, pushSteps + totalAbilityEffectSteps);
+  }, [
+    sessionOverridePositionEffect?.effect,
+    charCampaign?.active_session_detail?.default_effect,
+    rollModal.push_effect,
+    totalAbilityEffectSteps,
+  ]);
+
+  /** Roll modal: effect-tier step list + preview label for the read-only effect preview (shown below P/E row). */
+  const rollModalPositionEffectBreakdown = useMemo(() => {
+    if (!showDiceRollModalPositionEffect) return null;
+    const effectTierSteps = [];
+    if (rollModal.push_effect) {
+      effectTierSteps.push({
+        key: "push-effect",
+        text: "Push yourself — +1 effect tier (costs stress on roll)",
+      });
+    }
+    abilityRollBonusOptions.forEach((ab) => {
+      const id = ab.id ?? ab.name;
+      const b = rollAbilityBoost[id];
+      if (ab.supportsEffect && b?.effect) {
+        effectTierSteps.push({
+          key: `ab-eff:${id}`,
+          text: `${String(ab.name || "Ability").trim()} — +1 effect tier (sheet ability)`,
+        });
+      }
+    });
+    heritageRollBonusOptions.forEach((hb) => {
+      const id = hb.id ?? hb.name;
+      const b = heritageRollBoost[id];
+      if (hb.supportsEffect && b?.effect) {
+        effectTierSteps.push({
+          key: `hb-eff:${id}`,
+          text: `${String(hb.name || "Heritage").trim()} — +1 effect tier (heritage benefit)`,
+        });
+      }
+    });
+    return {
+      effectTierSteps,
+      previewTierLabel: String(rollModalPreviewEffect || "").trim() || "—",
+    };
+  }, [
+    showDiceRollModalPositionEffect,
+    rollModal.push_effect,
+    rollModalPreviewEffect,
+    abilityRollBonusOptions,
+    heritageRollBonusOptions,
+    rollAbilityBoost,
+    heritageRollBoost,
+  ]);
 
   const gmDevilBargainText = useMemo(() => {
     const m = charCampaign?.active_session_detail?.devils_bargain_by_character;
@@ -2208,7 +3906,11 @@ const CharacterSheetWrapper = ({
   const applyRollPushMode = useCallback(
     (mode) => {
       setDevilBargainConfirmed(false);
+      if (mode === "none" || mode === "devil") {
+        setRippleBreathingFreePush(false);
+      }
       if (harmLevel3Used && (mode === "push_effect" || mode === "push_dice")) {
+        setRippleBreathingFreePush(false);
         mode = "none";
       }
       setRollModal((prev) => {
@@ -2253,19 +3955,30 @@ const CharacterSheetWrapper = ({
   );
 
   const rollPoolPreview = useMemo(() => {
-    if (!rollPending) return null;
+    if (!rollPending || !rollActionName) return null;
     const { action_rating, basePool } = computeActionPoolBreakdown(
-      rollPending.actionName,
+      rollActionName,
       actionRatings,
     );
     let mod = 0;
     if (rollModal.push_dice) mod += 1;
     if (rollModal.devil_bargain_dice) mod += 1;
-    mod += bonusDiceFromAbilities;
+    mod += totalBonusDiceFromAbilitiesAndHeritage;
     const selectedPushStress =
       (rollModal.push_effect ? 2 : 0) + (rollModal.push_dice ? 2 : 0);
+    const rippleWaivesPushStress =
+      Boolean(activeSessionId) &&
+      hasRippleBreathingAbility &&
+      rippleBreathingFreePush &&
+      !rippleBreathingFreePushClaimedThisSession &&
+      (rollModal.push_dice || rollModal.push_effect);
+    const waivedPushStress = rippleWaivesPushStress ? 2 : 0;
     const requiredIncapacitatedStress = harmLevel3Used ? 2 : 0;
-    const pushStress = selectedPushStress + requiredIncapacitatedStress;
+    const phantomPainStressCost = phantomPainThroughCover ? 1 : 0;
+    const pushStress =
+      Math.max(0, selectedPushStress - waivedPushStress) +
+      requiredIncapacitatedStress +
+      phantomPainStressCost;
     return {
       action_rating,
       basePool,
@@ -2275,17 +3988,55 @@ const CharacterSheetWrapper = ({
     };
   }, [
     rollPending,
+    rollActionName,
     actionRatings,
     rollModal.push_dice,
     rollModal.push_effect,
     rollModal.devil_bargain_dice,
     harmLevel3Used,
-    bonusDiceFromAbilities,
+    totalBonusDiceFromAbilitiesAndHeritage,
+    phantomPainThroughCover,
+    activeSessionId,
+    hasRippleBreathingAbility,
+    rippleBreathingFreePush,
+    rippleBreathingFreePushClaimedThisSession,
   ]);
 
   const pushStressCost = rollPoolPreview?.pushStress || 0;
   const pushWouldCauseTrauma =
     pushStressCost > 0 && stressFilled + pushStressCost > maxStress;
+
+  useEffect(() => {
+    setStressOverflowConfirmed(false);
+  }, [
+    rollPending,
+    rollModal.push_effect,
+    rollModal.push_dice,
+    phantomPainThroughCover,
+    harmLevel3Used,
+  ]);
+
+  useLayoutEffect(() => {
+    if (!rollPending || !characterId) {
+      lastScrolledRollPendingKeyRef.current = "";
+      return;
+    }
+    const ht = rollPending.healAttempt;
+    const sig = [
+      String(rollPending.actionName || ""),
+      Number(rollPending.diceCount),
+      !!rollPending.isDesperateAction,
+      rollPending.group_action_id ?? "",
+      ht?.kind ?? "",
+      ht?.targetId ?? "",
+      ht?.usesSessionPositionEffect === true ? "1pe" : "0pe",
+    ].join("|");
+    if (lastScrolledRollPendingKeyRef.current === sig) return;
+    lastScrolledRollPendingKeyRef.current = sig;
+    const el = actionRollDicePoolPreviewElRef.current;
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+  }, [rollPending, characterId]);
 
   const handleRollWithSession = async () => {
     if (!rollPending || !characterId) return;
@@ -2293,8 +4044,226 @@ const CharacterSheetWrapper = ({
     const asd = charCampaign?.active_session_detail;
     try {
       const goalFromDraft = (rollGoalDraft || "").trim();
+      const phantomStress = phantomPainThroughCover ? 1 : 0;
+      const rippleEligibleForWaiver =
+        Boolean(activeSessionId) &&
+        hasRippleBreathingAbility &&
+        rippleBreathingFreePush &&
+        !rippleBreathingFreePushClaimedThisSession &&
+        (rollModal.push_dice || rollModal.push_effect);
+      const feedPenaltyActive = hasNoFeedDetriment && charData.fed_today === false;
+      const selectedRollAction =
+        rollActionName ||
+        String(rollPending.actionName || "")
+          .trim()
+          .toUpperCase();
+      const isRecoveryTreatmentRoll = !!selectedRollAction;
+      const targetName = (
+        healOtherSelectedTarget?.true_name ||
+        healOtherSelectedTarget?.name ||
+        ""
+      ).trim();
+      const healIntentActive =
+        isRecoveryTreatmentRoll &&
+        healOtherRecoveryIntent.enabled &&
+        String(healOtherRecoveryIntent.targetId || "").trim().length > 0 &&
+        !!targetName;
+      const healIntentIsSelf =
+        healIntentActive &&
+        String(healOtherRecoveryIntent.targetId) === String(characterId);
+      const healIntentActionSummary = healIntentActive
+        ? `Recovery action declared: ${selectedRollAction}.`
+        : "";
+      const healIntentSummary = healIntentActive
+        ? `Recovery treatment declared: healer ${
+            charData?.true_name || charData?.name || "PC"
+          } -> ${targetName}${healIntentIsSelf ? " (self)" : ""}.`
+        : "";
+      const healIntentBolsterSummary =
+        healIntentActive && healOtherRecoveryBolsterSources.length > 0
+          ? `Recovery bolsters declared: ${healOtherRecoveryBolsterSources.join("; ")}.`
+          : "";
+      const healIntentNote = healIntentActive
+        ? String(healOtherRecoveryIntent.bolsterNote || "").trim()
+        : "";
+      const abilityBonusesMerged = [
+        ...abilityBonusAudit,
+        ...(healIntentActionSummary ? [healIntentActionSummary] : []),
+        ...(healIntentSummary ? [healIntentSummary] : []),
+        ...(healIntentBolsterSummary ? [healIntentBolsterSummary] : []),
+        ...(healIntentNote ? [`Recovery bolster note: ${healIntentNote}`] : []),
+        ...(phantomStress > 0
+          ? [`Phantom Pain: ${phantomStress} stress (attack through cover)`]
+          : []),
+        ...(rippleEligibleForWaiver
+          ? [
+              "Ripple Breathing: waive 2 stress for this push (once per session episode).",
+            ]
+          : []),
+        ...(feedPenaltyActive
+          ? ["Loses Max Stress Without Feeding: stress detriment active"]
+          : []),
+      ];
+      const modifierSources = [
+        ...abilityBonusesMerged.map((name) => ({
+          kind: "ability",
+          name,
+          category: "ability",
+        })),
+      ];
+      const healAttemptFromRoll =
+        rollPending.healAttempt && typeof rollPending.healAttempt === "object"
+          ? rollPending.healAttempt
+          : null;
+      const bolsterStringsFromRoll =
+        healAttemptFromRoll &&
+        Array.isArray(healAttemptFromRoll.selectedAbilityBolsters)
+          ? healAttemptFromRoll.selectedAbilityBolsters
+              .map((x) => String(x || "").trim())
+              .filter(Boolean)
+          : [];
+      const mergedHealBolsterStrings =
+        bolsterStringsFromRoll.length > 0
+          ? bolsterStringsFromRoll
+          : healIntentActive && healOtherRecoveryBolsterSources.length > 0
+            ? [...healOtherRecoveryBolsterSources]
+            : [];
+      const healAttemptMeta =
+        healAttemptFromRoll ||
+        (healIntentActive
+          ? {
+              kind: "session_recover_intent",
+              targetName,
+              bolsterNote: healOtherRecoveryIntent.bolsterNote || "",
+              careNote: "",
+            }
+          : null);
+      if (healAttemptMeta) {
+        const healMetaTargetDisplay = String(
+          healAttemptMeta.targetName || "",
+        ).trim();
+        const bolsterNote = String(healAttemptMeta.bolsterNote || "").trim();
+        const careNote = String(healAttemptMeta.careNote || "").trim();
+        modifierSources.push({
+          kind: "healing",
+          name: healMetaTargetDisplay
+            ? `Heal target: ${healMetaTargetDisplay}`
+            : "Heal another player",
+          category: "intent",
+        });
+        if (mergedHealBolsterStrings.length > 0) {
+          modifierSources.push({
+            kind: "healing",
+            name: `Ability bolsters: ${mergedHealBolsterStrings.join("; ")}`,
+            category: "ability",
+          });
+        }
+        if (bolsterNote) {
+          modifierSources.push({
+            kind: "healing",
+            name: `Bolster note: ${bolsterNote}`,
+            category: "ability",
+          });
+        }
+        if (careNote) {
+          modifierSources.push({
+            kind: "healing",
+            name: `Approach note: ${careNote}`,
+            category: "intent",
+          });
+        }
+        modifierSources.push({
+          kind: "recovery_resolution",
+          name: "GM recovery resolution needed",
+          category: "recovery",
+          timing: "post_roll",
+          notes:
+            "Apply recovery ticks to linked target per SRD cadence when fiction/time allows.",
+        });
+      }
+      if (bonusDiceFromAbilities > 0 || bonusDiceFromHeritage > 0) {
+        modifierSources.push({
+          kind: "ability",
+          name: "Sheet/heritage bonus dice",
+          delta: `+${totalBonusDiceFromAbilitiesAndHeritage}d`,
+          category: "ability",
+        });
+      }
+      if (healIntentActive) {
+        modifierSources.push({
+          kind: "recovery_treatment",
+          name: "Heal another player",
+          delta: "declared pre-roll",
+          category: "recovery",
+          timing: "pre_roll",
+          notes: `healer=${charData?.true_name || charData?.name || "PC"}; action=${selectedRollAction}; target=${targetName}; target_id=${healOtherRecoveryIntent.targetId}; self=${healIntentIsSelf ? "true" : "false"}`,
+        });
+      }
+      if (healIntentActive && healOtherRecoveryBolsterSources.length > 0) {
+        modifierSources.push({
+          kind: "recovery_bolster",
+          name: "Declared recovery bolsters",
+          delta: `${healOtherRecoveryBolsterSources.length} source(s)`,
+          category: "ability",
+          timing: "pre_roll",
+          notes: healOtherRecoveryBolsterSources.join("; "),
+        });
+      }
+      if (healIntentActive && healIntentNote) {
+        modifierSources.push({
+          kind: "recovery_bolster",
+          name: "Recovery bolster note",
+          category: "recovery",
+          timing: "pre_roll",
+          notes: healIntentNote,
+        });
+      }
+      const stressSources = [
+        ...(phantomStress > 0
+          ? [
+              {
+                kind: "ability",
+                name: "Phantom Pain",
+                delta: `+${phantomStress} stress`,
+                category: "ability",
+              },
+            ]
+          : []),
+        ...(feedPenaltyActive
+          ? [
+              {
+                kind: "feed_penalty",
+                name: "Loses Max Stress Without Feeding",
+                delta: "stress detriment active",
+                category: "heritage",
+              },
+            ]
+          : []),
+      ];
+      const positionEffectSources = [
+        ...(rollModal.push_effect
+          ? [
+              {
+                kind: "push",
+                name: "Push for effect",
+                delta: "+1 effect",
+                category: "system",
+              },
+            ]
+          : []),
+        ...(totalAbilityEffectSteps > 0
+          ? [
+              {
+                kind: "ability",
+                name: "Ability/heritage effect boosts",
+                delta: `+${totalAbilityEffectSteps} effect`,
+                category: "ability",
+              },
+            ]
+          : []),
+      ];
       const payload = {
-        action: rollPending.actionName.toLowerCase(),
+        action: selectedRollAction.toLowerCase(),
         push_effect: rollModal.push_effect,
         push_dice: rollModal.push_dice,
         devil_bargain_dice: rollModal.devil_bargain_dice,
@@ -2303,13 +4272,54 @@ const CharacterSheetWrapper = ({
           !rollModal.devil_bargain_dice ||
           !gmDevilBargainText ||
           devilBargainConfirmed,
-        bonus_dice: bonusDiceFromAbilities,
-        ability_effect_steps: abilityEffectSteps,
+        bonus_dice: totalBonusDiceFromAbilitiesAndHeritage,
+        ability_effect_steps: abilityEffectSteps + heritageEffectSteps,
+        heritage_bonuses:
+          heritageBonusAudit.length > 0 ? heritageBonusAudit : undefined,
         goal_label:
           goalFromDraft || assignedRollGoalLabel || undefined,
-        ability_bonuses: abilityBonusAudit.length
-          ? abilityBonusAudit
-          : undefined,
+        ability_bonuses:
+          abilityBonusesMerged.length > 0 ? abilityBonusesMerged : undefined,
+        modifier_sources: modifierSources.length > 0 ? modifierSources : undefined,
+        stress_sources: stressSources.length > 0 ? stressSources : undefined,
+        position_effect_sources:
+          positionEffectSources.length > 0 ? positionEffectSources : undefined,
+        description:
+          healAttemptMeta != null
+            ? [
+                "Healing attempt",
+                String(healAttemptMeta.targetName || "").trim()
+                  ? `target=${String(healAttemptMeta.targetName).trim()}`
+                  : null,
+                String(healAttemptMeta.bolsterNote || "").trim()
+                  ? `bolster=${String(healAttemptMeta.bolsterNote).trim()}`
+                  : null,
+                mergedHealBolsterStrings.length > 0
+                  ? `bolsters=${mergedHealBolsterStrings.join(",")}`
+                  : null,
+                String(healAttemptMeta.careNote || "").trim()
+                  ? `note=${String(healAttemptMeta.careNote).trim()}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(" | ")
+            : undefined,
+        ...(phantomStress > 0 ? { extra_roll_stress: phantomStress } : {}),
+        ...(rippleEligibleForWaiver
+          ? { ripple_breathing_free_push: true }
+          : {}),
+        ...(pushWouldCauseTrauma && stressOverflowConfirmed
+          ? { stress_overflow_accepted: true }
+          : {}),
+        ...(healIntentActive
+          ? {
+              recovery_target_character_id: Number(
+                healOtherRecoveryIntent.targetId,
+              ),
+              recovery_roll_action: selectedRollAction.toLowerCase(),
+              recovery_is_self_treatment: healIntentIsSelf,
+            }
+          : {}),
       };
       if (activeSessionId) {
         payload.session_id = activeSessionId;
@@ -2318,13 +4328,108 @@ const CharacterSheetWrapper = ({
           payload.group_action_id = snappedGa;
         } else if (
           activeGroupAction?.id &&
-          String(rollPending.actionName || "").toLowerCase() ===
+          String(selectedRollAction || "").toLowerCase() ===
             String(activeGroupAction.action_name || "").toLowerCase()
         ) {
           payload.group_action_id = activeGroupAction.id;
         }
       }
       const res = await characterAPI.rollAction(characterId, payload);
+      const downtimeHealCadence = isDowntimeHealingHealAttempt(healAttemptFromRoll);
+      const downtimeSelfTreatment =
+        downtimeHealCadence &&
+        (healIntentIsSelf ||
+          Number(healAttemptFromRoll?.targetId) === Number(characterId));
+      let recoveryPresentation = null;
+      if (downtimeHealCadence) {
+        const tickParts = downtimeHealingTicksFromApiRoll(
+          res,
+          downtimeSelfTreatment,
+        );
+        recoveryPresentation = {
+          cadence: "downtime",
+          ticks: tickParts.ticks,
+          bandLabel: tickParts.bandLabel,
+          critical: tickParts.critical,
+          selfTreatment: downtimeSelfTreatment,
+          targetName: String(healAttemptFromRoll?.targetName || "").trim() || null,
+        };
+      }
+      // Advance patient healing clock using same tick count as the result UI (no duplicate paths).
+      const isDowntimeRecoveryClock =
+        downtimeHealCadence &&
+        recoveryPresentation &&
+        recoveryPresentation.ticks > 0;
+      const isMidActionHealOtherClock =
+        !downtimeHealCadence &&
+        healIntentActive &&
+        !healIntentIsSelf;
+      if (isDowntimeRecoveryClock || isMidActionHealOtherClock) {
+        let patientId = null;
+        let segments = 0;
+        if (isDowntimeRecoveryClock) {
+          segments = recoveryPresentation.ticks;
+          if (recoveryPresentation.selfTreatment) {
+            patientId = Number(characterId);
+          } else {
+            const fromRoll = Number(healAttemptFromRoll?.targetId);
+            if (Number.isFinite(fromRoll) && fromRoll > 0) {
+              patientId = fromRoll;
+            } else {
+              const fromIntent = Number(healOtherRecoveryIntent.targetId);
+              if (Number.isFinite(fromIntent) && fromIntent > 0) {
+                patientId = fromIntent;
+              }
+            }
+          }
+        } else {
+          const rolledDice = Array.isArray(res?.dice_results)
+            ? res.dice_results.map((d) => Number(d)).filter(Number.isFinite)
+            : [];
+          const highest = Number.isFinite(Number(res?.highest))
+            ? Number(res.highest)
+            : rolledDice.length > 0
+              ? Math.max(...rolledDice)
+              : 0;
+          const isCritical = rolledDice.filter((d) => d === 6).length >= 2;
+          segments = isCritical
+            ? 5
+            : highest >= 6
+              ? 3
+              : highest >= 4
+                ? 2
+                : 1;
+          patientId = Number(healOtherRecoveryIntent.targetId);
+        }
+        if (Number.isFinite(patientId) && patientId > 0 && segments > 0) {
+          try {
+            const targetRaw = await characterAPI.getCharacter(patientId);
+            const targetClock = Math.max(
+              0,
+              Math.min(4, Number(targetRaw?.healing_clock_filled) || 0),
+            );
+            const targetHarm = extractHarmFromBackendCharacter(targetRaw);
+            const targetRecovery = applyRecoverySegmentsToTrack(
+              targetClock,
+              targetHarm,
+              segments,
+            );
+            await characterAPI.patchCharacter(patientId, {
+              healing_clock_filled: targetRecovery.nextClock,
+              ...buildHarmPatchPayload(targetRecovery.nextHarm),
+            });
+            onCampaignRefresh?.();
+          } catch {
+            setRollApiError(
+              "Roll saved, but healing clock update failed. Ask the GM to apply recover ticks manually.",
+            );
+          }
+        } else if (segments > 0) {
+          setRollApiError(
+            "Roll saved, but could not resolve the heal target for the healing clock. Check the target and try again, or ask the GM to update the clock.",
+          );
+        }
+      }
       // Match roll modal + session GM map: per-PC session override beats API echo (same order as PositionStack preview).
       const effectivePosition =
         sessionOverridePositionEffect?.position ||
@@ -2367,23 +4472,28 @@ const CharacterSheetWrapper = ({
         onCampaignRefresh?.();
       }
       setDiceResult({
-        action: rollPending.actionName,
+        action: selectedRollAction,
         dice: res.dice_results || [],
         result: res.highest ?? Math.max(...(res.dice_results || [0])),
-        outcome: (res.outcome || "").replace(/_/g, " "),
-        special:
-          res.dice_results?.filter((d) => d === 6).length >= 2
+        outcome: downtimeHealCadence
+          ? ""
+          : (res.outcome || "").replace(/_/g, " "),
+        special: downtimeHealCadence
+          ? ""
+          : res.dice_results?.filter((d) => d === 6).length >= 2
             ? `Critical! (${res.dice_results?.filter((d) => d === 6).length} sixes)`
             : "",
         isResistance: false,
         stressCost: res.stress_spent || null,
         zeroDice: (Number(res.total_dice) || 0) === 0,
-        isDesperateAction:
-          String(effectivePosition || "").toLowerCase() === "desperate",
+        isDesperateAction: downtimeHealCadence
+          ? false
+          : String(effectivePosition || "").toLowerCase() === "desperate",
         isCritical: (res.dice_results || []).filter((d) => d === 6).length >= 2,
-        position: effectivePosition,
-        effect: effectiveEffect,
+        position: downtimeHealCadence ? undefined : effectivePosition,
+        effect: downtimeHealCadence ? undefined : effectiveEffect,
         xpGained: res.xp_gained || 0,
+        recoveryPresentation,
       });
       if (res.xp_gained > 0 && res.xp_track) {
         setXp((p) => ({
@@ -2392,6 +4502,9 @@ const CharacterSheetWrapper = ({
         }));
       }
       if (res.stress_spent) applyStressCost(res.stress_spent);
+      if (activeSessionId && res.roll_id) {
+        setHistoryRefreshTick((x) => x + 1);
+      }
       setRollPending(null);
       setRollGoalDraft("");
       setDevilBargainConfirmed(false);
@@ -2401,44 +4514,245 @@ const CharacterSheetWrapper = ({
         devil_bargain_note: "",
       }));
       setRollAbilityBoost({});
+      setHeritageRollBoost({});
+      setPhantomPainThroughCover(false);
+      setRippleBreathingFreePush(false);
+      setHealOtherRecoveryIntent({
+        enabled: false,
+        actionName: "TINKER",
+        targetId: "",
+        selectedBolsterKeys: [],
+        bolsterNote: "",
+      });
     } catch (e) {
       setRollApiError(e.message);
     }
   };
 
+  const hasIronWillAbility = useMemo(
+    () => characterHasIronWill(abilities),
+    [abilities],
+  );
+
+  const resistanceAbilityOptions = useMemo(() => {
+    const opts = [];
+    if (hasIronWillAbility) {
+      opts.push({
+        id: "iron-will",
+        name: "Iron Will",
+        bonusDice: 1,
+        appliesTo: "RESOLVE",
+        sourceType: "standard",
+      });
+    }
+    const hasSuperiorPhysiology = heritageAutoAbilities.some(
+      (a) => normalizeAbilityName(a?.name) === "superior physiology",
+    );
+    if (hasSuperiorPhysiology) {
+      opts.push({
+        id: "superior-physiology",
+        name: "Superior Physiology",
+        bonusDice: 1,
+        appliesTo: "PROWESS",
+        sourceType: "heritage",
+        description: "+1d to resisting physical harm.",
+      });
+    }
+    const stayingPower = combinedAbilitiesForDisplay.find(
+      (a) => normalizeAbilityName(a?.name) === "staying power",
+    );
+    if (stayingPower) {
+      opts.push({
+        id: "staying-power",
+        name: "Staying Power",
+        bonusDice: 0,
+        appliesTo: "ALL",
+        sourceType: stayingPower.type || "standard",
+        mitigationOnly: true,
+        description:
+          String(stayingPower.description || "").trim() ||
+          "May help reduce or absorb harm after resistance (table ruling).",
+      });
+    }
+    if (hasRippleBreathingAbility) {
+      opts.push({
+        id: "ripple-breathing",
+        name: "Ripple Breathing",
+        bonusDice: 1,
+        appliesTo: "ALL",
+        sourceType: "hamon",
+        description:
+          "+1d when resisting poison, fatigue, or fear (fiction must apply — GM/table confirms).",
+      });
+    }
+    return opts;
+  }, [
+    combinedAbilitiesForDisplay,
+    hasIronWillAbility,
+    hasRippleBreathingAbility,
+    heritageAutoAbilities,
+  ]);
+
+  const hasFatalHarm = useMemo(
+    () => !!String(harm?.level4?.[0] ?? "").trim(),
+    [harm],
+  );
+  const hasStayingPowerAbility = useMemo(
+    () => resistanceAbilityOptions.some((o) => o.id === "staying-power"),
+    [resistanceAbilityOptions],
+  );
+
+  useEffect(() => {
+    if (!hasStayingPowerAbility) return;
+    if (hasFatalHarm) {
+      setResistanceAbilityBoost((prev) =>
+        prev?.["staying-power"]
+          ? prev
+          : { ...(prev || {}), "staying-power": true },
+      );
+    } else {
+      setResistanceAbilityBoost((prev) => {
+        if (!prev?.["staying-power"]) return prev;
+        const next = { ...prev };
+        delete next["staying-power"];
+        return next;
+      });
+    }
+  }, [hasFatalHarm, hasStayingPowerAbility]);
+
+  const resistancePoolPreview = useMemo(() => {
+    if (!resistancePending) return null;
+    const attr = String(resistancePending.attr || "").toUpperCase();
+    const base = Math.max(0, Number(resistancePending.baseDice) || 0);
+    const options = resistanceAbilityOptions.filter((opt) => {
+      const appliesTo = String(opt.appliesTo || "").toUpperCase();
+      return appliesTo === "ALL" || appliesTo === attr;
+    });
+    const activeBonusOptions = options.filter(
+      (opt) =>
+        !!resistanceAbilityBoost[opt.id] &&
+        Math.max(0, Number(opt.bonusDice) || 0) > 0,
+    );
+    const bonusDice = activeBonusOptions.reduce(
+      (sum, opt) => sum + Math.max(0, Number(opt.bonusDice) || 0),
+      0,
+    );
+    const pushBonusDice = resistancePushDice ? 1 : 0;
+    const extraStress = resistancePushDice ? 2 : 0;
+    return {
+      attr,
+      base,
+      bonusDice,
+      pushBonusDice,
+      extraStress,
+      total: base + bonusDice + pushBonusDice,
+      zeroDice: base + bonusDice + pushBonusDice <= 0,
+      options,
+      activeBonusNames: activeBonusOptions.map(
+        (opt) => `${opt.name} (+${Math.max(0, Number(opt.bonusDice) || 0)}d)`,
+      ),
+      hasPostRollOptions: options.some((opt) => !!opt.mitigationOnly),
+    };
+  }, [
+    resistancePending,
+    resistanceAbilityOptions,
+    resistanceAbilityBoost,
+    resistancePushDice,
+  ]);
+
+  const resistanceRollSheetReminderItems = useMemo(() => {
+    if (
+      !diceResult?.isResistance ||
+      !Array.isArray(diceResult.dice)
+    ) {
+      return [];
+    }
+    return getResistanceResultSheetAbilityReminders(
+      abilities,
+      diceResult.dice,
+    );
+  }, [diceResult, abilities]);
+
   // FIX 8: Resistance critical → stressCost = -1 (clear 1 stress, pay none)
-  /** @param {unknown} [groupActionIdSnap] If set, POST includes this group_action_id even if activeGroupAction is cleared before submit. */
-  const rollDice = (
+  /**
+   * @param {unknown} [groupActionIdSnap] If set, POST includes this group_action_id even if activeGroupAction is cleared before submit.
+   * @param {{ resistanceBonusNote?: string }} [extras] Extra display only (e.g. Iron Will note on resistance).
+   */
+  const rollDice = async (
     actionName,
     diceCount,
     isResistance = false,
     isDesperateAction = false,
     groupActionIdSnap = undefined,
+    extras,
   ) => {
     if (characterId && !isResistance) {
+      const rawExtras = extras && typeof extras === "object" ? extras : {};
+      const { rollBoostPreset, ...rollPendingExtras } = rawExtras;
+      const goalTargetName =
+        extras &&
+        typeof extras === "object" &&
+        extras.healAttempt &&
+        String(extras.healAttempt.targetName || "").trim();
+      setResistancePending(null);
       setRollPending({
         actionName,
         diceCount,
         isDesperateAction,
+        ...rollPendingExtras,
         ...(groupActionIdSnap != null
           ? { group_action_id: groupActionIdSnap }
           : {}),
       });
-      setRollAbilityBoost({});
+      const preset =
+        rollBoostPreset && typeof rollBoostPreset === "object"
+          ? rollBoostPreset
+          : null;
+      setRollAbilityBoost(
+        preset?.abilities && typeof preset.abilities === "object"
+          ? preset.abilities
+          : {},
+      );
+      setHeritageRollBoost(
+        preset?.heritage && typeof preset.heritage === "object"
+          ? preset.heritage
+          : {},
+      );
+      setPhantomPainThroughCover(false);
+      setRippleBreathingFreePush(false);
       setDevilBargainConfirmed(false);
       const asdGoal = (
         assignedRollGoalLabel || ""
       ).trim();
-      setRollGoalDraft(asdGoal);
+      setRollGoalDraft(
+        asdGoal ||
+          (goalTargetName ? `Heal ${goalTargetName}'s harm` : ""),
+      );
       setRollModal({
         push_effect: false,
         push_dice: false,
         devil_bargain_dice: false,
         devil_bargain_note: "",
       });
+      setHealOtherRecoveryIntent({
+        enabled: false,
+        actionName: "TINKER",
+        targetId: "",
+        selectedBolsterKeys: [],
+        bolsterNote: "",
+      });
       setRollApiError(null);
       return;
     }
+
+    if (isResistance) {
+      setResistancePending(null);
+      setResistancePushDice(false);
+      setResistanceMitigationChoice("");
+      setPhantomPainThroughCover(false);
+      setRippleBreathingFreePush(false);
+    }
+
     let dice, highest, sixes, isCritical, outcome;
 
     if (diceCount === 0) {
@@ -2469,31 +4783,229 @@ const CharacterSheetWrapper = ({
     }
 
     // FIX 8: Critical resistance = 0 stress cost AND clear 1 stress; represented as -1
+    /** Non-critical: 6 − highest die, minimum 1 (a single 6 still costs 1 stress). */
     const stressCost = isResistance
       ? isCritical
         ? -1
-        : Math.max(0, 6 - highest)
+        : Math.max(1, 6 - highest)
       : null;
+    const resistanceExtraStress =
+      isResistance &&
+      extras &&
+      typeof extras === "object" &&
+      Number(extras.resistanceExtraStress) > 0
+        ? Number(extras.resistanceExtraStress)
+        : 0;
+    const resistanceTotalStressCost =
+      isResistance ? Math.max(0, Number(stressCost) || 0) + resistanceExtraStress : null;
+
+    const resistanceNote =
+      extras &&
+      typeof extras === "object" &&
+      String(extras.resistanceBonusNote || "").trim();
+    const criticalPart = isCritical ? `Critical! (${sixes} sixes)` : "";
+    const special =
+      resistanceNote && criticalPart
+        ? `${criticalPart} · ${resistanceNote}`
+        : resistanceNote || criticalPart;
+
+    const healAttemptOffline =
+      extras &&
+      typeof extras === "object" &&
+      extras.healAttempt &&
+      typeof extras.healAttempt === "object"
+        ? extras.healAttempt
+        : null;
+    const offlineDowntimeHeal =
+      !isResistance && isDowntimeHealingHealAttempt(healAttemptOffline);
+    const offlineDowntimeSelfTreatment =
+      offlineDowntimeHeal &&
+      Number(healAttemptOffline?.targetId) === Number(characterId);
+    const offlineRecoveryPresentation = offlineDowntimeHeal
+      ? (() => {
+          const tickParts = downtimeHealingTicksFromApiRoll(
+            { dice_results: dice, highest },
+            offlineDowntimeSelfTreatment,
+          );
+          return {
+            cadence: "downtime",
+            ticks: tickParts.ticks,
+            bandLabel: tickParts.bandLabel,
+            critical: tickParts.critical,
+            selfTreatment: offlineDowntimeSelfTreatment,
+            targetName:
+              String(healAttemptOffline?.targetName || "").trim() || null,
+          };
+        })()
+      : null;
+
+    const activeResistanceSources = isResistance
+      ? resistanceAbilityOptions.filter((opt) => {
+          if (!resistanceAbilityBoost[opt.id]) return false;
+          if (opt.appliesTo === "ALL") return true;
+          return String(opt.appliesTo || "").toUpperCase() === String(actionName || "").toUpperCase();
+        })
+      : [];
+
+    const resistanceSourceRows = activeResistanceSources.map((opt) => ({
+      kind: "ability",
+      name: opt.name,
+      delta: opt.bonusDice > 0 ? `+${opt.bonusDice}d` : "mitigation option",
+      category: String(opt.sourceType || "ability"),
+      timing: opt.mitigationOnly ? "post_roll" : "pre_roll",
+    }));
+    if (isResistance && resistanceMitigationChoice) {
+      resistanceSourceRows.push({
+        kind: "ability",
+        name: resistanceMitigationChoice,
+        delta: "mitigation used",
+        category: "ability",
+        timing: "post_roll",
+      });
+    }
+    if (isResistance && resistancePushDice) {
+      resistanceSourceRows.push({
+        kind: "push",
+        name: "Push yourself",
+        delta: "+1d",
+        category: "system",
+        timing: "pre_roll",
+      });
+    }
+    if (isResistance && hasNoFeedDetriment && charData.fed_today === false) {
+      resistanceSourceRows.push({
+        kind: "feed_penalty",
+        name: "Loses Max Stress Without Feeding",
+        delta: "stress detriment active",
+        category: "heritage",
+        timing: "ongoing",
+      });
+    }
+
+    const asdOffline = charCampaign?.active_session_detail;
+    const offlinePosLabel = String(
+      sessionOverridePositionEffect?.position ||
+        asdOffline?.default_position ||
+        "",
+    ).toLowerCase();
+    const offlineEffLabel = String(
+      sessionOverridePositionEffect?.effect ||
+        asdOffline?.default_effect ||
+        "",
+    ).toLowerCase();
+    const sessionSaysDesperate =
+      !!activeSessionId && offlinePosLabel === "desperate";
+    const effectiveDesperateAction =
+      !isResistance &&
+      !offlineDowntimeHeal &&
+      (sessionSaysDesperate || !!isDesperateAction);
 
     setDiceResult({
       action: actionName,
       dice,
       result: highest,
-      outcome,
-      special: isCritical ? `Critical! (${sixes} sixes)` : "",
+      outcome: offlineDowntimeHeal ? "" : outcome,
+      special: offlineDowntimeHeal ? "" : special,
       isResistance,
       stressCost,
+      resistanceExtraStress,
+      resistanceTotalStressCost,
       zeroDice: diceCount === 0,
-      isDesperateAction,
+      isDesperateAction: effectiveDesperateAction,
       isCritical,
+      resistanceSources: isResistance ? resistanceSourceRows : [],
+      ...(!isResistance && activeSessionId && !offlineDowntimeHeal
+        ? { position: offlinePosLabel || undefined, effect: offlineEffLabel || undefined }
+        : {}),
+      ...(offlineRecoveryPresentation
+        ? { recoveryPresentation: offlineRecoveryPresentation }
+        : {}),
+      ...(isResistance
+        ? {
+            resistanceHarmReductionCount: 0,
+            resistanceApplied: false,
+          }
+        : {}),
     });
     setResistanceApplyErr(null);
     setResistanceHarmTarget("");
 
-    if (isDesperateAction && !isResistance) {
-      const attr = ACTION_ATTR[actionName];
-      if (attr) setXp((p) => ({ ...p, [attr]: Math.min(p[attr] + 1, 5) }));
+    if (effectiveDesperateAction) {
+      const attr = ACTION_ATTR[String(actionName || "").toUpperCase()];
+      if (attr)
+        setXp((p) =>
+          (p[attr] ?? 0) >= 5
+            ? p
+            : { ...p, [attr]: Math.min((p[attr] || 0) + 1, 5) },
+        );
     }
+    if (isResistance && characterId && activeSessionId) {
+      const outcomeApi = isCritical
+        ? "CRITICAL_SUCCESS"
+        : highest >= 6
+          ? "FULL_SUCCESS"
+          : highest >= 4
+            ? "PARTIAL_SUCCESS"
+            : "FAILURE";
+      try {
+        await rollAPI.createRoll({
+          character: characterId,
+          session: activeSessionId,
+          roll_type: "RESISTANCE",
+          action_name: String(actionName || "").toLowerCase(),
+          dice_pool: diceCount,
+          results: dice,
+          outcome: outcomeApi,
+          description: `Resistance ${String(actionName || "").toLowerCase()} roll`,
+          pool_bonus_dice: activeResistanceSources.reduce(
+            (sum, opt) => sum + Math.max(0, Number(opt.bonusDice) || 0),
+            0,
+          ),
+          roller_stress_spent: Math.max(0, Number(stressCost) || 0),
+          modifier_sources: resistanceSourceRows,
+          stress_sources: [
+            ...(stressCost > 0
+              ? [
+                  {
+                    kind: "resistance",
+                    name: "Resistance stress cost",
+                    delta: `+${stressCost} stress`,
+                    category: "system",
+                  },
+                ]
+              : []),
+            ...(resistanceExtraStress > 0
+              ? [
+                  {
+                    kind: "push",
+                    name: "Push yourself",
+                    delta: `+${resistanceExtraStress} stress`,
+                    category: "system",
+                  },
+                ]
+              : []),
+            ...resistanceSourceRows.filter((x) => x.kind === "feed_penalty"),
+          ],
+          position_effect_sources: [],
+        });
+        onCampaignRefresh?.();
+      } catch (_) {
+        // Keep local resistance flow even if history save fails.
+      }
+    }
+  };
+
+  const openResistanceRollPreview = (attr, actions) => {
+    const base = Math.max(0, Number(getAttributeDice(actions)) || 0);
+    setRollPending(null);
+    setRollApiError(null);
+    setResistanceApplyErr(null);
+    setResistanceHarmTarget("");
+    setResistancePushDice(false);
+    setResistancePending({
+      attr: String(attr || "").toUpperCase(),
+      baseDice: base,
+    });
   };
 
   const addClock = () => {
@@ -2516,6 +5028,22 @@ const CharacterSheetWrapper = ({
     setNewClockShared(false);
     setClockEditorOpen(false);
   };
+
+  const addPerfectOrganismEntityClock = useCallback((sizeLabel, segments) => {
+    const segs = Math.max(1, Math.min(12, Number(segments) || 4));
+    const stamp = Date.now();
+    setClocks((p) => [
+      ...p,
+      {
+        id: `po-${stamp}-${Math.random().toString(16).slice(2, 8)}`,
+        name: `Perfect Organism — ${sizeLabel}`,
+        segments: segs,
+        filled: 0,
+        visible_to_party: false,
+      },
+    ]);
+    setClocksSectionExpandedPersist(true);
+  }, [setClocksSectionExpandedPersist]);
 
   const buildPayload = useCallback(() => {
     const backendId =
@@ -3014,7 +5542,7 @@ const CharacterSheetWrapper = ({
                     {characterId && (
                       <button
                         type="button"
-                        onClick={() => setShowHistoryPanel((x) => !x)}
+                        onClick={() => setShowHistoryPanelPersist((x) => !x)}
                         title={
                           showHistoryPanel
                             ? "Hide history"
@@ -3100,7 +5628,7 @@ const CharacterSheetWrapper = ({
                         justifyContent: "center",
                         paddingTop: "80px",
                       }}
-                      onClick={() => setShowHistoryPanel(false)}
+                      onClick={() => setShowHistoryPanelPersist(false)}
                     >
                     <div
                       onClick={(e) => e.stopPropagation()}
@@ -3139,7 +5667,7 @@ const CharacterSheetWrapper = ({
                           </span>
                           <button
                             type="button"
-                            onClick={() => setShowHistoryPanel(false)}
+                            onClick={() => setShowHistoryPanelPersist(false)}
                             style={{ ...S.btn, padding: "2px 8px", fontSize: 10 }}
                           >
                             Close
@@ -3291,7 +5819,7 @@ const CharacterSheetWrapper = ({
                                         marginBottom: 8,
                                       }}
                                     >
-                                      Manual history record
+                                      Manual history or XP award
                                     </div>
                                     <div
                                       style={{
@@ -3320,6 +5848,7 @@ const CharacterSheetWrapper = ({
                                           Resistance
                                         </option>
                                         <option value="VICE">Vice roll</option>
+                                        <option value="XP">XP award</option>
                                       </select>
                                       <select
                                         value={historyManual.sessionId}
@@ -3345,7 +5874,68 @@ const CharacterSheetWrapper = ({
                                           </option>
                                         ))}
                                       </select>
-                                      {historyManual.rollType === "RESISTANCE" ? (
+                                      {historyManual.rollType === "XP" ? (
+                                        <>
+                                          <select
+                                            value={historyManual.xpTrack}
+                                            onChange={(e) =>
+                                              setHistoryManual((p) => ({
+                                                ...p,
+                                                xpTrack: e.target.value,
+                                              }))
+                                            }
+                                            style={{
+                                              ...S.sel,
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                            }}
+                                          >
+                                            <option value="playbook">Playbook</option>
+                                            <option value="insight">Insight</option>
+                                            <option value="prowess">Prowess</option>
+                                            <option value="resolve">Resolve</option>
+                                            <option value="heritage">Heritage</option>
+                                          </select>
+                                          <input
+                                            type="number"
+                                            min={1}
+                                            max={20}
+                                            value={historyManual.xpAmount}
+                                            onChange={(e) =>
+                                              setHistoryManual((p) => ({
+                                                ...p,
+                                                xpAmount: e.target.value,
+                                              }))
+                                            }
+                                            style={{
+                                              ...S.inp,
+                                              fontSize: 10,
+                                              padding: "2px 6px",
+                                            }}
+                                            title="XP to add (1–20 per award)"
+                                          />
+                                          <textarea
+                                            value={historyManual.xpReason}
+                                            onChange={(e) =>
+                                              setHistoryManual((p) => ({
+                                                ...p,
+                                                xpReason: e.target.value,
+                                              }))
+                                            }
+                                            style={{
+                                              ...S.inp,
+                                              gridColumn: "1 / -1",
+                                              fontSize: 10,
+                                              padding: "6px",
+                                              minHeight: 52,
+                                              resize: "vertical",
+                                              fontFamily: "inherit",
+                                            }}
+                                            placeholder="Explain what this XP was for (appears in session history and XP log)."
+                                            rows={3}
+                                          />
+                                        </>
+                                      ) : historyManual.rollType === "RESISTANCE" ? (
                                         <select
                                           value={historyManual.action}
                                           onChange={(e) =>
@@ -3394,22 +5984,25 @@ const CharacterSheetWrapper = ({
                                           placeholder="Action"
                                         />
                                       )}
-                                      <input
-                                        value={historyManual.dice}
-                                        onChange={(e) =>
-                                          setHistoryManual((p) => ({
-                                            ...p,
-                                            dice: e.target.value,
-                                          }))
-                                        }
-                                        style={{
-                                          ...S.inp,
-                                          fontSize: 10,
-                                          padding: "2px 6px",
-                                        }}
-                                        placeholder="Dice e.g. 6,4"
-                                      />
-                                      {historyManual.rollType === "RESISTANCE" ? (
+                                      {historyManual.rollType !== "XP" ? (
+                                        <input
+                                          value={historyManual.dice}
+                                          onChange={(e) =>
+                                            setHistoryManual((p) => ({
+                                              ...p,
+                                              dice: e.target.value,
+                                            }))
+                                          }
+                                          style={{
+                                            ...S.inp,
+                                            fontSize: 10,
+                                            padding: "2px 6px",
+                                          }}
+                                          placeholder="Dice e.g. 6,4"
+                                        />
+                                      ) : null}
+                                      {historyManual.rollType === "XP" ? null : historyManual.rollType ===
+                                      "RESISTANCE" ? (
                                         <>
                                           <select
                                             value={historyManual.resistanceHarmTarget}
@@ -3547,7 +6140,8 @@ const CharacterSheetWrapper = ({
                                       )}
                                     </div>
                                     {historyManual.rollType !== "RESISTANCE" &&
-                                      historyManual.rollType !== "VICE" && (
+                                      historyManual.rollType !== "VICE" &&
+                                      historyManual.rollType !== "XP" && (
                                       <div
                                         style={{
                                           marginTop: 6,
@@ -3585,6 +6179,7 @@ const CharacterSheetWrapper = ({
                                     )}
                                     {historyManual.rollType !== "RESISTANCE" &&
                                     historyManual.rollType !== "VICE" &&
+                                    historyManual.rollType !== "XP" &&
                                     historyManual.groupAction ? (
                                       <input
                                         value={historyManual.groupActionId}
@@ -3662,6 +6257,98 @@ const CharacterSheetWrapper = ({
                                           }
                                           try {
                                             setHistoryWriteError(null);
+                                            const rt0 = String(
+                                              historyManual.rollType || "ACTION",
+                                            ).toUpperCase();
+                                            if (rt0 === "XP") {
+                                              if (!characterId) return;
+                                              const sessions =
+                                                charCampaign?.sessions || [];
+                                              const sidStr = String(
+                                                historyManual.sessionId || "",
+                                              ).trim();
+                                              if (sessions.length > 0 && !sidStr) {
+                                                setHistoryWriteError(
+                                                  "Select a session for this XP award.",
+                                                );
+                                                return;
+                                              }
+                                              let sessionIdPayload = null;
+                                              if (sidStr) {
+                                                const sidNum = parseInt(sidStr, 10);
+                                                if (
+                                                  !Number.isFinite(sidNum) ||
+                                                  sidNum < 1
+                                                ) {
+                                                  setHistoryWriteError(
+                                                    "Invalid session.",
+                                                  );
+                                                  return;
+                                                }
+                                                sessionIdPayload = sidNum;
+                                              }
+                                              const amt = parseInt(
+                                                String(historyManual.xpAmount || "1"),
+                                                10,
+                                              );
+                                              if (
+                                                !Number.isFinite(amt) ||
+                                                amt < 1 ||
+                                                amt > 20
+                                              ) {
+                                                setHistoryWriteError(
+                                                  "XP amount must be between 1 and 20.",
+                                                );
+                                                return;
+                                              }
+                                              const reason = String(
+                                                historyManual.xpReason || "",
+                                              ).trim();
+                                              if (reason.length < 3) {
+                                                setHistoryWriteError(
+                                                  "Enter at least 3 characters explaining this XP award.",
+                                                );
+                                                return;
+                                              }
+                                              const track = String(
+                                                historyManual.xpTrack || "playbook",
+                                              ).toLowerCase();
+                                              setHistoryManualSaving(true);
+                                              const res = await characterAPI.addXP(
+                                                characterId,
+                                                {
+                                                  xp_type: track,
+                                                  amount: amt,
+                                                  reason,
+                                                  ...(sessionIdPayload != null
+                                                    ? {
+                                                        session_id:
+                                                          sessionIdPayload,
+                                                      }
+                                                    : {}),
+                                                },
+                                              );
+                                              if (
+                                                res?.xp_clocks &&
+                                                typeof res.xp_clocks === "object"
+                                              ) {
+                                                setXp((prev) => ({
+                                                  ...prev,
+                                                  ...res.xp_clocks,
+                                                }));
+                                              } else if (
+                                                res?.new_total != null &&
+                                                track
+                                              ) {
+                                                setXp((p) => ({
+                                                  ...p,
+                                                  [track]: res.new_total,
+                                                }));
+                                              }
+                                              setHistoryRefreshTick((v) => v + 1);
+                                              setShowHistoryManualModal(false);
+                                              return;
+                                            }
                                             const sid = parseInt(
                                               String(historyManual.sessionId || ""),
                                               10,
@@ -3836,7 +6523,9 @@ const CharacterSheetWrapper = ({
                                       >
                                         {historyManualSaving
                                           ? "Saving…"
-                                          : "Add manual record"}
+                                          : historyManual.rollType === "XP"
+                                            ? "Add XP award"
+                                            : "Add manual record"}
                                       </button>
                                       <button
                                         type="button"
@@ -3868,11 +6557,13 @@ const CharacterSheetWrapper = ({
                           ) : historyError ? (
                             <div style={{ color: "#fca5a5" }}>{historyError}</div>
                           ) : historyRows.length === 0 ? (
-                            <div style={{ color: "#6b7280" }}>
-                              No history entries.
+                            <div style={{ color: "#6b7280", lineHeight: 1.45 }}>
+                              {historyMode === "session" && !historySessionId
+                                ? "No XP log for this filter. Choose a campaign session for rolls, stress, and session-tied XP, or stay on “No session” for full tracker + ledger + advancement edits (all time)."
+                                : "No history entries."}
                             </div>
                           ) : (
-                            historyRows.slice(0, 120).map((row) => (
+                            historyRows.slice(0, 200).map((row) => (
                               <div
                                 key={row.key}
                                 style={{
@@ -4396,6 +7087,390 @@ const CharacterSheetWrapper = ({
                       </label>
                     ))}
                   </div>
+
+                  {/* Vice roll — stress relief (downtime / table agreement) */}
+                  <div
+                    style={{
+                      marginTop: "12px",
+                      paddingTop: "12px",
+                      borderTop: "1px solid #374151",
+                      background: "#1f2937",
+                      borderRadius: "6px",
+                      paddingLeft: "10px",
+                      paddingRight: "10px",
+                      paddingBottom: "10px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        color: "#f87171",
+                        fontSize: "11px",
+                        fontWeight: "bold",
+                        marginBottom: "6px",
+                        display: "block",
+                      }}
+                    >
+                      VICE ROLL
+                    </span>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "#9ca3af",
+                        lineHeight: 1.45,
+                        marginBottom: "8px",
+                      }}
+                    >
+                      Roll dice equal to your{" "}
+                      <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
+                        lowest attribute
+                      </span>{" "}
+                      (Insight / Prowess / Resolve). Clear stress equal to the{" "}
+                      <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
+                        highest die
+                      </span>
+                      . If that number is greater than stress you had marked,
+                      you{" "}
+                      <span style={{ color: "#fbbf24", fontWeight: "bold" }}>
+                        overindulge
+                      </span>
+                      . Skipping vice in downtime: take stress equal to your
+                      trauma ({traumaMarkedCount}); no trauma means vice cannot
+                      force stress yet.
+                    </div>
+                    {String(charData.vice || "").trim() ? (
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#a78bfa",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        Vice on sheet: {String(charData.vice).trim()}
+                      </div>
+                    ) : null}
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "#d1d5db",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      Pool:{" "}
+                      <span style={{ color: "#a78bfa", fontWeight: "bold" }}>
+                        {viceDicePool}d
+                      </span>
+                      <span style={{ color: "#6b7280" }}>
+                        {" "}
+                        (Insight {viceAttributeDice[0]?.dice ?? 0} · Prowess{" "}
+                        {viceAttributeDice[1]?.dice ?? 0} · Resolve{" "}
+                        {viceAttributeDice[2]?.dice ?? 0})
+                        {viceLowestLabels
+                          ? ` — lowest: ${viceLowestLabels}`
+                          : ""}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDiceResult(null);
+                        const pool = viceDicePool;
+                        let dice;
+                        let highest;
+                        const zeroDice = pool === 0;
+                        if (zeroDice) {
+                          const d1 = Math.floor(Math.random() * 6) + 1;
+                          const d2 = Math.floor(Math.random() * 6) + 1;
+                          highest = Math.min(d1, d2);
+                          dice = [d1, d2];
+                        } else {
+                          dice = Array.from(
+                            { length: pool },
+                            () => Math.floor(Math.random() * 6) + 1,
+                          );
+                          highest = Math.max(...dice);
+                        }
+                        const stressBefore = Number(stressFilled) || 0;
+                        const wouldOverindulge = highest > stressBefore;
+                        setViceRollResult({
+                          dice,
+                          highest,
+                          dicePool: pool,
+                          zeroDice,
+                          wouldOverindulge,
+                          stressBefore,
+                          applied: false,
+                          overindulge: "",
+                          wantedApplyErr: null,
+                          viceApplyErr: null,
+                        });
+                      }}
+                      style={{
+                        ...S.btn,
+                        background: "#7c3aed",
+                        color: "#fff",
+                        fontSize: "11px",
+                      }}
+                    >
+                      Vice roll
+                    </button>
+                    {viceRollResult ? (
+                      <div
+                        style={{
+                          marginTop: "10px",
+                          padding: "8px",
+                          borderRadius: "4px",
+                          background: "#0d1117",
+                          border: "1px solid #374151",
+                          fontSize: "11px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "4px",
+                            flexWrap: "wrap",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          {viceRollResult.dice.map((die, i) => (
+                            <span
+                              key={i}
+                              style={{
+                                display: "inline-flex",
+                                width: "24px",
+                                height: "24px",
+                                borderRadius: "4px",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontWeight: "bold",
+                                border: "1px solid",
+                                background:
+                                  die === 6
+                                    ? "#166534"
+                                    : die >= 4
+                                      ? "#1e3a8a"
+                                      : "#374151",
+                                borderColor:
+                                  die === 6
+                                    ? "#22c55e"
+                                    : die >= 4
+                                      ? "#3b82f6"
+                                      : "#6b7280",
+                              }}
+                            >
+                              {die}
+                            </span>
+                          ))}
+                        </div>
+                        {viceRollResult.zeroDice ? (
+                          <div style={{ color: "#f87171", marginBottom: "4px" }}>
+                            0 rating — rolled 2d, took lower
+                          </div>
+                        ) : null}
+                        <div style={{ color: "#e5e7eb", marginBottom: "4px" }}>
+                          Highest:{" "}
+                          <strong style={{ color: "#34d399" }}>
+                            {viceRollResult.highest}
+                          </strong>{" "}
+                          → clear that many stress (cap at what you had:{" "}
+                          {viceRollResult.stressBefore} marked).
+                        </div>
+                        {viceRollResult.wouldOverindulge ? (
+                          <div
+                            style={{
+                              color: "#fbbf24",
+                              marginBottom: "6px",
+                              fontWeight: "bold",
+                            }}
+                          >
+                            Overindulgence: you cleared more stress than you
+                            had marked — bad call from vice. Choose an outcome
+                            below with the table/GM.
+                          </div>
+                        ) : null}
+                        {viceRollResult.wouldOverindulge &&
+                        !viceRollResult.applied ? (
+                          <select
+                            value={viceRollResult.overindulge || ""}
+                            onChange={(e) =>
+                              setViceRollResult((p) =>
+                                p
+                                  ? {
+                                      ...p,
+                                      overindulge: e.target.value,
+                                      wantedApplyErr: null,
+                                      viceApplyErr: null,
+                                    }
+                                  : p,
+                              )
+                            }
+                            style={{
+                              ...S.sel,
+                              width: "100%",
+                              maxWidth: "100%",
+                              fontSize: "11px",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            {VICE_OVERINDULGE_CHOICES.map((o) => (
+                              <option key={o.value || "none"} value={o.value}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
+                        {viceRollResult.wouldOverindulge &&
+                        viceRollResult.applied &&
+                        viceRollResult.overindulge ? (
+                          <div
+                            style={{
+                              padding: "6px 8px",
+                              marginBottom: "8px",
+                              borderRadius: "4px",
+                              background: "#422006",
+                              border: "1px solid #a16207",
+                              color: "#fde68a",
+                              fontSize: "11px",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            <strong>Overindulgence:</strong>{" "}
+                            {viceOverindulgeLabel(viceRollResult.overindulge)}
+                          </div>
+                        ) : null}
+                        {viceRollResult.wouldOverindulge &&
+                        viceRollResult.overindulge === "brag" ? (
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#93c5fd",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            Apply will bump this campaign&rsquo;s wanted stars by
+                            +2 (caps at 5) before stress clears.
+                          </div>
+                        ) : null}
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "8px",
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            disabled={!!viceRollResult.applied}
+                            onClick={async () => {
+                              if (!viceRollResult || viceRollResult.applied)
+                                return;
+                              if (
+                                viceRollResult.wouldOverindulge &&
+                                !String(
+                                  viceRollResult.overindulge || "",
+                                ).trim()
+                              ) {
+                                setViceRollResult((p) =>
+                                  p
+                                    ? {
+                                        ...p,
+                                        viceApplyErr:
+                                          "Choose an overindulgence consequence before applying.",
+                                      }
+                                    : p,
+                                );
+                                return;
+                              }
+                              const hi = viceRollResult.highest;
+                              const bumpWanted =
+                                viceRollResult.wouldOverindulge &&
+                                viceRollResult.overindulge === "brag";
+                              try {
+                                setViceRollResult((p) =>
+                                  p ? { ...p, viceApplyErr: null } : p,
+                                );
+                                if (bumpWanted) {
+                                  if (!charCampaign?.id) {
+                                    setViceRollResult((p) =>
+                                      p
+                                        ? {
+                                            ...p,
+                                            wantedApplyErr:
+                                              "No campaign linked; wanted stars not updated.",
+                                          }
+                                        : p,
+                                    );
+                                    return;
+                                  }
+                                  await campaignAPI.incrementCampaignWanted(
+                                    charCampaign.id,
+                                    { amount: 2, cap: 5 },
+                                  );
+                                  onCampaignRefresh?.();
+                                }
+                                setStressFilled((prev) =>
+                                  Math.max(0, (Number(prev) || 0) - hi),
+                                );
+                                // Once stress is applied, close the result card.
+                                setViceRollResult(null);
+                              } catch (e) {
+                                setViceRollResult((p) =>
+                                  p
+                                    ? {
+                                        ...p,
+                                        wantedApplyErr:
+                                          e.message ||
+                                          "Could not update campaign wanted stars.",
+                                      }
+                                    : p,
+                                );
+                              }
+                            }}
+                            style={{
+                              ...S.btn,
+                              background: "#059669",
+                              color: "#fff",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {viceRollResult.applied
+                              ? "Stress cleared"
+                              : `Apply −${viceRollResult.highest} stress`}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setViceRollResult(null)}
+                            style={{ ...S.btn, fontSize: "11px" }}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                        {viceRollResult.viceApplyErr ? (
+                          <div
+                            style={{
+                              marginTop: "8px",
+                              color: "#fca5a5",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {viceRollResult.viceApplyErr}
+                          </div>
+                        ) : null}
+                        {viceRollResult.wantedApplyErr ? (
+                          <div
+                            style={{
+                              marginTop: "8px",
+                              color: "#fca5a5",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {viceRollResult.wantedApplyErr}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
 
                 {/* Harm + Armor */}
@@ -4403,55 +7478,146 @@ const CharacterSheetWrapper = ({
                   <div style={{ display: "flex", gap: "16px" }}>
                     <div style={{ flex: 1 }}>
                       <span style={S.lbl}>HARM</span>
-                      {[
-                        { key: "level4", label: "FATAL", count: 1 },
-                        { key: "level3", label: "NEED HELP", count: 1 },
-                        { key: "level2", label: "-1D", count: 2 },
-                        { key: "level1", label: "LESS EFFECT", count: 2 },
-                      ].map(({ key, label, count }) =>
-                        Array.from({ length: count }, (_, idx) => (
-                          <div
-                            key={`${key}-${idx}`}
+                      {(
+                        [
+                          { key: "level4", label: "FATAL", count: 1 },
+                          { key: "level3", label: "NEED HELP", count: 1 },
+                        ]
+                      ).map(({ key, label, count }) => (
+                        <div
+                          key={key}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          <span
                             style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: "6px",
-                              marginBottom: "4px",
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              width: "68px",
+                              flexShrink: 0,
                             }}
                           >
-                            <span
-                              style={{
-                                fontSize: "10px",
-                                color: "#9ca3af",
-                                width: "68px",
-                                flexShrink: 0,
-                              }}
-                            >
-                              {label}
-                            </span>
-                            <input
-                              style={{
-                                ...S.inp,
-                                border: "1px solid #374151",
-                                background: "#0a0a0a",
-                                padding: "2px 6px",
-                                fontSize: "11px",
-                              }}
-                              placeholder={`Lv${key.slice(-1)} harm`}
-                              value={harm[key]?.[idx] ?? ""}
-                              onChange={(e) =>
-                                setHarm((p) => {
-                                  const row = Array.isArray(p[key])
-                                    ? [...p[key]]
-                                    : Array(count).fill("");
-                                  row[idx] = e.target.value;
-                                  return { ...p, [key]: row };
-                                })
-                              }
-                            />
+                            {label}
+                          </span>
+                          <input
+                            style={{
+                              ...S.inp,
+                              flex: 1,
+                              minWidth: 0,
+                              border: "1px solid #374151",
+                              background: "#0a0a0a",
+                              padding: "2px 6px",
+                              fontSize: "11px",
+                            }}
+                            placeholder={`Lv${key.slice(-1)} harm`}
+                            value={harm[key]?.[0] ?? ""}
+                            onChange={(e) =>
+                              setHarm((p) => {
+                                const row = Array.isArray(p[key])
+                                  ? [...p[key]]
+                                  : Array(count).fill("");
+                                const hadValue = String(row[0] || "").trim().length > 0;
+                                row[0] = e.target.value;
+                                const hasNewValue =
+                                  String(e.target.value || "").trim().length > 0;
+                                if (!hadValue && hasNewValue) setHealingClock(0);
+                                return { ...p, [key]: row };
+                              })
+                            }
+                          />
+                        </div>
+                      ))}
+                      {hasFatalHarm && hasStayingPowerAbility ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#fda4af",
+                            lineHeight: 1.35,
+                            marginBottom: "8px",
+                            padding: "6px 8px",
+                            background: "#1c1917",
+                            border: "1px solid #9f1239",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <strong>Staying Power:</strong> Fatal (Level 4) harm is
+                          marked. If resistance or other effects cannot remove
+                          this KO, work with the GM to exercise Staying Power
+                          (e.g. limb or severe complication instead) using the
+                          post-roll option above— it turns on automatically while
+                          this slot is filled.
+                        </div>
+                      ) : null}
+                      {(
+                        [
+                          { key: "level2", label: "-1D", count: 2 },
+                          { key: "level1", label: "LESS EFFECT", count: 2 },
+                        ]
+                      ).map(({ key, label, count }) => (
+                        <div
+                          key={key}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              width: "68px",
+                              flexShrink: 0,
+                            }}
+                          >
+                            {label}
+                          </span>
+                          <div
+                            style={{
+                              display: "flex",
+                              flex: 1,
+                              minWidth: 0,
+                              gap: "6px",
+                            }}
+                          >
+                            {Array.from({ length: count }, (_, idx) => (
+                              <input
+                                key={`${key}-${idx}`}
+                                style={{
+                                  ...S.inp,
+                                  flex: 1,
+                                  minWidth: 0,
+                                  border: "1px solid #374151",
+                                  background: "#0a0a0a",
+                                  padding: "2px 6px",
+                                  fontSize: "11px",
+                                }}
+                                placeholder={`Lv${key.slice(-1)} harm`}
+                                value={harm[key]?.[idx] ?? ""}
+                                onChange={(e) =>
+                                  setHarm((p) => {
+                                    const row = Array.isArray(p[key])
+                                      ? [...p[key]]
+                                      : Array(count).fill("");
+                                    const hadValue =
+                                      String(row[idx] || "").trim().length > 0;
+                                    row[idx] = e.target.value;
+                                    const hasNewValue =
+                                      String(e.target.value || "").trim().length > 0;
+                                    if (!hadValue && hasNewValue) setHealingClock(0);
+                                    return { ...p, [key]: row };
+                                  })
+                                }
+                              />
+                            ))}
                           </div>
-                        )),
-                      )}
+                        </div>
+                      ))}
                     </div>
                     <div
                       style={{
@@ -4469,8 +7635,137 @@ const CharacterSheetWrapper = ({
                         segments={4}
                         filled={healingClock}
                         interactive
-                        onClick={setHealingClock}
+                        onClick={handleHealingClockAdjust}
                       />
+
+                      <label
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: "4px",
+                          marginTop: "8px",
+                          width: "100%",
+                          maxWidth: "220px",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: "9px",
+                            color: "#6b7280",
+                            textAlign: "center",
+                          }}
+                          title="Dice pool = your rating for this action. Default Tinker; saved per character in this browser."
+                        >
+                          Recover roll action (default Tinker)
+                        </span>
+                        <select
+                          aria-label="Healing recover action"
+                          disabled={healingRecoverBusy || !canEditSheet}
+                          value={selfHealingRecoverAction}
+                          onChange={(e) => {
+                            const chosen = pickHealClockAction(e.target.value);
+                            setSelfHealingRecoverAction(chosen);
+                            if (!characterId) return;
+                            try {
+                              window.localStorage.setItem(
+                                `biz:self-healing-recover-action:${characterId}`,
+                                chosen,
+                              );
+                            } catch {
+                              /* ignore quota / privacy mode */
+                            }
+                          }}
+                          style={{
+                            ...S.sel,
+                            width: "100%",
+                            fontSize: "11px",
+                            paddingBlock: "4px",
+                          }}
+                        >
+                          {healRollActionChoices.map((action) => (
+                            <option key={action} value={action}>
+                              {action}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
+                        <button
+                          type="button"
+                          onClick={() => performHealingRecover("downtime")}
+                          disabled={healingRecoverBusy || !canEditSheet}
+                          style={{
+                            ...S.btn,
+                            fontSize: "11px",
+                            background: "#0f766e",
+                            color: "#f8fafc",
+                            opacity:
+                              healingRecoverBusy || !canEditSheet ? 0.6 : 1,
+                          }}
+                          title={`Downtime recover: treat yourself when you have downtime or an equivalent pause—even during a gaming session—when GM/table agrees. SRD stress: 2. Roll ${pickHealClockAction(selfHealingRecoverAction)} for healing clock segments (1-3:+1, 4/5:+2, 6:+3, critical:+5).${
+                            selfRecoverInvigoratedDice
+                              ? " Pool includes +1d Invigorated when that ability appears on your sheet or heritage."
+                              : ""
+                          }`}
+                        >
+                          downtime recover
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => performHealingRecover("mid-action")}
+                          disabled={
+                            healingRecoverBusy ||
+                            !canEditSheet ||
+                            !Boolean(activeSessionId)
+                          }
+                          style={{
+                            ...S.btn,
+                            fontSize: "11px",
+                            background: "#4338ca",
+                            color: "#ffffff",
+                            opacity:
+                              healingRecoverBusy ||
+                              !canEditSheet ||
+                              !Boolean(activeSessionId)
+                                ? 0.6
+                                : 1,
+                          }}
+                          title={`Mid-action recover: treat yourself mid-score. Requires time & safety (SRD). SRD stress cost: 2. Roll ${pickHealClockAction(selfHealingRecoverAction)} for healing clock segments (1-3:+1, 4/5:+2, 6:+3, critical:+5).${
+                            selfRecoverInvigoratedDice
+                              ? " Pool includes +1d Invigorated when that ability appears on your sheet or heritage."
+                              : ""
+                          }`}
+                        >
+                          mid-action recover
+                        </button>
+                      </div>
+
+                      {healingRecoverErr ? (
+                        <div
+                          style={{
+                            marginTop: "6px",
+                            fontSize: "11px",
+                            color: "#fca5a5",
+                            textAlign: "center",
+                          }}
+                        >
+                          {healingRecoverErr}
+                        </div>
+                      ) : null}
+                      {healingRecoverMsg ? (
+                        <div
+                          style={{
+                            marginTop: "6px",
+                            fontSize: "11px",
+                            color: "#a78bfa",
+                            textAlign: "center",
+                          }}
+                        >
+                          {healingRecoverMsg}
+                        </div>
+                      ) : null}
                     </div>
 
                     {/* FIX 4: Armor charges derived from Durability */}
@@ -4543,6 +7838,31 @@ const CharacterSheetWrapper = ({
                         />
                         SPECIAL
                       </label>
+                      {characterHasLegendaryGuard(abilities) ? (
+                        <div
+                          title={
+                            'Standard: Legendary Guard — once per score, completely negate one instance of incoming harm (table tracks when used).'
+                          }
+                          style={{
+                            marginTop: "8px",
+                            padding: "5px 6px",
+                            fontSize: "9px",
+                            lineHeight: 1.3,
+                            color: "#86efac",
+                            background: "#0f172a",
+                            border: "1px solid #166534",
+                            borderRadius: "4px",
+                            maxWidth: "100%",
+                          }}
+                        >
+                          <span style={{ fontWeight: "bold", color: "#bbf7d0" }}>
+                            Legendary Guard
+                          </span>
+                          <span style={{ display: "block", color: "#a7f3d0" }}>
+                            1× / score · negate incoming harm (not armor boxes)
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -4787,6 +8107,7 @@ const CharacterSheetWrapper = ({
                           ))}
                         </select>
                         <button
+                          type="button"
                           onClick={spendXPForDot}
                           disabled={
                             totalXP < 5 ||
@@ -5443,23 +8764,28 @@ const CharacterSheetWrapper = ({
                           style={{
                             fontSize: "11px",
                             color:
-                              totalStandPoints > 6
+                              totalStandPoints > standCoinIndexBudget
                                 ? "#f87171"
-                                : totalStandPoints === 6
+                                : totalStandPoints === standCoinIndexBudget
                                   ? "#34d399"
                                   : "#6b7280",
                           }}
+                          title={`SRD grade-value sum across six stats (${STAND_COIN_CREATION_POINT_SUM} at chargen, +${Number(character?.standCoinPointsGained) || 0} from XP on record).`}
                         >
-                          {totalStandPoints}/6 pts
+                          {totalStandPoints}/{standCoinIndexBudget} pts
                         </span>
                       </div>
 
-                      {totalStandPoints > 6 && (
+                      {totalStandPoints > standCoinIndexBudget ? (
                         <div style={{ ...S.warn, marginBottom: "8px" }}>
-                          Over budget by {totalStandPoints - 6} point
-                          {totalStandPoints - 6 > 1 ? "s" : ""} — reduce a stat
+                          Over budget by{" "}
+                          {totalStandPoints - standCoinIndexBudget} point
+                          {totalStandPoints - standCoinIndexBudget > 1
+                            ? "s"
+                            : ""}{" "}
+                          — reduce a stat or reconcile XP / server advances
                         </div>
-                      )}
+                      ) : null}
 
                       <NpcsStandCoin
                         variant="pc"
@@ -5680,31 +9006,6 @@ const CharacterSheetWrapper = ({
                                     </span>
                                   </div>
                                 )}
-                                {npc.harm_clock_max > 0 && (
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      gap: "6px",
-                                      marginBottom: "4px",
-                                    }}
-                                  >
-                                    <ProgressClock
-                                      size={36}
-                                      segments={npc.harm_clock_max}
-                                      filled={npc.harm_clock_current}
-                                    />
-                                    <span
-                                      style={{
-                                        fontSize: "10px",
-                                        color: "#9ca3af",
-                                      }}
-                                    >
-                                      Harm {npc.harm_clock_current}/
-                                      {npc.harm_clock_max}
-                                    </span>
-                                  </div>
-                                )}
                                 {(npc.conflict_clocks || []).length > 0
                                   ? (npc.conflict_clocks || []).map((clk) => (
                                       <div
@@ -5892,31 +9193,6 @@ const CharacterSheetWrapper = ({
                                           Vuln{" "}
                                           {npc.vulnerability_clock_current || 0}
                                           /{npc.vulnerability_clock_max}
-                                        </span>
-                                      </div>
-                                    )}
-                                    {npc.harm_clock_max > 0 && (
-                                      <div
-                                        style={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: "6px",
-                                          marginBottom: "4px",
-                                        }}
-                                      >
-                                        <ProgressClock
-                                          size={36}
-                                          segments={npc.harm_clock_max}
-                                          filled={npc.harm_clock_current || 0}
-                                        />
-                                        <span
-                                          style={{
-                                            fontSize: "10px",
-                                            color: "#9ca3af",
-                                          }}
-                                        >
-                                          Harm {npc.harm_clock_current || 0}/
-                                          {npc.harm_clock_max}
                                         </span>
                                       </div>
                                     )}
@@ -6124,6 +9400,57 @@ const CharacterSheetWrapper = ({
                       </div>
                     )}
 
+                    {resistanceAbilityOptions.some((o) => o.mitigationOnly) ? (
+                      <div
+                        style={{
+                          marginBottom: "10px",
+                          padding: "8px 10px",
+                          background: "#111827",
+                          border: "1px solid #374151",
+                          borderRadius: "6px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#9ca3af",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          Post-roll resistance (after harm is applied)
+                        </div>
+                        {resistanceAbilityOptions
+                          .filter((o) => o.mitigationOnly)
+                          .map((opt) => (
+                            <label
+                              key={opt.id}
+                              style={{
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                marginBottom: "4px",
+                                cursor: "pointer",
+                              }}
+                              title={opt.description || undefined}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!!resistanceAbilityBoost[opt.id]}
+                                onChange={(e) =>
+                                  setResistanceAbilityBoost((prev) => ({
+                                    ...prev,
+                                    [opt.id]: e.target.checked,
+                                  }))
+                                }
+                              />
+                              {opt.name} (post-roll option)
+                            </label>
+                          ))}
+                      </div>
+                    ) : null}
+
                     <div style={S.g3}>
                       {[
                         {
@@ -6138,7 +9465,20 @@ const CharacterSheetWrapper = ({
                           attr: "RESOLVE",
                           actions: ["BIZARRE", "COMMAND", "CONSORT", "SWAY"],
                         },
-                      ].map(({ attr, actions }) => (
+                      ].map(({ attr, actions }) => {
+                        const baseResistanceDice = getAttributeDice(actions);
+                        const prowessPhysiologyBonus =
+                          String(attr || "").toUpperCase() === "PROWESS" &&
+                          !!resistanceAbilityBoost["superior-physiology"]
+                            ? 1
+                            : 0;
+                        const resistanceDiceWithBonuses =
+                          baseResistanceDice + prowessPhysiologyBonus;
+                        const resistanceDotSlots = Math.max(
+                          4,
+                          resistanceDiceWithBonuses,
+                        );
+                        return (
                         <div key={attr}>
                           <div
                             style={{
@@ -6177,13 +9517,7 @@ const CharacterSheetWrapper = ({
                                 {attr}
                               </button>
                               <button
-                                onClick={() =>
-                                  rollDice(
-                                    attr,
-                                    getAttributeDice(actions),
-                                    true,
-                                  )
-                                }
+                                onClick={() => openResistanceRollPreview(attr, actions)}
                                 style={{
                                   fontSize: "14px",
                                   background: "none",
@@ -6194,14 +9528,22 @@ const CharacterSheetWrapper = ({
                                 }}
                                 title={
                                   RESISTANCE_ATTR_DESC[attr] ||
-                                  "Resistance Roll"
+                                  "Open resistance dice pool"
                                 }
                               >
                                 🎲
                               </button>
                             </span>
                             <div style={{ display: "flex", gap: "2px" }}>
-                              {[1, 2, 3, 4].map((d) => (
+                              {Array.from(
+                                { length: resistanceDotSlots },
+                                (_, idx) => {
+                                  const d = idx + 1;
+                                  const isBase = d <= baseResistanceDice;
+                                  const isBonus =
+                                    d > baseResistanceDice &&
+                                    d <= resistanceDiceWithBonuses;
+                                  return (
                                 <div
                                   key={d}
                                   style={{
@@ -6209,15 +9551,62 @@ const CharacterSheetWrapper = ({
                                     height: "7px",
                                     borderRadius: "50%",
                                     border: "1px solid #4b5563",
-                                    background:
-                                      d <= getAttributeDice(actions)
-                                        ? "#3b82f6"
+                                    background: isBase
+                                      ? "#3b82f6"
+                                      : isBonus
+                                        ? "#22c55e"
                                         : "#1f2937",
                                   }}
+                                  title={
+                                    isBonus
+                                      ? "Heritage / ability bonus on this resistance"
+                                      : undefined
+                                  }
                                 />
-                              ))}
+                                  );
+                                },
+                              )}
                             </div>
                           </div>
+                          {resistanceAbilityOptions
+                            .filter(
+                              (opt) =>
+                                !opt.mitigationOnly &&
+                                (String(opt.appliesTo || "").toUpperCase() ===
+                                  "ALL" ||
+                                  String(opt.appliesTo || "").toUpperCase() ===
+                                    String(attr || "").toUpperCase()),
+                            )
+                            .map((opt) => (
+                              <label
+                                key={`${attr}-${opt.id}`}
+                                style={{
+                                  fontSize: "10px",
+                                  color: "#9ca3af",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "6px",
+                                  marginBottom: "6px",
+                                  cursor: "pointer",
+                                }}
+                                title={opt.description || undefined}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={!!resistanceAbilityBoost[opt.id]}
+                                  onChange={(e) =>
+                                    setResistanceAbilityBoost((prev) => ({
+                                      ...prev,
+                                      [opt.id]: e.target.checked,
+                                    }))
+                                  }
+                                />
+                                {opt.name}
+                                {opt.bonusDice > 0
+                                  ? ` (+${opt.bonusDice}d)`
+                                  : " (post-roll option)"}
+                              </label>
+                            ))}
                           {expandedActionInfo === attr && (
                             <div
                               style={{
@@ -6370,13 +9759,16 @@ const CharacterSheetWrapper = ({
                             );
                           })}
                         </div>
-                      ))}
+                      );
+                      })}
                     </div>
                   </div>
 
                   {/* Action roll — dice pool preview (session) or roll result; same slot under action ratings */}
                   {rollPending && characterId && (
                     <div
+                      ref={actionRollDicePoolPreviewElRef}
+                      data-action-roll-dice-preview
                       style={{
                         background: "#1f2937",
                         padding: "12px",
@@ -6395,7 +9787,10 @@ const CharacterSheetWrapper = ({
                           color: "#a78bfa",
                         }}
                       >
-                        Dice pool — {rollPending.actionName}
+                        Dice pool — {rollActionName || rollPending.actionName}
+                        {rollPending?.healAttempt?.targetName
+                          ? ` — Healing ${rollPending.healAttempt.targetName}`
+                          : ""}
                       </div>
                       <div
                         style={{
@@ -6404,10 +9799,83 @@ const CharacterSheetWrapper = ({
                           marginBottom: "12px",
                         }}
                       >
-                        Preview your pool, check position and effect, add push /
-                        assist / bargain, then roll. Cancel to pick another
-                        action.
+                        {rollPending?.healAttempt &&
+                        !showDiceRollModalPositionEffect ? (
+                          <>
+                            Preview your dice pool, then roll. Position and effect
+                            are hidden for heals that are not recover-in-play
+                            (including downtime cadence). Cancel to pick another
+                            action.
+                          </>
+                        ) : (
+                          <>
+                            Preview your pool, check position and effect, add push
+                            / assist / bargain, then roll. Cancel to pick another
+                            action.
+                          </>
+                        )}
                       </div>
+                      {rollPending?.healAttempt && (
+                        <div
+                          style={{
+                            marginBottom: "12px",
+                            padding: "8px",
+                            borderRadius: "6px",
+                            border: "1px solid #0f766e",
+                            background: "#0f172a",
+                            color: "#99f6e4",
+                            fontSize: "11px",
+                            lineHeight: 1.35,
+                          }}
+                        >
+                          <div>
+                            Declared heal target:{" "}
+                            <strong style={{ color: "#e5e7eb" }}>
+                              {rollPending.healAttempt.targetName || "teammate"}
+                            </strong>
+                          </div>
+                          {String(rollPending.healAttempt.bolsterNote || "").trim() ? (
+                            <div style={{ marginTop: "4px" }}>
+                              Bolsters:{" "}
+                              {String(rollPending.healAttempt.bolsterNote).trim()}
+                            </div>
+                          ) : null}
+                          {(() => {
+                            const ht = rollPending.healAttempt;
+                            const fromRoll =
+                              ht &&
+                              Array.isArray(ht.selectedAbilityBolsters) &&
+                              ht.selectedAbilityBolsters.length > 0
+                                ? ht.selectedAbilityBolsters
+                                : [];
+                            const list =
+                              fromRoll.length > 0 ? fromRoll : healOtherRecoveryBolsterSources;
+                            return list.length > 0 ? (
+                              <div style={{ marginTop: "4px" }}>
+                                Ability bolsters:&nbsp;
+                                <span style={{ color: "#e5e7eb" }}>
+                                  {list.join("; ")}
+                                </span>
+                              </div>
+                            ) : null;
+                          })()}
+                          {String(rollPending.healAttempt.careNote || "").trim() ? (
+                            <div style={{ marginTop: "4px" }}>
+                              Notes: {String(rollPending.healAttempt.careNote).trim()}
+                            </div>
+                          ) : null}
+                          <div style={{ marginTop: "4px" }}>
+                            Boosts selected:{" "}
+                            {healAttemptSelectedBoostSummary.length > 0
+                              ? healAttemptSelectedBoostSummary.join("; ")
+                              : "none selected yet"}
+                          </div>
+                          <div style={{ marginTop: "4px", color: "#94a3b8" }}>
+                            GM follow-up: resolve linked recovery ticks for the
+                            target per SRD treatment cadence.
+                          </div>
+                        </div>
+                      )}
                       {harmLevel3Used && (
                           <div
                             style={{
@@ -6424,16 +9892,18 @@ const CharacterSheetWrapper = ({
                             This does not grant +1 effect or +1d.
                           </div>
                         )}
+                      {showDiceRollModalPositionEffect ? (
+                      <>
                       <div
                         style={{
                           display: "flex",
                           gap: "16px",
                           flexWrap: "wrap",
-                          marginBottom: "12px",
-                          alignItems: "flex-end",
+                          marginBottom: "8px",
+                          alignItems: "flex-start",
                         }}
                       >
-                        <div>
+                        <div style={{ flex: "1 1 160px", minWidth: 0 }}>
                           <div
                             style={{
                               fontSize: "10px",
@@ -6453,7 +9923,7 @@ const CharacterSheetWrapper = ({
                             readOnly
                           />
                         </div>
-                        <div>
+                        <div style={{ flex: "1 1 180px", minWidth: 0 }}>
                           <div
                             style={{
                               fontSize: "10px",
@@ -6461,18 +9931,78 @@ const CharacterSheetWrapper = ({
                               marginBottom: "4px",
                             }}
                           >
-                            Effect (this action)
+                            Effect (this action — after bonuses)
                           </div>
                           <EffectShapes
-                            activeEffect={
-                              sessionOverridePositionEffect?.effect ||
-                              charCampaign?.active_session_detail?.default_effect ||
-                              "standard"
-                            }
+                            activeEffect={rollModalPreviewEffect}
                             readOnly
                           />
                         </div>
                       </div>
+                      {rollModalPositionEffectBreakdown ? (
+                        <div
+                          style={{
+                            marginBottom: "12px",
+                            padding: "10px 12px",
+                            borderRadius: "6px",
+                            border: "1px solid #374151",
+                            background: "#0d1117",
+                            fontSize: "10px",
+                            color: "#9ca3af",
+                            lineHeight: 1.45,
+                          }}
+                        >
+                          <div style={{ marginBottom: "4px", color: "#a78bfa" }}>
+                            Effect tier steps applied in this roll:
+                          </div>
+                          {rollModalPositionEffectBreakdown.effectTierSteps.length === 0 ? (
+                            <div style={{ color: "#6b7280", fontStyle: "italic" }}>
+                              None — toggle +1 effect on abilities/heritage below or push for
+                              effect to add steps.
+                            </div>
+                          ) : (
+                            <ul
+                              style={{
+                                margin: "0 0 8px 0",
+                                paddingLeft: "18px",
+                                color: "#d1d5db",
+                              }}
+                            >
+                              {rollModalPositionEffectBreakdown.effectTierSteps.map((row) => (
+                                <li key={row.key} style={{ marginBottom: "2px" }}>
+                                  {row.text}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          <div style={{ fontSize: "9px", color: "#6b7280" }}>
+                            Highlighted effect shape (
+                            <strong style={{ color: "#c4b5fd" }}>
+                              {rollModalPositionEffectBreakdown.previewTierLabel}
+                            </strong>
+                            ) stacks session default then these steps in the same order as
+                            the server roll.
+                          </div>
+                        </div>
+                      ) : null}
+                      </>
+                      ) : (
+                        <div
+                          style={{
+                            fontSize: "11px",
+                            color: "#9ca3af",
+                            marginBottom: "12px",
+                            lineHeight: 1.35,
+                          }}
+                        >
+                          This heal preview is downtime or otherwise not recover-in-play:
+                          dice pool still uses your rating and boosts;{" "}
+                          <strong style={{ color: "#d1d5db" }}>
+                            omit position / effect preview
+                          </strong>{" "}
+                          unless you reopen with recover-in-play treatment selected.
+                        </div>
+                      )}
                       <div style={{ marginBottom: "12px" }}>
                         <label
                           style={{
@@ -6525,10 +10055,300 @@ const CharacterSheetWrapper = ({
                           >
                             Your dice pool
                           </div>
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: "#6b7280",
+                              marginBottom: 8,
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            Tick what applies to <strong>this</strong> roll (fiction only).
+                            Some abilities are hidden here on purpose (counterattack / ally
+                            perks); Iron Will uses the checkbox under RESOLVE resistance.
+                            See{" "}
+                            <code style={{ color: "#9ca3af" }}>
+                              docs/codebase/standard-ability-roll-bonus-audit.md
+                            </code>
+                            . Choices update dice here, are sent on the roll, appear in
+                            session dice history, and add{" "}
+                            <code style={{ color: "#9ca3af" }}>[Abilities: …]</code> /{" "}
+                            <code style={{ color: "#9ca3af" }}>[Heritage: …]</code> on the
+                            stored roll (STANDOUT settle + heritage XP hooks read those).
+                          </div>
                           <DicePoolStrip
                             label="Action rating (dice in this action only)"
                             count={rollPoolPreview.action_rating}
                           />
+                          {abilityRollBonusOptions.length === 0 &&
+                          heritageRollBonusOptions.length === 0 ? (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "#6b7280",
+                                marginTop: 4,
+                                marginBottom: 8,
+                              }}
+                            >
+                              No abilities on this sheet or selected heritage benefits match{" "}
+                              <code style={{ color: "#9ca3af" }}>+1d</code> or{" "}
+                              <code style={{ color: "#9ca3af" }}>+1 effect</code> in their
+                              descriptions.
+                            </div>
+                          ) : null}
+                          {abilityRollBonusOptions.length > 0 ? (
+                            <div style={{ marginTop: 4, marginBottom: 8 }}>
+                              <div
+                                style={{
+                                  fontSize: 10,
+                                  color: "#9ca3af",
+                                  marginBottom: 4,
+                                }}
+                              >
+                                Sheet abilities (optional — hover name for full text)
+                              </div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "6px",
+                                  maxHeight: "140px",
+                                  overflow: "auto",
+                                }}
+                              >
+                                {abilityRollBonusOptions.map((ab) => {
+                                  const id = ab.id ?? ab.name;
+                                  const b = rollAbilityBoost[id] || {};
+                                  return (
+                                    <div
+                                      key={id}
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        gap: "8px",
+                                        fontSize: "11px",
+                                        flexWrap: "wrap",
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          color: "#e5e7eb",
+                                          flex: "1 1 120px",
+                                        }}
+                                        title={
+                                          ab.rollBonusResolvedDescription
+                                            ? String(ab.rollBonusResolvedDescription).slice(0, 800)
+                                            : undefined
+                                        }
+                                      >
+                                        {ab.name}
+                                      </span>
+                                      {ab.supportsDice ? (
+                                        <label
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "4px",
+                                            cursor: "pointer",
+                                          }}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={!!b.dice}
+                                            onChange={(e) =>
+                                              setRollAbilityBoost((p) => ({
+                                                ...p,
+                                                [id]: {
+                                                  ...p[id],
+                                                  dice: e.target.checked,
+                                                  effect: !!p[id]?.effect,
+                                                },
+                                              }))
+                                            }
+                                          />
+                                          +1d
+                                        </label>
+                                      ) : null}
+                                      {ab.supportsEffect ? (
+                                        <label
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "4px",
+                                            cursor: "pointer",
+                                          }}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={!!b.effect}
+                                            onChange={(e) =>
+                                              setRollAbilityBoost((p) => ({
+                                                ...p,
+                                                [id]: {
+                                                  ...p[id],
+                                                  effect: e.target.checked,
+                                                  dice: !!p[id]?.dice,
+                                                },
+                                              }))
+                                            }
+                                          />
+                                          +1 effect
+                                        </label>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : null}
+                          {heritageRollBonusOptions.length > 0 ? (
+                            <div style={{ marginBottom: 8 }}>
+                              <div
+                                style={{
+                                  fontSize: 10,
+                                  color: "#9ca3af",
+                                  marginBottom: 4,
+                                }}
+                              >
+                                Heritage benefits (optional — expression XP when session
+                                active)
+                              </div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "6px",
+                                  maxHeight: "140px",
+                                  overflow: "auto",
+                                }}
+                              >
+                                {heritageRollBonusOptions.map((hb) => {
+                                  const hid = hb.id ?? hb.name;
+                                  const b = heritageRollBoost[hid] || {};
+                                  return (
+                                    <div
+                                      key={hid}
+                                      style={{
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        gap: "8px",
+                                        fontSize: "11px",
+                                        flexWrap: "wrap",
+                                      }}
+                                    >
+                                      <span
+                                        style={{
+                                          color: "#fde68a",
+                                          flex: "1 1 120px",
+                                        }}
+                                      >
+                                        {hb.name}
+                                      </span>
+                                      {hb.supportsDice ? (
+                                        <label
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "4px",
+                                            cursor: "pointer",
+                                          }}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={!!b.dice}
+                                            onChange={(e) =>
+                                              setHeritageRollBoost((p) => ({
+                                                ...p,
+                                                [hid]: {
+                                                  ...p[hid],
+                                                  dice: e.target.checked,
+                                                  effect: !!p[hid]?.effect,
+                                                },
+                                              }))
+                                            }
+                                          />
+                                          +1d
+                                        </label>
+                                      ) : null}
+                                      {hb.supportsEffect ? (
+                                        <label
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "4px",
+                                            cursor: "pointer",
+                                          }}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={!!b.effect}
+                                            onChange={(e) =>
+                                              setHeritageRollBoost((p) => ({
+                                                ...p,
+                                                [hid]: {
+                                                  ...p[hid],
+                                                  effect: e.target.checked,
+                                                  dice: !!p[hid]?.dice,
+                                                },
+                                              }))
+                                            }
+                                          />
+                                          +1 effect
+                                        </label>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : null}
+                          {characterHasPhantomPain(abilities) ? (
+                            <div style={{ marginTop: 4, marginBottom: 8 }}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "space-between",
+                                  gap: "8px",
+                                  fontSize: "11px",
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    color: "#e5e7eb",
+                                    flex: "1 1 120px",
+                                  }}
+                                  title={
+                                    phantomPainRollDescription
+                                      ? phantomPainRollDescription.slice(0, 900)
+                                      : undefined
+                                  }
+                                >
+                                  Phantom Pain
+                                </span>
+                                <label
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={phantomPainThroughCover}
+                                    onChange={(e) =>
+                                      setPhantomPainThroughCover(e.target.checked)
+                                    }
+                                  />
+                                  Through cover/barriers (+1 stress)
+                                </label>
+                              </div>
+                            </div>
+                          ) : null}
                           {rollModal.push_dice ? (
                             <DicePoolStrip
                               label="Push yourself (+1d, costs 2 stress)"
@@ -6555,9 +10375,40 @@ const CharacterSheetWrapper = ({
                           ) : null}
                           {bonusDiceFromAbilities > 0 ? (
                             <DicePoolStrip
-                              label={`Standard abilities (+${bonusDiceFromAbilities}d)`}
+                              label={`Sheet abilities (+${bonusDiceFromAbilities}d)`}
                               count={bonusDiceFromAbilities}
                             />
+                          ) : null}
+                          {bonusDiceFromHeritage > 0 ? (
+                            <DicePoolStrip
+                              label={`Heritage benefits (+${bonusDiceFromHeritage}d)`}
+                              count={bonusDiceFromHeritage}
+                            />
+                          ) : null}
+                          {totalAbilityEffectSteps > 0 ? (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "#a7f3d0",
+                                marginBottom: 6,
+                              }}
+                            >
+                              Total +{totalAbilityEffectSteps} effect tier step(s)
+                              (abilities / heritage — applied server-side before
+                              position).
+                            </div>
+                          ) : null}
+                          {phantomPainThroughCover ? (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "#fda4af",
+                                marginBottom: 6,
+                              }}
+                            >
+                              Phantom Pain: +1 stress marked on resolve (attacks
+                              through cover / barriers this roll).
+                            </div>
                           ) : null}
                           {rollPoolPreview.total === 0 ? (
                             <div
@@ -6604,110 +10455,11 @@ const CharacterSheetWrapper = ({
                             >
                               You will spend{" "}
                               <strong>{rollPoolPreview.pushStress}</strong>{" "}
-                              stress when this roll resolves (push).
+                              stress when this roll resolves (push, incap penalty,
+                              Phantom Pain — if checked; Ripple Breathing may waive
+                              push stress if checked).
                             </div>
                           ) : null}
-                        </div>
-                      )}
-                      {abilityRollBonusOptions.length > 0 && (
-                        <div style={{ marginBottom: "12px" }}>
-                          <div
-                            style={{
-                              fontSize: "11px",
-                              color: "#9ca3af",
-                              marginBottom: "6px",
-                            }}
-                          >
-                            Standard abilities (optional)
-                          </div>
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "6px",
-                              maxHeight: "140px",
-                              overflow: "auto",
-                            }}
-                          >
-                            {abilityRollBonusOptions.map((ab) => {
-                                const id = ab.id ?? ab.name;
-                                const b = rollAbilityBoost[id] || {};
-                                return (
-                                  <div
-                                    key={id}
-                                    style={{
-                                      display: "flex",
-                                      alignItems: "center",
-                                      justifyContent: "space-between",
-                                      gap: "8px",
-                                      fontSize: "11px",
-                                      flexWrap: "wrap",
-                                    }}
-                                  >
-                                    <span
-                                      style={{
-                                        color: "#e5e7eb",
-                                        flex: "1 1 120px",
-                                      }}
-                                    >
-                                      {ab.name}
-                                    </span>
-                                    {ab.supportsDice ? (
-                                      <label
-                                        style={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: "4px",
-                                          cursor: "pointer",
-                                        }}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={!!b.dice}
-                                          onChange={(e) =>
-                                            setRollAbilityBoost((p) => ({
-                                              ...p,
-                                              [id]: {
-                                                ...p[id],
-                                                dice: e.target.checked,
-                                                effect: !!p[id]?.effect,
-                                              },
-                                            }))
-                                          }
-                                        />
-                                        +1d
-                                      </label>
-                                    ) : null}
-                                    {ab.supportsEffect ? (
-                                      <label
-                                        style={{
-                                          display: "flex",
-                                          alignItems: "center",
-                                          gap: "4px",
-                                          cursor: "pointer",
-                                        }}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={!!b.effect}
-                                          onChange={(e) =>
-                                            setRollAbilityBoost((p) => ({
-                                              ...p,
-                                              [id]: {
-                                                ...p[id],
-                                                effect: e.target.checked,
-                                                dice: !!p[id]?.dice,
-                                              },
-                                            }))
-                                          }
-                                        />
-                                        +1 effect
-                                      </label>
-                                    ) : null}
-                                  </div>
-                                );
-                              })}
-                          </div>
                         </div>
                       )}
                       <fieldset
@@ -6732,7 +10484,14 @@ const CharacterSheetWrapper = ({
                           ["none", harmLevel3Used ? "None (incapacitated cost still applies)" : "None"],
                           ...(!harmLevel3Used
                             ? [
-                                ["push_effect", "Push for +1 effect (2 stress)"],
+                                ...(!healAttemptIsDowntimeRecovery
+                                  ? [
+                                      [
+                                        "push_effect",
+                                        "Push for +1 effect (2 stress)",
+                                      ],
+                                    ]
+                                  : []),
                                 ["push_dice", "Push for +1d (2 stress)"],
                               ]
                             : []),
@@ -6762,6 +10521,74 @@ const CharacterSheetWrapper = ({
                           </label>
                         ))}
                       </fieldset>
+                      {hasRippleBreathingAbility ? (
+                        <div
+                          style={{
+                            marginBottom: "12px",
+                            padding: "8px 10px",
+                            borderRadius: "6px",
+                            border: "1px solid #334155",
+                            background: "#0f172a",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#94a3b8",
+                              marginBottom: "6px",
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            Ripple Breathing — once per session episode you may push
+                            for <strong>+1d</strong> or <strong>+1 effect</strong>{" "}
+                            without marking the usual 2 stress (SRD). +1d vs poison /
+                            fatigue / fear belongs on{" "}
+                            <strong>resistance</strong> rolls only (checkbox there), not
+                            in the action pool above.
+                          </div>
+                          <label
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "8px",
+                              fontSize: "11px",
+                              color: "#e5e7eb",
+                              cursor:
+                                rippleBreathingFreePushClaimedThisSession ||
+                                !activeSessionId ||
+                                !(rollModal.push_dice || rollModal.push_effect) ||
+                                harmLevel3Used
+                                  ? "not-allowed"
+                                  : "pointer",
+                              opacity:
+                                rippleBreathingFreePushClaimedThisSession ||
+                                !activeSessionId
+                                  ? 0.55
+                                  : 1,
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={rippleBreathingFreePush}
+                              disabled={
+                                rippleBreathingFreePushClaimedThisSession ||
+                                !activeSessionId ||
+                                !(rollModal.push_dice || rollModal.push_effect) ||
+                                harmLevel3Used
+                              }
+                              onChange={(e) =>
+                                setRippleBreathingFreePush(e.target.checked)
+                              }
+                            />
+                            Use free push (no stress for this push)
+                            {rippleBreathingFreePushClaimedThisSession
+                              ? " — already used this session"
+                              : !activeSessionId
+                                ? " — need active session"
+                                : ""}
+                          </label>
+                        </div>
+                      ) : null}
                       <div style={{ marginBottom: "12px" }}>
                         <div style={{ marginTop: "10px" }}>
                           {rollModal.devil_bargain_dice &&
@@ -6855,8 +10682,9 @@ const CharacterSheetWrapper = ({
                           ) : null}
                         </div>
                       </div>
-                      {(bonusDiceFromAbilities > 0 ||
-                        abilityEffectSteps > 0) && (
+                      {(totalBonusDiceFromAbilitiesAndHeritage > 0 ||
+                        abilityEffectSteps + heritageEffectSteps > 0 ||
+                        phantomPainThroughCover) && (
                         <div
                           style={{
                             fontSize: "10px",
@@ -6864,9 +10692,14 @@ const CharacterSheetWrapper = ({
                             marginBottom: "8px",
                           }}
                         >
-                          Pool: +{bonusDiceFromAbilities}d from abilities
-                          {abilityEffectSteps > 0
-                            ? `, +${abilityEffectSteps} effect tier step(s)`
+                          Pool modifiers: +
+                          {totalBonusDiceFromAbilitiesAndHeritage}d (abilities /
+                          heritage)
+                          {abilityEffectSteps + heritageEffectSteps > 0
+                            ? `; +${abilityEffectSteps + heritageEffectSteps} effect tier step(s) total`
+                            : ""}
+                          {phantomPainThroughCover
+                            ? "; Phantom Pain +1 stress"
                             : ""}
                         </div>
                       )}
@@ -6882,16 +10715,45 @@ const CharacterSheetWrapper = ({
                         </div>
                       )}
                       {pushWouldCauseTrauma && (
-                        <div
-                          style={{
-                            color: "#f59e0b",
-                            fontSize: "11px",
-                            marginBottom: "8px",
-                          }}
-                        >
-                          Warning: paying this push stress will overflow your
-                          stress track and mark trauma.
-                        </div>
+                        <>
+                          <div
+                            style={{
+                              color: "#f59e0b",
+                              fontSize: "11px",
+                              marginBottom: "8px",
+                            }}
+                          >
+                            Warning: marking stress from this roll (push /
+                            incapacity / Phantom Pain / etc.) exceeds your empty
+                            stress boxes (SRD: suffer trauma — mark on your sheet
+                            with the table now or right after resolving the roll).
+                          </div>
+                          <label
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: "8px",
+                              fontSize: "11px",
+                              color: "#e5e7eb",
+                              marginBottom: "10px",
+                              cursor: "pointer",
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={stressOverflowConfirmed}
+                              onChange={(e) =>
+                                setStressOverflowConfirmed(e.target.checked)
+                              }
+                              style={{ marginTop: "2px" }}
+                            />
+                            <span>
+                              I take the trauma consequence and proceed with this roll
+                              (required when stress would overflow).
+                            </span>
+                          </label>
+                        </>
                       )}
                       <div
                         style={{
@@ -6903,12 +10765,15 @@ const CharacterSheetWrapper = ({
                         <button
                           onClick={handleRollWithSession}
                           disabled={
+                            (healOtherRecoveryIntent.enabled &&
+                              !String(healOtherRecoveryIntent.targetId || "").trim()) ||
                             (rollModal.devil_bargain_dice &&
                               ((gmDevilBargainText && !devilBargainConfirmed) ||
                                 (!gmDevilBargainText &&
                                   !(
                                     rollModal.devil_bargain_note || ""
-                                  ).trim())))
+                                  ).trim()))) ||
+                            (pushWouldCauseTrauma && !stressOverflowConfirmed)
                           }
                           style={{
                             ...S.btn,
@@ -6924,8 +10789,19 @@ const CharacterSheetWrapper = ({
                             setRollPending(null);
                             setRollApiError(null);
                             setRollAbilityBoost({});
+                            setHeritageRollBoost({});
+                            setPhantomPainThroughCover(false);
+                            setRippleBreathingFreePush(false);
+                            setStressOverflowConfirmed(false);
                             setRollGoalDraft("");
                             setDevilBargainConfirmed(false);
+                            setHealOtherRecoveryIntent({
+                              enabled: false,
+                              actionName: "TINKER",
+                              targetId: "",
+                              selectedBolsterKeys: [],
+                              bolsterNote: "",
+                            });
                             setRollModal({
                               push_effect: false,
                               push_dice: false,
@@ -6941,8 +10817,238 @@ const CharacterSheetWrapper = ({
                     </div>
                   )}
 
+                  {resistancePending && characterId && (
+                    <div
+                      style={{
+                        background: "#1f2937",
+                        padding: "12px",
+                        borderRadius: "4px",
+                        border: "1px solid #2563eb",
+                        marginBottom: "14px",
+                        fontSize: "12px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: "bold",
+                          marginBottom: "4px",
+                          color: "#93c5fd",
+                        }}
+                      >
+                        Resistance dice pool — {resistancePending.attr}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          color: "#6b7280",
+                          marginBottom: "10px",
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        Review all dice before rolling. After result, apply harm reduction,
+                        mark stress from <code style={{ color: "#9ca3af" }}>6 - highest die</code>,
+                        then use any post-roll mitigation/follow-up options.
+                      </div>
+                      {resistancePoolPreview ? (
+                        <div
+                          style={{
+                            marginBottom: "12px",
+                            padding: "10px",
+                            background: "#0d1117",
+                            borderRadius: "8px",
+                            border: "1px solid #374151",
+                          }}
+                        >
+                          <DicePoolStrip
+                            label="Attribute rating (dots in this attribute)"
+                            count={resistancePoolPreview.base}
+                          />
+                          {resistancePoolPreview.bonusDice > 0 ? (
+                            <DicePoolStrip
+                              label={`Resistance bonuses (+${resistancePoolPreview.bonusDice}d)`}
+                              count={resistancePoolPreview.bonusDice}
+                              color="#22c55e"
+                            />
+                          ) : null}
+                          <div
+                            style={{
+                              marginTop: 10,
+                              fontSize: 11,
+                              color: "#9ca3af",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            {resistancePoolPreview.activeBonusNames.length > 0 ? (
+                              <div>
+                                Active: {resistancePoolPreview.activeBonusNames.join(" · ")}
+                              </div>
+                            ) : (
+                              <div>No pre-roll bonus dice selected for this attribute.</div>
+                            )}
+                            {resistancePoolPreview.hasPostRollOptions ? (
+                              <div style={{ marginTop: 4 }}>
+                                Post-roll mitigation options available if selected below.
+                              </div>
+                            ) : null}
+                            {resistancePoolPreview.extraStress > 0 ? (
+                              <div style={{ marginTop: 4, color: "#fbbf24" }}>
+                                Push stress to mark: +{resistancePoolPreview.extraStress}
+                              </div>
+                            ) : null}
+                          </div>
+                          {resistancePoolPreview.zeroDice ? (
+                            <div
+                              style={{
+                                marginTop: "8px",
+                                color: "#fca5a5",
+                                fontSize: "11px",
+                              }}
+                            >
+                              0 dice in pool — you roll 2d6 and keep the lower die.
+                            </div>
+                          ) : (
+                            <div
+                              style={{
+                                marginTop: "8px",
+                                color: "#d1d5db",
+                                fontSize: "11px",
+                              }}
+                            >
+                              Total dice: <strong>{resistancePoolPreview.total}</strong>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+                      {resistancePoolPreview?.options?.length > 0 ? (
+                        <div
+                          style={{
+                            marginBottom: "10px",
+                            padding: "8px",
+                            background: "#0d1117",
+                            border: "1px solid #374151",
+                            borderRadius: "6px",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            Optional resistance bonuses
+                          </div>
+                          <div style={{ display: "grid", gap: "6px" }}>
+                            <label
+                              style={{
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!!resistancePushDice}
+                                onChange={(e) => setResistancePushDice(e.target.checked)}
+                              />
+                              Push yourself (+1d, +2 stress)
+                            </label>
+                            {resistancePoolPreview.options
+                              .filter((opt) => Math.max(0, Number(opt.bonusDice) || 0) > 0)
+                              .map((opt) => (
+                                <label
+                                  key={`res-preview-${opt.id}`}
+                                  style={{
+                                    fontSize: "10px",
+                                    color: "#9ca3af",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "6px",
+                                    cursor: "pointer",
+                                  }}
+                                  title={opt.description || undefined}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={!!resistanceAbilityBoost[opt.id]}
+                                    onChange={(e) =>
+                                      setResistanceAbilityBoost((prev) => ({
+                                        ...prev,
+                                        [opt.id]: e.target.checked,
+                                      }))
+                                    }
+                                  />
+                                  {opt.name} (+{Math.max(0, Number(opt.bonusDice) || 0)}d)
+                                </label>
+                              ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const attr = String(resistancePending.attr || "").toUpperCase();
+                            const base = Math.max(
+                              0,
+                              Number(resistancePending.baseDice) || 0,
+                            );
+                            const activeBonusOptions = resistanceAbilityOptions.filter((opt) => {
+                              const appliesTo = String(opt.appliesTo || "").toUpperCase();
+                              const applies = appliesTo === "ALL" || appliesTo === attr;
+                              return (
+                                applies &&
+                                !!resistanceAbilityBoost[opt.id] &&
+                                Math.max(0, Number(opt.bonusDice) || 0) > 0
+                              );
+                            });
+                            const bonus = activeBonusOptions.reduce(
+                              (sum, opt) => sum + Math.max(0, Number(opt.bonusDice) || 0),
+                              0,
+                            );
+                            const pushBonus = resistancePushDice ? 1 : 0;
+                            const extraStress = resistancePushDice ? 2 : 0;
+                            const ironWillActive = activeBonusOptions.some(
+                              (opt) => opt.id === "iron-will",
+                            );
+                            rollDice(
+                              attr,
+                              base + bonus + pushBonus,
+                              true,
+                              false,
+                              undefined,
+                              {
+                                ...(ironWillActive
+                                  ? { resistanceBonusNote: "+1d (Iron Will)" }
+                                  : {}),
+                                resistanceExtraStress: extraStress,
+                              },
+                            );
+                          }}
+                          style={{
+                            ...S.btn,
+                            background: "#2563eb",
+                            color: "#fff",
+                          }}
+                        >
+                          Roll resistance
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setResistancePending(null)}
+                          style={S.btn}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Dice result — same slot under action ratings (after pool or resistance / offline roll) */}
-                  {diceResult && !rollPending && (
+                  {diceResult && !rollPending && !resistancePending && (
                     <div
                       style={{
                         background: "#1f2937",
@@ -6960,19 +11066,46 @@ const CharacterSheetWrapper = ({
                           marginBottom: "6px",
                         }}
                       >
-                        {diceResult.action}{" "}
-                        {diceResult.isResistance
-                          ? "Resistance Roll"
-                          : "Action Roll"}
-                        {diceResult.zeroDice && (
-                          <span style={{ color: "#f87171", marginLeft: "8px" }}>
-                            (2d6 — lower counts)
-                          </span>
-                        )}
-                        {diceResult.isDesperateAction && (
-                          <span style={{ color: "#f97316", marginLeft: "8px" }}>
-                            (Desperate — XP marked)
-                          </span>
+                        {diceResult.recoveryPresentation?.cadence === "downtime" ? (
+                          <>
+                            <span style={{ color: "#5eead4" }}>
+                              Downtime healing clock
+                            </span>{" "}
+                            <span style={{ color: "#a78bfa" }}>
+                              ({diceResult.action} treatment roll)
+                            </span>
+                            <div
+                              style={{
+                                marginTop: "4px",
+                                fontSize: "10px",
+                                color: "#94a3b8",
+                                fontWeight: 400,
+                                lineHeight: 1.35,
+                              }}
+                            >
+                              No position or effect — not under action-roll pressure. If an
+                              NPC is the primary healer, the referee uses a Fortune pool
+                              (1d–4d by competence) instead of this PC rating roll; coin can
+                              still bump after any care roll.
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            {diceResult.action}{" "}
+                            {diceResult.isResistance
+                              ? "Resistance Roll"
+                              : "Action Roll"}
+                            {diceResult.zeroDice && (
+                              <span style={{ color: "#f87171", marginLeft: "8px" }}>
+                                (2d6 — lower counts)
+                              </span>
+                            )}
+                            {diceResult.isDesperateAction && (
+                              <span style={{ color: "#f97316", marginLeft: "8px" }}>
+                                (Desperate — XP marked)
+                              </span>
+                            )}
+                          </>
                         )}
                       </div>
                       <div
@@ -6985,7 +11118,7 @@ const CharacterSheetWrapper = ({
                         }}
                       >
                         <div style={{ display: "flex", gap: "3px" }}>
-                          {diceResult.dice.map((die, i) => (
+                          {(diceResult.dice || []).map((die, i) => (
                             <span
                               key={i}
                               style={{
@@ -7015,27 +11148,30 @@ const CharacterSheetWrapper = ({
                             </span>
                           ))}
                         </div>
-                        <span
-                          style={{
-                            fontWeight: "bold",
-                            color: diceResult.outcome.includes("Critical")
-                              ? "#fbbf24"
-                              : diceResult.outcome === "Success"
-                                ? "#22c55e"
-                                : diceResult.outcome.includes("Partial")
-                                  ? "#eab308"
-                                  : "#ef4444",
-                          }}
-                        >
-                          {diceResult.outcome}
-                        </span>
-                        {diceResult.special && (
-                          <span style={{ color: "#fbbf24" }}>
-                            {diceResult.special}
-                          </span>
-                        )}
+                        {!diceResult.isResistance &&
+                          diceResult.recoveryPresentation?.cadence !== "downtime" && (
+                            <span
+                              style={{
+                                fontWeight: "bold",
+                                color: diceResult.outcome.includes("Critical")
+                                  ? "#fbbf24"
+                                  : diceResult.outcome === "Success"
+                                    ? "#22c55e"
+                                    : diceResult.outcome.includes("Partial")
+                                      ? "#eab308"
+                                      : "#ef4444",
+                              }}
+                            >
+                              {diceResult.outcome}
+                            </span>
+                          )}
+                        {diceResult.recoveryPresentation?.cadence !== "downtime" &&
+                          diceResult.special && (
+                            <span style={{ color: "#fbbf24" }}>{diceResult.special}</span>
+                          )}
                         {(diceResult.position || diceResult.effect) &&
-                          !diceResult.isResistance && (
+                          !diceResult.isResistance &&
+                          diceResult.recoveryPresentation?.cadence !== "downtime" && (
                             <span
                               style={{
                                 color: "#6b7280",
@@ -7064,6 +11200,62 @@ const CharacterSheetWrapper = ({
                         )}
                       </div>
 
+                      {diceResult.recoveryPresentation?.cadence === "downtime" ? (
+                        <div
+                          style={{
+                            marginBottom: "10px",
+                            padding: "10px 12px",
+                            borderRadius: "6px",
+                            border: "1px solid #0f766e",
+                            background: "#0f172a",
+                            fontSize: "11px",
+                            color: "#ccfbf1",
+                            lineHeight: 1.45,
+                          }}
+                        >
+                          <div style={{ fontWeight: 700, marginBottom: "6px" }}>
+                            Healing-clock ticks{" "}
+                            <span style={{ fontWeight: 400, color: "#99f6e4" }}>
+                              (downtime procedure)
+                            </span>
+                          </div>
+                          <div style={{ color: "#a7f3d0", marginBottom: "6px" }}>
+                            <strong>Critical</strong> (two sixes):{" "}
+                            <strong>5 ticks</strong> · Single <strong>6</strong>:{" "}
+                            <strong>3 ticks</strong> · <strong>4–5</strong>:{" "}
+                            <strong>2 ticks</strong> · <strong>1–3</strong>:{" "}
+                            <strong>1 tick</strong>
+                          </div>
+                          {diceResult.recoveryPresentation.selfTreatment ? (
+                            <div style={{ marginBottom: "8px", color: "#fcd34d" }}>
+                              Self-treatment downtime: <strong>−1 tick</strong> from the
+                              raw band is folded into the total below (SRD).
+                            </div>
+                          ) : null}
+                          <div style={{ color: "#ecfdf5" }}>
+                            Rolled band (from pool dice):{" "}
+                            <strong>{diceResult.recoveryPresentation.bandLabel}</strong> →{" "}
+                            <strong style={{ color: "#34d399" }}>
+                              +{diceResult.recoveryPresentation.ticks} tick(s)
+                            </strong>{" "}
+                            toward the healing clock resolution (coin bump to critical can
+                            still stack before GM resolves harm steps).
+                          </div>
+                          <div
+                            style={{
+                              marginTop: "8px",
+                              fontSize: "10px",
+                              color: "#94a3b8",
+                            }}
+                          >
+                            Treating someone else here does not consume the healer&apos;s own
+                            downtime activity (SRD). Toughing it out with no aid: mark stress
+                            and roll with <strong>0 dice</strong>. New harm clears ticking
+                            progress on the healing clock.
+                          </div>
+                        </div>
+                      ) : null}
+
                       {diceResult.isResistance && (
                         <div
                           style={{
@@ -7080,6 +11272,41 @@ const CharacterSheetWrapper = ({
                                 }),
                           }}
                         >
+                          {hasStayingPowerAbility &&
+                          (hasFatalHarm ||
+                            diceResult.outcome === "Failure" ||
+                            diceResult.outcome === "Partial Success") ? (
+                            <div
+                              style={{
+                                marginBottom: "10px",
+                                padding: "6px 8px",
+                                background: "#1c1917",
+                                border: "1px solid #9f1239",
+                                borderRadius: "4px",
+                                fontSize: "10px",
+                                color: "#fecdd3",
+                                lineHeight: 1.35,
+                              }}
+                            >
+                              <strong>Staying Power:</strong>{" "}
+                              {hasFatalHarm ? (
+                                <>
+                                  Level 4 harm is already on your sheet. If you
+                                  cannot clear it with this resistance outcome,
+                                  negotiate the Staying Power fiction (limb /
+                                  severe cost) with the GM— the post-roll option
+                                  stays on while fatal harm is marked.
+                                </>
+                              ) : (
+                                <>
+                                  If this consequence still lands as Level 4
+                                  lethal harm and you cannot eliminate it,
+                                  Staying Power may apply (GM/table)— the
+                                  post-roll option is under Action Ratings.
+                                </>
+                              )}
+                            </div>
+                          ) : null}
                           {diceResult.isCritical ? (
                             <>
                               <div
@@ -7137,16 +11364,33 @@ const CharacterSheetWrapper = ({
                                       );
                                       return;
                                     }
-                                    setStressFilled((prev) =>
-                                      Math.max(0, (Number(prev) || 0) - 1),
-                                    );
+                                    if (!diceResult.resistanceApplied) {
+                                      setStressFilled((prev) => {
+                                        let next = Math.max(
+                                          0,
+                                          (Number(prev) || 0) - 1,
+                                        );
+                                        const extra =
+                                          Number(diceResult.resistanceExtraStress) || 0;
+                                        if (extra > 0) {
+                                          next = Math.min(maxStress, next + extra);
+                                        }
+                                        return next;
+                                      });
+                                    }
                                     setDiceResult((prev) =>
                                       prev
-                                        ? { ...prev, resistanceApplied: true }
+                                        ? {
+                                            ...prev,
+                                            resistanceApplied: true,
+                                            resistanceHarmReductionCount:
+                                              (Number(
+                                                prev.resistanceHarmReductionCount,
+                                              ) || 0) + 1,
+                                          }
                                         : prev,
                                     );
                                   }}
-                                  disabled={!!diceResult.resistanceApplied}
                                   style={{
                                     ...S.btn,
                                     background: "#92400e",
@@ -7154,11 +11398,22 @@ const CharacterSheetWrapper = ({
                                     fontSize: "11px",
                                   }}
                                 >
-                                  {diceResult.resistanceApplied
-                                    ? "Applied"
-                                    : "Reduce harm + clear 1 stress"}
+                                  Reduce selected harm
                                 </button>
                               </div>
+                              {(Number(diceResult.resistanceHarmReductionCount) ||
+                                0) >= 2 ? (
+                                <div
+                                  style={{
+                                    marginTop: "6px",
+                                    fontSize: "10px",
+                                    color: "#fcd34d",
+                                  }}
+                                >
+                                  Stress clear already applied for this roll. You can still
+                                  choose another harm slot or use post-roll options.
+                                </div>
+                              ) : null}
                             </>
                           ) : (
                             <>
@@ -7169,7 +11424,12 @@ const CharacterSheetWrapper = ({
                                   marginBottom: "2px",
                                 }}
                               >
-                                Stress Cost: {diceResult.stressCost}
+                                Stress Cost:{" "}
+                                {diceResult.resistanceTotalStressCost ??
+                                  diceResult.stressCost}
+                                {(Number(diceResult.resistanceExtraStress) || 0) > 0
+                                  ? ` (${Math.max(0, Number(diceResult.stressCost) || 0)} resist + ${Number(diceResult.resistanceExtraStress) || 0} push)`
+                                  : ""}
                               </div>
                               <div
                                 style={{
@@ -7220,15 +11480,28 @@ const CharacterSheetWrapper = ({
                                       );
                                       return;
                                     }
-                                    const cost = diceResult.stressCost ?? 0;
-                                    applyStressCost(cost);
+                                    if (!diceResult.resistanceApplied) {
+                                      const cost =
+                                        diceResult.resistanceTotalStressCost ??
+                                        diceResult.stressCost ??
+                                        0;
+                                      applyStressCost(cost);
+                                    }
                                     setDiceResult((prev) =>
                                       prev
-                                        ? { ...prev, resistanceApplied: true }
+                                        ? {
+                                            ...prev,
+                                            resistanceApplied: true,
+                                            mitigationAbility:
+                                              resistanceMitigationChoice || "",
+                                            resistanceHarmReductionCount:
+                                              (Number(
+                                                prev.resistanceHarmReductionCount,
+                                              ) || 0) + 1,
+                                          }
                                         : prev,
                                     );
                                   }}
-                                  disabled={!!diceResult.resistanceApplied}
                                   style={{
                                     ...S.btn,
                                     background: "#b45309",
@@ -7236,13 +11509,137 @@ const CharacterSheetWrapper = ({
                                     fontSize: "11px",
                                   }}
                                 >
-                                  {diceResult.resistanceApplied
-                                    ? "Applied"
-                                    : `Reduce harm + mark ${diceResult.stressCost} stress`}
+                                  Reduce selected harm
                                 </button>
                               </div>
+                              {(Number(diceResult.resistanceHarmReductionCount) ||
+                                0) >= 2 ? (
+                                <div
+                                  style={{
+                                    marginTop: "6px",
+                                    fontSize: "10px",
+                                    color: "#fcd34d",
+                                  }}
+                                >
+                                  Stress already marked for this roll. You can still pick
+                                  another harm slot or use a post-roll ability option.
+                                </div>
+                              ) : null}
+                              {resistanceAbilityOptions.some(
+                                (opt) =>
+                                  opt.mitigationOnly &&
+                                  !!resistanceAbilityBoost[opt.id],
+                              ) ? (
+                                <div style={{ marginTop: "8px" }}>
+                                  <select
+                                    value={resistanceMitigationChoice}
+                                    onChange={(e) =>
+                                      setResistanceMitigationChoice(e.target.value)
+                                    }
+                                    style={{ ...S.sel, fontSize: "11px", width: "100%" }}
+                                  >
+                                    <option value="">No mitigation ability selected</option>
+                                    {resistanceAbilityOptions
+                                      .filter(
+                                        (opt) =>
+                                          opt.mitigationOnly &&
+                                          !!resistanceAbilityBoost[opt.id],
+                                      )
+                                      .map((opt) => (
+                                        <option key={opt.id} value={opt.name}>
+                                          {opt.name}
+                                        </option>
+                                      ))}
+                                  </select>
+                                </div>
+                              ) : null}
                             </>
                           )}
+                          {resistanceRollSheetReminderItems.length > 0 ? (
+                            <div
+                              style={{
+                                marginTop: "10px",
+                                paddingTop: "10px",
+                                borderTop: "1px solid #374151",
+                              }}
+                            >
+                              <div
+                                style={{
+                                  fontSize: "10px",
+                                  color: "#9ca3af",
+                                  marginBottom: "4px",
+                                  fontWeight: "bold",
+                                }}
+                              >
+                                Sheet abilities (optional — hover name for full
+                                text)
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: "9px",
+                                  color: "#6b7280",
+                                  marginBottom: "8px",
+                                  lineHeight: 1.35,
+                                }}
+                              >
+                                Reminders from your standard / Hamon / Spin picks.
+                                Table confirms fiction (same idea as “Sheet
+                                abilities” in the dice pool).
+                              </div>
+                              {resistanceRollSheetReminderItems.map((rem) => (
+                                <div
+                                  key={rem.key}
+                                  title={rem.title}
+                                  style={{
+                                    marginBottom: "8px",
+                                    padding: "8px",
+                                    borderRadius: "6px",
+                                    background: "#0f172a",
+                                    border: "1px solid #14532d",
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "flex-start",
+                                      justifyContent: "space-between",
+                                      gap: "8px",
+                                      marginBottom: "4px",
+                                    }}
+                                  >
+                                    <span
+                                      style={{
+                                        color: "#6ee7b7",
+                                        fontWeight: "bold",
+                                        fontSize: "11px",
+                                      }}
+                                    >
+                                      {rem.headline}
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontSize: "9px",
+                                        color: "#86efac",
+                                        textTransform: "uppercase",
+                                        flexShrink: 0,
+                                      }}
+                                    >
+                                      {rem.abilityName} · {rem.abilityType}
+                                    </span>
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "10px",
+                                      color: "#d1d5db",
+                                      lineHeight: 1.35,
+                                    }}
+                                  >
+                                    {rem.body}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
                           {resistanceApplyErr ? (
                             <div
                               style={{
@@ -7257,34 +11654,10 @@ const CharacterSheetWrapper = ({
                         </div>
                       )}
 
-                      {!diceResult.isResistance &&
-                        !diceResult.isDesperateAction && (
-                          <button
-                            onClick={() => {
-                              const attr = ACTION_ATTR[diceResult.action];
-                              if (attr)
-                                setXp((p) => ({
-                                  ...p,
-                                  [attr]: Math.min(p[attr] + 1, 5),
-                                }));
-                              setDiceResult((p) => ({
-                                ...p,
-                                isDesperateAction: true,
-                              }));
-                            }}
-                            style={{
-                              ...S.btn,
-                              background: "#c2410c",
-                              color: "#fff",
-                              marginTop: "6px",
-                              fontSize: "11px",
-                            }}
-                          >
-                            Mark as Desperate (+1 XP)
-                          </button>
-                        )}
                       <button
-                        onClick={() => setDiceResult(null)}
+                        onClick={() => {
+                          setDiceResult(null);
+                        }}
                         style={{
                           display: "block",
                           marginTop: "6px",
@@ -7324,128 +11697,186 @@ const CharacterSheetWrapper = ({
                           </strong>
                         </div>
                       ) : null}
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: "#9ca3af",
-                          marginTop: "8px",
-                          marginBottom: "10px",
-                          lineHeight: 1.4,
-                        }}
-                      >
-                        <strong style={{ color: "#d1d5db" }}>Assist:</strong>{" "}
-                        when you roll an action (dice pool), pick a teammate
-                        there — they spend 1 stress and add +1d to your pool.
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: "8px",
-                          alignItems: "center",
-                          marginBottom: "12px",
-                        }}
-                      >
-                        <select
-                          style={{ ...S.sel, width: "100%", maxWidth: 260 }}
-                          value={assistTargetId}
-                          onChange={(e) => setAssistTargetId(e.target.value)}
-                        >
-                          <option value="">Choose player for +1d</option>
-                          {helpCandidates.map((c) => (
-                            <option key={c.id} value={String(c.id)}>
-                              {c.true_name || c.name || `PC ${c.id}`}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          disabled={!assistTargetId || assistGrantBusy}
-                          onClick={async () => {
-                            if (!assistTargetId || !characterId) return;
-                            setAssistGrantErr(null);
-                            setAssistGrantMsg(null);
-                            setAssistGrantBusy(true);
-                            try {
-                              await characterAPI.assistHelp(
-                                parseInt(assistTargetId, 10),
-                                characterId,
-                              );
-                              applyStressCost(1);
-                              const target = helpCandidates.find(
-                                (c) => String(c.id) === String(assistTargetId),
-                              );
-                              setAssistGrantMsg(
-                                `+1d assist granted to ${target?.true_name || target?.name || "teammate"} (you marked 1 stress).`,
-                              );
-                              setAssistTargetId("");
-                              onCampaignRefresh?.();
-                            } catch (e) {
-                              setAssistGrantErr(e.message);
-                            } finally {
-                              setAssistGrantBusy(false);
-                            }
-                          }}
-                          style={{
-                            ...S.btn,
-                            background: "#0f766e",
-                            color: "#f8fafc",
-                            fontSize: "11px",
-                          }}
-                        >
-                          {assistGrantBusy ? "…" : "Grant +1d assist"}
-                        </button>
-                      </div>
-                      {assistGrantMsg ? (
-                        <div
-                          style={{
-                            fontSize: "11px",
-                            color: "#5eead4",
-                            marginBottom: "10px",
-                          }}
-                        >
-                          {assistGrantMsg}
-                        </div>
-                      ) : null}
-                      {assistGrantErr ? (
-                        <div
-                          style={{
-                            fontSize: "11px",
-                            color: "#f87171",
-                            marginBottom: "10px",
-                          }}
-                        >
-                          {assistGrantErr}
-                        </div>
-                      ) : null}
                       <button
                         type="button"
-                        onClick={() =>
-                          setShowGroupActionCard((v) => !v)
-                        }
+                        onClick={() => setCrewAssistExpandedPersist((v) => !v)}
                         style={{
-                          ...S.btn,
-                          background: "#4338ca",
-                          color: "#fff",
-                          fontSize: "11px",
+                          display: "flex",
+                          width: "100%",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginTop: "10px",
+                          marginBottom: crewAssistExpanded ? "8px" : 0,
+                          padding: "8px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid #374151",
+                          background: "#111827",
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                          textAlign: "left",
                         }}
                       >
-                        {showGroupActionCard
-                          ? "Hide group action card"
-                          : "Open group action card"}
-                      </button>
-                      {showGroupActionCard && (
-                        <div
+                        <span
                           style={{
-                            display: "flex",
-                            flexWrap: "wrap",
-                            gap: "10px",
-                            alignItems: "flex-end",
-                            marginTop: "8px",
                             fontSize: "12px",
+                            fontWeight: 700,
+                            color: "#e5e7eb",
                           }}
                         >
-                        <div style={{ flex: "1 1 200px" }}>
+                          Assist
+                        </span>
+                        <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                          {crewAssistExpanded ? "Hide ▾" : "Show ▸"}
+                        </span>
+                      </button>
+                      {crewAssistExpanded && (
+                        <>
+                          <div
+                            style={{
+                              fontSize: "11px",
+                              color: "#9ca3af",
+                              marginBottom: "10px",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            <strong style={{ color: "#d1d5db" }}>Assist:</strong>{" "}
+                            when you roll an action (dice pool), pick a teammate
+                            there — they spend 1 stress and add +1d to your pool.
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "8px",
+                              alignItems: "center",
+                              marginBottom: "12px",
+                            }}
+                          >
+                            <select
+                              style={{ ...S.sel, width: "100%", maxWidth: 260 }}
+                              value={assistTargetId}
+                              onChange={(e) => setAssistTargetId(e.target.value)}
+                            >
+                              <option value="">Choose player for +1d</option>
+                              {helpCandidates.map((c) => (
+                                <option key={c.id} value={String(c.id)}>
+                                  {c.true_name || c.name || `PC ${c.id}`}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              disabled={!assistTargetId || assistGrantBusy}
+                              onClick={async () => {
+                                if (!assistTargetId || !characterId) return;
+                                setAssistGrantErr(null);
+                                setAssistGrantMsg(null);
+                                setAssistGrantBusy(true);
+                                try {
+                                  await characterAPI.assistHelp(
+                                    parseInt(assistTargetId, 10),
+                                    characterId,
+                                  );
+                                  applyStressCost(1);
+                                  const target = helpCandidates.find(
+                                    (c) => String(c.id) === String(assistTargetId),
+                                  );
+                                  setAssistGrantMsg(
+                                    `+1d assist granted to ${target?.true_name || target?.name || "teammate"} (you marked 1 stress).`,
+                                  );
+                                  setAssistTargetId("");
+                                  onCampaignRefresh?.();
+                                } catch (e) {
+                                  setAssistGrantErr(e.message);
+                                } finally {
+                                  setAssistGrantBusy(false);
+                                }
+                              }}
+                              style={{
+                                ...S.btn,
+                                background: "#0f766e",
+                                color: "#f8fafc",
+                                fontSize: "11px",
+                              }}
+                            >
+                              {assistGrantBusy ? "…" : "Grant +1d assist"}
+                            </button>
+                          </div>
+                          {assistGrantMsg ? (
+                            <div
+                              style={{
+                                fontSize: "11px",
+                                color: "#5eead4",
+                                marginBottom: "10px",
+                              }}
+                            >
+                              {assistGrantMsg}
+                            </div>
+                          ) : null}
+                          {assistGrantErr ? (
+                            <div
+                              style={{
+                                fontSize: "11px",
+                                color: "#f87171",
+                                marginBottom: "10px",
+                              }}
+                            >
+                              {assistGrantErr}
+                            </div>
+                          ) : null}
+                        </>
+                      )}
+                      <div
+                        style={{
+                          marginTop: "12px",
+                          paddingTop: "12px",
+                          borderTop: "1px solid #374151",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setCrewGroupExpandedPersist((v) => !v)}
+                          style={{
+                            display: "flex",
+                            width: "100%",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: crewGroupExpanded ? "8px" : 0,
+                            padding: "8px 10px",
+                            borderRadius: "6px",
+                            border: "1px solid #374151",
+                            background: "#111827",
+                            cursor: "pointer",
+                            fontFamily: "inherit",
+                            textAlign: "left",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: "12px",
+                              fontWeight: 700,
+                              color: "#e5e7eb",
+                            }}
+                          >
+                            Group action
+                          </span>
+                          <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                            {crewGroupExpanded ? "Hide ▾" : "Show ▸"}
+                          </span>
+                        </button>
+                        {crewGroupExpanded ? (
+                          <>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: "10px",
+                                alignItems: "flex-end",
+                                marginTop: "4px",
+                                fontSize: "12px",
+                              }}
+                            >
+                              <div style={{ flex: "1 1 200px" }}>
                           <span
                             style={{
                               fontSize: "10px",
@@ -7651,99 +12082,418 @@ const CharacterSheetWrapper = ({
                               {groupActionErr}
                             </div>
                           )}
-                        </div>
-                        </div>
-                      )}
-                      {showGroupActionCard && activeGroupAction?.id && (
+                              </div>
+                            </div>
+                            {activeGroupAction?.id && (
+                              <div
+                                style={{
+                                  marginTop: "8px",
+                                  background: "#0f172a",
+                                  border: "1px solid #334155",
+                                  borderRadius: "6px",
+                                  padding: "8px",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    fontSize: "11px",
+                                    color: "#cbd5e1",
+                                    marginBottom: "6px",
+                                  }}
+                                >
+                                  Group roll board ({String(activeGroupAction.action_name || "").toUpperCase()})
+                                </div>
+                                {groupActionLoading ? (
+                                  <div style={{ fontSize: "11px", color: "#94a3b8" }}>
+                                    Loading group rolls…
+                                  </div>
+                                ) : (
+                                  <div
+                                    style={{
+                                      display: "grid",
+                                      gap: "6px",
+                                    }}
+                                  >
+                                    {groupRollBoard.map((row) => (
+                                      <div
+                                        key={row.id}
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          alignItems: "center",
+                                          fontSize: "11px",
+                                          background: "#111827",
+                                          border: "1px solid #374151",
+                                          borderRadius: "4px",
+                                          padding: "6px 8px",
+                                        }}
+                                      >
+                                        <span style={{ color: "#e5e7eb" }}>
+                                          {row.name}
+                                        </span>
+                                        {!row.roll ? (
+                                          <span style={{ color: "#9ca3af" }}>
+                                            Pending
+                                          </span>
+                                        ) : (
+                                          (() => {
+                                            const diceStr = (
+                                              row.roll.results || []
+                                            ).join(", ");
+                                            const meta =
+                                              GROUP_ROLL_BOARD_BAND[
+                                                row.outcomeBand || "fail"
+                                              ] || GROUP_ROLL_BOARD_BAND.fail;
+                                            return (
+                                              <span
+                                                style={{
+                                                  color: meta.color,
+                                                  fontWeight:
+                                                    row.outcomeBand === "critical"
+                                                      ? 600
+                                                      : undefined,
+                                                }}
+                                              >
+                                                {meta.label} ({diceStr})
+                                              </span>
+                                            );
+                                          })()
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                <div
+                                  style={{
+                                    marginTop: "8px",
+                                    fontSize: "10px",
+                                    color: "#93c5fd",
+                                  }}
+                                >
+                                  Leader marks {groupFailures} stress on resolve (1 per non-leader fail).
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCrewHealExpandedPersist((v) => !v)}
+                        style={{
+                          display: "flex",
+                          width: "100%",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          marginTop: "12px",
+                          marginBottom: crewHealExpanded ? "8px" : 0,
+                          padding: "8px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid #374151",
+                          background: "#111827",
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                          textAlign: "left",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: "12px",
+                            fontWeight: 700,
+                            color: "#e5e7eb",
+                          }}
+                        >
+                          Heal teammate (session recover-in-play)
+                        </span>
+                        <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                          {crewHealExpanded ? "Hide ▾" : "Show ▸"}
+                        </span>
+                      </button>
+                      {crewHealExpanded ? (
                         <div
                           style={{
-                            marginTop: "8px",
-                            background: "#0f172a",
-                            border: "1px solid #334155",
-                            borderRadius: "6px",
-                            padding: "8px",
+                            marginBottom: "12px",
+                            paddingTop: "10px",
+                            borderTop: "1px solid #374151",
+                          }}
+                        >
+                        <label
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "4px",
+                            fontSize: "11px",
+                            color: "#9ca3af",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          Recover-in-play vs downtime — position / effect preview
+                          <select
+                            style={{
+                              ...S.sel,
+                              width: "100%",
+                              maxWidth: 440,
+                              fontSize: "11px",
+                            }}
+                            value={
+                              healOtherDraft.treatmentPhase === "downtime"
+                                ? "downtime"
+                                : "recover_in_play"
+                            }
+                            onChange={(e) =>
+                              setHealOtherDraft((p) => ({
+                                ...p,
+                                treatmentPhase:
+                                  String(e.target.value) === "downtime"
+                                    ? "downtime"
+                                    : "recover_in_play",
+                              }))
+                            }
+                          >
+                            <option value="recover_in_play">
+                              Recover-in-play (show P/E preview)
+                            </option>
+                            <option value="downtime">
+                              Downtime (hide P/E preview)
+                            </option>
+                          </select>
+                        </label>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns:
+                              "repeat(auto-fit, minmax(160px, 1fr))",
+                            gap: "8px",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          <select
+                            style={{ ...S.sel, width: "100%" }}
+                            value={healOtherDraft.targetId}
+                            onChange={(e) =>
+                              setHealOtherDraft((p) => ({
+                                ...p,
+                                targetId: e.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">Target teammate (not you)</option>
+                            {healOtherTargets.map((c) => (
+                              <option key={c.id} value={String(c.id)}>
+                                {c.true_name || c.name || `PC ${c.id}`}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            style={{ ...S.sel, width: "100%" }}
+                            value={healOtherDraft.actionName}
+                            onChange={(e) =>
+                              setHealOtherDraft((p) => ({
+                                ...p,
+                                actionName: String(
+                                  e.target.value || "",
+                                ).toUpperCase(),
+                              }))
+                            }
+                          >
+                            {healRollActionChoices.map((action) => (
+                              <option key={action} value={action}>
+                                {action}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns:
+                              "repeat(auto-fit, minmax(220px, 1fr))",
+                            gap: "8px",
+                            marginBottom: "8px",
                           }}
                         >
                           <div
                             style={{
-                              fontSize: "11px",
-                              color: "#cbd5e1",
-                              marginBottom: "6px",
+                              border: "1px solid #374151",
+                              borderRadius: "6px",
+                              padding: "6px 8px",
                             }}
                           >
-                            Group roll board ({String(activeGroupAction.action_name || "").toUpperCase()})
-                          </div>
-                          {groupActionLoading ? (
-                            <div style={{ fontSize: "11px", color: "#94a3b8" }}>
-                              Loading group rolls…
-                            </div>
-                          ) : (
                             <div
                               style={{
-                                display: "grid",
-                                gap: "6px",
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                marginBottom: "6px",
                               }}
                             >
-                              {groupRollBoard.map((row) => (
-                                <div
-                                  key={row.id}
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    alignItems: "center",
-                                    fontSize: "11px",
-                                    background: "#111827",
-                                    border: "1px solid #374151",
-                                    borderRadius: "4px",
-                                    padding: "6px 8px",
-                                  }}
-                                >
-                                  <span style={{ color: "#e5e7eb" }}>
-                                    {row.name}
-                                  </span>
-                                  {!row.roll ? (
-                                    <span style={{ color: "#9ca3af" }}>
-                                      Pending
-                                    </span>
-                                  ) : (
-                                    (() => {
-                                      const diceStr = (
-                                        row.roll.results || []
-                                      ).join(", ");
-                                      const meta =
-                                        GROUP_ROLL_BOARD_BAND[
-                                          row.outcomeBand || "fail"
-                                        ] || GROUP_ROLL_BOARD_BAND.fail;
-                                      return (
-                                        <span
-                                          style={{
-                                            color: meta.color,
-                                            fontWeight:
-                                              row.outcomeBand === "critical"
-                                                ? 600
-                                                : undefined,
-                                          }}
-                                        >
-                                          {meta.label} ({diceStr})
-                                        </span>
-                                      );
-                                    })()
-                                  )}
-                                </div>
-                              ))}
+                              Ability bolsters (matching selected abilities)
                             </div>
-                          )}
-                          <div
-                            style={{
-                              marginTop: "8px",
-                              fontSize: "10px",
-                              color: "#93c5fd",
-                            }}
-                          >
-                            Leader marks {groupFailures} stress on resolve (1 per non-leader fail).
+                            {healBolsterAbilityCandidates.length === 0 ? (
+                              <div
+                                style={{ fontSize: "10px", color: "#6b7280" }}
+                              >
+                                No current ability matches healing/recovery/roll
+                                modifiers.
+                              </div>
+                            ) : (
+                              <div style={{ display: "grid", gap: "4px" }}>
+                                {healBolsterAbilityCandidates.map((c) => (
+                                  <label
+                                    key={c.key}
+                                    title={c.description || undefined}
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: "6px",
+                                      fontSize: "11px",
+                                      color: "#d1d5db",
+                                      cursor: "pointer",
+                                    }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={
+                                        Array.isArray(
+                                          healOtherDraft.selectedBolsterKeys,
+                                        ) &&
+                                        healOtherDraft.selectedBolsterKeys.includes(
+                                          c.key,
+                                        )
+                                      }
+                                      onChange={(e) =>
+                                        setHealOtherDraft((p) => {
+                                          const prev = Array.isArray(
+                                            p.selectedBolsterKeys,
+                                          )
+                                            ? p.selectedBolsterKeys
+                                            : [];
+                                          const next = e.target.checked
+                                            ? prev.includes(c.key)
+                                              ? prev
+                                              : [...prev, c.key]
+                                            : prev.filter((k) => k !== c.key);
+                                          return {
+                                            ...p,
+                                            selectedBolsterKeys: next,
+                                          };
+                                        })
+                                      }
+                                    />
+                                    <span>{c.name}</span>
+                                    <span
+                                      style={{
+                                        fontSize: "10px",
+                                        color: "#6b7280",
+                                      }}
+                                    >
+                                      ({c.rollKind})
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
-                      )}
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "8px",
+                            flexWrap: "wrap",
+                            alignItems: "center",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            style={{
+                              ...S.btn,
+                              background: "#0f766e",
+                              color: "#f8fafc",
+                              fontSize: "11px",
+                            }}
+                            disabled={!healOtherDraft.targetId}
+                            onClick={() => {
+                              const action = String(
+                                healOtherDraft.actionName || "TINKER",
+                              )
+                                .trim()
+                                .toUpperCase();
+                              const target = healOtherTargets.find(
+                                (c) =>
+                                  String(c.id) ===
+                                  String(healOtherDraft.targetId),
+                              );
+                              const rating = Math.max(
+                                0,
+                                Number(actionRatings[action] || 0),
+                              );
+                              const healRecoverInPlay =
+                                String(
+                                  healOtherDraft.treatmentPhase ??
+                                    "recover_in_play",
+                                ) !== "downtime";
+                              const selKeys = Array.isArray(
+                                healOtherDraft.selectedBolsterKeys,
+                              )
+                                ? healOtherDraft.selectedBolsterKeys
+                                : [];
+                              const bolsterLabels =
+                                healBolsterAbilityCandidates
+                                  .filter((c) => selKeys.includes(c.key))
+                                  .map((c) => `${c.name} (${c.rollKind})`);
+                              const rollBoostPreset =
+                                buildHealRollBoostPresetFromSelections(
+                                  selKeys,
+                                  healBolsterAbilityCandidates,
+                                  abilityRollBonusOptions,
+                                  heritageRollBonusOptions,
+                                );
+                              rollDice(
+                                action,
+                                rating,
+                                false,
+                                false,
+                                undefined,
+                                {
+                                  rollBoostPreset,
+                                  healAttempt: {
+                                    kind: "heal_other",
+                                    treatmentCadence: healRecoverInPlay
+                                      ? "mid_action"
+                                      : "downtime",
+                                    recoverInPlayTreatment: healRecoverInPlay,
+                                    usesSessionPositionEffect:
+                                      healRecoverInPlay,
+                                    targetId: Number(healOtherDraft.targetId),
+                                    targetName:
+                                      target?.true_name ||
+                                      target?.name ||
+                                      `PC ${healOtherDraft.targetId}`,
+                                    selectedAbilityBolsters: bolsterLabels,
+                                    abilityBolsterDeclared:
+                                      bolsterLabels.length > 0,
+                                    bolsterNote: "",
+                                    careNote: "",
+                                    actionName: action,
+                                  },
+                                },
+                              );
+                            }}
+                            title="Open dice pool preview for this healing attempt"
+                          >
+                            Open healing roll preview
+                          </button>
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                            }}
+                          >
+                            Active-session only. Uses action roll dice pool +
+                            ability toggles; downtime recover remains separate.
+                          </span>
+                        </div>
+                        </div>
+                      ) : null}
                     </div>
                   )}
 
@@ -7834,398 +12584,115 @@ const CharacterSheetWrapper = ({
                     </div>
                   )}
 
-                  {/* Vice roll — stress relief (downtime / table agreement) */}
-                  <div
-                    style={{
-                      marginBottom: "14px",
-                      background: "#1f2937",
-                      border: "1px solid #374151",
-                      borderRadius: "6px",
-                      padding: "10px",
-                    }}
-                  >
-                    <span
-                      style={{
-                        color: "#f87171",
-                        fontSize: "11px",
-                        fontWeight: "bold",
-                        marginBottom: "6px",
-                        display: "block",
-                      }}
-                    >
-                      VICE ROLL
-                    </span>
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "#9ca3af",
-                        lineHeight: 1.45,
-                        marginBottom: "8px",
-                      }}
-                    >
-                      Roll dice equal to your{" "}
-                      <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
-                        lowest attribute
-                      </span>{" "}
-                      (Insight / Prowess / Resolve). Clear stress equal to the{" "}
-                      <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
-                        highest die
-                      </span>
-                      . If that number is greater than stress you had marked, you{" "}
-                      <span style={{ color: "#fbbf24", fontWeight: "bold" }}>
-                        overindulge
-                      </span>
-                      . Skipping vice in downtime: take stress equal to your trauma
-                      ({traumaMarkedCount}); no trauma means vice cannot force stress
-                      yet.
-                    </div>
-                    {String(charData.vice || "").trim() ? (
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          color: "#a78bfa",
-                          marginBottom: "8px",
-                        }}
-                      >
-                        Vice on sheet: {String(charData.vice).trim()}
-                      </div>
-                    ) : null}
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        color: "#d1d5db",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      Pool:{" "}
-                      <span style={{ color: "#a78bfa", fontWeight: "bold" }}>
-                        {viceDicePool}d
-                      </span>
-                      <span style={{ color: "#6b7280" }}>
-                        {" "}
-                        (Insight {viceAttributeDice[0]?.dice ?? 0} · Prowess{" "}
-                        {viceAttributeDice[1]?.dice ?? 0} · Resolve{" "}
-                        {viceAttributeDice[2]?.dice ?? 0})
-                        {viceLowestLabels
-                          ? ` — lowest: ${viceLowestLabels}`
-                          : ""}
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDiceResult(null);
-                        const pool = viceDicePool;
-                        let dice;
-                        let highest;
-                        const zeroDice = pool === 0;
-                        if (zeroDice) {
-                          const d1 = Math.floor(Math.random() * 6) + 1;
-                          const d2 = Math.floor(Math.random() * 6) + 1;
-                          highest = Math.min(d1, d2);
-                          dice = [d1, d2];
-                        } else {
-                          dice = Array.from(
-                            { length: pool },
-                            () => Math.floor(Math.random() * 6) + 1,
-                          );
-                          highest = Math.max(...dice);
-                        }
-                        const stressBefore = Number(stressFilled) || 0;
-                        const wouldOverindulge = highest > stressBefore;
-                        setViceRollResult({
-                          dice,
-                          highest,
-                          dicePool: pool,
-                          zeroDice,
-                          wouldOverindulge,
-                          stressBefore,
-                          applied: false,
-                          overindulge: "",
-                          wantedApplyErr: null,
-                          viceApplyErr: null,
-                        });
-                      }}
-                      style={{
-                        ...S.btn,
-                        background: "#7c3aed",
-                        color: "#fff",
-                        fontSize: "11px",
-                      }}
-                    >
-                      Vice roll
-                    </button>
-                    {viceRollResult ? (
-                      <div
-                        style={{
-                          marginTop: "10px",
-                          padding: "8px",
-                          borderRadius: "4px",
-                          background: "#0d1117",
-                          border: "1px solid #374151",
-                          fontSize: "11px",
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "4px",
-                            flexWrap: "wrap",
-                            marginBottom: "6px",
-                          }}
-                        >
-                          {viceRollResult.dice.map((die, i) => (
-                            <span
-                              key={i}
-                              style={{
-                                display: "inline-flex",
-                                width: "24px",
-                                height: "24px",
-                                borderRadius: "4px",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                fontWeight: "bold",
-                                border: "1px solid",
-                                background:
-                                  die === 6
-                                    ? "#166534"
-                                    : die >= 4
-                                      ? "#1e3a8a"
-                                      : "#374151",
-                                borderColor:
-                                  die === 6
-                                    ? "#22c55e"
-                                    : die >= 4
-                                      ? "#3b82f6"
-                                      : "#6b7280",
-                              }}
-                            >
-                              {die}
-                            </span>
-                          ))}
-                        </div>
-                        {viceRollResult.zeroDice ? (
-                          <div style={{ color: "#f87171", marginBottom: "4px" }}>
-                            0 rating — rolled 2d, took lower
-                          </div>
-                        ) : null}
-                        <div style={{ color: "#e5e7eb", marginBottom: "4px" }}>
-                          Highest:{" "}
-                          <strong style={{ color: "#34d399" }}>
-                            {viceRollResult.highest}
-                          </strong>{" "}
-                          → clear that many stress (cap at what you had:{" "}
-                          {viceRollResult.stressBefore} marked).
-                        </div>
-                        {viceRollResult.wouldOverindulge ? (
-                          <div
-                            style={{
-                              color: "#fbbf24",
-                              marginBottom: "6px",
-                              fontWeight: "bold",
-                            }}
-                          >
-                            Overindulgence: you cleared more stress than you had marked —
-                            bad call from vice. Choose an outcome below with the table/GM.
-                          </div>
-                        ) : null}
-                        {viceRollResult.wouldOverindulge &&
-                        !viceRollResult.applied ? (
-                          <select
-                            value={viceRollResult.overindulge || ""}
-                            onChange={(e) =>
-                              setViceRollResult((p) =>
-                                p
-                                  ? {
-                                      ...p,
-                                      overindulge: e.target.value,
-                                      wantedApplyErr: null,
-                                      viceApplyErr: null,
-                                    }
-                                  : p,
-                              )
-                            }
-                            style={{
-                              ...S.sel,
-                              width: "100%",
-                              maxWidth: "100%",
-                              fontSize: "11px",
-                              marginBottom: "8px",
-                            }}
-                          >
-                            {VICE_OVERINDULGE_CHOICES.map((o) => (
-                              <option key={o.value || "none"} value={o.value}>
-                                {o.label}
-                              </option>
-                            ))}
-                          </select>
-                        ) : null}
-                        {viceRollResult.wouldOverindulge &&
-                        viceRollResult.applied &&
-                        viceRollResult.overindulge ? (
-                          <div
-                            style={{
-                              padding: "6px 8px",
-                              marginBottom: "8px",
-                              borderRadius: "4px",
-                              background: "#422006",
-                              border: "1px solid #a16207",
-                              color: "#fde68a",
-                              fontSize: "11px",
-                              lineHeight: 1.4,
-                            }}
-                          >
-                            <strong>Overindulgence:</strong>{" "}
-                            {viceOverindulgeLabel(viceRollResult.overindulge)}
-                          </div>
-                        ) : null}
-                        {viceRollResult.wouldOverindulge &&
-                        viceRollResult.overindulge === "brag" ? (
-                          <div
-                            style={{
-                              fontSize: "10px",
-                              color: "#93c5fd",
-                              marginBottom: "8px",
-                            }}
-                          >
-                            Apply will bump this campaign&rsquo;s wanted stars by +2
-                            (caps at 5) before stress clears.
-                          </div>
-                        ) : null}
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "8px",
-                            flexWrap: "wrap",
-                            alignItems: "center",
-                          }}
-                        >
-                          <button
-                            type="button"
-                            disabled={!!viceRollResult.applied}
-                            onClick={async () => {
-                              if (!viceRollResult || viceRollResult.applied) return;
-                              if (
-                                viceRollResult.wouldOverindulge &&
-                                !String(
-                                  viceRollResult.overindulge || "",
-                                ).trim()
-                              ) {
-                                setViceRollResult((p) =>
-                                  p
-                                    ? {
-                                        ...p,
-                                        viceApplyErr:
-                                          "Choose an overindulgence consequence before applying.",
-                                      }
-                                    : p,
-                                );
-                                return;
-                              }
-                              const hi = viceRollResult.highest;
-                              const bumpWanted =
-                                viceRollResult.wouldOverindulge &&
-                                viceRollResult.overindulge === "brag";
-                              try {
-                                setViceRollResult((p) =>
-                                  p ? { ...p, viceApplyErr: null } : p,
-                                );
-                                if (bumpWanted) {
-                                  if (!charCampaign?.id) {
-                                    setViceRollResult((p) =>
-                                      p
-                                        ? {
-                                            ...p,
-                                            wantedApplyErr:
-                                              "No campaign linked; wanted stars not updated.",
-                                          }
-                                        : p,
-                                    );
-                                    return;
-                                  }
-                                  await campaignAPI.incrementCampaignWanted(
-                                    charCampaign.id,
-                                    { amount: 2, cap: 5 },
-                                  );
-                                  onCampaignRefresh?.();
-                                }
-                                setStressFilled((prev) =>
-                                  Math.max(0, (Number(prev) || 0) - hi),
-                                );
-                                setViceRollResult((p) =>
-                                  p
-                                    ? {
-                                        ...p,
-                                        applied: true,
-                                        wantedApplyErr: null,
-                                        viceApplyErr: null,
-                                      }
-                                    : p,
-                                );
-                              } catch (e) {
-                                setViceRollResult((p) =>
-                                  p
-                                    ? {
-                                        ...p,
-                                        wantedApplyErr:
-                                          e.message ||
-                                          "Could not update campaign wanted stars.",
-                                      }
-                                    : p,
-                                );
-                              }
-                            }}
-                            style={{
-                              ...S.btn,
-                              background: "#059669",
-                              color: "#fff",
-                              fontSize: "11px",
-                            }}
-                          >
-                            {viceRollResult.applied
-                              ? "Stress cleared"
-                              : `Apply −${viceRollResult.highest} stress`}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setViceRollResult(null)}
-                            style={{ ...S.btn, fontSize: "11px" }}
-                          >
-                            Dismiss
-                          </button>
-                        </div>
-                        {viceRollResult.viceApplyErr ? (
-                          <div
-                            style={{
-                              marginTop: "8px",
-                              color: "#fca5a5",
-                              fontSize: "11px",
-                            }}
-                          >
-                            {viceRollResult.viceApplyErr}
-                          </div>
-                        ) : null}
-                        {viceRollResult.wantedApplyErr ? (
-                          <div
-                            style={{
-                              marginTop: "8px",
-                              color: "#fca5a5",
-                              fontSize: "11px",
-                            }}
-                          >
-                            {viceRollResult.wantedApplyErr}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-
                   {/* Abilities */}
                   <div style={{ marginBottom: "14px" }}>
-                    <span style={S.lbl}>ABILITIES</span>
-                    {abilities.map((ab, abIndex) => {
+                    <button
+                      type="button"
+                      id="character-sheet-abilities-heading"
+                      onClick={() =>
+                        setAbilitiesSectionExpandedPersist((prev) => {
+                          if (prev) {
+                            setCustomAbilityModal(null);
+                            setStandardAbilityPickerOpen(false);
+                            setStandardAbilitySelected(null);
+                            setStandardAbilitySearch("");
+                            setSpinAbilityPickerOpen(false);
+                            setSpinAbilitySelected(null);
+                            setSpinAbilitySearch("");
+                            setHamonAbilityPickerOpen(false);
+                            setHamonAbilitySelected(null);
+                            setHamonAbilitySearch("");
+                          }
+                          return !prev;
+                        })
+                      }
+                      aria-expanded={abilitiesSectionExpanded}
+                      aria-controls="character-sheet-abilities-panel"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        width: "100%",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        marginBottom: "8px",
+                        textAlign: "left",
+                      }}
+                    >
+                      <span
+                        aria-hidden
+                        style={{
+                          color: "#9ca3af",
+                          fontSize: "10px",
+                          lineHeight: 1,
+                          width: "12px",
+                          flexShrink: 0,
+                          userSelect: "none",
+                        }}
+                      >
+                        {abilitiesSectionExpanded ? "\u25bc" : "\u25ba"}
+                      </span>
+                      <span
+                        style={{
+                          color: S.lbl.color,
+                          fontSize: S.lbl.fontSize,
+                          fontWeight: S.lbl.fontWeight,
+                        }}
+                      >
+                        ABILITIES
+                      </span>
+                    </button>
+                    {abilitiesSectionExpanded ? (
+                      <div id="character-sheet-abilities-panel">
+                    {hasNoFeedDetriment ? (
+                      <div
+                        style={{
+                          marginBottom: "8px",
+                          display: "flex",
+                          gap: "6px",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCharData((p) => ({ ...p, fed_today: true }))
+                          }
+                          style={{
+                            ...S.btn,
+                            fontSize: "11px",
+                            padding: "4px 8px",
+                            background: charData.fed_today === true ? "#15803d" : "#1f2937",
+                            color: "#fff",
+                          }}
+                        >
+                          You fed today
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCharData((p) => ({ ...p, fed_today: false }))
+                          }
+                          style={{
+                            ...S.btn,
+                            fontSize: "11px",
+                            padding: "4px 8px",
+                            background: charData.fed_today === false ? "#b45309" : "#1f2937",
+                            color: "#fff",
+                          }}
+                        >
+                          You did not feed today
+                        </button>
+                      </div>
+                    ) : null}
+                    {combinedAbilitiesForDisplay.map((ab, abIndex) => {
                       const abKey = ab.id || ab.name || `ability-${abIndex}`;
                       const isExpanded = expandedAbilityId === abKey;
+                      const isPerfectOrganism =
+                        normalizeAbilityName(ab?.name) === "perfect organism";
                       const standardRef =
                         ab.type === "standard" &&
                         standardAbilitiesList.find((a) => a.id === ab.id);
@@ -8281,7 +12748,12 @@ const CharacterSheetWrapper = ({
                               style={{
                                 marginLeft: "6px",
                                 padding: "1px 5px",
-                                background: "#7c3aed",
+                                background:
+                                  ab.type === "heritage"
+                                    ? "#b45309"
+                                    : ab.type === "hamon"
+                                      ? "#b91c1c"
+                                      : "#7c3aed",
                                 borderRadius: "10px",
                                 fontSize: "10px",
                               }}
@@ -8316,8 +12788,50 @@ const CharacterSheetWrapper = ({
                                   ))}
                                 </ul>
                               )}
+                            {isExpanded && isPerfectOrganism ? (
+                              <div
+                                style={{
+                                  marginTop: "8px",
+                                  display: "flex",
+                                  flexWrap: "wrap",
+                                  gap: "6px",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <span style={{ fontSize: "10px", color: "#9ca3af" }}>
+                                  Create entity clock:
+                                </span>
+                                {[
+                                  ["Small", 4],
+                                  ["Medium", 6],
+                                  ["Large", 8],
+                                  ["Huge", 10],
+                                ].map(([label, ticks]) => (
+                                  <button
+                                    key={`${abKey}-${label}`}
+                                    type="button"
+                                    onClick={() =>
+                                      addPerfectOrganismEntityClock(
+                                        `${label} entity`,
+                                        ticks,
+                                      )
+                                    }
+                                    style={{
+                                      ...S.btn,
+                                      fontSize: "10px",
+                                      padding: "2px 8px",
+                                      background: "#1d4ed8",
+                                      color: "#fff",
+                                    }}
+                                    title={`Create ${ticks}-tick ${label.toLowerCase()} entity clock`}
+                                  >
+                                    {label} ({ticks})
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
-                          {ab.type === "custom" && (
+                          {ab.type === "custom" && ab._uiOrigin === "sheet" && (
                             <button
                               type="button"
                               aria-label={`Edit ${ab.name || "ability"}`}
@@ -8378,24 +12892,26 @@ const CharacterSheetWrapper = ({
                               ✏
                             </button>
                           )}
-                          <button
-                            type="button"
-                            aria-label={`Remove ${ab.name || "ability"}`}
-                            onClick={() =>
-                              setAbilities((p) =>
-                                p.filter((_, i) => i !== abIndex),
-                              )
-                            }
-                            style={{
-                              color: "#f87171",
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              fontSize: "15px",
-                            }}
-                          >
-                            ×
-                          </button>
+                          {ab._uiOrigin === "sheet" ? (
+                            <button
+                              type="button"
+                              aria-label={`Remove ${ab.name || "ability"}`}
+                              onClick={() =>
+                                setAbilities((p) =>
+                                  p.filter((_, i) => i !== ab._uiIndex),
+                                )
+                              }
+                              style={{
+                                color: "#f87171",
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                fontSize: "15px",
+                              }}
+                            >
+                              ×
+                            </button>
+                          ) : null}
                         </div>
                       );
                     })}
@@ -9581,11 +14097,65 @@ const CharacterSheetWrapper = ({
                         </div>
                       )}
                     </div>
+                      </div>
+                    ) : null}
                   </div>
 
                   {/* Clocks */}
                   <div style={{ marginBottom: "14px" }}>
-                    <span style={S.lbl}>CLOCKS</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setClocksSectionExpandedPersist((prev) => {
+                          if (prev) {
+                            setClockEditorOpen(false);
+                            setNewClockName("");
+                            setNewClockSegments(4);
+                            setNewClockShared(false);
+                          }
+                          return !prev;
+                        })
+                      }
+                      aria-expanded={clocksSectionExpanded}
+                      aria-controls="character-sheet-clocks-panel"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        width: "100%",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        marginBottom: "8px",
+                        textAlign: "left",
+                      }}
+                    >
+                      <span
+                        aria-hidden
+                        style={{
+                          color: "#9ca3af",
+                          fontSize: "10px",
+                          lineHeight: 1,
+                          width: "12px",
+                          flexShrink: 0,
+                          userSelect: "none",
+                        }}
+                      >
+                        {clocksSectionExpanded ? "\u25bc" : "\u25ba"}
+                      </span>
+                      <span
+                        style={{
+                          color: S.lbl.color,
+                          fontSize: S.lbl.fontSize,
+                          fontWeight: S.lbl.fontWeight,
+                        }}
+                      >
+                        CLOCKS
+                      </span>
+                    </button>
+                    {clocksSectionExpanded ? (
+                      <div id="character-sheet-clocks-panel">
                     <div
                       style={{
                         display: "flex",
@@ -9790,7 +14360,6 @@ const CharacterSheetWrapper = ({
                         </div>
                       </div>
                     )}
-                  </div>
 
                   {/* Shared party clocks (player/crew-authored clocks; GM-created clocks live in SESSION > Clocks). */}
                   {charCampaign?.progress_clocks?.length > 0 &&
@@ -9911,6 +14480,9 @@ const CharacterSheetWrapper = ({
                         </div>
                       );
                     })()}
+                      </div>
+                    ) : null}
+                  </div>
 
                   {/* Devil's Bargain modal (above dice pool overlay when both open) */}
                   {showDevilsBargainModal && (
@@ -10024,42 +14596,138 @@ const CharacterSheetWrapper = ({
                   )}
 
                   {/* Notes */}
-                  <div>
-                    <span style={S.lbl}>NOTES</span>
-                    <textarea
-                      placeholder="Notes…"
+                  <div style={{ marginBottom: "14px" }}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNotesInventoryExpandedPersist((prev) => ({
+                          ...prev,
+                          notes: !prev.notes,
+                        }))
+                      }
+                      aria-expanded={notesInventoryExpanded.notes}
+                      aria-controls="character-sheet-notes-panel"
                       style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
                         width: "100%",
-                        height: "80px",
-                        background: "#0d1117",
-                        color: "#fff",
-                        border: "1px solid #374151",
-                        padding: "8px",
-                        fontFamily: "monospace",
-                        fontSize: "12px",
-                        resize: "vertical",
-                        boxSizing: "border-box",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        marginBottom: "8px",
+                        textAlign: "left",
                       }}
-                    />
+                    >
+                      <span
+                        aria-hidden
+                        style={{
+                          color: "#9ca3af",
+                          fontSize: "10px",
+                          lineHeight: 1,
+                          width: "12px",
+                          flexShrink: 0,
+                          userSelect: "none",
+                        }}
+                      >
+                        {notesInventoryExpanded.notes ? "\u25bc" : "\u25ba"}
+                      </span>
+                      <span
+                        style={{
+                          color: S.lbl.color,
+                          fontSize: S.lbl.fontSize,
+                          fontWeight: S.lbl.fontWeight,
+                        }}
+                      >
+                        NOTES
+                      </span>
+                    </button>
+                    {notesInventoryExpanded.notes ? (
+                      <textarea
+                        id="character-sheet-notes-panel"
+                        placeholder="Notes…"
+                        style={{
+                          width: "100%",
+                          height: "80px",
+                          background: "#0d1117",
+                          color: "#fff",
+                          border: "1px solid #374151",
+                          padding: "8px",
+                          fontFamily: "monospace",
+                          fontSize: "12px",
+                          resize: "vertical",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                    ) : null}
                   </div>
                   {/* Inventory */}
-                  <div>
-                    <span style={S.lbl}>INVENTORY</span>
-                    <textarea
-                      placeholder="Inventory…"
+                  <div style={{ marginBottom: "14px" }}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNotesInventoryExpandedPersist((prev) => ({
+                          ...prev,
+                          inventory: !prev.inventory,
+                        }))
+                      }
+                      aria-expanded={notesInventoryExpanded.inventory}
+                      aria-controls="character-sheet-inventory-panel"
                       style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
                         width: "100%",
-                        height: "80px",
-                        background: "#0d1117",
-                        color: "#fff",
-                        border: "1px solid #374151",
-                        padding: "8px",
-                        fontFamily: "monospace",
-                        fontSize: "12px",
-                        resize: "vertical",
-                        boxSizing: "border-box",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        marginBottom: "8px",
+                        textAlign: "left",
                       }}
-                    />
+                    >
+                      <span
+                        aria-hidden
+                        style={{
+                          color: "#9ca3af",
+                          fontSize: "10px",
+                          lineHeight: 1,
+                          width: "12px",
+                          flexShrink: 0,
+                          userSelect: "none",
+                        }}
+                      >
+                        {notesInventoryExpanded.inventory ? "\u25bc" : "\u25ba"}
+                      </span>
+                      <span
+                        style={{
+                          color: S.lbl.color,
+                          fontSize: S.lbl.fontSize,
+                          fontWeight: S.lbl.fontWeight,
+                        }}
+                      >
+                        INVENTORY
+                      </span>
+                    </button>
+                    {notesInventoryExpanded.inventory ? (
+                      <textarea
+                        id="character-sheet-inventory-panel"
+                        placeholder="Inventory…"
+                        style={{
+                          width: "100%",
+                          height: "80px",
+                          background: "#0d1117",
+                          color: "#fff",
+                          border: "1px solid #374151",
+                          padding: "8px",
+                          fontFamily: "monospace",
+                          fontSize: "12px",
+                          resize: "vertical",
+                          boxSizing: "border-box",
+                        }}
+                      />
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -10270,6 +14938,115 @@ const CharacterSheetWrapper = ({
                   Standing with campaign factions (-3 hostile, 0 neutral, +3
                   allied). Hidden factions are GM-only until revealed.
                 </div>
+                {charData.crewId && canEditSheet ? (
+                  <div
+                    style={{
+                      marginBottom: 10,
+                      padding: 10,
+                      borderRadius: 6,
+                      border: "1px solid #374151",
+                      background: "#0d1117",
+                    }}
+                  >
+                    <span style={{ ...S.lbl, fontSize: "10px" }}>
+                      Crew portrait (HTTPS URL)
+                    </span>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 10,
+                        alignItems: "center",
+                        marginTop: 8,
+                      }}
+                    >
+                      {crewPortraitSrc ? (
+                        <img
+                          src={crewPortraitSrc}
+                          alt=""
+                          style={{
+                            width: 44,
+                            height: 44,
+                            objectFit: "cover",
+                            borderRadius: 6,
+                            border: "1px solid #4b5563",
+                            flexShrink: 0,
+                          }}
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
+                        />
+                      ) : null}
+                      <input
+                        type="url"
+                        style={{
+                          ...S.inp,
+                          flex: "1 1 200px",
+                          minWidth: 0,
+                          fontSize: 11,
+                        }}
+                        value={crewPortraitUrlDraft}
+                        onChange={(e) => {
+                          setCrewPortraitUrlDraft(e.target.value);
+                          setCrewPortraitMsg(null);
+                        }}
+                        placeholder="https://example.com/crew-photo.jpg"
+                      />
+                      <button
+                        type="button"
+                        style={{ ...S.btn, fontSize: 11 }}
+                        disabled={crewPortraitSaving}
+                        onClick={async () => {
+                          if (!charData.crewId) return;
+                          setCrewPortraitSaving(true);
+                          setCrewPortraitMsg(null);
+                          try {
+                            await crewAPI.patchCrew(charData.crewId, {
+                              image_url: String(
+                                crewPortraitUrlDraft || "",
+                              ).trim(),
+                            });
+                            const d = await crewAPI.getCrew(charData.crewId);
+                            setCrewData((p) => ({
+                              ...p,
+                              image: d.image ?? "",
+                              image_url: d.image_url ?? "",
+                            }));
+                            setCrewPortraitUrlDraft(
+                              String(d.image_url || "").trim(),
+                            );
+                            setCrewPortraitMsg({
+                              ok: true,
+                              text: "Portrait URL saved.",
+                            });
+                          } catch (err) {
+                            setCrewPortraitMsg({
+                              ok: false,
+                              text:
+                                err?.message ||
+                                "Could not save (HTTPS URL required).",
+                            });
+                          } finally {
+                            setCrewPortraitSaving(false);
+                          }
+                        }}
+                      >
+                        {crewPortraitSaving ? "Saving…" : "Save URL"}
+                      </button>
+                    </div>
+                    {crewPortraitMsg ? (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          fontSize: 10,
+                          color: crewPortraitMsg.ok ? "#34d399" : "#f87171",
+                        }}
+                      >
+                        {crewPortraitMsg.text}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
                 {crewFactionLinks.length === 0 ? (
                   <div style={{ fontSize: "12px", color: "#6b7280" }}>
                     No linked factions yet.
@@ -10300,6 +15077,24 @@ const CharacterSheetWrapper = ({
                           border: "1px solid #374151",
                         }}
                       >
+                        {crewPortraitSrc ? (
+                          <img
+                            src={crewPortraitSrc}
+                            alt=""
+                            title="Crew portrait"
+                            style={{
+                              width: 36,
+                              height: 36,
+                              objectFit: "cover",
+                              borderRadius: 6,
+                              border: "1px solid #4b5563",
+                              flexShrink: 0,
+                            }}
+                            onError={(e) => {
+                              e.currentTarget.style.display = "none";
+                            }}
+                          />
+                        ) : null}
                         <span style={{ fontWeight: 600, color: "#e5e7eb" }}>
                           {row.faction_name}
                         </span>
@@ -10397,78 +15192,152 @@ const CharacterSheetWrapper = ({
                 {isGM && campaignId && charData.crewId ? (
                   <div
                     style={{
-                      marginTop: "10px",
+                      marginTop: "12px",
+                      padding: "10px",
+                      borderRadius: "6px",
+                      border: "1px solid #374151",
+                      background: "#111827",
                       display: "flex",
-                      flexWrap: "wrap",
+                      flexDirection: "column",
                       gap: "8px",
-                      alignItems: "center",
                     }}
                   >
-                    <button
-                      type="button"
-                      style={{ ...S.btn, fontSize: "11px" }}
-                      onClick={() => {
-                        const name = prompt("New faction name?");
-                        if (!name?.trim()) return;
-                        factionAPI
-                          .createFaction({
-                            campaign: parseInt(String(campaignId), 10),
-                            name: name.trim(),
-                            visible_to_players: false,
-                          })
-                              .then((created) => {
-                            const fid = created?.id ?? created?.pk;
-                            if (!fid) return;
-                            return crewAPI
-                              .patchCrew(charData.crewId, {
-                                faction_relationships: [
-                                  {
-                                    faction_id: fid,
-                                    reputation_value: 0,
-                                  },
-                                ],
-                              })
-                              .then(() =>
-                                crewAPI
-                                  .getCrew(charData.crewId)
-                                  .then((crewRes) => {
-                                    setCrewFactionLinks(
-                                      crewRes.faction_relationships || [],
-                                    );
-                                  }),
-                              );
-                          })
-                          .catch(() => {});
+                    <span style={{ ...S.lbl, fontSize: "10px" }}>
+                      Add faction link
+                    </span>
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        color: "#6b7280",
+                        lineHeight: 1.4,
                       }}
                     >
-                      + Create hidden faction and link
-                    </button>
-                    <button
-                      type="button"
-                      style={{ ...S.btn, fontSize: "11px" }}
-                      onClick={() => {
-                        const raw = prompt(
-                          "Link existing faction: enter faction ID",
-                        );
-                        if (!raw?.trim()) return;
-                        const fid = parseInt(raw.trim(), 10);
-                        if (!Number.isFinite(fid)) return;
-                        crewAPI
-                          .patchCrew(charData.crewId, {
-                            faction_relationships: [
-                              { faction_id: fid, reputation_value: 0 },
-                            ],
-                          })
-                          .then(() =>
-                            crewAPI.getCrew(charData.crewId).then((d) => {
-                              setCrewFactionLinks(d.faction_relationships || []);
-                            }),
-                          )
-                          .catch(() => {});
+                      Create a GM-only faction by name, or link one already in this
+                      campaign. Set starting reputation (−3 to +3), then add link.
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "8px",
+                        alignItems: "center",
                       }}
                     >
-                      Link faction by ID
-                    </button>
+                      <input
+                        type="text"
+                        style={{
+                          ...S.inp,
+                          flex: "1 1 160px",
+                          minWidth: "140px",
+                          fontSize: "11px",
+                        }}
+                        placeholder="New faction name (hidden until revealed)"
+                        value={crewFactionAddName}
+                        onChange={(e) => {
+                          setCrewFactionAddName(e.target.value);
+                          setCrewFactionAddErr(null);
+                          if (e.target.value.trim())
+                            setCrewFactionAddExistingId("");
+                        }}
+                        disabled={crewFactionAddBusy}
+                      />
+                      <span style={{ fontSize: "10px", color: "#6b7280" }}>or</span>
+                      <select
+                        style={{
+                          ...S.sel,
+                          flex: "1 1 160px",
+                          minWidth: "140px",
+                          fontSize: "11px",
+                        }}
+                        value={crewFactionAddExistingId}
+                        onChange={(e) => {
+                          setCrewFactionAddExistingId(e.target.value);
+                          setCrewFactionAddErr(null);
+                          if (e.target.value) setCrewFactionAddName("");
+                        }}
+                        disabled={crewFactionAddBusy}
+                      >
+                        <option value="">— Existing campaign faction —</option>
+                        {crewLinkableFactions.map((f) => (
+                          <option key={f.id} value={String(f.id)}>
+                            {f.name || `Faction ${f.id}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "10px",
+                        alignItems: "center",
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontSize: "11px",
+                          color: "#9ca3af",
+                        }}
+                      >
+                        Starting rep
+                        <input
+                          type="number"
+                          min={-3}
+                          max={3}
+                          style={{
+                            width: "52px",
+                            background: "#0d1117",
+                            color: "#fff",
+                            border: "1px solid #4b5563",
+                            borderRadius: "4px",
+                            padding: "2px 4px",
+                            fontSize: "11px",
+                          }}
+                          value={crewFactionAddRep}
+                          onChange={(e) => {
+                            setCrewFactionAddRep(
+                              Math.min(
+                                3,
+                                Math.max(
+                                  -3,
+                                  parseInt(e.target.value, 10) || 0,
+                                ),
+                              ),
+                            );
+                            setCrewFactionAddErr(null);
+                          }}
+                          disabled={crewFactionAddBusy}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        style={{
+                          ...S.btn,
+                          fontSize: "11px",
+                          padding: "4px 12px",
+                          opacity: crewFactionAddBusy ? 0.6 : 1,
+                        }}
+                        disabled={crewFactionAddBusy}
+                        onClick={() => void handleAddCrewFactionLink()}
+                      >
+                        {crewFactionAddBusy ? "Saving…" : "Add link"}
+                      </button>
+                    </div>
+                    {crewFactionAddErr ? (
+                      <div style={{ fontSize: "11px", color: "#f87171" }}>
+                        {crewFactionAddErr}
+                      </div>
+                    ) : null}
+                    {crewLinkableFactions.length === 0 &&
+                    !(campaignForCrewFactionAdd?.factions || []).length ? (
+                      <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                        No factions on this campaign yet — use the name field to
+                        create the first one.
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </div>
@@ -10553,72 +15422,103 @@ const CharacterSheetWrapper = ({
                 style={{
                   ...S.card,
                   marginBottom: "12px",
-                  maxHeight: "220px",
-                  overflow: "auto",
                 }}
               >
-                <span style={S.lbl}>CREW MODIFICATION HISTORY</span>
                 <div
                   style={{
-                    fontSize: "11px",
-                    color: "#6b7280",
-                    marginTop: "4px",
-                    marginBottom: "8px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "8px",
+                    marginBottom: crewHistoryOpen ? "6px" : 0,
                   }}
                 >
-                  Saved changes to this crew (name, rep, turf, tier, wanted,
-                  coin, notes, upgrades, etc.).
-                </div>
-                {crewHistoryEntries.length === 0 ? (
-                  <div style={{ fontSize: "12px", color: "#6b7280" }}>
-                    No history entries yet.
-                  </div>
-                ) : (
-                  <ul
+                  <span style={S.lbl}>CREW MODIFICATION HISTORY</span>
+                  <button
+                    type="button"
+                    onClick={() => setCrewHistoryOpenPersist((v) => !v)}
                     style={{
-                      margin: 0,
-                      paddingLeft: "18px",
-                      fontSize: "11px",
-                      color: "#d1d5db",
-                      lineHeight: 1.5,
+                      ...S.btn,
+                      fontSize: "10px",
+                      padding: "2px 8px",
+                      background: "#111827",
+                      color: "#c4b5fd",
                     }}
                   >
-                    {crewHistoryEntries.map((entry) => {
-                      const cf = entry.changed_fields || {};
-                      const keys = Object.keys(cf).filter((k) =>
-                        CREW_HISTORY_FIELD_KEYS.has(k),
-                      );
-                      if (!keys.length) return null;
-                      const when = entry.timestamp
-                        ? new Date(entry.timestamp).toLocaleString()
-                        : "";
-                      return (
-                        <li key={entry.id} style={{ marginBottom: "8px" }}>
-                          <div style={{ color: "#9ca3af" }}>
-                            {when}
-                            {entry.editor_username
-                              ? ` · ${entry.editor_username}`
-                              : ""}
-                          </div>
-                          {keys.map((k) => {
-                            const ch = cf[k] || {};
+                    {crewHistoryOpen ? "Collapse" : "Expand"}
+                  </button>
+                </div>
+                {crewHistoryOpen ? (
+                  <>
+                    <div
+                      style={{
+                        fontSize: "11px",
+                        color: "#6b7280",
+                        marginTop: "4px",
+                        marginBottom: "8px",
+                      }}
+                    >
+                      Saved changes to this crew (name, rep, turf, tier, wanted,
+                      coin, notes, upgrades, etc.).
+                    </div>
+                    <div style={{ maxHeight: "220px", overflow: "auto" }}>
+                      {crewHistoryEntries.length === 0 ? (
+                        <div style={{ fontSize: "12px", color: "#6b7280" }}>
+                          No history entries yet.
+                        </div>
+                      ) : (
+                        <ul
+                          style={{
+                            margin: 0,
+                            paddingLeft: "18px",
+                            fontSize: "11px",
+                            color: "#d1d5db",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          {crewHistoryEntries.map((entry) => {
+                            const cf = entry.changed_fields || {};
+                            const keys = Object.keys(cf).filter((k) =>
+                              CREW_HISTORY_FIELD_KEYS.has(k),
+                            );
+                            if (!keys.length) return null;
+                            const when = entry.timestamp
+                              ? new Date(entry.timestamp).toLocaleString()
+                              : "";
                             return (
-                              <div key={k}>
-                                <strong>{k}</strong>:{" "}
-                                <span style={{ color: "#fca5a5" }}>
-                                  {String(ch.old ?? "")}
-                                </span>{" "}
-                                →{" "}
-                                <span style={{ color: "#86efac" }}>
-                                  {String(ch.new ?? "")}
-                                </span>
-                              </div>
+                              <li key={entry.id} style={{ marginBottom: "8px" }}>
+                                <div style={{ color: "#9ca3af" }}>
+                                  {when}
+                                  {entry.editor_username
+                                    ? ` · ${entry.editor_username}`
+                                    : ""}
+                                </div>
+                                {keys.map((k) => {
+                                  const ch = cf[k] || {};
+                                  return (
+                                    <div key={k}>
+                                      <strong>{k}</strong>:{" "}
+                                      <span style={{ color: "#fca5a5" }}>
+                                        {String(ch.old ?? "")}
+                                      </span>{" "}
+                                      →{" "}
+                                      <span style={{ color: "#86efac" }}>
+                                        {String(ch.new ?? "")}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </li>
                             );
                           })}
-                        </li>
-                      );
-                    })}
-                  </ul>
+                        </ul>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                    Hidden. Expand to view crew edit history.
+                  </div>
                 )}
               </div>
             ) : null}
@@ -10935,6 +15835,7 @@ const CharacterSheetWrapper = ({
 
             <div style={{ display: "flex", gap: "8px" }}>
               <button
+                type="button"
                 onClick={confirmLevelUp}
                 style={{
                   ...S.btn,
@@ -10947,6 +15848,7 @@ const CharacterSheetWrapper = ({
                 Confirm (−10 XP)
               </button>
               <button
+                type="button"
                 onClick={() => setShowLevelUp(false)}
                 style={{ ...S.btn, background: "#374151", color: "#fff" }}
               >

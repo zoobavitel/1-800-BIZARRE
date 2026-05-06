@@ -1,3 +1,5 @@
+import logging
+
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.db import connection, models
 from django.contrib.auth.models import User
@@ -14,6 +16,7 @@ from ..models import (
     Character,
     CharacterHistory,
     NPC,
+    Session,
     ShowcasedNPC,
 )
 from ..serializers import (
@@ -23,6 +26,8 @@ from ..serializers import (
     InvitableUserSerializer,
 )
 from ..services.campaign_service import CampaignService
+
+logger = logging.getLogger(__name__)
 
 
 def _gm_history_character_row(h):
@@ -92,6 +97,30 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
         return super().partial_update(request, *args, **kwargs)
+
+    def perform_update(self, serializer):
+        prev_sid = serializer.instance.active_session_id
+        campaign = serializer.save()
+        new_sid = campaign.active_session_id
+        if prev_sid and prev_sid != new_sid:
+            try:
+                old_sess = Session.objects.get(pk=prev_sid)
+            except Session.DoesNotExist:
+                return
+            if old_sess.campaign_id == campaign.id:
+                try:
+                    from ..services.session_xp_settlement import (
+                        settle_encoded_session_xp,
+                    )
+
+                    settle_encoded_session_xp(old_sess, self.request.user)
+                except Exception:
+                    logger.exception(
+                        "Encoded session XP settlement failed after "
+                        "active_session change (campaign=%s, session=%s)",
+                        campaign.id,
+                        prev_sid,
+                    )
 
     def perform_destroy(self, instance):
         try:
@@ -601,9 +630,21 @@ class CampaignInvitationViewSet(viewsets.GenericViewSet):
     serializer_class = CampaignInvitationSerializer
 
     def get_queryset(self):
-        return CampaignInvitation.objects.filter(
-            invited_user=self.request.user, status="pending"
-        ).select_related("campaign", "invited_by", "invited_user")
+        return (
+            CampaignInvitation.objects.filter(
+                invited_user=self.request.user, status="pending"
+            )
+            .select_related(
+                "campaign",
+                "campaign__gm",
+                "campaign__gm__profile",
+                "invited_by",
+                "invited_by__profile",
+                "invited_user",
+                "invited_user__profile",
+            )
+            .prefetch_related("campaign__players", "campaign__players__profile")
+        )
 
     def list(self, request):
         serializer = self.get_serializer(self.get_queryset(), many=True)

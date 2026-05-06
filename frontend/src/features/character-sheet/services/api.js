@@ -402,16 +402,22 @@ export const factionAPI = {
       ? apiRequest(`/factions/?campaign=${campaignId}`)
       : apiRequest("/factions/"),
   getFaction: (id) => apiRequest(`/factions/${id}/`),
-  createFaction: (data) =>
-    apiRequest("/factions/", {
+  createFaction: (data) => {
+    const { multipart, body } = buildMultipartOrJson(data);
+    if (multipart) return apiRequestMultipart("/factions/", body, "POST");
+    return apiRequest("/factions/", {
       method: "POST",
-      body: JSON.stringify(data),
-    }),
-  updateFaction: (id, data) =>
-    apiRequest(`/factions/${id}/`, {
+      body,
+    });
+  },
+  updateFaction: (id, data) => {
+    const { multipart, body } = buildMultipartOrJson(data);
+    if (multipart) return apiRequestMultipart(`/factions/${id}/`, body, "PUT");
+    return apiRequest(`/factions/${id}/`, {
       method: "PUT",
-      body: JSON.stringify(data),
-    }),
+      body,
+    });
+  },
   patchFaction: (id, data) =>
     apiRequest(`/factions/${id}/`, {
       method: "PATCH",
@@ -535,8 +541,16 @@ export function buildMultipartOrJson(data) {
     }
     return { multipart: true, body: fd };
   }
-  const { imageFile: _if, image: _img, ...rest } = data || {};
-  return { multipart: false, body: JSON.stringify(rest) };
+  const dataObj = data || {};
+  const { imageFile: _if, image, ...rest } = dataObj;
+  const jsonPayload = { ...rest };
+  if (
+    Object.prototype.hasOwnProperty.call(dataObj, "image") &&
+    image === null
+  ) {
+    jsonPayload.image = null;
+  }
+  return { multipart: false, body: JSON.stringify(jsonPayload) };
 }
 
 // NPC API functions (GM / campaign NPCs)
@@ -593,6 +607,9 @@ export const sessionAPI = {
       method: "PATCH",
       body: JSON.stringify(sessionData),
     }),
+
+  deleteSession: (id) =>
+    apiRequest(`/sessions/${id}/`, { method: "DELETE" }),
 };
 
 // Progress clock API (GM clocks for campaigns/sessions)
@@ -1038,6 +1055,16 @@ export const transformBackendToFrontend = (backendCharacter) => {
     selected_detriments: Array.isArray(backendCharacter.selected_detriments)
       ? backendCharacter.selected_detriments
       : [],
+    fed_today:
+      typeof backendCharacter.fed_today === "boolean"
+        ? backendCharacter.fed_today
+        : null,
+
+    /** +1 Stand Coin ranks bought with XP beyond chargen (10 XP each on backend); chargen baseline is excluded. */
+    standCoinPointsGained: Math.max(
+      0,
+      Number(backendCharacter.stand_coin_points_gained) || 0,
+    ),
   };
 };
 
@@ -1226,6 +1253,10 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     selected_detriments: Array.isArray(frontendCharacter.selected_detriments)
       ? frontendCharacter.selected_detriments
       : [],
+    fed_today:
+      typeof frontendCharacter.fed_today === "boolean"
+        ? frontendCharacter.fed_today
+        : null,
 
     coin_boxes: normalizeCoinBoxes(frontendCharacter.coin),
 

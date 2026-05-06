@@ -7,7 +7,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from ..models import Character, ExperienceTracker, Roll, RollHistory, Session
-from ..roll_helpers import award_desperate_action_xp, normalize_effect, outcome_from_dice_results
+from ..roll_helpers import (
+    award_desperate_action_xp,
+    award_heritage_expression_xp,
+    normalize_effect,
+    outcome_from_dice_results,
+)
 from ..serializers import RollSerializer
 
 
@@ -133,9 +138,9 @@ class RollViewSet(viewsets.ModelViewSet):
                 {'error': 'Only desperate action rolls can award XP.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        if ExperienceTracker.objects.filter(roll=roll).exists():
+        if ExperienceTracker.objects.filter(roll=roll, trigger='DESPERATE_ROLL').exists():
             return Response(
-                {'error': 'XP already awarded for this roll.'},
+                {'error': 'Desperate-roll XP already awarded for this roll.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         character = roll.character
@@ -205,6 +210,11 @@ class RollViewSet(viewsets.ModelViewSet):
             roll=roll,
             defaults={'campaign': roll.session.campaign},
         )
+        raw_hb = self.request.data.get("heritage_bonuses")
+        if roll.roll_type == "ACTION":
+            award_heritage_expression_xp(
+                roll.character, roll.session, roll, raw_hb
+            )
         if roll.position == 'desperate' and roll.roll_type == 'ACTION' and roll.action_name:
             award_desperate_action_xp(
                 roll.character, roll.session, roll, roll.action_name, self.request.user

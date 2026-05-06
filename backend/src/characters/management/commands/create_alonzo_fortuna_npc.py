@@ -27,8 +27,6 @@ class Command(BaseCommand):
             "stand_precision": "C",
             "stand_range": "D",
             "stand_potential": "F",
-            "harm_clock_max": 8,
-            "vulnerability_clock_max": 4,
             "armor_charges": 3,
             "special_armor": 3,
             "purveyor": "The Bunker",

@@ -147,10 +147,8 @@ HERITAGE & RELATIONSHIPS:
 - relationships: JSON with relationship data
 
 COMBAT & RESISTANCE:
-- harm_clock_current: Current harm taken
-- harm_clock_max: Maximum harm capacity (calculated from Durability)
-- vulnerability_clock_current: Current vulnerability
-- vulnerability_clock_max: Maximum vulnerability (calculated from Precision)
+- vulnerability_clock_current: Current ticks on the NPC vulnerability clock
+- vulnerability_clock_max: Maximum vulnerability clock size (derived from Durability)
 - regular_armor_charges: Regular armor charges (calculated from Durability)
 - special_armor_charges: Special armor charges (calculated from Durability)
 

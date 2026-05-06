@@ -17,6 +17,9 @@ const shapeClip = {
   extreme: "inset(8%)",
 };
 
+/** ~even with Position tier pills (6+6 padding + ~11px label line). */
+const EFFECT_SHAPE_BOX = 48;
+
 /**
  * Stacked position blocks (active tier highlighted).
  */
@@ -100,7 +103,7 @@ export function EffectShapes({ activeEffect, readOnly = true, onSelect }) {
         display: "flex",
         flexDirection: "column",
         gap: 6,
-        minWidth: 100,
+        minWidth: 120,
       }}
     >
       <div
@@ -113,7 +116,7 @@ export function EffectShapes({ activeEffect, readOnly = true, onSelect }) {
       >
         EFFECT
       </div>
-      <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
         {EFFECT_ORDER.map((tier) => {
           const on = normalized === tier;
           const fill = on ? "#7c3aed" : "#374151";
@@ -126,15 +129,16 @@ export function EffectShapes({ activeEffect, readOnly = true, onSelect }) {
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
-                gap: 4,
+                gap: 6,
               }}
             >
               <div
                 role={interactive ? "button" : undefined}
                 tabIndex={interactive ? 0 : undefined}
                 style={{
-                  width: 36,
-                  height: 36,
+                  width: EFFECT_SHAPE_BOX,
+                  height: EFFECT_SHAPE_BOX,
+                  flexShrink: 0,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -142,7 +146,8 @@ export function EffectShapes({ activeEffect, readOnly = true, onSelect }) {
                   clipPath: shapeClip[tier],
                   color: letterColor,
                   fontWeight: 800,
-                  fontSize: 14,
+                  fontSize: 17,
+                  lineHeight: 1,
                   cursor: readOnly ? "default" : "pointer",
                 }}
                 onClick={interactive ? () => onSelect(tier) : undefined}
@@ -159,7 +164,16 @@ export function EffectShapes({ activeEffect, readOnly = true, onSelect }) {
               >
                 {EFFECT_LETTER[tier]}
               </div>
-              <span style={{ fontSize: 9, color: on ? "#c4b5fd" : "#6b7280" }}>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: on ? 600 : 400,
+                  color: on ? "#c4b5fd" : "#6b7280",
+                  textAlign: "center",
+                  lineHeight: 1.2,
+                  maxWidth: EFFECT_SHAPE_BOX + 8,
+                }}
+              >
                 {tier === "extreme"
                   ? "Extreme"
                   : tier === "standard"

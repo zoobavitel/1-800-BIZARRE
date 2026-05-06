@@ -50,13 +50,6 @@ class Command(BaseCommand):
             default="F",
             help="Stand Development Potential rating (S, A, B, C, D, F).",
         )
-        parser.add_argument(
-            "--harm_clock_max",
-            type=int,
-            default=4,
-            help="The maximum segments for the NPC's Harm Clock.",
-        )
-
     def handle(self, *args, **options):
         name = options["name"]
         campaign_id = options["campaign_id"]
@@ -68,7 +61,6 @@ class Command(BaseCommand):
         durability = options["durability"].upper()
         precision = options["precision"].upper()
         development = options["development"].upper()
-        harm_clock_max = options["harm_clock_max"]
 
         try:
             campaign = Campaign.objects.get(pk=campaign_id)
@@ -109,7 +101,6 @@ class Command(BaseCommand):
             creator=creator,
             level=level,
             stand_coin_stats=stand_coin_stats,
-            harm_clock_max=harm_clock_max,
         )
 
         self.stdout.write(

@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import viewsets, permissions
 from rest_framework.permissions import IsAuthenticated
 
@@ -70,12 +71,49 @@ class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         user = self.request.user
         campaign_id = self.request.query_params.get("campaign")
+        character_id = self.request.query_params.get("character")
         qs = CharacterHistory.objects.all().select_related(
             "character", "character__campaign", "editor"
         )
+
         if user.is_staff:
             base = qs
-        elif campaign_id:
+            if character_id:
+                try:
+                    base = base.filter(character_id=int(character_id))
+                except (TypeError, ValueError):
+                    return CharacterHistory.objects.none()
+            elif campaign_id:
+                try:
+                    base = base.filter(character__campaign_id=int(campaign_id))
+                except (TypeError, ValueError):
+                    return CharacterHistory.objects.none()
+            return base.order_by("-timestamp")
+
+        if character_id:
+            try:
+                ch_pk = int(character_id)
+            except (TypeError, ValueError):
+                return CharacterHistory.objects.none()
+            char = Character.objects.filter(pk=ch_pk).select_related("campaign").first()
+            if not char:
+                return CharacterHistory.objects.none()
+            can_view = char.user_id == user.id
+            if char.campaign_id:
+                camp = char.campaign
+                can_view = can_view or camp.gm_id == user.id
+            if not can_view:
+                return CharacterHistory.objects.none()
+            if campaign_id:
+                try:
+                    cap = int(campaign_id)
+                except (TypeError, ValueError):
+                    return CharacterHistory.objects.none()
+                if char.campaign_id != cap:
+                    return CharacterHistory.objects.none()
+            return qs.filter(character_id=ch_pk).order_by("-timestamp")
+
+        if campaign_id:
             try:
                 cid = int(campaign_id)
             except (TypeError, ValueError):
@@ -83,16 +121,17 @@ class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
             campaign = Campaign.objects.filter(pk=cid).first()
             if not campaign or campaign.gm_id != user.id:
                 return CharacterHistory.objects.none()
-            base = qs.filter(character__campaign_id=cid)
-        elif Campaign.objects.filter(gm=user).exists():
-            base = qs.filter(character__campaign__gm=user)
-        else:
-            base = qs.filter(character__user=user)
+            return qs.filter(character__campaign_id=cid).order_by("-timestamp")
 
-        character_id = self.request.query_params.get("character")
-        if character_id:
-            base = base.filter(character_id=character_id)
-        return base.order_by("-timestamp")
+        return (
+            qs.filter(
+                Q(character__user=user)
+                | Q(character__campaign__gm=user)
+                | Q(character__campaign__players=user)
+            )
+            .distinct()
+            .order_by("-timestamp")
+        )
 
 
 class CrewHistoryViewSet(viewsets.ReadOnlyModelViewSet):
@@ -132,6 +171,71 @@ class ExperienceTrackerViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ExperienceTrackerSerializer
 
     def get_queryset(self):
+        # #region agent log
+        import json
+        import time as _dbg_time_ref
+
+        def _dbg_experience_tracker_log():
+            try:
+                from django.db import connection
+                from django.db.migrations.recorder import MigrationRecorder
+
+                mig_0065 = MigrationRecorder.Migration.objects.filter(
+                    app="characters",
+                    name="0065_session_ripple_breathing_free_push",
+                ).exists()
+                col_present = None
+                if connection.vendor == "sqlite":
+                    with connection.cursor() as cur:
+                        cur.execute("PRAGMA table_info(characters_session)")
+                        names = {row[1] for row in cur.fetchall()}
+                    col_present = (
+                        "ripple_breathing_free_push_claimed_by_character" in names
+                    )
+                db_name = connection.settings_dict.get("NAME")
+                payload = {
+                    "sessionId": "068d9a",
+                    "runId": "pre-fix",
+                    "hypothesisId": "H1",
+                    "location": "reference_views.ExperienceTrackerViewSet.get_queryset",
+                    "message": "migrate 0065 vs sqlite column characters_session",
+                    "data": {
+                        "mig_0065_applied": mig_0065,
+                        "ripple_col_in_db": col_present,
+                        "db_vendor": connection.vendor,
+                        "db_name_repr": repr(db_name),
+                    },
+                    "timestamp": int(_dbg_time_ref.time() * 1000),
+                }
+                path = "$HOME/git/jojo-ttrpg-platform/.cursor/debug-068d9a.log"
+                with open(path, "a", encoding="utf-8") as df:
+                    df.write(json.dumps(payload) + "\n")
+            except Exception as ex:
+                try:
+                    with open(
+                        "$HOME/git/jojo-ttrpg-platform/.cursor/debug-068d9a.log",
+                        "a",
+                        encoding="utf-8",
+                    ) as df:
+                        df.write(
+                            json.dumps(
+                                {
+                                    "sessionId": "068d9a",
+                                    "runId": "pre-fix",
+                                    "hypothesisId": "H1",
+                                    "location": "reference_views.ExperienceTrackerViewSet.get_queryset",
+                                    "message": "debug log exception",
+                                    "data": {"error": repr(ex)},
+                                    "timestamp": int(_dbg_time_ref.time() * 1000),
+                                }
+                            )
+                            + "\n"
+                        )
+                except Exception:
+                    pass
+
+        _dbg_experience_tracker_log()
+        # #endregion
         qs = ExperienceTracker.objects.all().select_related('character', 'session', 'character__campaign')
         user = self.request.user
         if user.is_staff:

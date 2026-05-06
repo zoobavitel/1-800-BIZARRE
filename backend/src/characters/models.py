@@ -109,6 +109,12 @@ class Faction(models.Model):
     crew_notes = models.TextField(
         blank=True, help_text="Operational notes shared across all faction members."
     )
+    image = models.FileField(
+        upload_to="faction_images/",
+        null=True,
+        blank=True,
+        help_text="Optional emblem or photo for this faction.",
+    )
 
     class Meta:
         unique_together = [("campaign", "name")]
@@ -194,6 +200,12 @@ class Crew(models.Model):
     description = models.TextField(blank=True)
     notes = models.TextField(blank=True, help_text="Crew sheet notes (player-facing).")
     image = models.FileField(upload_to="crew_images/", blank=True, null=True)
+    image_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="Optional HTTPS URL for crew portrait (no file upload).",
+    )
     xp = models.IntegerField(default=0)
     xp_track_size = models.IntegerField(default=8)
     advancement_points = models.IntegerField(default=0)
@@ -310,7 +322,6 @@ class NPC(models.Model):
     )
     custom_abilities = models.TextField(blank=True)
     relationships = models.JSONField(default=dict, blank=True)
-    harm_clock_current = models.IntegerField(default=0)
     vulnerability_clock_current = models.IntegerField(default=0)
     armor_charges = models.IntegerField(default=0)
     creator = models.ForeignKey(
@@ -350,8 +361,6 @@ class NPC(models.Model):
     # Armor tracking (regular vs special charges used)
     regular_armor_used = models.IntegerField(default=0)
     special_armor_used = models.IntegerField(default=0)
-
-    harm_clock_max = models.IntegerField(default=4)
 
     @property
     def regular_armor_charges(self):
@@ -593,6 +602,15 @@ class Character(models.Model):
     xp_clocks = models.JSONField(default=dict, blank=True)
     total_xp_spent = models.IntegerField(default=0)
     heritage_points_gained = models.IntegerField(default=0)
+    fed_today = models.BooleanField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text=(
+            "Manual vampire feeding tracker used by sheet detriments "
+            "that depend on whether the character fed today."
+        ),
+    )
     stand_coin_points_gained = models.IntegerField(default=0)
     action_dice_gained = models.IntegerField(default=0)
     inventory = models.JSONField(
@@ -1413,6 +1431,7 @@ class ExperienceTracker(models.Model):
         ("DESPERATE", "Address a challenge with action rating 0"),
         ("DESPERATE_ROLL", "Desperate skill check"),
         ("STANDOUT", "Standout action or leadership"),
+        ("MANUAL", "Manual or offline XP award"),
     ]
 
     character = models.ForeignKey(
@@ -1570,12 +1589,27 @@ class Session(models.Model):
         blank=True,
         help_text="Map of character id (string) to GM-written devil's bargain consequence; player must confirm before rolling with +1d.",
     )
+    ripple_breathing_free_push_claimed_by_character = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Map of character id (string) to true after that PC uses Ripple Breathing "
+            "free push once for this session episode."
+        ),
+    )
     position_effect_by_character = models.JSONField(
         default=dict,
         blank=True,
         help_text=(
             "Map of character id (string) to {position, effect} for this session; "
             "overrides default_position/default_effect for that PC's action rolls when set."
+        ),
+    )
+    auto_encoded_xp_settled = models.BooleanField(
+        default=False,
+        help_text=(
+            "When true, encoded session-end XP (vice/playbook hints from rolls) was "
+            "applied once. Entanglement / score conflict XP stays manual."
         ),
     )
 
@@ -1606,7 +1640,6 @@ class SessionNPCInvolvement(models.Model):
     )
     show_clocks_to_players = models.BooleanField(default=False)
     show_vulnerability_clock_to_players = models.BooleanField(default=False)
-    show_harm_clock_to_players = models.BooleanField(default=False)
     revealed_conflict_clock_names = models.JSONField(default=list, blank=True)
     revealed_alt_clock_names = models.JSONField(default=list, blank=True)
     revealed_progress_clock_ids = models.JSONField(default=list, blank=True)
@@ -1622,8 +1655,6 @@ class SessionNPCInvolvement(models.Model):
         parts = []
         if self.show_clocks_to_players:
             parts.append("all_clocks")
-        if self.show_harm_clock_to_players:
-            parts.append("harm")
         if self.show_vulnerability_clock_to_players:
             parts.append("vuln")
         if self.show_stand_coin_to_players:
@@ -1841,6 +1872,24 @@ class Roll(models.Model):
     roller_stress_spent = models.PositiveSmallIntegerField(
         default=0, help_text="Stress spent by the rolling character (push, etc.)."
     )
+    modifier_sources = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "Structured source rows describing dice/stress/effect modifiers "
+            "applied to this roll."
+        ),
+    )
+    stress_sources = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Structured source rows for stress spend/gain tied to this roll.",
+    )
+    position_effect_sources = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Structured source rows for position/effect adjustments on this roll.",
+    )
     devil_bargain_consequence = models.CharField(max_length=500, blank=True)
     fortune_reveal_outcome = models.BooleanField(
         default=False,
@@ -1850,6 +1899,22 @@ class Roll(models.Model):
         max_length=120,
         blank=True,
         help_text="Optional public-facing label explaining what the fortune roll was for.",
+    )
+    recovery_context = models.CharField(
+        max_length=32,
+        blank=True,
+        default="",
+        help_text=(
+            "self_downtime | self_mid_action | ally | empty — session history / recovery audits."
+        ),
+    )
+    recovery_target = models.ForeignKey(
+        "Character",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recovery_rolls_received",
+        help_text="Patient when another PC rolls recovery treatment for them.",
     )
 
     def __str__(self):

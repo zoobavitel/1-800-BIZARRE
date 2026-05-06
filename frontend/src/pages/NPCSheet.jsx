@@ -8,17 +8,6 @@ import NpcsStandCoin from "../components/NpcsStandCoin";
 
 // ─── SRD Data Tables ──────────────────────────────────────────────────────────
 
-const CATEGORY_LABELS = {
-  aggression: "Aggression",
-  endurance: "Endurance",
-  cunning: "Cunning",
-  awareness: "Awareness",
-  presence: "Presence",
-  teamwork: "Teamwork",
-  adaptability: "Adaptability",
-  stand_nature: "Stand Nature",
-};
-
 // NOTE: SRD has two level formulas — one doc says -9, another says -10.
 // Change this constant to whichever is confirmed correct.
 const LEVEL_OFFSET = 9;
@@ -36,6 +25,103 @@ const DUR_REGULAR_ARMOR = { F: 0, D: 1, C: 1, B: 2, A: 3, S: 3 };
 const DUR_SPECIAL_ARMOR = { F: 0, D: 0, C: 1, B: 1, A: 2, S: 2 };
 
 // Power → base harm level + position note
+/** Session involvement rows use `npc` FK from JSON — may be number or string */
+function npcInvMatches(invNpcId, sheetNpcId) {
+  if (sheetNpcId == null || invNpcId == null) return false;
+  return Number(invNpcId) === Number(sheetNpcId);
+}
+
+/** JSONField clocks from API vs local edits — normalize once for state + merges */
+function normalizeNpcClockEntry(c) {
+  if (!c || typeof c !== "object") return null;
+  const segsRaw = Number(c.segments);
+  const segments = [4, 6, 8, 12].includes(segsRaw) ? segsRaw : 8;
+  const filledRaw = Number(c.filled);
+  const filled =
+    Number.isFinite(filledRaw) && filledRaw >= 0
+      ? Math.min(segments, filledRaw)
+      : 0;
+  const rawShow = c.show_to_players ?? c.visible_to_players;
+  const show_to_players =
+    rawShow === true ||
+    rawShow === 1 ||
+    (typeof rawShow === "string" &&
+      ["1", "true", "yes", "on"].includes(String(rawShow).toLowerCase()));
+  return {
+    id: c.id,
+    name: String(c.name ?? ""),
+    segments,
+    filled,
+    show_to_players,
+  };
+}
+
+function normalizeClockList(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map(normalizeNpcClockEntry).filter((x) => x != null);
+}
+
+function npcClockIdsMatch(a, b) {
+  return a === b || (a != null && b != null && Number(a) === Number(b));
+}
+
+/**
+ * NPC sheet: playbook copy is GM-facing narration only — strip PC-facing dice
+ * and stress spends from blurbs loaded from Hamon/Spin reference data.
+ */
+function sanitizeNpcPlaybookAbilityDescription(raw) {
+  if (raw == null || typeof raw !== "string") return "";
+  let s = raw.normalize("NFKC");
+
+  const passes = [
+    /\bCosts?\s+\d+\s+stress\.?\s*/gi,
+    /\bSpend(?:ing)?\s+\d+\s+stress[^.!?]*(?:[.!?]|$)/gi,
+    /\bPay\s+\d+\s+stress[^.!?]*(?:[.!?]|$)/gi,
+    // Clause starting with dice pool (+1d … through end of clause)
+    /\+?\d+\s*d[^.!?]*(?:[.!?]|$)/gi,
+    // Roll Finesse or Wreck; on a 6 / on a crit, …
+    /\bRoll\s+[A-Za-z][A-Za-z\s,]+\s*[;,]\s*on\s+(?:a\s+)?(?:crit|\d+)\+?\s*,\s*/gi,
+    /\bOn\s+a\s+(?:crit|\d+)\+?\s*,\s*/gi,
+  ];
+
+  passes.forEach((re) => {
+    for (let i = 0; i < 6; i += 1) {
+      const next = s.replace(re, "");
+      if (next === s) break;
+      s = next;
+    }
+  });
+
+  s = s
+    .replace(/\s+[,.;:]/g, (chunk) => chunk.trim())
+    .replace(/\s*,\s*\./g, ".")
+    .replace(/\(\s*\)/g, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[.,;\s:]+/, "")
+    .trim();
+
+  if (/^[a-z]/.test(s)) {
+    s = s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  return s;
+}
+
+/** Legacy rows linked standard-catalog abilities; NPC sheet uses freeform rows only now. */
+function normalizeNpcSheetAbilitiesNoStandard(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((ab) => {
+    if (!ab || typeof ab !== "object") {
+      return { id: Date.now(), name: "", description: "", type: "unique" };
+    }
+    const out = { ...ab };
+    delete out.standardId;
+    if (String(out.type || "").toLowerCase() === "standard") {
+      out.type = "unique";
+    }
+    return out;
+  });
+}
+
 const POWER_TABLE = {
   S: { harm: 4, pos: "Forces position worse by 1 step (always)" },
   A: { harm: 4, pos: "Forces position worse by 1 step" },
@@ -51,7 +137,7 @@ const SPEED_TABLE = {
     base: "200 ft",
     greater: "—",
     lesser: "—",
-    note: "Acts before everyone",
+    note: "Higher Speed usually starts Risky or better; GM adjusts by fiction",
   },
   A: { base: "60 ft", greater: "120 ft", lesser: "30 ft", note: "" },
   B: { base: "40 ft", greater: "80 ft", lesser: "20 ft", note: "" },
@@ -244,6 +330,142 @@ const ProgressClock = ({
   );
 };
 
+const npcClockAddCardInputStyle = {
+  width: "100%",
+  boxSizing: "border-box",
+  padding: "6px 8px",
+  borderRadius: "4px",
+  border: "1px solid #4b5563",
+  background: "#0a0a14",
+  color: "#e5e7eb",
+  fontFamily: "monospace",
+  fontSize: "12px",
+};
+
+/** Inline add-clock form (avoids browser prompt / modal feel). */
+function NpcClockAddCard({
+  draft,
+  error,
+  onFieldChange,
+  onCommit,
+  onCancel,
+  namePlaceholder,
+  borderColor,
+  createBg,
+  createColor,
+  createLabel,
+}) {
+  if (!draft) return null;
+  return (
+    <div
+      style={{
+        marginBottom: "12px",
+        padding: "10px 12px",
+        background: "#111827",
+        border: `1px solid ${borderColor}`,
+        borderRadius: "6px",
+      }}
+    >
+      <div style={{ fontSize: "10px", color: "#9ca3af", marginBottom: "8px" }}>
+        New clock
+      </div>
+      <input
+        type="text"
+        value={draft.name}
+        onChange={(e) => onFieldChange({ name: e.target.value })}
+        placeholder={namePlaceholder}
+        style={npcClockAddCardInputStyle}
+        autoFocus
+      />
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          marginTop: "8px",
+          flexWrap: "wrap",
+        }}
+      >
+        <label
+          style={{
+            fontSize: "11px",
+            color: "#9ca3af",
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+          }}
+        >
+          Segments
+          <select
+            value={draft.segments}
+            onChange={(e) =>
+              onFieldChange({ segments: Number(e.target.value) })
+            }
+            style={{
+              ...npcClockAddCardInputStyle,
+              width: "auto",
+              cursor: "pointer",
+            }}
+          >
+            {[4, 6, 8, 12].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {error ? (
+        <div style={{ fontSize: "10px", color: "#f87171", marginTop: "6px" }}>
+          {error}
+        </div>
+      ) : null}
+      <div
+        style={{
+          display: "flex",
+          gap: "8px",
+          marginTop: "10px",
+          justifyContent: "flex-end",
+        }}
+      >
+        <button
+          type="button"
+          onClick={onCancel}
+          style={{
+            padding: "4px 10px",
+            fontSize: "11px",
+            cursor: "pointer",
+            borderRadius: "4px",
+            border: "1px solid #4b5563",
+            background: "transparent",
+            color: "#9ca3af",
+            fontFamily: "monospace",
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={onCommit}
+          style={{
+            padding: "4px 10px",
+            fontSize: "11px",
+            cursor: "pointer",
+            borderRadius: "4px",
+            border: "none",
+            background: createBg,
+            color: createColor,
+            fontFamily: "monospace",
+            fontWeight: "bold",
+          }}
+        >
+          {createLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── ArmorTracker ─────────────────────────────────────────────────────────────
 
 const ArmorTracker = ({ label, max, used, onChange, color }) => {
@@ -363,6 +585,8 @@ const NPCSheet = ({
   const [activeSessionDetail, setActiveSessionDetail] = useState(null);
   const [activeSessionLoading, setActiveSessionLoading] = useState(false);
   const [vulnRevealSaving, setVulnRevealSaving] = useState(false);
+  /** Invalidate in-flight GET /sessions/:id after PATCH so stale responses cannot revert UI */
+  const activeSessionDetailNonceRef = useRef(0);
 
   useEffect(() => {
     if (!isGM || activeSessionId == null) {
@@ -371,14 +595,24 @@ const NPCSheet = ({
       return;
     }
     let cancelled = false;
+    activeSessionDetailNonceRef.current += 1;
+    const ticket = activeSessionDetailNonceRef.current;
     setActiveSessionLoading(true);
     sessionAPI
       .getSession(activeSessionId)
       .then((data) => {
-        if (!cancelled) setActiveSessionDetail(data);
+        if (
+          cancelled ||
+          ticket !== activeSessionDetailNonceRef.current
+        ) {
+          return;
+        }
+        setActiveSessionDetail(data);
       })
       .catch(() => {
-        if (!cancelled) setActiveSessionDetail(null);
+        if (cancelled) return;
+        if (ticket !== activeSessionDetailNonceRef.current) return;
+        setActiveSessionDetail(null);
       })
       .finally(() => {
         if (!cancelled) setActiveSessionLoading(false);
@@ -386,13 +620,17 @@ const NPCSheet = ({
     return () => {
       cancelled = true;
     };
+    // Include `campaigns`: session NPC involvements change when GM edits session elsewhere;
+    // nonce drops stale GETs started before our own PATCH completes.
   }, [isGM, activeSessionId, campaigns]);
 
   const sessionInvolvementForNpc = useMemo(() => {
     const id = npc?.id;
     if (id == null || !activeSessionDetail?.npc_involvements) return null;
     return (
-      activeSessionDetail.npc_involvements.find((i) => i.npc === id) ?? null
+      activeSessionDetail.npc_involvements.find((i) =>
+        npcInvMatches(i.npc, id),
+      ) ?? null
     );
   }, [npc?.id, activeSessionDetail]);
 
@@ -414,6 +652,7 @@ const NPCSheet = ({
         const updated = await sessionAPI.patchSession(activeSessionId, {
           npc_involvements: normalized,
         });
+        activeSessionDetailNonceRef.current += 1;
         setActiveSessionDetail(updated);
         if (typeof onCampaignRefresh === "function") {
           onCampaignRefresh();
@@ -436,7 +675,7 @@ const NPCSheet = ({
     }
     const id = npc?.id;
     const next = activeSessionDetail.npc_involvements.map((i) =>
-      i.npc === id
+      npcInvMatches(i.npc, id)
         ? {
             ...i,
             show_vulnerability_clock_to_players: !(
@@ -622,13 +861,39 @@ const NPCSheet = ({
     };
   });
 
-  const [conflictClocks, setConflictClocks] = useState(
-    npc?.conflict_clocks ?? npc?.conflictClocks ?? [],
+  const [conflictClocks, setConflictClocks] = useState(() =>
+    normalizeClockList(npc?.conflict_clocks ?? npc?.conflictClocks ?? []),
   );
 
-  const [altClocks, setAltClocks] = useState(
-    npc?.alt_clocks ?? npc?.altClocks ?? [],
+  const [altClocks, setAltClocks] = useState(() =>
+    normalizeClockList(npc?.alt_clocks ?? npc?.altClocks ?? []),
   );
+
+  /** Inline add form for conflict / alt clocks (replaces window.prompt). */
+  const [clockDraftCard, setClockDraftCard] = useState(null);
+  const [clockDraftError, setClockDraftError] = useState("");
+
+  const npcConflictClocksSnap = useMemo(() => {
+    if (npc?.id == null) return "";
+    return JSON.stringify(npc?.conflict_clocks ?? npc?.conflictClocks ?? []);
+  }, [npc?.id, npc?.conflict_clocks, npc?.conflictClocks]);
+
+  const npcAltClocksSnap = useMemo(() => {
+    if (npc?.id == null) return "";
+    return JSON.stringify(npc?.alt_clocks ?? npc?.altClocks ?? []);
+  }, [npc?.id, npc?.alt_clocks, npc?.altClocks]);
+
+  useEffect(() => {
+    if (npc?.id == null || npcConflictClocksSnap === "") return;
+    setConflictClocks(
+      normalizeClockList(JSON.parse(npcConflictClocksSnap || "[]")),
+    );
+  }, [npc?.id, npcConflictClocksSnap]);
+
+  useEffect(() => {
+    if (npc?.id == null || npcAltClocksSnap === "") return;
+    setAltClocks(normalizeClockList(JSON.parse(npcAltClocksSnap || "[]")));
+  }, [npc?.id, npcAltClocksSnap]);
 
   const [vulnFilled, setVulnFilled] = useState(
     npc?.vulnerability_clock_current ?? 0,
@@ -641,8 +906,9 @@ const NPCSheet = ({
     npc?.special_armor_used ?? npc?.specialUsed ?? 0,
   );
 
-  const [abilities, setAbilities] = useState(npc?.abilities ?? []);
-  const [standardAbilitiesList, setStandardAbilitiesList] = useState([]);
+  const [abilities, setAbilities] = useState(() =>
+    normalizeNpcSheetAbilitiesNoStandard(npc?.abilities ?? []),
+  );
 
   // Heritage and NPC type
   const [heritage, setHeritage] = useState(
@@ -664,6 +930,9 @@ const NPCSheet = ({
     setPlaybook(npc?.playbook ?? "STAND");
     setSelectedHamonIds(npc?.selected_hamon_abilities ?? []);
     setSelectedSpinIds(npc?.selected_spin_abilities ?? []);
+    setAbilities(normalizeNpcSheetAbilitiesNoStandard(npc?.abilities ?? []));
+    setClockDraftCard(null);
+    setClockDraftError("");
   }, [npc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Hamon / Spin playbook abilities
@@ -696,32 +965,6 @@ const NPCSheet = ({
     setSelectedSpinIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
-
-  useEffect(() => {
-    referenceAPI
-      .getAbilities()
-      .then((list) => setStandardAbilitiesList(list || []))
-      .catch(() => setStandardAbilitiesList([]));
-  }, []);
-
-  const [standardPickerAbId, setStandardPickerAbId] = useState(null);
-  const [standardPickerSearch, setStandardPickerSearch] = useState("");
-  const standardPickerRef = useRef(null);
-
-  useEffect(() => {
-    if (!standardPickerAbId) return;
-    const handleClick = (e) => {
-      if (
-        standardPickerRef.current &&
-        !standardPickerRef.current.contains(e.target)
-      ) {
-        setStandardPickerAbId(null);
-        setStandardPickerSearch("");
-      }
-    };
-    document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
-  }, [standardPickerAbId]);
 
   // Portrait state
   const [imageFile, setImageFile] = useState(null);
@@ -810,45 +1053,60 @@ const NPCSheet = ({
 
   // ── Clock helpers ─────────────────────────────────────────────────────────────
 
-  const addConflictClock = () => {
-    const name = prompt(
-      'Clock name (e.g. "Defeat Diavolo", "Expose the User"):',
+  const toggleClockDraftCard = (kind) => {
+    setClockDraftError("");
+    setClockDraftCard((prev) =>
+      prev?.kind === kind ? null : { kind, name: "", segments: 8 },
     );
-    if (!name) return;
-    const segs = parseInt(prompt("Segments (4, 6, 8, 12):") || "8");
-    if (![4, 6, 8, 12].includes(segs)) {
-      alert("Must be 4, 6, 8, or 12.");
-      return;
-    }
-    setConflictClocks((p) => [
-      ...p,
-      { id: Date.now(), name, segments: segs, filled: 0 },
-    ]);
   };
 
-  const addAltClock = () => {
-    const name = prompt(
-      'Alternative win condition (e.g. "Expose User", "Break Stand Logic"):',
-    );
-    if (!name) return;
-    const segs = parseInt(prompt("Segments (4, 6, 8, 12):") || "8");
-    if (![4, 6, 8, 12].includes(segs)) return;
-    setAltClocks((p) => [
-      ...p,
-      { id: Date.now(), name, segments: segs, filled: 0 },
-    ]);
+  const patchClockDraft = (patch) => {
+    setClockDraftCard((d) => (d ? { ...d, ...patch } : d));
+    setClockDraftError("");
+  };
+
+  const cancelClockDraftCard = () => {
+    setClockDraftError("");
+    setClockDraftCard(null);
+  };
+
+  const commitClockDraftCard = () => {
+    if (!clockDraftCard) return;
+    const name = clockDraftCard.name.trim();
+    if (!name) {
+      setClockDraftError("Enter a name for this clock.");
+      return;
+    }
+    setClockDraftError("");
+    let segs = Number(clockDraftCard.segments);
+    if (![4, 6, 8, 12].includes(segs)) segs = 8;
+    const row = {
+      id: Date.now(),
+      name,
+      segments: segs,
+      filled: 0,
+      show_to_players: false,
+    };
+    if (clockDraftCard.kind === "conflict") {
+      setConflictClocks((p) => [...p, row]);
+    } else {
+      setAltClocks((p) => [...p, row]);
+    }
+    setClockDraftCard(null);
   };
 
   const updateConflictClock = (id, filled) =>
     setConflictClocks((p) =>
-      p.map((c) => (c.id === id ? { ...c, filled } : c)),
+      p.map((c) => (npcClockIdsMatch(c.id, id) ? { ...c, filled } : c)),
     );
   const deleteConflictClock = (id) =>
-    setConflictClocks((p) => p.filter((c) => c.id !== id));
+    setConflictClocks((p) => p.filter((c) => !npcClockIdsMatch(c.id, id)));
   const updateAltClock = (id, filled) =>
-    setAltClocks((p) => p.map((c) => (c.id === id ? { ...c, filled } : c)));
+    setAltClocks((p) =>
+      p.map((c) => (npcClockIdsMatch(c.id, id) ? { ...c, filled } : c)),
+    );
   const deleteAltClock = (id) =>
-    setAltClocks((p) => p.filter((c) => c.id !== id));
+    setAltClocks((p) => p.filter((c) => !npcClockIdsMatch(c.id, id)));
 
   const buildPayload = useCallback(
     () => ({
@@ -873,7 +1131,7 @@ const NPCSheet = ({
       vulnerability_clock_current: vulnFilled,
       regular_armor_used: regularUsed,
       special_armor_used: specialUsed,
-      abilities,
+      abilities: normalizeNpcSheetAbilitiesNoStandard(abilities),
       hamon_ability_ids: selectedHamonIds,
       spin_ability_ids: selectedSpinIds,
       campaign: campaign || null,
@@ -929,6 +1187,12 @@ const NPCSheet = ({
       try {
         const result = await onSave(buildPayload());
         if (result?.id && !npcIdRef.current) npcIdRef.current = result.id;
+        if (Array.isArray(result?.conflict_clocks)) {
+          setConflictClocks(normalizeClockList(result.conflict_clocks));
+        }
+        if (Array.isArray(result?.alt_clocks)) {
+          setAltClocks(normalizeClockList(result.alt_clocks));
+        }
         setSaveStatus("saved");
         setTimeout(
           () => setSaveStatus((s) => (s === "saved" ? null : s)),
@@ -1543,8 +1807,28 @@ const NPCSheet = ({
                       <div>Greater: {speedInfo.greater}</div>
                       <div>Lesser: {speedInfo.lesser}</div>
                     </div>
-                    <div style={{ color: "#6b7280", marginTop: "2px" }}>
-                      Initiative: GM's call — NPCs never roll
+                    <div
+                      style={{
+                        color: "#6b7280",
+                        marginTop: "8px",
+                        fontSize: "10px",
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: "#9ca3af",
+                          fontWeight: 600,
+                          marginBottom: "4px",
+                        }}
+                      >
+                        Unexpected action vs PCs
+                      </div>
+                      Speed sets starting position when Stands clash directly.
+                      Compare grades: higher usually starts Risky or better,
+                      equal starts Risky, lower starts Desperate. GM adjusts
+                      from fiction. Turn order stays narrative — not a fixed
+                      initiative list.
                     </div>
                   </div>
 
@@ -1626,36 +1910,10 @@ const NPCSheet = ({
                     Narrative descriptions only — no mechanical dots
                   </div>
                   {abilities.map((ab) => {
-                    const standardOptions = standardAbilitiesList.filter(
-                      (a) =>
-                        (a.type || "").toLowerCase() === "standard" || !a.type,
-                    );
-                    const q = (
-                      standardPickerAbId === ab.id ? standardPickerSearch : ""
-                    )
-                      .trim()
-                      .toLowerCase();
-                    const filteredStandard = q
-                      ? standardOptions.filter(
-                          (a) =>
-                            (a.name || "").toLowerCase().includes(q) ||
-                            (a.description || "").toLowerCase().includes(q) ||
-                            (CATEGORY_LABELS[a.category] || "")
-                              .toLowerCase()
-                              .includes(q),
-                        )
-                      : standardOptions;
-                    const selectedStandard = ab.standardId
-                      ? standardAbilitiesList.find(
-                          (a) => a.id === ab.standardId,
-                        )
-                      : standardOptions.find((a) => a.name === ab.name);
-                    const isStandard =
-                      ab.type === "standard" ||
-                      !!ab.standardId ||
-                      !!selectedStandard;
-                    const pickerOpen = standardPickerAbId === ab.id;
-
+                    const typeVal =
+                      String(ab.type || "").toLowerCase() === "passive"
+                        ? "passive"
+                        : "unique";
                     return (
                       <div
                         key={ab.id}
@@ -1684,143 +1942,29 @@ const NPCSheet = ({
                                 flexWrap: "wrap",
                               }}
                             >
-                              {isStandard ? (
-                                <div
-                                  style={{
-                                    position: "relative",
-                                    flex: 1,
-                                    minWidth: "140px",
-                                  }}
-                                  ref={pickerOpen ? standardPickerRef : null}
-                                >
-                                  <input
-                                    value={
-                                      pickerOpen
-                                        ? standardPickerSearch
-                                        : selectedStandard?.name ||
-                                          ab.name ||
-                                          "Select standard ability..."
-                                    }
-                                    onChange={(e) => {
-                                      setStandardPickerSearch(e.target.value);
-                                      setStandardPickerAbId(ab.id);
-                                    }}
-                                    onFocus={() => {
-                                      setStandardPickerAbId(ab.id);
-                                      setStandardPickerSearch("");
-                                    }}
-                                    placeholder="Select standard ability..."
-                                    style={{
-                                      ...S.inp,
-                                      fontWeight: "bold",
-                                      borderBottom: "1px solid #4b2d8f",
-                                      fontSize: "12px",
-                                      border: "1px solid #2d1f52",
-                                      padding: "4px 8px",
-                                    }}
-                                  />
-                                  {pickerOpen && (
-                                    <div
-                                      style={{
-                                        position: "absolute",
-                                        top: "100%",
-                                        left: 0,
-                                        right: 0,
-                                        marginTop: "2px",
-                                        background: "#111827",
-                                        border: "1px solid #374151",
-                                        borderRadius: "4px",
-                                        maxHeight: "180px",
-                                        overflowY: "auto",
-                                        zIndex: 100,
-                                        boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
-                                      }}
-                                    >
-                                      {filteredStandard.length === 0 ? (
-                                        <div
-                                          style={{
-                                            padding: "12px",
-                                            fontSize: "11px",
-                                            color: "#6b7280",
-                                          }}
-                                        >
-                                          No matching abilities
-                                        </div>
-                                      ) : (
-                                        filteredStandard.map((a) => (
-                                          <div
-                                            key={a.id}
-                                            onClick={() => {
-                                              setAbilities((p) =>
-                                                p.map((x) =>
-                                                  x.id === ab.id
-                                                    ? {
-                                                        ...x,
-                                                        name: a.name,
-                                                        description:
-                                                          a.description || "",
-                                                        standardId: a.id,
-                                                        type: "standard",
-                                                      }
-                                                    : x,
-                                                ),
-                                              );
-                                              setStandardPickerAbId(null);
-                                              setStandardPickerSearch("");
-                                            }}
-                                            style={{
-                                              padding: "8px 10px",
-                                              cursor: "pointer",
-                                              fontSize: "12px",
-                                              borderBottom: "1px solid #1f2937",
-                                              background:
-                                                selectedStandard?.id === a.id
-                                                  ? "#374151"
-                                                  : "transparent",
-                                            }}
-                                          >
-                                            {a.name}
-                                            {a.category && (
-                                              <span
-                                                style={{
-                                                  fontSize: "10px",
-                                                  color: "#6b7280",
-                                                  marginLeft: "6px",
-                                                }}
-                                              >
-                                                {CATEGORY_LABELS[a.category] ||
-                                                  a.category}
-                                              </span>
-                                            )}
-                                          </div>
-                                        ))
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <input
-                                  value={ab.name}
-                                  onChange={(e) =>
-                                    setAbilities((p) =>
-                                      p.map((a) =>
-                                        a.id === ab.id
-                                          ? { ...a, name: e.target.value }
-                                          : a,
-                                      ),
-                                    )
-                                  }
-                                  style={{
-                                    ...S.inp,
-                                    fontWeight: "bold",
-                                    borderBottom: "1px solid #4b2d8f",
-                                    fontSize: "12px",
-                                  }}
-                                  placeholder="Ability name"
-                                />
-                              )}
+                              <input
+                                value={ab.name}
+                                onChange={(e) =>
+                                  setAbilities((p) =>
+                                    p.map((a) =>
+                                      a.id === ab.id
+                                        ? { ...a, name: e.target.value }
+                                        : a,
+                                    ),
+                                  )
+                                }
+                                style={{
+                                  ...S.inp,
+                                  flex: 1,
+                                  minWidth: "140px",
+                                  fontWeight: "bold",
+                                  borderBottom: "1px solid #4b2d8f",
+                                  fontSize: "12px",
+                                }}
+                                placeholder="Ability name"
+                              />
                               <select
-                                value={ab.type}
+                                value={typeVal}
                                 onChange={(e) =>
                                   setAbilities((p) =>
                                     p.map((a) =>
@@ -1837,85 +1981,34 @@ const NPCSheet = ({
                                 }}
                               >
                                 <option value="unique">Unique</option>
-                                <option value="standard">Standard</option>
                                 <option value="passive">Passive</option>
                               </select>
                             </div>
-                            {isStandard && selectedStandard && (
-                              <div
-                                style={{
-                                  marginBottom: "8px",
-                                  padding: "8px",
-                                  background: "#1f2937",
-                                  borderRadius: "4px",
-                                  border: "1px solid #374151",
-                                  fontSize: "11px",
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    fontWeight: "bold",
-                                    marginBottom: "4px",
-                                  }}
-                                >
-                                  {selectedStandard.name}
-                                </div>
-                                {selectedStandard.category && (
-                                  <span
-                                    style={{
-                                      display: "inline-block",
-                                      padding: "1px 6px",
-                                      background: "#374151",
-                                      borderRadius: "4px",
-                                      fontSize: "10px",
-                                      marginBottom: "6px",
-                                    }}
-                                  >
-                                    {CATEGORY_LABELS[
-                                      selectedStandard.category
-                                    ] || selectedStandard.category}
-                                  </span>
-                                )}
-                                {selectedStandard.description && (
-                                  <div
-                                    style={{
-                                      color: "#9ca3af",
-                                      lineHeight: "1.4",
-                                      marginTop: "6px",
-                                    }}
-                                  >
-                                    {selectedStandard.description}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                            {!isStandard && (
-                              <textarea
-                                value={ab.description}
-                                onChange={(e) =>
-                                  setAbilities((p) =>
-                                    p.map((a) =>
-                                      a.id === ab.id
-                                        ? { ...a, description: e.target.value }
-                                        : a,
-                                    ),
-                                  )
-                                }
-                                placeholder="What does this ability do narratively?"
-                                style={{
-                                  width: "100%",
-                                  background: "transparent",
-                                  color: "#d1d5db",
-                                  border: "none",
-                                  fontFamily: "monospace",
-                                  fontSize: "11px",
-                                  resize: "vertical",
-                                  outline: "none",
-                                  minHeight: "40px",
-                                  boxSizing: "border-box",
-                                }}
-                              />
-                            )}
+                            <textarea
+                              value={ab.description}
+                              onChange={(e) =>
+                                setAbilities((p) =>
+                                  p.map((a) =>
+                                    a.id === ab.id
+                                      ? { ...a, description: e.target.value }
+                                      : a,
+                                  ),
+                                )
+                              }
+                              placeholder="What does this ability do narratively?"
+                              style={{
+                                width: "100%",
+                                background: "transparent",
+                                color: "#d1d5db",
+                                border: "none",
+                                fontFamily: "monospace",
+                                fontSize: "11px",
+                                resize: "vertical",
+                                outline: "none",
+                                minHeight: "40px",
+                                boxSizing: "border-box",
+                              }}
+                            />
                           </div>
                           <button
                             onClick={() =>
@@ -1998,10 +2091,10 @@ const NPCSheet = ({
                         </div>
                         <div>
                           This NPC does not draw from the Hamon or Spin
-                          playbooks. Any standard abilities assigned do{" "}
-                          <strong>not</strong> automatically grant a Stand —
-                          Stand manifestation requires a narrative beat (GM
-                          decision).
+                          playbooks. Stand Ability blurbs in this sheet are
+                          narration only — they do <strong>not</strong>{" "}
+                          automatically grant a Stand; manifestation needs a GM
+                          beat.
                         </div>
                       </div>
                     )}
@@ -2031,6 +2124,9 @@ const NPCSheet = ({
                         ) : (
                           hamonAbilitiesList.map((a) => {
                             const selected = selectedHamonIds.includes(a.id);
+                            const desc = sanitizeNpcPlaybookAbilityDescription(
+                              a.description,
+                            );
                             return (
                               <div
                                 key={a.id}
@@ -2083,20 +2179,8 @@ const NPCSheet = ({
                                         {a.hamon_type}
                                       </span>
                                     )}
-                                    {a.stress_cost > 0 && (
-                                      <span
-                                        style={{
-                                          marginLeft: "6px",
-                                          fontSize: "10px",
-                                          color: "#f87171",
-                                          fontWeight: "normal",
-                                        }}
-                                      >
-                                        {a.stress_cost} stress
-                                      </span>
-                                    )}
                                   </div>
-                                  {a.description && (
+                                  {desc ? (
                                     <div
                                       style={{
                                         fontSize: "11px",
@@ -2105,9 +2189,9 @@ const NPCSheet = ({
                                         lineHeight: "1.4",
                                       }}
                                     >
-                                      {a.description}
+                                      {desc}
                                     </div>
-                                  )}
+                                  ) : null}
                                 </div>
                               </div>
                             );
@@ -2141,6 +2225,9 @@ const NPCSheet = ({
                         ) : (
                           spinAbilitiesList.map((a) => {
                             const selected = selectedSpinIds.includes(a.id);
+                            const desc = sanitizeNpcPlaybookAbilityDescription(
+                              a.description,
+                            );
                             return (
                               <div
                                 key={a.id}
@@ -2193,20 +2280,8 @@ const NPCSheet = ({
                                         {a.spin_type}
                                       </span>
                                     )}
-                                    {a.stress_cost > 0 && (
-                                      <span
-                                        style={{
-                                          marginLeft: "6px",
-                                          fontSize: "10px",
-                                          color: "#f87171",
-                                          fontWeight: "normal",
-                                        }}
-                                      >
-                                        {a.stress_cost} stress
-                                      </span>
-                                    )}
                                   </div>
-                                  {a.description && (
+                                  {desc ? (
                                     <div
                                       style={{
                                         fontSize: "11px",
@@ -2215,9 +2290,9 @@ const NPCSheet = ({
                                         lineHeight: "1.4",
                                       }}
                                     >
-                                      {a.description}
+                                      {desc}
                                     </div>
-                                  )}
+                                  ) : null}
                                 </div>
                               </div>
                             );
@@ -2307,7 +2382,8 @@ const NPCSheet = ({
                       >
                         <span style={S.lbl}>Alternative Win Conditions</span>
                         <button
-                          onClick={addAltClock}
+                          type="button"
+                          onClick={() => toggleClockDraftCard("alt")}
                           style={{
                             ...S.btn,
                             background: "#166534",
@@ -2318,6 +2394,25 @@ const NPCSheet = ({
                           + Add Clock
                         </button>
                       </div>
+                      <NpcClockAddCard
+                        draft={
+                          clockDraftCard?.kind === "alt"
+                            ? clockDraftCard
+                            : null
+                        }
+                        error={clockDraftCard?.kind === "alt" ? clockDraftError : ""}
+                        onFieldChange={patchClockDraft}
+                        onCommit={() => {
+                          if (clockDraftCard?.kind === "alt")
+                            commitClockDraftCard();
+                        }}
+                        onCancel={cancelClockDraftCard}
+                        namePlaceholder='e.g. "Expose User", "Break Stand Logic"'
+                        borderColor="#166534"
+                        createBg="#14532d"
+                        createColor="#86efac"
+                        createLabel="Add clock"
+                      />
                       {altClocks.length === 0 && (
                         <div style={{ ...S.warn, textAlign: "center" }}>
                           S-DUR NPCs must have at least one alternative win
@@ -2332,9 +2427,11 @@ const NPCSheet = ({
                           justifyContent: "center",
                         }}
                       >
-                        {altClocks.map((clk) => (
+                        {altClocks.map((clk, cidx) => (
                           <div
-                            key={clk.id}
+                            key={
+                              clk.id != null ? String(clk.id) : `alt-${cidx}`
+                            }
                             style={{
                               textAlign: "center",
                               position: "relative",
@@ -2350,6 +2447,7 @@ const NPCSheet = ({
                               sublabel={`${clk.segments}-segment clock`}
                             />
                             <button
+                              type="button"
                               onClick={() => deleteAltClock(clk.id)}
                               style={{
                                 position: "absolute",
@@ -2369,7 +2467,39 @@ const NPCSheet = ({
                             >
                               ×
                             </button>
+                            <label
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "6px",
+                                marginTop: "4px",
+                                fontSize: "10px",
+                                color: "#86efac",
+                                cursor: "pointer",
+                                userSelect: "none",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!!clk.show_to_players}
+                                onChange={(e) =>
+                                  setAltClocks((p) =>
+                                    p.map((c) =>
+                                      npcClockIdsMatch(c.id, clk.id)
+                                        ? {
+                                            ...c,
+                                            show_to_players: e.target.checked,
+                                          }
+                                        : c,
+                                    ),
+                                  )
+                                }
+                              />
+                              Players see
+                            </label>
                             <button
+                              type="button"
                               onClick={() => {
                                 const newName = prompt(
                                   "Rename clock:",
@@ -2378,7 +2508,7 @@ const NPCSheet = ({
                                 if (newName)
                                   setAltClocks((p) =>
                                     p.map((c) =>
-                                      c.id === clk.id
+                                      npcClockIdsMatch(c.id, clk.id)
                                         ? { ...c, name: newName }
                                         : c,
                                     ),
@@ -2607,11 +2737,14 @@ const NPCSheet = ({
                         }}
                       >
                         PCs roll action ratings to fill these. Limited=1 tick,
-                        Standard=2, Greater=3.
+                        Standard=2, Greater=3. Use{" "}
+                        <strong>Players see</strong> to show individual clocks on
+                        session-linked PC sheets without revealing every clock.
                       </div>
                     </div>
                     <button
-                      onClick={addConflictClock}
+                      type="button"
+                      onClick={() => toggleClockDraftCard("conflict")}
                       style={{
                         ...S.btn,
                         background: "#4c1d95",
@@ -2622,6 +2755,30 @@ const NPCSheet = ({
                       + Clock
                     </button>
                   </div>
+
+                  <NpcClockAddCard
+                    draft={
+                      clockDraftCard?.kind === "conflict"
+                        ? clockDraftCard
+                        : null
+                    }
+                    error={
+                      clockDraftCard?.kind === "conflict"
+                        ? clockDraftError
+                        : ""
+                    }
+                    onFieldChange={patchClockDraft}
+                    onCommit={() => {
+                      if (clockDraftCard?.kind === "conflict")
+                        commitClockDraftCard();
+                    }}
+                    onCancel={cancelClockDraftCard}
+                    namePlaceholder='e.g. "Defeat antagonist", "Expose the User"'
+                    borderColor="#6d28d9"
+                    createBg="#4c1d95"
+                    createColor="#e9d5ff"
+                    createLabel="Add clock"
+                  />
 
                   {conflictClocks.length === 0 && (
                     <div
@@ -2645,11 +2802,13 @@ const NPCSheet = ({
                         conflictClocks.length <= 2 ? "center" : "flex-start",
                     }}
                   >
-                    {conflictClocks.map((clk) => {
+                    {conflictClocks.map((clk, cidx) => {
                       const isComplete = clk.filled >= clk.segments;
                       return (
                         <div
-                          key={clk.id}
+                          key={
+                            clk.id != null ? String(clk.id) : `conf-${cidx}`
+                          }
                           style={{
                             textAlign: "center",
                             position: "relative",
@@ -2682,49 +2841,89 @@ const NPCSheet = ({
                           />
                           <div
                             style={{
-                              marginTop: "4px",
+                              marginTop: "6px",
                               display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
                               gap: "4px",
-                              justifyContent: "center",
                             }}
                           >
-                            <button
-                              onClick={() => {
-                                const newName = prompt(
-                                  "Rename clock:",
-                                  clk.name,
-                                );
-                                if (newName)
+                            <label
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                fontSize: "10px",
+                                color: "#a78bfa",
+                                cursor: "pointer",
+                                userSelect: "none",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={!!clk.show_to_players}
+                                onChange={(e) =>
                                   setConflictClocks((p) =>
                                     p.map((c) =>
-                                      c.id === clk.id
-                                        ? { ...c, name: newName }
+                                      npcClockIdsMatch(c.id, clk.id)
+                                        ? {
+                                            ...c,
+                                            show_to_players: e.target.checked,
+                                          }
                                         : c,
                                     ),
+                                  )
+                                }
+                              />
+                              Players see
+                            </label>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: "4px",
+                                justifyContent: "center",
+                              }}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newName = prompt(
+                                    "Rename clock:",
+                                    clk.name,
                                   );
-                              }}
-                              style={{
-                                color: "#6b7280",
-                                background: "none",
-                                border: "none",
-                                cursor: "pointer",
-                                fontSize: "10px",
-                              }}
-                            >
-                              rename
-                            </button>
-                            <button
-                              onClick={() => deleteConflictClock(clk.id)}
-                              style={{
-                                color: "#f87171",
-                                background: "none",
-                                border: "none",
-                                cursor: "pointer",
-                                fontSize: "10px",
-                              }}
-                            >
-                              delete
-                            </button>
+                                  if (newName)
+                                    setConflictClocks((p) =>
+                                      p.map((c) =>
+                                        npcClockIdsMatch(c.id, clk.id)
+                                          ? { ...c, name: newName }
+                                          : c,
+                                      ),
+                                    );
+                                }}
+                                style={{
+                                  color: "#6b7280",
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  fontSize: "10px",
+                                }}
+                              >
+                                rename
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => deleteConflictClock(clk.id)}
+                                style={{
+                                  color: "#f87171",
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  fontSize: "10px",
+                                }}
+                              >
+                                delete
+                              </button>
+                            </div>
                           </div>
                         </div>
                       );

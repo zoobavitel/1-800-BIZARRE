@@ -1136,42 +1136,26 @@ class NPCViewSet(viewsets.ModelViewSet):
                 {'error': f'effect must be one of: {", ".join(EFFECT_TO_TICKS)}', 'effect': effect},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        if clock_type not in ('vulnerability', 'harm'):
+        if clock_type != 'vulnerability':
             return Response(
-                {'error': 'clock_type must be "vulnerability" or "harm"', 'clock_type': clock_type},
+                {'error': 'clock_type must be "vulnerability"', 'clock_type': clock_type},
                 status=status.HTTP_400_BAD_REQUEST
             )
         ticks = EFFECT_TO_TICKS[effect]
-        if clock_type == 'vulnerability':
-            max_segments = npc.vulnerability_clock_max
-            current = npc.vulnerability_clock_current
-            new_value = min(current + ticks, max_segments)
-            npc.vulnerability_clock_current = new_value
-            npc.save(update_fields=['vulnerability_clock_current'])
-            return Response({
-                'clock_type': 'vulnerability',
-                'effect': effect,
-                'ticks_applied': ticks,
-                'previous': current,
-                'current': new_value,
-                'max': max_segments,
-                'defeated': new_value >= max_segments and max_segments > 0,
-            })
-        else:
-            max_segments = npc.harm_clock_max
-            current = npc.harm_clock_current
-            new_value = min(current + ticks, max_segments)
-            npc.harm_clock_current = new_value
-            npc.save(update_fields=['harm_clock_current'])
-            return Response({
-                'clock_type': 'harm',
-                'effect': effect,
-                'ticks_applied': ticks,
-                'previous': current,
-                'current': new_value,
-                'max': max_segments,
-                'filled': new_value >= max_segments,
-            })
+        max_segments = npc.vulnerability_clock_max
+        current = npc.vulnerability_clock_current
+        new_value = min(current + ticks, max_segments)
+        npc.vulnerability_clock_current = new_value
+        npc.save(update_fields=['vulnerability_clock_current'])
+        return Response({
+            'clock_type': 'vulnerability',
+            'effect': effect,
+            'ticks_applied': ticks,
+            'previous': current,
+            'current': new_value,
+            'max': max_segments,
+            'defeated': new_value >= max_segments and max_segments > 0,
+        })
 
     def perform_create(self, serializer):
         serializer.save(creator=self.request.user)

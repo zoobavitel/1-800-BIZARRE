@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
-from characters.models import Campaign, Character, Crew, Heritage, Session
+from characters.models import Campaign, Character, Crew, Heritage, Roll, Session
 
 
 class AuthBootstrapIntegrationTests(TestCase):
@@ -67,6 +67,22 @@ class CharacterLifecycleIntegrationTests(TestCase):
 
         deleted = self.client.delete(f"/api/characters/{char_id}/")
         self.assertEqual(deleted.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_patch_fed_today_persists(self):
+        created = self.client.post(
+            "/api/characters/",
+            {"true_name": "Fed Flow Hero", "heritage": self.heritage.id},
+            format="json",
+        )
+        self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.data)
+        char_id = created.data["id"]
+        patched = self.client.patch(
+            f"/api/characters/{char_id}/",
+            {"fed_today": False},
+            format="json",
+        )
+        self.assertEqual(patched.status_code, status.HTTP_200_OK, patched.data)
+        self.assertIs(patched.data.get("fed_today"), False)
 
     def test_unauthorized_user_cannot_delete_other_character(self):
         owned = Character.objects.create(
@@ -152,3 +168,66 @@ class SessionRollLoopIntegrationTests(TestCase):
         )
         self.assertEqual(rolled.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("error", rolled.data)
+
+    def test_roll_action_extra_roll_stress_marks_one_box(self):
+        self.player.refresh_from_db()
+        self.assertEqual(self.player.stress, 5)
+        rolled = self.client.post(
+            f"/api/characters/{self.player.id}/roll-action/",
+            {
+                "action": "hunt",
+                "session_id": self.session.id,
+                "extra_roll_stress": 1,
+            },
+            format="json",
+        )
+        self.assertEqual(
+            rolled.status_code, status.HTTP_200_OK, rolled.data,
+        )
+        self.assertEqual(rolled.data.get("stress_spent"), 1)
+        self.player.refresh_from_db()
+        # stress = marked boxes on the track (same as sheet stressFilled).
+        self.assertEqual(self.player.stress, 6)
+
+    def test_roll_action_extra_roll_stress_rejects_when_track_full(self):
+        self.player.stress = 9
+        self.player.save(update_fields=["stress"])
+        rolled = self.client.post(
+            f"/api/characters/{self.player.id}/roll-action/",
+            {
+                "action": "hunt",
+                "session_id": self.session.id,
+                "extra_roll_stress": 1,
+            },
+            format="json",
+        )
+        self.assertEqual(rolled.status_code, status.HTTP_400_BAD_REQUEST)
+        self.player.refresh_from_db()
+        self.assertEqual(self.player.stress, 9)
+
+    def test_roll_action_persists_modifier_source_fields(self):
+        rolled = self.client.post(
+            f"/api/characters/{self.player.id}/roll-action/",
+            {
+                "action": "hunt",
+                "session_id": self.session.id,
+                "bonus_dice": 1,
+                "modifier_sources": [
+                    {"kind": "ability", "name": "Quick Draw", "delta": "+1d"}
+                ],
+                "stress_sources": [
+                    {"kind": "ability", "name": "Phantom Pain", "delta": "+1 stress"}
+                ],
+                "position_effect_sources": [
+                    {"kind": "push", "name": "Push for effect", "delta": "+1 effect"}
+                ],
+            },
+            format="json",
+        )
+        self.assertEqual(rolled.status_code, status.HTTP_200_OK, rolled.data)
+        roll = Roll.objects.get(pk=rolled.data["roll_id"])
+        self.assertTrue(any((x.get("name") == "Quick Draw") for x in roll.modifier_sources))
+        self.assertTrue(any((x.get("name") == "Phantom Pain") for x in roll.stress_sources))
+        self.assertTrue(
+            any((x.get("name") == "Push for effect") for x in roll.position_effect_sources)
+        )

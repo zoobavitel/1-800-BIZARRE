@@ -30,7 +30,6 @@ try:
         'heritage': mf_doom.heritage.name if mf_doom.heritage else 'N/A',
         'playbook': mf_doom.playbook,
         'stand_coin_stats': mf_doom.stand_coin_stats,
-        'harm_clock_current': mf_doom.harm_clock_current,
         'vulnerability_clock_current': mf_doom.vulnerability_clock_current,
         'armor_charges': mf_doom.armor_charges,
         'custom_abilities': mf_doom.custom_abilities,

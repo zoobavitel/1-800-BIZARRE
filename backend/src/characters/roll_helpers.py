@@ -1,6 +1,9 @@
 """Shared dice roll helpers: effect normalization and desperate action XP."""
 
+import random
+
 from .models import ExperienceTracker
+from .services.session_xp_settlement import grant_encoded_trigger_xp
 
 
 EFFECT_ORDER = ['limited', 'standard', 'extreme']
@@ -35,6 +38,48 @@ def bump_effect(effect, steps):
     return EFFECT_ORDER[j]
 
 
+def recovery_healing_clock_segments(pool_before_roll, dice_results=None):
+    """
+    Healing-clock segments from a recover roll (mirrors CharacterSheet.rollRecoveryTreatment).
+    0 dice: roll 2d and take the lower die's band. Critical = two sixes (only when pool >= 2).
+    Bands: critical +5 segments; highest 6 -> +3; 4-5 -> +2; 1-3 -> +1.
+    """
+    pool = max(0, int(pool_before_roll or 0))
+    if pool <= 0:
+        dice_results = list(dice_results) if dice_results else []
+        if len(dice_results) < 2:
+            dice_results = [random.randint(1, 6), random.randint(1, 6)]
+        highest = min(int(dice_results[0]), int(dice_results[1]))
+        sixes = 0
+        critical = False
+    else:
+        if not dice_results:
+            dice_results = [random.randint(1, 6) for _ in range(pool)]
+        cleaned = [int(x) for x in dice_results[: pool + 24]]
+        if len(cleaned) < pool:
+            cleaned.extend(
+                random.randint(1, 6) for _ in range(pool - len(cleaned))
+            )
+        highest = max(cleaned)
+        sixes = sum(1 for d in cleaned if int(d) == 6)
+        critical = pool >= 2 and sixes >= 2
+    if critical:
+        segments = 5
+    elif highest >= 6:
+        segments = 3
+    elif highest >= 4:
+        segments = 2
+    else:
+        segments = 1
+    band = (
+        "critical"
+        if critical
+        else ("6" if highest >= 6 else ("4/5" if highest >= 4 else "1-3"))
+    )
+    out_dice = dice_results[:2] if pool <= 0 else cleaned
+    return segments, out_dice, highest, critical, band
+
+
 def action_rating_from_action_dots(action_dots, action_name_raw):
     """
     Dot count for rolled action. Persisted `action_dots` may use `attune` (BitD name) while
@@ -64,6 +109,23 @@ def action_rating_from_action_dots(action_dots, action_name_raw):
     return 0
 
 
+def xp_track_for_action_name(action_name):
+    """
+    BitD attribute track for a rolled action name (desperate-roll XP mapping).
+    Returns 'insight' | 'prowess' | 'resolve' or None if not mappable.
+    """
+    if not (action_name or "").strip():
+        return None
+    action_lower = str(action_name).strip().lower()
+    if action_lower in ("hunt", "study", "survey", "tinker"):
+        return "insight"
+    if action_lower in ("finesse", "prowl", "skirmish", "wreck"):
+        return "prowess"
+    if action_lower in ("bizarre", "command", "consort", "sway"):
+        return "resolve"
+    return None
+
+
 def award_desperate_action_xp(character, session, roll, action_name, request_user):
     """
     If this is a desperate ACTION roll with a mappable action name, award 1 XP on the attribute track.
@@ -74,14 +136,7 @@ def award_desperate_action_xp(character, session, roll, action_name, request_use
     if position != 'desperate' or roll_type != 'ACTION' or not (action_name or '').strip():
         return 0, None
 
-    action_lower = action_name.lower()
-    track = None
-    if action_lower in ['hunt', 'study', 'survey', 'tinker']:
-        track = 'insight'
-    elif action_lower in ['finesse', 'prowl', 'skirmish', 'wreck']:
-        track = 'prowess'
-    elif action_lower in ['bizarre', 'command', 'consort', 'sway']:
-        track = 'resolve'
+    track = xp_track_for_action_name(action_name)
     if not track:
         return 0, None
 
@@ -102,6 +157,89 @@ def award_desperate_action_xp(character, session, roll, action_name, request_use
         xp_gained=1,
     )
     return 1, track
+
+
+def normalized_trauma_pks(raw):
+    """Coerce Character.trauma JSON list entries to positive int PKs."""
+    if raw is None:
+        return set()
+    if isinstance(raw, (list, tuple)):
+        items = raw
+    elif isinstance(raw, dict):
+        return set()
+    else:
+        return set()
+    out = set()
+    for item in items:
+        if isinstance(item, bool):
+            continue
+        if isinstance(item, int) and item > 0:
+            out.add(item)
+            continue
+        if isinstance(item, float) and item > 0 and item == int(item):
+            out.add(int(item))
+            continue
+        if isinstance(item, str) and item.strip().isdigit():
+            n = int(item.strip())
+            if n > 0:
+                out.add(n)
+    return out
+
+
+def award_struggle_for_new_traumas(character, session, gained_pks):
+    """
+    Grant STRUGGLE (playbook) XP when new trauma IDs appear on save, same session bucket
+    as vice-based STRUGGLE and session settlement caps.
+    """
+    if not gained_pks or session is None or character is None:
+        return 0
+    n = len(gained_pks)
+    desc = (
+        "Auto (character save during active session): new trauma marked — "
+        f"counts toward struggle / trauma XP trigger (+{n})."
+    )[:500]
+    return grant_encoded_trigger_xp(
+        character,
+        session,
+        trigger="STRUGGLE",
+        clock_key="playbook",
+        clock_max=10,
+        want=n,
+        description=desc,
+        roll=None,
+    )
+
+
+def heritage_bonus_labels(raw):
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if str(x).strip()]
+    if isinstance(raw, str) and raw.strip():
+        return [raw.strip()]
+    return []
+
+
+def award_heritage_expression_xp(character, session, roll, heritage_bonuses_raw):
+    """
+    BELIEFS XP on heritage track when a roll applies optional heritage bonuses.
+    Separate session bucket from playbook STRUGGLE/STANDOUT; track max 5 (sheet).
+    """
+    labels = heritage_bonus_labels(heritage_bonuses_raw)
+    if not labels or session is None or roll is None or character is None:
+        return 0
+    desc = (
+        "Auto (heritage benefit on roll): "
+        + ", ".join(labels)
+    )[:500]
+    return grant_encoded_trigger_xp(
+        character,
+        session,
+        trigger="BELIEFS",
+        clock_key="heritage",
+        clock_max=5,
+        want=1,
+        description=desc,
+        roll=roll,
+    )
 
 
 def tier_die_from_action_pool(
@@ -195,3 +333,21 @@ def outcome_from_dice_results(results):
     if tier >= 4:
         return "PARTIAL_SUCCESS"
     return "FAILURE"
+
+
+def max_stress_slots_for_character(character):
+    """
+    Length of the stress track from Stand durability (SRD baseline 9 + grade table).
+
+    Character.stress in the API is the **filled / marked** count on that track
+    (same as the sheet's stressFilled), not "remaining budget."
+    """
+    grade = None
+    stand = getattr(character, "stand", None)
+    if stand is not None:
+        grade = getattr(stand, "durability", None)
+    if not grade:
+        coin_stats = getattr(character, "coin_stats", None) or {}
+        if isinstance(coin_stats, dict):
+            grade = coin_stats.get("durability") or coin_stats.get("DURABILITY")
+    return {"S": 13, "A": 12, "B": 11, "C": 10, "D": 9, "F": 8}.get(grade, 9)

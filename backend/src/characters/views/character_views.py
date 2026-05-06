@@ -12,16 +12,31 @@ from django.core.exceptions import PermissionDenied
 import json
 
 import random
-from ..models import Campaign, Character, GroupAction, Session, Roll, RollHistory
+from ..models import (
+    Campaign,
+    Character,
+    CharacterHamonAbility,
+    ExperienceTracker,
+    GroupAction,
+    Session,
+    Roll,
+    RollHistory,
+)
 from ..parsers import MultipartJsonParser
 from ..roll_helpers import (
     action_rating_from_action_dots,
     award_desperate_action_xp,
+    award_heritage_expression_xp,
     bump_effect,
+    heritage_bonus_labels,
+    max_stress_slots_for_character,
+    normalized_trauma_pks,
     normalize_effect,
     normalize_position,
     outcome_from_action_roll,
+    recovery_healing_clock_segments,
     tier_die_from_action_pool,
+    award_struggle_for_new_traumas,
 )
 from ..serializers import CharacterSerializer
 from ..history_context import bind_character_history_editor, reset_character_history_editor
@@ -104,7 +119,24 @@ class CharacterViewSet(viewsets.ModelViewSet):
         original_user_id = serializer.instance.user_id
         token = bind_character_history_editor(user)
         try:
-            serializer.save(user_id=original_user_id)
+            prev_trauma_pks = normalized_trauma_pks(serializer.instance.trauma)
+            with transaction.atomic():
+                serializer.save(user_id=original_user_id)
+                inst = serializer.instance
+                gained = normalized_trauma_pks(inst.trauma) - prev_trauma_pks
+                if gained:
+                    campaign = getattr(inst, "campaign", None)
+                    act = (
+                        getattr(campaign, "active_session", None)
+                        if campaign is not None
+                        else None
+                    )
+                    if (
+                        act is not None
+                        and getattr(act, "campaign_id", None) == inst.campaign_id
+                        and getattr(inst, "campaign_id", None)
+                    ):
+                        award_struggle_for_new_traumas(inst, act, gained)
         finally:
             reset_character_history_editor(token)
 
@@ -207,7 +239,10 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     "name": "Power",
                     "description": "Physical strength and destructive capability",
                 },
-                {"name": "Speed", "description": "Movement and reaction time"},
+                {
+                    "name": "Speed",
+                    "description": "How fast the Stand moves or acts; affects starting position in most conflicts.",
+                },
                 {
                     "name": "Range",
                     "description": "Distance the Stand can operate from the user",
@@ -279,6 +314,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
         devil_bargain_confirmed = bool(
             request.data.get("devil_bargain_confirmed", False)
         )
+        stress_overflow_accepted = _as_bool(
+            request.data.get("stress_overflow_accepted", False)
+        )
         fortune_reveal_outcome = bool(
             request.data.get("fortune_reveal_outcome", False)
         )
@@ -292,11 +330,63 @@ class CharacterViewSet(viewsets.ModelViewSet):
         ability_bonuses = request.data.get(
             "ability_bonuses"
         )  # optional list for audit string
+        heritage_bonuses_raw = request.data.get("heritage_bonuses")
         group_action_id = request.data.get("group_action_id")
         assist_helper_id_raw = request.data.get("assist_helper_id")
         assist_helper = None
+        extra_roll_stress = 0
+
+        def _normalize_source_rows(raw, fallback_kind):
+            out = []
+            if raw in (None, "", False):
+                return out
+            rows = raw if isinstance(raw, list) else [raw]
+            for row in rows:
+                item = None
+                if isinstance(row, str):
+                    name = row.strip()
+                    if name:
+                        item = {
+                            "kind": fallback_kind,
+                            "name": name[:160],
+                        }
+                elif isinstance(row, dict):
+                    kind = str(row.get("kind") or fallback_kind).strip().lower()
+                    if not kind:
+                        kind = fallback_kind
+                    name = str(row.get("name") or "").strip()
+                    delta = str(row.get("delta") or "").strip()
+                    category = str(row.get("category") or "").strip().lower()
+                    timing = str(row.get("timing") or "").strip().lower()
+                    notes = str(row.get("notes") or "").strip()
+                    item = {"kind": kind[:64]}
+                    if name:
+                        item["name"] = name[:160]
+                    if delta:
+                        item["delta"] = delta[:80]
+                    if category:
+                        item["category"] = category[:64]
+                    if timing:
+                        item["timing"] = timing[:64]
+                    if notes:
+                        item["notes"] = notes[:300]
+                if item:
+                    out.append(item)
+            return out[:64]
+
+        modifier_sources = _normalize_source_rows(
+            request.data.get("modifier_sources"), "modifier"
+        )
+        modifier_sources += _normalize_source_rows(
+            request.data.get("resistance_sources"), "resistance"
+        )
+        stress_sources = _normalize_source_rows(request.data.get("stress_sources"), "stress")
+        position_effect_sources = _normalize_source_rows(
+            request.data.get("position_effect_sources"), "position_effect"
+        )
 
         stress_cost = 0
+        ripple_mark_character_key = None
         session = None
         if session_id:
             try:
@@ -308,6 +398,118 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     )
             except Session.DoesNotExist:
                 session = None
+
+        recovery_ctx_sheet = (
+            request.data.get("recovery_context") or ""
+        ).strip().lower()
+        if recovery_ctx_sheet in ("self_downtime", "self_mid_action"):
+            if recovery_ctx_sheet == "self_mid_action" and not session_id:
+                return Response(
+                    {"error": "Mid-action recover requires an active session."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not session:
+                return Response(
+                    {
+                        "error": (
+                            "Link your campaign’s active session so this recovery appears "
+                            "in Session History."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not action_name:
+                return Response(
+                    {"error": "Action name is required"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            bonus_rec = max(0, int(request.data.get("bonus_dice") or 0))
+            rating_rec = action_rating_from_action_dots(
+                character.action_dots, action_name
+            )
+            pool_rec = rating_rec + bonus_rec
+            dice_for_seg = (
+                [random.randint(1, 6) for _ in range(pool_rec)]
+                if pool_rec > 0
+                else None
+            )
+            (
+                seg,
+                dice_out,
+                hi_rec,
+                crit_rec,
+                band_rec,
+            ) = recovery_healing_clock_segments(pool_rec, dice_for_seg)
+            stress_recovery = 2
+            max_slots = max_stress_slots_for_character(character)
+            stress_marked = max(
+                0,
+                min(max_slots, int(getattr(character, "stress", 0) or 0)),
+            )
+            free_slots = max(0, max_slots - stress_marked)
+            if stress_recovery > free_slots:
+                return Response(
+                    {
+                        "error": (
+                            "Not enough empty stress boxes for self-recovery "
+                            "(SRD: 2 stress)."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            mode_hr = (
+                "Mid-action self-recover"
+                if recovery_ctx_sheet == "self_mid_action"
+                else "Downtime self-recover"
+            )
+            pool_note = (
+                f"{rating_rec}+1 Invigorated ({pool_rec}d total)"
+                if bonus_rec
+                else f"{pool_rec}d"
+            )
+            desc_hr = (
+                f"{mode_hr}: {str(action_name).upper()} ({pool_note}) rolled {band_rec} "
+                f"→ +{seg} healing clock segments"
+            )
+            with transaction.atomic():
+                character.stress = min(max_slots, stress_marked + stress_recovery)
+                character.save(update_fields=["stress"])
+                rh_roll = Roll.objects.create(
+                    character=character,
+                    session=session,
+                    roll_type="OTHER",
+                    action_name=action_name or "",
+                    position="controlled",
+                    effect="standard",
+                    dice_pool=pool_rec,
+                    results=dice_out,
+                    outcome="PARTIAL_SUCCESS",
+                    description=desc_hr,
+                    goal_label="Healing clock recover",
+                    rolled_by=request.user,
+                    pool_action_rating=rating_rec,
+                    pool_bonus_dice=bonus_rec,
+                    roller_stress_spent=stress_recovery,
+                    recovery_context=recovery_ctx_sheet,
+                )
+                RollHistory.objects.create(campaign=session.campaign, roll=rh_roll)
+            return Response(
+                {
+                    "action": action_name,
+                    "rating": rating_rec,
+                    "total_dice": pool_rec,
+                    "dice_results": dice_out,
+                    "highest": hi_rec,
+                    "position": rh_roll.position,
+                    "effect": rh_roll.effect,
+                    "outcome": "partial success",
+                    "roll_id": rh_roll.id,
+                    "stress_spent": stress_recovery,
+                    "recovery_segments": seg,
+                    "recovery_critical": crit_rec,
+                    "recovery_band": band_rec,
+                }
+            )
 
         position = normalize_position(request.data.get("position"))
         effect = normalize_effect(request.data.get("effect") or "standard")
@@ -375,6 +577,14 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 )
             if incapacitated:
                 stress_cost += 2
+                stress_sources.append(
+                    {
+                        "kind": "system",
+                        "name": "Incapacitated action cost",
+                        "delta": "+2 stress",
+                        "category": "system",
+                    }
+                )
 
             # Devil's bargain: GM may set per-character text; player must confirm before +1d
             if session and devil_bargain_dice:
@@ -405,16 +615,120 @@ class CharacterViewSet(viewsets.ModelViewSet):
             # Optional push costs 2 stress each (in addition to incapacitated cost, if any)
             if push_effect:
                 stress_cost += 2
+                stress_sources.append(
+                    {
+                        "kind": "push",
+                        "name": "Push for effect",
+                        "delta": "+2 stress",
+                        "category": "system",
+                    }
+                )
             if push_dice:
                 stress_cost += 2
-            # Character.stress is remaining available stress (same as assist spend).
-            available_stress = max(0, int(getattr(character, "stress", 0) or 0))
-            if stress_cost > available_stress:
+                stress_sources.append(
+                    {
+                        "kind": "push",
+                        "name": "Push for dice",
+                        "delta": "+2 stress",
+                        "category": "system",
+                    }
+                )
+            # Optional ability-linked spend (e.g. Phantom Pain: 1 stress to attack through cover).
+            try:
+                extra_roll_stress_raw = int(request.data.get("extra_roll_stress") or 0)
+            except (TypeError, ValueError):
+                extra_roll_stress_raw = 0
+            extra_roll_stress = max(0, min(6, extra_roll_stress_raw))
+            if roll_type.upper() == "ACTION" and extra_roll_stress > 0:
+                stress_cost += extra_roll_stress
+                stress_sources.append(
+                    {
+                        "kind": "ability",
+                        "name": "Extra roll stress",
+                        "delta": f"+{extra_roll_stress} stress",
+                        "category": "system",
+                    }
+                )
+            ripple_free_push_claim = _as_bool(
+                request.data.get("ripple_breathing_free_push", False)
+            )
+            if ripple_free_push_claim:
+                if roll_type.upper() != "ACTION":
+                    return Response(
+                        {
+                            "error": (
+                                "Ripple Breathing free push applies only on action rolls."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if not session:
+                    return Response(
+                        {
+                            "error": (
+                                "Ripple Breathing free push requires an active session "
+                                "(tracked once per session per character)."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if not (push_effect or push_dice):
+                    return Response(
+                        {
+                            "error": (
+                                "Ripple Breathing waives stress only when you push for "
+                                "+1 effect or push for +1d."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                claimed_map = getattr(
+                    session, "ripple_breathing_free_push_claimed_by_character", None
+                )
+                if not isinstance(claimed_map, dict):
+                    claimed_map = {}
+                ck = str(character.pk)
+                if claimed_map.get(ck):
+                    return Response(
+                        {
+                            "error": (
+                                "Ripple Breathing free push was already used this session."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if not CharacterHamonAbility.objects.filter(
+                    character=character,
+                    hamon_ability__name__iexact="Ripple Breathing",
+                ).exists():
+                    return Response(
+                        {"error": "Character does not have Ripple Breathing."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                stress_cost = max(0, int(stress_cost) - 2)
+                stress_sources.append(
+                    {
+                        "kind": "ability",
+                        "name": "Ripple Breathing",
+                        "delta": "-2 stress (free push, once/session)",
+                        "category": "ability",
+                    }
+                )
+                ripple_mark_character_key = ck
+            # Character.stress is **marked** boxes on the track (same as sheet stressFilled),
+            # not "remaining budget". Spending stress marks more boxes.
+            max_slots = max_stress_slots_for_character(character)
+            stress_marked = max(
+                0, min(max_slots, int(getattr(character, "stress", 0) or 0))
+            )
+            free_slots = max(0, max_slots - stress_marked)
+            if stress_cost > free_slots and not stress_overflow_accepted:
                 return Response(
                     {
                         "error": (
-                            f"Not enough stress. Push costs {stress_cost} stress, "
-                            f"you have {available_stress} available."
+                            f"Not enough empty stress boxes to mark for this roll. "
+                            f"It costs {stress_cost} stress to mark, but only {free_slots} "
+                            f"empty slot(s) remain ({stress_marked}/{max_slots} filled)."
                         )
                     },
                     status=status.HTTP_400_BAD_REQUEST,
@@ -422,8 +736,24 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
             if push_effect:
                 effect = bump_effect(effect, 1)
+                position_effect_sources.append(
+                    {
+                        "kind": "push",
+                        "name": "Push for effect",
+                        "delta": "+1 effect",
+                        "category": "system",
+                    }
+                )
             if ability_effect_steps:
                 effect = bump_effect(effect, ability_effect_steps)
+                position_effect_sources.append(
+                    {
+                        "kind": "ability",
+                        "name": "Ability effect modifier",
+                        "delta": f"+{ability_effect_steps} effect",
+                        "category": "ability",
+                    }
+                )
 
         # Get action rating from action_dots (flat or nested) - skip for FORTUNE
         if roll_type.upper() != "FORTUNE":
@@ -438,9 +768,34 @@ class CharacterViewSet(viewsets.ModelViewSet):
             dice_pool = action_rating
             if push_dice:
                 dice_pool += 1
+                modifier_sources.append(
+                    {
+                        "kind": "push",
+                        "name": "Push for dice",
+                        "delta": "+1d",
+                        "category": "system",
+                    }
+                )
             if devil_bargain_dice:
                 dice_pool += 1
+                modifier_sources.append(
+                    {
+                        "kind": "devil_bargain",
+                        "name": "Devil's bargain",
+                        "delta": "+1d",
+                        "category": "system",
+                    }
+                )
             dice_pool += max(0, bonus_dice)
+            if bonus_dice > 0:
+                modifier_sources.append(
+                    {
+                        "kind": "ability",
+                        "name": "Ability/heritage bonus dice",
+                        "delta": f"+{bonus_dice}d",
+                        "category": "ability",
+                    }
+                )
 
             if assist_helper_id_raw not in (None, "", False):
                 try:
@@ -473,18 +828,34 @@ class CharacterViewSet(viewsets.ModelViewSet):
                             {"error": "Must be in the same crew to Help"},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
-                    hs = max(0, int(getattr(assist_helper, "stress", 0) or 0))
+                    hs = max(
+                        0,
+                        min(
+                            _max_stress_for_character(assist_helper),
+                            int(getattr(assist_helper, "stress", 0) or 0),
+                        ),
+                    )
                     helper_max_stress = _max_stress_for_character(assist_helper)
-                    if hs < 1:
+                    if hs >= helper_max_stress:
                         return Response(
-                            {"error": "Helper has no stress to spend"},
+                            {
+                                "error": (
+                                    "Helper's stress track is full (cannot mark another box)."
+                                )
+                            },
                             status=status.HTTP_400_BAD_REQUEST,
                         )
-                    assist_helper.stress = max(
-                        0, min(helper_max_stress, hs - 1)
-                    )
+                    assist_helper.stress = min(helper_max_stress, hs + 1)
                     assist_helper.save(update_fields=["stress"])
                     dice_pool += 1
+                    modifier_sources.append(
+                        {
+                            "kind": "assist",
+                            "name": f"Assist ({assist_helper.true_name})",
+                            "delta": "+1d",
+                            "category": "system",
+                        }
+                    )
 
         pool_before_roll = dice_pool
         # 0d action pool (Blades-style): roll 2d take the lowest for outcome tiers; mirrors offline rollDice().
@@ -506,10 +877,11 @@ class CharacterViewSet(viewsets.ModelViewSet):
             dice_results, pool_before_roll, ar_for_tier
         )
 
-        # Deduct stress for push (remaining pool decreases)
+        # Mark stress boxes for push / incapacity / ability spends (filled count increases).
         if stress_cost > 0:
-            current_stress = max(0, int(getattr(character, "stress", 0) or 0))
-            character.stress = max(0, current_stress - stress_cost)
+            max_slots = max_stress_slots_for_character(character)
+            cur = max(0, min(max_slots, int(getattr(character, "stress", 0) or 0)))
+            character.stress = min(max_slots, cur + stress_cost)
             character.save(update_fields=["stress"])
 
         roll = None
@@ -525,6 +897,36 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 desc += f" [Abilities: {ability_bonuses}]"
             elif isinstance(ability_bonuses, str) and ability_bonuses.strip():
                 desc += f" [Abilities: {ability_bonuses.strip()}]"
+            _hb_aud = heritage_bonus_labels(heritage_bonuses_raw)
+            if _hb_aud:
+                desc += f" [Heritage: {', '.join(_hb_aud)}]"
+            recovery_roll_target = None
+            recovery_ctx_for_roll = ""
+            rtc_raw = request.data.get("recovery_target_character_id")
+            if rtc_raw not in (None, "", False):
+                try:
+                    tid_rtc = int(rtc_raw)
+                    candidate_rt = Character.objects.filter(
+                        pk=tid_rtc, campaign_id=character.campaign_id
+                    ).first()
+                    if candidate_rt and candidate_rt.id != character.id:
+                        recovery_roll_target = candidate_rt
+                        recovery_ctx_for_roll = "ally"
+                        desc += f" [Recovery patient: {recovery_roll_target.true_name}]"
+                except (TypeError, ValueError):
+                    pass
+            if (
+                recovery_ctx_for_roll != "ally"
+                and recovery_ctx_sheet not in ("self_downtime", "self_mid_action")
+                and _as_bool(request.data.get("recovery_is_self_treatment", False))
+                and rtc_raw not in (None, "", False)
+            ):
+                try:
+                    sid_self = int(rtc_raw)
+                    if sid_self == character.id:
+                        recovery_ctx_for_roll = "self_treatment_roll"
+                except (TypeError, ValueError):
+                    pass
             ga_obj = None
             if group_action_id:
                 ga_obj = GroupAction.objects.filter(
@@ -594,6 +996,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 pool_assist_dice=rp_assist,
                 pool_bonus_dice=rp_bonus,
                 roller_stress_spent=rp_stress,
+                modifier_sources=modifier_sources,
+                stress_sources=stress_sources,
+                position_effect_sources=position_effect_sources,
                 devil_bargain_consequence=rp_devil_txt,
                 fortune_reveal_outcome=(
                     fortune_reveal_outcome if roll_type.upper() == "FORTUNE" else False
@@ -601,8 +1006,23 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 fortune_public_label=(
                     fortune_public_label if roll_type.upper() == "FORTUNE" else ""
                 ),
+                recovery_target=recovery_roll_target,
+                recovery_context=recovery_ctx_for_roll,
             )
             RollHistory.objects.create(campaign=session.campaign, roll=roll)
+
+            if ripple_mark_character_key:
+                cmap = getattr(
+                    session, "ripple_breathing_free_push_claimed_by_character", None
+                )
+                if not isinstance(cmap, dict):
+                    cmap = {}
+                cmap = dict(cmap)
+                cmap[str(ripple_mark_character_key)] = True
+                Session.objects.filter(pk=session.pk).update(
+                    ripple_breathing_free_push_claimed_by_character=cmap
+                )
+                session.ripple_breathing_free_push_claimed_by_character = cmap
 
             if (
                 position == "desperate"
@@ -611,6 +1031,11 @@ class CharacterViewSet(viewsets.ModelViewSet):
             ):
                 xp_awarded, xp_track = award_desperate_action_xp(
                     character, session, roll, action_name, request.user
+                )
+
+            if roll_type.upper() == "ACTION":
+                award_heritage_expression_xp(
+                    character, session, roll, heritage_bonuses_raw
                 )
 
         return Response(
@@ -631,6 +1056,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "group_action_id": roll.group_action_id if roll else None,
                 "assist_helper_id": assist_helper.id if assist_helper else None,
                 "assist_helper_stress": assist_helper.stress if assist_helper else None,
+                "modifier_sources": modifier_sources,
+                "stress_sources": stress_sources,
+                "position_effect_sources": position_effect_sources,
             }
         )
 
@@ -664,14 +1092,24 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 {"error": "Must be in the same crew to Help"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        hs = max(0, int(getattr(helper, "stress", 0) or 0))
+        hs = max(
+            0,
+            min(
+                _max_stress_for_character(helper),
+                int(getattr(helper, "stress", 0) or 0),
+            ),
+        )
         helper_max_stress = _max_stress_for_character(helper)
-        if hs < 1:
+        if hs >= helper_max_stress:
             return Response(
-                {"error": "Helper has no stress to spend"},
+                {
+                    "error": (
+                        "Helper's stress track is full (cannot mark another box)."
+                    )
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        helper.stress = max(0, min(helper_max_stress, hs - 1))
+        helper.stress = min(helper_max_stress, hs + 1)
         helper.save(update_fields=["stress"])
         return Response(
             {
@@ -775,27 +1213,127 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="add-xp")
     def add_xp(self, request, pk=None):
-        """Add XP to a character."""
+        """Add XP to a character's BitD-style tracks (xp_clocks) and log an ExperienceTracker row."""
         character = self.get_object()
-        amount = request.data.get("amount", 1)
-        reason = request.data.get("reason", "")
+        user = request.user
+        is_owner = character.user_id == user.id
+        is_gm = bool(
+            character.campaign_id and character.campaign.gm_id == user.id
+        )
+        if not (user.is_staff or is_owner or is_gm):
+            raise PermissionDenied(
+                "You may only add XP for your own character or as the campaign GM."
+            )
 
-        if amount <= 0:
+        track = request.data.get("track") or request.data.get("xp_type")
+        if not track or not isinstance(track, str):
             return Response(
-                {"error": "XP amount must be positive"},
+                {"error": "XP track is required (xp_type or track)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        track = track.strip().lower()
+        valid_tracks = ["insight", "prowess", "resolve", "heritage", "playbook"]
+        if track not in valid_tracks:
+            return Response(
+                {
+                    "error": (
+                        "Invalid track. Use one of: "
+                        + ", ".join(valid_tracks)
+                    )
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Add XP (simplified - you'd implement actual XP mechanics)
-        character.xp += amount
-        character.save()
+        try:
+            amount = int(request.data.get("amount", 1))
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "amount must be an integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if amount < 1 or amount > 20:
+            return Response(
+                {"error": "XP amount must be between 1 and 20 per award."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        description = (
+            request.data.get("description")
+            or request.data.get("reason")
+            or ""
+        ).strip()
+        if len(description) < 3:
+            description = "Manual XP award"
+
+        session_obj = None
+        session_raw = request.data.get("session") or request.data.get(
+            "session_id"
+        )
+        if session_raw not in (None, "", False):
+            try:
+                sid = int(session_raw)
+            except (TypeError, ValueError):
+                return Response(
+                    {"error": "Invalid session id"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not character.campaign_id:
+                return Response(
+                    {
+                        "error": (
+                            "Character has no campaign; cannot attach "
+                            "this XP to a session."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            session_obj = Session.objects.filter(
+                id=sid, campaign_id=character.campaign_id
+            ).first()
+            if not session_obj:
+                return Response(
+                    {"error": "Session not found for this character's campaign."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        xp_clocks = dict(character.xp_clocks or {})
+        current = int(xp_clocks.get(track, 0) or 0)
+        new_xp = current + amount
+        if track == "playbook" and new_xp > 10:
+            return Response(
+                {"error": "Playbook track cannot exceed 10 XP."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        xp_clocks[track] = new_xp
+
+        with transaction.atomic():
+            serializer = CharacterSerializer(
+                character, data={"xp_clocks": xp_clocks}, partial=True
+            )
+            if not serializer.is_valid():
+                return Response(
+                    {"error": "Failed to add XP", "errors": serializer.errors},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            serializer.save()
+            tracker = ExperienceTracker.objects.create(
+                character=character,
+                session=session_obj,
+                roll=None,
+                trigger="MANUAL",
+                description=f"[{track}] {description}",
+                xp_gained=amount,
+            )
 
         return Response(
             {
-                "message": f"Added {amount} XP",
-                "xp_gained": amount,
-                "total_xp": character.xp,
-                "reason": reason,
+                "success": True,
+                "track": track,
+                "amount": amount,
+                "new_total": new_xp,
+                "xp_clocks": xp_clocks,
+                "experience_tracker_id": tracker.id,
+                "message": f"Added {amount} XP to {track} track",
             }
         )
 

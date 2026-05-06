@@ -30,19 +30,9 @@
       }
     },
     {
-      "model": "characters.ability",
-      "pk": 4,
-      "fields": {
-        "name": "Parry and Break",
-        "type": "standard",
-        "category": "aggression",
-        "description": "On a successful resistance roll, counterattack with potency (+1 effect)."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 5,
-      "fields": {
+        "model": "characters.ability",
+        "pk": 5,
+        "fields": {
         "name": "Phantom Pain",
         "type": "standard",
         "category": "aggression",
@@ -256,7 +246,7 @@
         "name": "Bizarre Intuition",
         "type": "standard",
         "category": "awareness",
-        "description": "You have a bizarre sense for danger. You cannot be surprised and always act first in ambush situations."
+        "description": "You have a bizarre sense for danger. You cannot be surprised."
       }
     },
     {

@@ -75,11 +75,12 @@ class RollActionPushExclusiveTests(TestCase):
         )
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
         self.actor.refresh_from_db()
-        # push_effect costs 2 stress from remaining pool
-        self.assertEqual(self.actor.stress, 4)
+        # stress = marked boxes; push marks 2 more (6 + 2 = 8).
+        self.assertEqual(self.actor.stress, 8)
 
     def test_push_rejects_when_not_enough_stress(self):
-        self.actor.stress = 1
+        # max 9 default; 8 marked → only 1 empty box; push needs 2.
+        self.actor.stress = 8
         self.actor.save(update_fields=["stress"])
         self.client.force_authenticate(user=self.user)
         url = f"/api/characters/{self.actor.id}/roll-action/"
@@ -93,4 +94,25 @@ class RollActionPushExclusiveTests(TestCase):
             format="json",
         )
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("Not enough stress", str(r.data.get("error", "")))
+        err = str(r.data.get("error", ""))
+        self.assertIn("Not enough empty stress boxes", err)
+
+    def test_push_allowed_when_overflow_acknowledged(self):
+        # Same as rejection case, but client accepts SRD stress overflow (trauma).
+        self.actor.stress = 8
+        self.actor.save(update_fields=["stress"])
+        self.client.force_authenticate(user=self.user)
+        url = f"/api/characters/{self.actor.id}/roll-action/"
+        r = self.client.post(
+            url,
+            {
+                "action": "hunt",
+                "session_id": self.session.id,
+                "push_effect": True,
+                "stress_overflow_accepted": True,
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.actor.refresh_from_db()
+        self.assertEqual(self.actor.stress, 9)

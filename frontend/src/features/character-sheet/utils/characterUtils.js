@@ -66,6 +66,7 @@ export const createDefaultCharacter = () => ({
   coin: Array(4).fill(false),
   stash: Array(40).fill(false),
   healingClock: 0,
+  standCoinPointsGained: 0,
   xp: {
     insight: 0,
     prowess: 0,
@@ -101,7 +102,6 @@ export const standardAbilities = [
   "Ambush",
   "Cascade Effect",
   "Final Barrage",
-  "Parry and Break",
   "Phantom Pain",
   "Savage",
   "Spin-Boosted Blow",

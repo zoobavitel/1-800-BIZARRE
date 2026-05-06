@@ -88,7 +88,6 @@ class Command(BaseCommand):
                     'crew': {},
                     'factions': {}
                 },
-                'harm_clock_current': 0,
                 'vulnerability_clock_current': 0,
                 'armor_charges': 3, # Initial armor charges
                 'creator': user,

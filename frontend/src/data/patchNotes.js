@@ -4,13 +4,106 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-05-06",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "remove healing UI components and related files",
+          "add sheetDraftIsDirty prop to CharacterSheetWrapper",
+          "session retrieve P/E, stress overflow, downtime recovery UI"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-05-05",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "session NPC clocks, Staying Power on L4, Parry/Break cleanup",
+          "ripple free-push, recovery rolls, NPC sheet heals",
+          "heal bolsters picker, exclusions, downtime recover",
+          "improve session GM controls and recovery flow",
+          "track modifier sources and improve session/NPC roll flow"
+        ]
+      },
+      {
+        "title": "Documentation",
+        "items": [
+          "clarify resistance counterattack tick scaling"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-05-04",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "SRD Speed & Bizarre Intuition; NPC rules; session GM panels"
+        ]
+      },
+      {
+        "title": "Documentation",
+        "items": [
+          "drop NPC harm clock; vulnerability clock only"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "stress as marked track; sheet ability rolls UX"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-05-02",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "session XP settlement, GM sheet history splits"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-05-01",
     "version": null,
     "sections": [
       {
+        "title": "Other",
+        "items": [
+          "Merge pull request #69 from zoobavitel/cursor/ci-lxc-tailscale-and-pages-api-url",
+          "ci(deploy-lxc): Tailscale OAuth (TS_OAUTH_*) replaces authkey",
+          "Merge pull request #68 from zoobavitel/cursor/ci-lxc-tailscale-and-pages-api-url",
+          "Merge pull request #67 from zoobavitel/cursor/ci-lxc-tailscale-and-pages-api-url",
+          "Merge pull request #66 from zoobavitel/fix/session-date-scatterplot-campaignmanagementredundancy-characteredithistory",
+          "ci(perf): optional Lighthouse desktop preset for CI stability",
+          "ci(perf): lighthouse against production build, not dev server"
+        ]
+      },
+      {
         "title": "Fixed",
         "items": [
+          "write LXC deploy key to file for ssh-action",
+          "deploy CT over Tailscale SSH; Pages API base",
+          "address remaining review comments (artifact, a11y, group action case, perf budget)",
           "push and group-action stress semantics"
+        ]
+      },
+      {
+        "title": "Documentation",
+        "items": [
+          "add 2026-05-01 entry; dedupe workflow lines"
         ]
       }
     ]
@@ -396,27 +489,7 @@ export const PATCH_NOTES = [
           "Add clarifying comment on ability ID in regression test",
           "Remove accidentally committed debug.log",
           "Fix 500 on NPC PUT: merge conflicting 0038 migrations, harden Character.save(), add regression tests",
-          "Initial plan",
-          "Create copilot-instructions.md file with initial content",
-          "Merge pull request #21 from zoobavitel/copilot/add-heritage-and-user-types-to-npc",
-          "Merge pull request #20 from zoobavitel/copilot/create-faction-for-npc",
-          "Delete .github/workflows/black.yml",
-          "Merge branch 'master' into copilot/create-faction-for-npc",
-          "Merge pull request #22 from zoobavitel/copilot/inline-faction-creation-npc-sheet",
-          "Add TypeScript dependency to package.json",
-          "Address code review: bulk_create, consolidate heritage sync, use null for heritage",
-          "Merge branch 'master' into copilot/create-faction-for-npc",
-          "Add heritage, NPC type, and playbook abilities to NPC sheet",
-          "Merge pull request #19 from zoobavitel/copilot/update-repo-name-variables",
-          "Merge pull request #18 from zoobavitel/copilot/fix-vulnerability-clock-issue",
-          "Replace all jojo-ttrpg-platform references with 1-800-BIZARRE",
-          "Rename onClick param 'f' to 'newFilled' for clarity",
-          "Add GitHub Actions workflow for Black autofix",
-          "Merge pull request #17 from zoobavitel/copilot/fix-new-npc-button-functionality",
-          "Merge pull request #16 from zoobavitel/copilot/fix-syntax-error-in-create-npc-py",
-          "Fix curly apostrophe syntax error in create_npc.py",
-          "Update Black action options in workflow",
-          "Update source path in black.yml workflow"
+          "Initial plan"
         ]
       },
       {
@@ -427,18 +500,14 @@ export const PATCH_NOTES = [
           "restrict homepage characters to own user, add NPC delete button",
           "update URL hash when saving/opening NPC so refresh restores the sheet",
           "prevent duplicate faction names per campaign (backend + frontend)",
-          "parse campaign id to int on select change so factions populate",
-          "update package-lock.json to include typescript 5.9.3 as direct dev dependency",
-          "decouple vulnerability clock from conflict clocks on NPC page",
-          "always open blank NPC tab when navigating to NPC page without specific ID"
+          "parse campaign id to int on select change so factions populate"
         ]
       },
       {
         "title": "Added",
         "items": [
           "add crew management panel to campaign page and auto-assign crew on character assignment",
-          "add Delete NPC button to NPC character sheet top bar",
-          "inline faction creation & shared faction data in NPC Sheet"
+          "add Delete NPC button to NPC character sheet top bar"
         ]
       }
     ]
