@@ -5,6 +5,8 @@ export {
   getAttributeDice,
   getTotalXP,
   createDefaultCharacter,
+  countActionDots,
+  computeActionDotBudget,
   viceOptions,
   standardAbilities,
   traumaObjectToIds,

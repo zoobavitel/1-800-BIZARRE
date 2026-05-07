@@ -1,4 +1,5 @@
 import {
+  computeActionDotBudget,
   createDefaultCharacter,
   resolveHeritagePkForSave,
 } from "./characterUtils";
@@ -71,5 +72,32 @@ describe("createDefaultCharacter", () => {
     });
     expect(c.name).toBe("");
     expect(c.heritage).toBe(null);
+  });
+});
+
+describe("computeActionDotBudget", () => {
+  test("uses the larger of server gained dots and actual saved dot total", () => {
+    const budget = computeActionDotBudget({
+      actionDiceGained: 0,
+      actionRatings: {
+        HUNT: 2,
+        STUDY: 1,
+        SURVEY: 1,
+        TINKER: 1,
+        FINESSE: 1,
+        PROWL: 1,
+        SKIRMISH: 1,
+        WRECK: 1,
+        BIZARRE: 1,
+        COMMAND: 0,
+        CONSORT: 0,
+        SWAY: 0,
+      },
+    });
+
+    expect(budget.totalActionDots).toBe(10);
+    expect(budget.actionDotsFromXp).toBe(3);
+    expect(budget.maxActionDotsBudget).toBe(10);
+    expect(budget.dotsRemaining).toBe(0);
   });
 });

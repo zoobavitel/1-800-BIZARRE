@@ -39,6 +39,7 @@ import {
   characterHistoryAPI,
   sessionAPI,
   normalizeHarmObject,
+  computeActionDotBudget,
   resolveMediaUrl,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
@@ -305,6 +306,43 @@ const XP_LEDGER_HISTORY_KEYS = new Set([
   "action_dice_gained",
   "action_dots",
 ]);
+
+/** Backend `xp_clocks` keys; level-up / minor advance spend from one track only. */
+const XP_SPEND_TRACK_ORDER = [
+  "insight",
+  "prowess",
+  "resolve",
+  "heritage",
+  "playbook",
+];
+
+const XP_TRACK_SPEND_LABELS = {
+  insight: "Insight",
+  prowess: "Prowess",
+  resolve: "Resolve",
+  heritage: "Heritage",
+  playbook: "Playbook",
+};
+
+const XP_TRACK_SPEND_MAX = {
+  insight: 5,
+  prowess: 5,
+  resolve: 5,
+  heritage: 5,
+  playbook: 10,
+};
+
+const ATTRIBUTE_XP_SPEND_TRACKS = new Set(["insight", "prowess", "resolve"]);
+
+function actionOptionsForXpSpendTrack(actionRatings, spendTrack) {
+  const actions = Object.keys(actionRatings || {});
+  if (!ATTRIBUTE_XP_SPEND_TRACKS.has(spendTrack)) {
+    // Backend spend_xp_for_action_dice(xp_type) accepts any xp_type for dot buys.
+    return actions;
+  }
+  const filtered = actions.filter((action) => ACTION_ATTR[action] === spendTrack);
+  return filtered.length ? filtered : actions;
+}
 
 /** One-line summary when a sheet save touched XP / advancement fields. */
 function summarizeXpSpendFromHistoryEntry(entry) {
@@ -1383,9 +1421,44 @@ const CharacterSheetWrapper = ({
   const [levelUpStat, setLevelUpStat] = useState("power");
   const [levelUpDot1, setLevelUpDot1] = useState("HUNT");
   const [levelUpDot2, setLevelUpDot2] = useState("HUNT");
+  const [levelUpSpendTrack, setLevelUpSpendTrack] = useState("insight");
+  const [minorAdvanceSpendTrack, setMinorAdvanceSpendTrack] =
+    useState("insight");
 
   // FIX 7: Minor advance action selector
   const [minorAdvanceAction, setMinorAdvanceAction] = useState("HUNT");
+  const minorAdvanceActions = useMemo(
+    () =>
+      actionOptionsForXpSpendTrack(actionRatings, minorAdvanceSpendTrack),
+    [actionRatings, minorAdvanceSpendTrack],
+  );
+
+  useEffect(() => {
+    if (!showLevelUp) return;
+    setLevelUpSpendTrack((prev) => {
+      if ((Number(xp[prev]) || 0) >= 10) return prev;
+      return (
+        XP_SPEND_TRACK_ORDER.find((t) => (Number(xp[t]) || 0) >= 10) ||
+        XP_SPEND_TRACK_ORDER[0]
+      );
+    });
+  }, [showLevelUp, xp]);
+
+  useEffect(() => {
+    setMinorAdvanceSpendTrack((prev) => {
+      if ((Number(xp[prev]) || 0) >= 5) return prev;
+      return (
+        XP_SPEND_TRACK_ORDER.find((t) => (Number(xp[t]) || 0) >= 5) ||
+        XP_SPEND_TRACK_ORDER[0]
+      );
+    });
+  }, [xp]);
+
+  useEffect(() => {
+    if (!minorAdvanceActions.length) return;
+    if (minorAdvanceActions.includes(minorAdvanceAction)) return;
+    setMinorAdvanceAction(minorAdvanceActions[0]);
+  }, [minorAdvanceAction, minorAdvanceActions]);
 
   // Abilities & Clocks
   const [abilities, setAbilities] = useState(
@@ -1900,10 +1973,16 @@ const CharacterSheetWrapper = ({
   const maxArmorCharges = DUR_TABLE[durVal]?.armorCharges ?? 1;
   const sessionDevXP = DEV_SESSION_XP[devVal] ?? 0;
 
-  const totalActionDots = Object.values(actionRatings).reduce(
-    (s, v) => s + v,
-    0,
-  );
+  const {
+    totalActionDots,
+    actionDotsFromXp,
+    maxActionDotsBudget,
+    dotsRemaining,
+  } = computeActionDotBudget({
+    actionRatings,
+    actionDiceGained:
+      character?.actionDiceGained ?? character?.action_dice_gained,
+  });
   const totalStandPoints = Object.values(standStats).reduce((s, v) => s + v, 0);
   /** Chargen baseline 6 + XP-bought ranks (server); if total sum ran ahead of a stale counter, match the sheet so we do not false-alarm. */
   const standCoinIndexBudget = Math.max(
@@ -1918,8 +1997,15 @@ const CharacterSheetWrapper = ({
   const isSpinPlaybook = playbook === "Spin";
   const isHamonPlaybook = playbook === "Hamon";
   const totalXP = Object.values(xp).reduce((s, v) => s + v, 0);
-  const dotsRemaining = MAX_CREATION_DOTS - totalActionDots;
-
+  const maxXpOnAnyTrack = useMemo(
+    () =>
+      XP_SPEND_TRACK_ORDER.reduce(
+        (m, t) => Math.max(m, Number(xp[t]) || 0),
+        0,
+      ),
+    [xp],
+  );
+  const canAffordLevelUp = maxXpOnAnyTrack >= 10;
   // XP expenditure accounting
   // Each stand coin grade = 10 XP (cost of one level-up stat advance)
   // Each action dot = 5 XP (cost of one minor advance)
@@ -1988,7 +2074,7 @@ const CharacterSheetWrapper = ({
   const updateActionRating = (action, newVal) => {
     if (newVal < 0 || newVal > MAX_DOTS_PER_ACTION_CREATION) return;
     const delta = newVal - actionRatings[action];
-    if (delta > 0 && totalActionDots + delta > MAX_CREATION_DOTS) return;
+    if (delta > 0 && totalActionDots + delta > maxActionDotsBudget) return;
     setActionRatings((p) => ({ ...p, [action]: newVal }));
   };
 
@@ -2073,29 +2159,12 @@ const CharacterSheetWrapper = ({
     }));
   };
 
-  // Spend XP from pools in priority order
-  const deductXP = (amount) => {
-    let rem = amount;
-    const next = { ...xp };
-    for (const key of [
-      "playbook",
-      "insight",
-      "prowess",
-      "resolve",
-      "heritage",
-    ]) {
-      const take = Math.min(rem, next[key]);
-      next[key] -= take;
-      rem -= take;
-      if (rem === 0) break;
-    }
-    setXp(next);
-  };
-
-  // FIX 6: Confirm level-up (binary choice)
+  // FIX 6: Confirm level-up — spend 10 XP from the selected track only (matches backend xp_type).
   const confirmLevelUp = () => {
-    if (totalXP < 10) return;
-    deductXP(10);
+    const track = levelUpSpendTrack;
+    const cur = Number(xp[track]) || 0;
+    if (cur < 10) return;
+    setXp((p) => ({ ...p, [track]: cur - 10 }));
     if (levelUpChoice === "stat") {
       incrementStat(levelUpStat);
     } else {
@@ -2105,11 +2174,19 @@ const CharacterSheetWrapper = ({
     setShowLevelUp(false);
   };
 
-  // FIX 7: Minor advance — 5 XP for +1 action dot (outside level-up)
+  // FIX 7: Minor advance — 5 XP from selected track only
   const spendXPForDot = () => {
-    if (totalXP < 5 || actionRatings[minorAdvanceAction] >= 4) return;
-    deductXP(5);
-    advanceActionDot(minorAdvanceAction);
+    const track = minorAdvanceSpendTrack;
+    const cur = Number(xp[track]) || 0;
+    const action = minorAdvanceAction;
+    if (
+      cur < 5 ||
+      !minorAdvanceActions.includes(action) ||
+      actionRatings[action] >= 4
+    )
+      return;
+    setXp((p) => ({ ...p, [track]: cur - 5 }));
+    advanceActionDot(action);
   };
 
   // Roll modal for campaign/session context (position, effect, push)
@@ -8035,7 +8112,7 @@ const CharacterSheetWrapper = ({
                       </div>
                     </div>
 
-                    {totalXP >= 10 ? (
+                    {canAffordLevelUp ? (
                       <button
                         onClick={() => setShowLevelUp(true)}
                         style={{
@@ -8057,7 +8134,8 @@ const CharacterSheetWrapper = ({
                           textAlign: "center",
                         }}
                       >
-                        {10 - totalXP} more XP needed to level up
+                        Need 10 XP on one track to level (highest track now:{" "}
+                        {maxXpOnAnyTrack})
                       </div>
                     )}
 
@@ -8087,6 +8165,35 @@ const CharacterSheetWrapper = ({
                       >
                         +1 Action dot, outside level-up (max 4 per action)
                       </div>
+                      <div style={{ marginBottom: "6px" }}>
+                        <span
+                          style={{
+                            ...S.lbl,
+                            display: "block",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          Spend from track
+                        </span>
+                        <select
+                          value={minorAdvanceSpendTrack}
+                          onChange={(e) =>
+                            setMinorAdvanceSpendTrack(e.target.value)
+                          }
+                          style={{ ...S.sel, width: "100%", fontSize: "11px" }}
+                        >
+                          {XP_SPEND_TRACK_ORDER.map((t) => {
+                            const n = Number(xp[t]) || 0;
+                            const cap = XP_TRACK_SPEND_MAX[t];
+                            return (
+                              <option key={t} value={t} disabled={n < 5}>
+                                {XP_TRACK_SPEND_LABELS[t] || t}: {n}/{cap}
+                                {n < 5 ? " (need 5)" : ""}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
                       <div style={{ display: "flex", gap: "6px" }}>
                         <select
                           value={minorAdvanceAction}
@@ -8095,7 +8202,7 @@ const CharacterSheetWrapper = ({
                           }
                           style={{ ...S.sel, flex: 1, fontSize: "11px" }}
                         >
-                          {Object.keys(actionRatings).map((a) => (
+                          {minorAdvanceActions.map((a) => (
                             <option
                               key={a}
                               value={a}
@@ -8110,19 +8217,24 @@ const CharacterSheetWrapper = ({
                           type="button"
                           onClick={spendXPForDot}
                           disabled={
-                            totalXP < 5 ||
+                            (Number(xp[minorAdvanceSpendTrack]) || 0) < 5 ||
+                            !minorAdvanceActions.includes(minorAdvanceAction) ||
                             actionRatings[minorAdvanceAction] >= 4
                           }
                           style={{
                             ...S.btn,
                             fontSize: "11px",
                             background:
-                              totalXP >= 5 &&
+                              (Number(xp[minorAdvanceSpendTrack]) || 0) >=
+                                5 &&
+                              minorAdvanceActions.includes(minorAdvanceAction) &&
                               actionRatings[minorAdvanceAction] < 4
                                 ? "#4338ca"
                                 : "#374151",
                             color:
-                              totalXP >= 5 &&
+                              (Number(xp[minorAdvanceSpendTrack]) || 0) >=
+                                5 &&
+                              minorAdvanceActions.includes(minorAdvanceAction) &&
                               actionRatings[minorAdvanceAction] < 4
                                 ? "#fff"
                                 : "#6b7280",
@@ -8131,11 +8243,16 @@ const CharacterSheetWrapper = ({
                           −5 XP
                         </button>
                       </div>
-                      {totalXP < 5 && (
+                      {maxXpOnAnyTrack < 5 ? (
                         <div style={{ ...S.warn, marginTop: "4px" }}>
-                          {5 - totalXP} more XP needed
+                          Need 5 XP on one track (highest track:{" "}
+                          {maxXpOnAnyTrack})
                         </div>
-                      )}
+                      ) : (Number(xp[minorAdvanceSpendTrack]) || 0) < 5 ? (
+                        <div style={{ ...S.warn, marginTop: "4px" }}>
+                          Pick a track with at least 5 XP
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
@@ -9369,7 +9486,7 @@ const CharacterSheetWrapper = ({
                     </div>
                   )}
 
-                  {/* FIX 1: Action Ratings — creation dot budget */}
+                  {/* Action Ratings — chargen baseline plus XP-bought action dots */}
                   <div style={{ marginBottom: "14px" }}>
                     <div
                       style={{
@@ -9386,8 +9503,9 @@ const CharacterSheetWrapper = ({
                           color: dotColor,
                           fontWeight: dotsRemaining === 0 ? "bold" : "normal",
                         }}
+                        title={`SRD action dots (${MAX_CREATION_DOTS} at chargen, +${actionDotsFromXp} from XP or saved dot total).`}
                       >
-                        {totalActionDots}/{MAX_CREATION_DOTS} dots{" "}
+                        {totalActionDots}/{maxActionDotsBudget} dots{" "}
                         {dotsRemaining > 0
                           ? `(${dotsRemaining} left)`
                           : "— FULL"}
@@ -9707,7 +9825,7 @@ const CharacterSheetWrapper = ({
                                                 ? `Dot ${d} — gained via advancement`
                                                 : `Dot ${d} — unlock via advancement`
                                               : dotsRemaining === 0 && !filled
-                                                ? "No creation dots remaining"
+                                                ? "No action dots remaining"
                                                 : ""
                                           }
                                           style={{
@@ -14757,23 +14875,6 @@ const CharacterSheetWrapper = ({
                 ))}
               </div>
               <div style={S.card}>
-                <span style={S.lbl}>PLANNING & LOAD</span>
-                <div style={{ fontSize: "12px", color: "#d1d5db" }}>
-                  {[
-                    ["Assault", "Point of attack"],
-                    ["Occult", "Arcane power"],
-                    ["Deception", "Method"],
-                    ["Social", "Connection"],
-                    ["Stealth", "Entry point"],
-                    ["Transport", "Route"],
-                  ].map(([p, d]) => (
-                    <div key={p}>
-                      <strong>{p}:</strong> <em>{d}</em>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div style={S.card}>
                 <span style={S.lbl}>GATHER INFORMATION</span>
                 <div style={{ fontSize: "12px", color: "#9ca3af" }}>
                   {[
@@ -15833,14 +15934,46 @@ const CharacterSheetWrapper = ({
               </div>
             )}
 
+            <div style={{ marginBottom: "16px" }}>
+              <span style={S.lbl}>Spend 10 XP from</span>
+              <select
+                value={levelUpSpendTrack}
+                onChange={(e) => setLevelUpSpendTrack(e.target.value)}
+                style={{ ...S.sel, width: "100%", marginTop: "6px" }}
+              >
+                {XP_SPEND_TRACK_ORDER.map((t) => {
+                  const n = Number(xp[t]) || 0;
+                  const cap = XP_TRACK_SPEND_MAX[t];
+                  return (
+                    <option key={t} value={t} disabled={n < 10}>
+                      {XP_TRACK_SPEND_LABELS[t] || t}: {n}/{cap}
+                      {n < 10 ? " (need 10)" : ""}
+                    </option>
+                  );
+                })}
+              </select>
+              {(Number(xp[levelUpSpendTrack]) || 0) < 10 && (
+                <div style={{ ...S.warn, marginTop: "6px", fontSize: "10px" }}>
+                  Choose a track that has at least 10 XP
+                </div>
+              )}
+            </div>
+
             <div style={{ display: "flex", gap: "8px" }}>
               <button
                 type="button"
                 onClick={confirmLevelUp}
+                disabled={(Number(xp[levelUpSpendTrack]) || 0) < 10}
                 style={{
                   ...S.btn,
-                  background: "#7c3aed",
-                  color: "#fff",
+                  background:
+                    (Number(xp[levelUpSpendTrack]) || 0) >= 10
+                      ? "#7c3aed"
+                      : "#374151",
+                  color:
+                    (Number(xp[levelUpSpendTrack]) || 0) >= 10
+                      ? "#fff"
+                      : "#6b7280",
                   flex: 1,
                   fontWeight: "bold",
                 }}
