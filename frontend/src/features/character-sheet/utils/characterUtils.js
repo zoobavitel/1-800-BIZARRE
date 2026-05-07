@@ -1,5 +1,7 @@
 // Utility functions for character sheet operations
 
+import { MAX_CREATION_DOTS } from "../constants/srd";
+
 export const getAttributeDice = (actions, actionRatings) => {
   return actions.filter((action) => actionRatings[action] > 0).length;
 };
@@ -80,6 +82,32 @@ export const createDefaultCharacter = () => ({
   selected_benefits: [],
   selected_detriments: [],
 });
+
+export const countActionDots = (actionRatings = {}) => {
+  if (!actionRatings || typeof actionRatings !== "object") return 0;
+  return Object.values(actionRatings).reduce(
+    (sum, value) => sum + Math.max(0, Number(value) || 0),
+    0,
+  );
+};
+
+export const computeActionDotBudget = ({
+  actionRatings = {},
+  actionDiceGained = 0,
+  creationDots = MAX_CREATION_DOTS,
+} = {}) => {
+  const totalActionDots = countActionDots(actionRatings);
+  const serverGained = Math.max(0, Number(actionDiceGained) || 0);
+  const inferredGained = Math.max(0, totalActionDots - creationDots);
+  const gained = Math.max(serverGained, inferredGained);
+  const maxActionDotsBudget = creationDots + gained;
+  return {
+    totalActionDots,
+    actionDotsFromXp: gained,
+    maxActionDotsBudget,
+    dotsRemaining: maxActionDotsBudget - totalActionDots,
+  };
+};
 
 export const viceOptions = [
   "Gambling",

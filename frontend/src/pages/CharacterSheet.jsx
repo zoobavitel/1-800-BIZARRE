@@ -39,6 +39,7 @@ import {
   characterHistoryAPI,
   sessionAPI,
   normalizeHarmObject,
+  computeActionDotBudget,
   resolveMediaUrl,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
@@ -330,6 +331,18 @@ const XP_TRACK_SPEND_MAX = {
   heritage: 5,
   playbook: 10,
 };
+
+const ATTRIBUTE_XP_SPEND_TRACKS = new Set(["insight", "prowess", "resolve"]);
+
+function actionOptionsForXpSpendTrack(actionRatings, spendTrack) {
+  const actions = Object.keys(actionRatings || {});
+  if (!ATTRIBUTE_XP_SPEND_TRACKS.has(spendTrack)) {
+    // Backend spend_xp_for_action_dice(xp_type) accepts any xp_type for dot buys.
+    return actions;
+  }
+  const filtered = actions.filter((action) => ACTION_ATTR[action] === spendTrack);
+  return filtered.length ? filtered : actions;
+}
 
 /** One-line summary when a sheet save touched XP / advancement fields. */
 function summarizeXpSpendFromHistoryEntry(entry) {
@@ -1414,6 +1427,11 @@ const CharacterSheetWrapper = ({
 
   // FIX 7: Minor advance action selector
   const [minorAdvanceAction, setMinorAdvanceAction] = useState("HUNT");
+  const minorAdvanceActions = useMemo(
+    () =>
+      actionOptionsForXpSpendTrack(actionRatings, minorAdvanceSpendTrack),
+    [actionRatings, minorAdvanceSpendTrack],
+  );
 
   useEffect(() => {
     if (!showLevelUp) return;
@@ -1435,6 +1453,12 @@ const CharacterSheetWrapper = ({
       );
     });
   }, [xp]);
+
+  useEffect(() => {
+    if (!minorAdvanceActions.length) return;
+    if (minorAdvanceActions.includes(minorAdvanceAction)) return;
+    setMinorAdvanceAction(minorAdvanceActions[0]);
+  }, [minorAdvanceAction, minorAdvanceActions]);
 
   // Abilities & Clocks
   const [abilities, setAbilities] = useState(
@@ -1949,15 +1973,16 @@ const CharacterSheetWrapper = ({
   const maxArmorCharges = DUR_TABLE[durVal]?.armorCharges ?? 1;
   const sessionDevXP = DEV_SESSION_XP[devVal] ?? 0;
 
-  const totalActionDots = Object.values(actionRatings).reduce(
-    (s, v) => s + v,
-    0,
-  );
-  const actionDotsFromXp = Math.max(
-    0,
-    Number(character?.actionDiceGained) || 0,
-  );
-  const maxActionDotsBudget = MAX_CREATION_DOTS + actionDotsFromXp;
+  const {
+    totalActionDots,
+    actionDotsFromXp,
+    maxActionDotsBudget,
+    dotsRemaining,
+  } = computeActionDotBudget({
+    actionRatings,
+    actionDiceGained:
+      character?.actionDiceGained ?? character?.action_dice_gained,
+  });
   const totalStandPoints = Object.values(standStats).reduce((s, v) => s + v, 0);
   /** Chargen baseline 6 + XP-bought ranks (server); if total sum ran ahead of a stale counter, match the sheet so we do not false-alarm. */
   const standCoinIndexBudget = Math.max(
@@ -1981,8 +2006,6 @@ const CharacterSheetWrapper = ({
     [xp],
   );
   const canAffordLevelUp = maxXpOnAnyTrack >= 10;
-  const dotsRemaining = maxActionDotsBudget - totalActionDots;
-
   // XP expenditure accounting
   // Each stand coin grade = 10 XP (cost of one level-up stat advance)
   // Each action dot = 5 XP (cost of one minor advance)
@@ -2155,9 +2178,15 @@ const CharacterSheetWrapper = ({
   const spendXPForDot = () => {
     const track = minorAdvanceSpendTrack;
     const cur = Number(xp[track]) || 0;
-    if (cur < 5 || actionRatings[minorAdvanceAction] >= 4) return;
+    const action = minorAdvanceAction;
+    if (
+      cur < 5 ||
+      !minorAdvanceActions.includes(action) ||
+      actionRatings[action] >= 4
+    )
+      return;
     setXp((p) => ({ ...p, [track]: cur - 5 }));
-    advanceActionDot(minorAdvanceAction);
+    advanceActionDot(action);
   };
 
   // Roll modal for campaign/session context (position, effect, push)
@@ -8173,7 +8202,7 @@ const CharacterSheetWrapper = ({
                           }
                           style={{ ...S.sel, flex: 1, fontSize: "11px" }}
                         >
-                          {Object.keys(actionRatings).map((a) => (
+                          {minorAdvanceActions.map((a) => (
                             <option
                               key={a}
                               value={a}
@@ -8189,6 +8218,7 @@ const CharacterSheetWrapper = ({
                           onClick={spendXPForDot}
                           disabled={
                             (Number(xp[minorAdvanceSpendTrack]) || 0) < 5 ||
+                            !minorAdvanceActions.includes(minorAdvanceAction) ||
                             actionRatings[minorAdvanceAction] >= 4
                           }
                           style={{
@@ -8197,12 +8227,14 @@ const CharacterSheetWrapper = ({
                             background:
                               (Number(xp[minorAdvanceSpendTrack]) || 0) >=
                                 5 &&
+                              minorAdvanceActions.includes(minorAdvanceAction) &&
                               actionRatings[minorAdvanceAction] < 4
                                 ? "#4338ca"
                                 : "#374151",
                             color:
                               (Number(xp[minorAdvanceSpendTrack]) || 0) >=
                                 5 &&
+                              minorAdvanceActions.includes(minorAdvanceAction) &&
                               actionRatings[minorAdvanceAction] < 4
                                 ? "#fff"
                                 : "#6b7280",
@@ -9471,6 +9503,7 @@ const CharacterSheetWrapper = ({
                           color: dotColor,
                           fontWeight: dotsRemaining === 0 ? "bold" : "normal",
                         }}
+                        title={`SRD action dots (${MAX_CREATION_DOTS} at chargen, +${actionDotsFromXp} from XP or saved dot total).`}
                       >
                         {totalActionDots}/{maxActionDotsBudget} dots{" "}
                         {dotsRemaining > 0

@@ -8,6 +8,7 @@ import {
   DUR_TABLE,
   DEFAULT_TRAUMA,
   TRAUMA_PK_TO_KEY,
+  MAX_CREATION_DOTS,
 } from "../constants/srd";
 
 /** Backend Character.playbook values */
@@ -50,6 +51,22 @@ function abilityIdsByType(abilities, type) {
           (typeof a.id === "string" && /^\d+$/.test(a.id))),
     )
     .map((a) => (typeof a.id === "number" ? a.id : parseInt(a.id, 10)));
+}
+
+function numericNonNegative(...values) {
+  for (const value of values) {
+    const n = Number(value);
+    if (Number.isFinite(n)) return Math.max(0, n);
+  }
+  return 0;
+}
+
+function totalFrontendActionDots(actionRatings = {}) {
+  if (!actionRatings || typeof actionRatings !== "object") return 0;
+  return Object.values(actionRatings).reduce(
+    (sum, value) => sum + Math.max(0, Number(value) || 0),
+    0,
+  );
 }
 
 /** Build absolute URL for uploaded media paths (e.g. /media/...) so <img src> works with the API host. */
@@ -1066,9 +1083,9 @@ export const transformBackendToFrontend = (backendCharacter) => {
       Number(backendCharacter.stand_coin_points_gained) || 0,
     ),
     /** +1 action dots bought with XP beyond chargen (5 XP each on backend); chargen baseline is excluded. */
-    actionDiceGained: Math.max(
-      0,
-      Number(backendCharacter.action_dice_gained) || 0,
+    actionDiceGained: numericNonNegative(
+      backendCharacter.action_dice_gained,
+      backendCharacter.actionDiceGained,
     ),
   };
 };
@@ -1091,6 +1108,18 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     }
     return null;
   })();
+
+  const actionDiceGained = Math.max(
+    numericNonNegative(
+      frontendCharacter.actionDiceGained,
+      frontendCharacter.action_dice_gained,
+    ),
+    Math.max(
+      0,
+      totalFrontendActionDots(frontendCharacter.actionRatings) -
+        MAX_CREATION_DOTS,
+    ),
+  );
 
   return {
     true_name: frontendCharacter.name,
@@ -1120,6 +1149,7 @@ export const transformFrontendToBackend = (frontendCharacter) => {
       consort: frontendCharacter.actionRatings.CONSORT,
       sway: frontendCharacter.actionRatings.SWAY,
     },
+    action_dice_gained: actionDiceGained,
 
     // Stand: backend may use coin_stats (JSON) and/or nested stand; send grade letters (F–A)
     coin_stats: {

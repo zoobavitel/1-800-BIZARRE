@@ -187,6 +187,35 @@ describe("transformBackendToFrontend coin and crew stash", () => {
     expect(fe.actionDiceGained).toBe(4);
   });
 
+  test("maps camelCase XP-bought action dot count from frontend-shaped rows", () => {
+    const fe = transformBackendToFrontend({
+      actionDiceGained: 4,
+    });
+    expect(fe.actionDiceGained).toBe(4);
+  });
+
+  test("persists inferred XP-bought action dot count", () => {
+    const be = transformFrontendToBackend(
+      makeSheet({
+        actionRatings: {
+          HUNT: 2,
+          STUDY: 1,
+          SURVEY: 1,
+          TINKER: 1,
+          FINESSE: 1,
+          PROWL: 1,
+          SKIRMISH: 1,
+          WRECK: 1,
+          BIZARRE: 1,
+          COMMAND: 0,
+          CONSORT: 0,
+          SWAY: 0,
+        },
+      }),
+    );
+    expect(be.action_dice_gained).toBe(3);
+  });
+
   test("maps coin_boxes and crew.stash_slots", () => {
     const fe = transformBackendToFrontend({
       coin_boxes: [true, false, false, false],
