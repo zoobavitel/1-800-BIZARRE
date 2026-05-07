@@ -1953,6 +1953,11 @@ const CharacterSheetWrapper = ({
     (s, v) => s + v,
     0,
   );
+  const actionDotsFromXp = Math.max(
+    0,
+    Number(character?.actionDiceGained) || 0,
+  );
+  const maxActionDotsBudget = MAX_CREATION_DOTS + actionDotsFromXp;
   const totalStandPoints = Object.values(standStats).reduce((s, v) => s + v, 0);
   /** Chargen baseline 6 + XP-bought ranks (server); if total sum ran ahead of a stale counter, match the sheet so we do not false-alarm. */
   const standCoinIndexBudget = Math.max(
@@ -1976,7 +1981,7 @@ const CharacterSheetWrapper = ({
     [xp],
   );
   const canAffordLevelUp = maxXpOnAnyTrack >= 10;
-  const dotsRemaining = MAX_CREATION_DOTS - totalActionDots;
+  const dotsRemaining = maxActionDotsBudget - totalActionDots;
 
   // XP expenditure accounting
   // Each stand coin grade = 10 XP (cost of one level-up stat advance)
@@ -2046,7 +2051,7 @@ const CharacterSheetWrapper = ({
   const updateActionRating = (action, newVal) => {
     if (newVal < 0 || newVal > MAX_DOTS_PER_ACTION_CREATION) return;
     const delta = newVal - actionRatings[action];
-    if (delta > 0 && totalActionDots + delta > MAX_CREATION_DOTS) return;
+    if (delta > 0 && totalActionDots + delta > maxActionDotsBudget) return;
     setActionRatings((p) => ({ ...p, [action]: newVal }));
   };
 
@@ -9449,7 +9454,7 @@ const CharacterSheetWrapper = ({
                     </div>
                   )}
 
-                  {/* FIX 1: Action Ratings — creation dot budget */}
+                  {/* Action Ratings — chargen baseline plus XP-bought action dots */}
                   <div style={{ marginBottom: "14px" }}>
                     <div
                       style={{
@@ -9467,7 +9472,7 @@ const CharacterSheetWrapper = ({
                           fontWeight: dotsRemaining === 0 ? "bold" : "normal",
                         }}
                       >
-                        {totalActionDots}/{MAX_CREATION_DOTS} dots{" "}
+                        {totalActionDots}/{maxActionDotsBudget} dots{" "}
                         {dotsRemaining > 0
                           ? `(${dotsRemaining} left)`
                           : "— FULL"}
@@ -9787,7 +9792,7 @@ const CharacterSheetWrapper = ({
                                                 ? `Dot ${d} — gained via advancement`
                                                 : `Dot ${d} — unlock via advancement`
                                               : dotsRemaining === 0 && !filled
-                                                ? "No creation dots remaining"
+                                                ? "No action dots remaining"
                                                 : ""
                                           }
                                           style={{

@@ -1065,6 +1065,11 @@ export const transformBackendToFrontend = (backendCharacter) => {
       0,
       Number(backendCharacter.stand_coin_points_gained) || 0,
     ),
+    /** +1 action dots bought with XP beyond chargen (5 XP each on backend); chargen baseline is excluded. */
+    actionDiceGained: Math.max(
+      0,
+      Number(backendCharacter.action_dice_gained) || 0,
+    ),
   };
 };
 

@@ -67,6 +67,7 @@ export const createDefaultCharacter = () => ({
   stash: Array(40).fill(false),
   healingClock: 0,
   standCoinPointsGained: 0,
+  actionDiceGained: 0,
   xp: {
     insight: 0,
     prowess: 0,

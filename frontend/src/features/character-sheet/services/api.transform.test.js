@@ -180,6 +180,13 @@ describe("normalizeCoinBoxes and normalizeStashSlots", () => {
 });
 
 describe("transformBackendToFrontend coin and crew stash", () => {
+  test("maps XP-bought action dot count", () => {
+    const fe = transformBackendToFrontend({
+      action_dice_gained: 4,
+    });
+    expect(fe.actionDiceGained).toBe(4);
+  });
+
   test("maps coin_boxes and crew.stash_slots", () => {
     const fe = transformBackendToFrontend({
       coin_boxes: [true, false, false, false],
