@@ -14852,44 +14852,7 @@ const CharacterSheetWrapper = ({
             </div>
 
             {/* Bottom row */}
-            <div style={{ ...S.g3, marginTop: "16px" }}>
-              <div style={S.card}>
-                <span style={S.lbl}>TEAMWORK</span>
-                {[
-                  "Assist a teammate (+1d, costs 1 Stress)",
-                  "Lead a group action",
-                  "Protect a teammate",
-                  "Set up a teammate",
-                ].map((t) => (
-                  <div
-                    key={t}
-                    style={{
-                      background: "#374151",
-                      padding: "4px 8px",
-                      marginBottom: "3px",
-                      fontSize: "12px",
-                    }}
-                  >
-                    {t}
-                  </div>
-                ))}
-              </div>
-              <div style={S.card}>
-                <span style={S.lbl}>GATHER INFORMATION</span>
-                <div style={{ fontSize: "12px", color: "#9ca3af" }}>
-                  {[
-                    "What do they intend to do?",
-                    "How can I get them to [X]?",
-                    "What are they really feeling?",
-                    "What should I look out for?",
-                    "Where's the weakness here?",
-                    "What's really going on here?",
-                  ].map((q) => (
-                    <div key={q}>🔷 {q}</div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <div style={{ ...S.g3, marginTop: "16px" }} />
             </div>
             {portraitUrlModalOpen && canEditSheet && (
               <div

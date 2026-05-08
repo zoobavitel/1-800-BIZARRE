@@ -4,23 +4,36 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-05-07",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #71 from zoobavitel/fix/remove-character-planning-load"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-05-06",
     "version": null,
     "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "enhance action dot budget calculations and add utility functions",
+          "per-track XP for level/minor advance; drop info cards",
+          "remove healing UI components and related files",
+          "add sheetDraftIsDirty prop to CharacterSheetWrapper",
+          "session retrieve P/E, stress overflow, downtime recovery UI"
+        ]
+      },
       {
         "title": "Fixed",
         "items": [
           "action dot budget includes action_dice_gained",
           "Copilot review — XP settlement on session delete, multi-tracker rolls, faction image clear, history ACL"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "per-track XP for level/minor advance; drop info cards",
-          "remove healing UI components and related files",
-          "add sheetDraftIsDirty prop to CharacterSheetWrapper",
-          "session retrieve P/E, stress overflow, downtime recovery UI"
         ]
       },
       {
@@ -502,9 +515,7 @@ export const PATCH_NOTES = [
           "Merge branch 'master' into copilot/fix-npc-faction-dropdown",
           "Merge pull request #25 from zoobavitel/copilot/fix-issue-with-em-dash",
           "Address review: simplify NPC.__str__ null check, add Unicode comments in test",
-          "Fix EM dash 500: null-safe NPC.__str__, blank=True for relationships, regression tests",
-          "Initial plan for em-dash 500 fix",
-          "added merge migration"
+          "Fix EM dash 500: null-safe NPC.__str__, blank=True for relationships, regression tests"
         ]
       },
       {
