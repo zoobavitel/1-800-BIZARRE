@@ -240,11 +240,16 @@ export const characterAPI = {
       body: JSON.stringify(actionData),
     }),
 
-  /** Crew Help: helper spends 1 stress (same crew). */
-  assistHelp: (id, helperCharacterId) =>
-    apiRequest(`/characters/${id}/assist-help/`, {
+  /**
+   * Crew Assist: recipient is `recipientCharacterId` (gets pending +1d); helper spends 1 stress.
+   */
+  assistHelp: (recipientCharacterId, helperCharacterId, sessionId) =>
+    apiRequest(`/characters/${recipientCharacterId}/assist-help/`, {
       method: "POST",
-      body: JSON.stringify({ helper_character_id: helperCharacterId }),
+      body: JSON.stringify({
+        helper_character_id: helperCharacterId,
+        session_id: sessionId,
+      }),
     }),
 
   // Add XP to character

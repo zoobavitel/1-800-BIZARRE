@@ -87,6 +87,297 @@ function unwrapApiArray(data) {
   return [];
 }
 
+function rollHasTruthyFk(val) {
+  if (val == null || val === "") return false;
+  return true;
+}
+
+function recoveryContextTooltip(ctx) {
+  const c = String(ctx || "").trim().toLowerCase();
+  if (!c) return "";
+  if (c === "ally") return "Ally recovery (treating another PC)";
+  if (c === "self_downtime") return "Downtime self-recover (healing clock)";
+  if (c === "self_mid_action") return "Mid-action self-recover (healing clock)";
+  if (c === "self_treatment_roll") return "Self treatment roll";
+  return c.replace(/_/g, " ");
+}
+
+function isModifierAssistRow(s) {
+  if (!s || typeof s !== "object") return false;
+  if (String(s.kind || "").toLowerCase() === "assist") return true;
+  return /^assist\s*\(/i.test(String(s.name || ""));
+}
+
+function assistInfoFromRoll(r) {
+  const pad = Number(r.pool_assist_dice || 0) || 0;
+  const src = Array.isArray(r.modifier_sources) ? r.modifier_sources : [];
+  const row = src.find(isModifierAssistRow);
+  if (pad < 1 && !row) return null;
+  const fromName = row
+    ? String(row.name || "")
+        .replace(/^\s*[Aa]ssist\s*\(\s*/, "")
+        .replace(/\)\s*$/, "")
+        .trim()
+    : "";
+  const desc = String(r.description || "");
+  const m = desc.match(/\[Assist:\s*([^\]]+)\]/i);
+  const fromDesc = m ? String(m[1]).trim() : "";
+  const helper = fromName || fromDesc;
+  return {
+    label: "+1d",
+    title: helper
+      ? `Crew assist: +1d from ${helper}`
+      : "Crew assist: +1d (pool_assist_dice / modifier_sources)",
+  };
+}
+
+/** @returns {{ parts: string[], sum: number }} */
+function poolBreakdownPiecesFromStoredFields(r) {
+  const base = Number(r.pool_action_rating) || 0;
+  const attr = Number(r.pool_attribute_dice) || 0;
+  const bonus = Number(r.pool_bonus_dice) || 0;
+  const assist = Number(r.pool_assist_dice) || 0;
+  const pushDice = !!r.push_for_dice;
+  const devilDice = !!r.uses_devil_bargain;
+  const parts = [];
+  if (base > 0) parts.push(`base ${base}`);
+  if (attr > 0) parts.push(`attr ${attr}`);
+  if (bonus > 0) parts.push(`bonus ${bonus}`);
+  if (assist > 0) parts.push(`assist ${assist}`);
+  if (pushDice) parts.push("push +1");
+  if (devilDice) parts.push("devil +1");
+  const sum =
+    base +
+    attr +
+    bonus +
+    assist +
+    (pushDice ? 1 : 0) +
+    (devilDice ? 1 : 0);
+  return { parts, sum };
+}
+
+function humanizeModifierSourcesRows(mods) {
+  if (!Array.isArray(mods) || !mods.length) return [];
+  return mods.map((row) => {
+    if (!row || typeof row !== "object") return "";
+    const name = String(row.name ?? "").trim();
+    const delta = String(row.delta ?? "").trim();
+    const kind = String(row.kind ?? "").trim();
+    const cat = String(row.category ?? "").trim();
+    const bits = [];
+    if (kind) bits.push(kind);
+    if (name && name !== delta) bits.push(name);
+    if (delta) bits.push(delta);
+    if (!bits.length && cat) bits.push(cat);
+    return bits.join(": ").replace(/^:\s*/, "").trim();
+  }).filter(Boolean);
+}
+
+/** Physical dice rolled (tier pool may be 0 in Blades 0‑d tier rules). */
+function recentRollDiceCountDisplay(r) {
+  const stored = Number(r.dice_pool);
+  const rc = Array.isArray(r.results) ? r.results.length : 0;
+  if (Number.isFinite(stored) && stored > 0) return stored;
+  if (rc > 0) return rc;
+  return Number.isFinite(stored) ? stored : 0;
+}
+
+/**
+ * Visible line suffix for Recent rolls row: how many dice, from stored pool_* when present.
+ */
+function recentRollDiceSourcesSummary(r) {
+  const displayCount = recentRollDiceCountDisplay(r);
+  const { parts } = poolBreakdownPiecesFromStoredFields(r);
+  const mods = Array.isArray(r.modifier_sources) ? r.modifier_sources : [];
+  if (displayCount === 0 && parts.length === 0 && mods.length === 0)
+    return null;
+
+  const headNd = `${displayCount}d`;
+  if (parts.length > 0) {
+    return `${headNd} · ${parts.join(" + ")}`;
+  }
+
+  if (mods.length > 0) {
+    const short = mods
+      .map((row) => {
+        if (!row || typeof row !== "object") return "";
+        const n = String(row.name || "").trim();
+        const d = String(row.delta || "").trim();
+        if (/^assist\b/i.test(n) || String(row.kind || "").toLowerCase() === "assist")
+          return "+assist";
+        if (String(row.kind || "").toLowerCase() === "push") return "+push";
+        if (String(row.kind || "").toLowerCase() === "devil_bargain")
+          return "+devil";
+        if ((n || d).length <= 56)
+          return d && n !== d ? `${n} (${d})` : n || d || "";
+        return (n || d).slice(0, 53) + "…";
+      })
+      .filter(Boolean);
+    const uq = [...new Set(short)].slice(0, 5);
+    if (uq.length === 0) return headNd;
+    return `${headNd} · ${uq.join(", ")}`;
+  }
+
+  return displayCount > 0 ? headNd : null;
+}
+
+/** Long tooltip: stored pool_* lines + modifier_sources (+ push effect / devil text). */
+function recentRollDiceSourcesTooltip(r) {
+  const lines = [];
+  const storedTier = Number(r.dice_pool);
+  const diceRolled = Array.isArray(r.results) ? r.results.length : 0;
+  if (Number.isFinite(storedTier) && storedTier >= 0) {
+    lines.push(`Recorded tier dice_pool: ${storedTier}d`);
+  }
+  if (diceRolled > 0) lines.push(`Dice rolled (results): ${diceRolled}`);
+
+  const { parts, sum } = poolBreakdownPiecesFromStoredFields(r);
+  if (parts.length > 0) {
+    lines.push(`From stored pool_* (${sum}d):`);
+    lines.push(parts.map((p) => `  • ${p}`).join("\n"));
+  }
+  const base = Number(r.pool_action_rating) || 0;
+  const rt = String(r.roll_type || "").toUpperCase();
+  const compareTotal =
+    Number.isFinite(storedTier) && storedTier > 0 ? storedTier : diceRolled;
+  if (
+    compareTotal > 0 &&
+    parts.length > 0 &&
+    sum !== compareTotal &&
+    (rt === "ACTION" || base > 0)
+  )
+    lines.push(
+      `(Breakdown sums to ${sum}d vs tier/total ${compareTotal}d — edited or legacy.)`,
+    );
+
+  if (r.push_for_effect)
+    lines.push("Push for effect: yes (effect / position trade — not an extra risk die)");
+
+  const dc = String(r.devil_bargain_consequence || "").trim();
+  if (r.uses_devil_bargain && dc)
+    lines.push(`Devil's bargain note: ${dc}`);
+
+  const detailed = humanizeModifierSourcesRows(
+    Array.isArray(r.modifier_sources) ? r.modifier_sources : [],
+  );
+  if (detailed.length) {
+    lines.push("modifier_sources:");
+    detailed.forEach((t) => lines.push(`  • ${t}`));
+  }
+
+  return lines.filter(Boolean).join("\n").trim();
+}
+
+function isRecoveryLinkedRoll(r) {
+  const rt = String(r.roll_type || "").toUpperCase();
+  if (String(r.recovery_context || "").trim()) return true;
+  if (rollHasTruthyFk(r.recovery_target)) return true;
+  const mods = Array.isArray(r.modifier_sources) ? r.modifier_sources : [];
+  if (
+    mods.some((s) => {
+      const k = String(s?.kind || "").toLowerCase();
+      return (
+        k.startsWith("recovery") ||
+        k === "healing" ||
+        k === "recovery_treatment" ||
+        k === "recovery_bolster" ||
+        k === "recovery_resolution"
+      );
+    })
+  ) {
+    return true;
+  }
+  if (rt === "OTHER") {
+    const g = String(r.goal_label || "");
+    const d = String(r.description || "");
+    if (/healing clock recover/i.test(g)) return true;
+    if (
+      /self-recover|mid-action self-recover|recovery segments|healing clock/i.test(
+        d,
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * @param {object} options
+ * @param {boolean} options.showAllRecentRolls — all types except Fortune
+ * @param {boolean} options.showResistanceStressRolls — resistance / clear stress when not “all”
+ */
+function recentRollPassesGmFilter(r, options) {
+  const showAllRecentRolls = !!options.showAllRecentRolls;
+  const showResistanceStressRolls = !!options.showResistanceStressRolls;
+  const rt = String(r.roll_type || "").toUpperCase();
+  if (rt === "FORTUNE") return false;
+  if (showAllRecentRolls) return true;
+
+  const actionName = String(r.action_name || "").toUpperCase();
+  const isDefaultActionRow = rt === "ACTION" && actionName !== "FORTUNE";
+
+  if (showResistanceStressRolls && (rt === "RESISTANCE" || rt === "CLEAR_STRESS")) {
+    return true;
+  }
+  if (isDefaultActionRow) return true;
+  if (isRecoveryLinkedRoll(r)) return true;
+  if (rollHasTruthyFk(r.group_action)) return true;
+  return false;
+}
+
+function buildRecentRollDetailTitle(r) {
+  const parts = [];
+  if (rollHasTruthyFk(r.group_action)) {
+    parts.push(`Group action id ${r.group_action}`);
+  }
+  const rb = recoveryBadgeFromRoll(r);
+  if (rb?.title) parts.push(rb.title);
+  const ai = assistInfoFromRoll(r);
+  if (ai?.title) parts.push(ai.title);
+  const gl = String(r.goal_label || "").trim();
+  if (gl && !parts.some((p) => p.includes(gl))) parts.push(gl);
+  if (!parts.length) return undefined;
+  return parts.join(" · ");
+}
+
+function recoveryBadgeFromRoll(r) {
+  const rt = String(r.roll_type || "").toUpperCase();
+  const ctx = String(r.recovery_context || "").trim().toLowerCase();
+  const tgt = String(r.recovery_target_character_name || "").trim();
+  if (rollHasTruthyFk(r.recovery_target) || ctx === "ally") {
+    return {
+      label: "Heal",
+      title: tgt ? `Recovery treatment for ${tgt}` : "Ally recovery treatment",
+    };
+  }
+  if (
+    ctx === "self_downtime" ||
+    ctx === "self_mid_action" ||
+    (rt === "OTHER" && /healing clock recover/i.test(String(r.goal_label || "")))
+  ) {
+    return {
+      label: "Recover",
+      title: recoveryContextTooltip(ctx) || "Healing clock self-recover",
+    };
+  }
+  const mods = Array.isArray(r.modifier_sources) ? r.modifier_sources : [];
+  const healMod = mods.find((s) => {
+    const k = String(s?.kind || "").toLowerCase();
+    return k === "healing" || k.startsWith("recovery");
+  });
+  if (healMod) {
+    return {
+      label: "Heal",
+      title: String(healMod.name || healMod.notes || "Recovery / treatment"),
+    };
+  }
+  if (ctx) {
+    return { label: "Recover", title: recoveryContextTooltip(ctx) };
+  }
+  return null;
+}
+
 /** Progress clocks scoped to campaign session (aligned with CampaignManagement ClockManager). */
 const SESSION_PC_CLOCK_SEGMENTS = [4, 6, 8, 12];
 const SESSION_PC_CLOCK_TYPES = [
@@ -447,6 +738,8 @@ export default function SessionGMManagementPanels({
   /** Local crew field drafts; reset when `crews` refetch from parent. */
   const [crewDraftById, setCrewDraftById] = useState({});
   const [showAllRecentRolls, setShowAllRecentRolls] = useState(false);
+  const [showResistanceStressRecentRolls, setShowResistanceStressRecentRolls] =
+    useState(false);
   const [manualRollCardOpen, setManualRollCardOpen] = useState(true);
   const [sessionXpCardOpen, setSessionXpCardOpen] = useState(true);
   const [recentRollSavingId, setRecentRollSavingId] = useState(null);
@@ -881,16 +1174,13 @@ export default function SessionGMManagementPanels({
       (sessionRolls || [])
         .filter((r) => {
           if (String(r.character) !== String(characterId)) return false;
-          // Fortune rolls are GM-authored and shown in the dedicated Fortune history panel.
-          if (String((r.roll_type || "").toUpperCase()) === "FORTUNE") return false;
-          if (showAllRecentRolls) return true;
-          return (
-            String((r.roll_type || "").toUpperCase()) === "ACTION" &&
-            String((r.action_name || "").toUpperCase()) !== "FORTUNE"
-          );
+          return recentRollPassesGmFilter(r, {
+            showAllRecentRolls,
+            showResistanceStressRolls: showResistanceStressRecentRolls,
+          });
         })
         .slice(0, 5),
-    [sessionRolls, showAllRecentRolls],
+    [sessionRolls, showAllRecentRolls, showResistanceStressRecentRolls],
   );
 
   const editRecentRoll = useCallback(
@@ -3959,23 +4249,57 @@ export default function SessionGMManagementPanels({
                       }}
                     >
                       <span>Recent rolls</span>
-                      <label
+                      <span
                         style={{
                           display: "inline-flex",
+                          flexWrap: "wrap",
                           alignItems: "center",
-                          gap: 4,
+                          justifyContent: "flex-end",
+                          gap: 8,
                           fontSize: 10,
                           color: "#9ca3af",
                           textTransform: "none",
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          checked={showAllRecentRolls}
-                          onChange={(e) => setShowAllRecentRolls(e.target.checked)}
-                        />
-                        All roll types
-                      </label>
+                        <label
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            cursor: "pointer",
+                          }}
+                          title="Include resistance rolls and clear-stress (vice) records."
+                        >
+                          <input
+                            type="checkbox"
+                            checked={showResistanceStressRecentRolls}
+                            onChange={(e) =>
+                              setShowResistanceStressRecentRolls(e.target.checked)
+                            }
+                          />
+                          Resistance / stress
+                        </label>
+                        <label
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            cursor: "pointer",
+                          }}
+                          title="Show all roll kinds for this PC except Fortune (Fortune stays in Fortune history)."
+                        >
+                          <input
+                            type="checkbox"
+                            checked={showAllRecentRolls}
+                            onChange={(e) => {
+                              const v = e.target.checked;
+                              setShowAllRecentRolls(v);
+                              if (v) setShowResistanceStressRecentRolls(true);
+                            }}
+                          />
+                          All roll types
+                        </label>
+                      </span>
                     </div>
                     <div
                       style={{
@@ -3992,9 +4316,31 @@ export default function SessionGMManagementPanels({
                       {getRecentCharacterRolls(id).length === 0 ? (
                         <div>—</div>
                       ) : (
-                        getRecentCharacterRolls(id).map((r) => (
+                        getRecentCharacterRolls(id).map((r) => {
+                          const rtUp = String(r.roll_type || "").toUpperCase();
+                          const recBadge = recoveryBadgeFromRoll(r);
+                          const asst = assistInfoFromRoll(r);
+                          const rollHint = buildRecentRollDetailTitle(r);
+                          const diceSrcSummary = recentRollDiceSourcesSummary(r);
+                          const diceSrcTooltip =
+                            recentRollDiceSourcesTooltip(r) ||
+                            diceSrcSummary ||
+                            undefined;
+                          const compactType =
+                            !showAllRecentRolls &&
+                            rtUp &&
+                            rtUp !== "ACTION" &&
+                            rtUp !== "FORTUNE"
+                              ? rtUp === "CLEAR_STRESS"
+                                ? "VICE"
+                                : rtUp === "RESISTANCE"
+                                  ? "RES"
+                                  : rtUp.slice(0, 3)
+                              : null;
+                          return (
                           <div
                             key={r.id}
+                            title={rollHint}
                             style={{
                               marginBottom: 4,
                               display: "flex",
@@ -4006,12 +4352,91 @@ export default function SessionGMManagementPanels({
                             <div style={{ minWidth: 0 }}>
                               {showAllRecentRolls ? (
                                 <span style={{ color: "#6b7280" }}>
-                                  {String(r.roll_type || "").toUpperCase()} ·{" "}
+                                  {rtUp} ·{" "}
+                                </span>
+                              ) : compactType ? (
+                                <span style={{ color: "#6b7280" }} title={rtUp}>
+                                  {compactType} ·{" "}
                                 </span>
                               ) : null}
                               {(r.action_name || "action").toUpperCase()} ·{" "}
                               {(r.results || []).join(", ")} →{" "}
                               {(r.outcome || "").replace(/_/g, " ")}
+                              {diceSrcSummary ? (
+                                <span
+                                  title={diceSrcTooltip}
+                                  style={{
+                                    marginLeft: 6,
+                                    color: "#71717a",
+                                    fontSize: 9,
+                                    verticalAlign: "middle",
+                                  }}
+                                >
+                                  · {diceSrcSummary}
+                                </span>
+                              ) : null}
+                              <span
+                                style={{
+                                  marginLeft: 6,
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 3,
+                                  flexWrap: "wrap",
+                                  verticalAlign: "middle",
+                                }}
+                              >
+                                {rollHasTruthyFk(r.group_action) ? (
+                                  <span
+                                    title={`Group action id ${r.group_action}`}
+                                    style={{
+                                      fontSize: 8,
+                                      fontWeight: 700,
+                                      letterSpacing: "0.04em",
+                                      padding: "1px 5px",
+                                      borderRadius: 4,
+                                      border: "1px solid #1d4ed8",
+                                      background: "rgba(29, 78, 216, 0.2)",
+                                      color: "#93c5fd",
+                                    }}
+                                  >
+                                    GA
+                                  </span>
+                                ) : null}
+                                {recBadge ? (
+                                  <span
+                                    title={recBadge.title}
+                                    style={{
+                                      fontSize: 8,
+                                      fontWeight: 700,
+                                      letterSpacing: "0.04em",
+                                      padding: "1px 5px",
+                                      borderRadius: 4,
+                                      border: "1px solid #047857",
+                                      background: "rgba(4, 120, 87, 0.2)",
+                                      color: "#6ee7b7",
+                                    }}
+                                  >
+                                    {recBadge.label}
+                                  </span>
+                                ) : null}
+                                {asst ? (
+                                  <span
+                                    title={asst.title}
+                                    style={{
+                                      fontSize: 8,
+                                      fontWeight: 700,
+                                      letterSpacing: "0.04em",
+                                      padding: "1px 5px",
+                                      borderRadius: 4,
+                                      border: "1px solid #b45309",
+                                      background: "rgba(180, 83, 9, 0.2)",
+                                      color: "#fcd34d",
+                                    }}
+                                  >
+                                    {asst.label}
+                                  </span>
+                                ) : null}
+                              </span>
                               {(Array.isArray(r.xp_award_details) &&
                               r.xp_award_details.length > 0
                                 ? r.xp_award_details
@@ -4112,7 +4537,8 @@ export default function SessionGMManagementPanels({
                               </button>
                             </div>
                           </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </div>

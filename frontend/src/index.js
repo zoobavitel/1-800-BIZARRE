@@ -218,6 +218,7 @@ function routeStateFromHash(hash) {
     currentPage: "home",
     characterPageId: null,
     campaignPageId: null,
+    campaignSessionId: null,
     npcPageId: null,
     npcCampaignId: null,
     abilityFilter: null,
@@ -260,11 +261,26 @@ function routeStateFromHash(hash) {
     };
   }
   if (hash === "campaigns" || hash.startsWith("campaigns/")) {
-    const idPart = hash.replace(/^campaigns\/?/, "");
+    const rest = hash.replace(/^campaigns\/?/, "");
+    if (!rest) {
+      return { ...base, currentPage: "campaigns" };
+    }
+    const sessionSeg = "/session/";
+    const sessionIdx = rest.indexOf(sessionSeg);
+    if (sessionIdx !== -1) {
+      const campaignSeg = rest.slice(0, sessionIdx);
+      const sessionSegRest = rest.slice(sessionIdx + sessionSeg.length);
+      return {
+        ...base,
+        currentPage: "campaigns",
+        campaignPageId: parseHashId(campaignSeg.split("/")[0]),
+        campaignSessionId: parseHashId(sessionSegRest.split("/")[0]),
+      };
+    }
     return {
       ...base,
       currentPage: "campaigns",
-      campaignPageId: parseHashId(idPart),
+      campaignPageId: parseHashId(rest.split("/")[0]),
     };
   }
   if (hash === "abilities" || hash.startsWith("abilities-")) {
@@ -299,6 +315,16 @@ const App = () => {
   const [campaignPageId, setCampaignPageId] = useState(
     initialRoute.campaignPageId,
   );
+  const [campaignSessionId, setCampaignSessionId] = useState(
+    initialRoute.campaignSessionId ?? null,
+  );
+  const campaignRouteRef = useRef({
+    campaignPageId: initialRoute.campaignPageId,
+    campaignSessionId: initialRoute.campaignSessionId ?? null,
+  });
+  useEffect(() => {
+    campaignRouteRef.current = { campaignPageId, campaignSessionId };
+  }, [campaignPageId, campaignSessionId]);
   const [campaignFactionId, setCampaignFactionId] = useState(null);
   const [npcPageId, setNpcPageId] = useState(initialRoute.npcPageId);
   const [npcCampaignId, setNpcCampaignId] = useState(
@@ -321,6 +347,7 @@ const App = () => {
     setCurrentPage(s.currentPage);
     setCharacterPageId(s.characterPageId);
     setCampaignPageId(s.campaignPageId);
+    setCampaignSessionId(s.campaignSessionId ?? null);
     setNpcPageId(s.npcPageId);
     setNpcCampaignId(s.npcCampaignId);
     setAbilityFilter(s.abilityFilter);
@@ -333,6 +360,7 @@ const App = () => {
     currentPage,
     characterPageId,
     campaignPageId,
+    campaignSessionId,
     npcPageId,
     abilityFilter,
     rulesSection,
@@ -361,28 +389,62 @@ const App = () => {
     if (page === "character") {
       setCharacterPageId(payload?.characterId ?? null);
       setCampaignPageId(null);
+      setCampaignSessionId(null);
       setAbilityFilter(null);
       window.location.hash = buildRouteHash(page, payload);
     } else if (page === "campaigns") {
-      setCampaignPageId(payload?.campaignId ?? null);
-      setCampaignFactionId(payload?.factionId ?? null);
+      const cur = campaignRouteRef.current;
+      let nextCampaign = cur.campaignPageId;
+      let nextSession = cur.campaignSessionId;
+
+      if (payload && Object.prototype.hasOwnProperty.call(payload, "campaignId")) {
+        nextCampaign = payload.campaignId ?? null;
+        const sessionExplicit = Object.prototype.hasOwnProperty.call(
+          payload,
+          "sessionId",
+        );
+        const campaignChanged = nextCampaign !== cur.campaignPageId;
+        const leavingDeepSession =
+          cur.campaignSessionId != null &&
+          nextCampaign === cur.campaignPageId &&
+          !sessionExplicit;
+        if (!sessionExplicit && (campaignChanged || leavingDeepSession)) {
+          nextSession = null;
+        }
+      }
+      if (payload && Object.prototype.hasOwnProperty.call(payload, "sessionId")) {
+        nextSession = payload.sessionId ?? null;
+      }
+      if (payload && Object.prototype.hasOwnProperty.call(payload, "factionId")) {
+        setCampaignFactionId(payload.factionId ?? null);
+      }
+
+      setCampaignPageId(nextCampaign);
+      setCampaignSessionId(nextSession);
       setCharacterPageId(null);
       setAbilityFilter(null);
-      window.location.hash = buildRouteHash(page, payload);
+
+      window.location.hash = buildRouteHash("campaigns", {
+        campaignId: nextCampaign,
+        sessionId: nextSession,
+      });
     } else if (page === "abilities") {
       setCharacterPageId(null);
       setCampaignPageId(null);
+      setCampaignSessionId(null);
       const filter = payload?.filter || null;
       setAbilityFilter(filter);
       window.location.hash = buildRouteHash(page, { filter });
     } else if (page === "character-options") {
       setCharacterPageId(null);
       setCampaignPageId(null);
+      setCampaignSessionId(null);
       setAbilityFilter(null);
       window.location.hash = buildRouteHash(page, payload);
     } else if (page === "rules") {
       setCharacterPageId(null);
       setCampaignPageId(null);
+      setCampaignSessionId(null);
       setAbilityFilter(null);
       const section = payload?.section || null;
       setRulesSection(section);
@@ -390,6 +452,7 @@ const App = () => {
     } else if (page === "npcs") {
       setCharacterPageId(null);
       setCampaignPageId(null);
+      setCampaignSessionId(null);
       const npcId = payload?.npcId ?? null;
       const campaignId = payload?.campaignId ?? null;
       setNpcPageId(npcId);
@@ -398,6 +461,7 @@ const App = () => {
     } else {
       setCharacterPageId(null);
       setCampaignPageId(null);
+      setCampaignSessionId(null);
       setNpcPageId(null);
       setNpcCampaignId(null);
       setAbilityFilter(null);
@@ -527,6 +591,7 @@ const App = () => {
           <CampaignManagement
             initialCampaignId={campaignPageId}
             initialFactionId={campaignFactionId}
+            initialSessionId={campaignSessionId}
             onNavigateToCharacter={(id) =>
               handlePageChange("character", { characterId: id })
             }
@@ -535,6 +600,9 @@ const App = () => {
                 npcId: id,
                 campaignId: opts?.campaignId ?? null,
               })
+            }
+            onCampaignRouteSync={(patch) =>
+              handlePageChange("campaigns", patch)
             }
             onCampaignSelect={(id) =>
               handlePageChange("campaigns", { campaignId: id })

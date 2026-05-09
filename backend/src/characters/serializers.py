@@ -7,6 +7,7 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from django.contrib.auth.models import User
 from .models import (
+    AssistHelpPending,
     UserProfile,
     Heritage,
     Vice,
@@ -1744,6 +1745,32 @@ class CharacterSummarySerializer(serializers.ModelSerializer):
     user_id = serializers.IntegerField(source="user.id", read_only=True)
     username = serializers.CharField(source="user.username", read_only=True)
     crew_id = serializers.IntegerField(source="crew.id", read_only=True, default=None)
+    assist_help_pending = serializers.SerializerMethodField()
+
+    def get_assist_help_pending(self, obj):
+        """Active campaign session only; one pending +1d per beneficiary per session."""
+        pmap = self.context.get("assist_help_pending_map")
+        if isinstance(pmap, dict):
+            p = pmap.get(obj.id)
+            if not p:
+                return None
+        else:
+            sid = self.context.get("campaign_active_session_id")
+            if sid is None:
+                return None
+            p = AssistHelpPending.objects.filter(
+                session_id=sid, recipient_id=obj.id
+            ).select_related("helper").first()
+            if not p:
+                return None
+        h = p.helper
+        name = getattr(h, "true_name", None) or getattr(h, "alias", "") or ""
+        if not name:
+            name = f"Character {p.helper_id}"
+        return {
+            "helper_character_id": p.helper_id,
+            "helper_name": name,
+        }
 
     class Meta:
         model = Character
@@ -1760,6 +1787,7 @@ class CharacterSummarySerializer(serializers.ModelSerializer):
             # Portrait (upload or HTTPS URL) for GM session roster / crew lists
             "image",
             "image_url",
+            "assist_help_pending",
         ]
 
 
@@ -1965,9 +1993,7 @@ class CampaignSerializer(serializers.ModelSerializer):
     wanted_stars = serializers.IntegerField(required=False, default=0)
     factions = FactionSerializer(many=True, read_only=True)
     crews = CrewCampaignSerializer(many=True, read_only=True)
-    campaign_characters = CharacterSummarySerializer(
-        source="characters", many=True, read_only=True
-    )
+    campaign_characters = serializers.SerializerMethodField()
     campaign_npcs = NPCSummarySerializer(source="npcs", many=True, read_only=True)
     pending_invitations = serializers.SerializerMethodField()
     is_active = serializers.BooleanField(required=False, default=True)
@@ -2010,6 +2036,28 @@ class CampaignSerializer(serializers.ModelSerializer):
     def get_pending_invitations(self, obj):
         invitations = obj.invitations.filter(status="pending")
         return CampaignInvitationSerializer(invitations, many=True).data
+
+    def get_campaign_characters(self, obj):
+        qs = obj.characters.all().select_related(
+            "heritage", "crew", "user"
+        ).order_by("id")
+        sess_id = getattr(obj, "active_session_id", None)
+        pmap = {}
+        if sess_id:
+            ids = list(qs.values_list("id", flat=True))
+            pendings = AssistHelpPending.objects.filter(
+                session_id=sess_id, recipient_id__in=ids
+            ).select_related("helper")
+            pmap = {p.recipient_id: p for p in pendings}
+        return CharacterSummarySerializer(
+            qs,
+            many=True,
+            context={
+                **self.context,
+                "campaign_active_session_id": sess_id,
+                "assist_help_pending_map": pmap,
+            },
+        ).data
 
     def _npc_row_for_active_session_detail(self, npc, inv, viewer_is_gm_or_staff):
         """Build session NPC clock payload; strip hidden clocks for non-GM viewers."""

@@ -13,6 +13,7 @@ import json
 
 import random
 from ..models import (
+    AssistHelpPending,
     Campaign,
     Character,
     CharacterHamonAbility,
@@ -840,16 +841,73 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     }
                 )
 
+            ahid_requested = None
             if assist_helper_id_raw not in (None, "", False):
                 try:
-                    ahid = int(assist_helper_id_raw)
+                    ahid_requested = int(assist_helper_id_raw)
                 except (TypeError, ValueError):
                     return Response(
                         {"error": "Invalid assist_helper_id"},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
+
+            # Forfeit pending crew-assist (+1d) when the beneficiary commits an ACTION roll without assist.
+            if (
+                roll_type.upper() == "ACTION"
+                and session
+                and ahid_requested is None
+            ):
+                AssistHelpPending.objects.filter(
+                    session_id=session.id, recipient_id=character.id
+                ).delete()
+
+            if ahid_requested is not None:
+                if roll_type.upper() != "ACTION":
+                    return Response(
+                        {
+                            "error": (
+                                "assist_helper_id is only valid when roll_type is ACTION."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if not session:
+                    return Response(
+                        {
+                            "error": (
+                                "assist_helper_id requires session_id for this crew assist scene."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
                 with transaction.atomic():
-                    assist_helper = Character.objects.select_for_update().get(pk=ahid)
+                    pending_row = (
+                        AssistHelpPending.objects.select_for_update()
+                        .filter(
+                            session_id=session.id,
+                            recipient_id=character.id,
+                        )
+                        .select_related("helper")
+                        .first()
+                    )
+                    prepaid = pending_row is not None
+                    if pending_row is not None and pending_row.helper_id != ahid_requested:
+                        ph = getattr(pending_row, "helper", None)
+                        hn = (getattr(ph, "true_name", None) or "").strip()
+                        hn = hn or (getattr(ph, "alias", None) or "").strip()
+                        hn = hn or str(pending_row.helper_id)
+                        return Response(
+                            {
+                                "error": (
+                                    f"Pending crew assist is tied to {hn}. Send "
+                                    f"matching assist_helper_id, or omit it on an ACTION roll "
+                                    "to abandon the prepaid assist die for this pending window."
+                                )
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+                    assist_helper = Character.objects.select_for_update().get(pk=ahid_requested)
                     if character.id == assist_helper.id:
                         return Response(
                             {"error": "Cannot help yourself"},
@@ -871,6 +929,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                             {"error": "Must be in the same crew to Help"},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
+
                     hs = max(
                         0,
                         min(
@@ -879,17 +938,21 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         ),
                     )
                     helper_max_stress = _max_stress_for_character(assist_helper)
-                    if hs >= helper_max_stress:
-                        return Response(
-                            {
-                                "error": (
-                                    "Helper's stress track is full (cannot mark another box)."
-                                )
-                            },
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-                    assist_helper.stress = min(helper_max_stress, hs + 1)
-                    assist_helper.save(update_fields=["stress"])
+                    if not prepaid:
+                        if hs >= helper_max_stress:
+                            return Response(
+                                {
+                                    "error": (
+                                        "Helper's stress track is full (cannot mark another box)."
+                                    )
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                        assist_helper.stress = min(helper_max_stress, hs + 1)
+                        assist_helper.save(update_fields=["stress"])
+                    elif prepaid:
+                        AssistHelpPending.objects.filter(pk=pending_row.pk).delete()
+
                     dice_pool += 1
                     modifier_sources.append(
                         {
@@ -1107,20 +1170,63 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="assist-help")
     def assist_help(self, request, pk=None):
-        """Help: another PC in the same crew spends 1 stress to assist the acting character."""
+        """Crew Assist: beneficiary is URL character; helper spends 1 stress; at most one pending +1d per beneficiary per active session."""
         actor = self.get_object()
         helper_id = request.data.get("helper_character_id")
+        session_raw = request.data.get("session_id")
         if not helper_id:
             return Response(
                 {"error": "helper_character_id is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if session_raw in (None, "", False):
+            return Response(
+                {"error": "session_id is required (campaign active scene)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
-            helper = Character.objects.get(pk=helper_id)
+            sess_id_body = int(session_raw)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "Invalid session_id"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            helper = Character.objects.get(pk=int(helper_id))
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "Invalid helper_character_id"}, status=status.HTTP_400_BAD_REQUEST
+            )
         except Character.DoesNotExist:
             return Response(
                 {"error": "Helper not found"}, status=status.HTTP_404_NOT_FOUND
             )
+
+        cam = getattr(actor, "campaign", None)
+        if not cam:
+            return Response(
+                {"error": "Beneficiary character has no campaign."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        active_sid = getattr(cam, "active_session_id", None)
+        if not active_sid:
+            return Response(
+                {"error": "Campaign has no active session for crew assists."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if sess_id_body != active_sid:
+            return Response(
+                {"error": "session_id must be your campaign's active session."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            session_obj = Session.objects.get(pk=sess_id_body, campaign_id=cam.id)
+        except Session.DoesNotExist:
+            return Response(
+                {"error": "Session not found or not part of this campaign."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
         if actor.id == helper.id:
             return Response(
                 {"error": "Cannot help yourself"}, status=status.HTTP_400_BAD_REQUEST
@@ -1135,27 +1241,62 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 {"error": "Must be in the same crew to Help"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        hs = max(
-            0,
-            min(
-                _max_stress_for_character(helper),
-                int(getattr(helper, "stress", 0) or 0),
-            ),
-        )
-        helper_max_stress = _max_stress_for_character(helper)
-        if hs >= helper_max_stress:
-            return Response(
-                {
-                    "error": (
-                        "Helper's stress track is full (cannot mark another box)."
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST,
+
+        with transaction.atomic():
+            if AssistHelpPending.objects.select_for_update().filter(
+                session_id=session_obj.id, recipient_id=actor.id
+            ).exists():
+                return Response(
+                    {
+                        "error": (
+                            "This PC already has a pending crew assist for this session; "
+                            "resolve it by rolling before another assist grants +1d."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            hs = max(
+                0,
+                min(
+                    _max_stress_for_character(helper),
+                    int(getattr(helper, "stress", 0) or 0),
+                ),
             )
-        helper.stress = min(helper_max_stress, hs + 1)
-        helper.save(update_fields=["stress"])
+            helper_max_stress = _max_stress_for_character(helper)
+            if hs >= helper_max_stress:
+                return Response(
+                    {
+                        "error": (
+                            "Helper's stress track is full (cannot mark another box)."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            lock_helper = Character.objects.select_for_update().get(pk=helper.id)
+            lock_helper.stress = min(
+                helper_max_stress,
+                max(
+                    0,
+                    min(
+                        helper_max_stress,
+                        int(getattr(lock_helper, "stress", 0) or 0),
+                    ),
+                )
+                + 1,
+            )
+            lock_helper.save(update_fields=["stress"])
+            AssistHelpPending.objects.create(
+                session=session_obj,
+                recipient_id=actor.id,
+                helper_id=helper.id,
+            )
+
+        helper.refresh_from_db()
         return Response(
             {
+                "recipient_id": actor.id,
+                "session_id": session_obj.id,
                 "helper_id": helper.id,
                 "helper_name": helper.true_name,
                 "helper_stress": helper.stress,

@@ -82,6 +82,9 @@ const SHEET_STANDARD_ACTION_COLUMNS = [
 ];
 const HEALING_ACTION_CHOICES = [...SHEET_STANDARD_ACTION_COLUMNS];
 
+/** Extra heal-other/teammate treatment pool choices for Stand playbook (Stand Coin stats). */
+const STAND_HEAL_ACTION_EXTRA_CHOICES = ["PRECISION", "SPEED"];
+
 const CREW_HISTORY_FIELD_KEYS = new Set([
   "name",
   "rep",
@@ -2225,6 +2228,8 @@ const CharacterSheetWrapper = ({
   const [phantomPainThroughCover, setPhantomPainThroughCover] = useState(false);
   /** Ripple Breathing: waive push stress (2) once per active session episode. */
   const [rippleBreathingFreePush, setRippleBreathingFreePush] = useState(false);
+  /** Pending crew-assist (+1d): teammate already spent stress; include on Roll unless unchecked. */
+  const [includePendingAssistDie, setIncludePendingAssistDie] = useState(true);
   const [resistanceAbilityBoost, setResistanceAbilityBoost] = useState({});
   const [resistancePushDice, setResistancePushDice] = useState(false);
   const [resistanceMitigationChoice, setResistanceMitigationChoice] = useState("");
@@ -3274,8 +3279,14 @@ const CharacterSheetWrapper = ({
       .trim()
       .toUpperCase();
     if (HEALING_ACTION_CHOICES.includes(selected)) return selected;
+    if (
+      showStandCoinActionColumn &&
+      STAND_HEAL_ACTION_EXTRA_CHOICES.includes(selected)
+    ) {
+      return selected;
+    }
     return "TINKER";
-  }, [healOtherRecoveryIntent.actionName]);
+  }, [healOtherRecoveryIntent.actionName, showStandCoinActionColumn]);
 
   const rollActionName = useMemo(() => {
     if (healOtherRecoveryIntent.enabled) return healingIntentActionName;
@@ -3313,6 +3324,23 @@ const CharacterSheetWrapper = ({
     () => Object.keys(ACTION_ATTR || {}).sort(),
     [],
   );
+
+  /** Heal-other row: playbook actions plus Stand Precision/Speed when applicable. */
+  const healOtherHealActionChoices = useMemo(() => {
+    if (!showStandCoinActionColumn) return healRollActionChoices;
+    return [...healRollActionChoices, ...STAND_HEAL_ACTION_EXTRA_CHOICES];
+  }, [healRollActionChoices, showStandCoinActionColumn]);
+
+  useEffect(() => {
+    if (showStandCoinActionColumn) return;
+    setHealOtherDraft((p) =>
+      STAND_HEAL_ACTION_EXTRA_CHOICES.includes(
+        String(p.actionName || "").trim().toUpperCase(),
+      )
+        ? { ...p, actionName: "TINKER" }
+        : p,
+    );
+  }, [showStandCoinActionColumn]);
 
   useEffect(() => {
     if (!characterId) {
@@ -4016,6 +4044,14 @@ const CharacterSheetWrapper = ({
     rollModal.push_dice,
   ]);
 
+  const assistHelpPending = useMemo(() => {
+    const roster = charCampaign?.campaign_characters || [];
+    const me = roster.find((c) => String(c.id) === String(characterId));
+    return (
+      me?.assist_help_pending ?? me?.assistHelpPending ?? null
+    );
+  }, [charCampaign?.campaign_characters, characterId]);
+
   const applyRollPushMode = useCallback(
     (mode) => {
       setDevilBargainConfirmed(false);
@@ -4122,6 +4158,18 @@ const CharacterSheetWrapper = ({
     rippleBreathingFreePush,
     rippleBreathingFreePushClaimedThisSession,
   ]);
+
+  useEffect(() => {
+    if (rollPending && assistHelpPending)
+      setIncludePendingAssistDie(true);
+  }, [rollPending, assistHelpPending]);
+
+  const actionDiceTotalAtCommit = useMemo(() => {
+    if (!rollPoolPreview) return null;
+    const inc =
+      assistHelpPending && includePendingAssistDie ? 1 : 0;
+    return rollPoolPreview.total + inc;
+  }, [rollPoolPreview, assistHelpPending, includePendingAssistDie]);
 
   const pushStressCost = rollPoolPreview?.pushStress || 0;
   const pushWouldCauseTrauma =
@@ -4460,6 +4508,16 @@ const CharacterSheetWrapper = ({
               ),
               recovery_roll_action: selectedRollAction.toLowerCase(),
               recovery_is_self_treatment: healIntentIsSelf,
+            }
+          : {}),
+        ...(assistHelpPending &&
+        includePendingAssistDie &&
+        !(rollPending && rollPending.healAttempt)
+          ? {
+              assist_helper_id: Number(
+                assistHelpPending.helper_character_id ??
+                  assistHelpPending.helperCharacterId,
+              ),
             }
           : {}),
       };
@@ -10471,6 +10529,68 @@ const CharacterSheetWrapper = ({
                           unless you reopen with recover-in-play treatment selected.
                         </div>
                       )}
+                      {rollPending?.standRoll &&
+                        showStandCoinActionColumn &&
+                        String(rollPending?.standStat || "").trim() ? (
+                        <div style={{ marginBottom: "12px" }}>
+                          <label
+                            style={{
+                              fontSize: "11px",
+                              color: "#9ca3af",
+                              display: "block",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            Stand coin stat (action roll pool)
+                          </label>
+                          <select
+                            aria-label="Stand coin stat for this action roll"
+                            value={String(rollPending.standStat || "").toLowerCase()}
+                            onChange={(e) => {
+                              const ss = String(e.target.value || "")
+                                .trim()
+                                .toLowerCase();
+                              if (!STAND_ROLL_KEYS_ACTIVE.includes(ss)) return;
+                              setRollPending((p) => {
+                                if (!p?.standRoll) return p;
+                                const n = computeStandRollPool(ss, standStats);
+                                return {
+                                  ...p,
+                                  standStat: ss,
+                                  actionName: `stand_${ss}`,
+                                  diceCount: n,
+                                };
+                              });
+                            }}
+                            style={{
+                              ...S.sel,
+                              width: "100%",
+                              maxWidth: 280,
+                              fontSize: "12px",
+                            }}
+                          >
+                            {STAND_COLUMN_ROLL_ORDER.map((st) => (
+                              <option key={st} value={st}>
+                                {String(st).toUpperCase()} (Stand Coin)
+                              </option>
+                            ))}
+                          </select>
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#6b7280",
+                              marginTop: "6px",
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            Same pools as the POWER / PRECISION / SPEED rows under
+                            Action ratings. Submission uses{" "}
+                            <code style={{ color: "#9ca3af" }}>pool_source: stand_coin</code>{" "}
+                            and{" "}
+                            <code style={{ color: "#9ca3af" }}>stand_stat</code> on roll.
+                          </div>
+                        </div>
+                      ) : null}
                       <div style={{ marginBottom: "12px" }}>
                         <label
                           style={{
@@ -10878,7 +10998,55 @@ const CharacterSheetWrapper = ({
                               through cover / barriers this roll).
                             </div>
                           ) : null}
-                          {rollPoolPreview.total === 0 ? (
+                          {assistHelpPending && !rollPending?.healAttempt ? (
+                            <div
+                              style={{
+                                marginTop: "6px",
+                                marginBottom: "8px",
+                                paddingTop: "8px",
+                                borderTop: "1px solid #1e3a4c",
+                              }}
+                            >
+                              <DicePoolStrip
+                                label={`Incoming crew assist from ${String(assistHelpPending.helper_name ?? assistHelpPending.helperName ?? "teammate").trim()} (not counted in subtotal)`}
+                                count={1}
+                              />
+                              <label
+                                style={{
+                                  display: "flex",
+                                  alignItems: "flex-start",
+                                  gap: "8px",
+                                  fontSize: "11px",
+                                  color: "#e5e7eb",
+                                  marginTop: "6px",
+                                  cursor: "pointer",
+                                  lineHeight: 1.35,
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={includePendingAssistDie}
+                                  onChange={(e) =>
+                                    setIncludePendingAssistDie(e.target.checked)
+                                  }
+                                  style={{ marginTop: "2px" }}
+                                />
+                                <span>
+                                  Include this +1 crew assist die when you Roll
+                                  (teammate already marked stress via Assist).
+                                  Uncheck if you abandon it for this action — your
+                                  next ACTION roll will still clear it server-side if
+                                  you roll without claiming it.
+                                </span>
+                              </label>
+                            </div>
+                          ) : null}
+                          {rollPoolPreview.total === 0 &&
+                          !(
+                            assistHelpPending &&
+                            includePendingAssistDie &&
+                            !rollPending?.healAttempt
+                          ) ? (
                             <div
                               style={{
                                 fontSize: "11px",
@@ -10890,6 +11058,23 @@ const CharacterSheetWrapper = ({
                               0 dice in pool — you roll{" "}
                               <strong>2d6</strong> and use the{" "}
                               <strong>lower</strong> result (same as offline).
+                            </div>
+                          ) : null}
+                          {rollPoolPreview.total === 0 &&
+                          assistHelpPending &&
+                          includePendingAssistDie &&
+                          !rollPending?.healAttempt ? (
+                            <div
+                              style={{
+                                fontSize: "11px",
+                                color: "#5eead4",
+                                marginTop: "6px",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              0 dice from your sheet modifiers — crew assist adds{" "}
+                              <strong>+1d</strong> only when this roll resolves (shown
+                              in &quot;dice rolled&quot; below).
                             </div>
                           ) : null}
                           <div
@@ -10906,8 +11091,20 @@ const CharacterSheetWrapper = ({
                             }}
                           >
                             <span>
-                              Total dice: <strong>{rollPoolPreview.total}</strong>
+                              Pool subtotal (your modifiers):{" "}
+                              <strong>{rollPoolPreview.total}</strong>
                             </span>
+                            {!rollPending?.healAttempt &&
+                            assistHelpPending &&
+                            typeof actionDiceTotalAtCommit === "number" ? (
+                              <span>
+                                Dice rolled at commitment:{" "}
+                                <strong>{actionDiceTotalAtCommit}</strong>
+                                {!includePendingAssistDie
+                                  ? " (assist off)"
+                                  : " (includes crew assist)"}
+                              </span>
+                            ) : null}
                             <span>
                               Total stress to mark:{" "}
                               <strong>{rollPoolPreview.pushStress}</strong>
@@ -11260,6 +11457,7 @@ const CharacterSheetWrapper = ({
                             setHeritageRollBoost({});
                             setPhantomPainThroughCover(false);
                             setRippleBreathingFreePush(false);
+                            setIncludePendingAssistDie(true);
                             setStressOverflowConfirmed(false);
                             setRollGoalDraft("");
                             setDevilBargainConfirmed(false);
@@ -12239,9 +12437,35 @@ const CharacterSheetWrapper = ({
                             }}
                           >
                             <strong style={{ color: "#d1d5db" }}>Assist:</strong>{" "}
-                            when you roll an action (dice pool), pick a teammate
-                            there — they spend 1 stress and add +1d to your pool.
+                            choose which teammate spends 1 stress for your +1d on
+                            your next ACTION roll this session — at most one pending
+                            assist at a time; it applies when you press Roll below.
                           </div>
+                          {assistHelpPending ? (
+                            <div
+                              style={{
+                                marginBottom: "10px",
+                                padding: "8px 10px",
+                                borderRadius: "6px",
+                                border: "1px solid #0f766e",
+                                background: "#0f172a",
+                                fontSize: "11px",
+                                color: "#99f6e4",
+                              }}
+                            >
+                              Pending crew assist: +1d from{" "}
+                              <strong style={{ color: "#e5e7eb" }}>
+                                {String(
+                                  assistHelpPending.helper_name ||
+                                    assistHelpPending.helperName ||
+                                    "",
+                                ).trim() || "teammate"}
+                              </strong>{" "}
+                              (they already marked stress). Resolve it when you Roll
+                              an action — or abandon it by rolling once without including
+                              the assist die.
+                            </div>
+                          ) : null}
                           <div
                             style={{
                               display: "flex",
@@ -12256,7 +12480,9 @@ const CharacterSheetWrapper = ({
                               value={assistTargetId}
                               onChange={(e) => setAssistTargetId(e.target.value)}
                             >
-                              <option value="">Choose player for +1d</option>
+                              <option value="">
+                                Choose teammate — they spend 1 stress
+                              </option>
                               {helpCandidates.map((c) => (
                                 <option key={c.id} value={String(c.id)}>
                                   {c.true_name || c.name || `PC ${c.id}`}
@@ -12265,23 +12491,33 @@ const CharacterSheetWrapper = ({
                             </select>
                             <button
                               type="button"
-                              disabled={!assistTargetId || assistGrantBusy}
+                              disabled={
+                                !!assistHelpPending ||
+                                !assistTargetId ||
+                                assistGrantBusy
+                              }
                               onClick={async () => {
                                 if (!assistTargetId || !characterId) return;
+                                if (!activeSessionId) return;
                                 setAssistGrantErr(null);
                                 setAssistGrantMsg(null);
                                 setAssistGrantBusy(true);
                                 try {
                                   await characterAPI.assistHelp(
+                                    Number(characterId),
                                     parseInt(assistTargetId, 10),
-                                    characterId,
+                                    Number(activeSessionId),
                                   );
-                                  applyStressCost(1);
-                                  const target = helpCandidates.find(
-                                    (c) => String(c.id) === String(assistTargetId),
+                                  const helperPc = helpCandidates.find(
+                                    (c) =>
+                                      String(c.id) === String(assistTargetId),
                                   );
+                                  const hn =
+                                    helperPc?.true_name ||
+                                    helperPc?.name ||
+                                    "Teammate";
                                   setAssistGrantMsg(
-                                    `+1d assist granted to ${target?.true_name || target?.name || "teammate"} (you marked 1 stress).`,
+                                    `${hn} spends 1 stress — you gain +1d when you roll an action while this session is active (shown in the dice preview).`,
                                   );
                                   setAssistTargetId("");
                                   onCampaignRefresh?.();
@@ -12795,7 +13031,7 @@ const CharacterSheetWrapper = ({
                               }))
                             }
                           >
-                            {healRollActionChoices.map((action) => (
+                            {healOtherHealActionChoices.map((action) => (
                               <option key={action} value={action}>
                                 {action}
                               </option>
@@ -12911,19 +13147,36 @@ const CharacterSheetWrapper = ({
                             }}
                             disabled={!healOtherDraft.targetId}
                             onClick={() => {
-                              const action = String(
+                              const actionUpper = String(
                                 healOtherDraft.actionName || "TINKER",
                               )
                                 .trim()
                                 .toUpperCase();
+                              const standStatHeal =
+                                showStandCoinActionColumn &&
+                                STAND_HEAL_ACTION_EXTRA_CHOICES.includes(
+                                  actionUpper,
+                                )
+                                  ? actionUpper.toLowerCase()
+                                  : "";
+                              const rating =
+                                standStatHeal !== ""
+                                  ? computeStandRollPool(
+                                      standStatHeal,
+                                      standStats,
+                                    )
+                                  : Math.max(
+                                      0,
+                                      Number(actionRatings[actionUpper] || 0),
+                                    );
+                              const rollSlug =
+                                standStatHeal !== ""
+                                  ? `stand_${standStatHeal}`
+                                  : actionUpper;
                               const target = healOtherTargets.find(
                                 (c) =>
                                   String(c.id) ===
                                   String(healOtherDraft.targetId),
-                              );
-                              const rating = Math.max(
-                                0,
-                                Number(actionRatings[action] || 0),
                               );
                               const healRecoverInPlay =
                                 String(
@@ -12947,13 +13200,19 @@ const CharacterSheetWrapper = ({
                                   heritageRollBonusOptions,
                                 );
                               rollDice(
-                                action,
+                                rollSlug,
                                 rating,
                                 false,
                                 false,
                                 undefined,
                                 {
                                   rollBoostPreset,
+                                  ...(standStatHeal !== ""
+                                    ? {
+                                        standRoll: true,
+                                        standStat: standStatHeal,
+                                      }
+                                    : {}),
                                   healAttempt: {
                                     kind: "heal_other",
                                     treatmentCadence: healRecoverInPlay
@@ -12972,7 +13231,7 @@ const CharacterSheetWrapper = ({
                                       bolsterLabels.length > 0,
                                     bolsterNote: "",
                                     careNote: "",
-                                    actionName: action,
+                                    actionName: actionUpper,
                                   },
                                 },
                               );

@@ -1901,6 +1901,36 @@ class Roll(models.Model):
         return f"{self.character.true_name} - {self.action_name} ({self.outcome})"
 
 
+class AssistHelpPending(models.Model):
+    """Helper already spent stress; beneficiary gets +1d on next matching assist claim in-roll."""
+
+    session = models.ForeignKey(
+        Session, on_delete=models.CASCADE, related_name="assist_help_pending"
+    )
+    recipient = models.ForeignKey(
+        Character,
+        on_delete=models.CASCADE,
+        related_name="assist_help_pending_received",
+    )
+    helper = models.ForeignKey(
+        Character,
+        on_delete=models.CASCADE,
+        related_name="assist_help_pending_given",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session", "recipient"],
+                name="uniq_assist_help_pending_session_recipient",
+            )
+        ]
+
+    def __str__(self):
+        return f"sess={self.session_id} recv={self.recipient_id} help={self.helper_id}"
+
+
 class GroupAction(models.Model):
     """BitD-style group action: multiple rolls, leader pays 1 stress per failed participant roll."""
 
