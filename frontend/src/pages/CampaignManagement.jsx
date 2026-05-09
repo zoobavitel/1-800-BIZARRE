@@ -2668,6 +2668,56 @@ function campaignActiveSessionId(campaign) {
   return Number.isFinite(n) ? n : null;
 }
 
+/** `YYYY-MM-DD` vs local calendar start-of-today. */
+function calendarDateStartsBeforeToday(isoDate) {
+  if (!isoDate) return false;
+  const p = String(isoDate).trim().split("-");
+  if (p.length < 3) return false;
+  const y = Number(p[0]);
+  const m = Number(p[1]);
+  const d = Number(p[2]);
+  if (![y, m, d].every((n) => Number.isFinite(n))) return false;
+  const anchor = new Date(y, m - 1, d);
+  const startToday = new Date();
+  startToday.setHours(0, 0, 0, 0);
+  return anchor < startToday;
+}
+
+/** Second clause under session title (`date · [this]`). */
+function sessionListStatusCaption(session, campaignActiveSessionId) {
+  const sid = Number(session?.id);
+  const raw = String(session?.status ?? "PLANNED").trim().toUpperCase();
+
+  const aidParsed = Number(campaignActiveSessionId);
+  const aid =
+    campaignActiveSessionId != null && Number.isFinite(aidParsed)
+      ? aidParsed
+      : null;
+
+  const isCampaignLiveSlot =
+    aid !== null && Number.isFinite(sid) && sid === aid;
+
+  if (raw === "COMPLETED") return "Ended";
+
+  if (isCampaignLiveSlot) return "Active";
+
+  const anotherLive = aid !== null && Number.isFinite(sid) && sid !== aid;
+
+  if (anotherLive) {
+    if (raw === "ACTIVE") return "Not active";
+    if (raw === "PLANNED") {
+      if (calendarDateStartsBeforeToday(session?.proposed_date))
+        return "Past · not active";
+      // Still PLANNED but another episode is Live — distinguish real upcoming vs stale row.
+      return session?.proposed_date ? "Planned" : "Not active";
+    }
+  }
+
+  if (raw === "PLANNED") return "Planned";
+  if (raw === "ACTIVE") return "Active";
+  return raw;
+}
+
 // ---------------------------------------------------------------------------
 // Sessions list + create + records modal (embedded in CampaignDetail)
 // ---------------------------------------------------------------------------
@@ -2842,7 +2892,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                       {s.proposed_date
                         ? ` · Planned ${new Date(`${s.proposed_date}T12:00:00`).toLocaleDateString()}`
                         : ""}{" "}
-                      · {s.status || "PLANNED"}
+                      · {sessionListStatusCaption(s, activeId)}
                     </div>
                   </div>
                   <div

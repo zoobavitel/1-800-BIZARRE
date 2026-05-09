@@ -4,6 +4,18 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-05-09",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "SRD_DEV pools, durability vs stress, hero coin UI"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-05-08",
     "version": null,
     "sections": [
@@ -526,8 +538,7 @@ export const PATCH_NOTES = [
           "Merge pull request #24 from zoobavitel/copilot/fix-npc-faction-dropdown",
           "Merge branch 'master' into copilot/fix-npc-faction-dropdown",
           "Merge pull request #25 from zoobavitel/copilot/fix-issue-with-em-dash",
-          "Address review: simplify NPC.__str__ null check, add Unicode comments in test",
-          "Fix EM dash 500: null-safe NPC.__str__, blank=True for relationships, regression tests"
+          "Address review: simplify NPC.__str__ null check, add Unicode comments in test"
         ]
       },
       {

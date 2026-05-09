@@ -696,7 +696,11 @@ function hasMeaningfulDraftChanges(payload) {
   return false;
 }
 
-/** Healing-clock self-recover rolls: must match ACTION_ATTR; invalid → Tinker. */
+/**
+ * Healing-clock self-recover rolls: playbook action dots only (HUNT…SWAY).
+ * Stand Precision/Speed/etc. belong only when table fiction or an ability/item
+ * says so—we do not expose generic Stand Coin stats as recover actions here.
+ */
 function pickHealClockAction(candidate) {
   const keys = Object.keys(ACTION_ATTR || {});
   const u = String(candidate || "TINKER").trim().toUpperCase();
@@ -7865,7 +7869,7 @@ const CharacterSheetWrapper = ({
                             color: "#6b7280",
                             textAlign: "center",
                           }}
-                          title="Dice pool = your rating for this action. Default Tinker; saved per character in this browser."
+                          title="Dice pool = your dots in the playbook action you pick here (study, survey, tinkering to bind injuries, etc.). Stand Coin stats are not generic healing pools—Precision/Speed (or fiction you agree on with the GM) should apply only through a specific ability, item, or declared treatment method, not via this dropdown. Default Tinker; saved per character in this browser."
                         >
                           Recover roll action (default Tinker)
                         </span>
