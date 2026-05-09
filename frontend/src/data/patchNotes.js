@@ -4,6 +4,18 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-05-08",
+    "version": null,
+    "sections": [
+      {
+        "title": "Maintenance",
+        "items": [
+          "sync sheet notes and SRD dev draft"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-05-07",
     "version": null,
     "sections": [
@@ -525,8 +537,7 @@ export const PATCH_NOTES = [
           "remove default conflict clock on new NPC creation",
           "restrict homepage characters to own user, add NPC delete button",
           "update URL hash when saving/opening NPC so refresh restores the sheet",
-          "prevent duplicate faction names per campaign (backend + frontend)",
-          "parse campaign id to int on select change so factions populate"
+          "prevent duplicate faction names per campaign (backend + frontend)"
         ]
       },
       {

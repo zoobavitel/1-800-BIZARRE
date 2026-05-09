@@ -1,3 +1,5 @@
+import { standGradeIndexToDicePool } from "../constants/srd";
+
 /**
  * Mirrors backend `roll_action` base dice math (character_views.py):
  * base action pool = action rating only (dots in the rolled action). Attribute
@@ -38,4 +40,13 @@ export function computeActionPoolBreakdown(actionName, actionRatings) {
 export function computeBaseDicePool(actionName, actionRatings) {
   const { basePool } = computeActionPoolBreakdown(actionName, actionRatings);
   return basePool;
+}
+
+/**
+ * Stand Coin roll dice from grade indices on the sheet (`standStats` keys).
+ */
+export function computeStandRollPool(standStatKey, standStats) {
+  const k = String(standStatKey || "").toLowerCase();
+  const raw = Math.max(0, Math.min(5, Number(standStats?.[k]) || 0));
+  return standGradeIndexToDicePool(raw);
 }

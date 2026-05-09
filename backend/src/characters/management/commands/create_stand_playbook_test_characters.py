@@ -26,7 +26,7 @@ def flat_action_dots(hunt=0, study=0, survey=0, tinker=0, finesse=0, prowl=0, sk
     }
 
 
-# Stand playbook definitions: name, stand_name, type, coin_stats, stress (from durability), abilities (3 or 5)
+# Stand playbook definitions: name, stand_name, type, coin_stats, stress (L1 baseline 9; Durability gates armor only), abilities (3 or 5)
 PLAYBOOKS = [
     {
         'true_name': '3 Little Birds (Colony)',
@@ -90,7 +90,7 @@ PLAYBOOKS = [
         'stand_name': 'Dream Baby Dream',
         'stand_type': 'PHENOMENA',
         'coin_stats': {'power': 'F', 'speed': 'F', 'range': 'C', 'durability': 'F', 'precision': 'F', 'development': 'A'},
-        'stress': 8,
+        'stress': 9,
         'standard_ability_names': ['Bizarre Improvisation', 'Like Looking into a Mirror', 'Bizarre Intuition', 'Foresight', 'Calculating'],
         'stand_form': 'A shared hallucination—a child\'s recurring nightmare with metaphysical weight.',
         'unique_abilities': [

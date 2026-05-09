@@ -768,32 +768,12 @@ class Character(models.Model):
             )
 
     def _validate_stress_based_on_durability(self):
-        # SRD: Durability sets stress capacity. Base 9; S +4, A +3, B +2, C +1, D 0, F -1.
+        # SRD_DEV: Level-1 stress boxes are always 9. Stand Durability gates armor / resist fiction, not stress length.
         expected_stress = 9
-        durability_grade = None
-        try:
-            if hasattr(self, "stand"):
-                durability_grade = getattr(self.stand, "durability", None)
-        except Exception:
-            pass
-        if not durability_grade and self.coin_stats:
-            durability_grade = self.coin_stats.get("durability")
-        if durability_grade == "S":
-            expected_stress = 13
-        elif durability_grade == "A":
-            expected_stress = 12
-        elif durability_grade == "B":
-            expected_stress = 11
-        elif durability_grade == "C":
-            expected_stress = 10
-        elif durability_grade == "D":
-            expected_stress = 9
-        elif durability_grade == "F":
-            expected_stress = 8
         if self.level == 1 and self.stress != expected_stress:
             raise ValidationError(
                 {
-                    "stress": f"Stress must be {expected_stress} for a level 1 character with {durability_grade} Stand Durability."
+                    "stress": f"Stress must be {expected_stress} for a level 1 character."
                 }
             )
 

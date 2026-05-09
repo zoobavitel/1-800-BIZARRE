@@ -13,7 +13,10 @@ import {
   progressClockAPI,
 } from "../../features/character-sheet/services/api";
 import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
-import { ACTION_RATING_KEYS } from "../../features/character-sheet/constants/srd";
+import {
+  ACTION_RATING_KEYS,
+  STAND_ROLL_KEYS_ALL,
+} from "../../features/character-sheet/constants/srd";
 import NpcsStandCoin from "../NpcsStandCoin";
 import { PositionStack, EffectShapes } from "../position-effect/PositionEffectIndicators";
 import {
@@ -2257,7 +2260,8 @@ export default function SessionGMManagementPanels({
                     <div style={{ fontSize: 10, color: "#9ca3af", lineHeight: 1.35 }}>
                       Speed sets mobility and starting-position pressure by comparison. Precision
                       can swing position/effect. Range shapes distance penalties and practical
-                      effect. Durability maps to stress/armor pressure. Power frames destructive
+                      effect. Durability gates Stand armor and resist when your Stand absorbs harm—
+                      not PC stress boxes. Power frames destructive
                       output. Development frames evolution and ability growth.
                     </div>
                     <div style={lbl}>Actions (dots)</div>
@@ -2931,6 +2935,18 @@ export default function SessionGMManagementPanels({
                       </option>
                     );
                   })}
+                  <option disabled style={{ opacity: 0.5 }}>
+                    — Stand coin —
+                  </option>
+                  {STAND_ROLL_KEYS_ALL.map((sk) => {
+                    const v = `stand_${sk}`;
+                    const label = `Stand ${sk}`;
+                    return (
+                      <option key={v} value={v}>
+                        {label}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             ) : String(manualRoll.rollKind || "").toUpperCase() ===
@@ -2958,6 +2974,7 @@ export default function SessionGMManagementPanels({
                   <option value="insight">Insight</option>
                   <option value="prowess">Prowess</option>
                   <option value="resolve">Resolve</option>
+                  <option value="stand_durability">Stand durability</option>
                 </select>
               </div>
             ) : (

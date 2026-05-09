@@ -85,7 +85,7 @@ class Command(BaseCommand):
                 "prowess": {"finesse": 1, "prowl": 0, "skirmish": 2, "wreck": 1},
                 "resolve": {"attune": 1, "command": 0, "consort": 1, "sway": 1},
             },
-            stress=10,  # Based on C-rank durability
+            stress=9,  # SRD_DEV: stress independent of Stand Durability
             trauma=[],
             loadout=1,
             coin_stats={

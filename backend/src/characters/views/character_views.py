@@ -24,6 +24,7 @@ from ..models import (
 )
 from ..parsers import MultipartJsonParser
 from ..roll_helpers import (
+    STAND_POOL_STAT_KEYS,
     action_rating_from_action_dots,
     award_desperate_action_xp,
     award_heritage_expression_xp,
@@ -35,6 +36,7 @@ from ..roll_helpers import (
     normalize_position,
     outcome_from_action_roll,
     recovery_healing_clock_segments,
+    stand_action_rating_from_character,
     tier_die_from_action_pool,
     award_struggle_for_new_traumas,
 )
@@ -331,7 +333,11 @@ class CharacterViewSet(viewsets.ModelViewSet):
             "ability_bonuses"
         )  # optional list for audit string
         heritage_bonuses_raw = request.data.get("heritage_bonuses")
+        pool_source = str(request.data.get("pool_source") or "action_dots").strip().lower()
+        stand_stat_requested = str(request.data.get("stand_stat") or "").strip().lower()
         group_action_id = request.data.get("group_action_id")
+        if pool_source == "stand_coin":
+            group_action_id = None
         assist_helper_id_raw = request.data.get("assist_helper_id")
         assist_helper = None
         extra_roll_stress = 0
@@ -653,6 +659,15 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 request.data.get("ripple_breathing_free_push", False)
             )
             if ripple_free_push_claim:
+                if pool_source == "stand_coin":
+                    return Response(
+                        {
+                            "error": (
+                                "Ripple Breathing does not apply to stand coin rolls."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
                 if roll_type.upper() != "ACTION":
                     return Response(
                         {
@@ -755,14 +770,42 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     }
                 )
 
-        # Get action rating from action_dots (flat or nested) - skip for FORTUNE
+        # Get action rating from action_dots or Stand Coin grade — skip for FORTUNE
         if roll_type.upper() != "FORTUNE":
-            action_rating = action_rating_from_action_dots(
-                character.action_dots, action_name
-            )
+            if pool_source == "stand_coin":
+                if roll_type.upper() != "ACTION":
+                    return Response(
+                        {
+                            "error": (
+                                "Stand coin dice use roll_type ACTION with "
+                                "pool_source stand_coin and stand_stat "
+                                "(power|speed|precision|durability)."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if stand_stat_requested not in STAND_POOL_STAT_KEYS:
+                    return Response(
+                        {
+                            "error": (
+                                "stand_stat must be power, speed, precision, "
+                                "or durability when pool_source is stand_coin."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                action_rating = stand_action_rating_from_character(
+                    character, stand_stat_requested
+                )
+                action_name = (
+                    request.data.get("action") or f"stand_{stand_stat_requested}"
+                ).strip()
+            else:
+                action_rating = action_rating_from_action_dots(
+                    character.action_dots, action_name
+                )
 
-            # Base action pool: action rating only (no extra dice from other
-            # actions in the same attribute).
+            # Base action pool: action rating only (no cross-action attribute dice).
             attribute_dice = 0
 
             dice_pool = action_rating

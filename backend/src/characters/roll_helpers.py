@@ -80,6 +80,52 @@ def recovery_healing_clock_segments(pool_before_roll, dice_results=None):
     return segments, out_dice, highest, critical, band
 
 
+STAND_POOL_STAT_KEYS = frozenset({"power", "speed", "precision", "durability"})
+
+_STAND_GRADE_TO_DICE = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 4}
+
+
+def stand_grade_letter_to_dice_pool(letter):
+    """SRD_DEV stand coin roll dice from grade letter (S uses 4d cap, not a fifth die)."""
+    return _STAND_GRADE_TO_DICE.get(str(letter or "F").strip().upper(), 0)
+
+
+def _stand_grade_from_character(character, stat_key):
+    """
+    Resolve Stand/coin_stats grade letter for stat_key ('power','speed',... lower case).
+    """
+    stat_key = str(stat_key or "").strip().lower()
+    if stat_key not in STAND_POOL_STAT_KEYS:
+        return None
+    stand = getattr(character, "stand", None)
+    if stand is not None:
+        g = getattr(stand, stat_key, None)
+        if g:
+            return str(g).strip().upper()[:1]
+    coin = getattr(character, "coin_stats", None) or {}
+    if isinstance(coin, dict):
+        for k, v in coin.items():
+            if str(k).lower() != stat_key:
+                continue
+            if v:
+                return str(v).strip().upper()[:1]
+    legacy = getattr(character, "stand_coin_stats", None) or {}
+    if isinstance(legacy, dict):
+        u = stat_key.upper()
+        v = legacy.get(stat_key) or legacy.get(u)
+        if v:
+            return str(v).strip().upper()[:1]
+    return None
+
+
+def stand_action_rating_from_character(character, stat_key):
+    """Dot-equivalent dice count from Stand/coin_stats for Stand Coin rolls."""
+    g = _stand_grade_from_character(character, stat_key)
+    if not g:
+        return 0
+    return stand_grade_letter_to_dice_pool(g)
+
+
 def action_rating_from_action_dots(action_dots, action_name_raw):
     """
     Dot count for rolled action. Persisted `action_dots` may use `attune` (BitD name) while
@@ -337,17 +383,9 @@ def outcome_from_dice_results(results):
 
 def max_stress_slots_for_character(character):
     """
-    Length of the stress track from Stand durability (SRD baseline 9 + grade table).
+    Stress track length on the sheet (SRD_DEV: 9 for PCs; Stand Durability affects armor, not this count).
 
     Character.stress in the API is the **filled / marked** count on that track
     (same as the sheet's stressFilled), not "remaining budget."
     """
-    grade = None
-    stand = getattr(character, "stand", None)
-    if stand is not None:
-        grade = getattr(stand, "durability", None)
-    if not grade:
-        coin_stats = getattr(character, "coin_stats", None) or {}
-        if isinstance(coin_stats, dict):
-            grade = coin_stats.get("durability") or coin_stats.get("DURABILITY")
-    return {"S": 13, "A": 12, "B": 11, "C": 10, "D": 9, "F": 8}.get(grade, 9)
+    return 9

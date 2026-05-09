@@ -86,11 +86,13 @@ class CharacterValidationTests(TestCase):
 
     def test_invalid_stress_value(self):
         character = self._create_valid_level_1_character()
-        character.stress = 8  # Should be 9 for D durability
-        with self.assertRaisesMessage(ValidationError, 'Stress must be 9 for a level 1 character with D Stand Durability.'):
+        character.stress = 8
+        with self.assertRaisesMessage(
+            ValidationError, "Stress must be 9 for a level 1 character."
+        ):
             character.full_clean()
 
-        # Test with F durability, stress should be 8. 6 points: A+C+F+F+F+F = 4+2+0+0+0+0 = 6.
+        # F durability — stress baseline still 9 (SRD_DEV: armor only from Durability).
         character_f_durability = self._create_valid_level_1_character()
         character_f_durability.stand.power = 'A'
         character_f_durability.stand.speed = 'C'
@@ -99,8 +101,10 @@ class CharacterValidationTests(TestCase):
         character_f_durability.stand.precision = 'F'
         character_f_durability.stand.development = 'F'
         character_f_durability.stand.save()
-        character_f_durability.stress = 9  # Should be 8 for F
-        with self.assertRaisesMessage(ValidationError, 'Stress must be 8 for a level 1 character with F Stand Durability.'):
+        character_f_durability.stress = 8
+        with self.assertRaisesMessage(
+            ValidationError, "Stress must be 9 for a level 1 character."
+        ):
             character_f_durability.full_clean()
 
     def test_invalid_initial_abilities_count(self):
@@ -155,7 +159,7 @@ class CharacterValidationTests(TestCase):
                 'finesse': 1, 'prowl': 1, 'skirmish': 1, 'wreck': 0,
                 'bizarre': 0, 'command': 0, 'consort': 0, 'sway': 0,
             },
-            stress=8,
+            stress=9,
             coin_stats={}
         )
         character_a_rank.save()
@@ -179,7 +183,7 @@ class CharacterValidationTests(TestCase):
 
     def test_invalid_a_rank_abilities_count(self):
         character = self._create_valid_level_1_character()
-        # 6 points with one A-rank: A(4)+D(1)+D(1)+F+F+F = 6. Durability F => stress 8. Do not add abilities (have 3, need 5).
+        # 6 points with one A-rank: A(4)+D(1)+D(1)+F+F+F = 6. Do not add abilities (have 3, need 5).
         character.stand.power = 'A'
         character.stand.speed = 'D'
         character.stand.range = 'D'
@@ -187,7 +191,7 @@ class CharacterValidationTests(TestCase):
         character.stand.precision = 'F'
         character.stand.development = 'F'
         character.stand.save()
-        character.stress = 8
+        character.stress = 9
         with self.assertRaisesMessage(ValidationError, 'A level 1 character must have exactly 5 abilities'):
             character.full_clean()
 
@@ -216,7 +220,7 @@ class CharacterValidationTests(TestCase):
     def test_s_rank_stand_stat_validation_allowed_by_gm(self):
         character = self._create_valid_level_1_character()
         character.gm_can_have_s_rank_stand_stats = True
-        character.stress = 8  # S+D+F+F+F+F => durability F => stress 8
+        character.stress = 9
         character.stand.power = 'S'
         character.stand.speed = 'D'
         character.stand.range = 'F'

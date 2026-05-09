@@ -78,7 +78,7 @@ The `Character` model itself contains a `clean()` method that triggers several v
 *   **`_validate_level_1_creation()`**: A master validation method called during initial character creation. It orchestrates the following checks:
     *   **`_validate_action_dots_distribution()`**: Ensures the total number of action dots is exactly 7 for a new level 1 character, with a maximum of 2 dots per action. For characters above level 1, the maximum dots per action is 4.
     *   **`_validate_stand_coin_stats()`**: Verifies that a level 1 character has a Stand with defined coin stats, and that the total Stand Coin points sum to exactly 10. It also validates that each stat's grade is one of 'S', 'A', 'B', 'C', 'D', or 'F'.
-    *   **`_validate_stress_based_on_durability()`**: Calculates the expected stress value based on the Stand's Durability grade (from 8 for 'F' to 13 for 'S') and ensures the character's stress matches this expectation.
+    *   **`_validate_stress_based_on_durability()`**: Ensures level-1 configured characters have **stress = 9** (SRD_DEV: Stand Durability gates armor, not stress slot count).
     *   **`_validate_initial_abilities_count()`**: Confirms that a new level 1 character has exactly 3 abilities (standard, custom, or playbook).
 
 *   **`_validate_a_rank_abilities()`**: If a Stand exists, this method validates that the total number of abilities a character possesses aligns with the number of 'A' ratings in their Stand's coin stats. Each 'A' rank grants 2 additional abilities beyond the initial 3.

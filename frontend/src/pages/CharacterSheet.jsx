@@ -14,6 +14,9 @@ import {
   STAND_COIN_CREATION_POINT_SUM,
   PC_STAT_DESC,
   STAND_STAT_KEYS,
+  STAND_ROLL_KEYS_ACTIVE,
+  STAND_COLUMN_ROLL_ORDER,
+  STAND_PASSIVE_KEYS,
   DUR_TABLE,
   DEV_SESSION_XP,
   ACTION_ATTR,
@@ -50,6 +53,7 @@ import {
 } from "../components/position-effect/PositionEffectIndicators";
 import {
   computeActionPoolBreakdown,
+  computeStandRollPool,
   INSIGHT_ACTIONS,
   PROWESS_ACTIONS,
   RESOLVE_ACTIONS,
@@ -1948,7 +1952,8 @@ const CharacterSheetWrapper = ({
 
   const durVal = Math.min(5, Math.max(0, Number(standStats.durability) || 1));
   const devVal = Math.min(5, Math.max(0, Number(standStats.development) || 1));
-  const maxStress = 9 + (DUR_TABLE[durVal]?.stressBonus ?? 0);
+  /** SRD_DEV: stress track fixed at 9; Stand Durability only affects armor (+ resist tiers). */
+  const maxStress = 9;
   const applyStressCost = useCallback(
     (cost) => {
       const spend = Number(cost) || 0;
@@ -1996,6 +2001,8 @@ const CharacterSheetWrapper = ({
   );
   const isSpinPlaybook = playbook === "Spin";
   const isHamonPlaybook = playbook === "Hamon";
+  /** Stand playbook only: Durability + Power/Precision/Speed column (Hamon/Spin use core actions only). */
+  const showStandCoinActionColumn = playbook === "Stand";
   const totalXP = Object.values(xp).reduce((s, v) => s + v, 0);
   const maxXpOnAnyTrack = useMemo(
     () =>
@@ -3268,11 +3275,21 @@ const CharacterSheetWrapper = ({
 
   const rollActionName = useMemo(() => {
     if (healOtherRecoveryIntent.enabled) return healingIntentActionName;
+    if (
+      rollPending?.standRoll &&
+      String(rollPending?.standStat || "").trim()
+    ) {
+      return (
+        `${String(rollPending.standStat).trim().toUpperCase()} (Stand)`
+      );
+    }
     return String(rollPending?.actionName || "").trim().toUpperCase();
   }, [
     healOtherRecoveryIntent.enabled,
     healingIntentActionName,
     rollPending?.actionName,
+    rollPending?.standRoll,
+    rollPending?.standStat,
   ]);
 
   const groupParticipants = useMemo(() => {
@@ -3619,6 +3636,13 @@ const CharacterSheetWrapper = ({
 
   const { bonusDiceFromAbilities, abilityEffectSteps, abilityBonusAudit } =
     useMemo(() => {
+      if (rollPending?.standRoll) {
+        return {
+          bonusDiceFromAbilities: 0,
+          abilityEffectSteps: 0,
+          abilityBonusAudit: [],
+        };
+      }
       let d = 0;
       let e = 0;
       const audit = [];
@@ -3653,6 +3677,7 @@ const CharacterSheetWrapper = ({
       abilityRollBonusOptions,
       rollAbilityBoost,
       healingTreatmentBonusContext,
+      rollPending?.standRoll,
     ]);
 
   const {
@@ -3660,6 +3685,13 @@ const CharacterSheetWrapper = ({
     heritageEffectSteps,
     heritageBonusAudit,
   } = useMemo(() => {
+    if (rollPending?.standRoll) {
+      return {
+        bonusDiceFromHeritage: 0,
+        heritageEffectSteps: 0,
+        heritageBonusAudit: [],
+      };
+    }
     let d = 0;
     let e = 0;
     const audit = [];
@@ -3681,7 +3713,7 @@ const CharacterSheetWrapper = ({
       heritageEffectSteps: e,
       heritageBonusAudit: audit,
     };
-  }, [heritageRollBonusOptions, heritageRollBoost]);
+  }, [heritageRollBonusOptions, heritageRollBoost, rollPending?.standRoll]);
 
   const totalBonusDiceFromAbilitiesAndHeritage =
     bonusDiceFromAbilities + bonusDiceFromHeritage;
@@ -4033,10 +4065,16 @@ const CharacterSheetWrapper = ({
 
   const rollPoolPreview = useMemo(() => {
     if (!rollPending || !rollActionName) return null;
-    const { action_rating, basePool } = computeActionPoolBreakdown(
-      rollActionName,
-      actionRatings,
-    );
+    let action_rating;
+    let basePool;
+    if (rollPending.standRoll && rollPending.standStat) {
+      basePool = computeStandRollPool(rollPending.standStat, standStats);
+      action_rating = basePool;
+    } else {
+      const bd = computeActionPoolBreakdown(rollActionName, actionRatings);
+      action_rating = bd.action_rating;
+      basePool = bd.basePool;
+    }
     let mod = 0;
     if (rollModal.push_dice) mod += 1;
     if (rollModal.devil_bargain_dice) mod += 1;
@@ -4044,6 +4082,7 @@ const CharacterSheetWrapper = ({
     const selectedPushStress =
       (rollModal.push_effect ? 2 : 0) + (rollModal.push_dice ? 2 : 0);
     const rippleWaivesPushStress =
+      !rollPending.standRoll &&
       Boolean(activeSessionId) &&
       hasRippleBreathingAbility &&
       rippleBreathingFreePush &&
@@ -4067,6 +4106,7 @@ const CharacterSheetWrapper = ({
     rollPending,
     rollActionName,
     actionRatings,
+    standStats,
     rollModal.push_dice,
     rollModal.push_effect,
     rollModal.devil_bargain_dice,
@@ -4121,8 +4161,18 @@ const CharacterSheetWrapper = ({
     const asd = charCampaign?.active_session_detail;
     try {
       const goalFromDraft = (rollGoalDraft || "").trim();
-      const phantomStress = phantomPainThroughCover ? 1 : 0;
+      const standStatForRoll =
+        rollPending.standRoll && rollPending.standStat
+          ? String(rollPending.standStat).trim().toLowerCase()
+          : "";
+      const standSlug = standStatForRoll ? `stand_${standStatForRoll}` : "";
+      const phantomStress = standSlug
+        ? 0
+        : phantomPainThroughCover
+          ? 1
+          : 0;
       const rippleEligibleForWaiver =
+        !standSlug &&
         Boolean(activeSessionId) &&
         hasRippleBreathingAbility &&
         rippleBreathingFreePush &&
@@ -4340,7 +4390,12 @@ const CharacterSheetWrapper = ({
           : []),
       ];
       const payload = {
-        action: selectedRollAction.toLowerCase(),
+        action: (
+          standSlug ||
+          String(rollPending.actionName || rollActionName || selectedRollAction || "")
+            .trim()
+            .toLowerCase()
+        ),
         push_effect: rollModal.push_effect,
         push_dice: rollModal.push_dice,
         devil_bargain_dice: rollModal.devil_bargain_dice,
@@ -4388,6 +4443,12 @@ const CharacterSheetWrapper = ({
         ...(pushWouldCauseTrauma && stressOverflowConfirmed
           ? { stress_overflow_accepted: true }
           : {}),
+        ...(standSlug
+          ? {
+              pool_source: "stand_coin",
+              stand_stat: standStatForRoll,
+            }
+          : {}),
         ...(healIntentActive
           ? {
               recovery_target_character_id: Number(
@@ -4401,9 +4462,10 @@ const CharacterSheetWrapper = ({
       if (activeSessionId) {
         payload.session_id = activeSessionId;
         const snappedGa = rollPending.group_action_id;
-        if (snappedGa) {
+        if (snappedGa && !standSlug) {
           payload.group_action_id = snappedGa;
         } else if (
+          !standSlug &&
           activeGroupAction?.id &&
           String(selectedRollAction || "").toLowerCase() ===
             String(activeGroupAction.action_name || "").toLowerCase()
@@ -4700,9 +4762,14 @@ const CharacterSheetWrapper = ({
   const resistancePoolPreview = useMemo(() => {
     if (!resistancePending) return null;
     const attr = String(resistancePending.attr || "").toUpperCase();
+    const modeStandDur =
+      resistancePending.mode === "stand_durability" ? true : false;
     const base = Math.max(0, Number(resistancePending.baseDice) || 0);
     const options = resistanceAbilityOptions.filter((opt) => {
       const appliesTo = String(opt.appliesTo || "").toUpperCase();
+      if (modeStandDur) {
+        return appliesTo === "ALL";
+      }
       return appliesTo === "ALL" || appliesTo === attr;
     });
     const activeBonusOptions = options.filter(
@@ -4729,6 +4796,7 @@ const CharacterSheetWrapper = ({
         (opt) => `${opt.name} (+${Math.max(0, Number(opt.bonusDice) || 0)}d)`,
       ),
       hasPostRollOptions: options.some((opt) => !!opt.mitigationOnly),
+      modeStandDurability: resistancePending.mode === "stand_durability",
     };
   }, [
     resistancePending,
@@ -4859,12 +4927,17 @@ const CharacterSheetWrapper = ({
             : "Failure";
     }
 
-    // FIX 8: Critical resistance = 0 stress cost AND clear 1 stress; represented as -1
-    /** Non-critical: 6 − highest die, minimum 1 (a single 6 still costs 1 stress). */
+    /** User resistance critical = clear stress (-1 sentinel). Durability resist: SRD_DEV two sixes ⇒ 0 spent; otherwise 6−highest, min 1. */
     const stressCost = isResistance
-      ? isCritical
-        ? -1
-        : Math.max(1, 6 - highest)
+      ? extras &&
+          typeof extras === "object" &&
+          extras.durabilityStandResistance
+        ? sixes >= 2
+          ? 0
+          : Math.max(1, 6 - highest)
+        : isCritical
+          ? -1
+          : Math.max(1, 6 - highest)
       : null;
     const resistanceExtraStress =
       isResistance &&
@@ -4916,8 +4989,19 @@ const CharacterSheetWrapper = ({
         })()
       : null;
 
+    const durabilityStandResistance =
+      isResistance &&
+      extras &&
+      typeof extras === "object" &&
+      extras.durabilityStandResistance;
     const activeResistanceSources = isResistance
       ? resistanceAbilityOptions.filter((opt) => {
+          if (
+            durabilityStandResistance &&
+            String(opt.appliesTo || "").toUpperCase() !== "ALL"
+          ) {
+            return false;
+          }
           if (!resistanceAbilityBoost[opt.id]) return false;
           if (opt.appliesTo === "ALL") return true;
           return String(opt.appliesTo || "").toUpperCase() === String(actionName || "").toUpperCase();
@@ -5029,7 +5113,12 @@ const CharacterSheetWrapper = ({
           character: characterId,
           session: activeSessionId,
           roll_type: "RESISTANCE",
-          action_name: String(actionName || "").toLowerCase(),
+          action_name:
+            extras &&
+            typeof extras === "object" &&
+            extras.durabilityStandResistance
+              ? "stand_durability"
+              : String(actionName || "").toLowerCase(),
           dice_pool: diceCount,
           results: dice,
           outcome: outcomeApi,
@@ -5082,8 +5171,67 @@ const CharacterSheetWrapper = ({
     setResistancePending({
       attr: String(attr || "").toUpperCase(),
       baseDice: base,
+      mode: "attribute",
     });
   };
+
+  const openStandActionRollPreview = useCallback(
+    (standStat) => {
+      const ss = String(standStat || "").trim().toLowerCase();
+      if (!STAND_ROLL_KEYS_ACTIVE.includes(ss)) return;
+      setResistancePending(null);
+      setResistanceApplyErr(null);
+      setResistanceHarmTarget("");
+      setResistancePushDice(false);
+      setRollApiError(null);
+      const n = computeStandRollPool(ss, standStats);
+      setRollPending({
+        actionName: `stand_${ss}`,
+        diceCount: n,
+        standRoll: true,
+        standStat: ss,
+        isDesperateAction: false,
+      });
+      setRollAbilityBoost({});
+      setHeritageRollBoost({});
+      setPhantomPainThroughCover(false);
+      setRippleBreathingFreePush(false);
+      setDevilBargainConfirmed(false);
+      setStressOverflowConfirmed(false);
+      const asdGoal = (assignedRollGoalLabel || "").trim();
+      setRollGoalDraft(asdGoal);
+      setRollModal({
+        push_effect: false,
+        push_dice: false,
+        devil_bargain_dice: false,
+        devil_bargain_note: "",
+      });
+      setHealOtherRecoveryIntent({
+        enabled: false,
+        actionName: "TINKER",
+        targetId: "",
+        selectedBolsterKeys: [],
+        bolsterNote: "",
+      });
+    },
+    [standStats, assignedRollGoalLabel],
+  );
+
+  const openStandDurabilityResistancePreview = useCallback(() => {
+    setRollPending(null);
+    setRollApiError(null);
+    setResistanceApplyErr(null);
+    setResistanceHarmTarget("");
+    setResistancePushDice(false);
+    setResistanceMitigationChoice("");
+    setResistanceAbilityBoost({});
+    const baseDice = computeStandRollPool("durability", standStats);
+    setResistancePending({
+      attr: "STAND durability",
+      baseDice,
+      mode: "stand_durability",
+    });
+  }, [standStats]);
 
   const addClock = () => {
     const name = String(newClockName || "").trim();
@@ -7060,7 +7208,6 @@ const CharacterSheetWrapper = ({
 
                 {/* Stress & Trauma */}
                 <div style={S.card}>
-                  {/* FIX 4: stress max labeled with durability contribution */}
                   <div
                     style={{
                       display: "flex",
@@ -7072,20 +7219,6 @@ const CharacterSheetWrapper = ({
                     <span style={{ ...S.lbl, marginBottom: 0 }}>STRESS</span>
                     <span style={{ fontSize: "11px", color: "#6b7280" }}>
                       {stressFilled}/{maxStress}
-                      {DUR_TABLE[durVal].stressBonus !== 0 && (
-                        <span
-                          style={{
-                            color:
-                              DUR_TABLE[durVal].stressBonus > 0
-                                ? "#34d399"
-                                : "#f87171",
-                          }}
-                        >
-                          {" "}
-                          ({DUR_TABLE[durVal].stressBonus > 0 ? "+" : ""}
-                          {DUR_TABLE[durVal].stressBonus} DUR)
-                        </span>
-                      )}
                     </span>
                   </div>
                   {traumaRequiredBeforeStressClear ? (
@@ -8892,6 +9025,22 @@ const CharacterSheetWrapper = ({
                           {totalStandPoints}/{standCoinIndexBudget} pts
                         </span>
                       </div>
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#6b7280",
+                          marginBottom: "10px",
+                          lineHeight: 1.45,
+                        }}
+                      >
+                        <strong>Rolls</strong>: Power / Precision / Speed / Durability
+                        — dice when fiction calls for your Stand (
+                        fourth column under Action Ratings; grades + XP unlocks via radar).
+                        {" "}
+                        <strong>Passives</strong> on this chart:{" "}
+                        {STAND_PASSIVE_KEYS.join(", ")} (
+                        GM distance &amp; Growth — no pool).
+                      </div>
 
                       {totalStandPoints > standCoinIndexBudget ? (
                         <div style={{ ...S.warn, marginBottom: "8px" }}>
@@ -9879,6 +10028,203 @@ const CharacterSheetWrapper = ({
                         </div>
                       );
                       })}
+                    {showStandCoinActionColumn ? (
+                      <div key="stand-roll-column">
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedActionInfo((cur) =>
+                                  cur === "stand:dur-resist"
+                                    ? null
+                                    : "stand:dur-resist",
+                                )
+                              }
+                              style={{
+                                fontSize: "11px",
+                                fontWeight: "bold",
+                                color: "#e5e7eb",
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                padding: 0,
+                                textDecoration: "underline",
+                                textUnderlineOffset: "2px",
+                              }}
+                              title="Resistance when Stand takes harm"
+                            >
+                              DURABILITY
+                            </button>
+                            <button
+                              type="button"
+                              onClick={openStandDurabilityResistancePreview}
+                              style={{
+                                fontSize: "14px",
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                padding: 0,
+                                lineHeight: 1,
+                              }}
+                              title="Open Stand durability resist pool"
+                            >
+                              🎲
+                            </button>
+                          </span>
+                          <div style={{ display: "flex", gap: "2px" }}>
+                            {(() => {
+                              const durPool = computeStandRollPool(
+                                "durability",
+                                standStats,
+                              );
+                              return [1, 2, 3, 4].map((d) => (
+                                <div
+                                  key={d}
+                                  style={{
+                                    width: "7px",
+                                    height: "7px",
+                                    borderRadius: "50%",
+                                    border: "1px solid #4b5563",
+                                    background:
+                                      d <= durPool ? "#06b6d4" : "#1f2937",
+                                  }}
+                                  title="Grade maps to dice (edit wedges — 10 XP per +1 tier)"
+                                />
+                              ));
+                            })()}
+                          </div>
+                        </div>
+                        {expandedActionInfo === "stand:dur-resist" ? (
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              marginBottom: "6px",
+                              padding: "6px",
+                              background: "#1f2937",
+                              borderRadius: "4px",
+                              border: "1px solid #374151",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            Rolls when another Stand hurts yours. Separate from
+                            Insight / Prowess / Resolve. Spend Stand Coin pts (10 XP
+                            per +1 wedge on radar) — same grades as Stand armor (not stress boxes).
+                          </div>
+                        ) : null}
+                        {STAND_COLUMN_ROLL_ORDER.map((st) => {
+                          const pool = computeStandRollPool(st, standStats);
+                          const k = `stand:${st}`;
+                          return (
+                            <React.Fragment key={st}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  marginBottom: "4px",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedActionInfo((cur) =>
+                                        cur === k ? null : k,
+                                      )
+                                    }
+                                    style={{
+                                      fontSize: "11px",
+                                      color: "#06b6d4",
+                                      background: "none",
+                                      border: "none",
+                                      cursor: "pointer",
+                                      padding: 0,
+                                      textDecoration: "underline",
+                                      textUnderlineOffset: "2px",
+                                    }}
+                                    title="Stand action roll summary"
+                                  >
+                                    {String(st).toUpperCase()}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openStandActionRollPreview(st)}
+                                    style={{
+                                      fontSize: "14px",
+                                      background: "none",
+                                      border: "none",
+                                      cursor: "pointer",
+                                      padding: 0,
+                                      lineHeight: 1,
+                                    }}
+                                    title={
+                                      pool === 0
+                                        ? "0d — uses 2d6 lower off-session"
+                                        : `${pool} dice from Stand Coin grade`
+                                    }
+                                  >
+                                    🎲
+                                  </button>
+                                </span>
+                                <div style={{ display: "flex", gap: "2px" }}>
+                                  {[1, 2, 3, 4].map((slot) => (
+                                    <div
+                                      key={slot}
+                                      style={{
+                                        width: "12px",
+                                        height: "12px",
+                                        borderRadius: "50%",
+                                        border: "1px solid #0e7490",
+                                        background:
+                                          slot <= pool ? "#06b6d4" : "#111827",
+                                      }}
+                                      title="From Stand Coin grade — edit wedges"
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                              {expandedActionInfo === k ? (
+                                <div
+                                  style={{
+                                    fontSize: "10px",
+                                    color: "#9ca3af",
+                                    marginBottom: "6px",
+                                    padding: "6px",
+                                    background: "#0c1929",
+                                    borderRadius: "4px",
+                                    border: "1px solid #164e63",
+                                    lineHeight: 1.4,
+                                  }}
+                                >
+                                  {pcStandCoinReadouts?.[st] || ""}
+                                </div>
+                              ) : null}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                     </div>
                   </div>
 
@@ -10963,9 +11309,24 @@ const CharacterSheetWrapper = ({
                           lineHeight: 1.35,
                         }}
                       >
-                        Review all dice before rolling. After result, apply harm reduction,
-                        mark stress from <code style={{ color: "#9ca3af" }}>6 - highest die</code>,
-                        then use any post-roll mitigation/follow-up options.
+                        {resistancePoolPreview?.modeStandDurability ? (
+                          <>
+                            When your <strong>Stand</strong> takes a hit, resist with
+                            Durability dice (SRD_DEV). Stress:{" "}
+                            <code style={{ color: "#9ca3af" }}>6 − highest die</code>{" "}
+                            (minimum 1 on a single six;{" "}
+                            <strong>two sixes</strong> = resist for free). Apply to the
+                            Stand&apos;s consequence; use Stand Armor charges separately
+                            if marking armor.
+                          </>
+                        ) : (
+                          <>
+                            Review all dice before rolling. After result, apply harm reduction,
+                            mark stress from{" "}
+                            <code style={{ color: "#9ca3af" }}>6 - highest die</code>,
+                            then use any post-roll mitigation/follow-up options.
+                          </>
+                        )}
                       </div>
                       {resistancePoolPreview ? (
                         <div
@@ -10978,7 +11339,11 @@ const CharacterSheetWrapper = ({
                           }}
                         >
                           <DicePoolStrip
-                            label="Attribute rating (dots in this attribute)"
+                            label={
+                              resistancePoolPreview.modeStandDurability
+                                ? "Durability Stand Coin grade (dice pool)"
+                                : "Attribute rating (dots in this attribute)"
+                            }
                             count={resistancePoolPreview.base}
                           />
                           {resistancePoolPreview.bonusDice > 0 ? (
@@ -11110,13 +11475,17 @@ const CharacterSheetWrapper = ({
                           type="button"
                           onClick={() => {
                             const attr = String(resistancePending.attr || "").toUpperCase();
+                            const modeStandDur =
+                              resistancePending.mode === "stand_durability";
                             const base = Math.max(
                               0,
                               Number(resistancePending.baseDice) || 0,
                             );
                             const activeBonusOptions = resistanceAbilityOptions.filter((opt) => {
                               const appliesTo = String(opt.appliesTo || "").toUpperCase();
-                              const applies = appliesTo === "ALL" || appliesTo === attr;
+                              const applies = modeStandDur
+                                ? appliesTo === "ALL"
+                                : appliesTo === "ALL" || appliesTo === attr;
                               return (
                                 applies &&
                                 !!resistanceAbilityBoost[opt.id] &&
@@ -11129,20 +11498,28 @@ const CharacterSheetWrapper = ({
                             );
                             const pushBonus = resistancePushDice ? 1 : 0;
                             const extraStress = resistancePushDice ? 2 : 0;
-                            const ironWillActive = activeBonusOptions.some(
-                              (opt) => opt.id === "iron-will",
-                            );
+                            const ironWillActive =
+                              !modeStandDur &&
+                              activeBonusOptions.some(
+                                (opt) => opt.id === "iron-will",
+                              );
                             rollDice(
-                              attr,
+                              modeStandDur ? "stand_durability" : attr,
                               base + bonus + pushBonus,
                               true,
                               false,
                               undefined,
                               {
-                                ...(ironWillActive
-                                  ? { resistanceBonusNote: "+1d (Iron Will)" }
-                                  : {}),
                                 resistanceExtraStress: extraStress,
+                                ...(modeStandDur
+                                  ? {
+                                      durabilityStandResistance: true,
+                                      resistanceBonusNote:
+                                        "Stand durability resistance",
+                                    }
+                                  : ironWillActive
+                                    ? { resistanceBonusNote: "+1d (Iron Will)" }
+                                    : {}),
                               },
                             );
                           }}

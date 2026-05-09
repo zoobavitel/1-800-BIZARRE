@@ -555,27 +555,27 @@ Players can **buy extra HP with XP** instead of taking more detriments.
 * **F: 25(50)ft — use heritage speed instead**  
   ---
 
-**PRECISION**
+PRECISION
 
-***Used when your Stand performs actions requiring accuracy or control beyond human capability.***
+*Used when your Stand performs actions requiring accuracy or control beyond human capability.*
 
-**Roll Precision dice when targeting a specific point with surgical accuracy, performing fine manipulation at Stand scale, or executing a technique that demands exact control.**
+Roll Precision dice when targeting a specific point with surgical accuracy, performing fine manipulation at Stand scale, or executing a technique that demands exact control.
 
-**Precision also covers Stand-aided perception — detecting details, trajectories, or targets that require your Stand's senses rather than your own. A high-Precision Stand can perceive things no human eye could catch: movement too fast to follow, details too small to see, weaknesses invisible to normal sight. This is your Stand doing the looking, not you. *(Think: Joseph Joestar and Hermit Purple — it's the Stand perceiving, not the user.)***
+Precision also covers Stand-aided perception — detecting details, trajectories, or targets that require your Stand's senses rather than your own. A high-Precision Stand can perceive things no human eye could catch: movement too fast to follow, details too small to see, weaknesses invisible to normal sight. This is your Stand doing the looking, not you. *(Think: Joseph Joestar and Hermit Purple — it's the Stand perceiving, not the user.)*
 
-**At D or F, the GM may rule that precision-dependent Stand actions carry automatic consequences or aren't available.**
+At D or F, the GM may rule that precision-dependent Stand actions carry automatic consequences or aren't available.
 
 ---
 
 **DURABILITY**
 
-***Used when your Stand absorbs damage before it mirrors through to you.***
+*Used when your Stand absorbs damage before it mirrors through to you.*
 
-**When your Stand takes a hit, roll your Durability dice. Spend stress equal to 6 minus the highest result — the same structure as a standard resistance roll, but using your Stand's Coin dice instead of a user attribute. High Durability means the Stand eats the hit. Low Durability means it passes through hard.**
+When your Stand takes a hit from another Stand, roll your Durability dice. Spend stress equal to 6 minus the highest result — the same structure as a standard resistance roll, but using your Stand's Coin dice instead of a user attribute. High Durability means the Stand eats the hit. Low Durability means it passes through hard. Rolling a 6 still means you mark 1 stress, but if you roll two 6’s, you resist for free.
 
-***If you have 0 Durability dice (F-rank), roll 2d and take the lowest result.***
+*If you have 0 Durability dice (F-rank), roll 2d and take the lowest result.*
 
-**Stand Armor: Durability also determines your Stand's armor charges. When you check a Stand Armor charge, you reduce a consequence against your Stand by 1 level. Stand Armor cannot be used to protect your user from direct attacks.**
+Stand Armor: Durability also determines your Stand's armor charges. When you check a Stand Armor charge, you reduce a consequence against your Stand by 1 level. Stand Armor cannot be used to protect your user from direct attacks.
 
 | Grade | Stand Armor Charges |
 | ----- | ----- |
@@ -585,38 +585,38 @@ Players can **buy extra HP with XP** instead of taking more detriments.
 | **D** | **1** |
 | **F** | **0** |
 
-**Stands without a physical form share their Stand Armor with their user — there is no separate body to take the hit.**
+Stands without a physical form share their Stand Armor with their user — there is no separate body to take the hit.
 
-**User Armor is physical armor worn by the user. It is acquired through abilities or heritage and can be checked to reduce a consequence against the user by 1 level. It is entirely separate from Stand Armor.**
+User Armor is physical armor worn by the user. It is acquired through abilities or heritage and can be checked to reduce a consequence against the user by 1 level. It is entirely separate from Stand Armor.
 
 ---
 
-**STAND COIN PASSIVES**
+STAND COIN PASSIVES
 
-**RANGE**
+RANGE
 
-**Defines the operational distance of your Stand and its abilities.**
+Defines the operational distance of your Stand and its abilities.
 
-* **A: 100(200)ft, push yourself to extend**  
-* **B: 50(100)ft, push yourself to extend**  
-* **C: 40(80)ft, push yourself to extend, extension subtracts 1 effect**  
-* **D: 20(40)ft, push yourself to extend, extension subtracts 1 effect**  
-* **F: 10(20)ft, push yourself to extend, extension subtracts 2 effect**
+* A: 100(200)ft, push yourself to extend  
+* B: 50(100)ft, push yourself to extend  
+* C: 40(80)ft, push yourself to extend, extension subtracts 1 effect  
+* D: 20(40)ft, push yourself to extend, extension subtracts 1 effect  
+* F: 10(20)ft, push yourself to extend, extension subtracts 2 effect
 
-**DEVELOPMENT (POTENTIAL)**
+DEVELOPMENT (POTENTIAL)
 
-**Determines XP gain and capacity for growth.**
+Determines XP gain and capacity for growth.
 
-* **A: \+4 XP at end of session. Can spend 2 stress to adopt a new unique/standard ability until end of session, GM's discretion**  
-* **B: \+3 XP at end of session**  
-* **C: \+2 XP at end of session**  
-* **D: \+1 XP at end of session**  
-* **F: Standard XP gain**  
+* A: \+4 XP at end of session. Can spend 2 stress to adopt a new unique/standard ability until end of session, GM's discretion  
+* B: \+3 XP at end of session  
+* C: \+2 XP at end of session  
+* D: \+1 XP at end of session  
+* F: Standard XP gain  
   ---
 
-**NPC STAND COIN STATS**
+NPC STAND COIN STATS
 
-**NPC stats are GM-facing parameters. NPCs don't roll Stand Coin dice — the GM reads their grades to set harm levels, determine what actions are available, and adjudicate consequences.**
+NPC stats are GM-facing parameters. NPCs don't roll Stand Coin dice — the GM reads their grades to set harm levels, determine what actions are available, and adjudicate **consequences.**
 
 **NPCs can carry any combination of Regular Armor, Stand Armor, and Special Armor depending on their nature and threat level.**
 
@@ -663,541 +663,6 @@ Players can **buy extra HP with XP** instead of taking more detriments.
 * **C: Follows their script. Effective but predictable**  
 * **D: Few abilities. Easy to counter**  
 * **F: Loses abilities during combat. Unstable**
-
-**STAND COIN**
-
-**(Player Character)**
-
-**The Stand Coin is made of 6 properties, rated F to S, that describe a Stand's capabilities and limits. These properties fall into two categories: Stand Coin Rolls and Stand Coin Passives.**
-
-**Stand Coin Rolls — Power, Speed, Precision, and Durability — are active dice pools. When the fiction calls for something only a Stand can do, or when you want to push beyond what your user could accomplish alone, you roll these instead of your user skills. These are parallel rolls, not additions to your user dice.**
-
-**Stand Coin Passives — Range and Development — define your Stand's parameters. They don't generate dice rolls; the GM reads them to determine what's possible.**
-
-**Grade Scale:**
-
-| Grade | Dice |
-| ----- | ----- |
-| **A** | **4d** |
-| **B** | **3d** |
-| **C** | **2d** |
-| **D** | **1d** |
-| **F** | **0d (gated out)** |
-| **S** | **Unique capstone — see below** |
-
-**At the beginning of a new game, distribute 6 points among the six stats. Each point raises a stat one grade (F→D→C→B→A). S-rank requires GM approval and cannot be taken at character creation.**
-
-**F-Rank Limitations:**
-
-* **You cannot take F-rank in all six stats (minimum one stat must be D or higher)**  
-* **F-rank in a Coin Roll means you cannot attempt that category of Stand action**  
-* **F-rank Passives represent severe weaknesses enemies can exploit**
-
----
-
-**STAND COIN ROLLS**
-
-**How Stand Coin Rolls Work:**
-
-**When you attempt something only a Stand can do — or want to achieve greater effect than your user alone could manage — you make a Stand Coin Roll using Power, Speed, Precision, or Durability. The fiction determines which applies. These are not interchangeable.**
-
-**Grade Gates: Some actions require a minimum grade to attempt at all. The GM calls this. A D-Power Stand cannot punch through a skyscraper — that action is simply unavailable. A B-Power Stand can attempt it, but starts at reduced position or effect.**
-
-**Stand Roll Benefit: When you use a Stand Coin Roll for something your user could have attempted with a skill roll, you gain either \+position or \+effect — GM's call based on what the fiction supports. Not both.**
-
-**Stand-on-Stand Combat: Only Stand abilities, bizarre powers, or similarly supernatural forces can damage a Stand directly. User skills don't apply against a Stand — you need your Coin Rolls. This creates a tactical choice: target the Stand (requires your dice pool) or find and expose the user (opens up all your user skills).**
-
-**S-Rank: S-rank in a Coin Roll does not grant a 5th die. Instead, the player defines a unique capstone ability for that stat — something the Stand can do at that grade that no standard rule could anticipate. GM must approve it at advancement.**
-
----
-
-**POWER**
-
-**Used when your Stand applies force beyond human scale — destruction, impact, overwhelming physical pressure.**
-
-**Roll Power dice when demolishing structures or barriers, delivering Stand-scale strikes, or overpowering something through sheer force.**
-
-**Grade reference (gate thresholds):**
-
-* **A: Can demolish large buildings and city blocks**  
-* **B: Can destroy reinforced structures and thick concrete**  
-* **C: Can shatter stone and heavy structural materials**  
-* **D: Can break through standard materials (wood, metal plating)**  
-* **F: Human-level force — use Wreck or Skirmish instead**
-
----
-
-**SPEED**
-
-**Used when your Stand moves, reacts, or acts at a pace no human body can match.**
-
-**Roll Speed dice when intercepting something before it can be perceived, crossing distance in an instant, or reacting to threats faster than normal physics allows.**
-
-**Movement: Heritage sets your user's base movement speed. If your Stand is physical, its Speed grade determines its movement range. Non-physical Stands use heritage movement.**
-
-**Grade reference (movement):**
-
-* **A: 60(120)ft, push yourself to dash**  
-* **B: 40(80)ft, push yourself to dash**  
-* **C: 35(70)ft, push yourself to dash**  
-* **D: 30(60)ft, push yourself to dash**  
-* **F: 25(50)ft — use heritage speed instead**
-
----
-
-**PRECISION**
-
-**Used when your Stand performs actions requiring accuracy or control beyond human capability.**
-
-**Roll Precision dice when targeting a specific point with surgical accuracy, performing fine manipulation at Stand scale, or executing a technique that demands exact control.**
-
-**Precision also covers Stand-aided perception — detecting details, trajectories, or targets that require your Stand's senses rather than your own. A high-Precision Stand can perceive things no human eye could catch: movement too fast to follow, details too small to see, weaknesses invisible to normal sight. This is your Stand doing the looking, not you. (Think: Joseph Joestar and Hermit Purple — it's the Stand perceiving, not the user.)**
-
-**At D or F, the GM may rule that precision-dependent Stand actions carry automatic consequences or aren't available.**
-
----
-
-**DURABILITY**
-
-**Used when your Stand absorbs damage before it can mirror through to you.**
-
-**When your Stand takes a hit, roll your Durability dice. Spend stress equal to 6 minus the highest result — the same structure as a standard resistance roll, but using your Stand's Coin dice instead of a user attribute. High Durability means the Stand eats the hit. Low Durability means it passes through hard.**
-
-**If you have 0 Durability dice (F-rank), roll 2d and take the lowest result. You cannot critical on a Durability roll.**
-
-**Stand Armor: Durability also determines your Stand's armor charges. Stand Armor can only be spent when your Stand takes the hit — it does not protect your user from direct attacks.**
-
-| Grade | Stand Armor Charges |
-| ----- | ----- |
-| **A** | **4** |
-| **B** | **3** |
-| **C** | **2** |
-| **D** | **1** |
-| **F** | **0** |
-
-**Stands without a physical form share their Stand Armor with their user — there is no separate body to take the hit.**
-
-**User Armor is separate from Stand Armor entirely. It represents literal physical protection and is acquired through abilities or heritage, not Durability.**
-
----
-
-**STAND COIN PASSIVES**
-
-**RANGE**
-
-**Defines the operational distance of your Stand and its abilities.**
-
-* **S: Unlimited range, no penalties**  
-* **A: 100(200)ft, push yourself to extend**  
-* **B: 50(100)ft, push yourself to extend**  
-* **C: 40(80)ft, push yourself to extend, extension subtracts 1 effect**  
-* **D: 20(40)ft, push yourself to extend, extension subtracts 1 effect**  
-* **F: 10(20)ft, push yourself to extend, extension subtracts 2 effect**
-
-**DEVELOPMENT (POTENTIAL)**
-
-**Determines XP gain and capacity for growth.**
-
-* **S: \+5 XP at end of session**  
-* **A: \+4 XP at end of session. Can spend 2 stress to adopt a new unique/standard ability until end of session, GM's discretion**  
-* **B: \+3 XP at end of session**  
-* **C: \+2 XP at end of session**  
-* **D: \+1 XP at end of session**  
-* **F: Standard XP gain**
-
----
-
-**NPC STAND COIN STATS**
-
-**NPC stats are GM-facing parameters. NPCs don't roll Stand Coin dice — the GM reads their grades to set harm levels, determine what actions are available, and adjudicate consequences.**
-
-**Power — Determines harm level and impact:**
-
-* **S/A: Level 4 harm**  
-* **B: Level 3 harm**  
-* **C: Level 2 harm**  
-* **D: Level 1 harm**  
-* **F: No significant harm**
-
-**Speed — Movement reference:**
-
-* **S: 200ft | A: 60ft | B: 40ft | C: 35ft | D: 30ft | F: 25ft**
-
-**Range — Operational distance (same as player reference above)**
-
-**Durability — Vulnerability Clock:**
-
-* **S: 0 segments (requires alternative win condition\*)**  
-* **A: 12 segments | B: 10 segments | C: 8 segments | D: 6 segments | F: 4 segments**
-
-**\*S-Durability Alternative Win Condition: e.g., "Expose User" / "Break Stand Logic" / "Discover Weakness" (8-segment clock)**
-
-**Regular Armor charges (Clock ÷ 3, rounded down): S=5, A=4, B=3, C/D=2, F=1**
-
-**Special Armor charges: S/A=3, B=2, C/D=1, F=0**
-
-**GM spends armor charges before filling Vulnerability Clock segments.**
-
-**Precision:**
-
-* **S–A: When defending, can reduce player effect by 1 level**  
-* **B–C: GM sets effect normally**  
-* **D–F: When attacking precisely, reduce effect by 1 level (clumsy)**
-
-**Development:**
-
-* **S: Can gain new abilities every round. Cannot be predicted**  
-* **A: Once per combat, can mutate an ability**  
-* **B: On return battles, comes back with one new ability**  
-* **C: Follows their script. Effective but predictable**  
-* **D: Few abilities. Easy to counter**  
-* **F: Loses abilities during combat. Unstable**
-
-**STAND COIN**
-
-**(Player Character)**
-
-**The Stand Coin is made of 6 properties, rated F to S, that describe a Stand's capabilities and limits. These properties fall into two categories: Stand Coin Rolls and Stand Coin Passives.**
-
-**Stand Coin Rolls — Power, Speed, and Precision — are active dice pools. When the fiction calls for something only a Stand can do, or when you want to push beyond what your user could accomplish alone, you roll these instead of your user skills. These are parallel rolls, not additions to your user dice.**
-
-**Stand Coin Passives — Range, Durability, and Development — define your Stand's parameters. They don't generate dice rolls; the GM reads them to determine what's possible.**
-
-**Grade Scale:**
-
-| Grade | Dice |
-| ----- | ----- |
-| **A** | **4d** |
-| **B** | **3d** |
-| **C** | **2d** |
-| **D** | **1d** |
-| **F** | **0d (gated out)** |
-| **S** | **Unique capstone — see below** |
-
-**At the beginning of a new game, distribute 6 points among the six stats. Each point raises a stat one grade (F→D→C→B→A). S-rank requires GM approval and cannot be taken at character creation.**
-
-**F-Rank Limitations:**
-
-* **You cannot take F-rank in all six stats (minimum one stat must be D or higher)**  
-* **F-rank in a Coin Roll means you cannot attempt that category of Stand action**  
-* **F-rank Passives represent severe weaknesses enemies can exploit**
-
----
-
-**STAND COIN ROLLS**
-
-**How Stand Coin Rolls Work:**
-
-**When you attempt something only a Stand can do — or want to achieve greater effect than your user alone could manage — you make a Stand Coin Roll using Power, Speed, or Precision. The fiction determines which applies. These are not interchangeable.**
-
-**Grade Gates: Some actions require a minimum grade to attempt at all. The GM calls this. A D-Power Stand cannot punch through a skyscraper — that action is simply unavailable. A B-Power Stand can attempt it, but starts at reduced position or effect.**
-
-**Stand Roll Benefit: When you use a Stand Coin Roll for something your user could have attempted with a skill roll, you gain either \+position or \+effect — GM's call based on what the fiction supports. Not both.**
-
-**Stand-on-Stand Combat: Only Stand abilities, bizarre powers, or similarly supernatural forces can damage a Stand directly. User skills don't apply against a Stand — you need your Coin Rolls. This creates a tactical choice: target the Stand (requires your dice pool) or find and expose the user (opens up all your user skills).**
-
-**S-Rank: S-rank in a Coin Roll does not grant a 5th die. Instead, the player defines a unique capstone ability for that stat — something the Stand can do at that grade that no standard rule could anticipate. GM must approve it at advancement.**
-
----
-
-**POWER**
-
-**Used when your Stand applies force beyond human scale — destruction, impact, overwhelming physical pressure.**
-
-**Roll Power dice when demolishing structures or barriers, delivering Stand-scale strikes, or overpowering something through sheer force.**
-
-**Grade reference (gate thresholds):**
-
-* **A: Can demolish large buildings and city blocks**  
-* **B: Can destroy reinforced structures and thick concrete**  
-* **C: Can shatter stone and heavy structural materials**  
-* **D: Can break through standard materials (wood, metal plating)**  
-* **F: Human-level force — use Wreck or Skirmish instead**
-
----
-
-**SPEED**
-
-**Used when your Stand moves, reacts, or acts at a pace no human body can match.**
-
-**Roll Speed dice when intercepting something before it can be perceived, crossing distance in an instant, or reacting to threats faster than normal physics allows.**
-
-**Movement: Heritage sets your user's base movement speed. If your Stand is physical, its Speed grade determines its movement range. Non-physical Stands use heritage movement.**
-
-**Grade reference (movement):**
-
-* **A: 60(120)ft, push yourself to dash**  
-* **B: 40(80)ft, push yourself to dash**  
-* **C: 35(70)ft, push yourself to dash**  
-* **D: 30(60)ft, push yourself to dash**  
-* **F: 25(50)ft — use heritage speed instead**
-
----
-
-**PRECISION**
-
-**Used when your Stand performs actions requiring accuracy or control beyond human capability.**
-
-**Roll Precision dice when targeting a specific point with surgical accuracy, performing fine manipulation at Stand scale, or executing a technique that demands exact control.**
-
-**At D or F, the GM may rule that precision-dependent Stand actions carry automatic consequences or aren't available.**
-
----
-
-**STAND COIN PASSIVES**
-
-**RANGE**
-
-**Defines the operational distance of your Stand and its abilities.**
-
-* **S: Unlimited range, no penalties**  
-* **A: 100(200)ft, push yourself to extend**  
-* **B: 50(100)ft, push yourself to extend**  
-* **C: 40(80)ft, push yourself to extend, extension subtracts 1 effect**  
-* **D: 20(40)ft, push yourself to extend, extension subtracts 1 effect**  
-* **F: 10(20)ft, push yourself to extend, extension subtracts 2 effect**
-
-**DURABILITY**
-
-**Affects Stress capacity, armor charges, and Stand Armor effectiveness.**
-
-* **S: \+4 Stress boxes, 3 Armor charges. Resistance rolls can reduce harm by 2 levels instead of 1**  
-* **A: \+3 Stress boxes, 3 Armor charges**  
-* **B: \+2 Stress boxes, 2 Armor charges**  
-* **C: \+1 Stress box, 1 Armor charge**  
-* **D: 0 Stress bonus, 1 Armor charge**  
-* **F: \-1 Stress boxes, 0 Armor charges**
-
-**DEVELOPMENT (POTENTIAL)**
-
-**Determines XP gain and capacity for growth.**
-
-* **S: \+5 XP at end of session**  
-* **A: \+4 XP at end of session. Can spend 2 stress to adopt a new unique/standard ability until end of session, GM's discretion**  
-* **B: \+3 XP at end of session**  
-* **C: \+2 XP at end of session**  
-* **D: \+1 XP at end of session**  
-* **F: Standard XP gain**
-
----
-
-**NPC STAND COIN STATS**
-
-**NPC stats are GM-facing parameters. NPCs don't roll Stand Coin dice — the GM reads their grades to set harm levels, determine what actions are available, and adjudicate consequences.**
-
-**Power — Determines harm level and impact:**
-
-* **S/A: Level 4 harm**  
-* **B: Level 3 harm**  
-* **C: Level 2 harm**  
-* **D: Level 1 harm**  
-* **F: No significant harm**
-
-**Speed — Movement reference:**
-
-* **S: 200ft**  
-* **A: 60ft**  
-* **B: 40ft**  
-* **C: 35ft**  
-* **D: 30ft**  
-* **F: 25ft**
-
-**Range — Operational distance (same as player reference above)**
-
-**Durability — Vulnerability Clock:**
-
-* **S: 0 segments (requires alternative win condition\*)**  
-* **A: 12 segments**  
-* **B: 10 segments**  
-* **C: 8 segments**  
-* **D: 6 segments**  
-* **F: 4 segments**
-
-**\*S-Durability Alternative Win Condition: e.g., "Expose User" / "Break Stand Logic" / "Discover Weakness" (8-segment clock)**
-
-**Regular Armor charges (Clock ÷ 3, rounded down): S=5, A=4, B=3, C/D=2, F=1**
-
-**Special Armor charges: S/A=3, B=2, C/D=1, F=0**
-
-**GM spends armor charges before filling Vulnerability Clock segments.**
-
-**Precision:**
-
-* **S–A: When defending, can reduce player effect by 1 level**  
-* **B–C: GM sets effect normally**  
-* **D–F: When attacking precisely, reduce effect by 1 level (clumsy)**
-
-**Development:**
-
-* **S: Can gain new abilities every round. Cannot be predicted**  
-* **A: Once per combat, can mutate an ability**  
-* **B: On return battles, comes back with one new ability**  
-* **C: Follows their script. Effective but predictable**  
-* **D: Few abilities. Easy to counter**  
-* **F: Loses abilities during combat. Unstable**
-
----
-
-**The only thing left blank intentionally is the S-rank capstone section for each Coin Roll — that's player-defined at your table. Worth adding a one-liner placeholder like "S-rank: Work with your GM to define a unique capstone ability for this stat." under each.**
-
-**STAND COIN** 
-
-**(Player character)**
-
-**The stand coin is made of 6 properties, rated from F to S, that describe the limits put on its abilities.**
-
-**A (4)**  
-**B (3)**  
-**C (2)**  
-**D (1)**  
-**F (0)**
-
-**At the beginning of a new game, distribute 6 points among:**  
-**\- Power (physical destructive power)**  
-**\- Speed (mobility & position)**  
-**\- Range (operational distance of the stand & its abilities)**  
-**\- Durability (resistance, & armor)**  
-**\- Precision (accuracy & control)**   
-**\- Development (growth potential)**
-
-**Stats are graded S(special)/A(4)/B(3)/C(2)/D(1)/F(0)**
-
-**F-Rank Limitations:**
-
-* **You cannot take F-rank in all six stats (minimum one stat must be D or higher)**  
-* **F-rank stats represent severe weaknesses that can be exploited by enemies**
-
-**If a stand coin stat enhances your stand armor, stress boxes, dice pool, etc., denote it in your character sheet\!**
-
-**Player Stats:**
-
-**\- Power: Determines physical destructive power**   
-**S: World-ending threat**   
-**A: Can demolish large buildings and city blocks with ease**  
-**B: Can destroy reinforced structures and thick concrete barriers**   
-**C: Can shatter stone and heavy structural materials**   
-**D: Can break through standard materials (wood, metal plating)**   
-**F: Human-level strength; baseline to above-average human physical capability**
-
-**\- Speed: Determines mobility in conflict. Speed grade relative to your opponent sets starting position — see Combat & Initiative. (same levels of speed as range):**   
-**S: 200ft movement**  
-**A: 60(120)ft movement, push yourself to dash.**  
-**B: 40(80)ft movement, push yourself to dash.**  
-**C: 35(70)ft movement, push yourself to dash.**  
-**D: 30(60)ft movement, push yourself to dash.**  
-**F: 25(50)ft movement, push yourself to dash.**
-
-**\- Range:**   
-**S: Unlimited range, no range penalties**  
-**A: 100(200) ft range, push yourself to extend**  
-**B: 50(100) ft, push yourself to extend**  
-**C: 40(80) ft, push yourself to extend, extension subtracts 1 effect**  
-**D: 20(40) ft, push yourself to extend, extension subtracts 1 effect**  
-**F: 10(20) ft, push yourself to extend, extension subtracts 2 effect**
-
-**\- Durability:**   
-**Affects Stress capacity, armor charges, and Stand Armor effectiveness:**   
-**S: \+4 Stress boxes, 3 Armor charges. Resistance rolls can reduce harm by 2 levels instead of 1**  
-**A: \+3 Stress boxes, 3 Armor charges**   
-**B: \+2 Stress boxes, 2 Armor charges**   
-**C: \+1 Stress box, 1 Armor charge**   
-**D: 0 Stress bonus, 1 Armor charge**   
-**F: \-1 Stress boxes, 0 Armor charges**
-
-**\- Precision: Affects accuracy and control. Having a higher precision means you have a better position/effect depending on the grade differential.**   
-**S: Double 6s and double 5s count as critical success; inherit A, B, and C properties**  
-**A: 5 counts as success; inherit B and C properties**  
-**B: 3 counts as partial success; inherit C properties**  
-**C: You can no longer critical fail**  
-**D: Double 1s count as a critical fail**  
-**F: 1s and double 1s count as critical fail**
-
-**\- Development Potential: Determines the Stand’s capacity to improve abilities and gain experience.**  
-**S: Earn \+5 XP at the end of each session…**  
-**A: Earn \+4 XP at the end of each session. Can spend 2 stress to adopt a new unique/standard ability until the end of the session, at GM’s discretion.**  
-**B: Earn \+3 XP at the end of each session.**  
-**C: Earn \+2 XP at the end of each session.**  
-**D: Earn \+1 XP at the end of each session.**  
-**F: Standard XP gain.**
-
-**\---**
-
-**NPC STAND COIN STATS:**
-
-**\- Power:**   
-**Determines harm level and impact:**   
-**S: Level 4 harm**  
-**A: Level 4 harm**  
-**B: Level 3 harm**   
-**C: Level 2 harm**  
-**D: Level 1 harm**  
-**F: No significant harm**
-
-**\- Speed: Speed and mobility of an NPC’s stand.**  
-**S: 200 ft movement**  
-**A: 60 ft**  
-**B: 40 ft**  
-**C: 35 ft**  
-**D: 30 ft**  
-**F: 25 ft**
-
-**\- Range:**   
-**S: Unlimited range, no range penalties**  
-**A: 100 ft**  
-**B: 50 ft**  
-**C: 40 ft**  
-**D: 20 ft**  
-**F: 10 ft**
-
-**\- DURABILITY:**   
-**Vulnerability Clock: (\_\_\_ segments)**   
-**Clock Size by Grade:**   
-**\- S: 0 segments (requires alternative win condition)\***   
-**\- A: 12 segments (elite threat)**   
-**\- B: 10 segments (veteran opponent)**   
-**\- C: 8 segments (standard threat)**   
-**\- D: 6 segments (fragile fighter)**   
-**\- F: 4 segments (glass cannon)** 
-
-**\*S-Durability Alternative Win Condition: Example: "Expose User" / "Break Stand Logic" / "Discover Weakness" (8-segment clock)** 
-
-**When Vulnerability Clock fills: NPC is defeated**   
-**─────────────────────────────────────────────**   
-**Regular Armor (reduces harm/consequences by 1 level):**   
-**(\_\_\_ charges)** 
-
-**Charges by Grade (Formula: Clock segments ÷ 3, rounded down):**   
-**\- S: 5 charges**   
-**\- A: 4 charges**   
-**\- B: 3 charges**   
-**\- C: 2 charges**   
-**\- D: 2 charges**   
-**\- F: 1 charge**  
-**─────────────────────────────────────────────**   
-**Special Armor (completely negates harm/consequences):**   
-**(\_\_\_ charges)** 
-
-**Charges by Grade:**   
-**\- S, A: 3 charges**   
-**\- B: 2 charges**   
-**\- C, D: 1 charge**   
-**\- F: 0 charges** 
-
-**GM spends armor charges BEFORE filling Vulnerability Clock segments. Special Armor creates dramatic "the attack bounces off" moments.**
-
-**\- Precision:**   
-**S-A: When defending, can reduce player effect by 1 level**   
-**B-C: Standard \- GM sets effect normally**   
-**D-F: When attacking precisely, reduce effect by 1 level (clumsy)**
-
-**\- Development Potential:**   
-**Determines the Stand’s capacity to improve abilities.**  
-**S: Evolve in real time. Can gain new abilities every round. You cannot be predicted.**  
-**A: Once per combat, you can mutate an ability to do something else.**  
-**B: On return battles, you come back stronger with one new ability.**   
-**C: You follow your script. You do what you were designed to do effectively without surprise.**  
-**D: You don’t change. You have only a few abilities. You are easy to counter.**  
-**F: You lose abilities during combat. Your stand is unstable.**
 
 # 😓 Stress & Trauma
 
@@ -2511,7 +1976,7 @@ You have access to all your equipment options, choosing specific gear as needed 
 
 ## **Stand Playbook Examples**
 
-In *1(800)Bizarre*, a Stand’s form informs how it behaves, not what it can do. These five examples—Colony, Tool-Bound, Automatic, Fighting Spirit, and Phenomena—demonstrate how Coin stats shape narrative power and tactical options. They're not classes or restrictions. They’re example builds: launch pads for your imagination. At the start of the game, choose 3 abilities. Each A-rank in Coin stats unlocks two more abilities (from custom, playbook, or standard ability list). Some abilities may require a certain amount of A’s before being allocated. 
+In *1(800)Bizarre*, a Stand’s form informs how it behaves, not what it can do. These six examples—Colony, Tool-Bound, Automatic, Fighting Spirit, and Phenomena—demonstrate how Coin stats shape narrative power and tactical options. They're not classes or restrictions. They’re example builds: launch pads for your imagination. At the start of the game, choose 3 abilities. Each A-rank in Coin stats unlocks two more abilities (from custom, playbook, or standard ability list). Some abilities may require a certain amount of A’s before being allocated. 
 
 Each includes:
 
@@ -2559,7 +2024,7 @@ A swarm of three intelligent birds—each with a unique function. As they fall, 
 
 * Cascade Effect – The swarm’s reactive nature fits well with counter-punishment.
 
-* Reflexes – A must for keeping up when managing three simultaneous moves.
+* Automatic Trigger \- each bird can be loaded with a conditional response, fits the autonomous swarm logic.
 
 ---
 
@@ -2591,7 +2056,7 @@ A skeleton that hunts hostile heat signatures and leaves corrosive ink behind. I
 
 * Saboteur – Perfect synergy with the ink hazard lingering after actions.
 
-* Autonomous Detonation – A thematic match; could represent the ink triggering a delayed blast.
+* Automatic Trigger – Paint hunts on conditional logic, this is its mechanical home. 
 
 * Superhero Landing – When Paint explodes beneath you, recover with flare.
 
@@ -2623,11 +2088,9 @@ A hot rod engine bound to your soul. Whenever you touch machinery, you superchar
 
 **Recommended Standard Abilities:**
 
-* Trap Sequence – Stack this with *Autokill* for paranoid, preloaded lethality.
-
-* Echo Strikes – Makes your tool-shocks feel fast and reactive.
-
-* Bizarre Ward – A mechanic-tuned Wreck can become a supernatural reinforcement.
+* Channel Force \- redirecting supernatural force through machinery is exactly what this stand does  
+* **Steady Barrage \- supercharged rapid attacks fir the hot rod theme**  
+* **Saboteur \- quiet, hidden mechanical damage fis a stand that burns things out from the inside.** 
 
 ---
 
@@ -2691,7 +2154,7 @@ Your Stand is a shared hallucination—a child’s recurring nightmare with meta
 
 **Recommended Standard Abilities:**
 
-* Undo Truth – Fiction-bending logic pairs naturally with this dream-state Stand.
+* Mesmeriser \- a hallucination stand making targets forget what happened is dead-on thematic
 
 * Bizarre Improvisation – This is your default mode. Make it unpredictable.
 
@@ -2727,7 +2190,7 @@ Your stand is capable of regenerating your limbs, organs, and any of your organi
 
 * **Cascade Effect:** If you roll a 6 from your resistance roll to resist a physical or bizarre consequence, the attacker suffers a mirrored backlash.
 
-* **Bizarre Step:** Push (2 stress) to instantly reposition within your stand’s range. Nearby observers must resist or lose track of you.
+* **Tough as Nails \- harm penalties are reduced, which fits a regeneration tank**
 
 * **The Devil’s Footsteps:** When you **push yourself**, choose one of the following additional benefits:
 
@@ -3285,9 +2748,8 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 * **Iron Will:** You're immune to the terror that some bizarre entities inflict on sight. Take **\+1d** to resistance rolls with **Resolve**.  
 * **Tough as Nails:** Penalties from harm are one level less severe (though level 4 harm is still fatal)  
 * **Overdrive:** While wearing non-Stand armor, gain an extra **\+1 armor**.  
-* **Masochist:** When your Stand takes harm, reduce the user's damage by 1 level. If the Stand hits Level 4 harm, both die.  
-* **Undying Will:** When taking Level 3 harm, you can act normally for one round. Afterwards, actions cost **2 stress**.  
-* **Rule of Cool:** Once per score, when you do something genuinely dramatic or stylish, clear 2 stress.
+* **Masochist:** When your Stand takes harm, reduce the user's damage by 1 level. If the Stand hits Level 4 harm with no way to reduce, both die.  
+* **Undying Will:** When taking Level 3 harm, you can act normally for one round. Afterwards, actions cost **2 stress**.
 
 **Cunning**
 

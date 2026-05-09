@@ -293,14 +293,9 @@ RELATIONSHIPS:
 """
 STRESS QUALITIES:
 
-BASE STRESS:
-- Characters start with 8-13 stress based on Stand Durability:
-  * S-rank Durability: 13 stress
-  * A-rank Durability: 12 stress
-  * B-rank Durability: 11 stress
-  * C-rank Durability: 10 stress
-  * D-rank Durability: 9 stress
-  * F-rank Durability: 8 stress
+BASE STRESS (SRD_DEV):
+- Level-1 PCs use **9 marked stress slots** regardless of Stand Durability.
+- Stand Durability affects **Stand armor** (+ how fiction handles Stand harm), **not** how many PC stress boxes you have.
 
 STRESS GAIN:
 - Taking harm
