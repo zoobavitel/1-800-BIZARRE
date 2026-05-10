@@ -358,21 +358,79 @@ class NPC(models.Model):
     conflict_clocks = models.JSONField(default=list, blank=True)
     # Alternative win condition clocks
     alt_clocks = models.JSONField(default=list, blank=True)
-    # Armor tracking (regular vs special charges used)
+    # Armor tracking: physical (body) + stand path + special (negate) — see SRD NPC armor + path armor.
     regular_armor_used = models.IntegerField(default=0)
     special_armor_used = models.IntegerField(default=0)
+    stand_armor_used = models.IntegerField(default=0)
+    # Physical (regular) armor only when fiction includes worn/carried gear, etc.
+    has_physical_armor_item = models.BooleanField(
+        default=False,
+        help_text=(
+            "When False, this NPC has no physical armor pool (no item / no gear "
+            "granting −1 harm charges)."
+        ),
+    )
+    physical_armor_bonus_charges = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0), MaxValueValidator(6)],
+        help_text=(
+            "GM-tunable extra physical armor charges beyond the Durability "
+            "baseline (fiction, quality gear, on-the-fly grants)."
+        ),
+    )
+    # Default position / effect when a patient uses recover in play under this NPC’s care.
+    heal_recover_in_play_position = models.CharField(
+        max_length=16,
+        default="risky",
+        blank=True,
+        help_text="Default position for recover-in-play healing this NPC facilitates.",
+    )
+    heal_recover_in_play_effect = models.CharField(
+        max_length=16,
+        default="standard",
+        blank=True,
+        help_text="Default effect tier for recover-in-play healing (limited/standard/extreme).",
+    )
+    # Fixed d6 count (1–4) for fortune when this NPC provides healing / recovery care.
+    heal_quality_fortune_dice = models.IntegerField(
+        default=2,
+        validators=[MinValueValidator(1), MaxValueValidator(4)],
+        help_text=(
+            "Quality tier as dice: how many d6 for a fortune roll when this NPC "
+            "treats or stabilizes someone (downtime or in-play recover), for any "
+            "valid patient (self, another NPC, or a campaign PC)."
+        ),
+    )
 
     @property
     def regular_armor_charges(self):
-        """Regular armor charges based on durability grade (SRD: F=0, D=1, C=1, B=2, A=3, S=3)."""
+        """Physical armor charges: Durability baseline + bonus, only if `has_physical_armor_item`."""
+        if not bool(getattr(self, "has_physical_armor_item", False)):
+            return 0
         durability_grade = self.stand_coin_stats.get("DURABILITY", "F")
-        return {"S": 3, "A": 3, "B": 2, "C": 1, "D": 1, "F": 0}.get(durability_grade, 0)
+        base = {"S": 3, "A": 3, "B": 2, "C": 1, "D": 1, "F": 0}.get(durability_grade, 0)
+        bonus = max(
+            0,
+            min(
+                6,
+                int(getattr(self, "physical_armor_bonus_charges", 0) or 0),
+            ),
+        )
+        return base + bonus
 
     @property
     def special_armor_charges(self):
-        """Special armor charges (Stand Armor effectiveness)."""
+        """Special armor charges from Durability (completely negate harm)."""
         durability_grade = self.stand_coin_stats.get("DURABILITY", "F")
         return {"S": 2, "A": 2, "B": 1, "C": 1, "D": 0, "F": 0}.get(durability_grade, 0)
+
+    @property
+    def stand_armor_charges(self):
+        """Stand / path armor pool from Durability (separate from physical reduce & special negate)."""
+        durability_grade = self.stand_coin_stats.get("DURABILITY", "F")
+        return {"S": 2, "A": 2, "B": 1, "C": 1, "D": 0, "F": 0}.get(
+            durability_grade, 0
+        )
 
     @property
     def vulnerability_clock_max(self):
@@ -609,6 +667,14 @@ class Character(models.Model):
         help_text=(
             "Manual vampire feeding tracker used by sheet detriments "
             "that depend on whether the character fed today."
+        ),
+    )
+    disguised_as_human = models.BooleanField(
+        null=True,
+        blank=True,
+        default=None,
+        help_text=(
+            "Sheet toggle: when true, Alien Understanding (−1d social) does not apply."
         ),
     )
     stand_coin_points_gained = models.IntegerField(default=0)

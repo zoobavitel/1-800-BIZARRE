@@ -19,6 +19,7 @@ from ..models import (
     CharacterHamonAbility,
     ExperienceTracker,
     GroupAction,
+    NPC,
     Session,
     Roll,
     RollHistory,
@@ -327,7 +328,14 @@ class CharacterViewSet(viewsets.ModelViewSet):
             request.data.get("fortune_public_label", "") or ""
         ).strip()
         roll_type = request.data.get("roll_type", "ACTION")
+        npc_heal_fortune = _as_bool(request.data.get("npc_heal_fortune"))
+        npc_heal_coin_remaining = None
         bonus_dice = int(request.data.get("bonus_dice") or 0)
+        heritage_penalty_dice = int(request.data.get("heritage_penalty_dice") or 0)
+        if heritage_penalty_dice < 0:
+            heritage_penalty_dice = 0
+        if heritage_penalty_dice > 3:
+            heritage_penalty_dice = 3
         ability_effect_steps = int(request.data.get("ability_effect_steps") or 0)
         goal_label = (request.data.get("goal_label") or "").strip()
         ability_bonuses = request.data.get(
@@ -337,8 +345,6 @@ class CharacterViewSet(viewsets.ModelViewSet):
         pool_source = str(request.data.get("pool_source") or "action_dots").strip().lower()
         stand_stat_requested = str(request.data.get("stand_stat") or "").strip().lower()
         group_action_id = request.data.get("group_action_id")
-        if pool_source == "stand_coin":
-            group_action_id = None
         assist_helper_id_raw = request.data.get("assist_helper_id")
         assist_helper = None
         extra_roll_stress = 0
@@ -548,11 +554,165 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
         # Fortune roll: GM sets dice_pool directly; no action/incapacitated/push
         if roll_type.upper() == "FORTUNE":
+            if npc_heal_fortune and not session:
+                return Response(
+                    {
+                        "error": (
+                            "npc_heal_fortune requires a valid session_id for this "
+                            "character's campaign."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             action_name = action_name or "Fortune"
-            dice_pool = max(1, min(6, int(request.data.get("dice_pool", 2))))
+            base_fortune = max(1, min(6, int(request.data.get("dice_pool", 2))))
+            dice_pool = base_fortune
             action_rating = 0
             attribute_dice = 0
+            if npc_heal_fortune:
+                if character.user_id != request.user.id and not request.user.is_staff:
+                    return Response(
+                        {
+                            "error": (
+                                "Only that character's player may spend coin on this "
+                                "NPC heal fortune roll."
+                            )
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                try:
+                    healer_npc_id = int(request.data.get("npc_healer_npc_id") or 0)
+                except (TypeError, ValueError):
+                    healer_npc_id = 0
+                if healer_npc_id <= 0:
+                    return Response(
+                        {"error": "npc_healer_npc_id is required for npc_heal_fortune."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if not session.npcs_involved.filter(pk=healer_npc_id).exists():
+                    return Response(
+                        {
+                            "error": (
+                                "That NPC is not involved in this session; the GM must "
+                                "add them to the session first."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                healer_npc = (
+                    NPC.objects.filter(
+                        pk=healer_npc_id, campaign_id=character.campaign_id
+                    )
+                    .only("id", "name")
+                    .first()
+                )
+                if not healer_npc:
+                    return Response(
+                        {"error": "NPC healer not found in this campaign."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                pch_raw = request.data.get("npc_heal_patient_character_id")
+                if pch_raw not in (None, "", False):
+                    try:
+                        pcid_chk = int(pch_raw)
+                    except (TypeError, ValueError):
+                        pcid_chk = 0
+                    if pcid_chk > 0 and not Character.objects.filter(
+                        pk=pcid_chk, campaign_id=character.campaign_id
+                    ).exists():
+                        return Response(
+                            {
+                                "error": (
+                                    "npc_heal_patient_character_id must be a character "
+                                    "in this campaign."
+                                )
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                pnpc_raw_pre = request.data.get("npc_heal_patient_npc_id")
+                if pnpc_raw_pre not in (None, "", False):
+                    try:
+                        pnid_chk = int(pnpc_raw_pre)
+                    except (TypeError, ValueError):
+                        pnid_chk = 0
+                    if pnid_chk > 0 and not session.npcs_involved.filter(
+                        pk=pnid_chk
+                    ).exists():
+                        return Response(
+                            {
+                                "error": (
+                                    "npc_heal_patient_npc_id must refer to an NPC "
+                                    "involved in this session."
+                                )
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                try:
+                    coin_n = int(request.data.get("npc_heal_fortune_coin") or 0)
+                except (TypeError, ValueError):
+                    coin_n = 0
+                coin_n = max(0, min(3, coin_n))
+                bump = coin_n
+
+                def _personal_coin_filled_count(ch):
+                    bx = getattr(ch, "coin_boxes", None) or []
+                    if not isinstance(bx, (list, tuple)):
+                        return 0
+                    return sum(1 for x in bx[:4] if x)
+
+                if coin_n > 0:
+                    with transaction.atomic():
+                        locked = Character.objects.select_for_update().get(
+                            pk=character.pk
+                        )
+                        boxes = list(locked.coin_boxes or [])
+                        if not isinstance(boxes, list):
+                            boxes = []
+                        while len(boxes) < 4:
+                            boxes.append(False)
+                        boxes = [bool(x) for x in boxes[:4]]
+                        cur_coin = sum(1 for x in boxes if x)
+                        if cur_coin < coin_n:
+                            return Response(
+                                {
+                                    "error": "Insufficient personal coin for this spend.",
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                        filled_indices = [i for i, v in enumerate(boxes) if v]
+                        for j in filled_indices[-coin_n:]:
+                            boxes[j] = False
+                        locked.coin_boxes = boxes
+                        locked.save(update_fields=["coin_boxes"])
+                        character.coin_boxes = boxes
+                    modifier_sources.append(
+                        {
+                            "kind": "coin",
+                            "name": (
+                                f"Coin: spent {coin_n} → +{coin_n}d NPC heal fortune "
+                                f"(base {base_fortune}d)"
+                            ),
+                            "delta": f"+{coin_n}d",
+                            "category": "system",
+                        }
+                    )
+                npc_heal_coin_remaining = _personal_coin_filled_count(character)
+                dice_pool = max(1, min(6, base_fortune + bump))
+                healer_label = (getattr(healer_npc, "name", None) or "").strip() or "NPC"
+                modifier_sources.append(
+                    {
+                        "kind": "npc_healer",
+                        "name": f"Healer (session NPC): {healer_label}",
+                        "delta": "fortune",
+                        "category": "system",
+                    }
+                )
         else:
+            if npc_heal_fortune:
+                return Response(
+                    {"error": "npc_heal_fortune is only valid for roll_type FORTUNE."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             if not action_name:
                 return Response(
                     {"error": "Action name is required"},
@@ -840,6 +1000,16 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         "category": "ability",
                     }
                 )
+            if roll_type.upper() == "ACTION" and heritage_penalty_dice > 0:
+                dice_pool -= heritage_penalty_dice
+                modifier_sources.append(
+                    {
+                        "kind": "heritage",
+                        "name": "Alien Understanding",
+                        "delta": f"-{heritage_penalty_dice}d",
+                        "category": "heritage",
+                    }
+                )
 
             ahid_requested = None
             if assist_helper_id_raw not in (None, "", False):
@@ -963,6 +1133,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         }
                     )
 
+        dice_pool = max(0, dice_pool)
         pool_before_roll = dice_pool
         # 0d action pool (Blades-style): roll 2d take the lowest for outcome tiers; mirrors offline rollDice().
         if dice_pool > 0:
@@ -1009,7 +1180,54 @@ class CharacterViewSet(viewsets.ModelViewSet):
             recovery_roll_target = None
             recovery_ctx_for_roll = ""
             rtc_raw = request.data.get("recovery_target_character_id")
-            if rtc_raw not in (None, "", False):
+            if npc_heal_fortune:
+                recovery_ctx_for_roll = "npc_heal_fortune"
+                pchar_raw = request.data.get("npc_heal_patient_character_id")
+                if pchar_raw not in (None, "", False):
+                    try:
+                        tid_rtc = int(pchar_raw)
+                        cand = Character.objects.filter(
+                            pk=tid_rtc, campaign_id=character.campaign_id
+                        ).first()
+                        if cand:
+                            if cand.id != character.id:
+                                recovery_roll_target = cand
+                                desc += (
+                                    " [NPC heal patient (PC): "
+                                    f"{recovery_roll_target.true_name}]"
+                                )
+                            else:
+                                desc += " [NPC heal patient (PC): self]"
+                    except (TypeError, ValueError):
+                        pass
+                pnpc_raw = request.data.get("npc_heal_patient_npc_id")
+                if pnpc_raw not in (None, "", False):
+                    try:
+                        pnid = int(pnpc_raw)
+                    except (TypeError, ValueError):
+                        pnid = 0
+                    if pnid > 0:
+                        if not session.npcs_involved.filter(pk=pnid).exists():
+                            return Response(
+                                {
+                                    "error": (
+                                        "npc_heal_patient_npc_id must refer to an NPC "
+                                        "involved in this session."
+                                    )
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                        pnpc = (
+                            NPC.objects.filter(
+                                pk=pnid, campaign_id=character.campaign_id
+                            )
+                            .only("id", "name")
+                            .first()
+                        )
+                        if pnpc:
+                            pn = (getattr(pnpc, "name", None) or "").strip() or "NPC"
+                            desc += f" [NPC heal patient (NPC): {pn}]"
+            elif rtc_raw not in (None, "", False):
                 try:
                     tid_rtc = int(rtc_raw)
                     candidate_rt = Character.objects.filter(
@@ -1022,7 +1240,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 except (TypeError, ValueError):
                     pass
             if (
-                recovery_ctx_for_roll != "ally"
+                recovery_ctx_for_roll not in ("ally", "npc_heal_fortune")
                 and recovery_ctx_sheet not in ("self_downtime", "self_mid_action")
                 and _as_bool(request.data.get("recovery_is_self_treatment", False))
                 and rtc_raw not in (None, "", False)
@@ -1144,29 +1362,30 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     character, session, roll, heritage_bonuses_raw
                 )
 
-        return Response(
-            {
-                "action": action_name,
-                "rating": action_rating,
-                "attribute_dice": attribute_dice,
-                "total_dice": dice_pool,
-                "dice_results": dice_results,
-                "highest": max_result,
-                "position": position,
-                "effect": effect,
-                "outcome": outcome.lower().replace("_", " "),
-                "roll_id": roll.id if roll else None,
-                "stress_spent": stress_cost,
-                "xp_gained": xp_awarded if session else 0,
-                "xp_track": xp_track,
-                "group_action_id": roll.group_action_id if roll else None,
-                "assist_helper_id": assist_helper.id if assist_helper else None,
-                "assist_helper_stress": assist_helper.stress if assist_helper else None,
-                "modifier_sources": modifier_sources,
-                "stress_sources": stress_sources,
-                "position_effect_sources": position_effect_sources,
-            }
-        )
+        roll_response_body = {
+            "action": action_name,
+            "rating": action_rating,
+            "attribute_dice": attribute_dice,
+            "total_dice": dice_pool,
+            "dice_results": dice_results,
+            "highest": max_result,
+            "position": position,
+            "effect": effect,
+            "outcome": outcome.lower().replace("_", " "),
+            "roll_id": roll.id if roll else None,
+            "stress_spent": stress_cost,
+            "xp_gained": xp_awarded if session else 0,
+            "xp_track": xp_track,
+            "group_action_id": roll.group_action_id if roll else None,
+            "assist_helper_id": assist_helper.id if assist_helper else None,
+            "assist_helper_stress": assist_helper.stress if assist_helper else None,
+            "modifier_sources": modifier_sources,
+            "stress_sources": stress_sources,
+            "position_effect_sources": position_effect_sources,
+        }
+        if npc_heal_coin_remaining is not None:
+            roll_response_body["coin"] = npc_heal_coin_remaining
+        return Response(roll_response_body)
 
     @action(detail=True, methods=["post"], url_path="assist-help")
     def assist_help(self, request, pk=None):

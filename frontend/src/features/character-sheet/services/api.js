@@ -1083,6 +1083,10 @@ export const transformBackendToFrontend = (backendCharacter) => {
       typeof backendCharacter.fed_today === "boolean"
         ? backendCharacter.fed_today
         : null,
+    disguised_as_human:
+      typeof backendCharacter.disguised_as_human === "boolean"
+        ? backendCharacter.disguised_as_human
+        : null,
 
     /** +1 Stand Coin ranks bought with XP beyond chargen (10 XP each on backend); chargen baseline is excluded. */
     standCoinPointsGained: Math.max(
@@ -1298,6 +1302,10 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     fed_today:
       typeof frontendCharacter.fed_today === "boolean"
         ? frontendCharacter.fed_today
+        : null,
+    disguised_as_human:
+      typeof frontendCharacter.disguised_as_human === "boolean"
+        ? frontendCharacter.disguised_as_human
         : null,
 
     coin_boxes: normalizeCoinBoxes(frontendCharacter.coin),

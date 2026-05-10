@@ -72,6 +72,13 @@ import {
   characterHasPhantomPain,
   characterHasRippleBreathing,
 } from "../features/character-sheet/utils/abilityRollBonusMeta";
+import {
+  alienUnderstandingHeritagePenaltyApplies,
+  heritageBenefitIsReflexOverclock,
+  heritageEntryIsAlienUnderstanding,
+  reflexOverclockHeritageBonusApplies,
+} from "../features/character-sheet/utils/heritageRollBonusMeta";
+import { derivePartyFacingSessionNpc } from "../features/character-sheet/utils/sessionNpcPartyFace";
 import { getResistanceResultSheetAbilityReminders } from "../features/character-sheet/utils/sheetAbilityResistanceReminders";
 
 /** Same ordering as Insight / Prowess / Resolve columns on the sheet. */
@@ -840,6 +847,11 @@ const CharacterSheetWrapper = ({
       : "Created by unknown";
   const canEditSheet = !character?.id || isGM || character?.user_id === user?.id;
   const canCreateManualHistoryRecord = isGM || character?.user_id === user?.id;
+  const isCharacterOwner = Boolean(
+    character?.user_id != null &&
+      user?.id != null &&
+      String(character.user_id) === String(user.id),
+  );
   const [activeMode, setActiveMode] = useState("CHARACTER MODE");
   const campaignIdFromCharacter = (() => {
     const c = character?.campaign;
@@ -864,6 +876,23 @@ const CharacterSheetWrapper = ({
     const row = m[String(characterId)] ?? m[characterId];
     return row && typeof row === "object" ? row : null;
   }, [charCampaign?.active_session_detail, characterId]);
+
+  /** GM campaign payloads include full NPC stats; mirror player visibility on the sheet. */
+  const sessionNpcsPartyFacingDisplay = useMemo(() => {
+    const raw =
+      charCampaign?.active_session_detail?.session_npcs_with_clocks || [];
+    return raw
+      .map((npc) => derivePartyFacingSessionNpc(npc))
+      .filter((x) => x.showCard)
+      .map((x) => x.display);
+  }, [charCampaign?.active_session_detail?.session_npcs_with_clocks]);
+
+  /** All session-involved NPCs (id + name); not gated by player clock visibility — for NPC heal fortune picker. */
+  const sessionNpcHealRoster = useMemo(() => {
+    const roster =
+      charCampaign?.active_session_detail?.session_npc_heal_roster || [];
+    return Array.isArray(roster) ? roster : [];
+  }, [charCampaign?.active_session_detail?.session_npc_heal_roster]);
 
   const maxStandGradeIndex =
     character?.gm_can_have_s_rank_stand_stats === true ? 5 : 4;
@@ -895,6 +924,10 @@ const CharacterSheetWrapper = ({
     crewId: initialCrew.crewId,
     fed_today:
       typeof character?.fed_today === "boolean" ? character.fed_today : null,
+    disguised_as_human:
+      typeof character?.disguised_as_human === "boolean"
+        ? character.disguised_as_human
+        : null,
   });
 
   // Campaign assignment (normalize: backend may send campaign as object or ID)
@@ -1111,6 +1144,16 @@ const CharacterSheetWrapper = ({
     );
   }, [character?.id, character?.fed_today]);
 
+  useEffect(() => {
+    const v =
+      typeof character?.disguised_as_human === "boolean"
+        ? character.disguised_as_human
+        : null;
+    setCharData((prev) =>
+      prev.disguised_as_human !== v ? { ...prev, disguised_as_human: v } : prev,
+    );
+  }, [character?.id, character?.disguised_as_human]);
+
   // When parent merges id before full GET/list row arrives, fill empty identity from server (avoid PUT wiping true_name, etc.)
   useEffect(() => {
     setCharData((prev) => {
@@ -1302,6 +1345,16 @@ const CharacterSheetWrapper = ({
   const [healingRecoverBusy, setHealingRecoverBusy] = useState(false);
   const [healingRecoverErr, setHealingRecoverErr] = useState(null);
   const [healingRecoverMsg, setHealingRecoverMsg] = useState("");
+  /** Session NPC treats you (or an ally): fortune pool + optional personal coin (owner-only roll per API). */
+  const [npcHealFortuneBusy, setNpcHealFortuneBusy] = useState(false);
+  const [npcHealFortuneErr, setNpcHealFortuneErr] = useState(null);
+  const [npcHealFortuneMsg, setNpcHealFortuneMsg] = useState("");
+  const [npcHealHealerId, setNpcHealHealerId] = useState("");
+  const [npcHealBaseDice, setNpcHealBaseDice] = useState(2);
+  const [npcHealCoinSpend, setNpcHealCoinSpend] = useState(0);
+  const [npcHealPatientMode, setNpcHealPatientMode] = useState("self");
+  const [npcHealPatientPcId, setNpcHealPatientPcId] = useState("");
+  const [npcHealPatientNpcId, setNpcHealPatientNpcId] = useState("");
   /** Action rating used for downtime + mid-action healing-clock recover (default Tinker); per-character localStorage. */
   const [selfHealingRecoverAction, setSelfHealingRecoverAction] =
     useState("TINKER");
@@ -1396,6 +1449,50 @@ const CharacterSheetWrapper = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate coin/stash only on id change (see comment above)
   }, [character?.id]);
+
+  useEffect(() => {
+    setNpcHealFortuneErr(null);
+    setNpcHealFortuneMsg("");
+    setNpcHealPatientMode("self");
+    setNpcHealPatientPcId("");
+    setNpcHealPatientNpcId("");
+    setNpcHealCoinSpend(0);
+  }, [character?.id]);
+
+  useEffect(() => {
+    if (!sessionNpcHealRoster.length) {
+      setNpcHealHealerId("");
+      return;
+    }
+    setNpcHealHealerId((prev) => {
+      const ok = sessionNpcHealRoster.some(
+        (n) => String(n.id) === String(prev),
+      );
+      if (ok) return String(prev);
+      return String(sessionNpcHealRoster[0].id);
+    });
+  }, [sessionNpcHealRoster]);
+
+  /** Default base fortune dice from the selected session healer's NPC sheet Quality tier (1–4d). */
+  useEffect(() => {
+    if (!npcHealHealerId || !sessionNpcHealRoster.length) return;
+    const row = sessionNpcHealRoster.find(
+      (n) => String(n.id) === String(npcHealHealerId),
+    );
+    const hq = Number(row?.heal_quality_fortune_dice);
+    if (Number.isFinite(hq) && hq >= 1 && hq <= 4) {
+      setNpcHealBaseDice(hq);
+    }
+  }, [npcHealHealerId, sessionNpcHealRoster]);
+
+  useEffect(() => {
+    const base = Math.max(
+      1,
+      Math.min(6, Math.floor(Number(npcHealBaseDice)) || 2),
+    );
+    const maxSpend = Math.min(3, coinFilled, Math.max(0, 6 - base));
+    setNpcHealCoinSpend((s) => (s > maxSpend ? maxSpend : s));
+  }, [npcHealBaseDice, coinFilled]);
 
   // Heritage benefits and detriments (arrays of IDs)
   const [selectedBenefits, setSelectedBenefits] = useState(
@@ -1587,6 +1684,41 @@ const CharacterSheetWrapper = ({
         /without feeding/i.test(String(a.name || "")),
     );
   }, [heritageAutoAbilities]);
+
+  const hasAlienUnderstandingDetriment = useMemo(() => {
+    const hid = charData?.heritage;
+    const h =
+      hid != null && Array.isArray(heritages) && heritages.length
+        ? heritages.find((x) => x.id === hid)
+        : null;
+    const d = (h?.detriments || []).find((x) => heritageEntryIsAlienUnderstanding(x));
+    if (!d) return false;
+    return (
+      Boolean(d.required) ||
+      (Array.isArray(selectedDetriments) && selectedDetriments.includes(d.id))
+    );
+  }, [charData?.heritage, heritages, selectedDetriments]);
+
+  const alienUnderstandingDetrimentId = useMemo(() => {
+    const hid = charData?.heritage;
+    const h =
+      hid != null && Array.isArray(heritages) && heritages.length
+        ? heritages.find((x) => x.id === hid)
+        : null;
+    const d = (h?.detriments || []).find((x) => heritageEntryIsAlienUnderstanding(x));
+    return d?.id ?? null;
+  }, [charData?.heritage, heritages]);
+
+  useEffect(() => {
+    if (charData.disguised_as_human !== true) return;
+    const aid = alienUnderstandingDetrimentId;
+    if (aid == null) return;
+    setHeritageRollBoost((prev) => {
+      const k = String(aid);
+      if (!prev[k]?.dice) return prev;
+      return { ...prev, [k]: { ...prev[k], dice: false } };
+    });
+  }, [charData.disguised_as_human, alienUnderstandingDetrimentId]);
 
   // Sync playbook label when character changes (API uses STAND/HAMON/SPIN; sheet uses Stand/Hamon/Spin)
   useEffect(() => {
@@ -2792,6 +2924,89 @@ const CharacterSheetWrapper = ({
     ],
   );
 
+  const performNpcHealFortuneRoll = useCallback(async () => {
+    if (!isCharacterOwner || !canEditSheet) return;
+    if (!characterId || !activeSessionId) return;
+    if (npcHealFortuneBusy) return;
+    const hid = Number(npcHealHealerId);
+    if (!Number.isFinite(hid) || hid <= 0) {
+      setNpcHealFortuneErr("Pick a session NPC healer.");
+      return;
+    }
+    const base = Math.max(
+      1,
+      Math.min(6, Math.floor(Number(npcHealBaseDice)) || 2),
+    );
+    const maxSpend = Math.min(3, coinFilled, Math.max(0, 6 - base));
+    const spend = Math.max(
+      0,
+      Math.min(maxSpend, Math.floor(Number(npcHealCoinSpend)) || 0),
+    );
+
+    setNpcHealFortuneBusy(true);
+    setNpcHealFortuneErr(null);
+    setNpcHealFortuneMsg("");
+
+    try {
+      const payload = {
+        roll_type: "FORTUNE",
+        session_id: activeSessionId,
+        dice_pool: base,
+        npc_heal_fortune: true,
+        npc_healer_npc_id: hid,
+        npc_heal_fortune_coin: spend,
+        action: "fortune",
+      };
+      if (npcHealPatientMode === "pc" && npcHealPatientPcId) {
+        const pid = Number(npcHealPatientPcId);
+        if (Number.isFinite(pid) && pid > 0) {
+          payload.npc_heal_patient_character_id = pid;
+        }
+      } else if (npcHealPatientMode === "npc" && npcHealPatientNpcId) {
+        const nid = Number(npcHealPatientNpcId);
+        if (Number.isFinite(nid) && nid > 0) {
+          payload.npc_heal_patient_npc_id = nid;
+        }
+      }
+      const res = await characterAPI.rollAction(characterId, payload);
+      if (typeof res?.coin === "number" && Number.isFinite(res.coin)) {
+        setCoinFilled((prev) => {
+          const next = Math.max(0, Math.min(4, Math.floor(res.coin)));
+          return next !== prev ? next : prev;
+        });
+      }
+      const dice = Array.isArray(res?.dice_results)
+        ? res.dice_results.join(", ")
+        : "";
+      const total = Number.isFinite(Number(res?.total_dice))
+        ? Number(res.total_dice)
+        : "?";
+      setNpcHealFortuneMsg(
+        `NPC heal fortune (${total}d): [${dice}] highest ${res?.highest ?? "—"} — ${res?.outcome ?? "—"}${spend ? ` · spent ${spend} coin` : ""}`,
+      );
+      setHistoryRefreshTick((x) => x + 1);
+      onCampaignRefresh?.();
+    } catch (e) {
+      setNpcHealFortuneErr(e?.message || "NPC heal fortune failed");
+    } finally {
+      setNpcHealFortuneBusy(false);
+    }
+  }, [
+    isCharacterOwner,
+    canEditSheet,
+    characterId,
+    activeSessionId,
+    npcHealFortuneBusy,
+    npcHealHealerId,
+    npcHealBaseDice,
+    npcHealCoinSpend,
+    coinFilled,
+    npcHealPatientMode,
+    npcHealPatientPcId,
+    npcHealPatientNpcId,
+    onCampaignRefresh,
+  ]);
+
   const xpReqSnapshot = useMemo(
     () =>
       buildXpRequirementSnapshot({
@@ -3343,6 +3558,13 @@ const CharacterSheetWrapper = ({
   }, [showStandCoinActionColumn]);
 
   useEffect(() => {
+    if (showStandCoinActionColumn) return;
+    setGroupActionNameDraft((prev) =>
+      String(prev || "").trim().toLowerCase().startsWith("stand_") ? "" : prev,
+    );
+  }, [showStandCoinActionColumn]);
+
+  useEffect(() => {
     if (!characterId) {
       setSelfHealingRecoverAction("TINKER");
       return;
@@ -3615,8 +3837,7 @@ const CharacterSheetWrapper = ({
       hid != null && Array.isArray(heritages) && heritages.length
         ? heritages.find((x) => x.id === hid)
         : null;
-    if (!h?.benefits?.length) return [];
-    return h.benefits
+    const fromBenefits = (h?.benefits || [])
       .filter(
         (b) =>
           b &&
@@ -3628,16 +3849,34 @@ const CharacterSheetWrapper = ({
         ...b,
         supportsDice: supportsAbilityBonusDice(b.description),
         supportsEffect: supportsAbilityBonusEffect(b.description),
+        supportsPenaltyDice: false,
       }))
       .filter(
         (hb) =>
           supportsActionRollFromHeritage(hb) &&
           (hb.supportsDice || hb.supportsEffect),
       );
+
+    const alienOpts = (h?.detriments || [])
+      .filter((d) => d && heritageEntryIsAlienUnderstanding(d))
+      .filter(
+        (d) =>
+          Boolean(d.required) ||
+          (Array.isArray(selectedDetriments) && selectedDetriments.includes(d.id)),
+      )
+      .map((d) => ({
+        ...d,
+        supportsDice: false,
+        supportsEffect: false,
+        supportsPenaltyDice: true,
+      }));
+
+    return [...fromBenefits, ...alienOpts];
   }, [
     charData?.heritage,
     heritages,
     selectedBenefits,
+    selectedDetriments,
     supportsAbilityBonusDice,
     supportsAbilityBonusEffect,
   ]);
@@ -3717,23 +3956,33 @@ const CharacterSheetWrapper = ({
     heritageEffectSteps,
     heritageBonusAudit,
   } = useMemo(() => {
-    if (rollPending?.standRoll) {
-      return {
-        bonusDiceFromHeritage: 0,
-        heritageEffectSteps: 0,
-        heritageBonusAudit: [],
-      };
-    }
+    const reflexCtx = {
+      rollPending,
+      healingTreatmentBonusContext,
+    };
     let d = 0;
     let e = 0;
     const audit = [];
     heritageRollBonusOptions.forEach((hb) => {
+      if (rollPending?.standRoll && !heritageBenefitIsReflexOverclock(hb)) {
+        return;
+      }
+      if (
+        heritageBenefitIsReflexOverclock(hb) &&
+        !reflexOverclockHeritageBonusApplies(reflexCtx)
+      ) {
+        return;
+      }
       const id = hb.id ?? hb.name;
       const b = heritageRollBoost[id];
       if (!b) return;
       if (hb.supportsDice && b.dice) {
         d += 1;
-        audit.push(`${hb.name}: +1d (heritage)`);
+        audit.push(
+          rollPending?.standRoll
+            ? `${hb.name}: +1d (heritage — stand speed)`
+            : `${hb.name}: +1d (heritage)`,
+        );
       }
       if (hb.supportsEffect && b.effect) {
         e += 1;
@@ -3745,7 +3994,37 @@ const CharacterSheetWrapper = ({
       heritageEffectSteps: e,
       heritageBonusAudit: audit,
     };
-  }, [heritageRollBonusOptions, heritageRollBoost, rollPending?.standRoll]);
+  }, [
+    heritageRollBonusOptions,
+    heritageRollBoost,
+    rollPending,
+    healingTreatmentBonusContext,
+  ]);
+
+  const heritagePenaltyDiceActive = useMemo(() => {
+    const ctx = {
+      rollPending,
+      healingTreatmentBonusContext,
+      rollActionName,
+      disguisedAsHuman: charData.disguised_as_human,
+    };
+    if (!alienUnderstandingHeritagePenaltyApplies(ctx)) return 0;
+    let p = 0;
+    heritageRollBonusOptions.forEach((hb) => {
+      if (!hb.supportsPenaltyDice) return;
+      const id = hb.id ?? hb.name;
+      const b = heritageRollBoost[id];
+      if (b?.dice) p += 1;
+    });
+    return Math.min(3, p);
+  }, [
+    heritageRollBonusOptions,
+    heritageRollBoost,
+    rollPending,
+    healingTreatmentBonusContext,
+    rollActionName,
+    charData.disguised_as_human,
+  ]);
 
   const totalBonusDiceFromAbilitiesAndHeritage =
     bonusDiceFromAbilities + bonusDiceFromHeritage;
@@ -4119,6 +4398,7 @@ const CharacterSheetWrapper = ({
     if (rollModal.push_dice) mod += 1;
     if (rollModal.devil_bargain_dice) mod += 1;
     mod += totalBonusDiceFromAbilitiesAndHeritage;
+    mod -= heritagePenaltyDiceActive;
     const selectedPushStress =
       (rollModal.push_effect ? 2 : 0) + (rollModal.push_dice ? 2 : 0);
     const rippleWaivesPushStress =
@@ -4152,6 +4432,7 @@ const CharacterSheetWrapper = ({
     rollModal.devil_bargain_dice,
     harmLevel3Used,
     totalBonusDiceFromAbilitiesAndHeritage,
+    heritagePenaltyDiceActive,
     phantomPainThroughCover,
     activeSessionId,
     hasRippleBreathingAbility,
@@ -4281,6 +4562,11 @@ const CharacterSheetWrapper = ({
           : []),
         ...(feedPenaltyActive
           ? ["Loses Max Stress Without Feeding: stress detriment active"]
+          : []),
+        ...(heritagePenaltyDiceActive > 0
+          ? [
+              `Alien Understanding: −${heritagePenaltyDiceActive}d (heritage detriment)`,
+            ]
           : []),
       ];
       const modifierSources = [
@@ -4520,18 +4806,26 @@ const CharacterSheetWrapper = ({
               ),
             }
           : {}),
+        ...(heritagePenaltyDiceActive > 0
+          ? { heritage_penalty_dice: heritagePenaltyDiceActive }
+          : {}),
       };
       if (activeSessionId) {
         payload.session_id = activeSessionId;
         const snappedGa = rollPending.group_action_id;
-        if (snappedGa && !standSlug) {
+        const rollSlugForGroup = (
+          standStatForRoll
+            ? `stand_${standStatForRoll}`
+            : String(rollPending.actionName || rollActionName || selectedRollAction || "")
+        )
+          .trim()
+          .toLowerCase();
+        const gaSlug = String(activeGroupAction?.action_name || "")
+          .trim()
+          .toLowerCase();
+        if (snappedGa) {
           payload.group_action_id = snappedGa;
-        } else if (
-          !standSlug &&
-          activeGroupAction?.id &&
-          String(selectedRollAction || "").toLowerCase() ===
-            String(activeGroupAction.action_name || "").toLowerCase()
-        ) {
+        } else if (activeGroupAction?.id && rollSlugForGroup && gaSlug === rollSlugForGroup) {
           payload.group_action_id = activeGroupAction.id;
         }
       }
@@ -4901,12 +5195,20 @@ const CharacterSheetWrapper = ({
         typeof extras === "object" &&
         extras.healAttempt &&
         String(extras.healAttempt.targetName || "").trim();
+      const anLower = String(actionName ?? "").trim().toLowerCase();
+      const standM = /^stand_(power|speed|precision)$/.exec(anLower);
+      const derivedStandStat = standM ? standM[1] : "";
       setResistancePending(null);
       setRollPending({
-        actionName,
-        diceCount,
+        actionName: derivedStandStat ? `stand_${derivedStandStat}` : actionName,
+        diceCount: derivedStandStat
+          ? computeStandRollPool(derivedStandStat, standStats)
+          : diceCount,
         isDesperateAction,
         ...rollPendingExtras,
+        ...(derivedStandStat
+          ? { standRoll: true, standStat: derivedStandStat }
+          : {}),
         ...(groupActionIdSnap != null
           ? { group_action_id: groupActionIdSnap }
           : {}),
@@ -7747,8 +8049,21 @@ const CharacterSheetWrapper = ({
 
                 {/* Harm + Armor */}
                 <div style={S.card}>
-                  <div style={{ display: "flex", gap: "16px" }}>
-                    <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "16px",
+                        alignItems: "flex-start",
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
                       <span style={S.lbl}>HARM</span>
                       {(
                         [
@@ -7891,155 +8206,6 @@ const CharacterSheetWrapper = ({
                         </div>
                       ))}
                     </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        gap: "4px",
-                      }}
-                    >
-                      <span style={{ fontSize: "10px", color: "#9ca3af" }}>
-                        HEALING
-                      </span>
-                      <ProgressClock
-                        size={55}
-                        segments={4}
-                        filled={healingClock}
-                        interactive
-                        onClick={handleHealingClockAdjust}
-                      />
-
-                      <label
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          gap: "4px",
-                          marginTop: "8px",
-                          width: "100%",
-                          maxWidth: "220px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: "9px",
-                            color: "#6b7280",
-                            textAlign: "center",
-                          }}
-                          title="Dice pool = your dots in the playbook action you pick here (study, survey, tinkering to bind injuries, etc.). Stand Coin stats are not generic healing pools—Precision/Speed (or fiction you agree on with the GM) should apply only through a specific ability, item, or declared treatment method, not via this dropdown. Default Tinker; saved per character in this browser."
-                        >
-                          Recover roll action (default Tinker)
-                        </span>
-                        <select
-                          aria-label="Healing recover action"
-                          disabled={healingRecoverBusy || !canEditSheet}
-                          value={selfHealingRecoverAction}
-                          onChange={(e) => {
-                            const chosen = pickHealClockAction(e.target.value);
-                            setSelfHealingRecoverAction(chosen);
-                            if (!characterId) return;
-                            try {
-                              window.localStorage.setItem(
-                                `biz:self-healing-recover-action:${characterId}`,
-                                chosen,
-                              );
-                            } catch {
-                              /* ignore quota / privacy mode */
-                            }
-                          }}
-                          style={{
-                            ...S.sel,
-                            width: "100%",
-                            fontSize: "11px",
-                            paddingBlock: "4px",
-                          }}
-                        >
-                          {healRollActionChoices.map((action) => (
-                            <option key={action} value={action}>
-                              {action}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-
-                      <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
-                        <button
-                          type="button"
-                          onClick={() => performHealingRecover("downtime")}
-                          disabled={healingRecoverBusy || !canEditSheet}
-                          style={{
-                            ...S.btn,
-                            fontSize: "11px",
-                            background: "#0f766e",
-                            color: "#f8fafc",
-                            opacity:
-                              healingRecoverBusy || !canEditSheet ? 0.6 : 1,
-                          }}
-                          title={`Downtime recover: treat yourself when you have downtime or an equivalent pause—even during a gaming session—when GM/table agrees. SRD stress: 2. Roll ${pickHealClockAction(selfHealingRecoverAction)} for healing clock segments (1-3:+1, 4/5:+2, 6:+3, critical:+5).${
-                            selfRecoverInvigoratedDice
-                              ? " Pool includes +1d Invigorated when that ability appears on your sheet or heritage."
-                              : ""
-                          }`}
-                        >
-                          downtime recover
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => performHealingRecover("mid-action")}
-                          disabled={
-                            healingRecoverBusy ||
-                            !canEditSheet ||
-                            !Boolean(activeSessionId)
-                          }
-                          style={{
-                            ...S.btn,
-                            fontSize: "11px",
-                            background: "#4338ca",
-                            color: "#ffffff",
-                            opacity:
-                              healingRecoverBusy ||
-                              !canEditSheet ||
-                              !Boolean(activeSessionId)
-                                ? 0.6
-                                : 1,
-                          }}
-                          title={`Mid-action recover: treat yourself mid-score. Requires time & safety (SRD). SRD stress cost: 2. Roll ${pickHealClockAction(selfHealingRecoverAction)} for healing clock segments (1-3:+1, 4/5:+2, 6:+3, critical:+5).${
-                            selfRecoverInvigoratedDice
-                              ? " Pool includes +1d Invigorated when that ability appears on your sheet or heritage."
-                              : ""
-                          }`}
-                        >
-                          mid-action recover
-                        </button>
-                      </div>
-
-                      {healingRecoverErr ? (
-                        <div
-                          style={{
-                            marginTop: "6px",
-                            fontSize: "11px",
-                            color: "#fca5a5",
-                            textAlign: "center",
-                          }}
-                        >
-                          {healingRecoverErr}
-                        </div>
-                      ) : null}
-                      {healingRecoverMsg ? (
-                        <div
-                          style={{
-                            marginTop: "6px",
-                            fontSize: "11px",
-                            color: "#a78bfa",
-                            textAlign: "center",
-                          }}
-                        >
-                          {healingRecoverMsg}
-                        </div>
-                      ) : null}
-                    </div>
-
                     {/* FIX 4: Armor charges derived from Durability */}
                     <div style={{ minWidth: "90px" }}>
                       <span
@@ -8137,6 +8303,530 @@ const CharacterSheetWrapper = ({
                       ) : null}
                     </div>
                   </div>
+                  <div
+                    style={{
+                      width: "100%",
+                      paddingTop: "10px",
+                      borderTop: "1px solid #2d1f52",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "10px",
+                      alignItems: "stretch",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <span style={S.lbl}>HEALING</span>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "14px",
+                        alignItems: "flex-start",
+                        width: "100%",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: "4px",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <ProgressClock
+                          size={55}
+                          segments={4}
+                          filled={healingClock}
+                          interactive
+                          onClick={handleHealingClockAdjust}
+                        />
+                      </div>
+                      <div
+                        style={{
+                          flex: "1 1 240px",
+                          minWidth: "min(100%, 200px)",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "8px",
+                        }}
+                      >
+                        <label
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "stretch",
+                            gap: "4px",
+                            width: "100%",
+                          }}
+                        >
+                        <span
+                          style={{
+                            fontSize: "9px",
+                            color: "#6b7280",
+                            textAlign: "left",
+                          }}
+                          title="Dice pool = your dots in the playbook action you pick here (study, survey, tinkering to bind injuries, etc.). Stand Coin stats are not generic healing pools—Precision/Speed (or fiction you agree on with the GM) should apply only through a specific ability, item, or declared treatment method, not via this dropdown. Default Tinker; saved per character in this browser."
+                        >
+                          Recover roll action (default Tinker)
+                        </span>
+                        <select
+                          aria-label="Healing recover action"
+                          disabled={healingRecoverBusy || !canEditSheet}
+                          value={selfHealingRecoverAction}
+                          onChange={(e) => {
+                            const chosen = pickHealClockAction(e.target.value);
+                            setSelfHealingRecoverAction(chosen);
+                            if (!characterId) return;
+                            try {
+                              window.localStorage.setItem(
+                                `biz:self-healing-recover-action:${characterId}`,
+                                chosen,
+                              );
+                            } catch {
+                              /* ignore quota / privacy mode */
+                            }
+                          }}
+                          style={{
+                            ...S.sel,
+                            width: "100%",
+                            fontSize: "11px",
+                            paddingBlock: "4px",
+                          }}
+                        >
+                          {healRollActionChoices.map((action) => (
+                            <option key={action} value={action}>
+                              {action}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "6px",
+                          marginTop: "2px",
+                          width: "100%",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => performHealingRecover("downtime")}
+                          disabled={healingRecoverBusy || !canEditSheet}
+                          style={{
+                            ...S.btn,
+                            flex: "1 1 140px",
+                            fontSize: "11px",
+                            background: "#0f766e",
+                            color: "#f8fafc",
+                            opacity:
+                              healingRecoverBusy || !canEditSheet ? 0.6 : 1,
+                          }}
+                          title={`Downtime recover: treat yourself when you have downtime or an equivalent pause—even during a gaming session—when GM/table agrees. SRD stress: 2. Roll ${pickHealClockAction(selfHealingRecoverAction)} for healing clock segments (1-3:+1, 4/5:+2, 6:+3, critical:+5).${
+                            selfRecoverInvigoratedDice
+                              ? " Pool includes +1d Invigorated when that ability appears on your sheet or heritage."
+                              : ""
+                          }`}
+                        >
+                          downtime recover
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => performHealingRecover("mid-action")}
+                          disabled={
+                            healingRecoverBusy ||
+                            !canEditSheet ||
+                            !Boolean(activeSessionId)
+                          }
+                          style={{
+                            ...S.btn,
+                            flex: "1 1 140px",
+                            fontSize: "11px",
+                            background: "#4338ca",
+                            color: "#ffffff",
+                            opacity:
+                              healingRecoverBusy ||
+                              !canEditSheet ||
+                              !Boolean(activeSessionId)
+                                ? 0.6
+                                : 1,
+                          }}
+                          title={`Mid-action recover: treat yourself mid-score. Requires time & safety (SRD). SRD stress cost: 2. Roll ${pickHealClockAction(selfHealingRecoverAction)} for healing clock segments (1-3:+1, 4/5:+2, 6:+3, critical:+5).${
+                            selfRecoverInvigoratedDice
+                              ? " Pool includes +1d Invigorated when that ability appears on your sheet or heritage."
+                              : ""
+                          }`}
+                        >
+                          mid-action recover
+                        </button>
+                      </div>
+
+                      {healingRecoverErr ? (
+                        <div
+                          style={{
+                            marginTop: "6px",
+                            fontSize: "11px",
+                            color: "#fca5a5",
+                            textAlign: "center",
+                          }}
+                        >
+                          {healingRecoverErr}
+                        </div>
+                      ) : null}
+                      {healingRecoverMsg ? (
+                        <div
+                          style={{
+                            marginTop: "6px",
+                            fontSize: "11px",
+                            color: "#a78bfa",
+                            textAlign: "center",
+                          }}
+                        >
+                          {healingRecoverMsg}
+                        </div>
+                      ) : null}
+                      </div>
+                    </div>
+
+                      {sessionNpcHealRoster.length > 0 &&
+                      Boolean(activeSessionId) ? (
+                        <div
+                          style={{
+                            marginTop: "10px",
+                            paddingTop: "8px",
+                            borderTop: "1px solid #374151",
+                            width: "100%",
+                            maxWidth: "100%",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: "9px",
+                              color: "#6b7280",
+                              display: "block",
+                              textAlign: "center",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            NPC medic — fortune (base d6 pool + up to 3 coin for +1d
+                            each, total max 6d)
+                          </span>
+                          {!isCharacterOwner ? (
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                textAlign: "center",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              Only this character&apos;s player can roll or spend coin
+                              here.
+                            </div>
+                          ) : null}
+                          <label
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px",
+                              marginBottom: "6px",
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                            }}
+                          >
+                            Session healer (NPC)
+                            <select
+                              aria-label="NPC heal fortune healer"
+                              disabled={
+                                npcHealFortuneBusy ||
+                                !canEditSheet ||
+                                !isCharacterOwner
+                              }
+                              value={npcHealHealerId}
+                              onChange={(e) =>
+                                setNpcHealHealerId(e.target.value)
+                              }
+                              style={{ ...S.sel, fontSize: "11px" }}
+                            >
+                              {sessionNpcHealRoster.map((n) => (
+                                <option key={n.id} value={String(n.id)}>
+                                  {n.name || "NPC"}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "6px",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            <label
+                              style={{
+                                flex: 1,
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "2px",
+                              }}
+                            >
+                              Base d6
+                              <select
+                                aria-label="NPC heal fortune base dice"
+                                disabled={
+                                  npcHealFortuneBusy ||
+                                  !canEditSheet ||
+                                  !isCharacterOwner
+                                }
+                                value={String(npcHealBaseDice)}
+                                onChange={(e) =>
+                                  setNpcHealBaseDice(
+                                    Number(e.target.value) || 2,
+                                  )
+                                }
+                                style={{ ...S.sel, fontSize: "11px" }}
+                              >
+                                {[1, 2, 3, 4, 5, 6].map((d) => (
+                                  <option key={d} value={String(d)}>
+                                    {d}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label
+                              style={{
+                                flex: 1,
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "2px",
+                              }}
+                            >
+                              Coin (+d6)
+                              <select
+                                aria-label="NPC heal fortune coin spend"
+                                disabled={
+                                  npcHealFortuneBusy ||
+                                  !canEditSheet ||
+                                  !isCharacterOwner
+                                }
+                                value={String(
+                                  (() => {
+                                    const b = Math.max(
+                                      1,
+                                      Math.min(
+                                        6,
+                                        Math.floor(Number(npcHealBaseDice)) ||
+                                          2,
+                                      ),
+                                    );
+                                    const maxS = Math.min(
+                                      3,
+                                      coinFilled,
+                                      Math.max(0, 6 - b),
+                                    );
+                                    return Math.min(
+                                      maxS,
+                                      Math.floor(Number(npcHealCoinSpend)) || 0,
+                                    );
+                                  })(),
+                                )}
+                                onChange={(e) =>
+                                  setNpcHealCoinSpend(
+                                    Number(e.target.value) || 0,
+                                  )
+                                }
+                                style={{ ...S.sel, fontSize: "11px" }}
+                              >
+                                {(() => {
+                                  const b = Math.max(
+                                    1,
+                                    Math.min(
+                                      6,
+                                      Math.floor(Number(npcHealBaseDice)) ||
+                                        2,
+                                    ),
+                                  );
+                                  const maxS = Math.min(
+                                    3,
+                                    coinFilled,
+                                    Math.max(0, 6 - b),
+                                  );
+                                  return Array.from(
+                                    { length: maxS + 1 },
+                                    (_, i) => (
+                                      <option key={i} value={String(i)}>
+                                        +{i} ({b + i}d)
+                                      </option>
+                                    ),
+                                  );
+                                })()}
+                              </select>
+                            </label>
+                          </div>
+                          <label
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px",
+                              marginBottom: "6px",
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                            }}
+                          >
+                            Patient (optional)
+                            <select
+                              aria-label="NPC heal patient type"
+                              disabled={
+                                npcHealFortuneBusy ||
+                                !canEditSheet ||
+                                !isCharacterOwner
+                              }
+                              value={npcHealPatientMode}
+                              onChange={(e) => {
+                                setNpcHealPatientMode(e.target.value);
+                                setNpcHealPatientPcId("");
+                                setNpcHealPatientNpcId("");
+                              }}
+                              style={{ ...S.sel, fontSize: "11px" }}
+                            >
+                              <option value="self">You (default)</option>
+                              <option value="pc">Another PC</option>
+                              <option value="npc">Session NPC</option>
+                            </select>
+                          </label>
+                          {npcHealPatientMode === "pc" ? (
+                            <label
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "4px",
+                                marginBottom: "6px",
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                              }}
+                            >
+                              Target PC
+                              <select
+                                aria-label="NPC heal patient PC"
+                                disabled={
+                                  npcHealFortuneBusy ||
+                                  !canEditSheet ||
+                                  !isCharacterOwner
+                                }
+                                value={npcHealPatientPcId}
+                                onChange={(e) =>
+                                  setNpcHealPatientPcId(e.target.value)
+                                }
+                                style={{ ...S.sel, fontSize: "11px" }}
+                              >
+                                <option value="">Pick…</option>
+                                {healOtherRecoveryCandidates.map((c) => (
+                                  <option key={c.id} value={String(c.id)}>
+                                    {c.name || c.true_name || `PC #${c.id}`}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          ) : null}
+                          {npcHealPatientMode === "npc" ? (
+                            <label
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "4px",
+                                marginBottom: "6px",
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                              }}
+                            >
+                              Target NPC
+                              <select
+                                aria-label="NPC heal patient NPC"
+                                disabled={
+                                  npcHealFortuneBusy ||
+                                  !canEditSheet ||
+                                  !isCharacterOwner
+                                }
+                                value={npcHealPatientNpcId}
+                                onChange={(e) =>
+                                  setNpcHealPatientNpcId(e.target.value)
+                                }
+                                style={{ ...S.sel, fontSize: "11px" }}
+                              >
+                                <option value="">Pick…</option>
+                                {sessionNpcHealRoster.map((n) => (
+                                  <option key={n.id} value={String(n.id)}>
+                                    {n.name || "NPC"}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={performNpcHealFortuneRoll}
+                            disabled={
+                              npcHealFortuneBusy ||
+                              !canEditSheet ||
+                              !isCharacterOwner ||
+                              !activeSessionId ||
+                              (npcHealPatientMode === "npc" &&
+                                !npcHealPatientNpcId)
+                            }
+                            style={{
+                              ...S.btn,
+                              width: "100%",
+                              fontSize: "11px",
+                              background: "#7c3aed",
+                              color: "#faf5ff",
+                              opacity:
+                                npcHealFortuneBusy ||
+                                !canEditSheet ||
+                                !isCharacterOwner
+                                  ? 0.55
+                                  : 1,
+                            }}
+                            title="Logs a FORTUNE roll to session history; deducts personal coin if you chose a coin spend."
+                          >
+                            {npcHealFortuneBusy
+                              ? "Rolling…"
+                              : "Roll NPC heal fortune"}
+                          </button>
+                          {npcHealFortuneErr ? (
+                            <div
+                              style={{
+                                marginTop: "6px",
+                                fontSize: "11px",
+                                color: "#fca5a5",
+                                textAlign: "center",
+                              }}
+                            >
+                              {npcHealFortuneErr}
+                            </div>
+                          ) : null}
+                          {npcHealFortuneMsg ? (
+                            <div
+                              style={{
+                                marginTop: "6px",
+                                fontSize: "11px",
+                                color: "#c4b5fd",
+                                textAlign: "center",
+                              }}
+                            >
+                              {npcHealFortuneMsg}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+
+                </div>
                 </div>
 
                 {/* Coin & Stash */}
@@ -9210,10 +9900,7 @@ const CharacterSheetWrapper = ({
                           ))}
                         </div>
                       </div>
-                      {(
-                        charCampaign?.active_session_detail
-                          ?.session_npcs_with_clocks || []
-                      ).length > 0 && (
+                      {sessionNpcsPartyFacingDisplay.length > 0 && (
                         <div style={{ marginBottom: "8px" }}>
                           <span style={{ fontSize: "11px", color: "#9ca3af" }}>
                             Session NPC Clocks:
@@ -9226,10 +9913,7 @@ const CharacterSheetWrapper = ({
                               marginTop: "4px",
                             }}
                           >
-                            {(
-                              charCampaign?.active_session_detail
-                                ?.session_npcs_with_clocks || []
-                            ).map((npc) => (
+                            {sessionNpcsPartyFacingDisplay.map((npc) => (
                               <div
                                 key={npc.id}
                                 style={{
@@ -10811,9 +11495,27 @@ const CharacterSheetWrapper = ({
                                   overflow: "auto",
                                 }}
                               >
-                                {heritageRollBonusOptions.map((hb) => {
+                                {heritageRollBonusOptions
+                                  .filter(
+                                    (hb) =>
+                                      !(
+                                        hb.supportsPenaltyDice &&
+                                        charData.disguised_as_human === true
+                                      ),
+                                  )
+                                  .map((hb) => {
                                   const hid = hb.id ?? hb.name;
                                   const b = heritageRollBoost[hid] || {};
+                                  const alienPenaltyCtx = {
+                                    rollPending,
+                                    healingTreatmentBonusContext,
+                                    rollActionName,
+                                    disguisedAsHuman: charData.disguised_as_human,
+                                  };
+                                  const alienPenaltyInteractive =
+                                    alienUnderstandingHeritagePenaltyApplies(
+                                      alienPenaltyCtx,
+                                    );
                                   return (
                                     <div
                                       key={hid}
@@ -10831,9 +11533,49 @@ const CharacterSheetWrapper = ({
                                           color: "#fde68a",
                                           flex: "1 1 120px",
                                         }}
+                                        title={
+                                          hb.supportsPenaltyDice
+                                            ? String(hb.description || "").slice(
+                                                0,
+                                                800,
+                                              )
+                                            : undefined
+                                        }
                                       >
                                         {hb.name}
                                       </span>
+                                      {hb.supportsPenaltyDice ? (
+                                        <label
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "4px",
+                                            cursor: alienPenaltyInteractive
+                                              ? "pointer"
+                                              : "not-allowed",
+                                            opacity: alienPenaltyInteractive
+                                              ? 1
+                                              : 0.45,
+                                          }}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={!!b.dice}
+                                            disabled={!alienPenaltyInteractive}
+                                            onChange={(e) =>
+                                              setHeritageRollBoost((p) => ({
+                                                ...p,
+                                                [hid]: {
+                                                  ...p[hid],
+                                                  dice: e.target.checked,
+                                                  effect: !!p[hid]?.effect,
+                                                },
+                                              }))
+                                            }
+                                          />
+                                          −1d
+                                        </label>
+                                      ) : null}
                                       {hb.supportsDice ? (
                                         <label
                                           style={{
@@ -10972,6 +11714,17 @@ const CharacterSheetWrapper = ({
                               label={`Heritage benefits (+${bonusDiceFromHeritage}d)`}
                               count={bonusDiceFromHeritage}
                             />
+                          ) : null}
+                          {heritagePenaltyDiceActive > 0 ? (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "#fca5a5",
+                                marginBottom: 8,
+                              }}
+                            >
+                              Alien Understanding (−{heritagePenaltyDiceActive}d)
+                            </div>
                           ) : null}
                           {totalAbilityEffectSteps > 0 ? (
                             <div
@@ -11348,6 +12101,7 @@ const CharacterSheetWrapper = ({
                         </div>
                       </div>
                       {(totalBonusDiceFromAbilitiesAndHeritage > 0 ||
+                        heritagePenaltyDiceActive > 0 ||
                         abilityEffectSteps + heritageEffectSteps > 0 ||
                         phantomPainThroughCover) && (
                         <div
@@ -11360,6 +12114,9 @@ const CharacterSheetWrapper = ({
                           Pool modifiers: +
                           {totalBonusDiceFromAbilitiesAndHeritage}d (abilities /
                           heritage)
+                          {heritagePenaltyDiceActive > 0
+                            ? `; −${heritagePenaltyDiceActive}d (Alien Understanding)`
+                            : ""}
                           {abilityEffectSteps + heritageEffectSteps > 0
                             ? `; +${abilityEffectSteps + heritageEffectSteps} effect tier step(s) total`
                             : ""}
@@ -12636,6 +13393,19 @@ const CharacterSheetWrapper = ({
                                 {action}
                               </option>
                             ))}
+                            {showStandCoinActionColumn ? (
+                              <optgroup label="Stand (coin pools)">
+                                {STAND_ROLL_KEYS_ACTIVE.map((sk) => {
+                                  const slug = `stand_${String(sk || "").trim().toLowerCase()}`;
+                                  const label = `${String(sk || "").toUpperCase()} (Stand)`;
+                                  return (
+                                    <option key={slug} value={slug}>
+                                      {label}
+                                    </option>
+                                  );
+                                })}
+                              </optgroup>
+                            ) : null}
                           </select>
                           <span
                             style={{
@@ -13443,6 +14213,69 @@ const CharacterSheetWrapper = ({
                           }}
                         >
                           You did not feed today
+                        </button>
+                      </div>
+                    ) : null}
+                    {hasAlienUnderstandingDetriment ? (
+                      <div
+                        style={{
+                          marginBottom: "8px",
+                          display: "flex",
+                          gap: "6px",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            color: "#9ca3af",
+                            width: "100%",
+                          }}
+                        >
+                          Alien Understanding (disguise)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCharData((p) => ({
+                              ...p,
+                              disguised_as_human: true,
+                            }))
+                          }
+                          style={{
+                            ...S.btn,
+                            fontSize: "11px",
+                            padding: "4px 8px",
+                            background:
+                              charData.disguised_as_human === true
+                                ? "#15803d"
+                                : "#1f2937",
+                            color: "#fff",
+                          }}
+                        >
+                          Disguised as human
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCharData((p) => ({
+                              ...p,
+                              disguised_as_human: false,
+                            }))
+                          }
+                          style={{
+                            ...S.btn,
+                            fontSize: "11px",
+                            padding: "4px 8px",
+                            background:
+                              charData.disguised_as_human === false
+                                ? "#b45309"
+                                : "#1f2937",
+                            color: "#fff",
+                          }}
+                        >
+                          Not disguised
                         </button>
                       </div>
                     ) : null}

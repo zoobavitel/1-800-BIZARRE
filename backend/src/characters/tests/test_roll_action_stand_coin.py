@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from characters.models import Campaign, Character, Crew, Heritage, Session
+from characters.models import Campaign, Character, Crew, GroupAction, Heritage, Roll, Session
 
 
 class RollActionStandCoinTests(TestCase):
@@ -100,3 +100,28 @@ class RollActionStandCoinTests(TestCase):
             format="json",
         )
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_stand_coin_group_action_kept_when_matching_action_slug(self):
+        ga = GroupAction.objects.create(
+            session=self.session,
+            leader=self.actor,
+            action_name="stand_speed",
+            status="OPEN",
+        )
+        self.client.force_authenticate(user=self.user)
+        url = f"/api/characters/{self.actor.id}/roll-action/"
+        r = self.client.post(
+            url,
+            {
+                "action": "stand_speed",
+                "session_id": self.session.id,
+                "pool_source": "stand_coin",
+                "stand_stat": "speed",
+                "group_action_id": ga.id,
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertEqual(r.data.get("group_action_id"), ga.id)
+        roll = Roll.objects.get(pk=r.data["roll_id"])
+        self.assertEqual(roll.group_action_id, ga.id)

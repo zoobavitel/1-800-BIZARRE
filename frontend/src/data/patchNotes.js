@@ -10,7 +10,14 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
+          "deep-link GM session view; assist +1d pending; roll pool labels",
           "SRD_DEV pools, durability vs stress, hero coin UI"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "session list captions; heuristic heal recover copy"
         ]
       }
     ]
@@ -537,8 +544,7 @@ export const PATCH_NOTES = [
           "Fix trauma not saving: resolve traumaChecks object to ID array before backend call",
           "Merge pull request #24 from zoobavitel/copilot/fix-npc-faction-dropdown",
           "Merge branch 'master' into copilot/fix-npc-faction-dropdown",
-          "Merge pull request #25 from zoobavitel/copilot/fix-issue-with-em-dash",
-          "Address review: simplify NPC.__str__ null check, add Unicode comments in test"
+          "Merge pull request #25 from zoobavitel/copilot/fix-issue-with-em-dash"
         ]
       },
       {
@@ -547,8 +553,7 @@ export const PATCH_NOTES = [
           "on NPC delete land on blank character sheet, guard auto-save for nameless new NPCs",
           "remove default conflict clock on new NPC creation",
           "restrict homepage characters to own user, add NPC delete button",
-          "update URL hash when saving/opening NPC so refresh restores the sheet",
-          "prevent duplicate faction names per campaign (backend + frontend)"
+          "update URL hash when saving/opening NPC so refresh restores the sheet"
         ]
       },
       {

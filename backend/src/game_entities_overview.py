@@ -149,14 +149,18 @@ HERITAGE & RELATIONSHIPS:
 COMBAT & RESISTANCE:
 - vulnerability_clock_current: Current ticks on the NPC vulnerability clock
 - vulnerability_clock_max: Maximum vulnerability clock size (derived from Durability)
-- regular_armor_charges: Regular armor charges (calculated from Durability)
-- special_armor_charges: Special armor charges (calculated from Durability)
+- has_physical_armor_item: When True, NPC has worn/carried gear granting a physical armor pool
+- physical_armor_bonus_charges: 0–6 GM-added charges on top of the Durability baseline (physical only)
+- regular_armor_charges: Physical armor charges (0 if no item; else Durability baseline + bonus)
+- stand_armor_charges: Stand / path armor charges (calculated from Durability)
+- special_armor_charges: Special armor charges — negate harm (calculated from Durability)
 
 CAMPAIGN INTEGRATION:
 - creator: GM who created the NPC
 - campaign: Which campaign the NPC belongs to
 
 ADDITIONAL FIELDS:
+- heal_quality_fortune_dice: 1–4 (d6 count for fortune when this NPC heals/stabilizes; downtime or in-play)
 - purveyor: What the NPC provides
 - notes: GM notes
 - items: JSON list of items
@@ -393,8 +397,11 @@ ARMOR TYPES:
 - heavy_armor_used: Heavy armor active
 
 ARMOR CHARGES:
-- regular_armor_charges: Regular armor charges (calculated from Durability)
-- special_armor_charges: Special armor charges (calculated from Durability)
+- has_physical_armor_item: When True, NPC has worn/carried gear granting a physical armor pool
+- physical_armor_bonus_charges: 0–6 GM-added charges on top of the Durability baseline (physical only)
+- regular_armor_charges: Physical armor charges (0 if no item; else Durability baseline + bonus)
+- stand_armor_charges: Stand / path armor charges (calculated from Durability)
+- special_armor_charges: Special armor charges — negate harm (calculated from Durability)
 
 USAGE:
 - Spend charges to reduce harm

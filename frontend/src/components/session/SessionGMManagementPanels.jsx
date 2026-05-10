@@ -1585,9 +1585,9 @@ export default function SessionGMManagementPanels({
               const show = !inv.show_clocks_to_players;
               updateInv(npc.id, {
                 show_clocks_to_players: show,
-                show_vulnerability_clock_to_players: show
-                  ? true
-                  : inv.show_vulnerability_clock_to_players,
+                // Master "Clocks" off ⇒ no clock payload to players (vuln-only
+                // visibility is toggled from the NPC sheet, not left stale here).
+                show_vulnerability_clock_to_players: show ? true : false,
               });
             }}
             disabled={saving}
