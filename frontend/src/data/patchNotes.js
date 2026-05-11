@@ -4,6 +4,18 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-05-10",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "heal fortune, armor, recover-in-play UX"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-05-09",
     "version": null,
     "sections": [
@@ -543,8 +555,7 @@ export const PATCH_NOTES = [
           "Merge pull request #26 from zoobavitel/copilot/fix-npc-sheet-refresh-issue-again",
           "Fix trauma not saving: resolve traumaChecks object to ID array before backend call",
           "Merge pull request #24 from zoobavitel/copilot/fix-npc-faction-dropdown",
-          "Merge branch 'master' into copilot/fix-npc-faction-dropdown",
-          "Merge pull request #25 from zoobavitel/copilot/fix-issue-with-em-dash"
+          "Merge branch 'master' into copilot/fix-npc-faction-dropdown"
         ]
       },
       {
