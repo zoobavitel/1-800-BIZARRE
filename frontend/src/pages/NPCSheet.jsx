@@ -3,7 +3,9 @@ import {
   referenceAPI,
   factionAPI,
   sessionAPI,
+  rollAPI,
 } from "../features/character-sheet";
+import { HistoryBranchIcon } from "../components/position-effect/PositionEffectIndicators";
 import NpcsStandCoin from "../components/NpcsStandCoin";
 
 // ─── SRD Data Tables ──────────────────────────────────────────────────────────
@@ -83,6 +85,29 @@ function npcClockListsSemanticallyEqual(rawA, rawB) {
 
 function npcClockIdsMatch(a, b) {
   return a === b || (a != null && b != null && Number(a) === Number(b));
+}
+
+/** Session rolls where a PC spent coin on NPC heal fortune — match healer to this NPC by display name. */
+function rollIsNpcHealFortuneForThisNpc(roll, npcDisplayName) {
+  const ctx = String(
+    roll.recovery_context ?? roll.recoveryContext ?? "",
+  ).toLowerCase();
+  if (ctx !== "npc_heal_fortune") return false;
+  const name = String(npcDisplayName || "").trim();
+  if (!name) return false;
+  const mod = Array.isArray(roll.modifier_sources)
+    ? roll.modifier_sources
+    : Array.isArray(roll.modifierSources)
+      ? roll.modifierSources
+      : [];
+  const healer = mod.find((m) => m && m.kind === "npc_healer");
+  if (healer && String(healer.name || "").includes(name)) return true;
+  const goal = String(roll.goal_label ?? roll.goalLabel ?? "");
+  const desc = String(roll.description ?? "");
+  const fort = String(
+    roll.fortune_public_label ?? roll.fortunePublicLabel ?? "",
+  );
+  return [goal, desc, fort].some((x) => x.includes(name));
 }
 
 /**
@@ -1237,6 +1262,105 @@ const NPCSheet = ({
   const npcIdRef = useRef(npc?.id || null);
   const savingRef = useRef(false);
 
+  const [showNpcTrackingPanel, setShowNpcTrackingPanel] = useState(false);
+  const [npcTrackingTab, setNpcTrackingTab] = useState("rolls");
+  const [trackingSessionPick, setTrackingSessionPick] = useState(null);
+  const [npcTrackingRolls, setNpcTrackingRolls] = useState([]);
+  const [npcTrackingRollsLoading, setNpcTrackingRollsLoading] =
+    useState(false);
+  const [npcTrackingRollsErr, setNpcTrackingRollsErr] = useState(null);
+  const [npcTrackingLog, setNpcTrackingLog] = useState("");
+
+  useEffect(() => {
+    const sessions = activeCampaign?.sessions;
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      setTrackingSessionPick(activeSessionId);
+      return;
+    }
+    const ids = new Set(sessions.map((s) => s.id));
+    setTrackingSessionPick((prev) => {
+      if (prev != null && ids.has(prev)) return prev;
+      if (activeSessionId != null && ids.has(activeSessionId)) {
+        return activeSessionId;
+      }
+      return sessions[0].id;
+    });
+  }, [activeCampaign?.sessions, activeSessionId, npc?.id]);
+
+  useEffect(() => {
+    if (npc?.id == null) {
+      setNpcTrackingLog("");
+      return;
+    }
+    try {
+      setNpcTrackingLog(
+        window.localStorage.getItem(`biz:npc-gm-tracking-log:${npc.id}`) ||
+          "",
+      );
+    } catch {
+      setNpcTrackingLog("");
+    }
+  }, [npc?.id]);
+
+  const persistNpcTrackingLog = useCallback(
+    (text) => {
+      setNpcTrackingLog(text);
+      if (npc?.id == null) return;
+      try {
+        window.localStorage.setItem(
+          `biz:npc-gm-tracking-log:${npc.id}`,
+          text,
+        );
+      } catch {
+        /* ignore quota / privacy mode */
+      }
+    },
+    [npc?.id],
+  );
+
+  useEffect(() => {
+    if (!showNpcTrackingPanel) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setShowNpcTrackingPanel(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showNpcTrackingPanel]);
+
+  useEffect(() => {
+    if (!showNpcTrackingPanel || !campaignId || !trackingSessionPick) {
+      return;
+    }
+    let cancelled = false;
+    setNpcTrackingRollsLoading(true);
+    setNpcTrackingRollsErr(null);
+    const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
+    rollAPI
+      .getRolls({ campaign: campaignId, session: trackingSessionPick })
+      .then((res) => {
+        if (cancelled) return;
+        const all = asArray(res);
+        const n = String(name || "").trim();
+        const filtered = n
+          ? all.filter((r) => rollIsNpcHealFortuneForThisNpc(r, n))
+          : [];
+        setNpcTrackingRolls(filtered);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setNpcTrackingRollsErr(
+            e instanceof Error ? e.message : "Failed to load rolls",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setNpcTrackingRollsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showNpcTrackingPanel, campaignId, trackingSessionPick, name]);
+
   const handleFileSelect = useCallback((e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1670,6 +1794,25 @@ const NPCSheet = ({
           )}
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <button
+            type="button"
+            onClick={() => setShowNpcTrackingPanel((v) => !v)}
+            title={
+              showNpcTrackingPanel
+                ? "Close NPC tracking"
+                : "NPC tracking — session heal-fortune rolls & manual log"
+            }
+            style={{
+              background: showNpcTrackingPanel ? "#312e81" : "#1f2937",
+              border: "1px solid #4b5563",
+              borderRadius: "6px",
+              padding: "6px 8px",
+              cursor: "pointer",
+              lineHeight: 0,
+            }}
+          >
+            <HistoryBranchIcon />
+          </button>
           {saveStatus === "saving" && (
             <span style={{ fontSize: "11px", color: "#fbbf24" }}>
               Saving...
@@ -1705,6 +1848,282 @@ const NPCSheet = ({
           )}
         </div>
       </div>
+
+      {showNpcTrackingPanel && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="NPC tracking log"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.62)",
+            zIndex: 126,
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "center",
+            paddingTop: "72px",
+          }}
+          onClick={() => setShowNpcTrackingPanel(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#111827",
+              border: "1px solid #374151",
+              borderRadius: "8px",
+              padding: "12px",
+              width: "min(640px, 92vw)",
+              maxHeight: "72vh",
+              overflowY: "auto",
+              fontSize: "11px",
+              boxShadow: "0 14px 40px rgba(0,0,0,0.55)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "10px",
+                gap: "8px",
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ color: "#a78bfa", fontWeight: "bold" }}>
+                NPC tracking
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "8px",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <span style={{ fontSize: "10px", color: "#9ca3af" }}>
+                  Esc to close
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowNpcTrackingPanel(false)}
+                  style={{ ...S.btn, padding: "4px 10px", fontSize: "10px" }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <p
+              style={{
+                margin: "0 0 10px",
+                fontSize: 10,
+                color: "#6b7280",
+                lineHeight: 1.45,
+              }}
+            >
+              PC sheets: branch icon → Session History for campaign-wide rolls,
+              clocks, stress, XP, and manual fortune/action rows. NPC field edits have
+              no audit trail yet; use Manual log (local) or GM notes on the campaign.
+            </p>
+            <div
+              style={{
+                display: "flex",
+                gap: "6px",
+                marginBottom: "10px",
+                flexWrap: "wrap",
+              }}
+            >
+              {["rolls", "manual"].map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setNpcTrackingTab(tab)}
+                  style={{
+                    ...S.btn,
+                    fontSize: "10px",
+                    padding: "6px 10px",
+                    background:
+                      npcTrackingTab === tab ? "#4338ca" : "#1f2937",
+                    color: npcTrackingTab === tab ? "#f9fafb" : "#d1d5db",
+                    border:
+                      npcTrackingTab === tab
+                        ? "1px solid #818cf8"
+                        : "1px solid #374151",
+                  }}
+                >
+                  {tab === "rolls"
+                    ? "Heal-fortune rolls (session)"
+                    : "Manual log"}
+                </button>
+              ))}
+            </div>
+            {npcTrackingTab === "rolls" ? (
+              <>
+                {campaignId == null ? (
+                  <div style={{ color: "#9ca3af", marginBottom: "8px" }}>
+                    Link this NPC to a campaign to load session rolls.
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr",
+                      gap: "8px",
+                      marginBottom: "10px",
+                    }}
+                  >
+                    <label
+                      style={{
+                        fontSize: "10px",
+                        color: "#9ca3af",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "4px",
+                      }}
+                    >
+                      Session
+                      <select
+                        aria-label="Tracking session"
+                        value={trackingSessionPick ?? ""}
+                        onChange={(e) =>
+                          setTrackingSessionPick(
+                            e.target.value ? Number(e.target.value) : null,
+                          )
+                        }
+                        style={{ ...S.sel, fontSize: "11px" }}
+                      >
+                        {(activeCampaign?.sessions || []).map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name || `Session ${s.id}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                )}
+                {!String(name || "").trim() ? (
+                  <div
+                    style={{
+                      color: "#fcd34d",
+                      marginBottom: "8px",
+                      fontSize: "10px",
+                    }}
+                  >
+                    Name this NPC to match heal-fortune rolls (healer label uses
+                    the NPC name).
+                  </div>
+                ) : null}
+                {npcTrackingRollsLoading ? (
+                  <div style={{ color: "#9ca3af" }}>Loading rolls…</div>
+                ) : null}
+                {npcTrackingRollsErr ? (
+                  <div style={{ color: "#fca5a5", marginBottom: "8px" }}>
+                    {npcTrackingRollsErr}
+                  </div>
+                ) : null}
+                {!npcTrackingRollsLoading &&
+                !npcTrackingRollsErr &&
+                npcTrackingRolls.length === 0 &&
+                campaignId != null &&
+                String(name || "").trim() ? (
+                  <div style={{ color: "#6b7280", fontSize: "10px" }}>
+                    No NPC heal-fortune rolls in this session for “{name.trim()}
+                    ”. Rolls appear when a PC uses Roll NPC heal fortune with this
+                    NPC as healer.
+                  </div>
+                ) : null}
+                <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                  {npcTrackingRolls.map((r) => {
+                    const diceStr = [].concat(r.results || []).join(", ");
+                    const out = String(r.outcome || "").replace(/_/g, " ");
+                    const pub = String(
+                      r.fortune_public_label ??
+                        r.fortunePublicLabel ??
+                        "",
+                    ).trim();
+                    const pc = String(
+                      r.character_name ?? r.characterName ?? "",
+                    ).trim();
+                    return (
+                      <div
+                        key={r.id}
+                        style={{
+                          borderBottom: "1px solid #374151",
+                          padding: "8px 0",
+                        }}
+                      >
+                        <div style={{ color: "#6b7280", fontSize: "9px" }}>
+                          {r.timestamp}
+                          {pc ? ` · ${pc}` : ""}
+                        </div>
+                        <div style={{ color: "#e5e7eb" }}>
+                          {out}
+                          {String(r.roll_type || "").toUpperCase() === "FORTUNE"
+                            ? ""
+                            : ` · ${r.roll_type}`}{" "}
+                          · pool {r.dice_pool ?? 0}
+                          {diceStr ? ` · [${diceStr}]` : ""}
+                        </div>
+                        {pub ? (
+                          <div style={{ color: "#a78bfa", marginTop: "4px" }}>
+                            {pub}
+                          </div>
+                        ) : null}
+                        {!r.fortune_reveal_outcome &&
+                        String(r.roll_type || "").toUpperCase() ===
+                          "FORTUNE" ? (
+                          <div
+                            style={{
+                              color: "#57534e",
+                              fontSize: "9px",
+                              marginTop: "4px",
+                            }}
+                          >
+                            Outcome not revealed to players yet (GM view).
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <>
+                <p
+                  style={{
+                    color: "#6b7280",
+                    fontSize: "10px",
+                    marginBottom: "8px",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Scratchpad for clocks, harm, showcases, table beats — stored in
+                  this browser only (copy into GM Notes to keep on the server).
+                </p>
+                <textarea
+                  aria-label="NPC manual tracking log"
+                  value={npcTrackingLog}
+                  onChange={(e) => persistNpcTrackingLog(e.target.value)}
+                  placeholder="Encounter notes, resources spent, fiction you are tracking…"
+                  style={{
+                    width: "100%",
+                    minHeight: "160px",
+                    background: "#0d1117",
+                    color: "#d1d5db",
+                    border: "1px solid #374151",
+                    padding: "8px",
+                    fontSize: "11px",
+                    fontFamily: "monospace",
+                    borderRadius: "4px",
+                    resize: "vertical",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Mode Toggle ── */}
       <div

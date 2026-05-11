@@ -2391,6 +2391,8 @@ const CharacterSheetWrapper = ({
     effect: "standard",
     resistanceHarmTarget: "",
     viceOverindulge: "",
+    fortunePublicLabel: "",
+    fortuneRevealPlayers: true,
     pushDice: false,
     pushEffect: false,
     devil: false,
@@ -3266,8 +3268,8 @@ const CharacterSheetWrapper = ({
         const rows = [];
         asArray(rollsRes).forEach((r) => {
           const isFortune = String(r.roll_type || "").toUpperCase() === "FORTUNE";
-          // GM Fortune rolls stay out of player history until GM reveals outcomes.
-          if (isFortune && !r.fortune_reveal_outcome) return;
+          // Hide unrevealed fortunes from non-GMs only; GMs still see full rows.
+          if (isFortune && !r.fortune_reveal_outcome && !isGM) return;
           const diceStr = []
             .concat(r.results || [])
             .join(", ");
@@ -6310,6 +6312,20 @@ const CharacterSheetWrapper = ({
                               Session History
                             </button>
                           </div>
+                          <p
+                            style={{
+                              margin: "0 0 8px",
+                              fontSize: 10,
+                              color: "#6b7280",
+                              lineHeight: 1.45,
+                            }}
+                          >
+                            Sheet tab: field edits and XP notes over time. Session tab:
+                            rolls (incl. fortune when revealed to you), clocks, stress
+                            changes, session XP — plus{" "}
+                            <strong style={{ color: "#9ca3af" }}>Manual record</strong>{" "}
+                            for table rolls.
+                          </p>
                           {historyMode === "session" && (
                             <>
                               <div
@@ -6408,7 +6424,7 @@ const CharacterSheetWrapper = ({
                                         marginBottom: 8,
                                       }}
                                     >
-                                      Manual history or XP award
+                                      Manual history, roll, or XP award
                                     </div>
                                     <div
                                       style={{
@@ -6437,6 +6453,7 @@ const CharacterSheetWrapper = ({
                                           Resistance
                                         </option>
                                         <option value="VICE">Vice roll</option>
+                                        <option value="FORTUNE">Fortune roll</option>
                                         <option value="XP">XP award</option>
                                       </select>
                                       <select
@@ -6556,6 +6573,19 @@ const CharacterSheetWrapper = ({
                                         >
                                           Vice (downtime indulgence)
                                         </div>
+                                      ) : historyManual.rollType === "FORTUNE" ? (
+                                        <div
+                                          style={{
+                                            ...S.inp,
+                                            fontSize: 10,
+                                            padding: "2px 6px",
+                                            color: "#9ca3af",
+                                            display: "flex",
+                                            alignItems: "center",
+                                          }}
+                                        >
+                                          Fortune (highest die)
+                                        </div>
                                       ) : (
                                         <input
                                           value={historyManual.action}
@@ -6589,6 +6619,55 @@ const CharacterSheetWrapper = ({
                                           }}
                                           placeholder="Dice e.g. 6,4"
                                         />
+                                      ) : null}
+                                      {historyManual.rollType === "FORTUNE" ? (
+                                        <>
+                                          <textarea
+                                            value={historyManual.fortunePublicLabel}
+                                            onChange={(e) =>
+                                              setHistoryManual((p) => ({
+                                                ...p,
+                                                fortunePublicLabel: e.target.value,
+                                              }))
+                                            }
+                                            style={{
+                                              ...S.inp,
+                                              gridColumn: "1 / -1",
+                                              fontSize: 10,
+                                              padding: "6px",
+                                              minHeight: 44,
+                                              resize: "vertical",
+                                              fontFamily: "inherit",
+                                            }}
+                                            placeholder="What this fortune resolves (shown in session history)."
+                                            rows={2}
+                                          />
+                                          <label
+                                            style={{
+                                              gridColumn: "1 / -1",
+                                              fontSize: 10,
+                                              color: "#d1d5db",
+                                              display: "flex",
+                                              gap: 6,
+                                              alignItems: "center",
+                                            }}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={
+                                                !!historyManual.fortuneRevealPlayers
+                                              }
+                                              onChange={(e) =>
+                                                setHistoryManual((p) => ({
+                                                  ...p,
+                                                  fortuneRevealPlayers:
+                                                    e.target.checked,
+                                                }))
+                                              }
+                                            />
+                                            Show dice and outcome to players
+                                          </label>
+                                        </>
                                       ) : null}
                                       {historyManual.rollType === "XP" ? null : historyManual.rollType ===
                                       "RESISTANCE" ? (
@@ -6650,6 +6729,35 @@ const CharacterSheetWrapper = ({
                                             rating · stress cleared = highest die
                                           </div>
                                         </>
+                                      ) : historyManual.rollType === "FORTUNE" ? (
+                                        <select
+                                          value={historyManual.outcome}
+                                          onChange={(e) =>
+                                            setHistoryManual((p) => ({
+                                              ...p,
+                                              outcome: e.target.value,
+                                            }))
+                                          }
+                                          style={{
+                                            ...S.sel,
+                                            fontSize: 10,
+                                            padding: "2px 6px",
+                                            gridColumn: "1 / -1",
+                                          }}
+                                        >
+                                          <option value="CRITICAL_SUCCESS">
+                                            Critical
+                                          </option>
+                                          <option value="FULL_SUCCESS">
+                                            Full
+                                          </option>
+                                          <option value="PARTIAL_SUCCESS">
+                                            Partial
+                                          </option>
+                                          <option value="FAILURE">
+                                            Failure
+                                          </option>
+                                        </select>
                                       ) : (
                                         <>
                                           <select
@@ -6730,7 +6838,8 @@ const CharacterSheetWrapper = ({
                                     </div>
                                     {historyManual.rollType !== "RESISTANCE" &&
                                       historyManual.rollType !== "VICE" &&
-                                      historyManual.rollType !== "XP" && (
+                                      historyManual.rollType !== "XP" &&
+                                      historyManual.rollType !== "FORTUNE" && (
                                       <div
                                         style={{
                                           marginTop: 6,
@@ -6769,6 +6878,7 @@ const CharacterSheetWrapper = ({
                                     {historyManual.rollType !== "RESISTANCE" &&
                                     historyManual.rollType !== "VICE" &&
                                     historyManual.rollType !== "XP" &&
+                                    historyManual.rollType !== "FORTUNE" &&
                                     historyManual.groupAction ? (
                                       <input
                                         value={historyManual.groupActionId}
@@ -6966,6 +7076,7 @@ const CharacterSheetWrapper = ({
                                             const isResistanceManual =
                                               rt === "RESISTANCE";
                                             const isViceManual = rt === "VICE";
+                                            const isFortuneManual = rt === "FORTUNE";
                                             const resistanceSummary =
                                               computeResistanceSummary(
                                                 diceResults,
@@ -6999,6 +7110,18 @@ const CharacterSheetWrapper = ({
                                               );
                                               return;
                                             }
+                                            if (isFortuneManual) {
+                                              const lbl = String(
+                                                historyManual.fortunePublicLabel ||
+                                                  "",
+                                              ).trim();
+                                              if (lbl.length < 3) {
+                                                setHistoryWriteError(
+                                                  "Enter at least 3 characters describing what this fortune roll was for.",
+                                                );
+                                                return;
+                                              }
+                                            }
                                             setHistoryManualSaving(true);
                                             if (isResistanceManual) {
                                               const reduced = clearHarmSlot(
@@ -7025,73 +7148,96 @@ const CharacterSheetWrapper = ({
                                                 ),
                                               );
                                             }
-                                            await rollAPI.createRoll({
-                                              character: characterId,
-                                              session: sid,
-                                              roll_type: isResistanceManual
-                                                ? "RESISTANCE"
-                                                : isViceManual
-                                                  ? "CLEAR_STRESS"
-                                                  : "ACTION",
-                                              action_name: isViceManual
-                                                ? "vice"
-                                                : String(
-                                                      historyManual.action ||
-                                                        "action",
-                                                    ).toLowerCase(),
-                                              ...(isResistanceManual || isViceManual
-                                                ? {}
-                                                : {
-                                                    position:
-                                                      historyManual.position,
-                                                    effect: historyManual.effect,
-                                                  }),
-                                              dice_pool: diceResults.length,
-                                              results: diceResults,
-                                              outcome: isResistanceManual
-                                                ? resistanceSummary.outcome
-                                                : isViceManual
-                                                  ? viceSummary.outcome
-                                                  : historyManual.outcome,
-                                              ...(isResistanceManual
-                                                ? {
-                                                    roller_stress_spent:
-                                                      resistanceSummary.stressCost >
-                                                      0
-                                                        ? resistanceSummary.stressCost
-                                                        : 0,
-                                                  }
-                                                : isViceManual
-                                                  ? { roller_stress_spent: 0 }
-                                                  : {
-                                                      push_for_dice:
-                                                        !!historyManual.pushDice,
-                                                      push_for_effect:
-                                                        !!historyManual.pushEffect,
-                                                      uses_devil_bargain:
-                                                        !!historyManual.devil,
-                                                      pool_assist_dice:
-                                                        historyManual.helpDie
-                                                          ? 1
-                                                          : 0,
-                                                      group_action:
-                                                        historyManual.groupAction &&
-                                                        historyManual.groupActionId
-                                                          ? parseInt(
-                                                              String(
-                                                                historyManual.groupActionId,
-                                                              ),
-                                                              10,
-                                                            )
-                                                          : undefined,
-                                                    }),
-                                              description:
-                                                isResistanceManual
-                                                  ? `Manual resistance record from history panel. Reduced harm slot ${historyManual.resistanceHarmTarget}. Stress marked: ${Math.max(0, resistanceSummary.stressCost)}.`
+                                            if (isFortuneManual) {
+                                              const lbl = String(
+                                                historyManual.fortunePublicLabel ||
+                                                  "",
+                                              )
+                                                .trim()
+                                                .slice(0, 120);
+                                              await rollAPI.createRoll({
+                                                character: characterId,
+                                                session: sid,
+                                                roll_type: "FORTUNE",
+                                                action_name: "fortune",
+                                                dice_pool: diceResults.length,
+                                                results: diceResults,
+                                                outcome: historyManual.outcome,
+                                                fortune_public_label: lbl,
+                                                fortune_reveal_outcome:
+                                                  !!historyManual.fortuneRevealPlayers,
+                                                description:
+                                                  "Manual fortune record from history panel",
+                                              });
+                                            } else {
+                                              await rollAPI.createRoll({
+                                                character: characterId,
+                                                session: sid,
+                                                roll_type: isResistanceManual
+                                                  ? "RESISTANCE"
                                                   : isViceManual
-                                                    ? `Manual vice record from history panel. Stress cleared (highest die): ${viceSummary.highest}.${viceOverAtSave && String(historyManual.viceOverindulge || "").trim() ? ` Overindulgence: ${viceOverindulgeLabel(historyManual.viceOverindulge)}` : ""}`
-                                                    : "Manual record from history panel",
-                                            });
+                                                    ? "CLEAR_STRESS"
+                                                    : "ACTION",
+                                                action_name: isViceManual
+                                                  ? "vice"
+                                                  : String(
+                                                        historyManual.action ||
+                                                          "action",
+                                                      ).toLowerCase(),
+                                                ...(isResistanceManual || isViceManual
+                                                  ? {}
+                                                  : {
+                                                      position:
+                                                        historyManual.position,
+                                                      effect: historyManual.effect,
+                                                    }),
+                                                dice_pool: diceResults.length,
+                                                results: diceResults,
+                                                outcome: isResistanceManual
+                                                  ? resistanceSummary.outcome
+                                                  : isViceManual
+                                                    ? viceSummary.outcome
+                                                    : historyManual.outcome,
+                                                ...(isResistanceManual
+                                                  ? {
+                                                      roller_stress_spent:
+                                                        resistanceSummary.stressCost >
+                                                        0
+                                                          ? resistanceSummary.stressCost
+                                                          : 0,
+                                                    }
+                                                  : isViceManual
+                                                    ? { roller_stress_spent: 0 }
+                                                    : {
+                                                        push_for_dice:
+                                                          !!historyManual.pushDice,
+                                                        push_for_effect:
+                                                          !!historyManual.pushEffect,
+                                                        uses_devil_bargain:
+                                                          !!historyManual.devil,
+                                                        pool_assist_dice:
+                                                          historyManual.helpDie
+                                                            ? 1
+                                                            : 0,
+                                                        group_action:
+                                                          historyManual.groupAction &&
+                                                          historyManual.groupActionId
+                                                            ? parseInt(
+                                                                String(
+                                                                  historyManual.groupActionId,
+                                                                ),
+                                                                10,
+                                                              )
+                                                            : undefined,
+                                                      }),
+                                                description:
+                                                  isResistanceManual
+                                                    ? `Manual resistance record from history panel. Reduced harm slot ${historyManual.resistanceHarmTarget}. Stress marked: ${Math.max(0, resistanceSummary.stressCost)}.`
+                                                    : isViceManual
+                                                      ? `Manual vice record from history panel. Stress cleared (highest die): ${viceSummary.highest}.${viceOverAtSave && String(historyManual.viceOverindulge || "").trim() ? ` Overindulgence: ${viceOverindulgeLabel(historyManual.viceOverindulge)}` : ""}`
+                                                      : "Manual record from history panel",
+                                              });
+                                            }
                                             setHistoryRefreshTick((v) => v + 1);
                                             setShowHistoryManualModal(false);
                                           } catch (e) {
@@ -7114,7 +7260,9 @@ const CharacterSheetWrapper = ({
                                           ? "Saving…"
                                           : historyManual.rollType === "XP"
                                             ? "Add XP award"
-                                            : "Add manual record"}
+                                            : historyManual.rollType === "FORTUNE"
+                                              ? "Add fortune record"
+                                              : "Add manual record"}
                                       </button>
                                       <button
                                         type="button"
