@@ -666,6 +666,86 @@ const grid = {
 
 const lbl = { fontSize: 10, color: "#9ca3af", textTransform: "uppercase" };
 
+const NPC_QUICK_PLAYBOOK_OPTIONS = [
+  { value: "STAND", label: "Stand User" },
+  { value: "HAMON", label: "Hamon User" },
+  { value: "SPIN", label: "Spin User" },
+  { value: "NON_BIZARRE", label: "Non-Bizarre" },
+];
+
+const NPC_QUICK_STAT_PRESETS = [
+  { value: "balanced", label: "Standard (all grade D)" },
+  { value: "bruiser", label: "Bruiser (Dur B, Power C)" },
+  { value: "skirmisher", label: "Skirmisher (Speed B, Prec C)" },
+  { value: "threat", label: "Even threat (all C)" },
+];
+
+function standCoinStatsFromQuickPreset(preset) {
+  const d = {
+    POWER: "D",
+    SPEED: "D",
+    RANGE: "D",
+    DURABILITY: "D",
+    PRECISION: "D",
+    DEVELOPMENT: "D",
+  };
+  if (preset === "bruiser") return { ...d, DURABILITY: "B", POWER: "C" };
+  if (preset === "skirmisher") return { ...d, SPEED: "B", PRECISION: "C" };
+  if (preset === "threat") {
+    return {
+      POWER: "C",
+      SPEED: "C",
+      RANGE: "C",
+      DURABILITY: "C",
+      PRECISION: "C",
+      DEVELOPMENT: "C",
+    };
+  }
+  return d;
+}
+
+function parseQuickNpcAbilityLines(text) {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const t = Date.now();
+  return lines.map((name, i) => ({
+    id: t + i,
+    name: name.slice(0, 120),
+    description: "",
+    type: "unique",
+  }));
+}
+
+function makeQuickNpcClockRow(name, idSalt = 0) {
+  return {
+    id: Date.now() + idSalt * 10000,
+    name,
+    segments: 8,
+    filled: 0,
+    show_to_players: false,
+  };
+}
+
+/** Opaque bg + dark options: `S.inp` uses transparent bg + white text → unreadable native option list on many OS themes. */
+const QUICK_NPC_SELECT_STYLE = {
+  fontSize: 12,
+  width: "100%",
+  boxSizing: "border-box",
+  backgroundColor: "#1f1035",
+  color: "#f9fafb",
+  border: "1px solid #4b2d8f",
+  borderRadius: 4,
+  padding: "6px 8px",
+  colorScheme: "dark",
+};
+
+const QUICK_NPC_OPTION_STYLE = {
+  backgroundColor: "#111827",
+  color: "#f3f4f6",
+};
+
 /** Visual severity for session compact harm grid (warns as higher tiers fill). */
 function compactHarmFieldStyle(key, rawValue) {
   const filled = String(rawValue ?? "").trim().length > 0;
@@ -728,6 +808,19 @@ export default function SessionGMManagementPanels({
   user = null,
 }) {
   const [showAddNpc, setShowAddNpc] = useState(false);
+  /** Quick-create NPC when every campaign NPC is already in this session */
+  const [quickNpcName, setQuickNpcName] = useState("");
+  const [quickNpcRole, setQuickNpcRole] = useState("");
+  const [quickNpcPlaybook, setQuickNpcPlaybook] = useState("STAND");
+  const [quickNpcStatPreset, setQuickNpcStatPreset] = useState("balanced");
+  const [quickNpcAbilitiesText, setQuickNpcAbilitiesText] = useState("");
+  const [quickNpcConflictClock, setQuickNpcConflictClock] = useState(false);
+  const [quickNpcAltClock, setQuickNpcAltClock] = useState(false);
+  const [quickNpcFactionId, setQuickNpcFactionId] = useState("");
+  const [quickNpcNewFactionName, setQuickNpcNewFactionName] = useState("");
+  const [quickNpcFactionCreateBusy, setQuickNpcFactionCreateBusy] =
+    useState(false);
+  const [quickNpcCreateBusy, setQuickNpcCreateBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [localNpcPatch, setLocalNpcPatch] = useState({});
   const [harmDraftByChar, setHarmDraftByChar] = useState({});
@@ -861,6 +954,109 @@ export default function SessionGMManagementPanels({
       },
     ];
     return patchSessionInv(next);
+  };
+
+  useEffect(() => {
+    if (!showAddNpc) return;
+    setQuickNpcName("");
+    setQuickNpcRole("");
+    setQuickNpcPlaybook("STAND");
+    setQuickNpcStatPreset("balanced");
+    setQuickNpcAbilitiesText("");
+    setQuickNpcConflictClock(false);
+    setQuickNpcAltClock(false);
+    setQuickNpcFactionId("");
+    setQuickNpcNewFactionName("");
+    setQuickNpcFactionCreateBusy(false);
+    setQuickNpcCreateBusy(false);
+  }, [showAddNpc]);
+
+  const handleCreateQuickNpcModalFaction = async () => {
+    const trimmed = String(quickNpcNewFactionName || "").trim();
+    if (!trimmed || !campaign?.id) {
+      setError("Enter a name for the new faction.");
+      return;
+    }
+    const dup = (campaign?.factions || []).some(
+      (f) => String(f.name || "").trim().toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (dup) {
+      setError(`A faction named "${trimmed}" already exists in this campaign.`);
+      return;
+    }
+    setQuickNpcFactionCreateBusy(true);
+    setError(null);
+    try {
+      const created = await factionAPI.createFaction({
+        name: trimmed,
+        campaign: campaign.id,
+      });
+      setQuickNpcFactionId(String(created.id));
+      setQuickNpcNewFactionName("");
+      onRefresh?.();
+    } catch (e) {
+      setError(e?.message || "Could not create faction.");
+    } finally {
+      setQuickNpcFactionCreateBusy(false);
+    }
+  };
+
+  const handleQuickCreateNpcForSession = async (openSheetAfter) => {
+    const nameTrim = String(quickNpcName || "").trim();
+    if (!nameTrim) {
+      setError("Enter a name for the new NPC.");
+      return;
+    }
+    if (!campaign?.id) {
+      setError("Campaign is missing; cannot create NPC.");
+      return;
+    }
+    setQuickNpcCreateBusy(true);
+    setError(null);
+    try {
+      const abilities = parseQuickNpcAbilityLines(quickNpcAbilitiesText);
+      const conflict_clocks = quickNpcConflictClock
+        ? [makeQuickNpcClockRow("Conflict", 1)]
+        : [];
+      const alt_clocks = quickNpcAltClock
+        ? [makeQuickNpcClockRow("Alt track", 2)]
+        : [];
+      const factionNum =
+        quickNpcFactionId === ""
+          ? null
+          : parseInt(String(quickNpcFactionId), 10);
+      const payload = {
+        name: nameTrim,
+        campaign: campaign.id,
+        playbook: quickNpcPlaybook,
+        stand_coin_stats: standCoinStatsFromQuickPreset(quickNpcStatPreset),
+        role: String(quickNpcRole || "").trim(),
+        abilities,
+        conflict_clocks,
+        alt_clocks,
+        notes: "",
+        inventory_notes: "",
+      };
+      if (quickNpcFactionId !== "" && Number.isFinite(factionNum)) {
+        payload.faction = factionNum;
+      }
+      const created = await npcAPI.createNPC(payload);
+      await addNpcToSession(created.id);
+      setShowAddNpc(false);
+      onRefresh?.();
+      if (openSheetAfter && typeof onNavigateToNPC === "function") {
+        onNavigateToNPC(created.id, { campaignId: campaign.id });
+      }
+    } catch (e) {
+      const msg =
+        e?.message ||
+        e?.detail ||
+        (Array.isArray(e?.name) ? e.name[0] : null) ||
+        "Failed to create NPC.";
+      setError(typeof msg === "string" ? msg : "Failed to create NPC.");
+    } finally {
+      setQuickNpcCreateBusy(false);
+    }
   };
 
   const handleAddNpcCardClick = () => {
@@ -1997,7 +2193,7 @@ export default function SessionGMManagementPanels({
               border: "1px solid #4b5563",
               borderRadius: 8,
               padding: 16,
-              maxWidth: 420,
+              maxWidth: 480,
               width: "100%",
               maxHeight: "80vh",
               overflow: "auto",
@@ -2006,7 +2202,261 @@ export default function SessionGMManagementPanels({
           >
             <div style={{ fontWeight: "bold", marginBottom: 8 }}>Add campaign NPC</div>
             {addableNpcList.length === 0 ? (
-              <div style={{ color: "#9ca3af" }}>All campaign NPCs are already in this session.</div>
+              <>
+                <div style={{ color: "#9ca3af", marginBottom: 10, lineHeight: 1.45 }}>
+                  All campaign NPCs are already in this session. Create a new NPC for
+                  this campaign with stand coin grades, optional abilities and clocks,
+                  then add it to the session — or open the full sheet after save.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={lbl}>Name</span>
+                    <input
+                      type="text"
+                      value={quickNpcName}
+                      onChange={(e) => setQuickNpcName(e.target.value)}
+                      placeholder="e.g. Highway Star"
+                      style={{ ...S.inp, fontSize: 12 }}
+                      disabled={quickNpcCreateBusy || saving}
+                    />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={lbl}>Role / type (optional)</span>
+                    <input
+                      type="text"
+                      value={quickNpcRole}
+                      onChange={(e) => setQuickNpcRole(e.target.value)}
+                      placeholder="Boss, ally, hazard…"
+                      style={{ ...S.inp, fontSize: 12 }}
+                      disabled={quickNpcCreateBusy || saving}
+                    />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={lbl}>Playbook</span>
+                    <select
+                      value={quickNpcPlaybook}
+                      onChange={(e) => setQuickNpcPlaybook(e.target.value)}
+                      style={QUICK_NPC_SELECT_STYLE}
+                      disabled={quickNpcCreateBusy || saving}
+                    >
+                      {NPC_QUICK_PLAYBOOK_OPTIONS.map((o) => (
+                        <option
+                          key={o.value}
+                          value={o.value}
+                          style={QUICK_NPC_OPTION_STYLE}
+                        >
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={lbl}>Stand coin preset</span>
+                    <select
+                      value={quickNpcStatPreset}
+                      onChange={(e) => setQuickNpcStatPreset(e.target.value)}
+                      style={QUICK_NPC_SELECT_STYLE}
+                      disabled={quickNpcCreateBusy || saving}
+                    >
+                      {NPC_QUICK_STAT_PRESETS.map((o) => (
+                        <option
+                          key={o.value}
+                          value={o.value}
+                          style={QUICK_NPC_OPTION_STYLE}
+                        >
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {campaign?.id ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 8,
+                        padding: 10,
+                        background: "#0b1220",
+                        border: "1px solid #374151",
+                        borderRadius: 6,
+                      }}
+                    >
+                      <span style={lbl}>Faction (optional)</span>
+                      {(campaign.factions || []).length > 0 ? (
+                        <select
+                          value={quickNpcFactionId}
+                          onChange={(e) => setQuickNpcFactionId(e.target.value)}
+                          style={QUICK_NPC_SELECT_STYLE}
+                          disabled={
+                            quickNpcCreateBusy ||
+                            saving ||
+                            quickNpcFactionCreateBusy
+                          }
+                        >
+                          <option value="" style={QUICK_NPC_OPTION_STYLE}>
+                            — None —
+                          </option>
+                          {(campaign.factions || []).map((f) => (
+                            <option
+                              key={f.id}
+                              value={f.id}
+                              style={QUICK_NPC_OPTION_STYLE}
+                            >
+                              {f.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div style={{ fontSize: 10, color: "#6b7280" }}>
+                          No factions in this campaign yet — create one below, then it
+                          will appear in the list after refresh.
+                        </div>
+                      )}
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 8,
+                          alignItems: "center",
+                        }}
+                      >
+                        <input
+                          type="text"
+                          value={quickNpcNewFactionName}
+                          onChange={(e) => setQuickNpcNewFactionName(e.target.value)}
+                          placeholder="New faction name"
+                          style={{
+                            ...S.inp,
+                            flex: "1 1 160px",
+                            minWidth: 140,
+                            fontSize: 12,
+                            backgroundColor: "#1f1035",
+                            color: "#f9fafb",
+                            border: "1px solid #4b2d8f",
+                            borderRadius: 4,
+                            padding: "6px 8px",
+                          }}
+                          disabled={
+                            quickNpcCreateBusy ||
+                            saving ||
+                            quickNpcFactionCreateBusy
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleCreateQuickNpcModalFaction();
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleCreateQuickNpcModalFaction()}
+                          style={{ ...S.btnPrimary, fontSize: 11 }}
+                          disabled={
+                            quickNpcCreateBusy ||
+                            saving ||
+                            quickNpcFactionCreateBusy ||
+                            !String(quickNpcNewFactionName || "").trim()
+                          }
+                        >
+                          {quickNpcFactionCreateBusy
+                            ? "Creating…"
+                            : "Create faction"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={lbl}>Abilities (optional, one per line)</span>
+                    <textarea
+                      value={quickNpcAbilitiesText}
+                      onChange={(e) => setQuickNpcAbilitiesText(e.target.value)}
+                      placeholder="Each line becomes a unique ability name on the sheet."
+                      rows={4}
+                      style={{
+                        ...S.inp,
+                        fontSize: 11,
+                        minHeight: 72,
+                        resize: "vertical",
+                        border: "1px solid #374151",
+                        borderRadius: 4,
+                        padding: 8,
+                      }}
+                      disabled={quickNpcCreateBusy || saving}
+                    />
+                  </label>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <span style={lbl}>Starting clocks</span>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 11,
+                        color: "#d1d5db",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={quickNpcConflictClock}
+                        onChange={(e) => setQuickNpcConflictClock(e.target.checked)}
+                        disabled={quickNpcCreateBusy || saving}
+                      />
+                      8-segment conflict clock (&quot;Conflict&quot;)
+                    </label>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 11,
+                        color: "#d1d5db",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={quickNpcAltClock}
+                        onChange={(e) => setQuickNpcAltClock(e.target.checked)}
+                        disabled={quickNpcCreateBusy || saving}
+                      />
+                      8-segment alt clock (&quot;Alt track&quot;)
+                    </label>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickCreateNpcForSession(false)}
+                      style={{ ...S.btnPrimary, flex: "1 1 160px", fontSize: 11 }}
+                      disabled={quickNpcCreateBusy || saving || !quickNpcName.trim()}
+                    >
+                      {quickNpcCreateBusy ? "Creating…" : "Create & add to session"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickCreateNpcForSession(true)}
+                      style={{
+                        ...S.btnGhost,
+                        flex: "1 1 160px",
+                        fontSize: 11,
+                        border: "1px solid #4b5563",
+                      }}
+                      disabled={
+                        quickNpcCreateBusy ||
+                        saving ||
+                        !quickNpcName.trim() ||
+                        typeof onNavigateToNPC !== "function"
+                      }
+                      title={
+                        typeof onNavigateToNPC !== "function"
+                          ? "Navigation to NPC sheet is not available here."
+                          : undefined
+                      }
+                    >
+                      {quickNpcCreateBusy ? "Creating…" : "Create, add & open sheet"}
+                    </button>
+                  </div>
+                </div>
+              </>
             ) : (
               <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
                 {addableNpcList.map((n) => (
