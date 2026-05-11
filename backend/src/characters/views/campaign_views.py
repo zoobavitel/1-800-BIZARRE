@@ -101,6 +101,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         prev_sid = serializer.instance.active_session_id
         campaign = serializer.save()
+        new_sid = campaign.active_session_id
         skip = getattr(campaign, "_skip_encoded_xp_settlement", False)
         try:
             if prev_sid and prev_sid != new_sid:
