@@ -268,40 +268,6 @@ function recentRollDiceSourcesTooltip(r) {
   return lines.filter(Boolean).join("\n").trim();
 }
 
-function isRecoveryLinkedRoll(r) {
-  const rt = String(r.roll_type || "").toUpperCase();
-  if (String(r.recovery_context || "").trim()) return true;
-  if (rollHasTruthyFk(r.recovery_target)) return true;
-  const mods = Array.isArray(r.modifier_sources) ? r.modifier_sources : [];
-  if (
-    mods.some((s) => {
-      const k = String(s?.kind || "").toLowerCase();
-      return (
-        k.startsWith("recovery") ||
-        k === "healing" ||
-        k === "recovery_treatment" ||
-        k === "recovery_bolster" ||
-        k === "recovery_resolution"
-      );
-    })
-  ) {
-    return true;
-  }
-  if (rt === "OTHER") {
-    const g = String(r.goal_label || "");
-    const d = String(r.description || "");
-    if (/healing clock recover/i.test(g)) return true;
-    if (
-      /self-recover|mid-action self-recover|recovery segments|healing clock/i.test(
-        d,
-      )
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function buildRecentRollDetailTitle(r) {
   const parts = [];
   if (rollHasTruthyFk(r.group_action)) {
