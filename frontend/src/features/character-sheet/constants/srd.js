@@ -137,8 +137,27 @@ export const DUR_TABLE = [
   { armorCharges: 3, resistanceReduceLevels: 2 }, // S(5)
 ];
 
-// Development → session XP bonus per grade (index = stat value 0–4)
-export const DEV_SESSION_XP = [0, 1, 2, 3, 4];
+/**
+ * Stand / path armor pool (when the Stand takes the hit) — matches NPC
+ * `stand_armor_charges` (SRD_DEV). Separate from physical user armor.
+ */
+export const STAND_PATH_ARMOR_CHARGES_BY_GRADE = {
+  S: 2,
+  A: 2,
+  B: 1,
+  C: 1,
+  D: 0,
+  F: 0,
+};
+
+/** @param {number} durabilityIdx Stand Coin durability index 0–5 (F…S) */
+export function standPathArmorMaxFromDurabilityIndex(durabilityIdx) {
+  const g = INDEX_TO_GRADE(durabilityIdx);
+  return STAND_PATH_ARMOR_CHARGES_BY_GRADE[g] ?? 0;
+}
+
+// Development → session XP bonus per grade (index = stat value 0–5, F…S)
+export const DEV_SESSION_XP = [0, 1, 2, 3, 4, 5];
 
 // Per-grade descriptions for PC sheet (index = stat value 0–4)
 export const PC_STAT_DESC = {

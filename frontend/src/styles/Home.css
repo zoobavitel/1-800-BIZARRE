@@ -308,16 +308,18 @@
 }
 .home-poc .home-stand-coin-readout {
   width: 100%;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-radius: 4px;
   background: rgba(26, 22, 16, 0.06);
   border: 1px solid var(--light-border);
+  /* .home-poc defaults to mono; prose readout reads better in heading sans */
+  font-family: var(--font-heading);
 }
 .home-poc .home-stand-coin-readout-stack {
   display: grid;
   grid-template-columns: 1fr;
   /* Fixed track height: minmax(..., auto) still grew when blurbs wrapped and pushed the SVG down */
-  grid-template-rows: 8.25rem;
+  grid-template-rows: 9.5rem;
 }
 .home-poc .home-stand-coin-readout-stack > .home-stand-coin-readout-panel {
   grid-column: 1;
@@ -338,7 +340,7 @@
 }
 .home-poc .home-stand-coin-readout-stat {
   font-family: var(--font-heading);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -348,21 +350,25 @@
   font-family: var(--font-display);
   font-size: 28px;
   line-height: 1;
-  color: var(--p2);
+  color: var(--p1);
 }
 .home-poc .home-stand-coin-readout-blurb {
-  font-size: 10px;
-  line-height: 1.35;
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
   color: var(--light-text-2);
   max-width: 220px;
   min-height: 0;
-  max-height: 3.6em;
+  max-height: 6.25em;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
 .home-poc .home-stand-coin-readout-hint {
-  font-size: 10px;
-  line-height: 1.4;
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.45;
   color: var(--light-text-3);
   max-width: 220px;
 }
@@ -381,91 +387,6 @@
   outline: 2px solid var(--p1);
   outline-offset: 2px;
 }
-.home-poc .home-stand-coin-durability {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: min(260px, 100%);
-  margin: 4px auto 0;
-  padding: 8px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(123, 90, 198, 0.35);
-  background: rgba(26, 22, 16, 0.04);
-  font-family: var(--font-heading);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--light-text);
-  cursor: pointer;
-  box-sizing: border-box;
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-.home-poc .home-stand-coin-durability:hover,
-.home-poc .home-stand-coin-durability:focus-visible {
-  border-color: var(--p1);
-  box-shadow: 0 0 0 1px rgba(123, 90, 198, 0.25);
-  outline: none;
-}
-.home-poc .home-stand-coin-durability.is-selected {
-  border-color: var(--p2);
-  box-shadow:
-    0 0 0 1px var(--p2),
-    0 4px 12px rgba(123, 90, 198, 0.12);
-}
-.home-poc .home-stand-coin-durability-label {
-  flex: 0 0 auto;
-}
-.home-poc .home-stand-coin-durability-dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-.home-poc .home-stand-coin-dur-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 1px solid rgba(123, 90, 198, 0.45);
-  background: transparent;
-}
-.home-poc .home-stand-coin-dur-dot.is-on {
-  background: var(--p2);
-  border-color: var(--p2);
-}
-.home-poc .home-stand-coin-readout-grade--dice {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2rem;
-}
-.home-poc .home-stand-coin-readout-dotline {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-}
-.home-poc .home-stand-coin-read-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 1px solid rgba(123, 90, 198, 0.4);
-  background: transparent;
-}
-.home-poc .home-stand-coin-read-dot.is-on {
-  border-color: var(--p2);
-  background: var(--p2);
-}
-.home-poc .home-stand-coin-readout-dice-caption {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--light-text-2);
-  margin-top: 2px;
-}
 .home-poc .vhs-badge {
   display: inline-block;
   margin-bottom: 12px;
@@ -478,6 +399,15 @@
 }
 .home-poc .vhs-badge::before {
   content: none;
+}
+.home-poc .hero-headline-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+.home-poc .hero-headline-group .hero-title {
+  text-align: center;
 }
 .home-poc .hero-title {
   font-family: var(--font-display);
@@ -493,11 +423,55 @@
 .home-poc .hero-title .accent {
   color: #000;
 }
+.home-poc .hero-pill-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: min(440px, calc(100vw - 48px));
+  box-sizing: border-box;
+  margin: 0 0 14px;
+  padding-inline: 4px;
+}
 .home-poc .hero-pills {
   display: flex;
   gap: 8px;
-  margin: 12px 0 14px;
+  margin: 0;
   flex-wrap: wrap;
+  justify-content: center;
+}
+.home-poc .hero-pill-panel {
+  width: 100%;
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.home-poc .hero-pill-panel.is-open {
+  grid-template-rows: 1fr;
+}
+.home-poc .hero-pill-panel-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+.home-poc .hero-pill-panel-text {
+  margin: 0;
+  padding: 10px 4px 4px;
+  text-align: center;
+  font-family: var(--font-heading);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: 0.03em;
+  color: var(--light-text-2);
+  max-height: 9em;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overflow-wrap: anywhere;
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-poc .hero-pill-panel {
+    transition: none;
+  }
 }
 .home-poc .pill {
   font-family: var(--font-heading);
@@ -507,6 +481,32 @@
   text-transform: uppercase;
   padding: 3px 10px;
   border: 1px solid currentColor;
+}
+.home-poc button.pill {
+  font: inherit;
+  appearance: none;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  line-height: 1.2;
+  border-radius: 2px;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.home-poc button.pill:focus {
+  outline: none;
+}
+.home-poc button.pill:focus-visible {
+  outline: 2px solid var(--p1);
+  outline-offset: 2px;
+}
+.home-poc button.pill:hover {
+  background: rgba(26, 22, 16, 0.05);
+}
+.home-poc button.pill.is-selected {
+  background: rgba(26, 22, 16, 0.08);
+  box-shadow: inset 0 0 0 1px currentColor;
 }
 .home-poc .pill-stand {
   color: var(--p1);
@@ -1670,9 +1670,13 @@
   .home-poc .home-stand-coin-readout {
     width: 132px;
   }
-  .home-poc .home-stand-coin-readout-hint,
   .home-poc .home-stand-coin-readout-blurb {
     max-width: 112px;
+    font-size: 11px;
+  }
+  .home-poc .home-stand-coin-readout-hint {
+    max-width: 112px;
+    font-size: 10px;
   }
   .home-poc .hero-metrics {
     padding: 0 16px 28px;

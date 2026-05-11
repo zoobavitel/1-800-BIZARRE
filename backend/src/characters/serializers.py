@@ -1986,6 +1986,16 @@ class CampaignSerializer(serializers.ModelSerializer):
     active_session = serializers.PrimaryKeyRelatedField(
         queryset=Session.objects.all(), required=False, allow_null=True
     )
+    skip_encoded_xp_settlement = serializers.BooleanField(
+        write_only=True,
+        required=False,
+        default=False,
+        help_text=(
+            "When PATCH clears or changes active_session, skip automatic "
+            "STANDOUT/STRUGGLE playbook XP for the previous session (still "
+            "marks that pass as settled)."
+        ),
+    )
     active_session_detail = serializers.SerializerMethodField()
     sessions = serializers.SerializerMethodField()
     showcased_npcs = ShowcasedNPCSerializer(many=True, read_only=True)
@@ -2011,12 +2021,23 @@ class CampaignSerializer(serializers.ModelSerializer):
             "campaign_npcs",
             "pending_invitations",
             "active_session",
+            "skip_encoded_xp_settlement",
             "active_session_detail",
             "sessions",
             "showcased_npcs",
             "current_scene_type",
             "progress_clocks",
         ]
+
+    def create(self, validated_data):
+        validated_data.pop("skip_encoded_xp_settlement", None)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        skip = bool(validated_data.pop("skip_encoded_xp_settlement", False))
+        ret = super().update(instance, validated_data)
+        setattr(ret, "_skip_encoded_xp_settlement", skip)
+        return ret
 
     def get_pending_invitations(self, obj):
         invitations = obj.invitations.filter(status="pending")

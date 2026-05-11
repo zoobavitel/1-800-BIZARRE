@@ -12,6 +12,7 @@ from characters.models import (
     Heritage,
     Roll,
     Session,
+    Stand,
 )
 from characters.services.session_xp_settlement import settle_encoded_session_xp
 
@@ -162,3 +163,53 @@ class SessionEncodedXpSettlementTests(TestCase):
         self.assertIsNone(self.campaign.active_session_id)
         self.character.refresh_from_db()
         self.assertEqual(self.character.xp_clocks.get("playbook", 0), 6)
+
+    def test_patch_clear_active_skip_encoded_xp(self):
+        """PATCH campaign with skip flag ends live without granting encoded XP."""
+        client = APIClient()
+        client.force_authenticate(user=self.gm)
+        self.campaign.active_session = self.session
+        self.campaign.save(update_fields=["active_session"])
+        self._roll(description="[Abilities: Stand ability foo]")
+        res = client.patch(
+            f"/api/campaigns/{self.campaign.id}/",
+            {"active_session": None, "skip_encoded_xp_settlement": True},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, getattr(res, "data", res.content))
+        self.session.refresh_from_db()
+        self.assertTrue(self.session.auto_encoded_xp_settled)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.xp_clocks.get("playbook", 0), 5)
+        self.assertFalse(
+            ExperienceTracker.objects.filter(
+                trigger="STANDOUT", character=self.character, session=self.session
+            ).exists()
+        )
+
+    def test_stand_development_session_xp_to_unallocated_pool(self):
+        self.session.characters_involved.add(self.character)
+        Stand.objects.create(
+            character=self.character,
+            name="Test Stand",
+            type="FIGHTING",
+            form="Humanoid",
+            consciousness_level="C",
+            power="D",
+            speed="D",
+            range="D",
+            durability="D",
+            precision="D",
+            development="C",
+        )
+        settle_encoded_session_xp(self.session, self.gm)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.unallocated_xp, 2)
+        self.assertTrue(
+            ExperienceTracker.objects.filter(
+                character=self.character,
+                session=self.session,
+                trigger="MANUAL",
+                description__icontains="Session end (pool)",
+            ).exists()
+        )

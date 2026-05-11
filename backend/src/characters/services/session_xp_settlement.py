@@ -1,7 +1,12 @@
 """
 Apply once-per-session encoded XP when a session is deactivated or completed.
 
-Desperate action XP is already awarded per roll (DESPERATE_ROLL). This pass only adds capped playbook-track XP for signals we can read from stored rolls:
+Desperate action XP is already awarded per roll (DESPERATE_ROLL). This pass adds:
+  - Capped playbook-track XP from stored rolls (STANDOUT / STRUGGLE), and
+  - Stand Development session XP into each PC's ``Character.unallocated_xp`` pool
+    (players allocate pool XP to tracks on the character sheet).
+
+Encoded signals from stored rolls:
   - STANDOUT: roll description includes [Abilities: …] (playbook / stand ability used)
   - STRUGGLE: vice (CLEAR_STRESS) with overindulgence note, or vice clear failed (FAILURE/BOTCH)
 
@@ -22,13 +27,28 @@ import logging
 from typing import Any
 
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import F, Sum
 
 from ..models import Character, ExperienceTracker, Roll, Session
 
 logger = logging.getLogger(__name__)
 
 _SESSION_TRIGGER_CAP = 2
+
+# Stand Development grade → session XP banked to `Character.unallocated_xp` at settle
+# (matches `Character.development_xp_bonus` / frontend DEV_SESSION_XP for S).
+_DEV_SESSION_XP_BY_GRADE = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 5}
+
+
+def development_session_xp_to_pool_amount(character: Character) -> int:
+    """SRD_DEV: end-of-session Stand Development XP → unallocated pool (not a track)."""
+    stand = getattr(character, "stand", None)
+    if stand is None:
+        return 0
+    g = (getattr(stand, "development", None) or "F")[:1].upper()
+    if g not in _DEV_SESSION_XP_BY_GRADE:
+        g = "F"
+    return int(_DEV_SESSION_XP_BY_GRADE[g])
 
 
 def trigger_xp_session_sum(character: Character, session: Session, triggers: list[str]) -> int:
@@ -126,6 +146,31 @@ def _vice_struggle_signals(roll: Roll) -> int:
     return 0
 
 
+def mark_encoded_session_xp_settled_without_xp(
+    session: Session, acting_user: Any = None
+) -> dict:
+    """
+    Mark the one-time encoded playbook XP pass as done without granting XP.
+
+    Used when the GM ends the live session but opts out of the automatic
+    STANDOUT/STRUGGLE settlement (manual awards only).
+    """
+    out: dict[str, Any] = {"session_id": session.id, "encoded_xp_skipped": True}
+    with transaction.atomic():
+        locked = Session.objects.select_for_update().get(pk=session.pk)
+        if locked.auto_encoded_xp_settled:
+            out["skipped"] = True
+            out["reason"] = "already_settled"
+            return out
+        Session.objects.filter(pk=session.pk).update(auto_encoded_xp_settled=True)
+    logger.info(
+        "session_xp_settlement skipped (no XP grant) session=%s user=%s",
+        session.id,
+        getattr(acting_user, "id", None),
+    )
+    return out
+
+
 def settle_encoded_session_xp(session: Session, acting_user: Any) -> dict:
     """
     Idempotent encoded XP for one session. Safe to call multiple times.
@@ -154,7 +199,9 @@ def settle_encoded_session_xp(session: Session, acting_user: Any) -> dict:
             return out
         for cid in sorted(char_ids):
             try:
-                char = Character.objects.select_for_update().get(pk=cid)
+                char = Character.objects.select_for_update().select_related("stand").get(
+                    pk=cid
+                )
             except Character.DoesNotExist:
                 continue
             if char.campaign_id != locked.campaign_id:
@@ -192,6 +239,25 @@ def settle_encoded_session_xp(session: Session, acting_user: Any) -> dict:
                     out["applied"].append(
                         {"character": cid, "trigger": "STANDOUT", "xp": n}
                     )
+            dev_pool = development_session_xp_to_pool_amount(char)
+            if dev_pool > 0:
+                Character.objects.filter(pk=cid).update(
+                    unallocated_xp=F("unallocated_xp") + dev_pool
+                )
+                ExperienceTracker.objects.create(
+                    character_id=cid,
+                    session=locked,
+                    roll=None,
+                    trigger="MANUAL",
+                    description=(
+                        "Session end (pool): Stand Development session XP "
+                        f"(+{dev_pool}; allocate from pool on character sheet)."
+                    )[:500],
+                    xp_gained=dev_pool,
+                )
+                out["applied"].append(
+                    {"character": cid, "trigger": "DEVELOPMENT_POOL", "xp": dev_pool}
+                )
         Session.objects.filter(pk=session.pk).update(auto_encoded_xp_settled=True)
     logger.info(
         "session_xp_settlement session=%s user=%s applied=%s",

@@ -101,26 +101,38 @@ class CampaignViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         prev_sid = serializer.instance.active_session_id
         campaign = serializer.save()
-        new_sid = campaign.active_session_id
-        if prev_sid and prev_sid != new_sid:
-            try:
-                old_sess = Session.objects.get(pk=prev_sid)
-            except Session.DoesNotExist:
-                return
-            if old_sess.campaign_id == campaign.id:
+        skip = getattr(campaign, "_skip_encoded_xp_settlement", False)
+        try:
+            if prev_sid and prev_sid != new_sid:
                 try:
-                    from ..services.session_xp_settlement import (
-                        settle_encoded_session_xp,
-                    )
+                    old_sess = Session.objects.get(pk=prev_sid)
+                except Session.DoesNotExist:
+                    old_sess = None
+                if old_sess is not None and old_sess.campaign_id == campaign.id:
+                    try:
+                        from ..services.session_xp_settlement import (
+                            mark_encoded_session_xp_settled_without_xp,
+                            settle_encoded_session_xp,
+                        )
 
-                    settle_encoded_session_xp(old_sess, self.request.user)
-                except Exception:
-                    logger.exception(
-                        "Encoded session XP settlement failed after "
-                        "active_session change (campaign=%s, session=%s)",
-                        campaign.id,
-                        prev_sid,
-                    )
+                        if skip:
+                            mark_encoded_session_xp_settled_without_xp(
+                                old_sess, self.request.user
+                            )
+                        else:
+                            settle_encoded_session_xp(old_sess, self.request.user)
+                    except Exception:
+                        logger.exception(
+                            "Encoded session XP settlement failed after "
+                            "active_session change (campaign=%s, session=%s)",
+                            campaign.id,
+                            prev_sid,
+                        )
+        finally:
+            try:
+                delattr(campaign, "_skip_encoded_xp_settlement")
+            except AttributeError:
+                pass
 
     def perform_destroy(self, instance):
         try:

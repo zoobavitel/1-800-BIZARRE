@@ -643,6 +643,31 @@ class Character(models.Model):
     light_armor_used = models.BooleanField(default=False)
     medium_armor_used = models.BooleanField(default=False)
     heavy_armor_used = models.BooleanField(default=False)
+    # SRD_DEV: Stand path armor (Durability) vs physical gear — see NPC `stand_armor_*` / `has_physical_armor_item`.
+    stand_armor_used = models.IntegerField(default=0)
+    has_physical_armor_item = models.BooleanField(
+        default=False,
+        help_text=(
+            "When True, this PC tracks a physical armor pool (worn gear / heritage). "
+            "Pool size is `physical_armor_bonus_charges` (GM 0–6 from fiction)."
+        ),
+    )
+    physical_armor_bonus_charges = models.IntegerField(
+        default=0,
+        help_text="Physical armor charge count when has_physical_armor_item (0–6).",
+    )
+    physical_armor_used = models.IntegerField(
+        default=0,
+        help_text="Spent physical armor charges (0–6); pool size is physical_armor_bonus_charges when has_physical_armor_item.",
+    )
+    # Session-end Stand Development XP (and future pool sources) pending player allocation to tracks.
+    unallocated_xp = models.IntegerField(
+        default=0,
+        help_text=(
+            "XP in the session bank: granted at session settle (e.g. Stand Development) "
+            "until the player allocates it to insight/prowess/resolve/heritage/playbook."
+        ),
+    )
 
     harm_level1_used = models.BooleanField(default=False)
     harm_level1_name = models.CharField(max_length=100, blank=True, null=True)

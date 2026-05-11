@@ -905,6 +905,90 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 'errors': serializer.errors
             }, status=status.HTTP_400_BAD_REQUEST)
 
+    @action(detail=True, methods=['post'], url_path='allocate-pool-xp')
+    def allocate_pool_xp(self, request, pk=None):
+        """
+        Move XP from `unallocated_xp` (session bank) onto a normal xp_clocks track.
+        """
+        try:
+            character = self.get_object()
+        except Character.DoesNotExist:
+            return Response(
+                {'error': 'Character not found'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        user = request.user
+        is_owner = character.user_id == user.id
+        is_gm = bool(
+            character.campaign_id and character.campaign.gm_id == user.id
+        )
+        if not (user.is_staff or is_owner or is_gm):
+            raise PermissionDenied(
+                "You may only allocate pool XP for your own character or as the campaign GM."
+            )
+
+        track = (request.data.get('track') or request.data.get('xp_type') or '').strip().lower()
+        valid_tracks = ['insight', 'prowess', 'resolve', 'heritage', 'playbook']
+        if track not in valid_tracks:
+            return Response(
+                {'error': f'Invalid track. Must be one of: {valid_tracks}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            amount = int(request.data.get('amount', 1))
+        except (TypeError, ValueError):
+            return Response(
+                {'error': 'amount must be an integer'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if amount < 1 or amount > 20:
+            return Response(
+                {'error': 'amount must be 1–20 per request'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            locked = Character.objects.select_for_update().get(pk=character.pk)
+            pool = int(getattr(locked, 'unallocated_xp', 0) or 0)
+            if amount > pool:
+                return Response(
+                    {'error': f'Only {pool} XP available in session pool.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            xp_clocks = dict(locked.xp_clocks or {})
+            cur = int(xp_clocks.get(track, 0) or 0)
+            new_xp = cur + amount
+            cap = 10 if track == 'playbook' else 5
+            if new_xp > cap:
+                return Response(
+                    {'error': f'{track} track cannot exceed {cap} XP.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            xp_clocks[track] = new_xp
+            locked.unallocated_xp = pool - amount
+            locked.xp_clocks = xp_clocks
+            locked.save(update_fields=['unallocated_xp', 'xp_clocks'])
+            ExperienceTracker.objects.create(
+                character=locked,
+                session=None,
+                roll=None,
+                trigger='MANUAL',
+                description=(
+                    f'[{track}] Allocated {amount} XP from session pool '
+                    f'({pool} in pool before).'
+                ),
+                xp_gained=amount,
+            )
+
+        return Response({
+            'success': True,
+            'track': track,
+            'amount': amount,
+            'new_track_total': new_xp,
+            'unallocated_xp': locked.unallocated_xp,
+            'xp_clocks': locked.xp_clocks,
+        })
+
     @action(detail=True, methods=['post'], url_path='add-progress-clock')
     def add_progress_clock(self, request, pk=None):
         """

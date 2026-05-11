@@ -17,7 +17,7 @@ import {
   STAND_ROLL_KEYS_ACTIVE,
   STAND_COLUMN_ROLL_ORDER,
   STAND_PASSIVE_KEYS,
-  DUR_TABLE,
+  standPathArmorMaxFromDurabilityIndex,
   DEV_SESSION_XP,
   ACTION_ATTR,
   ACTION_DESC,
@@ -668,8 +668,11 @@ function hasMeaningfulDraftChanges(payload) {
   if (payload.campaign != null && payload.campaign !== "") return true;
   if ((payload.playbook || "Stand") !== "Stand") return true;
   if ((payload.stressFilled || 0) > 0) return true;
-  if ((payload.regularArmorUsed || 0) > 0) return true;
-  if (Boolean(payload.specialArmorUsed)) return true;
+  if ((payload.standArmorUsed || 0) > 0) return true;
+  if (Boolean(payload.hasPhysicalArmorItem)) return true;
+  if ((payload.physicalArmorBonusCharges || 0) > 0) return true;
+  if ((payload.physicalArmorUsed || 0) > 0) return true;
+  if ((payload.unallocatedXp || 0) > 0) return true;
   if ((payload.healingClock || 0) > 0) return true;
   if ((payload.coinFilled || 0) > 0) return true;
   if (Object.values(payload.xp || {}).some((v) => (Number(v) || 0) > 0))
@@ -847,11 +850,6 @@ const CharacterSheetWrapper = ({
       : "Created by unknown";
   const canEditSheet = !character?.id || isGM || character?.user_id === user?.id;
   const canCreateManualHistoryRecord = isGM || character?.user_id === user?.id;
-  const isCharacterOwner = Boolean(
-    character?.user_id != null &&
-      user?.id != null &&
-      String(character.user_id) === String(user.id),
-  );
   const [activeMode, setActiveMode] = useState("CHARACTER MODE");
   const campaignIdFromCharacter = (() => {
     const c = character?.campaign;
@@ -886,13 +884,6 @@ const CharacterSheetWrapper = ({
       .filter((x) => x.showCard)
       .map((x) => x.display);
   }, [charCampaign?.active_session_detail?.session_npcs_with_clocks]);
-
-  /** All session-involved NPCs (id + name); not gated by player clock visibility — for NPC heal fortune picker. */
-  const sessionNpcHealRoster = useMemo(() => {
-    const roster =
-      charCampaign?.active_session_detail?.session_npc_heal_roster || [];
-    return Array.isArray(roster) ? roster : [];
-  }, [charCampaign?.active_session_detail?.session_npc_heal_roster]);
 
   const maxStandGradeIndex =
     character?.gm_can_have_s_rank_stand_stats === true ? 5 : 4;
@@ -1326,13 +1317,35 @@ const CharacterSheetWrapper = ({
       : DEFAULT_TRAUMA,
   );
 
-  // FIX 4: Armor charges derived from Durability grade
-  const [regularArmorUsed, setRegularArmorUsed] = useState(
-    character?.regularArmorUsed || 0,
+  // SRD_DEV: Stand path armor (Durability) vs physical gear (fiction / GM pool)
+  const [standArmorUsed, setStandArmorUsed] = useState(
+    character?.standArmorUsed ?? 0,
   );
-  const [specialArmorUsed, setSpecialArmorUsed] = useState(
-    character?.specialArmorUsed || false,
+  const [hasPhysicalArmorItem, setHasPhysicalArmorItem] = useState(
+    () => !!character?.hasPhysicalArmorItem,
   );
+  const [physicalArmorBonusCharges, setPhysicalArmorBonusCharges] = useState(
+    () =>
+      Math.min(
+        6,
+        Math.max(0, Math.floor(Number(character?.physicalArmorBonusCharges) || 0)),
+      ),
+  );
+  const [physicalArmorUsed, setPhysicalArmorUsed] = useState(
+    () =>
+      Math.min(
+        6,
+        Math.max(0, Math.floor(Number(character?.physicalArmorUsed) || 0)),
+      ),
+  );
+
+  const physicalArmorMax = useMemo(() => {
+    if (!hasPhysicalArmorItem) return 0;
+    return Math.min(
+      6,
+      Math.max(0, Math.floor(Number(physicalArmorBonusCharges) || 0)),
+    );
+  }, [hasPhysicalArmorItem, physicalArmorBonusCharges]);
 
   // Harm (API can send harm or harmEntries; always keep L1/L2×2, L3, L4)
   const [harm, setHarm] = useState(() =>
@@ -1345,16 +1358,6 @@ const CharacterSheetWrapper = ({
   const [healingRecoverBusy, setHealingRecoverBusy] = useState(false);
   const [healingRecoverErr, setHealingRecoverErr] = useState(null);
   const [healingRecoverMsg, setHealingRecoverMsg] = useState("");
-  /** Session NPC treats you (or an ally): fortune pool + optional personal coin (owner-only roll per API). */
-  const [npcHealFortuneBusy, setNpcHealFortuneBusy] = useState(false);
-  const [npcHealFortuneErr, setNpcHealFortuneErr] = useState(null);
-  const [npcHealFortuneMsg, setNpcHealFortuneMsg] = useState("");
-  const [npcHealHealerId, setNpcHealHealerId] = useState("");
-  const [npcHealBaseDice, setNpcHealBaseDice] = useState(2);
-  const [npcHealCoinSpend, setNpcHealCoinSpend] = useState(0);
-  const [npcHealPatientMode, setNpcHealPatientMode] = useState("self");
-  const [npcHealPatientPcId, setNpcHealPatientPcId] = useState("");
-  const [npcHealPatientNpcId, setNpcHealPatientNpcId] = useState("");
   /** Action rating used for downtime + mid-action healing-clock recover (default Tinker); per-character localStorage. */
   const [selfHealingRecoverAction, setSelfHealingRecoverAction] =
     useState("TINKER");
@@ -1383,6 +1386,10 @@ const CharacterSheetWrapper = ({
       playbook: 0,
     },
   );
+  const [unallocatedXp, setUnallocatedXp] = useState(
+    Math.max(0, Math.floor(Number(character?.unallocatedXp) || 0)),
+  );
+  const [poolAllocateBusy, setPoolAllocateBusy] = useState(false);
 
   // Hydrate sheet from server when character payload arrives after first paint (same class of bug as actionRatings)
   useEffect(() => {
@@ -1421,6 +1428,35 @@ const CharacterSheetWrapper = ({
   }, [character?.id, character?.healingClock]);
 
   useEffect(() => {
+    const v = character?.unallocatedXp;
+    if (typeof v !== "number") return;
+    const n = Math.max(0, Math.floor(v));
+    setUnallocatedXp((p) => (p !== n ? n : p));
+  }, [character?.id, character?.unallocatedXp]);
+
+  useEffect(() => {
+    if (sheetDraftIsDirty) return;
+    const s = character?.standArmorUsed;
+    if (typeof s === "number" && Number.isFinite(s))
+      setStandArmorUsed(Math.max(0, Math.floor(s)));
+    if (typeof character?.hasPhysicalArmorItem === "boolean")
+      setHasPhysicalArmorItem(character.hasPhysicalArmorItem);
+    const b = character?.physicalArmorBonusCharges;
+    if (typeof b === "number" && Number.isFinite(b))
+      setPhysicalArmorBonusCharges(Math.min(6, Math.max(0, Math.floor(b))));
+    const u = character?.physicalArmorUsed;
+    if (typeof u === "number" && Number.isFinite(u))
+      setPhysicalArmorUsed(Math.min(6, Math.max(0, Math.floor(u))));
+  }, [
+    character?.id,
+    character?.standArmorUsed,
+    character?.hasPhysicalArmorItem,
+    character?.physicalArmorBonusCharges,
+    character?.physicalArmorUsed,
+    sheetDraftIsDirty,
+  ]);
+
+  useEffect(() => {
     if (sheetDraftIsDirty) return;
     const nx = character?.xp;
     if (!nx || typeof nx !== "object") return;
@@ -1449,50 +1485,6 @@ const CharacterSheetWrapper = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate coin/stash only on id change (see comment above)
   }, [character?.id]);
-
-  useEffect(() => {
-    setNpcHealFortuneErr(null);
-    setNpcHealFortuneMsg("");
-    setNpcHealPatientMode("self");
-    setNpcHealPatientPcId("");
-    setNpcHealPatientNpcId("");
-    setNpcHealCoinSpend(0);
-  }, [character?.id]);
-
-  useEffect(() => {
-    if (!sessionNpcHealRoster.length) {
-      setNpcHealHealerId("");
-      return;
-    }
-    setNpcHealHealerId((prev) => {
-      const ok = sessionNpcHealRoster.some(
-        (n) => String(n.id) === String(prev),
-      );
-      if (ok) return String(prev);
-      return String(sessionNpcHealRoster[0].id);
-    });
-  }, [sessionNpcHealRoster]);
-
-  /** Default base fortune dice from the selected session healer's NPC sheet Quality tier (1–4d). */
-  useEffect(() => {
-    if (!npcHealHealerId || !sessionNpcHealRoster.length) return;
-    const row = sessionNpcHealRoster.find(
-      (n) => String(n.id) === String(npcHealHealerId),
-    );
-    const hq = Number(row?.heal_quality_fortune_dice);
-    if (Number.isFinite(hq) && hq >= 1 && hq <= 4) {
-      setNpcHealBaseDice(hq);
-    }
-  }, [npcHealHealerId, sessionNpcHealRoster]);
-
-  useEffect(() => {
-    const base = Math.max(
-      1,
-      Math.min(6, Math.floor(Number(npcHealBaseDice)) || 2),
-    );
-    const maxSpend = Math.min(3, coinFilled, Math.max(0, 6 - base));
-    setNpcHealCoinSpend((s) => (s > maxSpend ? maxSpend : s));
-  }, [npcHealBaseDice, coinFilled]);
 
   // Heritage benefits and detriments (arrays of IDs)
   const [selectedBenefits, setSelectedBenefits] = useState(
@@ -1961,6 +1953,22 @@ const CharacterSheetWrapper = ({
     };
   }, [activeMode, charData.crewId]);
 
+  /** Light sync: standing rows + visibility can change from GM / other clients while staying in crew mode. */
+  useEffect(() => {
+    if (activeMode !== "CREW MODE" || !charData.crewId) return undefined;
+    let cancelled = false;
+    crewAPI
+      .getCrew(charData.crewId)
+      .then((d) => {
+        if (cancelled) return;
+        setCrewFactionLinks(d.faction_relationships || []);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMode, charData.crewId, sessionDataPollTick]);
+
   useEffect(() => {
     if (activeMode !== "CREW MODE" || !charData.crewId) return;
     crewHistoryAPI
@@ -2033,6 +2041,13 @@ const CharacterSheetWrapper = ({
     return facs.filter((f) => f?.id != null && !linkedIds.has(Number(f.id)));
   }, [campaignForCrewFactionAdd?.factions, crewFactionLinks]);
 
+  /** Non-GMs only see standings for factions the GM has revealed (matches CrewSerializer). */
+  const crewFactionLinksForDisplay = useMemo(() => {
+    const list = crewFactionLinks || [];
+    if (isGM) return list;
+    return list.filter((r) => r.visible_to_players !== false);
+  }, [crewFactionLinks, isGM]);
+
   const handleAddCrewFactionLink = useCallback(async () => {
     if (!charData.crewId || !campaignId) return;
     const nameTrim = crewFactionAddName.trim();
@@ -2089,7 +2104,11 @@ const CharacterSheetWrapper = ({
     onCampaignRefresh,
   ]);
 
-  const durVal = Math.min(5, Math.max(0, Number(standStats.durability) || 1));
+  const rawDur = Number(standStats.durability);
+  const durVal = Math.min(
+    5,
+    Math.max(0, Number.isFinite(rawDur) ? Math.floor(rawDur) : 0),
+  );
   const devVal = Math.min(5, Math.max(0, Number(standStats.development) || 1));
   /** SRD_DEV: stress track fixed at 9; Stand Durability only affects armor (+ resist tiers). */
   const maxStress = 9;
@@ -2114,8 +2133,28 @@ const CharacterSheetWrapper = ({
     },
     [maxStress],
   );
-  const maxArmorCharges = DUR_TABLE[durVal]?.armorCharges ?? 1;
+  const standArmorMax = standPathArmorMaxFromDurabilityIndex(durVal);
   const sessionDevXP = DEV_SESSION_XP[devVal] ?? 0;
+
+  useEffect(() => {
+    setStandArmorUsed((u) => {
+      const n = Math.min(
+        standArmorMax,
+        Math.max(0, Math.floor(Number(u) || 0)),
+      );
+      return n === u ? u : n;
+    });
+  }, [standArmorMax]);
+
+  useEffect(() => {
+    setPhysicalArmorUsed((u) => {
+      const n = Math.min(
+        physicalArmorMax,
+        Math.max(0, Math.floor(Number(u) || 0)),
+      );
+      return n === u ? u : n;
+    });
+  }, [physicalArmorMax]);
 
   const {
     totalActionDots,
@@ -2925,89 +2964,6 @@ const CharacterSheetWrapper = ({
       onCampaignRefresh,
     ],
   );
-
-  const performNpcHealFortuneRoll = useCallback(async () => {
-    if (!isCharacterOwner || !canEditSheet) return;
-    if (!characterId || !activeSessionId) return;
-    if (npcHealFortuneBusy) return;
-    const hid = Number(npcHealHealerId);
-    if (!Number.isFinite(hid) || hid <= 0) {
-      setNpcHealFortuneErr("Pick a session NPC healer.");
-      return;
-    }
-    const base = Math.max(
-      1,
-      Math.min(6, Math.floor(Number(npcHealBaseDice)) || 2),
-    );
-    const maxSpend = Math.min(3, coinFilled, Math.max(0, 6 - base));
-    const spend = Math.max(
-      0,
-      Math.min(maxSpend, Math.floor(Number(npcHealCoinSpend)) || 0),
-    );
-
-    setNpcHealFortuneBusy(true);
-    setNpcHealFortuneErr(null);
-    setNpcHealFortuneMsg("");
-
-    try {
-      const payload = {
-        roll_type: "FORTUNE",
-        session_id: activeSessionId,
-        dice_pool: base,
-        npc_heal_fortune: true,
-        npc_healer_npc_id: hid,
-        npc_heal_fortune_coin: spend,
-        action: "fortune",
-      };
-      if (npcHealPatientMode === "pc" && npcHealPatientPcId) {
-        const pid = Number(npcHealPatientPcId);
-        if (Number.isFinite(pid) && pid > 0) {
-          payload.npc_heal_patient_character_id = pid;
-        }
-      } else if (npcHealPatientMode === "npc" && npcHealPatientNpcId) {
-        const nid = Number(npcHealPatientNpcId);
-        if (Number.isFinite(nid) && nid > 0) {
-          payload.npc_heal_patient_npc_id = nid;
-        }
-      }
-      const res = await characterAPI.rollAction(characterId, payload);
-      if (typeof res?.coin === "number" && Number.isFinite(res.coin)) {
-        setCoinFilled((prev) => {
-          const next = Math.max(0, Math.min(4, Math.floor(res.coin)));
-          return next !== prev ? next : prev;
-        });
-      }
-      const dice = Array.isArray(res?.dice_results)
-        ? res.dice_results.join(", ")
-        : "";
-      const total = Number.isFinite(Number(res?.total_dice))
-        ? Number(res.total_dice)
-        : "?";
-      setNpcHealFortuneMsg(
-        `NPC heal fortune (${total}d): [${dice}] highest ${res?.highest ?? "—"} — ${res?.outcome ?? "—"}${spend ? ` · spent ${spend} coin` : ""}`,
-      );
-      setHistoryRefreshTick((x) => x + 1);
-      onCampaignRefresh?.();
-    } catch (e) {
-      setNpcHealFortuneErr(e?.message || "NPC heal fortune failed");
-    } finally {
-      setNpcHealFortuneBusy(false);
-    }
-  }, [
-    isCharacterOwner,
-    canEditSheet,
-    characterId,
-    activeSessionId,
-    npcHealFortuneBusy,
-    npcHealHealerId,
-    npcHealBaseDice,
-    npcHealCoinSpend,
-    coinFilled,
-    npcHealPatientMode,
-    npcHealPatientPcId,
-    npcHealPatientNpcId,
-    onCampaignRefresh,
-  ]);
 
   const xpReqSnapshot = useMemo(
     () =>
@@ -5650,8 +5606,10 @@ const CharacterSheetWrapper = ({
       actionRatings,
       stressFilled,
       trauma,
-      regularArmorUsed,
-      specialArmorUsed,
+      standArmorUsed,
+      hasPhysicalArmorItem,
+      physicalArmorBonusCharges,
+      physicalArmorUsed,
       harm,
       healingClock,
       coinFilled,
@@ -5674,8 +5632,10 @@ const CharacterSheetWrapper = ({
     actionRatings,
     stressFilled,
     trauma,
-    regularArmorUsed,
-    specialArmorUsed,
+    standArmorUsed,
+    hasPhysicalArmorItem,
+    physicalArmorBonusCharges,
+    physicalArmorUsed,
     harm,
     healingClock,
     coinFilled,
@@ -5775,8 +5735,10 @@ const CharacterSheetWrapper = ({
     actionRatings,
     stressFilled,
     trauma,
-    regularArmorUsed,
-    specialArmorUsed,
+    standArmorUsed,
+    hasPhysicalArmorItem,
+    physicalArmorBonusCharges,
+    physicalArmorUsed,
     harm,
     healingClock,
     coinFilled,
@@ -8354,76 +8316,217 @@ const CharacterSheetWrapper = ({
                         </div>
                       ))}
                     </div>
-                    {/* FIX 4: Armor charges derived from Durability */}
-                    <div style={{ minWidth: "90px" }}>
+                    {/* SRD_DEV: Stand path armor (Durability) vs physical gear; special negate = NPC/GM */}
+                    <div style={{ minWidth: "200px", maxWidth: "240px" }}>
                       <span
                         style={{
                           fontSize: "10px",
                           color: "#9ca3af",
                           display: "block",
-                          marginBottom: "4px",
+                          marginBottom: "6px",
                         }}
                       >
                         ARMOR
-                        <span style={{ color: "#f59e0b", marginLeft: "4px" }}>
-                          ({maxArmorCharges} chg)
-                        </span>
                       </span>
-                      {maxArmorCharges === 0 ? (
-                        <div style={{ fontSize: "10px", color: "#6b7280" }}>
-                          F-DUR: no armor
-                        </div>
-                      ) : (
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "3px",
-                            marginBottom: "6px",
-                          }}
-                        >
-                          {Array.from({ length: maxArmorCharges }, (_, i) => (
-                            <div
-                              key={i}
-                              onClick={() =>
-                                setRegularArmorUsed(
-                                  i < regularArmorUsed ? i : i + 1,
-                                )
-                              }
-                              title={
-                                i < regularArmorUsed
-                                  ? "Used — click to restore"
-                                  : "Click to spend"
-                              }
-                              style={{
-                                width: "20px",
-                                height: "20px",
-                                border: "1px solid #4b5563",
-                                cursor: "pointer",
-                                background:
-                                  i < regularArmorUsed ? "#b45309" : "#1f2937",
-                              }}
-                            />
-                          ))}
-                        </div>
-                      )}
-                      <label
+                      <div
                         style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "4px",
-                          cursor: "pointer",
-                          fontSize: "11px",
+                          marginBottom: "10px",
+                          opacity: hasPhysicalArmorItem ? 1 : 0.72,
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          checked={specialArmorUsed}
-                          onChange={(e) =>
-                            setSpecialArmorUsed(e.target.checked)
-                          }
-                        />
-                        SPECIAL
-                      </label>
+                        <label
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "5px",
+                            cursor: "pointer",
+                            fontSize: "10px",
+                            color: "#e5e7eb",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={hasPhysicalArmorItem}
+                            onChange={(e) => {
+                              const on = e.target.checked;
+                              setHasPhysicalArmorItem(on);
+                              if (!on) setPhysicalArmorUsed(0);
+                            }}
+                          />
+                          PHYSICAL
+                          <span style={{ color: "#9ca3af", fontWeight: "normal" }}>
+                            (gear / heritage)
+                          </span>
+                        </label>
+                        {hasPhysicalArmorItem ? (
+                          <>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                marginBottom: "4px",
+                                flexWrap: "wrap",
+                              }}
+                            >
+                              <span
+                                style={{ fontSize: "9px", color: "#6b7280" }}
+                              >
+                                Pool 0–6
+                              </span>
+                              <input
+                                type="number"
+                                min={0}
+                                max={6}
+                                value={physicalArmorBonusCharges}
+                                onChange={(e) => {
+                                  const n = Math.min(
+                                    6,
+                                    Math.max(
+                                      0,
+                                      parseInt(e.target.value, 10) || 0,
+                                    ),
+                                  );
+                                  setPhysicalArmorBonusCharges(n);
+                                }}
+                                style={{
+                                  width: "40px",
+                                  padding: "2px 4px",
+                                  fontSize: "11px",
+                                  background: "#0a0a0a",
+                                  border: "1px solid #374151",
+                                  color: "#fff",
+                                }}
+                              />
+                            </div>
+                            {physicalArmorMax === 0 ? (
+                              <div
+                                style={{ fontSize: "9px", color: "#6b7280" }}
+                              >
+                                Set pool &gt; 0 to track charges.
+                              </div>
+                            ) : (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: "3px",
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                {Array.from(
+                                  { length: physicalArmorMax },
+                                  (_, i) => (
+                                    <div
+                                      key={`ph-${i}`}
+                                      onClick={() =>
+                                        setPhysicalArmorUsed(
+                                          i < physicalArmorUsed ? i : i + 1,
+                                        )
+                                      }
+                                      title={
+                                        i < physicalArmorUsed
+                                          ? "Used — click to restore"
+                                          : "Click to spend (−1 harm)"
+                                      }
+                                      style={{
+                                        width: "20px",
+                                        height: "20px",
+                                        border: "1px solid #4b5563",
+                                        cursor: "pointer",
+                                        background:
+                                          i < physicalArmorUsed
+                                            ? "#b45309"
+                                            : "#1f2937",
+                                      }}
+                                    />
+                                  ),
+                                )}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div
+                            style={{
+                              fontSize: "9px",
+                              color: "#6b7280",
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            Enable only when fiction gives worn or carried
+                            physical armor (same rule as NPC sheet).
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ marginBottom: "8px" }}>
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            color: "#9ca3af",
+                            display: "block",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          STAND (path)
+                          <span
+                            style={{ color: "#0ea5e9", marginLeft: "4px" }}
+                          >
+                            ({standArmorMax} chg)
+                          </span>
+                        </span>
+                        {standArmorMax === 0 ? (
+                          <div style={{ fontSize: "9px", color: "#6b7280" }}>
+                            F/D durability: no stand path armor.
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "3px",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            {Array.from({ length: standArmorMax }, (_, i) => (
+                              <div
+                                key={`st-${i}`}
+                                onClick={() =>
+                                  setStandArmorUsed(
+                                    i < standArmorUsed ? i : i + 1,
+                                  )
+                                }
+                                title={
+                                  i < standArmorUsed
+                                    ? "Used — click to restore"
+                                    : "Click to spend (Stand takes the hit)"
+                                }
+                                style={{
+                                  width: "20px",
+                                  height: "20px",
+                                  border: "1px solid #0369a1",
+                                  cursor: "pointer",
+                                  background:
+                                    i < standArmorUsed ? "#0284c7" : "#0c4a6e",
+                                }}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "9px",
+                          color: "#6b7280",
+                          lineHeight: 1.35,
+                          marginBottom: "6px",
+                        }}
+                      >
+                        <strong style={{ color: "#9ca3af" }}>
+                          Special negate
+                        </strong>{" "}
+                        (flat cancel harm) is an NPC/GM tool in SRD_DEV. PCs rely
+                        on abilities (below) or table agreement — not a generic
+                        special-armor row.
+                      </div>
                       {characterHasLegendaryGuard(abilities) ? (
                         <div
                           title={
@@ -8637,341 +8740,6 @@ const CharacterSheetWrapper = ({
                       ) : null}
                       </div>
                     </div>
-
-                      {sessionNpcHealRoster.length > 0 &&
-                      Boolean(activeSessionId) ? (
-                        <div
-                          style={{
-                            marginTop: "10px",
-                            paddingTop: "8px",
-                            borderTop: "1px solid #374151",
-                            width: "100%",
-                            maxWidth: "100%",
-                          }}
-                        >
-                          <span
-                            style={{
-                              fontSize: "9px",
-                              color: "#6b7280",
-                              display: "block",
-                              textAlign: "center",
-                              marginBottom: "6px",
-                            }}
-                          >
-                            NPC medic — fortune (base d6 pool + up to 3 coin for +1d
-                            each, total max 6d)
-                          </span>
-                          {!isCharacterOwner ? (
-                            <div
-                              style={{
-                                fontSize: "10px",
-                                color: "#9ca3af",
-                                textAlign: "center",
-                                marginBottom: "6px",
-                              }}
-                            >
-                              Only this character&apos;s player can roll or spend coin
-                              here.
-                            </div>
-                          ) : null}
-                          <label
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "4px",
-                              marginBottom: "6px",
-                              fontSize: "10px",
-                              color: "#9ca3af",
-                            }}
-                          >
-                            Session healer (NPC)
-                            <select
-                              aria-label="NPC heal fortune healer"
-                              disabled={
-                                npcHealFortuneBusy ||
-                                !canEditSheet ||
-                                !isCharacterOwner
-                              }
-                              value={npcHealHealerId}
-                              onChange={(e) =>
-                                setNpcHealHealerId(e.target.value)
-                              }
-                              style={{ ...S.sel, fontSize: "11px" }}
-                            >
-                              {sessionNpcHealRoster.map((n) => (
-                                <option key={n.id} value={String(n.id)}>
-                                  {n.name || "NPC"}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: "6px",
-                              marginBottom: "6px",
-                            }}
-                          >
-                            <label
-                              style={{
-                                flex: 1,
-                                fontSize: "10px",
-                                color: "#9ca3af",
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: "2px",
-                              }}
-                            >
-                              Base d6
-                              <select
-                                aria-label="NPC heal fortune base dice"
-                                disabled={
-                                  npcHealFortuneBusy ||
-                                  !canEditSheet ||
-                                  !isCharacterOwner
-                                }
-                                value={String(npcHealBaseDice)}
-                                onChange={(e) =>
-                                  setNpcHealBaseDice(
-                                    Number(e.target.value) || 2,
-                                  )
-                                }
-                                style={{ ...S.sel, fontSize: "11px" }}
-                              >
-                                {[1, 2, 3, 4, 5, 6].map((d) => (
-                                  <option key={d} value={String(d)}>
-                                    {d}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <label
-                              style={{
-                                flex: 1,
-                                fontSize: "10px",
-                                color: "#9ca3af",
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: "2px",
-                              }}
-                            >
-                              Coin (+d6)
-                              <select
-                                aria-label="NPC heal fortune coin spend"
-                                disabled={
-                                  npcHealFortuneBusy ||
-                                  !canEditSheet ||
-                                  !isCharacterOwner
-                                }
-                                value={String(
-                                  (() => {
-                                    const b = Math.max(
-                                      1,
-                                      Math.min(
-                                        6,
-                                        Math.floor(Number(npcHealBaseDice)) ||
-                                          2,
-                                      ),
-                                    );
-                                    const maxS = Math.min(
-                                      3,
-                                      coinFilled,
-                                      Math.max(0, 6 - b),
-                                    );
-                                    return Math.min(
-                                      maxS,
-                                      Math.floor(Number(npcHealCoinSpend)) || 0,
-                                    );
-                                  })(),
-                                )}
-                                onChange={(e) =>
-                                  setNpcHealCoinSpend(
-                                    Number(e.target.value) || 0,
-                                  )
-                                }
-                                style={{ ...S.sel, fontSize: "11px" }}
-                              >
-                                {(() => {
-                                  const b = Math.max(
-                                    1,
-                                    Math.min(
-                                      6,
-                                      Math.floor(Number(npcHealBaseDice)) ||
-                                        2,
-                                    ),
-                                  );
-                                  const maxS = Math.min(
-                                    3,
-                                    coinFilled,
-                                    Math.max(0, 6 - b),
-                                  );
-                                  return Array.from(
-                                    { length: maxS + 1 },
-                                    (_, i) => (
-                                      <option key={i} value={String(i)}>
-                                        +{i} ({b + i}d)
-                                      </option>
-                                    ),
-                                  );
-                                })()}
-                              </select>
-                            </label>
-                          </div>
-                          <label
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              gap: "4px",
-                              marginBottom: "6px",
-                              fontSize: "10px",
-                              color: "#9ca3af",
-                            }}
-                          >
-                            Patient (optional)
-                            <select
-                              aria-label="NPC heal patient type"
-                              disabled={
-                                npcHealFortuneBusy ||
-                                !canEditSheet ||
-                                !isCharacterOwner
-                              }
-                              value={npcHealPatientMode}
-                              onChange={(e) => {
-                                setNpcHealPatientMode(e.target.value);
-                                setNpcHealPatientPcId("");
-                                setNpcHealPatientNpcId("");
-                              }}
-                              style={{ ...S.sel, fontSize: "11px" }}
-                            >
-                              <option value="self">You (default)</option>
-                              <option value="pc">Another PC</option>
-                              <option value="npc">Session NPC</option>
-                            </select>
-                          </label>
-                          {npcHealPatientMode === "pc" ? (
-                            <label
-                              style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: "4px",
-                                marginBottom: "6px",
-                                fontSize: "10px",
-                                color: "#9ca3af",
-                              }}
-                            >
-                              Target PC
-                              <select
-                                aria-label="NPC heal patient PC"
-                                disabled={
-                                  npcHealFortuneBusy ||
-                                  !canEditSheet ||
-                                  !isCharacterOwner
-                                }
-                                value={npcHealPatientPcId}
-                                onChange={(e) =>
-                                  setNpcHealPatientPcId(e.target.value)
-                                }
-                                style={{ ...S.sel, fontSize: "11px" }}
-                              >
-                                <option value="">Pick…</option>
-                                {healOtherRecoveryCandidates.map((c) => (
-                                  <option key={c.id} value={String(c.id)}>
-                                    {c.name || c.true_name || `PC #${c.id}`}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          ) : null}
-                          {npcHealPatientMode === "npc" ? (
-                            <label
-                              style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                gap: "4px",
-                                marginBottom: "6px",
-                                fontSize: "10px",
-                                color: "#9ca3af",
-                              }}
-                            >
-                              Target NPC
-                              <select
-                                aria-label="NPC heal patient NPC"
-                                disabled={
-                                  npcHealFortuneBusy ||
-                                  !canEditSheet ||
-                                  !isCharacterOwner
-                                }
-                                value={npcHealPatientNpcId}
-                                onChange={(e) =>
-                                  setNpcHealPatientNpcId(e.target.value)
-                                }
-                                style={{ ...S.sel, fontSize: "11px" }}
-                              >
-                                <option value="">Pick…</option>
-                                {sessionNpcHealRoster.map((n) => (
-                                  <option key={n.id} value={String(n.id)}>
-                                    {n.name || "NPC"}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          ) : null}
-                          <button
-                            type="button"
-                            onClick={performNpcHealFortuneRoll}
-                            disabled={
-                              npcHealFortuneBusy ||
-                              !canEditSheet ||
-                              !isCharacterOwner ||
-                              !activeSessionId ||
-                              (npcHealPatientMode === "npc" &&
-                                !npcHealPatientNpcId)
-                            }
-                            style={{
-                              ...S.btn,
-                              width: "100%",
-                              fontSize: "11px",
-                              background: "#7c3aed",
-                              color: "#faf5ff",
-                              opacity:
-                                npcHealFortuneBusy ||
-                                !canEditSheet ||
-                                !isCharacterOwner
-                                  ? 0.55
-                                  : 1,
-                            }}
-                            title="Logs a FORTUNE roll to session history; deducts personal coin if you chose a coin spend."
-                          >
-                            {npcHealFortuneBusy
-                              ? "Rolling…"
-                              : "Roll NPC heal fortune"}
-                          </button>
-                          {npcHealFortuneErr ? (
-                            <div
-                              style={{
-                                marginTop: "6px",
-                                fontSize: "11px",
-                                color: "#fca5a5",
-                                textAlign: "center",
-                              }}
-                            >
-                              {npcHealFortuneErr}
-                            </div>
-                          ) : null}
-                          {npcHealFortuneMsg ? (
-                            <div
-                              style={{
-                                marginTop: "6px",
-                                fontSize: "11px",
-                                color: "#c4b5fd",
-                                textAlign: "center",
-                              }}
-                            >
-                              {npcHealFortuneMsg}
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : null}
                     </div>
 
                 </div>
@@ -9030,6 +8798,95 @@ const CharacterSheetWrapper = ({
                 {/* XP & Advancement */}
                 <div style={S.card}>
                   <span style={S.lbl}>EXPERIENCE TRACKS</span>
+                  {unallocatedXp > 0 ? (
+                    <div
+                      style={{
+                        marginBottom: "12px",
+                        padding: "10px",
+                        background: "#1a1025",
+                        border: "1px solid rgb(109, 40, 217)",
+                        borderRadius: "6px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: "rgb(167, 139, 250)",
+                          fontWeight: "bold",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        Total XP (session pool): {unallocatedXp}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#9ca3af",
+                          lineHeight: 1.45,
+                          marginBottom: "8px",
+                        }}
+                      >
+                        From session end (Stand Development session XP, banked
+                        when the GM applied encoded XP). Allocate +1 to a track.
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "6px",
+                        }}
+                      >
+                        {XP_SPEND_TRACK_ORDER.map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            disabled={
+                              !canEditSheet ||
+                              !character?.id ||
+                              poolAllocateBusy ||
+                              unallocatedXp < 1
+                            }
+                            onClick={async () => {
+                              if (!character?.id) return;
+                              setPoolAllocateBusy(true);
+                              setSaveErrorMessage(null);
+                              try {
+                                const res = await characterAPI.allocatePoolXp(
+                                  character.id,
+                                  { track: t, amount: 1 },
+                                );
+                                const nextPool = Number(res?.unallocated_xp);
+                                if (Number.isFinite(nextPool))
+                                  setUnallocatedXp(Math.max(0, nextPool));
+                                if (
+                                  res?.xp_clocks &&
+                                  typeof res.xp_clocks === "object"
+                                ) {
+                                  setXp((prev) => ({ ...prev, ...res.xp_clocks }));
+                                }
+                              } catch (e) {
+                                setSaveErrorMessage(
+                                  e?.message || "Could not allocate pool XP",
+                                );
+                              } finally {
+                                setPoolAllocateBusy(false);
+                              }
+                            }}
+                            style={{
+                              ...S.btn,
+                              fontSize: "10px",
+                              padding: "4px 8px",
+                              background: "#6d28d9",
+                              color: "#fff",
+                              opacity:
+                                !canEditSheet || unallocatedXp < 1 ? 0.5 : 1,
+                            }}
+                          >
+                            +1 {XP_TRACK_SPEND_LABELS[t] || t}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   {[
                     { name: "INSIGHT", key: "insight", max: 5 },
                     { name: "PROWESS", key: "prowess", max: 5 },
@@ -16732,12 +16589,22 @@ const CharacterSheetWrapper = ({
                     ) : null}
                   </div>
                 ) : null}
-                {crewFactionLinks.length === 0 ? (
+                {crewFactionLinksForDisplay.length === 0 ? (
                   <div style={{ fontSize: "12px", color: "#6b7280" }}>
-                    No linked factions yet.
-                    {isGM && campaignId
-                      ? " Create a faction for the campaign, then link it to this crew."
-                      : ""}
+                    {crewFactionLinks.length === 0 ? (
+                      <>
+                        No linked factions yet.
+                        {isGM && campaignId
+                          ? " Create a faction for the campaign, then link it to this crew."
+                          : ""}
+                      </>
+                    ) : (
+                      <>
+                        No crew–faction standings are revealed to players yet. Your
+                        GM can reveal them from the crew block when the table is meant
+                        to see them.
+                      </>
+                    )}
                   </div>
                 ) : (
                   <div
@@ -16747,7 +16614,7 @@ const CharacterSheetWrapper = ({
                       gap: "8px",
                     }}
                   >
-                    {crewFactionLinks.map((row) => (
+                    {crewFactionLinksForDisplay.map((row) => (
                       <div
                         key={row.id}
                         style={{
@@ -16859,6 +16726,7 @@ const CharacterSheetWrapper = ({
                                       setCrewFactionLinks(
                                         d.faction_relationships || [],
                                       );
+                                      onCampaignRefresh?.();
                                     }),
                                   )
                                   .catch(() => {});

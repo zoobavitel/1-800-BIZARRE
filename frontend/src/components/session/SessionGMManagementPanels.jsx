@@ -302,30 +302,6 @@ function isRecoveryLinkedRoll(r) {
   return false;
 }
 
-/**
- * @param {object} options
- * @param {boolean} options.showAllRecentRolls — all types except Fortune
- * @param {boolean} options.showResistanceStressRolls — resistance / clear stress when not “all”
- */
-function recentRollPassesGmFilter(r, options) {
-  const showAllRecentRolls = !!options.showAllRecentRolls;
-  const showResistanceStressRolls = !!options.showResistanceStressRolls;
-  const rt = String(r.roll_type || "").toUpperCase();
-  if (rt === "FORTUNE") return false;
-  if (showAllRecentRolls) return true;
-
-  const actionName = String(r.action_name || "").toUpperCase();
-  const isDefaultActionRow = rt === "ACTION" && actionName !== "FORTUNE";
-
-  if (showResistanceStressRolls && (rt === "RESISTANCE" || rt === "CLEAR_STRESS")) {
-    return true;
-  }
-  if (isDefaultActionRow) return true;
-  if (isRecoveryLinkedRoll(r)) return true;
-  if (rollHasTruthyFk(r.group_action)) return true;
-  return false;
-}
-
 function buildRecentRollDetailTitle(r) {
   const parts = [];
   if (rollHasTruthyFk(r.group_action)) {
@@ -630,6 +606,52 @@ function renderSessionLedgerBucketUl(
   return out;
 }
 
+/** One history row’s “initial” bucket (dots from all-zero, empty playbook clocks → fills). */
+function renderLedgerInitialBlock(
+  entry,
+  charDisplayNameById,
+  keySuffix,
+  note = null,
+) {
+  const lines = entry?.advancement_buckets?.initial || [];
+  if (!lines.length) return null;
+  const cid = Number(entry.character);
+  const title =
+    charDisplayNameById.get(cid) ||
+    entry.character_true_name ||
+    `PC ${entry.character}`;
+  const when = entry.timestamp
+    ? new Date(entry.timestamp).toLocaleString()
+    : "—";
+  return (
+    <li key={`initial-${keySuffix}-${entry.id}`} style={{ marginBottom: 10 }}>
+      <div style={{ color: "#e5e7eb", marginBottom: 4 }}>
+        <span>{when}</span>
+        <span style={{ color: "#9ca3af" }}>
+          {" "}
+          · {title}
+        </span>
+        {note ? (
+          <span style={{ color: "#6b7280", fontSize: 9 }}> {note}</span>
+        ) : null}
+      </div>
+      <ul
+        style={{
+          margin: 0,
+          paddingLeft: 16,
+          color: "#cbd5e1",
+          fontSize: 10,
+          lineHeight: 1.4,
+        }}
+      >
+        {lines.map((line, i) => (
+          <li key={`${entry.id}-initial-${keySuffix}-${i}`}>{line}</li>
+        ))}
+      </ul>
+    </li>
+  );
+}
+
 function flatActionDots(actionDots) {
   if (!actionDots || typeof actionDots !== "object") return [];
   const first = Object.values(actionDots)[0];
@@ -747,6 +769,19 @@ const QUICK_NPC_OPTION_STYLE = {
 };
 
 /** Visual severity for session compact harm grid (warns as higher tiers fill). */
+/** Map API character harm_* fields → compact session grid draft keys. */
+function harmDraftFromApiCharacter(ch) {
+  const o = ch || {};
+  return {
+    l1a: String(o.harm_level1_name ?? "").trim(),
+    l1b: String(o.harm_level1_slot2_name ?? "").trim(),
+    l2a: String(o.harm_level2_name ?? "").trim(),
+    l2b: String(o.harm_level2_slot2_name ?? "").trim(),
+    l3: String(o.harm_level3_name ?? "").trim(),
+    l4: String(o.harm_level4_name ?? "").trim(),
+  };
+}
+
 function compactHarmFieldStyle(key, rawValue) {
   const filled = String(rawValue ?? "").trim().length > 0;
   const borderA = filled ? 1 : 0.55;
@@ -805,6 +840,8 @@ export default function SessionGMManagementPanels({
   setManualXp,
   manualXpSaving,
   onManualXpGrant,
+  /** Refetch session-scoped `characters` after sheet PATCH (campaign refresh alone does not). */
+  onSessionCharactersRefresh = null,
   user = null,
 }) {
   const [showAddNpc, setShowAddNpc] = useState(false);
@@ -830,19 +867,22 @@ export default function SessionGMManagementPanels({
   const [crewSavingId, setCrewSavingId] = useState(null);
   /** Local crew field drafts; reset when `crews` refetch from parent. */
   const [crewDraftById, setCrewDraftById] = useState({});
-  const [showAllRecentRolls, setShowAllRecentRolls] = useState(false);
-  const [showResistanceStressRecentRolls, setShowResistanceStressRecentRolls] =
-    useState(false);
   const [manualRollCardOpen, setManualRollCardOpen] = useState(true);
   const [sessionXpCardOpen, setSessionXpCardOpen] = useState(true);
   const [recentRollSavingId, setRecentRollSavingId] = useState(null);
   const [factionSavingId, setFactionSavingId] = useState(null);
   const [factionDraftById, setFactionDraftById] = useState({});
   const [npcFactionSavingId, setNpcFactionSavingId] = useState(null);
+  /** `vuln:<npcId>` or `clk:<progressClockId>` while a roster NPC clock save runs */
+  const [npcUiBusyKey, setNpcUiBusyKey] = useState(null);
   const [collapsedCrewCards, setCollapsedCrewCards] = useState({});
   const [collapsedFactionCards, setCollapsedFactionCards] = useState({});
   const [collapsedNpcCards, setCollapsedNpcCards] = useState({});
   const [collapsedPcCards, setCollapsedPcCards] = useState({});
+  const [npcRosterSectionCollapsed, setNpcRosterSectionCollapsed] =
+    useState(false);
+  const [playerRosterSectionCollapsed, setPlayerRosterSectionCollapsed] =
+    useState(false);
   const [sessionQuickFactionName, setSessionQuickFactionName] = useState("");
   const [sessionQuickFactionBusy, setSessionQuickFactionBusy] = useState(false);
   const [xpLifetimeCharId, setXpLifetimeCharId] = useState("");
@@ -858,6 +898,9 @@ export default function SessionGMManagementPanels({
     sessionAdvancementHistoryLoaded,
     setSessionAdvancementHistoryLoaded,
   ] = useState(false);
+  /** Same shape as session ledger rows but full campaign (no session-date filter); used to surface pre-session initial buy-in. */
+  const [campaignAdvancementLedgerEntries, setCampaignAdvancementLedgerEntries] =
+    useState([]);
 
   /** Inline create for per-PC progress clocks on this session (roster card). */
   const [pcSessionClockDraftFor, setPcSessionClockDraftFor] = useState(null);
@@ -868,6 +911,16 @@ export default function SessionGMManagementPanels({
     visible_to_players: false,
   });
   const [pcSessionClockBusyCharId, setPcSessionClockBusyCharId] = useState(null);
+
+  /** Inline create for per-NPC progress clocks on this session (roster card). */
+  const [npcSessionClockDraftFor, setNpcSessionClockDraftFor] = useState(null);
+  const [npcSessionClockDraft, setNpcSessionClockDraft] = useState({
+    name: "",
+    max_segments: 8,
+    clock_type: "CUSTOM",
+    visible_to_players: false,
+  });
+  const [npcSessionClockBusyNpcId, setNpcSessionClockBusyNpcId] = useState(null);
 
   const npcInvolvements = useMemo(
     () => sessionData?.npc_involvements || [],
@@ -1218,6 +1271,27 @@ export default function SessionGMManagementPanels({
     });
   }, [clocks, session?.id]);
 
+  /** Progress clocks on this session owned by an NPC (for roster quick ticks). */
+  const npcSessionClocksByNpcId = useMemo(() => {
+    const sid = session?.id != null ? Number(session.id) : NaN;
+    const m = new Map();
+    if (!Number.isFinite(sid)) return m;
+    for (const c of clocks || []) {
+      const cs = c.session != null ? Number(c.session) : NaN;
+      if (!Number.isFinite(cs) || cs !== sid) continue;
+      const nid = c.npc != null ? Number(c.npc) : NaN;
+      if (!Number.isFinite(nid)) continue;
+      if (!m.has(nid)) m.set(nid, []);
+      m.get(nid).push(c);
+    }
+    for (const arr of m.values()) {
+      arr.sort((a, b) =>
+        String(a.name || "").localeCompare(String(b.name || "")),
+      );
+    }
+    return m;
+  }, [clocks, session?.id]);
+
   const pcIdsInCampaign = useMemo(() => {
     const s = new Set();
     for (const ch of campaignChars || []) {
@@ -1230,6 +1304,7 @@ export default function SessionGMManagementPanels({
   useEffect(() => {
     if (!campaign?.id) {
       setSessionAdvancementHistory([]);
+      setCampaignAdvancementLedgerEntries([]);
       setSessionAdvancementHistoryLoaded(false);
       return;
     }
@@ -1244,7 +1319,7 @@ export default function SessionGMManagementPanels({
           ? new Date(sessionData.session_date).getTime()
           : NaN;
         const slopMs = 60 * 60 * 1000;
-        const filtered = list
+        const mapped = list
           .map((entry) => ({
             ...entry,
             advancement_buckets: partitionLedgerHistoryEntry(entry),
@@ -1252,8 +1327,11 @@ export default function SessionGMManagementPanels({
           .filter((entry) => {
             const cid = Number(entry.character);
             if (!pcIdsInCampaign.has(cid)) return false;
-            if (!ledgerBucketsTouchXpFields(entry.advancement_buckets))
-              return false;
+            return ledgerBucketsTouchXpFields(entry.advancement_buckets);
+          });
+        setCampaignAdvancementLedgerEntries(mapped);
+        const filtered = mapped
+          .filter((entry) => {
             if (!Number.isFinite(sessionStartMs)) return false;
             const ts = new Date(entry.timestamp).getTime();
             return ts >= sessionStartMs - slopMs;
@@ -1268,6 +1346,7 @@ export default function SessionGMManagementPanels({
       .catch(() => {
         if (cancelled) return;
         setSessionAdvancementHistory([]);
+        setCampaignAdvancementLedgerEntries([]);
         setSessionAdvancementHistoryLoaded(true);
       });
     return () => {
@@ -1282,11 +1361,6 @@ export default function SessionGMManagementPanels({
 
   const advancementLedgerNodes = useMemo(
     () => ({
-      initial: renderSessionLedgerBucketUl(
-        sessionAdvancementHistory,
-        "initial",
-        charDisplayNameById,
-      ),
       expenditure: renderSessionLedgerBucketUl(
         sessionAdvancementHistory,
         "expenditure",
@@ -1300,6 +1374,62 @@ export default function SessionGMManagementPanels({
     }),
     [sessionAdvancementHistory, charDisplayNameById],
   );
+
+  /** Session-window initial rows + each PC’s first campaign-wide zero-baseline buy-in if it predates session (fixes “built sheet before session date”). */
+  const initialBuyInLedgerItems = useMemo(() => {
+    const inWindow = renderSessionLedgerBucketUl(
+      sessionAdvancementHistory,
+      "initial",
+      charDisplayNameById,
+    );
+    const idsInWindowWithInitial = new Set();
+    for (const e of sessionAdvancementHistory || []) {
+      if ((e.advancement_buckets?.initial || []).length)
+        idsInWindowWithInitial.add(e.id);
+    }
+    const sessionStartMs = sessionData?.session_date
+      ? new Date(sessionData.session_date).getTime()
+      : NaN;
+    const slopMs = 60 * 60 * 1000;
+    const extras = [];
+    if (
+      Number.isFinite(sessionStartMs) &&
+      (campaignAdvancementLedgerEntries || []).length
+    ) {
+      const asc = [...campaignAdvancementLedgerEntries].sort(
+        (a, b) =>
+          new Date(a.timestamp || 0).getTime() -
+          new Date(b.timestamp || 0).getTime(),
+      );
+      const firstInitialByChar = new Map();
+      for (const e of asc) {
+        const ini = e.advancement_buckets?.initial;
+        if (!ini?.length) continue;
+        const cid = Number(e.character);
+        if (!Number.isFinite(cid) || !pcIdsInCampaign.has(cid)) continue;
+        if (!firstInitialByChar.has(cid)) firstInitialByChar.set(cid, e);
+      }
+      for (const entry of firstInitialByChar.values()) {
+        if (idsInWindowWithInitial.has(entry.id)) continue;
+        const ts = new Date(entry.timestamp || 0).getTime();
+        if (!Number.isFinite(ts) || ts >= sessionStartMs - slopMs) continue;
+        const block = renderLedgerInitialBlock(
+          entry,
+          charDisplayNameById,
+          "presession",
+          "— first logged zero→layout buy-in before this session date (full campaign sheet history); not spend.",
+        );
+        if (block) extras.push(block);
+      }
+    }
+    return [...extras, ...inWindow];
+  }, [
+    sessionAdvancementHistory,
+    campaignAdvancementLedgerEntries,
+    sessionData?.session_date,
+    charDisplayNameById,
+    pcIdsInCampaign,
+  ]);
 
   function progressClockOwnerLabel(clk) {
     if (clk?.character != null && clk.character !== "") {
@@ -1365,19 +1495,18 @@ export default function SessionGMManagementPanels({
   );
 
   const sessionRolls = rolls;
-  const getRecentCharacterRolls = useCallback(
-    (characterId) =>
-      (sessionRolls || [])
-        .filter((r) => {
-          if (String(r.character) !== String(characterId)) return false;
-          return recentRollPassesGmFilter(r, {
-            showAllRecentRolls,
-            showResistanceStressRolls: showResistanceStressRecentRolls,
-          });
-        })
-        .slice(0, 5),
-    [sessionRolls, showAllRecentRolls, showResistanceStressRecentRolls],
-  );
+  const getRecentCharacterRolls = useCallback((characterId) => {
+    const list = (sessionRolls || []).filter(
+      (r) => String(r.character) === String(characterId),
+    );
+    const sorted = [...list].sort((a, b) => {
+      const ta = new Date(a.timestamp || 0).getTime();
+      const tb = new Date(b.timestamp || 0).getTime();
+      if (tb !== ta) return tb - ta;
+      return (Number(b.id) || 0) - (Number(a.id) || 0);
+    });
+    return sorted.slice(0, 5);
+  }, [sessionRolls]);
 
   const editRecentRoll = useCallback(
     async (roll) => {
@@ -1451,13 +1580,7 @@ export default function SessionGMManagementPanels({
     const next = {};
     (campaignChars || []).forEach((ch) => {
       const full = (characters || []).find((c) => c.id === ch.id) || ch;
-      const l1a = (full.harm_level1_name || "").toString();
-      const l1b = (full.harm_level1_slot2_name || "").toString();
-      const l2a = (full.harm_level2_name || "").toString();
-      const l2b = (full.harm_level2_slot2_name || "").toString();
-      const l3 = (full.harm_level3_name || "").toString();
-      const l4 = (full.harm_level4_name || "").toString();
-      next[ch.id] = { l1a, l1b, l2a, l2b, l3, l4 };
+      next[ch.id] = harmDraftFromApiCharacter(full);
     });
     setHarmDraftByChar(next);
   }, [campaignChars, characters]);
@@ -1653,6 +1776,56 @@ export default function SessionGMManagementPanels({
       );
   };
 
+  const bumpNpcVulnerability = useCallback(
+    async (npc, delta) => {
+      if (!canEditNpcStandCoin(user, campaign, npc)) return;
+      const max = Number(npc.vulnerability_clock_max) ?? 0;
+      const cur = Number(npc.vulnerability_clock_current) ?? 0;
+      if (max <= 0) return;
+      const next = Math.max(0, Math.min(max, cur + delta));
+      if (next === cur) return;
+      const key = `vuln:${npc.id}`;
+      setNpcUiBusyKey(key);
+      setError(null);
+      try {
+        await npcAPI.patchNPC(npc.id, {
+          vulnerability_clock_current: next,
+        });
+        await onRefresh();
+      } catch (e) {
+        setError(e.message || "Could not update vulnerability.");
+      } finally {
+        setNpcUiBusyKey((k) => (k === key ? null : k));
+      }
+    },
+    [user, campaign, onRefresh, setError],
+  );
+
+  const bumpNpcSessionProgressClock = useCallback(
+    async (npc, clock, delta) => {
+      if (!canEditNpcStandCoin(user, campaign, npc)) return;
+      const cap = Number(clock.max_segments) || 0;
+      const cur = Number(clock.filled_segments) || 0;
+      if (cap <= 0) return;
+      const next = Math.max(0, Math.min(cap, cur + delta));
+      if (next === cur) return;
+      const key = `clk:${clock.id}`;
+      setNpcUiBusyKey(key);
+      setError(null);
+      try {
+        await progressClockAPI.updateProgressClock(clock.id, {
+          filled_segments: next,
+        });
+        await onRefresh();
+      } catch (e) {
+        setError(e.message || "Could not update clock.");
+      } finally {
+        setNpcUiBusyKey((k) => (k === key ? null : k));
+      }
+    },
+    [user, campaign, onRefresh, setError],
+  );
+
   const factionGroupWrap = {
     width: "100%",
     boxSizing: "border-box",
@@ -1671,6 +1844,10 @@ export default function SessionGMManagementPanels({
     const grades = rawStandToGrades(npc.stand_coin_stats);
     const busy = !!localNpcPatch[npc.id];
     const canEditStand = canEditNpcStandCoin(user, campaign, npc);
+    const npcClks = npcSessionClocksByNpcId.get(npc.id) || [];
+    const vulnMax = Number(npc.vulnerability_clock_max) ?? 0;
+    const vulnCur = Number(npc.vulnerability_clock_current) ?? 0;
+    const vulnBusy = npcUiBusyKey === `vuln:${npc.id}`;
     const npcPortraitSrc = resolveMediaUrl(npc.image || npc.image_url || "");
     const npcCollapseKey = String(npc.id);
     const npcCollapsed = !!collapsedNpcCards[npcCollapseKey];
@@ -1724,7 +1901,13 @@ export default function SessionGMManagementPanels({
             <a
               href={buildRouteHref("npcs", { npcId: npc.id })}
               onClick={(e) => handleSpaNavClick(e, () => onNavigateToNPC?.(npc.id))}
-              style={{ ...S.btn, fontSize: 10, marginTop: 4 }}
+              style={{
+                ...S.btnGhost,
+                fontSize: 10,
+                marginTop: 4,
+                display: "inline-block",
+                textDecoration: "none",
+              }}
             >
               Full sheet
             </a>
@@ -1823,10 +2006,344 @@ export default function SessionGMManagementPanels({
           ))}
           {(!npc.abilities || npc.abilities.length === 0) && <li>—</li>}
         </ul>
-        <div style={lbl}>Clocks (summary)</div>
-        <div style={{ fontSize: 10, color: "#6b7280" }}>
-          Vuln {npc.vulnerability_clock_current ?? 0}/
-          {npc.vulnerability_clock_max ?? 0}
+        <div style={lbl}>Clocks</div>
+        <div style={{ fontSize: 10, color: "#d1d5db" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+              marginBottom: 8,
+            }}
+          >
+            <span style={{ fontWeight: 600, color: "#9ca3af" }}>Vulnerability</span>
+            {vulnMax <= 0 ? (
+              <span
+                style={{ color: "#6b7280" }}
+                title="S-rank durability: no standard vulnerability clock on sheet."
+              >
+                — (n/a)
+              </span>
+            ) : (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
+                <button
+                  type="button"
+                  style={{ ...S.btnGhost, fontSize: 9, padding: "1px 6px" }}
+                  title="Tick vulnerability down"
+                  disabled={
+                    saving ||
+                    busy ||
+                    vulnBusy ||
+                    !canEditStand ||
+                    vulnCur <= 0
+                  }
+                  onClick={() => bumpNpcVulnerability(npc, -1)}
+                >
+                  −
+                </button>
+                <span style={{ color: "#e5e7eb", fontVariantNumeric: "tabular-nums" }}>
+                  {vulnCur}/{vulnMax}
+                </span>
+                <button
+                  type="button"
+                  style={{ ...S.btnGhost, fontSize: 9, padding: "1px 6px" }}
+                  title="Tick vulnerability up"
+                  disabled={
+                    saving ||
+                    busy ||
+                    vulnBusy ||
+                    !canEditStand ||
+                    vulnCur >= vulnMax
+                  }
+                  onClick={() => bumpNpcVulnerability(npc, 1)}
+                >
+                  +
+                </button>
+              </span>
+            )}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 6,
+              flexWrap: "wrap",
+              marginBottom: 4,
+            }}
+          >
+            <div
+              style={{
+                fontWeight: 600,
+                color: "#9ca3af",
+                letterSpacing: "0.04em",
+              }}
+            >
+              Session progress
+            </div>
+            <button
+              type="button"
+              disabled={
+                saving ||
+                busy ||
+                !canEditStand ||
+                npcSessionClockBusyNpcId === npc.id
+              }
+              onClick={() => {
+                if (npcSessionClockDraftFor === npc.id) {
+                  setNpcSessionClockDraftFor(null);
+                } else {
+                  setNpcSessionClockDraft({
+                    name: "",
+                    max_segments: 8,
+                    clock_type: "CUSTOM",
+                    visible_to_players: false,
+                  });
+                  setNpcSessionClockDraftFor(npc.id);
+                }
+              }}
+              style={{
+                ...S.btn,
+                fontSize: 10,
+                padding: "2px 8px",
+                background: "#1e3a5f",
+                color: "#bae6fd",
+              }}
+            >
+              {npcSessionClockDraftFor === npc.id ? "Close" : "+ Clock"}
+            </button>
+          </div>
+          {npcSessionClockDraftFor === npc.id ? (
+            <div
+              style={{
+                marginTop: 4,
+                marginBottom: 8,
+                padding: 8,
+                borderRadius: 6,
+                border: "1px solid #374151",
+                background: "#0d1117",
+                display: "grid",
+                gap: 8,
+              }}
+            >
+              <input
+                style={S.inp}
+                placeholder="Clock name"
+                value={npcSessionClockDraft.name}
+                onChange={(e) =>
+                  setNpcSessionClockDraft((d) => ({
+                    ...d,
+                    name: e.target.value,
+                  }))
+                }
+              />
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                <label style={{ fontSize: 10, color: "#9ca3af" }}>
+                  Segments
+                  <select
+                    style={{ ...S.select, marginLeft: 6 }}
+                    value={npcSessionClockDraft.max_segments}
+                    onChange={(e) =>
+                      setNpcSessionClockDraft((d) => ({
+                        ...d,
+                        max_segments: Number(e.target.value),
+                      }))
+                    }
+                  >
+                    {SESSION_PC_CLOCK_SEGMENTS.map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{ fontSize: 10, color: "#9ca3af" }}>
+                  Type
+                  <select
+                    style={{ ...S.select, marginLeft: 6 }}
+                    value={npcSessionClockDraft.clock_type}
+                    onChange={(e) =>
+                      setNpcSessionClockDraft((d) => ({
+                        ...d,
+                        clock_type: e.target.value,
+                      }))
+                    }
+                  >
+                    {SESSION_PC_CLOCK_TYPES.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  fontSize: 10,
+                  color: "#a7f3d0",
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={npcSessionClockDraft.visible_to_players}
+                  onChange={(e) =>
+                    setNpcSessionClockDraft((d) => ({
+                      ...d,
+                      visible_to_players: e.target.checked,
+                    }))
+                  }
+                />
+                Visible to players
+              </label>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button
+                  type="button"
+                  style={S.btnPrimary}
+                  disabled={npcSessionClockBusyNpcId === npc.id}
+                  onClick={async () => {
+                    const nm = String(npcSessionClockDraft.name || "").trim();
+                    if (!nm) {
+                      setError("Enter a name for the clock.");
+                      return;
+                    }
+                    setNpcSessionClockBusyNpcId(npc.id);
+                    setError(null);
+                    try {
+                      await progressClockAPI.createProgressClock({
+                        campaign: campaign.id,
+                        session: session.id,
+                        npc: npc.id,
+                        name: nm,
+                        clock_type:
+                          npcSessionClockDraft.clock_type || "CUSTOM",
+                        max_segments:
+                          npcSessionClockDraft.max_segments || 8,
+                        filled_segments: 0,
+                        visible_to_players:
+                          !!npcSessionClockDraft.visible_to_players,
+                      });
+                      setNpcSessionClockDraftFor(null);
+                      setNpcSessionClockDraft({
+                        name: "",
+                        max_segments: 8,
+                        clock_type: "CUSTOM",
+                        visible_to_players: false,
+                      });
+                      await onRefresh();
+                    } catch (e) {
+                      setError(
+                        e?.message || "Could not create progress clock.",
+                      );
+                    } finally {
+                      setNpcSessionClockBusyNpcId(null);
+                    }
+                  }}
+                >
+                  {npcSessionClockBusyNpcId === npc.id ? "Saving…" : "Create"}
+                </button>
+                <button
+                  type="button"
+                  style={S.btnGhost}
+                  onClick={() => {
+                    setNpcSessionClockDraftFor(null);
+                    setNpcSessionClockDraft({
+                      name: "",
+                      max_segments: 8,
+                      clock_type: "CUSTOM",
+                      visible_to_players: false,
+                    });
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : null}
+          <ul
+            style={{
+              margin: 0,
+              paddingLeft: 14,
+              color: "#9ca3af",
+              maxHeight: 120,
+              overflowY: "auto",
+            }}
+          >
+            {npcClks.map((c) => {
+              const clkBusy = npcUiBusyKey === `clk:${c.id}`;
+              return (
+                <li
+                  key={c.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    flexWrap: "wrap",
+                    marginBottom: 4,
+                  }}
+                >
+                  <span style={{ flex: "1 1 120px" }}>
+                    {c.name} ({c.filled_segments}/{c.max_segments})
+                    {c.visible_to_players ? (
+                      <span style={{ color: "#6ee7b7", fontSize: 9 }}>
+                        {" "}
+                        · players
+                      </span>
+                    ) : null}
+                  </span>
+                  <span style={{ display: "inline-flex", gap: 4 }}>
+                    <button
+                      type="button"
+                      style={{ ...S.btnGhost, fontSize: 9, padding: "1px 6px" }}
+                      title="Fewer ticks"
+                      disabled={
+                        saving ||
+                        busy ||
+                        clkBusy ||
+                        !canEditStand ||
+                        (Number(c.filled_segments) || 0) <= 0
+                      }
+                      onClick={() => bumpNpcSessionProgressClock(npc, c, -1)}
+                    >
+                      −
+                    </button>
+                    <button
+                      type="button"
+                      style={{ ...S.btnGhost, fontSize: 9, padding: "1px 6px" }}
+                      title="More ticks"
+                      disabled={
+                        saving ||
+                        busy ||
+                        clkBusy ||
+                        !canEditStand ||
+                        (Number(c.filled_segments) || 0) >=
+                          (Number(c.max_segments) || 0)
+                      }
+                      onClick={() => bumpNpcSessionProgressClock(npc, c, 1)}
+                    >
+                      +
+                    </button>
+                  </span>
+                </li>
+              );
+            })}
+            {npcClks.length === 0 && npcSessionClockDraftFor !== npc.id ? (
+              <li style={{ color: "#6b7280" }}>—</li>
+            ) : null}
+          </ul>
+          <div style={{ fontSize: 9, color: "#6b7280", marginTop: 6 }}>
+            Conflict / alt clocks stay on the full NPC sheet.
+          </div>
         </div>
         <button
           type="button"
@@ -1848,15 +2365,43 @@ export default function SessionGMManagementPanels({
   return (
     <>
       <div style={S.card}>
-        <span style={S.sectionLbl}>Session NPC roster</span>
-        <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 0" }}>
-          NPCs grouped by faction (one faction card when multiple NPCs share it).
-          Use + to add from the campaign roster. Assign faction from each NPC card, or
-          use Create faction & assign in the No faction block to add a campaign faction
-          and attach every unfactioned NPC here at once. Toggle what players can see;
-          quick-edit Stand coin (GM or that NPC's owner).
-        </p>
-        <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 10 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 8,
+          }}
+        >
+          <span style={{ ...S.sectionLbl, marginBottom: 0 }}>
+            Session NPC roster
+          </span>
+          <button
+            type="button"
+            onClick={() => setNpcRosterSectionCollapsed((v) => !v)}
+            style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px", flexShrink: 0 }}
+            title={
+              npcRosterSectionCollapsed
+                ? "Expand session NPC roster"
+                : "Collapse session NPC roster"
+            }
+          >
+            {npcRosterSectionCollapsed ? "Expand" : "Collapse"}
+          </button>
+        </div>
+        {!npcRosterSectionCollapsed ? (
+          <>
+            <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 0" }}>
+              NPCs grouped by faction (one faction card when multiple NPCs share it).
+              Use + to add from the campaign roster. Assign faction from each NPC card, or
+              use Create faction & assign in the No faction block to add a campaign faction
+              and attach every unfactioned NPC here at once. Toggle what players can see;
+              quick-edit Stand coin, vulnerability, and session progress clocks (GM or
+              that NPC&apos;s owner).
+            </p>
+            <div
+              style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 10 }}
+            >
           {sessionFactionNpcGroups.factionPairs.map(([fid, npcList]) => {
             const fac =
               factionsById[fid] ||
@@ -2171,6 +2716,8 @@ export default function SessionGMManagementPanels({
             </button>
           </div>
         </div>
+          </>
+        ) : null}
       </div>
 
       {showAddNpc && (
@@ -2487,13 +3034,38 @@ export default function SessionGMManagementPanels({
       )}
 
       <div style={S.card}>
-        <span style={S.sectionLbl}>Session player roster</span>
-        <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 0" }}>
-          Quick view: portrait, stand coin, action dots, XP tracks, personal clocks in this
-          session. Crew summary (edit here or on campaign). Below: PCs in this crew’s
-          campaign.
-        </p>
-        {(crews || []).length === 0 ? (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 8,
+          }}
+        >
+          <span style={{ ...S.sectionLbl, marginBottom: 0 }}>
+            Session player roster
+          </span>
+          <button
+            type="button"
+            onClick={() => setPlayerRosterSectionCollapsed((v) => !v)}
+            style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px", flexShrink: 0 }}
+            title={
+              playerRosterSectionCollapsed
+                ? "Expand session player roster"
+                : "Collapse session player roster"
+            }
+          >
+            {playerRosterSectionCollapsed ? "Expand" : "Collapse"}
+          </button>
+        </div>
+        {!playerRosterSectionCollapsed ? (
+          <>
+            <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 0" }}>
+              Quick view: portrait, stand coin, action dots, XP tracks, personal clocks in
+              this session. Crew summary (edit here or on campaign). Below: PCs in this
+              crew’s campaign.
+            </p>
+            {(crews || []).length === 0 ? (
           <div style={{ fontSize: 12, color: "#6b7280", marginTop: 10 }}>
             No crews linked to this campaign.
           </div>
@@ -2963,7 +3535,13 @@ export default function SessionGMManagementPanels({
                           onClick={(e) =>
                             handleSpaNavClick(e, () => onNavigateToCharacter?.(full.id))
                           }
-                          style={{ ...S.btn, fontSize: 10, marginTop: 4 }}
+                          style={{
+                            ...S.btnGhost,
+                            fontSize: 10,
+                            marginTop: 4,
+                            display: "inline-block",
+                            textDecoration: "none",
+                          }}
                         >
                           Open sheet
                         </a>
@@ -3350,13 +3928,17 @@ export default function SessionGMManagementPanels({
             );
           })}
         </div>
+        </>
+        ) : null}
       </div>
 
       <div style={S.card}>
         <span style={S.sectionLbl}>Bulk position / effect (per character)</span>
         <p style={{ fontSize: 11, color: "#6b7280" }}>
-          Overrides session defaults for these PCs on action rolls. Leave row at session
-          default to use defaults (clear with Reset).
+          Overrides session defaults for these PCs on action rolls. Use{" "}
+          <strong>PE default</strong> next to a name to clear that PC&apos;s
+          position/effect override. Use <strong>Reset harm</strong> to wipe that
+          PC&apos;s harm fields (asks for confirmation before saving).
         </p>
         <div
           style={{
@@ -4066,11 +4648,31 @@ export default function SessionGMManagementPanels({
                   >
                     First-time action-dot layout (was all zero) or first playbook
                     tick fills starting from zero totals — not assumed to be XP
-                    spent.
+                    spent. Rows dated <strong>before</strong> this session (when
+                    set) are pulled from full campaign sheet history so buy-in
+                    after invite but before session night still shows here.
                   </div>
-                  {advancementLedgerNodes.initial.length === 0 ? (
+                  {initialBuyInLedgerItems.length === 0 ? (
                     <div style={{ marginBottom: 12, color: "#6b7280" }}>
-                      No initial-layout rows in this window.
+                      {campaignAdvancementLedgerEntries.some(
+                        (e) =>
+                          (e.advancement_buckets?.expenditure || []).length ||
+                          (e.advancement_buckets?.other || []).length,
+                      ) ? (
+                        <>
+                          No zero-baseline initial rows in the session window, and
+                          no earlier campaign save matched empty→filled layout for
+                          PCs missing that pattern—common when the first logged
+                          save already had partial dots. See{" "}
+                          <strong>Paid with XP</strong> / other buckets below.
+                        </>
+                      ) : (
+                        <>
+                          No initial-layout rows (session + pre-session scan). No
+                          ledger save yet matched all-zero action dots or empty
+                          playbook clocks → first fills for these PCs.
+                        </>
+                      )}
                     </div>
                   ) : (
                     <ul
@@ -4081,7 +4683,7 @@ export default function SessionGMManagementPanels({
                         listStyle: "disc",
                       }}
                     >
-                      {advancementLedgerNodes.initial}
+                      {initialBuyInLedgerItems}
                     </ul>
                   )}
                   <div
@@ -4497,9 +5099,50 @@ export default function SessionGMManagementPanels({
               };
               try {
                 await characterAPI.patchCharacter(id, payload);
+                await onSessionCharactersRefresh?.();
                 onRefresh();
               } catch (e) {
                 setError(e.message || "Failed to save harm");
+              }
+            };
+            const emptyHarmPayload = {
+              harm_level1_name: "",
+              harm_level1_used: false,
+              harm_level1_slot2_name: "",
+              harm_level1_slot2_used: false,
+              harm_level2_name: "",
+              harm_level2_used: false,
+              harm_level2_slot2_name: "",
+              harm_level2_slot2_used: false,
+              harm_level3_name: "",
+              harm_level3_used: false,
+              harm_level4_name: "",
+              harm_level4_used: false,
+            };
+            const confirmResetHarmForPc = async () => {
+              const nm = (ch.true_name || ch.name || `PC ${id}`).trim();
+              const ok = window.confirm(
+                `Clear all harm (levels 1–4) for ${nm}? This saves immediately to the character sheet.`,
+              );
+              if (!ok) return;
+              setError(null);
+              setSaving(true);
+              try {
+                let body = await characterAPI.patchCharacter(id, emptyHarmPayload);
+                if (!body || typeof body !== "object") body = {};
+                if (!("harm_level1_name" in body)) {
+                  body = await characterAPI.getCharacter(id);
+                }
+                setHarmDraftByChar((prev) => ({
+                  ...prev,
+                  [id]: harmDraftFromApiCharacter(body),
+                }));
+                await onSessionCharactersRefresh?.();
+                onRefresh();
+              } catch (e) {
+                setError(e.message || "Failed to reset harm");
+              } finally {
+                setSaving(false);
               }
             };
             const row = peMap[String(id)] || peMap[id] || null;
@@ -4556,12 +5199,21 @@ export default function SessionGMManagementPanels({
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <button
                       type="button"
-                      onClick={() => mergePosEffect({ [id]: null })}
+                      onClick={confirmResetHarmForPc}
                       style={{ ...S.btnGhost, fontSize: 10 }}
                       disabled={saving}
-                      title="Use session default for this PC"
+                      title="Clear every harm line for this PC (confirmation required)"
                     >
-                      Reset
+                      Reset harm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => mergePosEffect({ [id]: null })}
+                      style={{ ...S.btnGhost, fontSize: 10, padding: "6px 8px" }}
+                      disabled={saving}
+                      title="Use session default position / effect for this PC"
+                    >
+                      PE default
                     </button>
                     <button
                       type="button"
@@ -4689,67 +5341,8 @@ export default function SessionGMManagementPanels({
                     </div>
                   </div>
                   <div style={{ minWidth: 220, flex: "1 1 220px" }}>
-                    <div
-                      style={{
-                        ...lbl,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 8,
-                      }}
-                    >
+                    <div style={lbl}>
                       <span>Recent rolls</span>
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          flexWrap: "wrap",
-                          alignItems: "center",
-                          justifyContent: "flex-end",
-                          gap: 8,
-                          fontSize: 10,
-                          color: "#9ca3af",
-                          textTransform: "none",
-                        }}
-                      >
-                        <label
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 4,
-                            cursor: "pointer",
-                          }}
-                          title="Include resistance rolls and clear-stress (vice) records."
-                        >
-                          <input
-                            type="checkbox"
-                            checked={showResistanceStressRecentRolls}
-                            onChange={(e) =>
-                              setShowResistanceStressRecentRolls(e.target.checked)
-                            }
-                          />
-                          Resistance / stress
-                        </label>
-                        <label
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 4,
-                            cursor: "pointer",
-                          }}
-                          title="Show all roll kinds for this PC except Fortune (Fortune stays in Fortune history)."
-                        >
-                          <input
-                            type="checkbox"
-                            checked={showAllRecentRolls}
-                            onChange={(e) => {
-                              const v = e.target.checked;
-                              setShowAllRecentRolls(v);
-                              if (v) setShowResistanceStressRecentRolls(true);
-                            }}
-                          />
-                          All roll types
-                        </label>
-                      </span>
                     </div>
                     <div
                       style={{
@@ -4776,17 +5369,6 @@ export default function SessionGMManagementPanels({
                             recentRollDiceSourcesTooltip(r) ||
                             diceSrcSummary ||
                             undefined;
-                          const compactType =
-                            !showAllRecentRolls &&
-                            rtUp &&
-                            rtUp !== "ACTION" &&
-                            rtUp !== "FORTUNE"
-                              ? rtUp === "CLEAR_STRESS"
-                                ? "VICE"
-                                : rtUp === "RESISTANCE"
-                                  ? "RES"
-                                  : rtUp.slice(0, 3)
-                              : null;
                           return (
                           <div
                             key={r.id}
@@ -4800,14 +5382,8 @@ export default function SessionGMManagementPanels({
                             }}
                           >
                             <div style={{ minWidth: 0 }}>
-                              {showAllRecentRolls ? (
-                                <span style={{ color: "#6b7280" }}>
-                                  {rtUp} ·{" "}
-                                </span>
-                              ) : compactType ? (
-                                <span style={{ color: "#6b7280" }} title={rtUp}>
-                                  {compactType} ·{" "}
-                                </span>
+                              {rtUp ? (
+                                <span style={{ color: "#6b7280" }}>{rtUp} · </span>
                               ) : null}
                               {(r.action_name || "action").toUpperCase()} ·{" "}
                               {(r.results || []).join(", ")} →{" "}

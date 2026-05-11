@@ -4,9 +4,40 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-05-11",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Session GM: quick NPC create, dark selects, inline faction",
+          "Show NPC character/session history"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-05-10",
     "version": null,
     "sections": [
+      {
+        "title": "Tests",
+        "items": [
+          "campaign player hits 403 not 404"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "disguised_as_human migration + patch notes"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "GM sees hidden fortunes; manual fortune log"
+        ]
+      },
       {
         "title": "Added",
         "items": [
@@ -551,11 +582,7 @@ export const PATCH_NOTES = [
           "Merge pull request #30 from zoobavitel/copilot/fix-characters-visibility-and-delete-npcs",
           "Merge pull request #29 from zoobavitel/copilot/add-crew-name-and-characteristics-again",
           "Merge pull request #28 from zoobavitel/copilot/add-delete-npc-button",
-          "Merge pull request #27 from zoobavitel/copilot/fix-player-character-trauma-saving",
-          "Merge pull request #26 from zoobavitel/copilot/fix-npc-sheet-refresh-issue-again",
-          "Fix trauma not saving: resolve traumaChecks object to ID array before backend call",
-          "Merge pull request #24 from zoobavitel/copilot/fix-npc-faction-dropdown",
-          "Merge branch 'master' into copilot/fix-npc-faction-dropdown"
+          "Merge pull request #27 from zoobavitel/copilot/fix-player-character-trauma-saving"
         ]
       },
       {
@@ -563,8 +590,7 @@ export const PATCH_NOTES = [
         "items": [
           "on NPC delete land on blank character sheet, guard auto-save for nameless new NPCs",
           "remove default conflict clock on new NPC creation",
-          "restrict homepage characters to own user, add NPC delete button",
-          "update URL hash when saving/opening NPC so refresh restores the sheet"
+          "restrict homepage characters to own user, add NPC delete button"
         ]
       },
       {
