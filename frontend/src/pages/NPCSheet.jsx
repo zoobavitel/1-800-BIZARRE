@@ -4,6 +4,9 @@ import {
   factionAPI,
   sessionAPI,
   rollAPI,
+  characterHistoryAPI,
+  experienceTrackerAPI,
+  xpHistoryAPI,
 } from "../features/character-sheet";
 import { HistoryBranchIcon } from "../components/position-effect/PositionEffectIndicators";
 import NpcsStandCoin from "../components/NpcsStandCoin";
@@ -108,6 +111,21 @@ function rollIsNpcHealFortuneForThisNpc(roll, npcDisplayName) {
     roll.fortune_public_label ?? roll.fortunePublicLabel ?? "",
   );
   return [goal, desc, fort].some((x) => x.includes(name));
+}
+
+function historyFieldLabel(key) {
+  return String(key || "").replace(/_/g, " ");
+}
+
+function stringifyValue(v) {
+  if (v == null) return "";
+  if (typeof v === "string" || typeof v === "number" || typeof v === "boolean")
+    return String(v);
+  try {
+    return JSON.stringify(v);
+  } catch (_err) {
+    return String(v);
+  }
 }
 
 /**
@@ -1263,13 +1281,15 @@ const NPCSheet = ({
   const savingRef = useRef(false);
 
   const [showNpcTrackingPanel, setShowNpcTrackingPanel] = useState(false);
-  const [npcTrackingTab, setNpcTrackingTab] = useState("rolls");
+  const [npcTrackingTab, setNpcTrackingTab] = useState("sheet");
   const [trackingSessionPick, setTrackingSessionPick] = useState(null);
   const [npcTrackingRolls, setNpcTrackingRolls] = useState([]);
   const [npcTrackingRollsLoading, setNpcTrackingRollsLoading] =
     useState(false);
   const [npcTrackingRollsErr, setNpcTrackingRollsErr] = useState(null);
-  const [npcTrackingLog, setNpcTrackingLog] = useState("");
+  const [npcSheetHistoryRows, setNpcSheetHistoryRows] = useState([]);
+  const [npcSheetHistoryLoading, setNpcSheetHistoryLoading] = useState(false);
+  const [npcSheetHistoryErr, setNpcSheetHistoryErr] = useState(null);
 
   useEffect(() => {
     const sessions = activeCampaign?.sessions;
@@ -1288,37 +1308,6 @@ const NPCSheet = ({
   }, [activeCampaign?.sessions, activeSessionId, npc?.id]);
 
   useEffect(() => {
-    if (npc?.id == null) {
-      setNpcTrackingLog("");
-      return;
-    }
-    try {
-      setNpcTrackingLog(
-        window.localStorage.getItem(`biz:npc-gm-tracking-log:${npc.id}`) ||
-          "",
-      );
-    } catch {
-      setNpcTrackingLog("");
-    }
-  }, [npc?.id]);
-
-  const persistNpcTrackingLog = useCallback(
-    (text) => {
-      setNpcTrackingLog(text);
-      if (npc?.id == null) return;
-      try {
-        window.localStorage.setItem(
-          `biz:npc-gm-tracking-log:${npc.id}`,
-          text,
-        );
-      } catch {
-        /* ignore quota / privacy mode */
-      }
-    },
-    [npc?.id],
-  );
-
-  useEffect(() => {
     if (!showNpcTrackingPanel) return;
     const onKey = (e) => {
       if (e.key === "Escape") setShowNpcTrackingPanel(false);
@@ -1328,7 +1317,91 @@ const NPCSheet = ({
   }, [showNpcTrackingPanel]);
 
   useEffect(() => {
-    if (!showNpcTrackingPanel || !campaignId || !trackingSessionPick) {
+    if (!showNpcTrackingPanel || npcTrackingTab !== "sheet") return;
+    if (npc?.id == null) {
+      setNpcSheetHistoryRows([]);
+      setNpcSheetHistoryLoading(false);
+      setNpcSheetHistoryErr(null);
+      return;
+    }
+    let cancelled = false;
+    setNpcSheetHistoryLoading(true);
+    setNpcSheetHistoryErr(null);
+    setNpcSheetHistoryRows([]);
+    const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
+    Promise.all([
+      characterHistoryAPI.list({ character: npc.id }).catch(() => []),
+      experienceTrackerAPI.list({ character: npc.id }).catch(() => []),
+      xpHistoryAPI.list({ character: npc.id }).catch(() => []),
+    ])
+      .then(([histRes, etRes, xhRes]) => {
+        if (cancelled) return;
+        const rows = [];
+        asArray(histRes).forEach((entry) => {
+          const changed = entry?.changed_fields || entry?.changedFields || {};
+          const keys = Object.keys(changed || {});
+          if (!keys.length) return;
+          const details = keys.map((k) => ({
+            key: k,
+            label: historyFieldLabel(k),
+            oldValue: stringifyValue(changed?.[k]?.old),
+            newValue: stringifyValue(changed?.[k]?.new),
+          }));
+          rows.push({
+            key: `sheet-${entry.id}`,
+            timestamp: entry.timestamp,
+            actor: entry.editor_username || "system",
+            type: "sheet_edit",
+            details,
+          });
+        });
+        asArray(etRes).forEach((e) => {
+          rows.push({
+            key: `et-${e.id}`,
+            timestamp: e.session_date,
+            actor: "xp (tracker)",
+            type: "xp_tracker",
+            text: `+${e.xp_gained ?? 0} XP — ${e.trigger_display || e.trigger || "XP"}: ${e.description || "—"}`,
+          });
+        });
+        asArray(xhRes).forEach((x) => {
+          rows.push({
+            key: `xh-${x.id}`,
+            timestamp: x.timestamp,
+            actor: "xp (ledger)",
+            type: "xp_ledger",
+            text: `+${x.amount ?? 0} XP — ${x.reason || "—"}`,
+          });
+        });
+        rows.sort(
+          (a, b) =>
+            new Date(b.timestamp || 0).getTime() -
+            new Date(a.timestamp || 0).getTime(),
+        );
+        setNpcSheetHistoryRows(rows);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setNpcSheetHistoryErr(
+          e instanceof Error ? e.message : "Failed to load history",
+        );
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setNpcSheetHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showNpcTrackingPanel, npcTrackingTab, npc?.id]);
+
+  useEffect(() => {
+    if (
+      !showNpcTrackingPanel ||
+      npcTrackingTab !== "session" ||
+      !campaignId ||
+      !trackingSessionPick
+    ) {
       return;
     }
     let cancelled = false;
@@ -1359,7 +1432,7 @@ const NPCSheet = ({
     return () => {
       cancelled = true;
     };
-  }, [showNpcTrackingPanel, campaignId, trackingSessionPick, name]);
+  }, [showNpcTrackingPanel, npcTrackingTab, campaignId, trackingSessionPick, name]);
 
   const handleFileSelect = useCallback((e) => {
     const file = e.target.files?.[0];
@@ -1800,7 +1873,7 @@ const NPCSheet = ({
             title={
               showNpcTrackingPanel
                 ? "Close NPC tracking"
-                : "NPC tracking — session heal-fortune rolls & manual log"
+                    : "NPC tracking — character sheet history & session history"
             }
             style={{
               background: showNpcTrackingPanel ? "#312e81" : "#1f2937",
@@ -1853,7 +1926,7 @@ const NPCSheet = ({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="NPC tracking log"
+          aria-label="NPC history"
           style={{
             position: "fixed",
             inset: 0,
@@ -1921,9 +1994,8 @@ const NPCSheet = ({
                 lineHeight: 1.45,
               }}
             >
-              PC sheets: branch icon → Session History for campaign-wide rolls,
-              clocks, stress, XP, and manual fortune/action rows. NPC field edits have
-              no audit trail yet; use Manual log (local) or GM notes on the campaign.
+              Character sheet history: field edits + XP ledger/tracker. Session history:
+              NPC-related fortune/action rolls for the selected campaign session.
             </p>
             <div
               style={{
@@ -1933,7 +2005,7 @@ const NPCSheet = ({
                 flexWrap: "wrap",
               }}
             >
-              {["rolls", "manual"].map((tab) => (
+              {["sheet", "session"].map((tab) => (
                 <button
                   key={tab}
                   type="button"
@@ -1951,17 +2023,15 @@ const NPCSheet = ({
                         : "1px solid #374151",
                   }}
                 >
-                  {tab === "rolls"
-                    ? "Heal-fortune rolls (session)"
-                    : "Manual log"}
+                  {tab === "sheet" ? "Character sheet history" : "Session history"}
                 </button>
               ))}
             </div>
-            {npcTrackingTab === "rolls" ? (
+            {npcTrackingTab === "session" ? (
               <>
                 {campaignId == null ? (
                   <div style={{ color: "#9ca3af", marginBottom: "8px" }}>
-                    Link this NPC to a campaign to load session rolls.
+                    Link this NPC to a campaign to load session history.
                   </div>
                 ) : (
                   <div
@@ -2001,20 +2071,8 @@ const NPCSheet = ({
                     </label>
                   </div>
                 )}
-                {!String(name || "").trim() ? (
-                  <div
-                    style={{
-                      color: "#fcd34d",
-                      marginBottom: "8px",
-                      fontSize: "10px",
-                    }}
-                  >
-                    Name this NPC to match heal-fortune rolls (healer label uses
-                    the NPC name).
-                  </div>
-                ) : null}
                 {npcTrackingRollsLoading ? (
-                  <div style={{ color: "#9ca3af" }}>Loading rolls…</div>
+                  <div style={{ color: "#9ca3af" }}>Loading session history…</div>
                 ) : null}
                 {npcTrackingRollsErr ? (
                   <div style={{ color: "#fca5a5", marginBottom: "8px" }}>
@@ -2027,9 +2085,7 @@ const NPCSheet = ({
                 campaignId != null &&
                 String(name || "").trim() ? (
                   <div style={{ color: "#6b7280", fontSize: "10px" }}>
-                    No NPC heal-fortune rolls in this session for “{name.trim()}
-                    ”. Rolls appear when a PC uses Roll NPC heal fortune with this
-                    NPC as healer.
+                    No session history entries for “{name.trim()}” in this session.
                   </div>
                 ) : null}
                 <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
@@ -2089,36 +2145,58 @@ const NPCSheet = ({
               </>
             ) : (
               <>
-                <p
-                  style={{
-                    color: "#6b7280",
-                    fontSize: "10px",
-                    marginBottom: "8px",
-                    lineHeight: 1.5,
-                  }}
-                >
-                  Scratchpad for clocks, harm, showcases, table beats — stored in
-                  this browser only (copy into GM Notes to keep on the server).
-                </p>
-                <textarea
-                  aria-label="NPC manual tracking log"
-                  value={npcTrackingLog}
-                  onChange={(e) => persistNpcTrackingLog(e.target.value)}
-                  placeholder="Encounter notes, resources spent, fiction you are tracking…"
-                  style={{
-                    width: "100%",
-                    minHeight: "160px",
-                    background: "#0d1117",
-                    color: "#d1d5db",
-                    border: "1px solid #374151",
-                    padding: "8px",
-                    fontSize: "11px",
-                    fontFamily: "monospace",
-                    borderRadius: "4px",
-                    resize: "vertical",
-                    boxSizing: "border-box",
-                  }}
-                />
+                {npcSheetHistoryLoading ? (
+                  <div style={{ color: "#9ca3af" }}>Loading character history…</div>
+                ) : npcSheetHistoryErr ? (
+                  <div style={{ color: "#fca5a5" }}>{npcSheetHistoryErr}</div>
+                ) : npcSheetHistoryRows.length === 0 ? (
+                  <div style={{ color: "#6b7280", lineHeight: 1.45 }}>
+                    No history entries.
+                  </div>
+                ) : (
+                  npcSheetHistoryRows.slice(0, 200).map((row) => (
+                    <div
+                      key={row.key}
+                      style={{
+                        padding: "6px 0",
+                        borderBottom: "1px solid #1f2937",
+                      }}
+                    >
+                      <div style={{ color: "#9ca3af", fontSize: 10 }}>
+                        {row.timestamp
+                          ? new Date(row.timestamp).toLocaleString()
+                          : "No timestamp"}{" "}
+                        · {row.actor || "unknown"}
+                      </div>
+                      {row.text ? (
+                        <div style={{ color: "#d1d5db" }}>{row.text}</div>
+                      ) : null}
+                      {Array.isArray(row.details) &&
+                      row.details.length > 0 ? (
+                        row.details.map((d) => (
+                          <div
+                            key={`${row.key}-${d.key}`}
+                            style={{ fontSize: 10, color: "#d1d5db" }}
+                          >
+                            <strong>{d.label}</strong>:{" "}
+                            <span style={{ color: "#fca5a5" }}>
+                              {d.oldValue || "∅"}
+                            </span>{" "}
+                            →{" "}
+                            <span style={{ color: "#86efac" }}>
+                              {d.newValue || "∅"}
+                            </span>
+                          </div>
+                        ))
+                      ) : null}
+                      {row.modifiers?.length ? (
+                        <div style={{ fontSize: 10, color: "#a78bfa" }}>
+                          {row.modifiers.join(" · ")}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))
+                )}
               </>
             )}
           </div>
