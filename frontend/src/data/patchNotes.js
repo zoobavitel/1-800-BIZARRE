@@ -8,6 +8,12 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Added",
+        "items": [
+          "stand coin sync, session XP pool, collapsible GM rosters"
+        ]
+      },
+      {
         "title": "Other",
         "items": [
           "Session GM: quick NPC create, dark selects, inline faction",
@@ -596,8 +602,7 @@ export const PATCH_NOTES = [
       {
         "title": "Added",
         "items": [
-          "add crew management panel to campaign page and auto-assign crew on character assignment",
-          "add Delete NPC button to NPC character sheet top bar"
+          "add crew management panel to campaign page and auto-assign crew on character assignment"
         ]
       }
     ]
