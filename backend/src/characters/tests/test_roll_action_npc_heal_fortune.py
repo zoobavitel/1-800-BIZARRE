@@ -92,6 +92,8 @@ class RollActionNpcHealFortuneTests(TestCase):
 
     def test_npc_heal_fortune_forbidden_for_wrong_user(self):
         other = User.objects.create_user(username="other_nhf", password="pw")
+        # Campaign player may list PCs; npc_heal_fortune still owner-only → 403 (not 404).
+        self.campaign.players.add(other)
         self.client.force_authenticate(user=other)
         url = f"/api/characters/{self.actor.id}/roll-action/"
         r = self.client.post(
