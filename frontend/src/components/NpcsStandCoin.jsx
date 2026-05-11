@@ -7,7 +7,7 @@ import React, {
   useState,
 } from "react";
 
-/** Six-axis playable chart (legacy sheet layout). Hero HomeStandCoin uses SRD_DEV 3-roll radar + durability dice strip. */
+/** Six-axis playable chart (legacy sheet layout). Hero HomeStandCoin matches this six-wedge radar; copy there calls out SRD_DEV parallel pools. */
 const CX = 100;
 const CY = 100;
 const R_OUTER = 92;

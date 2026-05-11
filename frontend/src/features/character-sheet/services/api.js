@@ -8,6 +8,7 @@ import {
   DEFAULT_TRAUMA,
   TRAUMA_PK_TO_KEY,
   MAX_CREATION_DOTS,
+  standPathArmorMaxFromDurabilityIndex,
 } from "../constants/srd";
 
 /** Backend Character.playbook values */
@@ -257,6 +258,12 @@ export const characterAPI = {
     apiRequest(`/characters/${id}/add-xp/`, {
       method: "POST",
       body: JSON.stringify(xpData),
+    }),
+
+  allocatePoolXp: (id, body) =>
+    apiRequest(`/characters/${id}/allocate-pool-xp/`, {
+      method: "POST",
+      body: JSON.stringify(body),
     }),
 
   // Take harm
@@ -907,12 +914,23 @@ export const transformBackendToFrontend = (backendCharacter) => {
       return base;
     })(),
 
-    // Armor
-    regularArmorUsed: 0, // derived from light_armor_used + heavy_armor_used if needed
-    specialArmorUsed: false,
+    // Armor (SRD_DEV: stand path vs physical gear; legacy light/heavy unused)
+    standArmorUsed: Math.max(
+      0,
+      Math.floor(Number(backendCharacter.stand_armor_used) || 0),
+    ),
+    hasPhysicalArmorItem: !!backendCharacter.has_physical_armor_item,
+    physicalArmorBonusCharges: Math.min(
+      6,
+      Math.max(0, Math.floor(Number(backendCharacter.physical_armor_bonus_charges) || 0)),
+    ),
+    physicalArmorUsed: Math.min(
+      6,
+      Math.max(0, Math.floor(Number(backendCharacter.physical_armor_used) || 0)),
+    ),
     armor: {
-      armor: backendCharacter.light_armor_used || false,
-      heavy: backendCharacter.heavy_armor_used || false,
+      armor: false,
+      heavy: false,
       special: false,
     },
 
@@ -1005,6 +1023,10 @@ export const transformBackendToFrontend = (backendCharacter) => {
       heritage: 0,
       playbook: 0,
     },
+    unallocatedXp: Math.max(
+      0,
+      Math.floor(Number(backendCharacter.unallocated_xp) || 0),
+    ),
 
     // Abilities (standard + hamon + spin + custom from custom_ability fields)
     abilities: [
@@ -1193,9 +1215,47 @@ export const transformFrontendToBackend = (frontendCharacter) => {
       ? frontendCharacter.trauma
       : [],
 
-    // Armor
-    light_armor_used: frontendCharacter.armor.armor,
-    heavy_armor_used: frontendCharacter.armor.heavy,
+    // Armor (SRD_DEV)
+    stand_armor_used: (() => {
+      const durIdx = Math.min(
+        5,
+        Math.max(
+          0,
+          Math.floor(Number(frontendCharacter.standStats?.durability) || 0),
+        ),
+      );
+      const cap = standPathArmorMaxFromDurabilityIndex(durIdx);
+      return Math.min(
+        cap,
+        Math.max(0, Math.floor(Number(frontendCharacter.standArmorUsed) || 0)),
+      );
+    })(),
+    has_physical_armor_item: !!frontendCharacter.hasPhysicalArmorItem,
+    physical_armor_bonus_charges: Math.min(
+      6,
+      Math.max(
+        0,
+        Math.floor(Number(frontendCharacter.physicalArmorBonusCharges) || 0),
+      ),
+    ),
+    physical_armor_used: (() => {
+      const has = !!frontendCharacter.hasPhysicalArmorItem;
+      const pool = has
+        ? Math.min(
+            6,
+            Math.max(
+              0,
+              Math.floor(Number(frontendCharacter.physicalArmorBonusCharges) || 0),
+            ),
+          )
+        : 0;
+      return Math.min(
+        pool,
+        Math.max(0, Math.floor(Number(frontendCharacter.physicalArmorUsed) || 0)),
+      );
+    })(),
+    light_armor_used: false,
+    heavy_armor_used: false,
 
     // Harm — full L1/L2 two-slot + L3 + L4; `used` follows trimmed non-empty text
     ...(() => {

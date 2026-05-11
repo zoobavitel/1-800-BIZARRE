@@ -24,6 +24,31 @@ import HomeStatsBarChart from "../components/home/HomeStatsBarChart";
 import HomeStandCoin from "../components/home/HomeStandCoin";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 
+/** Hero “tradition” pills: short blurbs for home only (not rules text). */
+const HERO_PILLS = [
+  {
+    key: "stand",
+    label: "Stand",
+    className: "pill-stand",
+    description:
+      "Stand users manifest a fighting spirit as its own being with bizarre rules. You roll parallel Stand-coin dice on Power, Speed, Precision, and Durability.",
+  },
+  {
+    key: "hamon",
+    label: "Hamon",
+    className: "pill-hamon",
+    description:
+      "Hamon users shape breathing-trained life energy—ripple—for strikes, defense, and sensing. It is the disciplined human path when you want power without a Stand partner.",
+  },
+  {
+    key: "spin",
+    label: "Spin",
+    className: "pill-spin",
+    description:
+      "Spin users apply the Golden Rectangle through Steel Balls and similar tools: mastered rotation bends trajectories and wounds until geometry itself becomes the weapon.",
+  },
+];
+
 function tierRoman(level) {
   const n = Number(level);
   if (!Number.isFinite(n) || n <= 0) return "—";
@@ -130,6 +155,7 @@ const HomePage = ({
   const [npcsLoading, setNpcsLoading] = useState(true);
   const [crewCount, setCrewCount] = useState(0);
   const [siteStats, setSiteStats] = useState(null);
+  const [openHeroPill, setOpenHeroPill] = useState(null);
 
   const loadCharacters = useCallback(async () => {
     setLoading(true);
@@ -392,16 +418,58 @@ const HomePage = ({
       <section className="hero">
         <div className="hero-inner">
           <div className="hero-text">
-            <div className="vhs-badge fade-up d1">A Bizarre Adventure TTRPG</div>
-            <h1 className="hero-title fade-up d2">
-              <span className="hero-title-stand">STAND</span>
-              <br />
-              <span className="accent">PROUD.</span>
-            </h1>
-            <div className="hero-pills fade-up d2">
-              <span className="pill pill-stand">Stand</span>
-              <span className="pill pill-hamon">Hamon</span>
-              <span className="pill pill-spin">Spin</span>
+            <div className="hero-headline-group fade-up d1">
+              <h1 className="hero-title">
+                <span className="hero-title-stand">STAND</span>
+                <br />
+                <span className="accent">PROUD.</span>
+              </h1>
+              <div className="hero-pill-stack">
+                <div
+                  className="hero-pills"
+                  role="group"
+                  aria-label="Playstyle traditions"
+                >
+                  {HERO_PILLS.map(({ key, label, className }) => {
+                    const isOpen = openHeroPill === key;
+                    return (
+                      <button
+                        key={key}
+                        id={`hero-pill-btn-${key}`}
+                        type="button"
+                        className={`pill ${className}${isOpen ? " is-selected" : ""}`}
+                        aria-expanded={isOpen}
+                        aria-controls="hero-pill-description"
+                        onClick={() =>
+                          setOpenHeroPill((cur) => (cur === key ? null : key))
+                        }
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div
+                  id="hero-pill-description"
+                  className={`hero-pill-panel${openHeroPill ? " is-open" : ""}`}
+                  role="region"
+                  aria-hidden={!openHeroPill}
+                  aria-labelledby={
+                    openHeroPill ? `hero-pill-btn-${openHeroPill}` : undefined
+                  }
+                >
+                  <div className="hero-pill-panel-inner">
+                    {openHeroPill ? (
+                      <p className="hero-pill-panel-text" key={openHeroPill}>
+                        {
+                          HERO_PILLS.find((p) => p.key === openHeroPill)
+                            ?.description
+                        }
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
             </div>
             <p className="hero-subtext fade-up d2">
               Fate is truly a very long, roundabout path...

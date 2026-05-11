@@ -216,10 +216,20 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
     stressFilled:
       typeof payload.stressFilled === "number" ? payload.stressFilled : 0,
     trauma: traumaIds,
+    standArmorUsed: Math.max(0, Math.floor(Number(payload.standArmorUsed) || 0)),
+    hasPhysicalArmorItem: !!payload.hasPhysicalArmorItem,
+    physicalArmorBonusCharges: Math.min(
+      6,
+      Math.max(0, Math.floor(Number(payload.physicalArmorBonusCharges) || 0)),
+    ),
+    physicalArmorUsed: Math.min(
+      6,
+      Math.max(0, Math.floor(Number(payload.physicalArmorUsed) || 0)),
+    ),
     armor: {
-      armor: (payload.regularArmorUsed ?? 0) > 0,
-      heavy: payload.specialArmorUsed === true,
-      special: payload.specialArmorUsed === true,
+      armor: false,
+      heavy: false,
+      special: false,
     },
     harmEntries: harm,
     harm,
@@ -228,6 +238,10 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
       .map((_, i) => i < coinFilled),
     stash: Array.isArray(payload.stash) ? payload.stash : Array(40).fill(false),
     healingClock: payload.healingClock ?? 0,
+    unallocatedXp: Math.max(
+      0,
+      Math.floor(Number(payload.unallocatedXp) || 0),
+    ),
     xp: payload.xp ?? {
       insight: 0,
       prowess: 0,

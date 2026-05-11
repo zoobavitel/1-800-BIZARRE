@@ -53,6 +53,11 @@ export const createDefaultCharacter = () => ({
     VICIOUS: false,
   },
   armor: { armor: false, heavy: false, special: false },
+  standArmorUsed: 0,
+  hasPhysicalArmorItem: false,
+  physicalArmorBonusCharges: 0,
+  physicalArmorUsed: 0,
+  unallocatedXp: 0,
   harm: {
     level4: [""],
     level3: [""],

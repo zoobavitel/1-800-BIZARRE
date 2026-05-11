@@ -14,45 +14,51 @@ const R_LABEL = 78;
 const R_DATA_MAX = 68;
 const R_DATA_MIN = 14;
 
-/** SRD_DEV: wedge rolls — top = Power, then clockwise Precision, Speed */
-const RADAR_STATS = [
+/** SRD order: top = Power, then clockwise */
+const STATS = [
   {
     key: "power",
     label: "Power",
     grade: "D",
     blurb:
-      "Physical destructive power — parallel dice when fiction calls for a Stand strike.",
-  },
-  {
-    key: "precision",
-    label: "Precision",
-    grade: "B",
-    blurb:
-      "Accuracy and control — parallel dice for fine manipulation or ranged pressure.",
+      "SRD_DEV: roll parallel Stand-coin dice when brute force or harm from the Stand is what matters.",
   },
   {
     key: "speed",
     label: "Speed",
     grade: "B",
     blurb:
-      "Conflict position and mobility — parallel dice when quickness decides position.",
+      "SRD_DEV: roll parallel dice when quickness sets conflict position or mobility.",
+  },
+  {
+    key: "range",
+    label: "Range",
+    grade: "A",
+    blurb:
+      "How far abilities reliably reach—treated as passive sizing on the sheet, not a third pool alongside Speed.",
+  },
+  {
+    key: "durability",
+    label: "Durability",
+    grade: "A",
+    blurb:
+      "Soak and grit: on character sheets this is a 0–4 dice pool, not an F–S wedge roll. The letter keeps the classic six-spoke look.",
+  },
+  {
+    key: "precision",
+    label: "Precision",
+    grade: "B",
+    blurb:
+      "SRD_DEV: roll parallel dice for finesse, aim, and controlled Stand effects.",
+  },
+  {
+    key: "development",
+    label: "Development",
+    grade: "C",
+    blurb:
+      "Growth and flexibility—mostly narrative framing on the sheet, not its own parallel wedge pool.",
   },
 ];
-
-/**
- * SRD_DEV: Range / Development are passive (no wedge pool).
- * Durability uses a dice pool (0–4) for resistance / armor, not a wedge grade badge.
- */
-const DURABILITY = {
-  key: "durability",
-  label: "Durability",
-  /** Demo pool capped at 4 (same cap as Grade A/S on sheet). */
-  dicePool: 4,
-  blurb:
-    "Dice pool only (no wedge letter): absorbs harm to your Stand, drives resist rolls and Stand armor. PC stress track stays 9 — Durability does not add boxes. Upgrade via Stand Coin wedges on your sheet—not shown on this radar.",
-};
-
-const RADAR_VERTEX_COUNT = RADAR_STATS.length;
 
 const GRADE_RADIUS = {
   F: 0.08,
@@ -68,10 +74,9 @@ function polar(cx, cy, r, angleRad) {
 }
 
 function wedgePath(i) {
-  const center = -Math.PI / 2 + (i * 2 * Math.PI) / RADAR_VERTEX_COUNT;
-  const halfArc = Math.PI / RADAR_VERTEX_COUNT;
-  const a0 = center - halfArc;
-  const a1 = center + halfArc;
+  const center = -Math.PI / 2 + (i * Math.PI) / 3;
+  const a0 = center - Math.PI / 6;
+  const a1 = center + Math.PI / 6;
   const [x0, y0] = polar(CX, CY, R_OUTER, a0);
   const [x1, y1] = polar(CX, CY, R_OUTER, a1);
   const largeArc = 0;
@@ -79,11 +84,11 @@ function wedgePath(i) {
 }
 
 function statAngle(i) {
-  return -Math.PI / 2 + (i * 2 * Math.PI) / RADAR_VERTEX_COUNT;
+  return -Math.PI / 2 + (i * Math.PI) / 3;
 }
 
 function polygonPoints() {
-  return RADAR_STATS.map((s, i) => {
+  return STATS.map((s, i) => {
     const t = GRADE_RADIUS[s.grade] ?? GRADE_RADIUS.D;
     const r = R_DATA_MIN + t * (R_DATA_MAX - R_DATA_MIN);
     const [x, y] = polar(CX, CY, r, statAngle(i));
@@ -93,22 +98,11 @@ function polygonPoints() {
 
 export default function HomeStandCoin() {
   const rootRef = useRef(null);
-  const [hoveredWedge, setHoveredWedge] = useState(null);
-  const [durabilityHovered, setDurabilityHovered] = useState(false);
+  const [hovered, setHovered] = useState(null);
   const [pinned, setPinned] = useState(null);
 
-  const pinOrHoverKey = useMemo(() => {
-    if (pinned != null) return pinned;
-    if (hoveredWedge != null) return hoveredWedge;
-    return durabilityHovered ? DURABILITY.key : null;
-  }, [pinned, hoveredWedge, durabilityHovered]);
-
-  const active = useMemo(() => {
-    const k = pinOrHoverKey;
-    if (!k) return null;
-    if (k === DURABILITY.key) return { ...DURABILITY, isDurability: true };
-    return RADAR_STATS.find((s) => s.key === k) ?? null;
-  }, [pinOrHoverKey]);
+  const activeKey = pinned ?? hovered;
+  const active = STATS.find((s) => s.key === activeKey) ?? null;
 
   useEffect(() => {
     if (pinned == null) return undefined;
@@ -135,10 +129,6 @@ export default function HomeStandCoin() {
     [onWedgeClick],
   );
 
-  const onDurabilityClick = useCallback(() => {
-    setPinned((p) => (p === DURABILITY.key ? null : DURABILITY.key));
-  }, []);
-
   const gradeRings = useMemo(
     () =>
       ["F", "D", "C", "B", "A", "S"].map((g) => {
@@ -150,15 +140,8 @@ export default function HomeStandCoin() {
   );
 
   const announce = active
-    ? active.isDurability
-      ? `${active.label}, ${active.dicePool} of 4 dice pool. ${active.blurb}`
-      : `${active.label}, grade ${active.grade}. ${active.blurb}`
-    : "Stand coin: three wedge rolls (Power, Precision, Speed); durability dice below. Hover or tap for details.";
-
-  const wedgeActiveKey =
-    typeof pinOrHoverKey === "string" && pinOrHoverKey !== DURABILITY.key
-      ? pinOrHoverKey
-      : null;
+    ? `${active.label}, grade ${active.grade}. ${active.blurb}`
+    : "SRD_DEV stand coin demo: six wedges (classic radar). Hover or focus a wedge for details. Tap outside to clear selection.";
 
   return (
     <div className="home-stand-coin" ref={rootRef}>
@@ -177,8 +160,9 @@ export default function HomeStandCoin() {
           aria-labelledby="home-stand-coin-title"
         >
           <title id="home-stand-coin-title">
-            Demo stand coin (SRD_DEV): three wedge action grades Power, Precision,
-            and Speed; durability is a separate 0–4 dice pool marker under the radar.
+            SRD_DEV demo stand coin: six-wedge radar (Power, Speed, Range,
+            Durability, Precision, Development). F–S grades; parallel dice on
+            Power, Speed, and Precision when the fiction calls for it.
           </title>
           <defs>
             <clipPath id="home-stand-coin-clip">
@@ -208,7 +192,7 @@ export default function HomeStandCoin() {
           ))}
 
           <g clipPath="url(#home-stand-coin-clip)">
-            {RADAR_STATS.map((_, i) => {
+            {STATS.map((_, i) => {
               const a = statAngle(i);
               const [xe, ye] = polar(CX, CY, R_RING - 1, a);
               return (
@@ -252,11 +236,11 @@ export default function HomeStandCoin() {
             );
           })}
 
-          {RADAR_STATS.map((s, i) => {
+          {STATS.map((s, i) => {
             const a = statAngle(i);
             const [lx, ly] = polar(CX, CY, R_LABEL, a);
             const deg = (a * 180) / Math.PI + 90;
-            const hot = wedgeActiveKey === s.key;
+            const isActive = activeKey === s.key;
             return (
               <g key={s.key}>
                 <text
@@ -289,7 +273,7 @@ export default function HomeStandCoin() {
                 >
                   {s.grade}
                 </text>
-                {hot && (
+                {isActive && (
                   <circle
                     cx={
                       polar(
@@ -322,8 +306,8 @@ export default function HomeStandCoin() {
             );
           })}
 
-          {RADAR_STATS.map((s, i) => {
-            const isHot = hoveredWedge === s.key || pinned === s.key;
+          {STATS.map((s, i) => {
+            const isHot = hovered === s.key || pinned === s.key;
             return (
               <path
                 key={`hit-${s.key}`}
@@ -335,43 +319,16 @@ export default function HomeStandCoin() {
                 role="button"
                 tabIndex={0}
                 aria-label={`${s.label}, grade ${s.grade}`}
-                onMouseEnter={() => setHoveredWedge(s.key)}
-                onMouseLeave={() => setHoveredWedge(null)}
-                onFocus={() => setHoveredWedge(s.key)}
-                onBlur={() => setHoveredWedge(null)}
+                onMouseEnter={() => setHovered(s.key)}
+                onMouseLeave={() => setHovered(null)}
+                onFocus={() => setHovered(s.key)}
+                onBlur={() => setHovered(null)}
                 onClick={() => onWedgeClick(s.key)}
                 onKeyDown={(e) => onWedgeKey(e, s.key)}
               />
             );
           })}
         </svg>
-        <button
-          type="button"
-          className={`home-stand-coin-durability${pinned === DURABILITY.key ? " is-selected" : ""}`}
-          aria-pressed={pinned === DURABILITY.key}
-          aria-label={`${DURABILITY.label}, dice pool ${DURABILITY.dicePool} of 4`}
-          onClick={onDurabilityClick}
-          onMouseEnter={() => setDurabilityHovered(true)}
-          onMouseLeave={() => setDurabilityHovered(false)}
-          onFocus={() => setDurabilityHovered(true)}
-          onBlur={() => setDurabilityHovered(false)}
-        >
-          <span className="home-stand-coin-durability-label">
-            {DURABILITY.label}
-          </span>
-          <span className="home-stand-coin-durability-dots" aria-hidden="true">
-            {[1, 2, 3, 4].map((d) => (
-              <span
-                key={d}
-                className={
-                  d <= DURABILITY.dicePool
-                    ? "home-stand-coin-dur-dot is-on"
-                    : "home-stand-coin-dur-dot"
-                }
-              />
-            ))}
-          </span>
-        </button>
         <div className="home-stand-coin-readout">
           <div className="home-stand-coin-readout-stack">
             <div
@@ -379,8 +336,9 @@ export default function HomeStandCoin() {
               aria-hidden={!!active}
             >
               <span className="home-stand-coin-readout-hint">
-                Hover or tap a wedge (F–S) or Durability (0–4 dice). Range and
-                Development are narrative passives—not on this chart.
+                Hover or tap a wedge for F–S shorthand. SRD_DEV uses parallel
+                Stand-coin rolls on Power, Speed, and Precision when the table
+                agrees the fiction needs them.
               </span>
             </div>
             <div
@@ -390,34 +348,9 @@ export default function HomeStandCoin() {
               <span className="home-stand-coin-readout-stat">
                 {active?.label ?? "\u00a0"}
               </span>
-              {active?.isDurability ? (
-                <>
-                  <span
-                    className="home-stand-coin-readout-grade home-stand-coin-readout-grade--dice"
-                    aria-hidden="true"
-                  >
-                    <span className="home-stand-coin-readout-dotline">
-                      {[1, 2, 3, 4].map((d) => (
-                        <span
-                          key={d}
-                          className={
-                            d <= active.dicePool
-                              ? "home-stand-coin-read-dot is-on"
-                              : "home-stand-coin-read-dot"
-                          }
-                        />
-                      ))}
-                    </span>
-                  </span>
-                  <span className="home-stand-coin-readout-dice-caption">
-                    {active.dicePool} / 4 dice pool
-                  </span>
-                </>
-              ) : (
-                <span className="home-stand-coin-readout-grade">
-                  {active?.grade ?? "\u00a0"}
-                </span>
-              )}
+              <span className="home-stand-coin-readout-grade">
+                {active?.grade ?? "\u00a0"}
+              </span>
               <span className="home-stand-coin-readout-blurb">
                 {active?.blurb ?? "\u00a0"}
               </span>

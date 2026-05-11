@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import {
   campaignAPI,
   characterAPI,
+  experienceTrackerAPI,
   factionAPI,
   npcAPI,
   sessionAPI,
@@ -2683,7 +2684,30 @@ function calendarDateStartsBeforeToday(isoDate) {
   return anchor < startToday;
 }
 
-/** Second clause under session title (`date · [this]`). */
+/** Calendar date shown before `·` on the campaign session list row. */
+function sessionListPrimaryDate(session) {
+  const raw = String(session?.status ?? "PLANNED").trim().toUpperCase();
+  if (raw === "PLANNED" && session?.proposed_date) {
+    const iso = String(session.proposed_date).trim();
+    if (iso) {
+      try {
+        return new Date(`${iso}T12:00:00`).toLocaleDateString();
+      } catch {
+        /* fall through */
+      }
+    }
+  }
+  if (session?.session_date) {
+    try {
+      return new Date(session.session_date).toLocaleDateString();
+    } catch {
+      return "N/A";
+    }
+  }
+  return "N/A";
+}
+
+/** Status phrase after `date ·` (Planned / In session / Ended, plus edge labels). */
 function sessionListStatusCaption(session, campaignActiveSessionId) {
   const sid = Number(session?.id);
   const raw = String(session?.status ?? "PLANNED").trim().toUpperCase();
@@ -2699,7 +2723,7 @@ function sessionListStatusCaption(session, campaignActiveSessionId) {
 
   if (raw === "COMPLETED") return "Ended";
 
-  if (isCampaignLiveSlot) return "Active";
+  if (isCampaignLiveSlot) return "In session";
 
   const anotherLive = aid !== null && Number.isFinite(sid) && sid !== aid;
 
@@ -2714,7 +2738,7 @@ function sessionListStatusCaption(session, campaignActiveSessionId) {
   }
 
   if (raw === "PLANNED") return "Planned";
-  if (raw === "ACTIVE") return "Active";
+  if (raw === "ACTIVE") return "In session";
   return raw;
 }
 
@@ -2886,13 +2910,8 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                       )}
                     </div>
                     <div style={{ fontSize: "11px", color: "#9ca3af" }}>
-                      {s.session_date
-                        ? new Date(s.session_date).toLocaleDateString()
-                        : "N/A"}
-                      {s.proposed_date
-                        ? ` · Planned ${new Date(`${s.proposed_date}T12:00:00`).toLocaleDateString()}`
-                        : ""}{" "}
-                      · {sessionListStatusCaption(s, activeId)}
+                      {sessionListPrimaryDate(s)} ·{" "}
+                      {sessionListStatusCaption(s, activeId)}
                     </div>
                   </div>
                   <div
@@ -2957,6 +2976,154 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
   );
 }
 
+const SESSION_ENCODED_XP_CAP = 2;
+
+function rollHasAbilitiesTagForEncodedXp(roll) {
+  return String(roll?.description || "")
+    .toLowerCase()
+    .includes("[abilities:");
+}
+
+function viceStruggleSignalsForEncodedXp(roll) {
+  if (String(roll?.roll_type || "").toUpperCase() !== "CLEAR_STRESS") return 0;
+  if (!String(roll?.action_name || "").toLowerCase().includes("vice")) return 0;
+  const desc = String(roll?.description || "").toLowerCase();
+  if (desc.includes("overindulgence")) return 1;
+  const o = String(roll?.outcome || "");
+  if (o === "FAILURE" || o === "BOTCH") return 1;
+  return 0;
+}
+
+/** GM preview for end-live modal (mirrors backend settle heuristics, not exact caps from prior grants). */
+function buildSessionEndLiveSummary(rolls, campaignChars, clocks) {
+  const list = Array.isArray(rolls) ? rolls : [];
+  const byType = {};
+  let desperateCount = 0;
+  for (const r of list) {
+    const t = String(r.roll_type || "").toUpperCase() || "UNKNOWN";
+    byType[t] = (byType[t] || 0) + 1;
+    if (String(r.position || "").toLowerCase() === "desperate") desperateCount += 1;
+  }
+  const nameById = new Map(
+    (campaignChars || []).map((c) => [
+      Number(c.id),
+      c.true_name || c.name || `PC #${c.id}`,
+    ]),
+  );
+  const byChar = new Map();
+  for (const r of list) {
+    const cid = r.character != null ? Number(r.character) : null;
+    if (!cid || Number.isNaN(cid)) continue;
+    if (!byChar.has(cid)) byChar.set(cid, []);
+    byChar.get(cid).push(r);
+  }
+  const encodedRows = [];
+  for (const [cid, crolls] of byChar) {
+    const standoutEvents = crolls.filter(rollHasAbilitiesTagForEncodedXp).length;
+    const struggleEvents = crolls.reduce(
+      (sum, rr) => sum + viceStruggleSignalsForEncodedXp(rr),
+      0,
+    );
+    const standoutWouldGrant = Math.min(
+      SESSION_ENCODED_XP_CAP,
+      standoutEvents,
+    );
+    const struggleWouldGrant = Math.min(
+      SESSION_ENCODED_XP_CAP,
+      struggleEvents,
+    );
+    encodedRows.push({
+      characterId: cid,
+      name: nameById.get(cid) || `Character ${cid}`,
+      standoutEvents,
+      struggleEvents,
+      standoutWouldGrant,
+      struggleWouldGrant,
+      totalEncodedPlaybookXp: standoutWouldGrant + struggleWouldGrant,
+    });
+  }
+  encodedRows.sort((a, b) => a.name.localeCompare(b.name));
+  const clockList = Array.isArray(clocks) ? clocks : [];
+  const clocksCompleted = clockList.filter((c) => {
+    const max = Number(c.max_segments) || 0;
+    const filled = Number(c.filled_segments) || 0;
+    return max > 0 && filled >= max;
+  }).length;
+  return {
+    rollCount: list.length,
+    byType,
+    desperateCount,
+    encodedRows,
+    clockCount: clockList.length,
+    clocksCompleted,
+  };
+}
+
+/** Preview Stand Development session XP banked to the session pool at settle (SRD_DEV). */
+function developmentSessionXpPreviewFromCharacter(ch) {
+  if (!ch) return 0;
+  const g = String(
+    ch?.stand?.development ??
+      ch?.coin_stats?.DEVELOPMENT ??
+      ch?.coin_stats?.development ??
+      "",
+  )
+    .trim()
+    .charAt(0)
+    .toUpperCase();
+  if (g && "FDCBAS".includes(g)) {
+    const map = { F: 0, D: 1, C: 2, B: 3, A: 4, S: 5 };
+    return map[g] ?? 0;
+  }
+  const idx = Math.floor(Number(ch?.standStats?.development));
+  if (Number.isFinite(idx) && idx >= 0 && idx <= 5) {
+    const table = [0, 1, 2, 3, 4, 5];
+    return table[idx] ?? 0;
+  }
+  return 0;
+}
+
+function sumManualTrackXpForSession(entries, sessionId) {
+  const sid = Number(sessionId);
+  if (!Number.isFinite(sid)) return 0;
+  const re = /^\[(insight|prowess|resolve|heritage|playbook)\]/i;
+  const list = Array.isArray(entries) ? entries : entries?.results || [];
+  return list.reduce((sum, e) => {
+    if (Number(e?.session) !== sid) return sum;
+    if (String(e?.trigger || "").toUpperCase() !== "MANUAL") return sum;
+    if (!re.test(String(e?.description || ""))) return sum;
+    return sum + (Number(e?.xp_gained) || 0);
+  }, 0);
+}
+
+/** End-live modal data: roll snapshot + per-PC encoded playbook preview + Development→pool preview. */
+function buildSessionEndLivePreview(rolls, campaignChars, clocks, characters) {
+  const inner = buildSessionEndLiveSummary(rolls, campaignChars, clocks);
+  const charById = new Map((characters || []).map((c) => [Number(c.id), c]));
+  const encById = new Map(inner.encodedRows.map((r) => [r.characterId, r]));
+  const perPcRows = (campaignChars || []).map((ch) => {
+    const id = Number(ch.id);
+    const enc = encById.get(id) || {
+      characterId: id,
+      name: ch.true_name || ch.name || `PC ${id}`,
+      standoutEvents: 0,
+      struggleEvents: 0,
+      standoutWouldGrant: 0,
+      struggleWouldGrant: 0,
+      totalEncodedPlaybookXp: 0,
+    };
+    const full = charById.get(id) || ch;
+    const developmentPoolXp = developmentSessionXpPreviewFromCharacter(full);
+    return {
+      ...enc,
+      characterId: id,
+      name: enc.name || ch.true_name || ch.name || `PC ${id}`,
+      developmentPoolXp,
+    };
+  });
+  return { ...inner, perPcRows };
+}
+
 // ---------------------------------------------------------------------------
 // Session Detail View (GM-only)
 // ---------------------------------------------------------------------------
@@ -2997,6 +3164,24 @@ function SessionDetail({
   const [fortuneRolling, setFortuneRolling] = useState(false);
   const [error, setError] = useState(null);
   const [sessionDateInput, setSessionDateInput] = useState("");
+  const [endLiveModalOpen, setEndLiveModalOpen] = useState(false);
+  const [endLiveBusy, setEndLiveBusy] = useState(false);
+  const [sessionManualXpByChar, setSessionManualXpByChar] = useState({});
+
+  const refreshSessionCharacters = useCallback(async () => {
+    if (!campaign?.id) return;
+    try {
+      const list = await characterAPI.getCharacters();
+      const rows = Array.isArray(list)
+        ? list.filter(
+            (c) => Number(c?.campaign) === Number(campaign.id),
+          )
+        : [];
+      setCharacters(rows);
+    } catch {
+      /* ignore */
+    }
+  }, [campaign?.id]);
 
   useEffect(() => {
     if (!session?.id) return;
@@ -3066,6 +3251,53 @@ function SessionDetail({
     [rolls],
   );
 
+  const endLivePreview = useMemo(
+    () => buildSessionEndLivePreview(rolls, campaignChars, clocks, characters),
+    [rolls, campaignChars, clocks, characters],
+  );
+
+  const endLiveRowsWithManual = useMemo(() => {
+    return (endLivePreview.perPcRows || []).map((row) => {
+      const manualSessionXp = sessionManualXpByChar[row.characterId] ?? 0;
+      const totalSessionXpPreview =
+        (row.developmentPoolXp || 0) +
+        (row.totalEncodedPlaybookXp || 0) +
+        manualSessionXp;
+      return {
+        ...row,
+        manualSessionXp,
+        totalSessionXpPreview,
+      };
+    });
+  }, [endLivePreview.perPcRows, sessionManualXpByChar]);
+
+  useEffect(() => {
+    if (!endLiveModalOpen || !session?.id) return;
+    let cancelled = false;
+    const sid = session.id;
+    const chars = campaignChars || [];
+    if (!chars.length) {
+      setSessionManualXpByChar({});
+      return;
+    }
+    (async () => {
+      const pairs = await Promise.all(
+        chars.map(async (ch) => {
+          const raw = await experienceTrackerAPI
+            .list({ character: ch.id })
+            .catch(() => []);
+          const arr = Array.isArray(raw) ? raw : raw?.results || [];
+          return [ch.id, sumManualTrackXpForSession(arr, sid)];
+        }),
+      );
+      if (cancelled) return;
+      setSessionManualXpByChar(Object.fromEntries(pairs));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [endLiveModalOpen, session?.id, campaignChars]);
+
   const handleSetActiveSession = async () => {
     try {
       await campaignAPI.patchCampaign(campaign.id, {
@@ -3082,13 +3314,21 @@ function SessionDetail({
   const isCurrentActiveSession =
     activeSessionId != null && Number(activeSessionId) === Number(session.id);
 
-  const handleClearActiveSession = async () => {
+  const runEndLiveSession = async (skipEncodedXp) => {
     if (!isCurrentActiveSession) return;
+    setEndLiveBusy(true);
+    setError(null);
     try {
-      await campaignAPI.patchCampaign(campaign.id, { active_session: null });
+      await campaignAPI.patchCampaign(campaign.id, {
+        active_session: null,
+        skip_encoded_xp_settlement: skipEncodedXp === true,
+      });
+      setEndLiveModalOpen(false);
       onRefresh();
     } catch (e) {
       setError(e.message);
+    } finally {
+      setEndLiveBusy(false);
     }
   };
 
@@ -3310,6 +3550,265 @@ function SessionDetail({
       </button>
       {error && <div style={S.err}>{error}</div>}
 
+      {endLiveModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="end-live-session-title"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 50,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !endLiveBusy) {
+              setEndLiveModalOpen(false);
+            }
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "520px",
+              maxHeight: "88vh",
+              overflow: "auto",
+              background: "#111827",
+              border: "1px solid #4b5563",
+              borderRadius: "8px",
+              padding: "20px",
+              color: "#e5e7eb",
+              fontSize: "13px",
+              lineHeight: 1.45,
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h2
+              id="end-live-session-title"
+              style={{ margin: "0 0 12px", fontSize: "18px", color: "#fff" }}
+            >
+              End live session?
+            </h2>
+            <p style={{ margin: "0 0 12px", color: "#d1d5db" }}>
+              Review this session before you stop live character sheets for the
+              campaign. <strong>End &amp; apply encoded XP</strong> runs the
+              one-time encoded <strong>playbook</strong> pass (STANDOUT /
+              STRUGGLE from the roll log, capped per session){" "}
+              <strong>and</strong> banks each PC&apos;s{" "}
+              <strong>Stand Development</strong> session XP into their{" "}
+              <strong>session XP pool</strong> on the character sheet (players
+              allocate pool XP to tracks). Use manual XP for anything not
+              inferred from rolls (entanglements, brawls, etc.).{" "}
+              <span style={{ color: "#9ca3af" }}>
+                Durability affects armor/resist only, not XP.
+              </span>
+            </p>
+            {sessionData?.auto_encoded_xp_settled ? (
+              <div
+                style={{
+                  marginBottom: "12px",
+                  padding: "8px 10px",
+                  borderRadius: "6px",
+                  background: "rgba(234, 179, 8, 0.12)",
+                  border: "1px solid rgba(234, 179, 8, 0.45)",
+                  color: "#fcd34d",
+                  fontSize: "12px",
+                }}
+              >
+                This session&apos;s encoded XP pass was already marked settled.
+                Ending live will <strong>not</strong> apply additional automatic
+                playbook XP from rolls or bank Development session XP again.
+              </div>
+            ) : null}
+            <div
+              style={{
+                marginBottom: "10px",
+                fontSize: "12px",
+                fontWeight: 600,
+                color: "#9ca3af",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+              }}
+            >
+              Session snapshot
+            </div>
+            <ul style={{ margin: "0 0 12px 18px", padding: 0, color: "#d1d5db" }}>
+              <li>
+                <strong>{endLivePreview.rollCount}</strong> roll
+                {endLivePreview.rollCount === 1 ? "" : "s"} logged on this session
+                {endLivePreview.rollCount > 0 ? (
+                  <span style={{ color: "#9ca3af" }}>
+                    {" "}
+                    (
+                    {Object.entries(endLivePreview.byType)
+                      .map(([k, v]) => `${k}: ${v}`)
+                      .join(", ")}
+                    )
+                  </span>
+                ) : null}
+                .
+              </li>
+              {endLivePreview.desperateCount > 0 ? (
+                <li>
+                  <strong>{endLivePreview.desperateCount}</strong> desperate-position
+                  roll{endLivePreview.desperateCount === 1 ? "" : "s"} (desperate
+                  action XP is applied when each roll is committed, not here).
+                </li>
+              ) : null}
+              <li>
+                Progress clocks in this session:{" "}
+                <strong>{endLivePreview.clockCount}</strong> tracked,{" "}
+                <strong>{endLivePreview.clocksCompleted}</strong> completed (fiction
+                / clocks are not auto-converted to XP).
+              </li>
+            </ul>
+            <div
+              style={{
+                marginBottom: "8px",
+                fontSize: "12px",
+                fontWeight: 600,
+                color: "#9ca3af",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+              }}
+            >
+              Per-PC XP preview (if you apply encoded pass)
+            </div>
+            {endLiveRowsWithManual.length === 0 ? (
+              <div style={{ color: "#9ca3af", marginBottom: "12px", fontSize: "12px" }}>
+                No PCs in this campaign roster — nothing to preview.
+              </div>
+            ) : (
+              <div
+                style={{
+                  marginBottom: "12px",
+                  border: "1px solid #374151",
+                  borderRadius: "6px",
+                  overflow: "auto",
+                }}
+              >
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+                  <thead>
+                    <tr style={{ background: "#0d1117", color: "#9ca3af" }}>
+                      <th style={{ textAlign: "left", padding: "6px 8px" }}>Character</th>
+                      <th style={{ textAlign: "right", padding: "6px 8px" }}>STANDOUT</th>
+                      <th style={{ textAlign: "right", padding: "6px 8px" }}>STRUGGLE</th>
+                      <th style={{ textAlign: "right", padding: "6px 8px" }}>Enc. playbook</th>
+                      <th style={{ textAlign: "right", padding: "6px 8px" }}>Dev→pool</th>
+                      <th style={{ textAlign: "right", padding: "6px 8px" }}>Manual→tracks</th>
+                      <th style={{ textAlign: "right", padding: "6px 8px" }}>Total</th>
+                      <th style={{ textAlign: "left", padding: "6px 8px" }}>Sources</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {endLiveRowsWithManual.map((row) => (
+                      <tr key={row.characterId} style={{ borderTop: "1px solid #374151" }}>
+                        <td style={{ padding: "6px 8px", color: "#e5e7eb" }}>{row.name}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#d1d5db" }}>
+                          {row.standoutWouldGrant}/{SESSION_ENCODED_XP_CAP}
+                          <span style={{ color: "#6b7280", fontSize: "10px" }}>
+                            {" "}
+                            ({row.standoutEvents})
+                          </span>
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#d1d5db" }}>
+                          {row.struggleWouldGrant}/{SESSION_ENCODED_XP_CAP}
+                          <span style={{ color: "#6b7280", fontSize: "10px" }}>
+                            {" "}
+                            ({row.struggleEvents})
+                          </span>
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>
+                          {row.totalEncodedPlaybookXp}
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#c4b5fd" }}>
+                          {row.developmentPoolXp}
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#d1d5db" }}>
+                          {row.manualSessionXp}
+                        </td>
+                        <td style={{ padding: "6px 8px", textAlign: "right" }}>
+                          <span
+                            style={{
+                              color: "rgb(167, 139, 250)",
+                              fontWeight: "bold",
+                            }}
+                          >
+                            {row.totalSessionXpPreview}
+                          </span>
+                        </td>
+                        <td style={{ padding: "6px 8px", color: "#9ca3af", fontSize: "10px" }}>
+                          {[
+                            row.totalEncodedPlaybookXp
+                              ? `Encoded playbook +${row.totalEncodedPlaybookXp}`
+                              : null,
+                            row.developmentPoolXp
+                              ? `Stand Development (session) +${row.developmentPoolXp} → pool`
+                              : null,
+                            row.manualSessionXp
+                              ? `Manual GM awards +${row.manualSessionXp} (already on tracks)`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p style={{ margin: "0 0 16px", fontSize: "11px", color: "#9ca3af" }}>
+              <strong>Total</strong> column = encoded playbook XP (goes straight to
+              the playbook clock) + Development session XP (banked to the{" "}
+              <strong>session XP pool</strong>) + manual awards logged this
+              session (already on tracks). Pool XP is spent on the character sheet.
+            </p>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                justifyContent: "flex-end",
+              }}
+            >
+              <button
+                type="button"
+                disabled={endLiveBusy}
+                onClick={() => {
+                  if (!endLiveBusy) setEndLiveModalOpen(false);
+                }}
+                style={S.btnGhost}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={endLiveBusy}
+                onClick={() => runEndLiveSession(true)}
+                style={S.btnGhost}
+                title="Clears live session only; marks encoded pass done without granting STANDOUT/STRUGGLE XP."
+              >
+                {endLiveBusy ? "…" : "End without encoded XP"}
+              </button>
+              <button
+                type="button"
+                disabled={endLiveBusy}
+                onClick={() => runEndLiveSession(false)}
+                style={S.btnPrimary}
+                title="Clears live session and runs the automatic playbook XP pass (no-op if this session was already settled)."
+              >
+                {endLiveBusy ? "…" : "End & apply encoded XP"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={S.card}>
         <span style={S.sectionLbl}>
           Session: {sessionData?.name || session?.name || "Unnamed"}
@@ -3330,9 +3829,9 @@ function SessionDetail({
               </span>
               <button
                 type="button"
-                onClick={handleClearActiveSession}
+                onClick={() => setEndLiveModalOpen(true)}
                 style={S.btnGhost}
-                title="Ends live play on character sheets for this campaign. Applies one-time roll-based playbook XP from this session (abilities noted on rolls; vice/overindulge signals)—capped per session. Other triggers you award manually."
+                title="Opens a confirmation with a session tally. You can end live with or without the one-time encoded playbook XP pass."
               >
                 End live session
               </button>
@@ -3346,9 +3845,10 @@ function SessionDetail({
                   maxWidth: "560px",
                 }}
               >
-                Ends live sheets for everyone and applies encoded playbook XP from
-                rolls for this session (once, with caps—see tooltip). Anything not
-                in the roll log you still grant as manual XP.
+                Opens a confirmation: review rolls / clocks, then end live{" "}
+                <strong>with</strong> or <strong>without</strong> automatic encoded
+                playbook XP (STANDOUT/STRUGGLE) plus Development→session pool. Use
+                manual XP for off-roll awards to tracks.
               </div>
             </>
           ) : (
@@ -3434,6 +3934,7 @@ function SessionDetail({
         setManualXp={setManualXp}
         manualXpSaving={manualXpSaving}
         onManualXpGrant={handleManualXpGrant}
+        onSessionCharactersRefresh={refreshSessionCharacters}
         user={user}
       />
 

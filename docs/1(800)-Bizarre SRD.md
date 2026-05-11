@@ -480,171 +480,196 @@ Players can **buy extra HP with XP** instead of taking more detriments.
 
 # 🪙 Stand Coin Stats
 
-**STAND COIN** 
+**STAND COIN**
 
-**(Player character)**
+**(Player Character)**
 
-The stand coin is made of 6 properties, rated from F to S, that describe the limits put on its abilities.
+**The Stand Coin is made of 6 properties, rated F to S, that describe a Stand's capabilities and limits. These properties fall into two categories: Stand Coin Rolls and Stand Coin Passives.**
 
-A (4)  
-B (3)  
-C (2)  
-D (1)  
-F (0)
+**Stand Coin Rolls — Power, Speed, Precision, and Durability — are active dice pools. When the fiction calls for something only a Stand can do, or when you want to push beyond what your user could accomplish alone, you roll these instead of your user skills. These are parallel rolls, not additions to your user dice.**
 
-At the beginning of a new game, distribute 6 points among:  
-\- Power (physical destructive power)  
-\- Speed (mobility & position)  
-\- Range (operational distance of the stand & its abilities)  
-\- Durability (resistance, & armor)  
-\- Precision (accuracy & control)   
-\- Development (growth potential)
+**Stand Coin Passives — Range and Development — define your Stand's parameters. They don't generate dice rolls; the GM reads them to determine what's possible.**
 
-Stats are graded S(special)/A(4)/B(3)/C(2)/D(1)/F(0)
+**Grade Scale:**
+
+| Grade | Dice |
+| ----- | ----- |
+| **A** | **4d** |
+| **B** | **3d** |
+| **C** | **2d** |
+| **D** | **1d** |
+| **F** | **0d (gated out)** |
+
+**At the beginning of a new game, distribute 6 points among the six stats. Each point raises a stat one grade (F→D→C→B→A).**
 
 **F-Rank Limitations:**
 
-* You cannot take F-rank in **all six stats** (minimum one stat must be D or higher)  
-* F-rank stats represent **severe weaknesses** that can be exploited by enemies
+* **You cannot take F-rank in all six stats (minimum one stat must be D or higher)**  
+* **F-rank in a Coin Roll means you cannot attempt that category of Stand action**  
+* **F-rank Passives represent severe weaknesses enemies can exploit**  
+  ---
 
-**If a stand coin stat enhances your stand armor, stress boxes, dice pool, etc., denote it in your character sheet\!**
+**STAND COIN ROLLS**
 
-**Player Stats:**
+**How Stand Coin Rolls Work:**
 
-**\- Power: Determines physical destructive power**   
-S: World-ending threat   
-A: Can demolish large buildings and city blocks with ease  
-B: Can destroy reinforced structures and thick concrete barriers   
-C: Can shatter stone and heavy structural materials   
-D: Can break through standard materials (wood, metal plating)   
-F: Human-level strength; baseline to above-average human physical capability
+**When you attempt something only a Stand can do — or want to achieve greater effect than your user alone could manage — you make a Stand Coin Roll using Power, Speed, Precision, or Durability. The fiction determines which applies. These are not interchangeable.**
 
-**\- Speed: Determines mobility in conflict. Speed grade relative to your opponent sets starting position — see Combat & Initiative. (same levels of speed as range):**   
-S: 200ft movement  
-A: 60(120)ft movement, push yourself to dash.  
-B: 40(80)ft movement, push yourself to dash.  
-C: 35(70)ft movement, push yourself to dash.  
-D: 30(60)ft movement, push yourself to dash.  
-F: 25(50)ft movement, push yourself to dash.
+**Grade Gates: Some actions require a minimum grade to attempt at all. The GM calls this. A D-Power Stand cannot punch through a skyscraper — that action is simply unavailable. A B-Power Stand can attempt it, but starts at reduced position or effect.**
 
-**\- Range:**   
-S: Unlimited range, no range penalties  
-A: 100(200) ft range, push yourself to extend  
-B: 50(100) ft, push yourself to extend  
-C: 40(80) ft, push yourself to extend, extension subtracts 1 effect  
-D: 20(40) ft, push yourself to extend, extension subtracts 1 effect  
-F: 10(20) ft, push yourself to extend, extension subtracts 2 effect
+**Stand Roll Benefit: When you use a Stand Coin Roll for something your user *could* have attempted with a skill roll, you gain either \+position or \+effect — GM's call based on what the fiction supports. Not both.**
 
-**\- Durability:**   
-**Affects Stress capacity, armor charges, and Stand Armor effectiveness:**   
-S: \+4 Stress boxes, 3 Armor charges. Resistance rolls can reduce harm by 2 levels instead of 1  
-A: \+3 Stress boxes, 3 Armor charges   
-B: \+2 Stress boxes, 2 Armor charges   
-C: \+1 Stress box, 1 Armor charge   
-D: 0 Stress bonus, 1 Armor charge   
-F: \-1 Stress boxes, 0 Armor charges
+**Stand-on-Stand Combat: Only Stand abilities, bizarre powers, or similarly supernatural forces can damage a Stand directly. User skills don't apply against a Stand — you need your Coin Rolls. This creates a tactical choice: target the Stand (requires your dice pool) or find and expose the user (opens up all your user skills).**
 
-**\- Precision: Affects accuracy and control. Having a higher precision means you have a better position/effect depending on the grade differential.**   
-S: Double 6s and double 5s count as critical success; inherit A, B, and C properties  
-A: 5 counts as success; inherit B and C properties  
-B: 3 counts as partial success; inherit C properties  
-C: You can no longer critical fail  
-D: Double 1s count as a critical fail  
-F: 1s and double 1s count as critical fail
+---
 
-**\- Development Potential**: **Determines the Stand’s capacity to improve abilities and gain experience.**  
-S: Earn \+5 XP at the end of each session…  
-A: Earn \+4 XP at the end of each session. Can spend 2 stress to adopt a new unique/standard ability until the end of the session, at GM’s discretion.  
-B: Earn \+3 XP at the end of each session.  
-C: Earn \+2 XP at the end of each session.  
-D: Earn \+1 XP at the end of each session.  
-F: Standard XP gain.
+**POWER**
 
-\---
+***Used when your Stand applies force beyond human scale — destruction, impact, overwhelming physical pressure.***
 
-**NPC STAND COIN STATS:**
+**Roll Power dice when demolishing structures or barriers, delivering Stand-scale strikes, or overpowering something through sheer force.**
 
-**\- Power:**   
-Determines harm level and impact:   
-S: Level 4 harm  
-A: Level 4 harm  
-B: Level 3 harm   
-C: Level 2 harm  
-D: Level 1 harm  
-F: No significant harm
+**Grade reference (gate thresholds):**
 
-**\- Speed: Speed and mobility of an NPC’s stand.**  
-S: 200 ft movement  
-A: 60 ft  
-B: 40 ft  
-C: 35 ft  
-D: 30 ft  
-F: 25 ft
+* **A: Can demolish large buildings and city blocks**  
+* **B: Can destroy reinforced structures and thick concrete**  
+* **C: Can shatter stone and heavy structural materials**  
+* **D: Can break through standard materials (wood, metal plating)**  
+* **F: Human-level force — use Wreck or Skirmish instead**  
+  ---
 
-**\- Range:**   
-S: Unlimited range, no range penalties  
-A: 100 ft  
-B: 50 ft  
-C: 40 ft  
-D: 20 ft  
-F: 10 ft
+**SPEED**
 
-**\- DURABILITY:**   
-Vulnerability Clock: (\_\_\_ segments)   
-Clock Size by Grade:   
-\- S: 0 segments (requires alternative win condition)\*   
-\- A: 12 segments (elite threat)   
-\- B: 10 segments (veteran opponent)   
-\- C: 8 segments (standard threat)   
-\- D: 6 segments (fragile fighter)   
-\- F: 4 segments (glass cannon) 
+***Used when your Stand moves, reacts, or acts at a pace no human body can match.***
 
-\*S-Durability Alternative Win Condition: Example: "Expose User" / "Break Stand Logic" / "Discover Weakness" (8-segment clock) 
+**Roll Speed dice when intercepting something before it can be perceived, crossing distance in an instant, or reacting to threats faster than normal physics allows.**
 
-When Vulnerability Clock fills: NPC is defeated   
-─────────────────────────────────────────────   
-Regular Armor (reduces harm/consequences by 1 level):   
-(\_\_\_ charges) 
+**Movement: Heritage sets your user's base movement speed. If your Stand is physical, its Speed grade determines its movement range. Non-physical Stands use heritage movement.**
 
-Charges by Grade (Formula: Clock segments ÷ 3, rounded down):   
-\- S: 5 charges   
-\- A: 4 charges   
-\- B: 3 charges   
-\- C: 2 charges   
-\- D: 2 charges   
-\- F: 1 charge  
-─────────────────────────────────────────────   
-Special Armor (completely negates harm/consequences):   
-(\_\_\_ charges) 
+**Grade reference (movement):**
 
-Charges by Grade:   
-\- S, A: 3 charges   
-\- B: 2 charges   
-\- C, D: 1 charge   
-\- F: 0 charges 
+* **A: 60(120)ft, push yourself to dash**  
+* **B: 40(80)ft, push yourself to dash**  
+* **C: 35(70)ft, push yourself to dash**  
+* **D: 30(60)ft, push yourself to dash**  
+* **F: 25(50)ft — use heritage speed instead**  
+  ---
 
-GM spends armor charges BEFORE filling Vulnerability Clock segments. Special Armor creates dramatic "the attack bounces off" moments.
+PRECISION
 
-**\- Precision:**   
-S-A: When defending, can reduce player effect by 1 level   
-B-C: Standard \- GM sets effect normally   
-D-F: When attacking precisely, reduce effect by 1 level (clumsy)
+*Used when your Stand performs actions requiring accuracy or control beyond human capability.*
 
-**\- Development Potential**:   
-Determines the Stand’s capacity to improve abilities.  
-S: Evolve in real time. Can gain new abilities every round. You cannot be predicted.  
-A: Once per combat, you can mutate an ability to do something else.  
-B: On return battles, you come back stronger with one new ability.   
-C: You follow your script. You do what you were designed to do effectively without surprise.  
-D: You don’t change. You have only a few abilities. You are easy to counter.  
-F: You lose abilities during combat. Your stand is unstable.
+Roll Precision dice when targeting a specific point with surgical accuracy, performing fine manipulation at Stand scale, or executing a technique that demands exact control.
+
+Precision also covers Stand-aided perception — detecting details, trajectories, or targets that require your Stand's senses rather than your own. A high-Precision Stand can perceive things no human eye could catch: movement too fast to follow, details too small to see, weaknesses invisible to normal sight. This is your Stand doing the looking, not you. *(Think: Joseph Joestar and Hermit Purple — it's the Stand perceiving, not the user.)*
+
+At D or F, the GM may rule that precision-dependent Stand actions carry automatic consequences or aren't available.
+
+---
+
+**DURABILITY**
+
+*Used when your Stand absorbs damage before it mirrors through to you.*
+
+When your Stand takes a hit from another Stand, roll your Durability dice. Spend stress equal to 6 minus the highest result — the same structure as a standard resistance roll, but using your Stand's Coin dice instead of a user attribute. High Durability means the Stand eats the hit. Low Durability means it passes through hard. Rolling a 6 still means you mark 1 stress, but if you roll two 6’s, you resist for free.
+
+*If you have 0 Durability dice (F-rank), roll 2d and take the lowest result.*
+
+Stand Armor: Durability also determines your Stand's armor charges. When you check a Stand Armor charge, you reduce a consequence against your Stand by 1 level. Stand Armor cannot be used to protect your user from direct attacks.
+
+| Grade | Stand Armor Charges |
+| ----- | ----- |
+| **A** | **4** |
+| **B** | **3** |
+| **C** | **2** |
+| **D** | **1** |
+| **F** | **0** |
+
+Stands without a physical form share their Stand Armor with their user — there is no separate body to take the hit.
+
+User Armor is physical armor worn by the user. It is acquired through abilities or heritage and can be checked to reduce a consequence against the user by 1 level. It is entirely separate from Stand Armor.
+
+---
+
+STAND COIN PASSIVES
+
+RANGE
+
+Defines the operational distance of your Stand and its abilities.
+
+* A: 100(200)ft, push yourself to extend  
+* B: 50(100)ft, push yourself to extend  
+* C: 40(80)ft, push yourself to extend, extension subtracts 1 effect  
+* D: 20(40)ft, push yourself to extend, extension subtracts 1 effect  
+* F: 10(20)ft, push yourself to extend, extension subtracts 2 effect
+
+DEVELOPMENT (POTENTIAL)
+
+Determines XP gain and capacity for growth.
+
+* A: \+4 XP at end of session. Can spend 2 stress to adopt a new unique/standard ability until end of session, GM's discretion  
+* B: \+3 XP at end of session  
+* C: \+2 XP at end of session  
+* D: \+1 XP at end of session  
+* F: Standard XP gain  
+  ---
+
+NPC STAND COIN STATS
+
+NPC stats are GM-facing parameters. NPCs don't roll Stand Coin dice — the GM reads their grades to set harm levels, determine what actions are available, and adjudicate **consequences.**
+
+**NPCs can carry any combination of Regular Armor, Stand Armor, and Special Armor depending on their nature and threat level.**
+
+* **Regular Armor — physical armor. Checked to reduce a consequence by 1 level.**  
+* **Stand Armor — defensive capability of the Stand. Checked to reduce a Stand-hit consequence by 1 level.**  
+* **Special Armor — flat negation. The attack bounces off entirely. GM tool only.**
+
+**Power — Determines harm level and impact:**
+
+* **S/A: Level 4 harm**  
+* **B: Level 3 harm**  
+* **C: Level 2 harm**  
+* **D: Level 1 harm**  
+* **F: No significant harm**
+
+**Speed — Movement reference: S: 200ft | A: 60ft | B: 40ft | C: 35ft | D: 30ft | F: 25ft**
+
+**Range — Operational distance (same as player reference above)**
+
+**Durability — Vulnerability Clock:**
+
+* **S: 0 segments (requires alternative win condition\*)**  
+* **A: 12 segments | B: 10 segments | C: 8 segments | D: 6 segments | F: 4 segments**
+
+**\*S-Durability Alternative Win Condition: e.g., "Expose User" / "Break Stand Logic" / "Discover Weakness" (8-segment clock)**
+
+**Stand Armor charges (Clock ÷ 3, rounded down): S=5, A=4, B=3, C/D=2, F=1**
+
+**Special Armor charges: S/A=3, B=2, C/D=1, F=0**
+
+**GM spends armor charges before filling Vulnerability Clock segments.**
+
+**Precision:**
+
+* **S–A: When defending, can reduce player effect by 1 level**  
+* **B–C: GM sets effect normally**  
+* **D–F: When attacking precisely, reduce effect by 1 level (clumsy)**
+
+**Development:**
+
+* **S: Can gain new abilities every round. Cannot be predicted**  
+* **A: Once per combat, can mutate an ability**  
+* **B: On return battles, comes back with one new ability**  
+* **C: Follows their script. Effective but predictable**  
+* **D: Few abilities. Easy to counter**  
+* **F: Loses abilities during combat. Unstable**
 
 # 😓 Stress & Trauma
 
 **STRESS & TRAUMA**
 
 **STRESS:**  
-Player characters in 1(800)Bizarre have a special reserve called **stress**. When they suffer a consequence that they don’t want to accept, they can take stress instead. The result of a **resistance check** determines how much stress it costs to avoid a bad outcome.
+Player characters in 1(800)Bizarre have a special reserve of 9 tokens called **stress**. When they suffer a consequence that they don’t want to accept, they can take stress instead. The result of a **resistance check** determines how much stress it costs to avoid a bad outcome.
 
 *During an All-Out-Brawl, Daniel’s character, Cross, gets stabbed in the chest. Daniel rolls his **Prowess** rating to resist, and gets a **2**. It costs 6 stress, minus 2 (the result of the resistance check) to resist the consequences. Daniel marks off 4 stress and describes how Cross survives.*
 
@@ -1336,11 +1361,13 @@ It is 5 xp to gain a \+1d in a skill rating. It is 10xp to gain a \+1 stand coin
 
 **COMBAT AND INITIATIVE**
 
-In 1(800)BIZARRE, the outcome of an All-Out-Brawl is determined by the player's wit and resources. Starting position in conflicts is influenced by relative Speed grades.
+In 1(800)Bizarre, the outcome of an All-Out-Brawl is determined by the players' wit, resources, and the fiction at hand. Position and effect are set by the GM based on the situation — not by grade comparison.
 
-Speed determines starting position whenever Stands clash directly. Compare grades — higher Speed starts at Risky or better, equal starts at Risky, lower starts at Desperate. The GM adjusts from there based on the fiction.
+When Stands clash directly, players use their Stand Coin Rolls (Power, Speed, Precision, Durability) rather than user skills. Only Stand abilities, bizarre powers, or similarly supernatural forces can damage a Stand — user skills apply only against the Stand's user directly. This creates a core tactical choice in every conflict: fight the Stand, or find and expose the user.
 
-All-Out-Brawls and other types of showdowns are presented by the GM during a mission or as an entanglement from gaining a Wanted Level.
+The GM sets starting position as normal: Risky by default, adjusted up or down based on the fiction, the environment, and any relevant Stand grades. A Stand with significantly higher Speed or Power than its opposition may warrant a better starting position — but this is a GM judgment call, not a hard mechanical rule.
+
+All-Out-Brawls and other showdowns are presented by the GM during a mission or as an entanglement from gaining a Wanted Level.
 
 # 💨 Actions in Combat
 
@@ -1807,192 +1834,143 @@ Of course, you’ll also have your specializations and skills, the qualities tha
 
 **Character Creation**
 
-In 1(800)Bizarre, your character’s abilities reflect their Stand, Hamon mastery, or Spin technique, as well as their unique heritage. This defines your character’s specialty and starting potential, but your true nature will evolve over time through gameplay.
+In 1(800)Bizarre, your character's abilities reflect their Stand, Hamon mastery, or Spin technique, as well as their unique heritage. This defines your character's specialty and starting potential, but your true nature will evolve over time through gameplay.
 
-#### **1\. Choose a Playbook**
+**1\. Choose a Playbook**
 
-Your playbook defines your **metaphysical focus**—Stand, Hamon, or Spin. Each comes with a unique narrative flavor and a foundational list of abilities. You may select from these, or create your own. More on that, later.
+Your playbook defines your metaphysical focus — Stand, Hamon, or Spin. Each comes with a unique narrative flavor and a foundational list of abilities. You may select from these, or create your own. More on that later.
 
-#### **2\. Choose Your Heritage**
+**2\. Choose Your Heritage**
 
-Your heritage influences your character’s origins and innate capabilities. Choose from:
+Your heritage influences your character's origins and innate capabilities. Choose from: Human, Rock Human, Vampire, Pillar Man, Gray Matter, Haunting, Cyborg, or Oracle.
 
-* **Human:** Versatile but without inherent supernatural abilities.
+Write a brief note about your family's background and life before joining the crew. If the GM deems it so, you may be able to create a unique ability based on a heritage trait.
 
-* **Rock Human:** Resilient stone-like beings with natural stealth.
-
-* **Vampire:** Immortal predators vulnerable to sunlight and Hamon.
-
-* **Pillar Man:** Evolved ancients with heightened physicality and intelligence.
-
-* **Gray Matter:** Extraterrestrials adept at mimicry and shapeshifting.
-
-* **Haunting:** Partially spectral entities existing between life and death.
-
-* **Cyborg:** Humans enhanced with advanced cybernetics.
-
-* **Oracle:** Seers attuned deeply to the supernatural.
-
-Write a brief note about your family’s background and life before joining the crew. If the GM deems it so, you may be able to create a unique ability that is based on a heritage trait. 
-
-#### **3\. Make a Background**
+**3\. Make a Background**
 
 Detail your previous life, occupation, or significant experiences. Describe how these experiences led to your alignment with your crew.
 
-#### **4\. Assign 7 Action Dots**
+**4\. Assign 7 Action Dots**
 
-Assign 7 dice to your actions (no more than two dots in any single action at creation).
+Assign 7 dots to your actions (no more than two dots in any single action at creation).
 
 Action categories include:
 
-* **Insight** (study, survey, tinker, hunt)
+* Insight (Study, Survey, Tinker, Hunt)  
+* Prowess (Prowl, Skirmish, Finesse, Wreck)  
+* Resolve (Bizarre, Sway, Command, Consort)
 
-* **Prowess** (prowl, skirmish, finesse, wreck)
+**5\. Create Your Stand (or Select Hamon/Spin Technique)**
 
-* **Resolve** (bizarre, sway, command, consort)
+Whether you wield a Stand, Hamon, or Spin, your powers are defined by a set of unique abilities and your Coin stats. These govern what your Stand can do — how hard it hits, how fast it moves, how far it can reach, and how well it holds together.
 
-#### **5\. Create Your Stand (or Select Hamon/Spin Technique)**
+You may choose one, then choose an ability from the standard abilities list:
 
-*Whether you wield a Stand, Hamon, or Spin, your powers are defined by a set of unique abilities and your Coin stats. These govern what your Echo can do—how hard it hits, how fast it moves, how far it can go, and how flexible its effects are.*
+* Create 3 unique abilities, each with 1 function  
+* Create 1 unique ability with 3 functions
 
-*You may choose one, then choose an ability from the [standard abilities list]():*
+Not sure where to start? Use the Foundation Playbooks. They offer sample abilities and weapons tailored to each path.
 
-* *Create 3 unique abilities, each with 1 function*
+If you're playing:
 
-* *Create 1 unique ability with 3 functions*
-
-*Not sure where to start? Use the Foundation Playbooks. They offer sample abilities and weapons tailored to each path—whether you're harnessing sunlight, deflecting bullets with gravity, or utilizing other bizarre powers.*
-
----
-
-*If you’re playing:*
-
-* *Stand: Define your Stand’s type and consciousness level:*
-
-  * *Automatic – Acts based on a trigger, often with autonomous logic*
-
-  * *Tool-Bound – Bound to an object or medium*
-
-  * *Fighting Spirit – Humanoid, close-range or long-range combatant*
-
-  * *Phenomena – Abstract, bizarre, and surreal*
-
-  * *Shared – Split across multiple users or locations*
-
-  * *Colony – Composed of tens to hundreds of linked entities* 
-
-* *Hamon: Create 3 custom abilities or select from the Hamon Foundation Playbook. You may also choose a weapon that channels Hamon energy.*
-
-* *Spin: Create 3 custom abilities or select from the Spin Foundation Playbook. Choose a weapon or projection method—Spin often relies on medium-based precision.*
+* **Stand:** Define your Stand's type and consciousness level: Automatic, Tool-Bound, Fighting Spirit, Phenomena, Shared, or Colony.  
+* **Hamon:** Create 3 custom abilities or select from the Hamon Foundation Playbook. You may also choose a weapon that channels Hamon energy.  
+* **Spin:** Create 3 custom abilities or select from the Spin Foundation Playbook. Choose a weapon or projection method.
 
 ---
 
-### *Coin Stats*
+**Coin Stats**
 
-*Distribute 6 points across your Stand’s core attributes:*
+Distribute **6 points** across your Stand's six stats. Each point raises a stat one grade (F→D→C→B→A). You cannot take F-rank in all six stats — at least one must be D or higher.
 
-| *Stat* | *Description* |
+Your stats fall into two categories:
+
+**Stand Coin Rolls** are active dice pools. When the fiction calls for something only a Stand can do, you roll these instead of your user skills.
+
+| Stat | What it does |
 | ----- | ----- |
-| *Power* | *Raw strength of attacks and effects* |
-| *Speed* | *How fast your Echo moves or acts, effects starting position of most conflicts.* |
-| *Range* | *Operational or targeting distance* |
-| *Durability* | *How much harm it can take before breaking* |
-| *Precision* | *Accuracy and control over fine effects* |
-| *Development* | *Adaptability, flexibility, and growth* |
+| Power | Roll when your Stand applies force beyond human scale — destruction, strikes, overwhelming pressure |
+| Speed | Roll when your Stand moves, reacts, or acts faster than any human body can match |
+| Precision | Roll when your Stand performs actions requiring accuracy, fine control, or perception beyond human capability |
+| Durability | Roll when your Stand absorbs a hit before it mirrors through to you |
 
-| *Grade* | *Value* |
+**Stand Coin Passives** define your Stand's parameters. The GM reads these to determine what's possible — they don't generate dice rolls.
+
+| Stat | What it does |
 | ----- | ----- |
-| *A* | *4* |
-| *B* | *3* |
-| *C* | *2* |
-| *D* | *1* |
-| *F* | *0* |
+| Range | Operational distance of your Stand and its abilities |
+| Development | XP gain and capacity for growth |
+
+**Grade Scale:**
+
+| Grade | Dice |
+| ----- | ----- |
+| A | 4d |
+| B | 3d |
+| C | 2d |
+| D | 1d |
+| F | 0d (gated out) |
+
+For each A-grade, you gain two abilities (1 function each). You may choose from standard abilities or create unique ones. Standard Abilities are universal to all players regardless of playbook type.
+
+You may mix custom and foundation abilities freely, but you cannot mix Hamon and Spin playbooks unless granted by a relic, advancement, or GM permission.
 
 ---
 
-*For each A-grade, you gain:*
+**6\. Stress & Armor**
 
-* *Two abilities with 1 function each; you may choose between standard abilities or unique abilities ([Standard Abilities]() are universal to all players, regardless of playbook type)*
+Your character has **9 stress boxes.** Stress is spent to resist consequences, push yourself, and absorb harm.
 
----
+Track your armor separately:
 
-[*Standard Abilities*]() *reflect training, experience, or improvisational genius. They include talents like “Echo Strikes” for follow-up attacks, “Steady Barrage” for long-range barrages, and “Iron Will” for resisting bizarre trauma.*
+* **Stand Armor** — comes from your Durability grade. Checked when your Stand takes a hit to reduce the consequence by 1 level. Stands without a physical form share their Stand Armor with their user.  
+* **Regular Armor** — physical armor worn by your user. Acquired through abilities or heritage. Checked to reduce a consequence against your user by 1 level.
 
-*You may mix custom and foundation abilities freely, but you cannot mix Hamon and Spin playbooks unless granted by a relic, advancement, or GM permission.*
+**7\. Close Friend and Rival**
 
-#### **6\. Stand/Hamon/Spin Armor**
+Pick one close friend and one rival from your playbook's list to anchor your connections within the world.
 
-Track special armor abilities tied specifically to your chosen path:
+**8\. Choose Your Vice**
 
-* **Stands:** Use armor for enhanced Stand effects.
+Your vice helps manage stress but also reveals vulnerabilities. Describe the details and location of your vice purveyor. Options include: Faith, Gambling, Luxury, Obligation, Pleasure, Stupor, Weird.
 
-* **Hamon:** Use armor to absorb or redirect bizarre energies.
-
-* **Spin:** Armor may represent precision deflections or controlled rotations.
-
-#### **7\. Close Friend and Rival**
-
-Pick one close friend and one rival from your playbook’s list to anchor your connections within the world.
-
-#### **8\. Choose Your Vice**
-
-Your vice helps manage stress but also reveals vulnerabilities. Describe the details and location of your vice purveyor. Options include:
-
-* Faith
-
-* Gambling
-
-* Luxury
-
-* Obligation
-
-* Pleasure
-
-* Stupor
-
-* Weird
-
-#### **9\. Record Your Name, Alias, & Appearance**
+**9\. Record Your Name, Alias, & Appearance**
 
 Define how your character is known in the bizarre underworld. Give yourself a unique style and recognizable presence.
 
-#### **10\. XP Triggers**
+**10\. XP Triggers**
 
 Earn experience by:
 
-* Making desperate rolls.
+* Making desperate rolls  
+* Expressing your character's core nature  
+* Acting on background influences  
+* Taking notable risks
 
-* Expressing your character’s core nature.
+With 10 XP, you can raise a Coin stat one grade or take 2 action rating increases.
 
-* Acting on background influences.
-
-* Taking notable risks.
-
-With 10 xp, you can go up a Coin Grade *or* take 2 action rating increases\!
-
-#### **11\. Loadout**
+**11\. Loadout**
 
 Decide your load for each operation:
 
-* **1-3 Load (Light)**: Blend in with normal civilians.
-
-* **4-5 Load (Normal)**: Clearly ready for trouble.
-
-* **6 Load (Heavy)**: Slow-moving and visibly armed.
-
-* **7-9 Load (Encumbered)**: Severely hindered, very noticeable.
+* 1–3 Load (Light): Blend in with normal civilians  
+* 4–5 Load (Normal): Clearly ready for trouble  
+* 6 Load (Heavy): Slow-moving and visibly armed  
+* 7–9 Load (Encumbered): Severely hindered, very noticeable
 
 You have access to all your equipment options, choosing specific gear as needed during operations.
 
-### **Final Advice**
+---
 
-Remember, 1(800)Bizarre is about embracing your character’s evolution and confronting bizarre and powerful adversaries. Every choice shapes your legend and your inevitable clash with destiny itself.
+**Final Advice**
+
+1(800)Bizarre is about embracing your character's evolution and confronting bizarre and powerful adversaries. Every choice shapes your legend.
 
 # 👺 Stand Playbook & Example Builds
 
 ## **Stand Playbook Examples**
 
-In *1(800)Bizarre*, a Stand’s form informs how it behaves, not what it can do. These five examples—Colony, Tool-Bound, Automatic, Fighting Spirit, and Phenomena—demonstrate how Coin stats shape narrative power and tactical options. They're not classes or restrictions. They’re example builds: launch pads for your imagination. At the start of the game, choose 3 abilities. Each A-rank in Coin stats unlocks two more abilities (from custom, playbook, or standard ability list). Some abilities may require a certain amount of A’s before being allocated. 
+In *1(800)Bizarre*, a Stand’s form informs how it behaves, not what it can do. These six examples—Colony, Tool-Bound, Automatic, Fighting Spirit, and Phenomena—demonstrate how Coin stats shape narrative power and tactical options. They're not classes or restrictions. They’re example builds: launch pads for your imagination. At the start of the game, choose 3 abilities. Each A-rank in Coin stats unlocks two more abilities (from custom, playbook, or standard ability list). Some abilities may require a certain amount of A’s before being allocated. 
 
 Each includes:
 
@@ -2040,7 +2018,7 @@ A swarm of three intelligent birds—each with a unique function. As they fall, 
 
 * Cascade Effect – The swarm’s reactive nature fits well with counter-punishment.
 
-* Reflexes – A must for keeping up when managing three simultaneous moves.
+* Automatic Trigger \- each bird can be loaded with a conditional response, fits the autonomous swarm logic.
 
 ---
 
@@ -2072,7 +2050,7 @@ A skeleton that hunts hostile heat signatures and leaves corrosive ink behind. I
 
 * Saboteur – Perfect synergy with the ink hazard lingering after actions.
 
-* Autonomous Detonation – A thematic match; could represent the ink triggering a delayed blast.
+* Automatic Trigger – Paint hunts on conditional logic, this is its mechanical home. 
 
 * Superhero Landing – When Paint explodes beneath you, recover with flare.
 
@@ -2104,11 +2082,9 @@ A hot rod engine bound to your soul. Whenever you touch machinery, you superchar
 
 **Recommended Standard Abilities:**
 
-* Trap Sequence – Stack this with *Autokill* for paranoid, preloaded lethality.
-
-* Echo Strikes – Makes your tool-shocks feel fast and reactive.
-
-* Bizarre Ward – A mechanic-tuned Wreck can become a supernatural reinforcement.
+* Channel Force \- redirecting supernatural force through machinery is exactly what this stand does  
+* **Steady Barrage \- supercharged rapid attacks fir the hot rod theme**  
+* **Saboteur \- quiet, hidden mechanical damage fis a stand that burns things out from the inside.** 
 
 ---
 
@@ -2172,7 +2148,7 @@ Your Stand is a shared hallucination—a child’s recurring nightmare with meta
 
 **Recommended Standard Abilities:**
 
-* Undo Truth – Fiction-bending logic pairs naturally with this dream-state Stand.
+* Mesmeriser \- a hallucination stand making targets forget what happened is dead-on thematic
 
 * Bizarre Improvisation – This is your default mode. Make it unpredictable.
 
@@ -2208,7 +2184,7 @@ Your stand is capable of regenerating your limbs, organs, and any of your organi
 
 * **Cascade Effect:** If you roll a 6 from your resistance roll to resist a physical or bizarre consequence, the attacker suffers a mirrored backlash.
 
-* **Bizarre Step:** Push (2 stress) to instantly reposition within your stand’s range. Nearby observers must resist or lose track of you.
+* **Tough as Nails \- harm penalties are reduced, which fits a regeneration tank**
 
 * **The Devil’s Footsteps:** When you **push yourself**, choose one of the following additional benefits:
 
@@ -2766,9 +2742,8 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 * **Iron Will:** You're immune to the terror that some bizarre entities inflict on sight. Take **\+1d** to resistance rolls with **Resolve**.  
 * **Tough as Nails:** Penalties from harm are one level less severe (though level 4 harm is still fatal)  
 * **Overdrive:** While wearing non-Stand armor, gain an extra **\+1 armor**.  
-* **Masochist:** When your Stand takes harm, reduce the user's damage by 1 level. If the Stand hits Level 4 harm, both die.  
-* **Undying Will:** When taking Level 3 harm, you can act normally for one round. Afterwards, actions cost **2 stress**.  
-* **Rule of Cool:** Once per score, when you do something genuinely dramatic or stylish, clear 2 stress.
+* **Masochist:** When your Stand takes harm, reduce the user's damage by 1 level. If the Stand hits Level 4 harm with no way to reduce, both die.  
+* **Undying Will:** When taking Level 3 harm, you can act normally for one round. Afterwards, actions cost **2 stress**.
 
 **Cunning**
 
@@ -2840,19 +2815,14 @@ Check out [Tips & Techniques videos here](https://youtube.com/playlist?list=PLQQ
 
 This kit includes:
 
-* Basic procedures of Blades in the Dark  
+* Basic procedures  
 * Character and crew creation  
 * Factions  
-* A map of the city and the Shattered Isles  
 * Rules reference sheets.
 
-Download [Player's Kit here](https://bladesinthedark.com/sites/default/files/blades_playerkit_v8_2.pdf)
+Download Player's Kit here
 
-### **Characters**
-
-Torquero  
-Luminary   
-[Blank Character Sheet](https://bladesinthedark.com/sites/default/files/sheets/blades_sheets_v8_2_Blank_Character_Sheet.pdf)
+### **Characters** [Blank Character Sheet](https://bladesinthedark.com/sites/default/files/sheets/blades_sheets_v8_2_Blank_Character_Sheet.pdf)
 
 ### **Crews** [Blank Crew Sheet](https://bladesinthedark.com/sites/default/files/sheets/blades_sheets_v8_2_Blank_Crew_Sheet.pdf)
 
@@ -2865,143 +2835,6 @@ Luminary
 **FOR GM EYES**
 
 We’re happy you decided to GM\! This cheat sheet is for your eyes only, and will help you with planning, organizing, and running a 1(800)Bizarre game\!
-
-# Da Bay sicks
-
-### **The Basics**
-
-**Every character sheet lists three personal XP triggers.**  
- Hit any trigger → mark 1 XP (2 XP if it happened several times).  
- **At 10 XP you level up:** either
-
-* raise one Stand Coin stat **one grade** (if this hits **A**, you also unlock a free Standard Ability), **or**
-
-* gain **\+2 Action dots** (split as you like, obeying the normal per-action cap).
-
----
-
-#### **Fiction → Position / Effect → Roll → Fallout.**
-
-* The dice never decide **what** you attempt—only **how** it turns out.
-
-* Stress fuels greatness *and* drags you toward collapse.
-
-* Stuck? Advance a clock and ask, “What do you do next?”
-
----
-
-### **Core System**
-
-Roll **d6s \= Action dots** \+ bonus dice (push, assist, bargain, gear).  
- 6 \= success · 4-5 \= success **with** consequence · 1-3 \= failure · Two 6s \= **Critical** (+1 Effect).
-
----
-
-### **Actions & Attributes**
-
-| Attribute | Actions | Sample moves |
-| ----- | ----- | ----- |
-| **Insight** | Hunt · Study · Survey · Tinker | track prey, research, craft |
-| **Prowess** | Prowl · Skirmish · Finesse · Wreck | sneak, brawl, pick pockets, blow doors |
-| **Resolve** | Bizarre · Sway · Command · Consort | sense Stands, persuade, rally, connect |
-
-Start with **7 dots**, max 2 per action.
-
----
-
-### **Stress & Trauma**
-
-Push (+1d or \+1 Effect) → 2 Stress   ·  Assist → 1 Stress   ·  Resist → roll attribute; pay **6 – highest die** Stress (min 1).  
- Fill the bar, take a **Trauma** and clear Stress. Four Traumas \= retirement or doom.
-
----
-
-### **Progress Clocks**
-
-Draw a 4/6/8-segment circle for any rising threat or goal.  
- Success ticks wedges; the GM can tick danger clocks on failures or time jumps.
-
----
-
-### **Action Roll (full loop)**
-
-1 Intent & Action · 2 Group?—leader takes 1 Stress per 1-3 rolled · 3 Set Position & Effect · 4 Roll · 5 Apply consequences; player may **Resist** or spend **Armor** · 6 If **Desperate**, mark \+1 XP in that attribute.
-
----
-
-### **Effect**
-
-Great \= two ticks on a 4-clock · Standard \= expected · Limited \= partial.
-
----
-
-### **Setting Position & Effect**
-
-| Position | Feel | Max consequence |
-| ----- | ----- | ----- |
-| Controlled | Advantage | Level-1 harm / small clock |
-| Risky (default) | Tense | Level-2 harm / big clock |
-| Desperate | Life-or-limb | Level-3 harm / must use 2 stress to act |
-
-**Tier check:** Up-tier vs. target? player bumps Position *or* Effect; down-tier? GM drops one.
-
----
-
-### **Consequences & Harm**
-
-Worse Position · Reduced Effect · Complication / clock tick · Harm (Lv 1-4).  
- Penalties: Lv 2 \= \-1d · Lv 3 \= need help · Lv 4 \= fatal (unless resisted).
-
----
-
-### **Resistance & Armor**
-
-Roll attribute → Stress cost 6 – highest die (0 on crit).  
- Durability S/A can downgrade harm **two** levels at once.  
- Spend one **Armor** charge to blunt harm by one level; refresh at downtime or scene end.
-
----
-
-### **Fortune Roll**
-
-Unopposed uncertainty: roll 1-4 dice. 1-3 bad · 4-5 mixed · 6 good.
-
----
-
-### **Gathering Information**
-
-Controlled / Standard by default; Effect \= clarity; failure may add Wanted Stars or clocks.
-
----
-
-### **Coins & Stash**
-
-**Coin** \= liquid cash. **Stash** \= retirement fund (10 Coin ⇒ 1 Stash tier).
-
----
-
-### **The Faction Game**
-
-Crew tracks Tier, Hold, Rep, Wanted Stars, Rep \+ Coin raises Tier; Star Triggers drive Wanted stars and Entanglements. Faction clocks tick toward alliance or war.
-
----
-
-### **Advancement**
-
-| Earn XP | Mark |
-| ----- | ----- |
-| Each **Desperate** roll | \+1 XP in that attribute |
-| End-session triggers (Stand challenge · beliefs/heritage · vice/trauma) | \+1 XP each ( \+2 if frequent ) |
-
-| Spend XP | Cost |
-| ----- | ----- |
-| Level-up (choose one) → • \+1 Stand-Coin grade • **or** \+2 Action dots | **10 XP** |
-| New Standard or Unique Ability (if Coin stat just hit **A**, one ability is *free*) | included in level-up |
-| \+1 Action dot (outside a level-up) | 5 XP |
-
-**Development** S/A/B Stands auto-gain \+5/+4/+3 XP per session.
-
-*Memorise these beats, throw on a soundtrack, and scream “ORA\!” when the dice hit the table.*
 
 [image1]: <data:image/png;base64,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>
 
