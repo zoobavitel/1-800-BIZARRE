@@ -31,7 +31,7 @@ const HERO_PILLS = [
     label: "Stand",
     className: "pill-stand",
     description:
-      "Stand users manifest a fighting spirit as its own being with bizarre rules. You roll parallel Stand-coin dice on Power, Speed, and Precision.",
+      "Stand users manifest a fighting spirit as its own being with bizarre rules. You roll parallel Stand-coin dice on Power, Speed, Precision, and Durability.",
   },
   {
     key: "hamon",
