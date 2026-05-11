@@ -31,7 +31,7 @@ const HERO_PILLS = [
     label: "Stand",
     className: "pill-stand",
     description:
-      "Stand users manifest a fighting spirit as its own being with bizarre rules. When the table agrees the fiction needs it, you roll parallel Stand-coin dice on Power, Speed, and Precision.",
+      "Stand users manifest a fighting spirit as its own being with bizarre rules. You roll parallel Stand-coin dice on Power, Speed, and Precision.",
   },
   {
     key: "hamon",
@@ -418,8 +418,7 @@ const HomePage = ({
       <section className="hero">
         <div className="hero-inner">
           <div className="hero-text">
-            <div className="vhs-badge fade-up d1">A Bizarre Adventure TTRPG</div>
-            <div className="hero-headline-group fade-up d2">
+            <div className="hero-headline-group fade-up d1">
               <h1 className="hero-title">
                 <span className="hero-title-stand">STAND</span>
                 <br />

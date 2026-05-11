@@ -367,9 +367,9 @@
 .home-poc .home-stand-coin-readout-hint {
   font-family: var(--font-heading);
   font-size: 11px;
-  font-weight: 400;
+  font-weight: 500;
   line-height: 1.45;
-  color: var(--light-text-3);
+  color: var(--light-text-2);
   max-width: 220px;
 }
 .home-poc .home-stand-coin-svg {
@@ -386,19 +386,6 @@
 .home-poc .home-stand-coin-svg path[role="button"]:focus-visible {
   outline: 2px solid var(--p1);
   outline-offset: 2px;
-}
-.home-poc .vhs-badge {
-  display: inline-block;
-  margin-bottom: 12px;
-  font-family: var(--font-heading);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--p1);
-}
-.home-poc .vhs-badge::before {
-  content: none;
 }
 .home-poc .hero-headline-group {
   display: flex;
