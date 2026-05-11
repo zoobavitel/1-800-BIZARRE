@@ -8,6 +8,12 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Maintenance",
+        "items": [
+          "regenerate patch notes from git log"
+        ]
+      },
+      {
         "title": "Added",
         "items": [
           "stand coin sync, session XP pool, collapsible GM rosters"
@@ -587,8 +593,7 @@ export const PATCH_NOTES = [
           "migrate",
           "Merge pull request #30 from zoobavitel/copilot/fix-characters-visibility-and-delete-npcs",
           "Merge pull request #29 from zoobavitel/copilot/add-crew-name-and-characteristics-again",
-          "Merge pull request #28 from zoobavitel/copilot/add-delete-npc-button",
-          "Merge pull request #27 from zoobavitel/copilot/fix-player-character-trauma-saving"
+          "Merge pull request #28 from zoobavitel/copilot/add-delete-npc-button"
         ]
       },
       {
