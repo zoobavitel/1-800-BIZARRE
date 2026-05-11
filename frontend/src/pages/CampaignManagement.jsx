@@ -2668,6 +2668,56 @@ function campaignActiveSessionId(campaign) {
   return Number.isFinite(n) ? n : null;
 }
 
+/** `YYYY-MM-DD` vs local calendar start-of-today. */
+function calendarDateStartsBeforeToday(isoDate) {
+  if (!isoDate) return false;
+  const p = String(isoDate).trim().split("-");
+  if (p.length < 3) return false;
+  const y = Number(p[0]);
+  const m = Number(p[1]);
+  const d = Number(p[2]);
+  if (![y, m, d].every((n) => Number.isFinite(n))) return false;
+  const anchor = new Date(y, m - 1, d);
+  const startToday = new Date();
+  startToday.setHours(0, 0, 0, 0);
+  return anchor < startToday;
+}
+
+/** Second clause under session title (`date · [this]`). */
+function sessionListStatusCaption(session, campaignActiveSessionId) {
+  const sid = Number(session?.id);
+  const raw = String(session?.status ?? "PLANNED").trim().toUpperCase();
+
+  const aidParsed = Number(campaignActiveSessionId);
+  const aid =
+    campaignActiveSessionId != null && Number.isFinite(aidParsed)
+      ? aidParsed
+      : null;
+
+  const isCampaignLiveSlot =
+    aid !== null && Number.isFinite(sid) && sid === aid;
+
+  if (raw === "COMPLETED") return "Ended";
+
+  if (isCampaignLiveSlot) return "Active";
+
+  const anotherLive = aid !== null && Number.isFinite(sid) && sid !== aid;
+
+  if (anotherLive) {
+    if (raw === "ACTIVE") return "Not active";
+    if (raw === "PLANNED") {
+      if (calendarDateStartsBeforeToday(session?.proposed_date))
+        return "Past · not active";
+      // Still PLANNED but another episode is Live — distinguish real upcoming vs stale row.
+      return session?.proposed_date ? "Planned" : "Not active";
+    }
+  }
+
+  if (raw === "PLANNED") return "Planned";
+  if (raw === "ACTIVE") return "Active";
+  return raw;
+}
+
 // ---------------------------------------------------------------------------
 // Sessions list + create + records modal (embedded in CampaignDetail)
 // ---------------------------------------------------------------------------
@@ -2842,7 +2892,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                       {s.proposed_date
                         ? ` · Planned ${new Date(`${s.proposed_date}T12:00:00`).toLocaleDateString()}`
                         : ""}{" "}
-                      · {s.status || "PLANNED"}
+                      · {sessionListStatusCaption(s, activeId)}
                     </div>
                   </div>
                   <div
@@ -3658,11 +3708,18 @@ function GoalsEditor({ sessionData, onSave }) {
 // ---------------------------------------------------------------------------
 // Main Component
 // ---------------------------------------------------------------------------
+/**
+ * QA: reload on `#campaigns/:campaignId/session/:sessionId` keeps SessionDetail;
+ * Back to Campaign → `#campaigns/:campaignId`; bare `#campaigns` / `#campaigns/:id`
+ * unchanged; NPC return still restores session + hash catches up via sync call.
+ */
 export default function CampaignManagement({
   initialCampaignId = null,
   initialFactionId = null,
+  initialSessionId = null,
   onNavigateToCharacter,
   onNavigateToNPC,
+  onCampaignRouteSync,
   onCampaignSelect,
 }) {
   const { user } = useAuth();
@@ -3676,6 +3733,16 @@ export default function CampaignManagement({
     useState(initialCampaignId);
   const [sessionView, setSessionView] = useState(null); // null | 'detail'
   const [selectedSession, setSelectedSession] = useState(null);
+
+  const campaignRouteSyncRef = useRef(onCampaignRouteSync);
+  campaignRouteSyncRef.current = onCampaignRouteSync;
+
+  const sessionBelongsToCampaign = useCallback((sessionRow, campaignId) => {
+    if (sessionRow == null || campaignId == null) return false;
+    const sc =
+      sessionRow.campaign?.id ?? sessionRow.campaign ?? campaignId ?? null;
+    return Number(sc) === Number(campaignId);
+  }, []);
 
   const loadCampaigns = useCallback(async () => {
     setLoading(true);
@@ -3744,15 +3811,23 @@ export default function CampaignManagement({
         (s) => Number(s?.id) === sessionId,
       );
       if (!cancelled && embedded) {
+        if (!sessionBelongsToCampaign(embedded, selectedCampaignId)) return;
         setSelectedSession(embedded);
         setSessionView("detail");
+        campaignRouteSyncRef.current?.({ sessionId });
         return;
       }
       try {
         const fetched = await sessionAPI.getSession(sessionId);
-        if (!cancelled && fetched?.id && Number(fetched.id) === sessionId) {
+        const ok =
+          !cancelled &&
+          fetched?.id &&
+          Number(fetched.id) === sessionId &&
+          sessionBelongsToCampaign(fetched, selectedCampaignId);
+        if (ok) {
           setSelectedSession(fetched);
           setSessionView("detail");
+          campaignRouteSyncRef.current?.({ sessionId });
         }
       } catch {
         // Ignore: landing on campaign detail is safer than forcing bad session state.
@@ -3763,7 +3838,67 @@ export default function CampaignManagement({
     return () => {
       cancelled = true;
     };
-  }, [campaigns, selectedCampaignId]);
+  }, [campaigns, selectedCampaignId, sessionBelongsToCampaign]);
+
+  useEffect(() => {
+    const want =
+      initialSessionId != null && Number.isFinite(Number(initialSessionId))
+        ? Number(initialSessionId)
+        : null;
+
+    if (want == null) {
+      setSessionView(null);
+      setSelectedSession(null);
+      return;
+    }
+
+    if (selectedCampaignId == null) return;
+
+    let cancelled = false;
+    const sync = campaignRouteSyncRef.current;
+
+    const run = async () => {
+      const camp = campaigns.find((c) => c.id === selectedCampaignId);
+      const embedded = (camp?.sessions || []).find(
+        (s) => Number(s?.id) === want,
+      );
+      if (embedded) {
+        if (!sessionBelongsToCampaign(embedded, selectedCampaignId)) {
+          if (!cancelled) sync?.({ sessionId: null });
+          return;
+        }
+        if (!cancelled) {
+          setSelectedSession(embedded);
+          setSessionView("detail");
+        }
+        return;
+      }
+      try {
+        const fetched = await sessionAPI.getSession(want);
+        const ok =
+          fetched?.id &&
+          Number(fetched.id) === want &&
+          sessionBelongsToCampaign(fetched, selectedCampaignId);
+        if (!cancelled && ok) {
+          setSelectedSession(fetched);
+          setSessionView("detail");
+        } else if (!cancelled) {
+          sync?.({ sessionId: null });
+        }
+      } catch {
+        if (!cancelled) sync?.({ sessionId: null });
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    initialSessionId,
+    selectedCampaignId,
+    campaigns,
+    sessionBelongsToCampaign,
+  ]);
 
   const startCreate = () => {
     setEditing("new");
@@ -3831,6 +3966,7 @@ export default function CampaignManagement({
             onBack={() => {
               setSessionView(null);
               setSelectedSession(null);
+              campaignRouteSyncRef.current?.({ sessionId: null });
             }}
             onRefresh={refreshSelected}
             onNavigateToCharacter={onNavigateToCharacter}
@@ -3867,6 +4003,9 @@ export default function CampaignManagement({
             onOpenSession={(session) => {
               setSelectedSession(session);
               setSessionView("detail");
+              if (session?.id != null) {
+                campaignRouteSyncRef.current?.({ sessionId: session.id });
+              }
             }}
             onNavigateToCharacter={onNavigateToCharacter}
             onNavigateToNPC={onNavigateToNPC}

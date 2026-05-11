@@ -7,7 +7,7 @@ import React, {
   useState,
 } from "react";
 
-/** Same layout / SRD wedge order as HomeStandCoin (top = Power, then clockwise). */
+/** Six-axis playable chart (legacy sheet layout). Hero HomeStandCoin uses SRD_DEV 3-roll radar + durability dice strip. */
 const CX = 100;
 const CY = 100;
 const R_OUTER = 92;

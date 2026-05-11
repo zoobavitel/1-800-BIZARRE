@@ -14,6 +14,9 @@ import {
   STAND_COIN_CREATION_POINT_SUM,
   PC_STAT_DESC,
   STAND_STAT_KEYS,
+  STAND_ROLL_KEYS_ACTIVE,
+  STAND_COLUMN_ROLL_ORDER,
+  STAND_PASSIVE_KEYS,
   DUR_TABLE,
   DEV_SESSION_XP,
   ACTION_ATTR,
@@ -50,6 +53,7 @@ import {
 } from "../components/position-effect/PositionEffectIndicators";
 import {
   computeActionPoolBreakdown,
+  computeStandRollPool,
   INSIGHT_ACTIONS,
   PROWESS_ACTIONS,
   RESOLVE_ACTIONS,
@@ -68,6 +72,13 @@ import {
   characterHasPhantomPain,
   characterHasRippleBreathing,
 } from "../features/character-sheet/utils/abilityRollBonusMeta";
+import {
+  alienUnderstandingHeritagePenaltyApplies,
+  heritageBenefitIsReflexOverclock,
+  heritageEntryIsAlienUnderstanding,
+  reflexOverclockHeritageBonusApplies,
+} from "../features/character-sheet/utils/heritageRollBonusMeta";
+import { derivePartyFacingSessionNpc } from "../features/character-sheet/utils/sessionNpcPartyFace";
 import { getResistanceResultSheetAbilityReminders } from "../features/character-sheet/utils/sheetAbilityResistanceReminders";
 
 /** Same ordering as Insight / Prowess / Resolve columns on the sheet. */
@@ -77,6 +88,9 @@ const SHEET_STANDARD_ACTION_COLUMNS = [
   ...RESOLVE_ACTIONS,
 ];
 const HEALING_ACTION_CHOICES = [...SHEET_STANDARD_ACTION_COLUMNS];
+
+/** Extra heal-other/teammate treatment pool choices for Stand playbook (Stand Coin stats). */
+const STAND_HEAL_ACTION_EXTRA_CHOICES = ["PRECISION", "SPEED"];
 
 const CREW_HISTORY_FIELD_KEYS = new Set([
   "name",
@@ -692,7 +706,11 @@ function hasMeaningfulDraftChanges(payload) {
   return false;
 }
 
-/** Healing-clock self-recover rolls: must match ACTION_ATTR; invalid → Tinker. */
+/**
+ * Healing-clock self-recover rolls: playbook action dots only (HUNT…SWAY).
+ * Stand Precision/Speed/etc. belong only when table fiction or an ability/item
+ * says so—we do not expose generic Stand Coin stats as recover actions here.
+ */
 function pickHealClockAction(candidate) {
   const keys = Object.keys(ACTION_ATTR || {});
   const u = String(candidate || "TINKER").trim().toUpperCase();
@@ -829,6 +847,11 @@ const CharacterSheetWrapper = ({
       : "Created by unknown";
   const canEditSheet = !character?.id || isGM || character?.user_id === user?.id;
   const canCreateManualHistoryRecord = isGM || character?.user_id === user?.id;
+  const isCharacterOwner = Boolean(
+    character?.user_id != null &&
+      user?.id != null &&
+      String(character.user_id) === String(user.id),
+  );
   const [activeMode, setActiveMode] = useState("CHARACTER MODE");
   const campaignIdFromCharacter = (() => {
     const c = character?.campaign;
@@ -853,6 +876,23 @@ const CharacterSheetWrapper = ({
     const row = m[String(characterId)] ?? m[characterId];
     return row && typeof row === "object" ? row : null;
   }, [charCampaign?.active_session_detail, characterId]);
+
+  /** GM campaign payloads include full NPC stats; mirror player visibility on the sheet. */
+  const sessionNpcsPartyFacingDisplay = useMemo(() => {
+    const raw =
+      charCampaign?.active_session_detail?.session_npcs_with_clocks || [];
+    return raw
+      .map((npc) => derivePartyFacingSessionNpc(npc))
+      .filter((x) => x.showCard)
+      .map((x) => x.display);
+  }, [charCampaign?.active_session_detail?.session_npcs_with_clocks]);
+
+  /** All session-involved NPCs (id + name); not gated by player clock visibility — for NPC heal fortune picker. */
+  const sessionNpcHealRoster = useMemo(() => {
+    const roster =
+      charCampaign?.active_session_detail?.session_npc_heal_roster || [];
+    return Array.isArray(roster) ? roster : [];
+  }, [charCampaign?.active_session_detail?.session_npc_heal_roster]);
 
   const maxStandGradeIndex =
     character?.gm_can_have_s_rank_stand_stats === true ? 5 : 4;
@@ -884,6 +924,10 @@ const CharacterSheetWrapper = ({
     crewId: initialCrew.crewId,
     fed_today:
       typeof character?.fed_today === "boolean" ? character.fed_today : null,
+    disguised_as_human:
+      typeof character?.disguised_as_human === "boolean"
+        ? character.disguised_as_human
+        : null,
   });
 
   // Campaign assignment (normalize: backend may send campaign as object or ID)
@@ -1100,6 +1144,16 @@ const CharacterSheetWrapper = ({
     );
   }, [character?.id, character?.fed_today]);
 
+  useEffect(() => {
+    const v =
+      typeof character?.disguised_as_human === "boolean"
+        ? character.disguised_as_human
+        : null;
+    setCharData((prev) =>
+      prev.disguised_as_human !== v ? { ...prev, disguised_as_human: v } : prev,
+    );
+  }, [character?.id, character?.disguised_as_human]);
+
   // When parent merges id before full GET/list row arrives, fill empty identity from server (avoid PUT wiping true_name, etc.)
   useEffect(() => {
     setCharData((prev) => {
@@ -1291,6 +1345,16 @@ const CharacterSheetWrapper = ({
   const [healingRecoverBusy, setHealingRecoverBusy] = useState(false);
   const [healingRecoverErr, setHealingRecoverErr] = useState(null);
   const [healingRecoverMsg, setHealingRecoverMsg] = useState("");
+  /** Session NPC treats you (or an ally): fortune pool + optional personal coin (owner-only roll per API). */
+  const [npcHealFortuneBusy, setNpcHealFortuneBusy] = useState(false);
+  const [npcHealFortuneErr, setNpcHealFortuneErr] = useState(null);
+  const [npcHealFortuneMsg, setNpcHealFortuneMsg] = useState("");
+  const [npcHealHealerId, setNpcHealHealerId] = useState("");
+  const [npcHealBaseDice, setNpcHealBaseDice] = useState(2);
+  const [npcHealCoinSpend, setNpcHealCoinSpend] = useState(0);
+  const [npcHealPatientMode, setNpcHealPatientMode] = useState("self");
+  const [npcHealPatientPcId, setNpcHealPatientPcId] = useState("");
+  const [npcHealPatientNpcId, setNpcHealPatientNpcId] = useState("");
   /** Action rating used for downtime + mid-action healing-clock recover (default Tinker); per-character localStorage. */
   const [selfHealingRecoverAction, setSelfHealingRecoverAction] =
     useState("TINKER");
@@ -1385,6 +1449,50 @@ const CharacterSheetWrapper = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- hydrate coin/stash only on id change (see comment above)
   }, [character?.id]);
+
+  useEffect(() => {
+    setNpcHealFortuneErr(null);
+    setNpcHealFortuneMsg("");
+    setNpcHealPatientMode("self");
+    setNpcHealPatientPcId("");
+    setNpcHealPatientNpcId("");
+    setNpcHealCoinSpend(0);
+  }, [character?.id]);
+
+  useEffect(() => {
+    if (!sessionNpcHealRoster.length) {
+      setNpcHealHealerId("");
+      return;
+    }
+    setNpcHealHealerId((prev) => {
+      const ok = sessionNpcHealRoster.some(
+        (n) => String(n.id) === String(prev),
+      );
+      if (ok) return String(prev);
+      return String(sessionNpcHealRoster[0].id);
+    });
+  }, [sessionNpcHealRoster]);
+
+  /** Default base fortune dice from the selected session healer's NPC sheet Quality tier (1–4d). */
+  useEffect(() => {
+    if (!npcHealHealerId || !sessionNpcHealRoster.length) return;
+    const row = sessionNpcHealRoster.find(
+      (n) => String(n.id) === String(npcHealHealerId),
+    );
+    const hq = Number(row?.heal_quality_fortune_dice);
+    if (Number.isFinite(hq) && hq >= 1 && hq <= 4) {
+      setNpcHealBaseDice(hq);
+    }
+  }, [npcHealHealerId, sessionNpcHealRoster]);
+
+  useEffect(() => {
+    const base = Math.max(
+      1,
+      Math.min(6, Math.floor(Number(npcHealBaseDice)) || 2),
+    );
+    const maxSpend = Math.min(3, coinFilled, Math.max(0, 6 - base));
+    setNpcHealCoinSpend((s) => (s > maxSpend ? maxSpend : s));
+  }, [npcHealBaseDice, coinFilled]);
 
   // Heritage benefits and detriments (arrays of IDs)
   const [selectedBenefits, setSelectedBenefits] = useState(
@@ -1576,6 +1684,41 @@ const CharacterSheetWrapper = ({
         /without feeding/i.test(String(a.name || "")),
     );
   }, [heritageAutoAbilities]);
+
+  const hasAlienUnderstandingDetriment = useMemo(() => {
+    const hid = charData?.heritage;
+    const h =
+      hid != null && Array.isArray(heritages) && heritages.length
+        ? heritages.find((x) => x.id === hid)
+        : null;
+    const d = (h?.detriments || []).find((x) => heritageEntryIsAlienUnderstanding(x));
+    if (!d) return false;
+    return (
+      Boolean(d.required) ||
+      (Array.isArray(selectedDetriments) && selectedDetriments.includes(d.id))
+    );
+  }, [charData?.heritage, heritages, selectedDetriments]);
+
+  const alienUnderstandingDetrimentId = useMemo(() => {
+    const hid = charData?.heritage;
+    const h =
+      hid != null && Array.isArray(heritages) && heritages.length
+        ? heritages.find((x) => x.id === hid)
+        : null;
+    const d = (h?.detriments || []).find((x) => heritageEntryIsAlienUnderstanding(x));
+    return d?.id ?? null;
+  }, [charData?.heritage, heritages]);
+
+  useEffect(() => {
+    if (charData.disguised_as_human !== true) return;
+    const aid = alienUnderstandingDetrimentId;
+    if (aid == null) return;
+    setHeritageRollBoost((prev) => {
+      const k = String(aid);
+      if (!prev[k]?.dice) return prev;
+      return { ...prev, [k]: { ...prev[k], dice: false } };
+    });
+  }, [charData.disguised_as_human, alienUnderstandingDetrimentId]);
 
   // Sync playbook label when character changes (API uses STAND/HAMON/SPIN; sheet uses Stand/Hamon/Spin)
   useEffect(() => {
@@ -1948,7 +2091,8 @@ const CharacterSheetWrapper = ({
 
   const durVal = Math.min(5, Math.max(0, Number(standStats.durability) || 1));
   const devVal = Math.min(5, Math.max(0, Number(standStats.development) || 1));
-  const maxStress = 9 + (DUR_TABLE[durVal]?.stressBonus ?? 0);
+  /** SRD_DEV: stress track fixed at 9; Stand Durability only affects armor (+ resist tiers). */
+  const maxStress = 9;
   const applyStressCost = useCallback(
     (cost) => {
       const spend = Number(cost) || 0;
@@ -1996,6 +2140,8 @@ const CharacterSheetWrapper = ({
   );
   const isSpinPlaybook = playbook === "Spin";
   const isHamonPlaybook = playbook === "Hamon";
+  /** Stand playbook only: Durability + Power/Precision/Speed column (Hamon/Spin use core actions only). */
+  const showStandCoinActionColumn = playbook === "Stand";
   const totalXP = Object.values(xp).reduce((s, v) => s + v, 0);
   const maxXpOnAnyTrack = useMemo(
     () =>
@@ -2214,6 +2360,8 @@ const CharacterSheetWrapper = ({
   const [phantomPainThroughCover, setPhantomPainThroughCover] = useState(false);
   /** Ripple Breathing: waive push stress (2) once per active session episode. */
   const [rippleBreathingFreePush, setRippleBreathingFreePush] = useState(false);
+  /** Pending crew-assist (+1d): teammate already spent stress; include on Roll unless unchecked. */
+  const [includePendingAssistDie, setIncludePendingAssistDie] = useState(true);
   const [resistanceAbilityBoost, setResistanceAbilityBoost] = useState({});
   const [resistancePushDice, setResistancePushDice] = useState(false);
   const [resistanceMitigationChoice, setResistanceMitigationChoice] = useState("");
@@ -2243,6 +2391,8 @@ const CharacterSheetWrapper = ({
     effect: "standard",
     resistanceHarmTarget: "",
     viceOverindulge: "",
+    fortunePublicLabel: "",
+    fortuneRevealPlayers: true,
     pushDice: false,
     pushEffect: false,
     devil: false,
@@ -2776,6 +2926,89 @@ const CharacterSheetWrapper = ({
     ],
   );
 
+  const performNpcHealFortuneRoll = useCallback(async () => {
+    if (!isCharacterOwner || !canEditSheet) return;
+    if (!characterId || !activeSessionId) return;
+    if (npcHealFortuneBusy) return;
+    const hid = Number(npcHealHealerId);
+    if (!Number.isFinite(hid) || hid <= 0) {
+      setNpcHealFortuneErr("Pick a session NPC healer.");
+      return;
+    }
+    const base = Math.max(
+      1,
+      Math.min(6, Math.floor(Number(npcHealBaseDice)) || 2),
+    );
+    const maxSpend = Math.min(3, coinFilled, Math.max(0, 6 - base));
+    const spend = Math.max(
+      0,
+      Math.min(maxSpend, Math.floor(Number(npcHealCoinSpend)) || 0),
+    );
+
+    setNpcHealFortuneBusy(true);
+    setNpcHealFortuneErr(null);
+    setNpcHealFortuneMsg("");
+
+    try {
+      const payload = {
+        roll_type: "FORTUNE",
+        session_id: activeSessionId,
+        dice_pool: base,
+        npc_heal_fortune: true,
+        npc_healer_npc_id: hid,
+        npc_heal_fortune_coin: spend,
+        action: "fortune",
+      };
+      if (npcHealPatientMode === "pc" && npcHealPatientPcId) {
+        const pid = Number(npcHealPatientPcId);
+        if (Number.isFinite(pid) && pid > 0) {
+          payload.npc_heal_patient_character_id = pid;
+        }
+      } else if (npcHealPatientMode === "npc" && npcHealPatientNpcId) {
+        const nid = Number(npcHealPatientNpcId);
+        if (Number.isFinite(nid) && nid > 0) {
+          payload.npc_heal_patient_npc_id = nid;
+        }
+      }
+      const res = await characterAPI.rollAction(characterId, payload);
+      if (typeof res?.coin === "number" && Number.isFinite(res.coin)) {
+        setCoinFilled((prev) => {
+          const next = Math.max(0, Math.min(4, Math.floor(res.coin)));
+          return next !== prev ? next : prev;
+        });
+      }
+      const dice = Array.isArray(res?.dice_results)
+        ? res.dice_results.join(", ")
+        : "";
+      const total = Number.isFinite(Number(res?.total_dice))
+        ? Number(res.total_dice)
+        : "?";
+      setNpcHealFortuneMsg(
+        `NPC heal fortune (${total}d): [${dice}] highest ${res?.highest ?? "—"} — ${res?.outcome ?? "—"}${spend ? ` · spent ${spend} coin` : ""}`,
+      );
+      setHistoryRefreshTick((x) => x + 1);
+      onCampaignRefresh?.();
+    } catch (e) {
+      setNpcHealFortuneErr(e?.message || "NPC heal fortune failed");
+    } finally {
+      setNpcHealFortuneBusy(false);
+    }
+  }, [
+    isCharacterOwner,
+    canEditSheet,
+    characterId,
+    activeSessionId,
+    npcHealFortuneBusy,
+    npcHealHealerId,
+    npcHealBaseDice,
+    npcHealCoinSpend,
+    coinFilled,
+    npcHealPatientMode,
+    npcHealPatientPcId,
+    npcHealPatientNpcId,
+    onCampaignRefresh,
+  ]);
+
   const xpReqSnapshot = useMemo(
     () =>
       buildXpRequirementSnapshot({
@@ -3035,8 +3268,8 @@ const CharacterSheetWrapper = ({
         const rows = [];
         asArray(rollsRes).forEach((r) => {
           const isFortune = String(r.roll_type || "").toUpperCase() === "FORTUNE";
-          // GM Fortune rolls stay out of player history until GM reveals outcomes.
-          if (isFortune && !r.fortune_reveal_outcome) return;
+          // Hide unrevealed fortunes from non-GMs only; GMs still see full rows.
+          if (isFortune && !r.fortune_reveal_outcome && !isGM) return;
           const diceStr = []
             .concat(r.results || [])
             .join(", ");
@@ -3263,16 +3496,32 @@ const CharacterSheetWrapper = ({
       .trim()
       .toUpperCase();
     if (HEALING_ACTION_CHOICES.includes(selected)) return selected;
+    if (
+      showStandCoinActionColumn &&
+      STAND_HEAL_ACTION_EXTRA_CHOICES.includes(selected)
+    ) {
+      return selected;
+    }
     return "TINKER";
-  }, [healOtherRecoveryIntent.actionName]);
+  }, [healOtherRecoveryIntent.actionName, showStandCoinActionColumn]);
 
   const rollActionName = useMemo(() => {
     if (healOtherRecoveryIntent.enabled) return healingIntentActionName;
+    if (
+      rollPending?.standRoll &&
+      String(rollPending?.standStat || "").trim()
+    ) {
+      return (
+        `${String(rollPending.standStat).trim().toUpperCase()} (Stand)`
+      );
+    }
     return String(rollPending?.actionName || "").trim().toUpperCase();
   }, [
     healOtherRecoveryIntent.enabled,
     healingIntentActionName,
     rollPending?.actionName,
+    rollPending?.standRoll,
+    rollPending?.standStat,
   ]);
 
   const groupParticipants = useMemo(() => {
@@ -3292,6 +3541,30 @@ const CharacterSheetWrapper = ({
     () => Object.keys(ACTION_ATTR || {}).sort(),
     [],
   );
+
+  /** Heal-other row: playbook actions plus Stand Precision/Speed when applicable. */
+  const healOtherHealActionChoices = useMemo(() => {
+    if (!showStandCoinActionColumn) return healRollActionChoices;
+    return [...healRollActionChoices, ...STAND_HEAL_ACTION_EXTRA_CHOICES];
+  }, [healRollActionChoices, showStandCoinActionColumn]);
+
+  useEffect(() => {
+    if (showStandCoinActionColumn) return;
+    setHealOtherDraft((p) =>
+      STAND_HEAL_ACTION_EXTRA_CHOICES.includes(
+        String(p.actionName || "").trim().toUpperCase(),
+      )
+        ? { ...p, actionName: "TINKER" }
+        : p,
+    );
+  }, [showStandCoinActionColumn]);
+
+  useEffect(() => {
+    if (showStandCoinActionColumn) return;
+    setGroupActionNameDraft((prev) =>
+      String(prev || "").trim().toLowerCase().startsWith("stand_") ? "" : prev,
+    );
+  }, [showStandCoinActionColumn]);
 
   useEffect(() => {
     if (!characterId) {
@@ -3566,8 +3839,7 @@ const CharacterSheetWrapper = ({
       hid != null && Array.isArray(heritages) && heritages.length
         ? heritages.find((x) => x.id === hid)
         : null;
-    if (!h?.benefits?.length) return [];
-    return h.benefits
+    const fromBenefits = (h?.benefits || [])
       .filter(
         (b) =>
           b &&
@@ -3579,16 +3851,34 @@ const CharacterSheetWrapper = ({
         ...b,
         supportsDice: supportsAbilityBonusDice(b.description),
         supportsEffect: supportsAbilityBonusEffect(b.description),
+        supportsPenaltyDice: false,
       }))
       .filter(
         (hb) =>
           supportsActionRollFromHeritage(hb) &&
           (hb.supportsDice || hb.supportsEffect),
       );
+
+    const alienOpts = (h?.detriments || [])
+      .filter((d) => d && heritageEntryIsAlienUnderstanding(d))
+      .filter(
+        (d) =>
+          Boolean(d.required) ||
+          (Array.isArray(selectedDetriments) && selectedDetriments.includes(d.id)),
+      )
+      .map((d) => ({
+        ...d,
+        supportsDice: false,
+        supportsEffect: false,
+        supportsPenaltyDice: true,
+      }));
+
+    return [...fromBenefits, ...alienOpts];
   }, [
     charData?.heritage,
     heritages,
     selectedBenefits,
+    selectedDetriments,
     supportsAbilityBonusDice,
     supportsAbilityBonusEffect,
   ]);
@@ -3619,6 +3909,13 @@ const CharacterSheetWrapper = ({
 
   const { bonusDiceFromAbilities, abilityEffectSteps, abilityBonusAudit } =
     useMemo(() => {
+      if (rollPending?.standRoll) {
+        return {
+          bonusDiceFromAbilities: 0,
+          abilityEffectSteps: 0,
+          abilityBonusAudit: [],
+        };
+      }
       let d = 0;
       let e = 0;
       const audit = [];
@@ -3653,6 +3950,7 @@ const CharacterSheetWrapper = ({
       abilityRollBonusOptions,
       rollAbilityBoost,
       healingTreatmentBonusContext,
+      rollPending?.standRoll,
     ]);
 
   const {
@@ -3660,16 +3958,33 @@ const CharacterSheetWrapper = ({
     heritageEffectSteps,
     heritageBonusAudit,
   } = useMemo(() => {
+    const reflexCtx = {
+      rollPending,
+      healingTreatmentBonusContext,
+    };
     let d = 0;
     let e = 0;
     const audit = [];
     heritageRollBonusOptions.forEach((hb) => {
+      if (rollPending?.standRoll && !heritageBenefitIsReflexOverclock(hb)) {
+        return;
+      }
+      if (
+        heritageBenefitIsReflexOverclock(hb) &&
+        !reflexOverclockHeritageBonusApplies(reflexCtx)
+      ) {
+        return;
+      }
       const id = hb.id ?? hb.name;
       const b = heritageRollBoost[id];
       if (!b) return;
       if (hb.supportsDice && b.dice) {
         d += 1;
-        audit.push(`${hb.name}: +1d (heritage)`);
+        audit.push(
+          rollPending?.standRoll
+            ? `${hb.name}: +1d (heritage — stand speed)`
+            : `${hb.name}: +1d (heritage)`,
+        );
       }
       if (hb.supportsEffect && b.effect) {
         e += 1;
@@ -3681,7 +3996,37 @@ const CharacterSheetWrapper = ({
       heritageEffectSteps: e,
       heritageBonusAudit: audit,
     };
-  }, [heritageRollBonusOptions, heritageRollBoost]);
+  }, [
+    heritageRollBonusOptions,
+    heritageRollBoost,
+    rollPending,
+    healingTreatmentBonusContext,
+  ]);
+
+  const heritagePenaltyDiceActive = useMemo(() => {
+    const ctx = {
+      rollPending,
+      healingTreatmentBonusContext,
+      rollActionName,
+      disguisedAsHuman: charData.disguised_as_human,
+    };
+    if (!alienUnderstandingHeritagePenaltyApplies(ctx)) return 0;
+    let p = 0;
+    heritageRollBonusOptions.forEach((hb) => {
+      if (!hb.supportsPenaltyDice) return;
+      const id = hb.id ?? hb.name;
+      const b = heritageRollBoost[id];
+      if (b?.dice) p += 1;
+    });
+    return Math.min(3, p);
+  }, [
+    heritageRollBonusOptions,
+    heritageRollBoost,
+    rollPending,
+    healingTreatmentBonusContext,
+    rollActionName,
+    charData.disguised_as_human,
+  ]);
 
   const totalBonusDiceFromAbilitiesAndHeritage =
     bonusDiceFromAbilities + bonusDiceFromHeritage;
@@ -3980,6 +4325,14 @@ const CharacterSheetWrapper = ({
     rollModal.push_dice,
   ]);
 
+  const assistHelpPending = useMemo(() => {
+    const roster = charCampaign?.campaign_characters || [];
+    const me = roster.find((c) => String(c.id) === String(characterId));
+    return (
+      me?.assist_help_pending ?? me?.assistHelpPending ?? null
+    );
+  }, [charCampaign?.campaign_characters, characterId]);
+
   const applyRollPushMode = useCallback(
     (mode) => {
       setDevilBargainConfirmed(false);
@@ -4033,17 +4386,25 @@ const CharacterSheetWrapper = ({
 
   const rollPoolPreview = useMemo(() => {
     if (!rollPending || !rollActionName) return null;
-    const { action_rating, basePool } = computeActionPoolBreakdown(
-      rollActionName,
-      actionRatings,
-    );
+    let action_rating;
+    let basePool;
+    if (rollPending.standRoll && rollPending.standStat) {
+      basePool = computeStandRollPool(rollPending.standStat, standStats);
+      action_rating = basePool;
+    } else {
+      const bd = computeActionPoolBreakdown(rollActionName, actionRatings);
+      action_rating = bd.action_rating;
+      basePool = bd.basePool;
+    }
     let mod = 0;
     if (rollModal.push_dice) mod += 1;
     if (rollModal.devil_bargain_dice) mod += 1;
     mod += totalBonusDiceFromAbilitiesAndHeritage;
+    mod -= heritagePenaltyDiceActive;
     const selectedPushStress =
       (rollModal.push_effect ? 2 : 0) + (rollModal.push_dice ? 2 : 0);
     const rippleWaivesPushStress =
+      !rollPending.standRoll &&
       Boolean(activeSessionId) &&
       hasRippleBreathingAbility &&
       rippleBreathingFreePush &&
@@ -4067,17 +4428,31 @@ const CharacterSheetWrapper = ({
     rollPending,
     rollActionName,
     actionRatings,
+    standStats,
     rollModal.push_dice,
     rollModal.push_effect,
     rollModal.devil_bargain_dice,
     harmLevel3Used,
     totalBonusDiceFromAbilitiesAndHeritage,
+    heritagePenaltyDiceActive,
     phantomPainThroughCover,
     activeSessionId,
     hasRippleBreathingAbility,
     rippleBreathingFreePush,
     rippleBreathingFreePushClaimedThisSession,
   ]);
+
+  useEffect(() => {
+    if (rollPending && assistHelpPending)
+      setIncludePendingAssistDie(true);
+  }, [rollPending, assistHelpPending]);
+
+  const actionDiceTotalAtCommit = useMemo(() => {
+    if (!rollPoolPreview) return null;
+    const inc =
+      assistHelpPending && includePendingAssistDie ? 1 : 0;
+    return rollPoolPreview.total + inc;
+  }, [rollPoolPreview, assistHelpPending, includePendingAssistDie]);
 
   const pushStressCost = rollPoolPreview?.pushStress || 0;
   const pushWouldCauseTrauma =
@@ -4121,8 +4496,18 @@ const CharacterSheetWrapper = ({
     const asd = charCampaign?.active_session_detail;
     try {
       const goalFromDraft = (rollGoalDraft || "").trim();
-      const phantomStress = phantomPainThroughCover ? 1 : 0;
+      const standStatForRoll =
+        rollPending.standRoll && rollPending.standStat
+          ? String(rollPending.standStat).trim().toLowerCase()
+          : "";
+      const standSlug = standStatForRoll ? `stand_${standStatForRoll}` : "";
+      const phantomStress = standSlug
+        ? 0
+        : phantomPainThroughCover
+          ? 1
+          : 0;
       const rippleEligibleForWaiver =
+        !standSlug &&
         Boolean(activeSessionId) &&
         hasRippleBreathingAbility &&
         rippleBreathingFreePush &&
@@ -4179,6 +4564,11 @@ const CharacterSheetWrapper = ({
           : []),
         ...(feedPenaltyActive
           ? ["Loses Max Stress Without Feeding: stress detriment active"]
+          : []),
+        ...(heritagePenaltyDiceActive > 0
+          ? [
+              `Alien Understanding: −${heritagePenaltyDiceActive}d (heritage detriment)`,
+            ]
           : []),
       ];
       const modifierSources = [
@@ -4340,7 +4730,12 @@ const CharacterSheetWrapper = ({
           : []),
       ];
       const payload = {
-        action: selectedRollAction.toLowerCase(),
+        action: (
+          standSlug ||
+          String(rollPending.actionName || rollActionName || selectedRollAction || "")
+            .trim()
+            .toLowerCase()
+        ),
         push_effect: rollModal.push_effect,
         push_dice: rollModal.push_dice,
         devil_bargain_dice: rollModal.devil_bargain_dice,
@@ -4388,6 +4783,12 @@ const CharacterSheetWrapper = ({
         ...(pushWouldCauseTrauma && stressOverflowConfirmed
           ? { stress_overflow_accepted: true }
           : {}),
+        ...(standSlug
+          ? {
+              pool_source: "stand_coin",
+              stand_stat: standStatForRoll,
+            }
+          : {}),
         ...(healIntentActive
           ? {
               recovery_target_character_id: Number(
@@ -4397,17 +4798,36 @@ const CharacterSheetWrapper = ({
               recovery_is_self_treatment: healIntentIsSelf,
             }
           : {}),
+        ...(assistHelpPending &&
+        includePendingAssistDie &&
+        !(rollPending && rollPending.healAttempt)
+          ? {
+              assist_helper_id: Number(
+                assistHelpPending.helper_character_id ??
+                  assistHelpPending.helperCharacterId,
+              ),
+            }
+          : {}),
+        ...(heritagePenaltyDiceActive > 0
+          ? { heritage_penalty_dice: heritagePenaltyDiceActive }
+          : {}),
       };
       if (activeSessionId) {
         payload.session_id = activeSessionId;
         const snappedGa = rollPending.group_action_id;
+        const rollSlugForGroup = (
+          standStatForRoll
+            ? `stand_${standStatForRoll}`
+            : String(rollPending.actionName || rollActionName || selectedRollAction || "")
+        )
+          .trim()
+          .toLowerCase();
+        const gaSlug = String(activeGroupAction?.action_name || "")
+          .trim()
+          .toLowerCase();
         if (snappedGa) {
           payload.group_action_id = snappedGa;
-        } else if (
-          activeGroupAction?.id &&
-          String(selectedRollAction || "").toLowerCase() ===
-            String(activeGroupAction.action_name || "").toLowerCase()
-        ) {
+        } else if (activeGroupAction?.id && rollSlugForGroup && gaSlug === rollSlugForGroup) {
           payload.group_action_id = activeGroupAction.id;
         }
       }
@@ -4700,9 +5120,14 @@ const CharacterSheetWrapper = ({
   const resistancePoolPreview = useMemo(() => {
     if (!resistancePending) return null;
     const attr = String(resistancePending.attr || "").toUpperCase();
+    const modeStandDur =
+      resistancePending.mode === "stand_durability" ? true : false;
     const base = Math.max(0, Number(resistancePending.baseDice) || 0);
     const options = resistanceAbilityOptions.filter((opt) => {
       const appliesTo = String(opt.appliesTo || "").toUpperCase();
+      if (modeStandDur) {
+        return appliesTo === "ALL";
+      }
       return appliesTo === "ALL" || appliesTo === attr;
     });
     const activeBonusOptions = options.filter(
@@ -4729,6 +5154,7 @@ const CharacterSheetWrapper = ({
         (opt) => `${opt.name} (+${Math.max(0, Number(opt.bonusDice) || 0)}d)`,
       ),
       hasPostRollOptions: options.some((opt) => !!opt.mitigationOnly),
+      modeStandDurability: resistancePending.mode === "stand_durability",
     };
   }, [
     resistancePending,
@@ -4771,12 +5197,20 @@ const CharacterSheetWrapper = ({
         typeof extras === "object" &&
         extras.healAttempt &&
         String(extras.healAttempt.targetName || "").trim();
+      const anLower = String(actionName ?? "").trim().toLowerCase();
+      const standM = /^stand_(power|speed|precision)$/.exec(anLower);
+      const derivedStandStat = standM ? standM[1] : "";
       setResistancePending(null);
       setRollPending({
-        actionName,
-        diceCount,
+        actionName: derivedStandStat ? `stand_${derivedStandStat}` : actionName,
+        diceCount: derivedStandStat
+          ? computeStandRollPool(derivedStandStat, standStats)
+          : diceCount,
         isDesperateAction,
         ...rollPendingExtras,
+        ...(derivedStandStat
+          ? { standRoll: true, standStat: derivedStandStat }
+          : {}),
         ...(groupActionIdSnap != null
           ? { group_action_id: groupActionIdSnap }
           : {}),
@@ -4859,12 +5293,17 @@ const CharacterSheetWrapper = ({
             : "Failure";
     }
 
-    // FIX 8: Critical resistance = 0 stress cost AND clear 1 stress; represented as -1
-    /** Non-critical: 6 − highest die, minimum 1 (a single 6 still costs 1 stress). */
+    /** User resistance critical = clear stress (-1 sentinel). Durability resist: SRD_DEV two sixes ⇒ 0 spent; otherwise 6−highest, min 1. */
     const stressCost = isResistance
-      ? isCritical
-        ? -1
-        : Math.max(1, 6 - highest)
+      ? extras &&
+          typeof extras === "object" &&
+          extras.durabilityStandResistance
+        ? sixes >= 2
+          ? 0
+          : Math.max(1, 6 - highest)
+        : isCritical
+          ? -1
+          : Math.max(1, 6 - highest)
       : null;
     const resistanceExtraStress =
       isResistance &&
@@ -4916,8 +5355,19 @@ const CharacterSheetWrapper = ({
         })()
       : null;
 
+    const durabilityStandResistance =
+      isResistance &&
+      extras &&
+      typeof extras === "object" &&
+      extras.durabilityStandResistance;
     const activeResistanceSources = isResistance
       ? resistanceAbilityOptions.filter((opt) => {
+          if (
+            durabilityStandResistance &&
+            String(opt.appliesTo || "").toUpperCase() !== "ALL"
+          ) {
+            return false;
+          }
           if (!resistanceAbilityBoost[opt.id]) return false;
           if (opt.appliesTo === "ALL") return true;
           return String(opt.appliesTo || "").toUpperCase() === String(actionName || "").toUpperCase();
@@ -5029,7 +5479,12 @@ const CharacterSheetWrapper = ({
           character: characterId,
           session: activeSessionId,
           roll_type: "RESISTANCE",
-          action_name: String(actionName || "").toLowerCase(),
+          action_name:
+            extras &&
+            typeof extras === "object" &&
+            extras.durabilityStandResistance
+              ? "stand_durability"
+              : String(actionName || "").toLowerCase(),
           dice_pool: diceCount,
           results: dice,
           outcome: outcomeApi,
@@ -5082,8 +5537,67 @@ const CharacterSheetWrapper = ({
     setResistancePending({
       attr: String(attr || "").toUpperCase(),
       baseDice: base,
+      mode: "attribute",
     });
   };
+
+  const openStandActionRollPreview = useCallback(
+    (standStat) => {
+      const ss = String(standStat || "").trim().toLowerCase();
+      if (!STAND_ROLL_KEYS_ACTIVE.includes(ss)) return;
+      setResistancePending(null);
+      setResistanceApplyErr(null);
+      setResistanceHarmTarget("");
+      setResistancePushDice(false);
+      setRollApiError(null);
+      const n = computeStandRollPool(ss, standStats);
+      setRollPending({
+        actionName: `stand_${ss}`,
+        diceCount: n,
+        standRoll: true,
+        standStat: ss,
+        isDesperateAction: false,
+      });
+      setRollAbilityBoost({});
+      setHeritageRollBoost({});
+      setPhantomPainThroughCover(false);
+      setRippleBreathingFreePush(false);
+      setDevilBargainConfirmed(false);
+      setStressOverflowConfirmed(false);
+      const asdGoal = (assignedRollGoalLabel || "").trim();
+      setRollGoalDraft(asdGoal);
+      setRollModal({
+        push_effect: false,
+        push_dice: false,
+        devil_bargain_dice: false,
+        devil_bargain_note: "",
+      });
+      setHealOtherRecoveryIntent({
+        enabled: false,
+        actionName: "TINKER",
+        targetId: "",
+        selectedBolsterKeys: [],
+        bolsterNote: "",
+      });
+    },
+    [standStats, assignedRollGoalLabel],
+  );
+
+  const openStandDurabilityResistancePreview = useCallback(() => {
+    setRollPending(null);
+    setRollApiError(null);
+    setResistanceApplyErr(null);
+    setResistanceHarmTarget("");
+    setResistancePushDice(false);
+    setResistanceMitigationChoice("");
+    setResistanceAbilityBoost({});
+    const baseDice = computeStandRollPool("durability", standStats);
+    setResistancePending({
+      attr: "STAND durability",
+      baseDice,
+      mode: "stand_durability",
+    });
+  }, [standStats]);
 
   const addClock = () => {
     const name = String(newClockName || "").trim();
@@ -5798,6 +6312,20 @@ const CharacterSheetWrapper = ({
                               Session History
                             </button>
                           </div>
+                          <p
+                            style={{
+                              margin: "0 0 8px",
+                              fontSize: 10,
+                              color: "#6b7280",
+                              lineHeight: 1.45,
+                            }}
+                          >
+                            Sheet tab: field edits and XP notes over time. Session tab:
+                            rolls (incl. fortune when revealed to you), clocks, stress
+                            changes, session XP — plus{" "}
+                            <strong style={{ color: "#9ca3af" }}>Manual record</strong>{" "}
+                            for table rolls.
+                          </p>
                           {historyMode === "session" && (
                             <>
                               <div
@@ -5896,7 +6424,7 @@ const CharacterSheetWrapper = ({
                                         marginBottom: 8,
                                       }}
                                     >
-                                      Manual history or XP award
+                                      Manual history, roll, or XP award
                                     </div>
                                     <div
                                       style={{
@@ -5925,6 +6453,7 @@ const CharacterSheetWrapper = ({
                                           Resistance
                                         </option>
                                         <option value="VICE">Vice roll</option>
+                                        <option value="FORTUNE">Fortune roll</option>
                                         <option value="XP">XP award</option>
                                       </select>
                                       <select
@@ -6044,6 +6573,19 @@ const CharacterSheetWrapper = ({
                                         >
                                           Vice (downtime indulgence)
                                         </div>
+                                      ) : historyManual.rollType === "FORTUNE" ? (
+                                        <div
+                                          style={{
+                                            ...S.inp,
+                                            fontSize: 10,
+                                            padding: "2px 6px",
+                                            color: "#9ca3af",
+                                            display: "flex",
+                                            alignItems: "center",
+                                          }}
+                                        >
+                                          Fortune (highest die)
+                                        </div>
                                       ) : (
                                         <input
                                           value={historyManual.action}
@@ -6077,6 +6619,55 @@ const CharacterSheetWrapper = ({
                                           }}
                                           placeholder="Dice e.g. 6,4"
                                         />
+                                      ) : null}
+                                      {historyManual.rollType === "FORTUNE" ? (
+                                        <>
+                                          <textarea
+                                            value={historyManual.fortunePublicLabel}
+                                            onChange={(e) =>
+                                              setHistoryManual((p) => ({
+                                                ...p,
+                                                fortunePublicLabel: e.target.value,
+                                              }))
+                                            }
+                                            style={{
+                                              ...S.inp,
+                                              gridColumn: "1 / -1",
+                                              fontSize: 10,
+                                              padding: "6px",
+                                              minHeight: 44,
+                                              resize: "vertical",
+                                              fontFamily: "inherit",
+                                            }}
+                                            placeholder="What this fortune resolves (shown in session history)."
+                                            rows={2}
+                                          />
+                                          <label
+                                            style={{
+                                              gridColumn: "1 / -1",
+                                              fontSize: 10,
+                                              color: "#d1d5db",
+                                              display: "flex",
+                                              gap: 6,
+                                              alignItems: "center",
+                                            }}
+                                          >
+                                            <input
+                                              type="checkbox"
+                                              checked={
+                                                !!historyManual.fortuneRevealPlayers
+                                              }
+                                              onChange={(e) =>
+                                                setHistoryManual((p) => ({
+                                                  ...p,
+                                                  fortuneRevealPlayers:
+                                                    e.target.checked,
+                                                }))
+                                              }
+                                            />
+                                            Show dice and outcome to players
+                                          </label>
+                                        </>
                                       ) : null}
                                       {historyManual.rollType === "XP" ? null : historyManual.rollType ===
                                       "RESISTANCE" ? (
@@ -6138,6 +6729,35 @@ const CharacterSheetWrapper = ({
                                             rating · stress cleared = highest die
                                           </div>
                                         </>
+                                      ) : historyManual.rollType === "FORTUNE" ? (
+                                        <select
+                                          value={historyManual.outcome}
+                                          onChange={(e) =>
+                                            setHistoryManual((p) => ({
+                                              ...p,
+                                              outcome: e.target.value,
+                                            }))
+                                          }
+                                          style={{
+                                            ...S.sel,
+                                            fontSize: 10,
+                                            padding: "2px 6px",
+                                            gridColumn: "1 / -1",
+                                          }}
+                                        >
+                                          <option value="CRITICAL_SUCCESS">
+                                            Critical
+                                          </option>
+                                          <option value="FULL_SUCCESS">
+                                            Full
+                                          </option>
+                                          <option value="PARTIAL_SUCCESS">
+                                            Partial
+                                          </option>
+                                          <option value="FAILURE">
+                                            Failure
+                                          </option>
+                                        </select>
                                       ) : (
                                         <>
                                           <select
@@ -6218,7 +6838,8 @@ const CharacterSheetWrapper = ({
                                     </div>
                                     {historyManual.rollType !== "RESISTANCE" &&
                                       historyManual.rollType !== "VICE" &&
-                                      historyManual.rollType !== "XP" && (
+                                      historyManual.rollType !== "XP" &&
+                                      historyManual.rollType !== "FORTUNE" && (
                                       <div
                                         style={{
                                           marginTop: 6,
@@ -6257,6 +6878,7 @@ const CharacterSheetWrapper = ({
                                     {historyManual.rollType !== "RESISTANCE" &&
                                     historyManual.rollType !== "VICE" &&
                                     historyManual.rollType !== "XP" &&
+                                    historyManual.rollType !== "FORTUNE" &&
                                     historyManual.groupAction ? (
                                       <input
                                         value={historyManual.groupActionId}
@@ -6454,6 +7076,7 @@ const CharacterSheetWrapper = ({
                                             const isResistanceManual =
                                               rt === "RESISTANCE";
                                             const isViceManual = rt === "VICE";
+                                            const isFortuneManual = rt === "FORTUNE";
                                             const resistanceSummary =
                                               computeResistanceSummary(
                                                 diceResults,
@@ -6487,6 +7110,18 @@ const CharacterSheetWrapper = ({
                                               );
                                               return;
                                             }
+                                            if (isFortuneManual) {
+                                              const lbl = String(
+                                                historyManual.fortunePublicLabel ||
+                                                  "",
+                                              ).trim();
+                                              if (lbl.length < 3) {
+                                                setHistoryWriteError(
+                                                  "Enter at least 3 characters describing what this fortune roll was for.",
+                                                );
+                                                return;
+                                              }
+                                            }
                                             setHistoryManualSaving(true);
                                             if (isResistanceManual) {
                                               const reduced = clearHarmSlot(
@@ -6513,73 +7148,96 @@ const CharacterSheetWrapper = ({
                                                 ),
                                               );
                                             }
-                                            await rollAPI.createRoll({
-                                              character: characterId,
-                                              session: sid,
-                                              roll_type: isResistanceManual
-                                                ? "RESISTANCE"
-                                                : isViceManual
-                                                  ? "CLEAR_STRESS"
-                                                  : "ACTION",
-                                              action_name: isViceManual
-                                                ? "vice"
-                                                : String(
-                                                      historyManual.action ||
-                                                        "action",
-                                                    ).toLowerCase(),
-                                              ...(isResistanceManual || isViceManual
-                                                ? {}
-                                                : {
-                                                    position:
-                                                      historyManual.position,
-                                                    effect: historyManual.effect,
-                                                  }),
-                                              dice_pool: diceResults.length,
-                                              results: diceResults,
-                                              outcome: isResistanceManual
-                                                ? resistanceSummary.outcome
-                                                : isViceManual
-                                                  ? viceSummary.outcome
-                                                  : historyManual.outcome,
-                                              ...(isResistanceManual
-                                                ? {
-                                                    roller_stress_spent:
-                                                      resistanceSummary.stressCost >
-                                                      0
-                                                        ? resistanceSummary.stressCost
-                                                        : 0,
-                                                  }
-                                                : isViceManual
-                                                  ? { roller_stress_spent: 0 }
-                                                  : {
-                                                      push_for_dice:
-                                                        !!historyManual.pushDice,
-                                                      push_for_effect:
-                                                        !!historyManual.pushEffect,
-                                                      uses_devil_bargain:
-                                                        !!historyManual.devil,
-                                                      pool_assist_dice:
-                                                        historyManual.helpDie
-                                                          ? 1
-                                                          : 0,
-                                                      group_action:
-                                                        historyManual.groupAction &&
-                                                        historyManual.groupActionId
-                                                          ? parseInt(
-                                                              String(
-                                                                historyManual.groupActionId,
-                                                              ),
-                                                              10,
-                                                            )
-                                                          : undefined,
-                                                    }),
-                                              description:
-                                                isResistanceManual
-                                                  ? `Manual resistance record from history panel. Reduced harm slot ${historyManual.resistanceHarmTarget}. Stress marked: ${Math.max(0, resistanceSummary.stressCost)}.`
+                                            if (isFortuneManual) {
+                                              const lbl = String(
+                                                historyManual.fortunePublicLabel ||
+                                                  "",
+                                              )
+                                                .trim()
+                                                .slice(0, 120);
+                                              await rollAPI.createRoll({
+                                                character: characterId,
+                                                session: sid,
+                                                roll_type: "FORTUNE",
+                                                action_name: "fortune",
+                                                dice_pool: diceResults.length,
+                                                results: diceResults,
+                                                outcome: historyManual.outcome,
+                                                fortune_public_label: lbl,
+                                                fortune_reveal_outcome:
+                                                  !!historyManual.fortuneRevealPlayers,
+                                                description:
+                                                  "Manual fortune record from history panel",
+                                              });
+                                            } else {
+                                              await rollAPI.createRoll({
+                                                character: characterId,
+                                                session: sid,
+                                                roll_type: isResistanceManual
+                                                  ? "RESISTANCE"
                                                   : isViceManual
-                                                    ? `Manual vice record from history panel. Stress cleared (highest die): ${viceSummary.highest}.${viceOverAtSave && String(historyManual.viceOverindulge || "").trim() ? ` Overindulgence: ${viceOverindulgeLabel(historyManual.viceOverindulge)}` : ""}`
-                                                    : "Manual record from history panel",
-                                            });
+                                                    ? "CLEAR_STRESS"
+                                                    : "ACTION",
+                                                action_name: isViceManual
+                                                  ? "vice"
+                                                  : String(
+                                                        historyManual.action ||
+                                                          "action",
+                                                      ).toLowerCase(),
+                                                ...(isResistanceManual || isViceManual
+                                                  ? {}
+                                                  : {
+                                                      position:
+                                                        historyManual.position,
+                                                      effect: historyManual.effect,
+                                                    }),
+                                                dice_pool: diceResults.length,
+                                                results: diceResults,
+                                                outcome: isResistanceManual
+                                                  ? resistanceSummary.outcome
+                                                  : isViceManual
+                                                    ? viceSummary.outcome
+                                                    : historyManual.outcome,
+                                                ...(isResistanceManual
+                                                  ? {
+                                                      roller_stress_spent:
+                                                        resistanceSummary.stressCost >
+                                                        0
+                                                          ? resistanceSummary.stressCost
+                                                          : 0,
+                                                    }
+                                                  : isViceManual
+                                                    ? { roller_stress_spent: 0 }
+                                                    : {
+                                                        push_for_dice:
+                                                          !!historyManual.pushDice,
+                                                        push_for_effect:
+                                                          !!historyManual.pushEffect,
+                                                        uses_devil_bargain:
+                                                          !!historyManual.devil,
+                                                        pool_assist_dice:
+                                                          historyManual.helpDie
+                                                            ? 1
+                                                            : 0,
+                                                        group_action:
+                                                          historyManual.groupAction &&
+                                                          historyManual.groupActionId
+                                                            ? parseInt(
+                                                                String(
+                                                                  historyManual.groupActionId,
+                                                                ),
+                                                                10,
+                                                              )
+                                                            : undefined,
+                                                      }),
+                                                description:
+                                                  isResistanceManual
+                                                    ? `Manual resistance record from history panel. Reduced harm slot ${historyManual.resistanceHarmTarget}. Stress marked: ${Math.max(0, resistanceSummary.stressCost)}.`
+                                                    : isViceManual
+                                                      ? `Manual vice record from history panel. Stress cleared (highest die): ${viceSummary.highest}.${viceOverAtSave && String(historyManual.viceOverindulge || "").trim() ? ` Overindulgence: ${viceOverindulgeLabel(historyManual.viceOverindulge)}` : ""}`
+                                                      : "Manual record from history panel",
+                                              });
+                                            }
                                             setHistoryRefreshTick((v) => v + 1);
                                             setShowHistoryManualModal(false);
                                           } catch (e) {
@@ -6602,7 +7260,9 @@ const CharacterSheetWrapper = ({
                                           ? "Saving…"
                                           : historyManual.rollType === "XP"
                                             ? "Add XP award"
-                                            : "Add manual record"}
+                                            : historyManual.rollType === "FORTUNE"
+                                              ? "Add fortune record"
+                                              : "Add manual record"}
                                       </button>
                                       <button
                                         type="button"
@@ -7060,7 +7720,6 @@ const CharacterSheetWrapper = ({
 
                 {/* Stress & Trauma */}
                 <div style={S.card}>
-                  {/* FIX 4: stress max labeled with durability contribution */}
                   <div
                     style={{
                       display: "flex",
@@ -7072,20 +7731,6 @@ const CharacterSheetWrapper = ({
                     <span style={{ ...S.lbl, marginBottom: 0 }}>STRESS</span>
                     <span style={{ fontSize: "11px", color: "#6b7280" }}>
                       {stressFilled}/{maxStress}
-                      {DUR_TABLE[durVal].stressBonus !== 0 && (
-                        <span
-                          style={{
-                            color:
-                              DUR_TABLE[durVal].stressBonus > 0
-                                ? "#34d399"
-                                : "#f87171",
-                          }}
-                        >
-                          {" "}
-                          ({DUR_TABLE[durVal].stressBonus > 0 ? "+" : ""}
-                          {DUR_TABLE[durVal].stressBonus} DUR)
-                        </span>
-                      )}
                     </span>
                   </div>
                   {traumaRequiredBeforeStressClear ? (
@@ -7552,8 +8197,21 @@ const CharacterSheetWrapper = ({
 
                 {/* Harm + Armor */}
                 <div style={S.card}>
-                  <div style={{ display: "flex", gap: "16px" }}>
-                    <div style={{ flex: 1 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "12px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "16px",
+                        alignItems: "flex-start",
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
                       <span style={S.lbl}>HARM</span>
                       {(
                         [
@@ -7696,155 +8354,6 @@ const CharacterSheetWrapper = ({
                         </div>
                       ))}
                     </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "center",
-                        gap: "4px",
-                      }}
-                    >
-                      <span style={{ fontSize: "10px", color: "#9ca3af" }}>
-                        HEALING
-                      </span>
-                      <ProgressClock
-                        size={55}
-                        segments={4}
-                        filled={healingClock}
-                        interactive
-                        onClick={handleHealingClockAdjust}
-                      />
-
-                      <label
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "center",
-                          gap: "4px",
-                          marginTop: "8px",
-                          width: "100%",
-                          maxWidth: "220px",
-                        }}
-                      >
-                        <span
-                          style={{
-                            fontSize: "9px",
-                            color: "#6b7280",
-                            textAlign: "center",
-                          }}
-                          title="Dice pool = your rating for this action. Default Tinker; saved per character in this browser."
-                        >
-                          Recover roll action (default Tinker)
-                        </span>
-                        <select
-                          aria-label="Healing recover action"
-                          disabled={healingRecoverBusy || !canEditSheet}
-                          value={selfHealingRecoverAction}
-                          onChange={(e) => {
-                            const chosen = pickHealClockAction(e.target.value);
-                            setSelfHealingRecoverAction(chosen);
-                            if (!characterId) return;
-                            try {
-                              window.localStorage.setItem(
-                                `biz:self-healing-recover-action:${characterId}`,
-                                chosen,
-                              );
-                            } catch {
-                              /* ignore quota / privacy mode */
-                            }
-                          }}
-                          style={{
-                            ...S.sel,
-                            width: "100%",
-                            fontSize: "11px",
-                            paddingBlock: "4px",
-                          }}
-                        >
-                          {healRollActionChoices.map((action) => (
-                            <option key={action} value={action}>
-                              {action}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-
-                      <div style={{ display: "flex", gap: "6px", marginTop: "6px" }}>
-                        <button
-                          type="button"
-                          onClick={() => performHealingRecover("downtime")}
-                          disabled={healingRecoverBusy || !canEditSheet}
-                          style={{
-                            ...S.btn,
-                            fontSize: "11px",
-                            background: "#0f766e",
-                            color: "#f8fafc",
-                            opacity:
-                              healingRecoverBusy || !canEditSheet ? 0.6 : 1,
-                          }}
-                          title={`Downtime recover: treat yourself when you have downtime or an equivalent pause—even during a gaming session—when GM/table agrees. SRD stress: 2. Roll ${pickHealClockAction(selfHealingRecoverAction)} for healing clock segments (1-3:+1, 4/5:+2, 6:+3, critical:+5).${
-                            selfRecoverInvigoratedDice
-                              ? " Pool includes +1d Invigorated when that ability appears on your sheet or heritage."
-                              : ""
-                          }`}
-                        >
-                          downtime recover
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => performHealingRecover("mid-action")}
-                          disabled={
-                            healingRecoverBusy ||
-                            !canEditSheet ||
-                            !Boolean(activeSessionId)
-                          }
-                          style={{
-                            ...S.btn,
-                            fontSize: "11px",
-                            background: "#4338ca",
-                            color: "#ffffff",
-                            opacity:
-                              healingRecoverBusy ||
-                              !canEditSheet ||
-                              !Boolean(activeSessionId)
-                                ? 0.6
-                                : 1,
-                          }}
-                          title={`Mid-action recover: treat yourself mid-score. Requires time & safety (SRD). SRD stress cost: 2. Roll ${pickHealClockAction(selfHealingRecoverAction)} for healing clock segments (1-3:+1, 4/5:+2, 6:+3, critical:+5).${
-                            selfRecoverInvigoratedDice
-                              ? " Pool includes +1d Invigorated when that ability appears on your sheet or heritage."
-                              : ""
-                          }`}
-                        >
-                          mid-action recover
-                        </button>
-                      </div>
-
-                      {healingRecoverErr ? (
-                        <div
-                          style={{
-                            marginTop: "6px",
-                            fontSize: "11px",
-                            color: "#fca5a5",
-                            textAlign: "center",
-                          }}
-                        >
-                          {healingRecoverErr}
-                        </div>
-                      ) : null}
-                      {healingRecoverMsg ? (
-                        <div
-                          style={{
-                            marginTop: "6px",
-                            fontSize: "11px",
-                            color: "#a78bfa",
-                            textAlign: "center",
-                          }}
-                        >
-                          {healingRecoverMsg}
-                        </div>
-                      ) : null}
-                    </div>
-
                     {/* FIX 4: Armor charges derived from Durability */}
                     <div style={{ minWidth: "90px" }}>
                       <span
@@ -7942,6 +8451,530 @@ const CharacterSheetWrapper = ({
                       ) : null}
                     </div>
                   </div>
+                  <div
+                    style={{
+                      width: "100%",
+                      paddingTop: "10px",
+                      borderTop: "1px solid #2d1f52",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "10px",
+                      alignItems: "stretch",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <span style={S.lbl}>HEALING</span>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "14px",
+                        alignItems: "flex-start",
+                        width: "100%",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: "4px",
+                          flexShrink: 0,
+                        }}
+                      >
+                        <ProgressClock
+                          size={55}
+                          segments={4}
+                          filled={healingClock}
+                          interactive
+                          onClick={handleHealingClockAdjust}
+                        />
+                      </div>
+                      <div
+                        style={{
+                          flex: "1 1 240px",
+                          minWidth: "min(100%, 200px)",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "8px",
+                        }}
+                      >
+                        <label
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "stretch",
+                            gap: "4px",
+                            width: "100%",
+                          }}
+                        >
+                        <span
+                          style={{
+                            fontSize: "9px",
+                            color: "#6b7280",
+                            textAlign: "left",
+                          }}
+                          title="Dice pool = your dots in the playbook action you pick here (study, survey, tinkering to bind injuries, etc.). Stand Coin stats are not generic healing pools—Precision/Speed (or fiction you agree on with the GM) should apply only through a specific ability, item, or declared treatment method, not via this dropdown. Default Tinker; saved per character in this browser."
+                        >
+                          Recover roll action (default Tinker)
+                        </span>
+                        <select
+                          aria-label="Healing recover action"
+                          disabled={healingRecoverBusy || !canEditSheet}
+                          value={selfHealingRecoverAction}
+                          onChange={(e) => {
+                            const chosen = pickHealClockAction(e.target.value);
+                            setSelfHealingRecoverAction(chosen);
+                            if (!characterId) return;
+                            try {
+                              window.localStorage.setItem(
+                                `biz:self-healing-recover-action:${characterId}`,
+                                chosen,
+                              );
+                            } catch {
+                              /* ignore quota / privacy mode */
+                            }
+                          }}
+                          style={{
+                            ...S.sel,
+                            width: "100%",
+                            fontSize: "11px",
+                            paddingBlock: "4px",
+                          }}
+                        >
+                          {healRollActionChoices.map((action) => (
+                            <option key={action} value={action}>
+                              {action}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "6px",
+                          marginTop: "2px",
+                          width: "100%",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => performHealingRecover("downtime")}
+                          disabled={healingRecoverBusy || !canEditSheet}
+                          style={{
+                            ...S.btn,
+                            flex: "1 1 140px",
+                            fontSize: "11px",
+                            background: "#0f766e",
+                            color: "#f8fafc",
+                            opacity:
+                              healingRecoverBusy || !canEditSheet ? 0.6 : 1,
+                          }}
+                          title={`Downtime recover: treat yourself when you have downtime or an equivalent pause—even during a gaming session—when GM/table agrees. SRD stress: 2. Roll ${pickHealClockAction(selfHealingRecoverAction)} for healing clock segments (1-3:+1, 4/5:+2, 6:+3, critical:+5).${
+                            selfRecoverInvigoratedDice
+                              ? " Pool includes +1d Invigorated when that ability appears on your sheet or heritage."
+                              : ""
+                          }`}
+                        >
+                          downtime recover
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => performHealingRecover("mid-action")}
+                          disabled={
+                            healingRecoverBusy ||
+                            !canEditSheet ||
+                            !Boolean(activeSessionId)
+                          }
+                          style={{
+                            ...S.btn,
+                            flex: "1 1 140px",
+                            fontSize: "11px",
+                            background: "#4338ca",
+                            color: "#ffffff",
+                            opacity:
+                              healingRecoverBusy ||
+                              !canEditSheet ||
+                              !Boolean(activeSessionId)
+                                ? 0.6
+                                : 1,
+                          }}
+                          title={`Mid-action recover: treat yourself mid-score. Requires time & safety (SRD). SRD stress cost: 2. Roll ${pickHealClockAction(selfHealingRecoverAction)} for healing clock segments (1-3:+1, 4/5:+2, 6:+3, critical:+5).${
+                            selfRecoverInvigoratedDice
+                              ? " Pool includes +1d Invigorated when that ability appears on your sheet or heritage."
+                              : ""
+                          }`}
+                        >
+                          mid-action recover
+                        </button>
+                      </div>
+
+                      {healingRecoverErr ? (
+                        <div
+                          style={{
+                            marginTop: "6px",
+                            fontSize: "11px",
+                            color: "#fca5a5",
+                            textAlign: "center",
+                          }}
+                        >
+                          {healingRecoverErr}
+                        </div>
+                      ) : null}
+                      {healingRecoverMsg ? (
+                        <div
+                          style={{
+                            marginTop: "6px",
+                            fontSize: "11px",
+                            color: "#a78bfa",
+                            textAlign: "center",
+                          }}
+                        >
+                          {healingRecoverMsg}
+                        </div>
+                      ) : null}
+                      </div>
+                    </div>
+
+                      {sessionNpcHealRoster.length > 0 &&
+                      Boolean(activeSessionId) ? (
+                        <div
+                          style={{
+                            marginTop: "10px",
+                            paddingTop: "8px",
+                            borderTop: "1px solid #374151",
+                            width: "100%",
+                            maxWidth: "100%",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontSize: "9px",
+                              color: "#6b7280",
+                              display: "block",
+                              textAlign: "center",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            NPC medic — fortune (base d6 pool + up to 3 coin for +1d
+                            each, total max 6d)
+                          </span>
+                          {!isCharacterOwner ? (
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                textAlign: "center",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              Only this character&apos;s player can roll or spend coin
+                              here.
+                            </div>
+                          ) : null}
+                          <label
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px",
+                              marginBottom: "6px",
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                            }}
+                          >
+                            Session healer (NPC)
+                            <select
+                              aria-label="NPC heal fortune healer"
+                              disabled={
+                                npcHealFortuneBusy ||
+                                !canEditSheet ||
+                                !isCharacterOwner
+                              }
+                              value={npcHealHealerId}
+                              onChange={(e) =>
+                                setNpcHealHealerId(e.target.value)
+                              }
+                              style={{ ...S.sel, fontSize: "11px" }}
+                            >
+                              {sessionNpcHealRoster.map((n) => (
+                                <option key={n.id} value={String(n.id)}>
+                                  {n.name || "NPC"}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "6px",
+                              marginBottom: "6px",
+                            }}
+                          >
+                            <label
+                              style={{
+                                flex: 1,
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "2px",
+                              }}
+                            >
+                              Base d6
+                              <select
+                                aria-label="NPC heal fortune base dice"
+                                disabled={
+                                  npcHealFortuneBusy ||
+                                  !canEditSheet ||
+                                  !isCharacterOwner
+                                }
+                                value={String(npcHealBaseDice)}
+                                onChange={(e) =>
+                                  setNpcHealBaseDice(
+                                    Number(e.target.value) || 2,
+                                  )
+                                }
+                                style={{ ...S.sel, fontSize: "11px" }}
+                              >
+                                {[1, 2, 3, 4, 5, 6].map((d) => (
+                                  <option key={d} value={String(d)}>
+                                    {d}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <label
+                              style={{
+                                flex: 1,
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "2px",
+                              }}
+                            >
+                              Coin (+d6)
+                              <select
+                                aria-label="NPC heal fortune coin spend"
+                                disabled={
+                                  npcHealFortuneBusy ||
+                                  !canEditSheet ||
+                                  !isCharacterOwner
+                                }
+                                value={String(
+                                  (() => {
+                                    const b = Math.max(
+                                      1,
+                                      Math.min(
+                                        6,
+                                        Math.floor(Number(npcHealBaseDice)) ||
+                                          2,
+                                      ),
+                                    );
+                                    const maxS = Math.min(
+                                      3,
+                                      coinFilled,
+                                      Math.max(0, 6 - b),
+                                    );
+                                    return Math.min(
+                                      maxS,
+                                      Math.floor(Number(npcHealCoinSpend)) || 0,
+                                    );
+                                  })(),
+                                )}
+                                onChange={(e) =>
+                                  setNpcHealCoinSpend(
+                                    Number(e.target.value) || 0,
+                                  )
+                                }
+                                style={{ ...S.sel, fontSize: "11px" }}
+                              >
+                                {(() => {
+                                  const b = Math.max(
+                                    1,
+                                    Math.min(
+                                      6,
+                                      Math.floor(Number(npcHealBaseDice)) ||
+                                        2,
+                                    ),
+                                  );
+                                  const maxS = Math.min(
+                                    3,
+                                    coinFilled,
+                                    Math.max(0, 6 - b),
+                                  );
+                                  return Array.from(
+                                    { length: maxS + 1 },
+                                    (_, i) => (
+                                      <option key={i} value={String(i)}>
+                                        +{i} ({b + i}d)
+                                      </option>
+                                    ),
+                                  );
+                                })()}
+                              </select>
+                            </label>
+                          </div>
+                          <label
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px",
+                              marginBottom: "6px",
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                            }}
+                          >
+                            Patient (optional)
+                            <select
+                              aria-label="NPC heal patient type"
+                              disabled={
+                                npcHealFortuneBusy ||
+                                !canEditSheet ||
+                                !isCharacterOwner
+                              }
+                              value={npcHealPatientMode}
+                              onChange={(e) => {
+                                setNpcHealPatientMode(e.target.value);
+                                setNpcHealPatientPcId("");
+                                setNpcHealPatientNpcId("");
+                              }}
+                              style={{ ...S.sel, fontSize: "11px" }}
+                            >
+                              <option value="self">You (default)</option>
+                              <option value="pc">Another PC</option>
+                              <option value="npc">Session NPC</option>
+                            </select>
+                          </label>
+                          {npcHealPatientMode === "pc" ? (
+                            <label
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "4px",
+                                marginBottom: "6px",
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                              }}
+                            >
+                              Target PC
+                              <select
+                                aria-label="NPC heal patient PC"
+                                disabled={
+                                  npcHealFortuneBusy ||
+                                  !canEditSheet ||
+                                  !isCharacterOwner
+                                }
+                                value={npcHealPatientPcId}
+                                onChange={(e) =>
+                                  setNpcHealPatientPcId(e.target.value)
+                                }
+                                style={{ ...S.sel, fontSize: "11px" }}
+                              >
+                                <option value="">Pick…</option>
+                                {healOtherRecoveryCandidates.map((c) => (
+                                  <option key={c.id} value={String(c.id)}>
+                                    {c.name || c.true_name || `PC #${c.id}`}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          ) : null}
+                          {npcHealPatientMode === "npc" ? (
+                            <label
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "4px",
+                                marginBottom: "6px",
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                              }}
+                            >
+                              Target NPC
+                              <select
+                                aria-label="NPC heal patient NPC"
+                                disabled={
+                                  npcHealFortuneBusy ||
+                                  !canEditSheet ||
+                                  !isCharacterOwner
+                                }
+                                value={npcHealPatientNpcId}
+                                onChange={(e) =>
+                                  setNpcHealPatientNpcId(e.target.value)
+                                }
+                                style={{ ...S.sel, fontSize: "11px" }}
+                              >
+                                <option value="">Pick…</option>
+                                {sessionNpcHealRoster.map((n) => (
+                                  <option key={n.id} value={String(n.id)}>
+                                    {n.name || "NPC"}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={performNpcHealFortuneRoll}
+                            disabled={
+                              npcHealFortuneBusy ||
+                              !canEditSheet ||
+                              !isCharacterOwner ||
+                              !activeSessionId ||
+                              (npcHealPatientMode === "npc" &&
+                                !npcHealPatientNpcId)
+                            }
+                            style={{
+                              ...S.btn,
+                              width: "100%",
+                              fontSize: "11px",
+                              background: "#7c3aed",
+                              color: "#faf5ff",
+                              opacity:
+                                npcHealFortuneBusy ||
+                                !canEditSheet ||
+                                !isCharacterOwner
+                                  ? 0.55
+                                  : 1,
+                            }}
+                            title="Logs a FORTUNE roll to session history; deducts personal coin if you chose a coin spend."
+                          >
+                            {npcHealFortuneBusy
+                              ? "Rolling…"
+                              : "Roll NPC heal fortune"}
+                          </button>
+                          {npcHealFortuneErr ? (
+                            <div
+                              style={{
+                                marginTop: "6px",
+                                fontSize: "11px",
+                                color: "#fca5a5",
+                                textAlign: "center",
+                              }}
+                            >
+                              {npcHealFortuneErr}
+                            </div>
+                          ) : null}
+                          {npcHealFortuneMsg ? (
+                            <div
+                              style={{
+                                marginTop: "6px",
+                                fontSize: "11px",
+                                color: "#c4b5fd",
+                                textAlign: "center",
+                              }}
+                            >
+                              {npcHealFortuneMsg}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+
+                </div>
                 </div>
 
                 {/* Coin & Stash */}
@@ -8892,6 +9925,22 @@ const CharacterSheetWrapper = ({
                           {totalStandPoints}/{standCoinIndexBudget} pts
                         </span>
                       </div>
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#6b7280",
+                          marginBottom: "10px",
+                          lineHeight: 1.45,
+                        }}
+                      >
+                        <strong>Rolls</strong>: Power / Precision / Speed / Durability
+                        — dice when fiction calls for your Stand (
+                        fourth column under Action Ratings; grades + XP unlocks via radar).
+                        {" "}
+                        <strong>Passives</strong> on this chart:{" "}
+                        {STAND_PASSIVE_KEYS.join(", ")} (
+                        GM distance &amp; Growth — no pool).
+                      </div>
 
                       {totalStandPoints > standCoinIndexBudget ? (
                         <div style={{ ...S.warn, marginBottom: "8px" }}>
@@ -8999,10 +10048,7 @@ const CharacterSheetWrapper = ({
                           ))}
                         </div>
                       </div>
-                      {(
-                        charCampaign?.active_session_detail
-                          ?.session_npcs_with_clocks || []
-                      ).length > 0 && (
+                      {sessionNpcsPartyFacingDisplay.length > 0 && (
                         <div style={{ marginBottom: "8px" }}>
                           <span style={{ fontSize: "11px", color: "#9ca3af" }}>
                             Session NPC Clocks:
@@ -9015,10 +10061,7 @@ const CharacterSheetWrapper = ({
                               marginTop: "4px",
                             }}
                           >
-                            {(
-                              charCampaign?.active_session_detail
-                                ?.session_npcs_with_clocks || []
-                            ).map((npc) => (
+                            {sessionNpcsPartyFacingDisplay.map((npc) => (
                               <div
                                 key={npc.id}
                                 style={{
@@ -9879,6 +10922,203 @@ const CharacterSheetWrapper = ({
                         </div>
                       );
                       })}
+                    {showStandCoinActionColumn ? (
+                      <div key="stand-roll-column">
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            marginBottom: "6px",
+                          }}
+                        >
+                          <span
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedActionInfo((cur) =>
+                                  cur === "stand:dur-resist"
+                                    ? null
+                                    : "stand:dur-resist",
+                                )
+                              }
+                              style={{
+                                fontSize: "11px",
+                                fontWeight: "bold",
+                                color: "#e5e7eb",
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                padding: 0,
+                                textDecoration: "underline",
+                                textUnderlineOffset: "2px",
+                              }}
+                              title="Resistance when Stand takes harm"
+                            >
+                              DURABILITY
+                            </button>
+                            <button
+                              type="button"
+                              onClick={openStandDurabilityResistancePreview}
+                              style={{
+                                fontSize: "14px",
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                padding: 0,
+                                lineHeight: 1,
+                              }}
+                              title="Open Stand durability resist pool"
+                            >
+                              🎲
+                            </button>
+                          </span>
+                          <div style={{ display: "flex", gap: "2px" }}>
+                            {(() => {
+                              const durPool = computeStandRollPool(
+                                "durability",
+                                standStats,
+                              );
+                              return [1, 2, 3, 4].map((d) => (
+                                <div
+                                  key={d}
+                                  style={{
+                                    width: "7px",
+                                    height: "7px",
+                                    borderRadius: "50%",
+                                    border: "1px solid #4b5563",
+                                    background:
+                                      d <= durPool ? "#06b6d4" : "#1f2937",
+                                  }}
+                                  title="Grade maps to dice (edit wedges — 10 XP per +1 tier)"
+                                />
+                              ));
+                            })()}
+                          </div>
+                        </div>
+                        {expandedActionInfo === "stand:dur-resist" ? (
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              marginBottom: "6px",
+                              padding: "6px",
+                              background: "#1f2937",
+                              borderRadius: "4px",
+                              border: "1px solid #374151",
+                              lineHeight: 1.4,
+                            }}
+                          >
+                            Rolls when another Stand hurts yours. Separate from
+                            Insight / Prowess / Resolve. Spend Stand Coin pts (10 XP
+                            per +1 wedge on radar) — same grades as Stand armor (not stress boxes).
+                          </div>
+                        ) : null}
+                        {STAND_COLUMN_ROLL_ORDER.map((st) => {
+                          const pool = computeStandRollPool(st, standStats);
+                          const k = `stand:${st}`;
+                          return (
+                            <React.Fragment key={st}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  marginBottom: "4px",
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setExpandedActionInfo((cur) =>
+                                        cur === k ? null : k,
+                                      )
+                                    }
+                                    style={{
+                                      fontSize: "11px",
+                                      color: "#06b6d4",
+                                      background: "none",
+                                      border: "none",
+                                      cursor: "pointer",
+                                      padding: 0,
+                                      textDecoration: "underline",
+                                      textUnderlineOffset: "2px",
+                                    }}
+                                    title="Stand action roll summary"
+                                  >
+                                    {String(st).toUpperCase()}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openStandActionRollPreview(st)}
+                                    style={{
+                                      fontSize: "14px",
+                                      background: "none",
+                                      border: "none",
+                                      cursor: "pointer",
+                                      padding: 0,
+                                      lineHeight: 1,
+                                    }}
+                                    title={
+                                      pool === 0
+                                        ? "0d — uses 2d6 lower off-session"
+                                        : `${pool} dice from Stand Coin grade`
+                                    }
+                                  >
+                                    🎲
+                                  </button>
+                                </span>
+                                <div style={{ display: "flex", gap: "2px" }}>
+                                  {[1, 2, 3, 4].map((slot) => (
+                                    <div
+                                      key={slot}
+                                      style={{
+                                        width: "12px",
+                                        height: "12px",
+                                        borderRadius: "50%",
+                                        border: "1px solid #0e7490",
+                                        background:
+                                          slot <= pool ? "#06b6d4" : "#111827",
+                                      }}
+                                      title="From Stand Coin grade — edit wedges"
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                              {expandedActionInfo === k ? (
+                                <div
+                                  style={{
+                                    fontSize: "10px",
+                                    color: "#9ca3af",
+                                    marginBottom: "6px",
+                                    padding: "6px",
+                                    background: "#0c1929",
+                                    borderRadius: "4px",
+                                    border: "1px solid #164e63",
+                                    lineHeight: 1.4,
+                                  }}
+                                >
+                                  {pcStandCoinReadouts?.[st] || ""}
+                                </div>
+                              ) : null}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                     </div>
                   </div>
 
@@ -10121,6 +11361,68 @@ const CharacterSheetWrapper = ({
                           unless you reopen with recover-in-play treatment selected.
                         </div>
                       )}
+                      {rollPending?.standRoll &&
+                        showStandCoinActionColumn &&
+                        String(rollPending?.standStat || "").trim() ? (
+                        <div style={{ marginBottom: "12px" }}>
+                          <label
+                            style={{
+                              fontSize: "11px",
+                              color: "#9ca3af",
+                              display: "block",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            Stand coin stat (action roll pool)
+                          </label>
+                          <select
+                            aria-label="Stand coin stat for this action roll"
+                            value={String(rollPending.standStat || "").toLowerCase()}
+                            onChange={(e) => {
+                              const ss = String(e.target.value || "")
+                                .trim()
+                                .toLowerCase();
+                              if (!STAND_ROLL_KEYS_ACTIVE.includes(ss)) return;
+                              setRollPending((p) => {
+                                if (!p?.standRoll) return p;
+                                const n = computeStandRollPool(ss, standStats);
+                                return {
+                                  ...p,
+                                  standStat: ss,
+                                  actionName: `stand_${ss}`,
+                                  diceCount: n,
+                                };
+                              });
+                            }}
+                            style={{
+                              ...S.sel,
+                              width: "100%",
+                              maxWidth: 280,
+                              fontSize: "12px",
+                            }}
+                          >
+                            {STAND_COLUMN_ROLL_ORDER.map((st) => (
+                              <option key={st} value={st}>
+                                {String(st).toUpperCase()} (Stand Coin)
+                              </option>
+                            ))}
+                          </select>
+                          <div
+                            style={{
+                              fontSize: "10px",
+                              color: "#6b7280",
+                              marginTop: "6px",
+                              lineHeight: 1.35,
+                            }}
+                          >
+                            Same pools as the POWER / PRECISION / SPEED rows under
+                            Action ratings. Submission uses{" "}
+                            <code style={{ color: "#9ca3af" }}>pool_source: stand_coin</code>{" "}
+                            and{" "}
+                            <code style={{ color: "#9ca3af" }}>stand_stat</code> on roll.
+                          </div>
+                        </div>
+                      ) : null}
                       <div style={{ marginBottom: "12px" }}>
                         <label
                           style={{
@@ -10341,9 +11643,27 @@ const CharacterSheetWrapper = ({
                                   overflow: "auto",
                                 }}
                               >
-                                {heritageRollBonusOptions.map((hb) => {
+                                {heritageRollBonusOptions
+                                  .filter(
+                                    (hb) =>
+                                      !(
+                                        hb.supportsPenaltyDice &&
+                                        charData.disguised_as_human === true
+                                      ),
+                                  )
+                                  .map((hb) => {
                                   const hid = hb.id ?? hb.name;
                                   const b = heritageRollBoost[hid] || {};
+                                  const alienPenaltyCtx = {
+                                    rollPending,
+                                    healingTreatmentBonusContext,
+                                    rollActionName,
+                                    disguisedAsHuman: charData.disguised_as_human,
+                                  };
+                                  const alienPenaltyInteractive =
+                                    alienUnderstandingHeritagePenaltyApplies(
+                                      alienPenaltyCtx,
+                                    );
                                   return (
                                     <div
                                       key={hid}
@@ -10361,9 +11681,49 @@ const CharacterSheetWrapper = ({
                                           color: "#fde68a",
                                           flex: "1 1 120px",
                                         }}
+                                        title={
+                                          hb.supportsPenaltyDice
+                                            ? String(hb.description || "").slice(
+                                                0,
+                                                800,
+                                              )
+                                            : undefined
+                                        }
                                       >
                                         {hb.name}
                                       </span>
+                                      {hb.supportsPenaltyDice ? (
+                                        <label
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: "4px",
+                                            cursor: alienPenaltyInteractive
+                                              ? "pointer"
+                                              : "not-allowed",
+                                            opacity: alienPenaltyInteractive
+                                              ? 1
+                                              : 0.45,
+                                          }}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={!!b.dice}
+                                            disabled={!alienPenaltyInteractive}
+                                            onChange={(e) =>
+                                              setHeritageRollBoost((p) => ({
+                                                ...p,
+                                                [hid]: {
+                                                  ...p[hid],
+                                                  dice: e.target.checked,
+                                                  effect: !!p[hid]?.effect,
+                                                },
+                                              }))
+                                            }
+                                          />
+                                          −1d
+                                        </label>
+                                      ) : null}
                                       {hb.supportsDice ? (
                                         <label
                                           style={{
@@ -10503,6 +11863,17 @@ const CharacterSheetWrapper = ({
                               count={bonusDiceFromHeritage}
                             />
                           ) : null}
+                          {heritagePenaltyDiceActive > 0 ? (
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "#fca5a5",
+                                marginBottom: 8,
+                              }}
+                            >
+                              Alien Understanding (−{heritagePenaltyDiceActive}d)
+                            </div>
+                          ) : null}
                           {totalAbilityEffectSteps > 0 ? (
                             <div
                               style={{
@@ -10528,7 +11899,55 @@ const CharacterSheetWrapper = ({
                               through cover / barriers this roll).
                             </div>
                           ) : null}
-                          {rollPoolPreview.total === 0 ? (
+                          {assistHelpPending && !rollPending?.healAttempt ? (
+                            <div
+                              style={{
+                                marginTop: "6px",
+                                marginBottom: "8px",
+                                paddingTop: "8px",
+                                borderTop: "1px solid #1e3a4c",
+                              }}
+                            >
+                              <DicePoolStrip
+                                label={`Incoming crew assist from ${String(assistHelpPending.helper_name ?? assistHelpPending.helperName ?? "teammate").trim()} (not counted in subtotal)`}
+                                count={1}
+                              />
+                              <label
+                                style={{
+                                  display: "flex",
+                                  alignItems: "flex-start",
+                                  gap: "8px",
+                                  fontSize: "11px",
+                                  color: "#e5e7eb",
+                                  marginTop: "6px",
+                                  cursor: "pointer",
+                                  lineHeight: 1.35,
+                                }}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={includePendingAssistDie}
+                                  onChange={(e) =>
+                                    setIncludePendingAssistDie(e.target.checked)
+                                  }
+                                  style={{ marginTop: "2px" }}
+                                />
+                                <span>
+                                  Include this +1 crew assist die when you Roll
+                                  (teammate already marked stress via Assist).
+                                  Uncheck if you abandon it for this action — your
+                                  next ACTION roll will still clear it server-side if
+                                  you roll without claiming it.
+                                </span>
+                              </label>
+                            </div>
+                          ) : null}
+                          {rollPoolPreview.total === 0 &&
+                          !(
+                            assistHelpPending &&
+                            includePendingAssistDie &&
+                            !rollPending?.healAttempt
+                          ) ? (
                             <div
                               style={{
                                 fontSize: "11px",
@@ -10540,6 +11959,23 @@ const CharacterSheetWrapper = ({
                               0 dice in pool — you roll{" "}
                               <strong>2d6</strong> and use the{" "}
                               <strong>lower</strong> result (same as offline).
+                            </div>
+                          ) : null}
+                          {rollPoolPreview.total === 0 &&
+                          assistHelpPending &&
+                          includePendingAssistDie &&
+                          !rollPending?.healAttempt ? (
+                            <div
+                              style={{
+                                fontSize: "11px",
+                                color: "#5eead4",
+                                marginTop: "6px",
+                                marginBottom: "4px",
+                              }}
+                            >
+                              0 dice from your sheet modifiers — crew assist adds{" "}
+                              <strong>+1d</strong> only when this roll resolves (shown
+                              in &quot;dice rolled&quot; below).
                             </div>
                           ) : null}
                           <div
@@ -10556,8 +11992,20 @@ const CharacterSheetWrapper = ({
                             }}
                           >
                             <span>
-                              Total dice: <strong>{rollPoolPreview.total}</strong>
+                              Pool subtotal (your modifiers):{" "}
+                              <strong>{rollPoolPreview.total}</strong>
                             </span>
+                            {!rollPending?.healAttempt &&
+                            assistHelpPending &&
+                            typeof actionDiceTotalAtCommit === "number" ? (
+                              <span>
+                                Dice rolled at commitment:{" "}
+                                <strong>{actionDiceTotalAtCommit}</strong>
+                                {!includePendingAssistDie
+                                  ? " (assist off)"
+                                  : " (includes crew assist)"}
+                              </span>
+                            ) : null}
                             <span>
                               Total stress to mark:{" "}
                               <strong>{rollPoolPreview.pushStress}</strong>
@@ -10801,6 +12249,7 @@ const CharacterSheetWrapper = ({
                         </div>
                       </div>
                       {(totalBonusDiceFromAbilitiesAndHeritage > 0 ||
+                        heritagePenaltyDiceActive > 0 ||
                         abilityEffectSteps + heritageEffectSteps > 0 ||
                         phantomPainThroughCover) && (
                         <div
@@ -10813,6 +12262,9 @@ const CharacterSheetWrapper = ({
                           Pool modifiers: +
                           {totalBonusDiceFromAbilitiesAndHeritage}d (abilities /
                           heritage)
+                          {heritagePenaltyDiceActive > 0
+                            ? `; −${heritagePenaltyDiceActive}d (Alien Understanding)`
+                            : ""}
                           {abilityEffectSteps + heritageEffectSteps > 0
                             ? `; +${abilityEffectSteps + heritageEffectSteps} effect tier step(s) total`
                             : ""}
@@ -10910,6 +12362,7 @@ const CharacterSheetWrapper = ({
                             setHeritageRollBoost({});
                             setPhantomPainThroughCover(false);
                             setRippleBreathingFreePush(false);
+                            setIncludePendingAssistDie(true);
                             setStressOverflowConfirmed(false);
                             setRollGoalDraft("");
                             setDevilBargainConfirmed(false);
@@ -10963,9 +12416,24 @@ const CharacterSheetWrapper = ({
                           lineHeight: 1.35,
                         }}
                       >
-                        Review all dice before rolling. After result, apply harm reduction,
-                        mark stress from <code style={{ color: "#9ca3af" }}>6 - highest die</code>,
-                        then use any post-roll mitigation/follow-up options.
+                        {resistancePoolPreview?.modeStandDurability ? (
+                          <>
+                            When your <strong>Stand</strong> takes a hit, resist with
+                            Durability dice (SRD_DEV). Stress:{" "}
+                            <code style={{ color: "#9ca3af" }}>6 − highest die</code>{" "}
+                            (minimum 1 on a single six;{" "}
+                            <strong>two sixes</strong> = resist for free). Apply to the
+                            Stand&apos;s consequence; use Stand Armor charges separately
+                            if marking armor.
+                          </>
+                        ) : (
+                          <>
+                            Review all dice before rolling. After result, apply harm reduction,
+                            mark stress from{" "}
+                            <code style={{ color: "#9ca3af" }}>6 - highest die</code>,
+                            then use any post-roll mitigation/follow-up options.
+                          </>
+                        )}
                       </div>
                       {resistancePoolPreview ? (
                         <div
@@ -10978,7 +12446,11 @@ const CharacterSheetWrapper = ({
                           }}
                         >
                           <DicePoolStrip
-                            label="Attribute rating (dots in this attribute)"
+                            label={
+                              resistancePoolPreview.modeStandDurability
+                                ? "Durability Stand Coin grade (dice pool)"
+                                : "Attribute rating (dots in this attribute)"
+                            }
                             count={resistancePoolPreview.base}
                           />
                           {resistancePoolPreview.bonusDice > 0 ? (
@@ -11110,13 +12582,17 @@ const CharacterSheetWrapper = ({
                           type="button"
                           onClick={() => {
                             const attr = String(resistancePending.attr || "").toUpperCase();
+                            const modeStandDur =
+                              resistancePending.mode === "stand_durability";
                             const base = Math.max(
                               0,
                               Number(resistancePending.baseDice) || 0,
                             );
                             const activeBonusOptions = resistanceAbilityOptions.filter((opt) => {
                               const appliesTo = String(opt.appliesTo || "").toUpperCase();
-                              const applies = appliesTo === "ALL" || appliesTo === attr;
+                              const applies = modeStandDur
+                                ? appliesTo === "ALL"
+                                : appliesTo === "ALL" || appliesTo === attr;
                               return (
                                 applies &&
                                 !!resistanceAbilityBoost[opt.id] &&
@@ -11129,20 +12605,28 @@ const CharacterSheetWrapper = ({
                             );
                             const pushBonus = resistancePushDice ? 1 : 0;
                             const extraStress = resistancePushDice ? 2 : 0;
-                            const ironWillActive = activeBonusOptions.some(
-                              (opt) => opt.id === "iron-will",
-                            );
+                            const ironWillActive =
+                              !modeStandDur &&
+                              activeBonusOptions.some(
+                                (opt) => opt.id === "iron-will",
+                              );
                             rollDice(
-                              attr,
+                              modeStandDur ? "stand_durability" : attr,
                               base + bonus + pushBonus,
                               true,
                               false,
                               undefined,
                               {
-                                ...(ironWillActive
-                                  ? { resistanceBonusNote: "+1d (Iron Will)" }
-                                  : {}),
                                 resistanceExtraStress: extraStress,
+                                ...(modeStandDur
+                                  ? {
+                                      durabilityStandResistance: true,
+                                      resistanceBonusNote:
+                                        "Stand durability resistance",
+                                    }
+                                  : ironWillActive
+                                    ? { resistanceBonusNote: "+1d (Iron Will)" }
+                                    : {}),
                               },
                             );
                           }}
@@ -11858,9 +13342,35 @@ const CharacterSheetWrapper = ({
                             }}
                           >
                             <strong style={{ color: "#d1d5db" }}>Assist:</strong>{" "}
-                            when you roll an action (dice pool), pick a teammate
-                            there — they spend 1 stress and add +1d to your pool.
+                            choose which teammate spends 1 stress for your +1d on
+                            your next ACTION roll this session — at most one pending
+                            assist at a time; it applies when you press Roll below.
                           </div>
+                          {assistHelpPending ? (
+                            <div
+                              style={{
+                                marginBottom: "10px",
+                                padding: "8px 10px",
+                                borderRadius: "6px",
+                                border: "1px solid #0f766e",
+                                background: "#0f172a",
+                                fontSize: "11px",
+                                color: "#99f6e4",
+                              }}
+                            >
+                              Pending crew assist: +1d from{" "}
+                              <strong style={{ color: "#e5e7eb" }}>
+                                {String(
+                                  assistHelpPending.helper_name ||
+                                    assistHelpPending.helperName ||
+                                    "",
+                                ).trim() || "teammate"}
+                              </strong>{" "}
+                              (they already marked stress). Resolve it when you Roll
+                              an action — or abandon it by rolling once without including
+                              the assist die.
+                            </div>
+                          ) : null}
                           <div
                             style={{
                               display: "flex",
@@ -11875,7 +13385,9 @@ const CharacterSheetWrapper = ({
                               value={assistTargetId}
                               onChange={(e) => setAssistTargetId(e.target.value)}
                             >
-                              <option value="">Choose player for +1d</option>
+                              <option value="">
+                                Choose teammate — they spend 1 stress
+                              </option>
                               {helpCandidates.map((c) => (
                                 <option key={c.id} value={String(c.id)}>
                                   {c.true_name || c.name || `PC ${c.id}`}
@@ -11884,23 +13396,33 @@ const CharacterSheetWrapper = ({
                             </select>
                             <button
                               type="button"
-                              disabled={!assistTargetId || assistGrantBusy}
+                              disabled={
+                                !!assistHelpPending ||
+                                !assistTargetId ||
+                                assistGrantBusy
+                              }
                               onClick={async () => {
                                 if (!assistTargetId || !characterId) return;
+                                if (!activeSessionId) return;
                                 setAssistGrantErr(null);
                                 setAssistGrantMsg(null);
                                 setAssistGrantBusy(true);
                                 try {
                                   await characterAPI.assistHelp(
+                                    Number(characterId),
                                     parseInt(assistTargetId, 10),
-                                    characterId,
+                                    Number(activeSessionId),
                                   );
-                                  applyStressCost(1);
-                                  const target = helpCandidates.find(
-                                    (c) => String(c.id) === String(assistTargetId),
+                                  const helperPc = helpCandidates.find(
+                                    (c) =>
+                                      String(c.id) === String(assistTargetId),
                                   );
+                                  const hn =
+                                    helperPc?.true_name ||
+                                    helperPc?.name ||
+                                    "Teammate";
                                   setAssistGrantMsg(
-                                    `+1d assist granted to ${target?.true_name || target?.name || "teammate"} (you marked 1 stress).`,
+                                    `${hn} spends 1 stress — you gain +1d when you roll an action while this session is active (shown in the dice preview).`,
                                   );
                                   setAssistTargetId("");
                                   onCampaignRefresh?.();
@@ -12019,6 +13541,19 @@ const CharacterSheetWrapper = ({
                                 {action}
                               </option>
                             ))}
+                            {showStandCoinActionColumn ? (
+                              <optgroup label="Stand (coin pools)">
+                                {STAND_ROLL_KEYS_ACTIVE.map((sk) => {
+                                  const slug = `stand_${String(sk || "").trim().toLowerCase()}`;
+                                  const label = `${String(sk || "").toUpperCase()} (Stand)`;
+                                  return (
+                                    <option key={slug} value={slug}>
+                                      {label}
+                                    </option>
+                                  );
+                                })}
+                              </optgroup>
+                            ) : null}
                           </select>
                           <span
                             style={{
@@ -12414,7 +13949,7 @@ const CharacterSheetWrapper = ({
                               }))
                             }
                           >
-                            {healRollActionChoices.map((action) => (
+                            {healOtherHealActionChoices.map((action) => (
                               <option key={action} value={action}>
                                 {action}
                               </option>
@@ -12530,19 +14065,36 @@ const CharacterSheetWrapper = ({
                             }}
                             disabled={!healOtherDraft.targetId}
                             onClick={() => {
-                              const action = String(
+                              const actionUpper = String(
                                 healOtherDraft.actionName || "TINKER",
                               )
                                 .trim()
                                 .toUpperCase();
+                              const standStatHeal =
+                                showStandCoinActionColumn &&
+                                STAND_HEAL_ACTION_EXTRA_CHOICES.includes(
+                                  actionUpper,
+                                )
+                                  ? actionUpper.toLowerCase()
+                                  : "";
+                              const rating =
+                                standStatHeal !== ""
+                                  ? computeStandRollPool(
+                                      standStatHeal,
+                                      standStats,
+                                    )
+                                  : Math.max(
+                                      0,
+                                      Number(actionRatings[actionUpper] || 0),
+                                    );
+                              const rollSlug =
+                                standStatHeal !== ""
+                                  ? `stand_${standStatHeal}`
+                                  : actionUpper;
                               const target = healOtherTargets.find(
                                 (c) =>
                                   String(c.id) ===
                                   String(healOtherDraft.targetId),
-                              );
-                              const rating = Math.max(
-                                0,
-                                Number(actionRatings[action] || 0),
                               );
                               const healRecoverInPlay =
                                 String(
@@ -12566,13 +14118,19 @@ const CharacterSheetWrapper = ({
                                   heritageRollBonusOptions,
                                 );
                               rollDice(
-                                action,
+                                rollSlug,
                                 rating,
                                 false,
                                 false,
                                 undefined,
                                 {
                                   rollBoostPreset,
+                                  ...(standStatHeal !== ""
+                                    ? {
+                                        standRoll: true,
+                                        standStat: standStatHeal,
+                                      }
+                                    : {}),
                                   healAttempt: {
                                     kind: "heal_other",
                                     treatmentCadence: healRecoverInPlay
@@ -12591,7 +14149,7 @@ const CharacterSheetWrapper = ({
                                       bolsterLabels.length > 0,
                                     bolsterNote: "",
                                     careNote: "",
-                                    actionName: action,
+                                    actionName: actionUpper,
                                   },
                                 },
                               );
@@ -12803,6 +14361,69 @@ const CharacterSheetWrapper = ({
                           }}
                         >
                           You did not feed today
+                        </button>
+                      </div>
+                    ) : null}
+                    {hasAlienUnderstandingDetriment ? (
+                      <div
+                        style={{
+                          marginBottom: "8px",
+                          display: "flex",
+                          gap: "6px",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: "10px",
+                            color: "#9ca3af",
+                            width: "100%",
+                          }}
+                        >
+                          Alien Understanding (disguise)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCharData((p) => ({
+                              ...p,
+                              disguised_as_human: true,
+                            }))
+                          }
+                          style={{
+                            ...S.btn,
+                            fontSize: "11px",
+                            padding: "4px 8px",
+                            background:
+                              charData.disguised_as_human === true
+                                ? "#15803d"
+                                : "#1f2937",
+                            color: "#fff",
+                          }}
+                        >
+                          Disguised as human
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCharData((p) => ({
+                              ...p,
+                              disguised_as_human: false,
+                            }))
+                          }
+                          style={{
+                            ...S.btn,
+                            fontSize: "11px",
+                            padding: "4px 8px",
+                            background:
+                              charData.disguised_as_human === false
+                                ? "#b45309"
+                                : "#1f2937",
+                            color: "#fff",
+                          }}
+                        >
+                          Not disguised
                         </button>
                       </div>
                     ) : null}
@@ -14852,44 +16473,7 @@ const CharacterSheetWrapper = ({
             </div>
 
             {/* Bottom row */}
-            <div style={{ ...S.g3, marginTop: "16px" }}>
-              <div style={S.card}>
-                <span style={S.lbl}>TEAMWORK</span>
-                {[
-                  "Assist a teammate (+1d, costs 1 Stress)",
-                  "Lead a group action",
-                  "Protect a teammate",
-                  "Set up a teammate",
-                ].map((t) => (
-                  <div
-                    key={t}
-                    style={{
-                      background: "#374151",
-                      padding: "4px 8px",
-                      marginBottom: "3px",
-                      fontSize: "12px",
-                    }}
-                  >
-                    {t}
-                  </div>
-                ))}
-              </div>
-              <div style={S.card}>
-                <span style={S.lbl}>GATHER INFORMATION</span>
-                <div style={{ fontSize: "12px", color: "#9ca3af" }}>
-                  {[
-                    "What do they intend to do?",
-                    "How can I get them to [X]?",
-                    "What are they really feeling?",
-                    "What should I look out for?",
-                    "Where's the weakness here?",
-                    "What's really going on here?",
-                  ].map((q) => (
-                    <div key={q}>🔷 {q}</div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <div style={{ ...S.g3, marginTop: "16px" }} />
             </div>
             {portraitUrlModalOpen && canEditSheet && (
               <div

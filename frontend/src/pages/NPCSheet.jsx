@@ -3,7 +3,12 @@ import {
   referenceAPI,
   factionAPI,
   sessionAPI,
+  rollAPI,
+  characterHistoryAPI,
+  experienceTrackerAPI,
+  xpHistoryAPI,
 } from "../features/character-sheet";
+import { HistoryBranchIcon } from "../components/position-effect/PositionEffectIndicators";
 import NpcsStandCoin from "../components/NpcsStandCoin";
 
 // ─── SRD Data Tables ──────────────────────────────────────────────────────────
@@ -21,8 +26,11 @@ const DUR_VULN_CLOCK = { F: 4, D: 6, C: 8, B: 10, A: 12, S: 0 };
 // Durability → Regular armor charges (SRD: F=0, D=1, C=1, B=2, A=3, S=3)
 const DUR_REGULAR_ARMOR = { F: 0, D: 1, C: 1, B: 2, A: 3, S: 3 };
 
-// Durability → Special armor charges (Stand Armor effectiveness)
+// Durability → Special armor charges (negate harm)
 const DUR_SPECIAL_ARMOR = { F: 0, D: 0, C: 1, B: 1, A: 2, S: 2 };
+
+// Durability → Stand armor charges (path / Stand soak; separate from physical reduce & special negate)
+const DUR_STAND_ARMOR = { F: 0, D: 0, C: 1, B: 1, A: 2, S: 2 };
 
 // Power → base harm level + position note
 /** Session involvement rows use `npc` FK from JSON — may be number or string */
@@ -61,8 +69,63 @@ function normalizeClockList(raw) {
   return raw.map(normalizeNpcClockEntry).filter((x) => x != null);
 }
 
+/** True when normalized clock rows match (avoid save→setState(ref churn)→autosave loops). */
+function npcClockListsSemanticallyEqual(rawA, rawB) {
+  const a = normalizeClockList(rawA);
+  const b = normalizeClockList(rawB);
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    const x = a[i];
+    const y = b[i];
+    if (String(x.id ?? "") !== String(y.id ?? "")) return false;
+    if (x.name !== y.name) return false;
+    if (x.segments !== y.segments) return false;
+    if (x.filled !== y.filled) return false;
+    if (x.show_to_players !== y.show_to_players) return false;
+  }
+  return true;
+}
+
 function npcClockIdsMatch(a, b) {
   return a === b || (a != null && b != null && Number(a) === Number(b));
+}
+
+/** Session rolls where a PC spent coin on NPC heal fortune — match healer to this NPC by display name. */
+function rollIsNpcHealFortuneForThisNpc(roll, npcDisplayName) {
+  const ctx = String(
+    roll.recovery_context ?? roll.recoveryContext ?? "",
+  ).toLowerCase();
+  if (ctx !== "npc_heal_fortune") return false;
+  const name = String(npcDisplayName || "").trim();
+  if (!name) return false;
+  const mod = Array.isArray(roll.modifier_sources)
+    ? roll.modifier_sources
+    : Array.isArray(roll.modifierSources)
+      ? roll.modifierSources
+      : [];
+  const healer = mod.find((m) => m && m.kind === "npc_healer");
+  if (healer && String(healer.name || "").includes(name)) return true;
+  const goal = String(roll.goal_label ?? roll.goalLabel ?? "");
+  const desc = String(roll.description ?? "");
+  const fort = String(
+    roll.fortune_public_label ?? roll.fortunePublicLabel ?? "",
+  );
+  return [goal, desc, fort].some((x) => x.includes(name));
+}
+
+function historyFieldLabel(key) {
+  return String(key || "").replace(/_/g, " ");
+}
+
+function stringifyValue(v) {
+  if (v == null) return "";
+  if (typeof v === "string" || typeof v === "number" || typeof v === "boolean")
+    return String(v);
+  try {
+    return JSON.stringify(v);
+  } catch (_err) {
+    return String(v);
+  }
 }
 
 /**
@@ -521,6 +584,115 @@ const ArmorTracker = ({ label, max, used, onChange, color }) => {
   );
 };
 
+/** Physical armor only when fiction includes gear; bonus = GM-added charges beyond Durability tier. */
+function NpcPhysicalArmorBlock({
+  shortLabel,
+  hasItem,
+  onHasItemChange,
+  bonusCharges,
+  onBonusChargesChange,
+  regArmorMax,
+  regularUsed,
+  onRegularUsed,
+}) {
+  return (
+    <div
+      style={{
+        textAlign: "left",
+        padding: "8px",
+        background: "#0a0a14",
+        borderRadius: "4px",
+        border: "1px solid #374151",
+      }}
+    >
+      <label
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: "8px",
+          fontSize: "10px",
+          color: "#d1d5db",
+          cursor: "pointer",
+          marginBottom: "8px",
+          lineHeight: 1.45,
+        }}
+      >
+        <input
+          type="checkbox"
+          checked={hasItem}
+          onChange={(e) => onHasItemChange(e.target.checked)}
+          style={{ marginTop: "2px" }}
+        />
+        <span>
+          <strong style={{ color: "#fbbf24" }}>Physical armor item</strong> — worn or
+          carried gear that grants −1 harm charges. Leave off when this NPC has no
+          such item.
+        </span>
+      </label>
+      {hasItem ? (
+        <>
+          <ArmorTracker
+            label={shortLabel ? "PHYSICAL" : "PHYSICAL ARMOR"}
+            max={regArmorMax}
+            used={regularUsed}
+            onChange={onRegularUsed}
+            color="#f59e0b"
+          />
+          <label
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: "4px",
+              marginTop: "8px",
+              fontSize: "10px",
+              color: "#9ca3af",
+            }}
+          >
+            Extra physical charges (GM, 0–6)
+            <span
+              style={{
+                fontSize: "9px",
+                color: "#6b7280",
+                fontWeight: "normal",
+                lineHeight: 1.4,
+              }}
+            >
+              On top of the Durability baseline — better gear, improvised plating, or
+              a table grant.
+            </span>
+            <input
+              type="number"
+              min={0}
+              max={6}
+              step={1}
+              value={bonusCharges}
+              onChange={(e) => {
+                const v = Math.floor(Number(e.target.value));
+                if (!Number.isFinite(v)) return;
+                onBonusChargesChange(Math.max(0, Math.min(6, v)));
+              }}
+              style={{
+                width: "64px",
+                padding: "4px 6px",
+                borderRadius: "4px",
+                border: "1px solid #4b5563",
+                background: "#111827",
+                color: "#e5e7eb",
+                fontFamily: "monospace",
+                fontSize: "12px",
+              }}
+            />
+          </label>
+        </>
+      ) : (
+        <div style={{ fontSize: "10px", color: "#57534e", textAlign: "center" }}>
+          Physical armor tracker hidden until the item box is checked.
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── NPCSheet ─────────────────────────────────────────────────────────────────
 
 const NPCSheet = ({
@@ -528,6 +700,7 @@ const NPCSheet = ({
   onSave,
   onClose,
   campaigns = [],
+  allNpcs = [],
   isGM = false,
   onFactionChange,
   onCampaignRefresh,
@@ -570,6 +743,35 @@ const NPCSheet = ({
         : null,
     [campaigns, campaignId],
   );
+
+  const currentFactionId = useMemo(() => {
+    if (faction === "" || faction == null) return null;
+    if (typeof faction === "object") return faction?.id ?? null;
+    const n = Number(faction);
+    return Number.isFinite(n) ? n : null;
+  }, [faction]);
+
+  const factionNpcPeers = useMemo(() => {
+    if (currentFactionId == null) return [];
+    return (allNpcs || []).filter((n) => {
+      if (n?.id == null) return false;
+      if (Number(n.id) === Number(npc?.id)) return false;
+      const raw = n.faction ?? n.faction_id;
+      const fid =
+        raw != null && typeof raw === "object" ? raw.id ?? null : raw;
+      if (fid === "" || fid == null) return false;
+      return Number(fid) === Number(currentFactionId);
+    });
+  }, [allNpcs, currentFactionId, npc?.id]);
+
+  const campaignPlayerCharacters = useMemo(
+    () =>
+      Array.isArray(activeCampaign?.campaign_characters)
+        ? activeCampaign.campaign_characters
+        : [],
+    [activeCampaign?.campaign_characters],
+  );
+
   const activeSessionId = useMemo(() => {
     const raw = activeCampaign?.active_session;
     if (raw == null) return null;
@@ -643,7 +845,7 @@ const NPCSheet = ({
           const showAll = !!i.show_clocks_to_players;
           const rawVuln = !!(i.show_vulnerability_clock_to_players ?? false);
           return {
-            npc: i.npc,
+            ...i,
             show_clocks_to_players: showAll,
             // Match serializers._normalize_npc_involvement_clock_flags: full clocks ⇒ vuln visible.
             show_vulnerability_clock_to_players: showAll || rawVuln,
@@ -706,6 +908,49 @@ const NPCSheet = ({
   const [newFactionName, setNewFactionName] = useState("");
   const [creatingFaction, setCreatingFaction] = useState(false);
   const [factionCreateError, setFactionCreateError] = useState("");
+
+  /** Heal ally: PC picker + in-play/downtime scratch notes are local; fortune dice + recover-in-play P/E persist on NPC. */
+  /** 1–4 d6 for fortune when this NPC provides healing / recovery (persisted on NPC). */
+  const [healQualityFortuneDice, setHealQualityFortuneDice] = useState(() => {
+    const raw = Number(npc?.heal_quality_fortune_dice ?? npc?.healQualityFortuneDice);
+    return Number.isFinite(raw) && raw >= 1 && raw <= 4 ? raw : 2;
+  });
+  /** Latest GM-side preview roll for heal fortune (not persisted). */
+  const [healFortuneRollPreview, setHealFortuneRollPreview] = useState(null);
+
+  const [healAllyPcId, setHealAllyPcId] = useState("");
+  const [healAllyPosition, setHealAllyPosition] = useState(() => {
+    const p = String(npc?.heal_recover_in_play_position || "risky").toLowerCase();
+    return ["controlled", "risky", "desperate"].includes(p) ? p : "risky";
+  });
+  const [healAllyEffect, setHealAllyEffect] = useState(() => {
+    const e = String(npc?.heal_recover_in_play_effect || "standard").toLowerCase();
+    return ["limited", "standard", "extreme"].includes(e) ? e : "standard";
+  });
+  const [healAllyRecoveryNote, setHealAllyRecoveryNote] = useState("");
+  const [healAllyDowntimeNote, setHealAllyDowntimeNote] = useState("");
+
+  useEffect(() => {
+    setHealAllyPcId("");
+    setHealAllyRecoveryNote("");
+    setHealAllyDowntimeNote("");
+    setHealFortuneRollPreview(null);
+  }, [npc?.id]);
+
+  const rollHealQualityFortune = useCallback((kind) => {
+    const n = Math.max(
+      1,
+      Math.min(4, Math.floor(Number(healQualityFortuneDice)) || 2),
+    );
+    const results = Array.from(
+      { length: n },
+      () => Math.floor(Math.random() * 6) + 1,
+    );
+    const highest = Math.max(...results);
+    const sixes = results.filter((d) => d === 6).length;
+    const critical = sixes >= 2;
+    setHealFortuneRollPreview({ results, highest, critical, kind });
+  }, [healQualityFortuneDice]);
 
   // Faction detail — loaded from server when a faction is selected
   const [factionDetailLoading, setFactionDetailLoading] = useState(false);
@@ -885,14 +1130,20 @@ const NPCSheet = ({
 
   useEffect(() => {
     if (npc?.id == null || npcConflictClocksSnap === "") return;
-    setConflictClocks(
-      normalizeClockList(JSON.parse(npcConflictClocksSnap || "[]")),
+    const next = normalizeClockList(
+      JSON.parse(npcConflictClocksSnap || "[]"),
+    );
+    setConflictClocks((prev) =>
+      npcClockListsSemanticallyEqual(prev, next) ? prev : next,
     );
   }, [npc?.id, npcConflictClocksSnap]);
 
   useEffect(() => {
     if (npc?.id == null || npcAltClocksSnap === "") return;
-    setAltClocks(normalizeClockList(JSON.parse(npcAltClocksSnap || "[]")));
+    const next = normalizeClockList(JSON.parse(npcAltClocksSnap || "[]"));
+    setAltClocks((prev) =>
+      npcClockListsSemanticallyEqual(prev, next) ? prev : next,
+    );
   }, [npc?.id, npcAltClocksSnap]);
 
   const [vulnFilled, setVulnFilled] = useState(
@@ -904,6 +1155,19 @@ const NPCSheet = ({
   );
   const [specialUsed, setSpecialUsed] = useState(
     npc?.special_armor_used ?? npc?.specialUsed ?? 0,
+  );
+  const [standUsed, setStandUsed] = useState(npc?.stand_armor_used ?? 0);
+
+  const [hasPhysicalArmorItem, setHasPhysicalArmorItem] = useState(
+    () => !!npc?.has_physical_armor_item,
+  );
+  const [physicalArmorBonusCharges, setPhysicalArmorBonusCharges] = useState(
+    () => {
+      const b = Number(npc?.physical_armor_bonus_charges);
+      return Number.isFinite(b)
+        ? Math.max(0, Math.min(6, Math.floor(b)))
+        : 0;
+    },
   );
 
   const [abilities, setAbilities] = useState(() =>
@@ -924,6 +1188,20 @@ const NPCSheet = ({
       .catch(() => setHeritagesList([]));
   }, []);
 
+  const resolvedHeritageDetails = useMemo(() => {
+    const d = npc?.heritage_details;
+    if (d && typeof d === "object" && (d.name || d.description)) {
+      return d;
+    }
+    const hid = heritage;
+    if (hid == null || hid === "") return null;
+    return (
+      heritagesList.find(
+        (h) => h.id === hid || String(h.id) === String(hid),
+      ) || null
+    );
+  }, [npc?.heritage_details, heritage, heritagesList]);
+
   // Sync heritage/playbook when NPC identity changes
   useEffect(() => {
     setHeritage(npc?.heritage ?? npc?.heritage_id ?? null);
@@ -931,6 +1209,25 @@ const NPCSheet = ({
     setSelectedHamonIds(npc?.selected_hamon_abilities ?? []);
     setSelectedSpinIds(npc?.selected_spin_abilities ?? []);
     setAbilities(normalizeNpcSheetAbilitiesNoStandard(npc?.abilities ?? []));
+    setHasPhysicalArmorItem(!!npc?.has_physical_armor_item);
+    const bonusArm = Number(npc?.physical_armor_bonus_charges);
+    setPhysicalArmorBonusCharges(
+      Number.isFinite(bonusArm)
+        ? Math.max(0, Math.min(6, Math.floor(bonusArm)))
+        : 0,
+    );
+    const hq = Number(npc?.heal_quality_fortune_dice ?? npc?.healQualityFortuneDice);
+    setHealQualityFortuneDice(
+      Number.isFinite(hq) && hq >= 1 && hq <= 4 ? hq : 2,
+    );
+    const rp = String(npc?.heal_recover_in_play_position || "risky").toLowerCase();
+    setHealAllyPosition(
+      ["controlled", "risky", "desperate"].includes(rp) ? rp : "risky",
+    );
+    const re = String(npc?.heal_recover_in_play_effect || "standard").toLowerCase();
+    setHealAllyEffect(
+      ["limited", "standard", "extreme"].includes(re) ? re : "standard",
+    );
     setClockDraftCard(null);
     setClockDraftError("");
   }, [npc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -976,10 +1273,166 @@ const NPCSheet = ({
 
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState(null);
+  /** Last autosave failure (API message); cleared on next successful save attempt. */
+  const [saveErrorDetail, setSaveErrorDetail] = useState(null);
   const debounceRef = useRef(null);
   const mountedRef = useRef(false);
   const npcIdRef = useRef(npc?.id || null);
   const savingRef = useRef(false);
+
+  const [showNpcTrackingPanel, setShowNpcTrackingPanel] = useState(false);
+  const [npcTrackingTab, setNpcTrackingTab] = useState("sheet");
+  const [trackingSessionPick, setTrackingSessionPick] = useState(null);
+  const [npcTrackingRolls, setNpcTrackingRolls] = useState([]);
+  const [npcTrackingRollsLoading, setNpcTrackingRollsLoading] =
+    useState(false);
+  const [npcTrackingRollsErr, setNpcTrackingRollsErr] = useState(null);
+  const [npcSheetHistoryRows, setNpcSheetHistoryRows] = useState([]);
+  const [npcSheetHistoryLoading, setNpcSheetHistoryLoading] = useState(false);
+  const [npcSheetHistoryErr, setNpcSheetHistoryErr] = useState(null);
+
+  useEffect(() => {
+    const sessions = activeCampaign?.sessions;
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      setTrackingSessionPick(activeSessionId);
+      return;
+    }
+    const ids = new Set(sessions.map((s) => s.id));
+    setTrackingSessionPick((prev) => {
+      if (prev != null && ids.has(prev)) return prev;
+      if (activeSessionId != null && ids.has(activeSessionId)) {
+        return activeSessionId;
+      }
+      return sessions[0].id;
+    });
+  }, [activeCampaign?.sessions, activeSessionId, npc?.id]);
+
+  useEffect(() => {
+    if (!showNpcTrackingPanel) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setShowNpcTrackingPanel(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [showNpcTrackingPanel]);
+
+  useEffect(() => {
+    if (!showNpcTrackingPanel || npcTrackingTab !== "sheet") return;
+    if (npc?.id == null) {
+      setNpcSheetHistoryRows([]);
+      setNpcSheetHistoryLoading(false);
+      setNpcSheetHistoryErr(null);
+      return;
+    }
+    let cancelled = false;
+    setNpcSheetHistoryLoading(true);
+    setNpcSheetHistoryErr(null);
+    setNpcSheetHistoryRows([]);
+    const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
+    Promise.all([
+      characterHistoryAPI.list({ character: npc.id }).catch(() => []),
+      experienceTrackerAPI.list({ character: npc.id }).catch(() => []),
+      xpHistoryAPI.list({ character: npc.id }).catch(() => []),
+    ])
+      .then(([histRes, etRes, xhRes]) => {
+        if (cancelled) return;
+        const rows = [];
+        asArray(histRes).forEach((entry) => {
+          const changed = entry?.changed_fields || entry?.changedFields || {};
+          const keys = Object.keys(changed || {});
+          if (!keys.length) return;
+          const details = keys.map((k) => ({
+            key: k,
+            label: historyFieldLabel(k),
+            oldValue: stringifyValue(changed?.[k]?.old),
+            newValue: stringifyValue(changed?.[k]?.new),
+          }));
+          rows.push({
+            key: `sheet-${entry.id}`,
+            timestamp: entry.timestamp,
+            actor: entry.editor_username || "system",
+            type: "sheet_edit",
+            details,
+          });
+        });
+        asArray(etRes).forEach((e) => {
+          rows.push({
+            key: `et-${e.id}`,
+            timestamp: e.session_date,
+            actor: "xp (tracker)",
+            type: "xp_tracker",
+            text: `+${e.xp_gained ?? 0} XP — ${e.trigger_display || e.trigger || "XP"}: ${e.description || "—"}`,
+          });
+        });
+        asArray(xhRes).forEach((x) => {
+          rows.push({
+            key: `xh-${x.id}`,
+            timestamp: x.timestamp,
+            actor: "xp (ledger)",
+            type: "xp_ledger",
+            text: `+${x.amount ?? 0} XP — ${x.reason || "—"}`,
+          });
+        });
+        rows.sort(
+          (a, b) =>
+            new Date(b.timestamp || 0).getTime() -
+            new Date(a.timestamp || 0).getTime(),
+        );
+        setNpcSheetHistoryRows(rows);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setNpcSheetHistoryErr(
+          e instanceof Error ? e.message : "Failed to load history",
+        );
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setNpcSheetHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showNpcTrackingPanel, npcTrackingTab, npc?.id]);
+
+  useEffect(() => {
+    if (
+      !showNpcTrackingPanel ||
+      npcTrackingTab !== "session" ||
+      !campaignId ||
+      !trackingSessionPick
+    ) {
+      return;
+    }
+    let cancelled = false;
+    setNpcTrackingRollsLoading(true);
+    setNpcTrackingRollsErr(null);
+    const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
+    rollAPI
+      .getRolls({ campaign: campaignId, session: trackingSessionPick })
+      .then((res) => {
+        if (cancelled) return;
+        const all = asArray(res);
+        const n = String(name || "").trim();
+        const filtered = n
+          ? all.filter((r) => rollIsNpcHealFortuneForThisNpc(r, n))
+          : [];
+        setNpcTrackingRolls(filtered);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setNpcTrackingRollsErr(
+            e instanceof Error ? e.message : "Failed to load rolls",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setNpcTrackingRollsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showNpcTrackingPanel, npcTrackingTab, campaignId, trackingSessionPick, name]);
 
   const handleFileSelect = useCallback((e) => {
     const file = e.target.files?.[0];
@@ -1010,9 +1463,21 @@ const NPCSheet = ({
 
   const durGrade = stats.durability;
   const vulnSegs = DUR_VULN_CLOCK[durGrade];
-  const regArmorMax = DUR_REGULAR_ARMOR[durGrade];
+  const baseRegPhysical = DUR_REGULAR_ARMOR[durGrade];
+  const regArmorMax = hasPhysicalArmorItem
+    ? baseRegPhysical +
+      Math.max(
+        0,
+        Math.min(6, Math.floor(Number(physicalArmorBonusCharges) || 0)),
+      )
+    : 0;
   const specArmorMax = DUR_SPECIAL_ARMOR[durGrade];
+  const standArmorMax = DUR_STAND_ARMOR[durGrade];
   const isDurS = durGrade === "S";
+
+  useEffect(() => {
+    setRegularUsed((u) => (u > regArmorMax ? regArmorMax : u));
+  }, [regArmorMax]);
 
   const powerInfo = POWER_TABLE[stats.power];
   const speedInfo = SPEED_TABLE[stats.speed];
@@ -1028,11 +1493,11 @@ const NPCSheet = ({
       durability:
         isDurS
           ? "⚠ S-DUR: No vulnerability clock — alternative win conditions required"
-          : `${vulnSegs}-seg clock · ${regArmorMax} regular · ${specArmorMax} special`,
+          : `${vulnSegs}-seg clock · ${regArmorMax} physical · ${standArmorMax} stand · ${specArmorMax} special`,
       precision: `Partial → ${PRECISION_TABLE[stats.precision].partial}`,
       development: DEV_TABLE[stats.development].split("—")[0].trim(),
     }),
-    [stats, isDurS, vulnSegs, regArmorMax, specArmorMax],
+    [stats, isDurS, vulnSegs, regArmorMax, standArmorMax, specArmorMax],
   );
 
   const bumpStandCoinGrade = useCallback((key, delta) => {
@@ -1045,6 +1510,7 @@ const NPCSheet = ({
         queueMicrotask(() => {
           setRegularUsed(0);
           setSpecialUsed(0);
+          setStandUsed(0);
         });
       }
       return { ...p, [key]: next };
@@ -1108,6 +1574,16 @@ const NPCSheet = ({
   const deleteAltClock = (id) =>
     setAltClocks((p) => p.filter((c) => !npcClockIdsMatch(c.id, id)));
 
+  /** Between-score upkeep: full armor boxes + all clock progress cleared (autosaves). */
+  const refreshRestClocksAndArmor = useCallback(() => {
+    setRegularUsed(0);
+    setStandUsed(0);
+    setSpecialUsed(0);
+    setVulnFilled(0);
+    setConflictClocks((prev) => prev.map((c) => ({ ...c, filled: 0 })));
+    setAltClocks((prev) => prev.map((c) => ({ ...c, filled: 0 })));
+  }, []);
+
   const buildPayload = useCallback(
     () => ({
       ...(npcIdRef.current ? { id: npcIdRef.current } : {}),
@@ -1130,7 +1606,16 @@ const NPCSheet = ({
       alt_clocks: altClocks,
       vulnerability_clock_current: vulnFilled,
       regular_armor_used: regularUsed,
+      stand_armor_used: standUsed,
       special_armor_used: specialUsed,
+      has_physical_armor_item: hasPhysicalArmorItem,
+      physical_armor_bonus_charges: Math.max(
+        0,
+        Math.min(6, Math.floor(Number(physicalArmorBonusCharges) || 0)),
+      ),
+      heal_quality_fortune_dice: healQualityFortuneDice,
+      heal_recover_in_play_position: healAllyPosition,
+      heal_recover_in_play_effect: healAllyEffect,
       abilities: normalizeNpcSheetAbilitiesNoStandard(abilities),
       hamon_ability_ids: selectedHamonIds,
       spin_ability_ids: selectedSpinIds,
@@ -1155,7 +1640,13 @@ const NPCSheet = ({
       altClocks,
       vulnFilled,
       regularUsed,
+      standUsed,
       specialUsed,
+      hasPhysicalArmorItem,
+      physicalArmorBonusCharges,
+      healQualityFortuneDice,
+      healAllyPosition,
+      healAllyEffect,
       abilities,
       selectedHamonIds,
       selectedSpinIds,
@@ -1184,22 +1675,38 @@ const NPCSheet = ({
       if (!npcIdRef.current && !name.trim()) return;
       savingRef.current = true;
       setSaveStatus("saving");
+      setSaveErrorDetail(null);
       try {
         const result = await onSave(buildPayload());
         if (result?.id && !npcIdRef.current) npcIdRef.current = result.id;
         if (Array.isArray(result?.conflict_clocks)) {
-          setConflictClocks(normalizeClockList(result.conflict_clocks));
+          const next = normalizeClockList(result.conflict_clocks);
+          setConflictClocks((prev) =>
+            npcClockListsSemanticallyEqual(prev, next) ? prev : next,
+          );
         }
         if (Array.isArray(result?.alt_clocks)) {
-          setAltClocks(normalizeClockList(result.alt_clocks));
+          const next = normalizeClockList(result.alt_clocks);
+          setAltClocks((prev) =>
+            npcClockListsSemanticallyEqual(prev, next) ? prev : next,
+          );
         }
         setSaveStatus("saved");
+        setSaveErrorDetail(null);
         setTimeout(
           () => setSaveStatus((s) => (s === "saved" ? null : s)),
           2000,
         );
-      } catch {
+      } catch (err) {
         setSaveStatus("error");
+        const msg =
+          err instanceof Error
+            ? err.message
+            : typeof err === "string"
+              ? err
+              : "Save failed";
+        setSaveErrorDetail(msg);
+        console.error("NPC autosave failed:", err);
       } finally {
         savingRef.current = false;
       }
@@ -1221,7 +1728,13 @@ const NPCSheet = ({
     altClocks,
     vulnFilled,
     regularUsed,
+    standUsed,
     specialUsed,
+    hasPhysicalArmorItem,
+    physicalArmorBonusCharges,
+    healQualityFortuneDice,
+    healAllyPosition,
+    healAllyEffect,
     abilities,
     selectedHamonIds,
     selectedSpinIds,
@@ -1354,6 +1867,25 @@ const NPCSheet = ({
           )}
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          <button
+            type="button"
+            onClick={() => setShowNpcTrackingPanel((v) => !v)}
+            title={
+              showNpcTrackingPanel
+                ? "Close NPC tracking"
+                    : "NPC tracking — character sheet history & session history"
+            }
+            style={{
+              background: showNpcTrackingPanel ? "#312e81" : "#1f2937",
+              border: "1px solid #4b5563",
+              borderRadius: "6px",
+              padding: "6px 8px",
+              cursor: "pointer",
+              lineHeight: 0,
+            }}
+          >
+            <HistoryBranchIcon />
+          </button>
           {saveStatus === "saving" && (
             <span style={{ fontSize: "11px", color: "#fbbf24" }}>
               Saving...
@@ -1363,8 +1895,14 @@ const NPCSheet = ({
             <span style={{ fontSize: "11px", color: "#34d399" }}>Saved</span>
           )}
           {saveStatus === "error" && (
-            <span style={{ fontSize: "11px", color: "#f87171" }}>
+            <span
+              style={{ fontSize: "11px", color: "#f87171", maxWidth: "220px" }}
+              title={saveErrorDetail || "Request failed — see browser console"}
+            >
               Error saving
+              {saveErrorDetail
+                ? `: ${saveErrorDetail.length > 90 ? `${saveErrorDetail.slice(0, 90)}…` : saveErrorDetail}`
+                : ""}
             </span>
           )}
           {onClose && (
@@ -1383,6 +1921,287 @@ const NPCSheet = ({
           )}
         </div>
       </div>
+
+      {showNpcTrackingPanel && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="NPC history"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.62)",
+            zIndex: 126,
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "center",
+            paddingTop: "72px",
+          }}
+          onClick={() => setShowNpcTrackingPanel(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#111827",
+              border: "1px solid #374151",
+              borderRadius: "8px",
+              padding: "12px",
+              width: "min(640px, 92vw)",
+              maxHeight: "72vh",
+              overflowY: "auto",
+              fontSize: "11px",
+              boxShadow: "0 14px 40px rgba(0,0,0,0.55)",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "10px",
+                gap: "8px",
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ color: "#a78bfa", fontWeight: "bold" }}>
+                NPC tracking
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "8px",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <span style={{ fontSize: "10px", color: "#9ca3af" }}>
+                  Esc to close
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowNpcTrackingPanel(false)}
+                  style={{ ...S.btn, padding: "4px 10px", fontSize: "10px" }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <p
+              style={{
+                margin: "0 0 10px",
+                fontSize: 10,
+                color: "#6b7280",
+                lineHeight: 1.45,
+              }}
+            >
+              Character sheet history: field edits + XP ledger/tracker. Session history:
+              NPC-related fortune/action rolls for the selected campaign session.
+            </p>
+            <div
+              style={{
+                display: "flex",
+                gap: "6px",
+                marginBottom: "10px",
+                flexWrap: "wrap",
+              }}
+            >
+              {["sheet", "session"].map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setNpcTrackingTab(tab)}
+                  style={{
+                    ...S.btn,
+                    fontSize: "10px",
+                    padding: "6px 10px",
+                    background:
+                      npcTrackingTab === tab ? "#4338ca" : "#1f2937",
+                    color: npcTrackingTab === tab ? "#f9fafb" : "#d1d5db",
+                    border:
+                      npcTrackingTab === tab
+                        ? "1px solid #818cf8"
+                        : "1px solid #374151",
+                  }}
+                >
+                  {tab === "sheet" ? "Character sheet history" : "Session history"}
+                </button>
+              ))}
+            </div>
+            {npcTrackingTab === "session" ? (
+              <>
+                {campaignId == null ? (
+                  <div style={{ color: "#9ca3af", marginBottom: "8px" }}>
+                    Link this NPC to a campaign to load session history.
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr",
+                      gap: "8px",
+                      marginBottom: "10px",
+                    }}
+                  >
+                    <label
+                      style={{
+                        fontSize: "10px",
+                        color: "#9ca3af",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "4px",
+                      }}
+                    >
+                      Session
+                      <select
+                        aria-label="Tracking session"
+                        value={trackingSessionPick ?? ""}
+                        onChange={(e) =>
+                          setTrackingSessionPick(
+                            e.target.value ? Number(e.target.value) : null,
+                          )
+                        }
+                        style={{ ...S.sel, fontSize: "11px" }}
+                      >
+                        {(activeCampaign?.sessions || []).map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name || `Session ${s.id}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                )}
+                {npcTrackingRollsLoading ? (
+                  <div style={{ color: "#9ca3af" }}>Loading session history…</div>
+                ) : null}
+                {npcTrackingRollsErr ? (
+                  <div style={{ color: "#fca5a5", marginBottom: "8px" }}>
+                    {npcTrackingRollsErr}
+                  </div>
+                ) : null}
+                {!npcTrackingRollsLoading &&
+                !npcTrackingRollsErr &&
+                npcTrackingRolls.length === 0 &&
+                campaignId != null &&
+                String(name || "").trim() ? (
+                  <div style={{ color: "#6b7280", fontSize: "10px" }}>
+                    No session history entries for “{name.trim()}” in this session.
+                  </div>
+                ) : null}
+                <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                  {npcTrackingRolls.map((r) => {
+                    const diceStr = [].concat(r.results || []).join(", ");
+                    const out = String(r.outcome || "").replace(/_/g, " ");
+                    const pub = String(
+                      r.fortune_public_label ??
+                        r.fortunePublicLabel ??
+                        "",
+                    ).trim();
+                    const pc = String(
+                      r.character_name ?? r.characterName ?? "",
+                    ).trim();
+                    return (
+                      <div
+                        key={r.id}
+                        style={{
+                          borderBottom: "1px solid #374151",
+                          padding: "8px 0",
+                        }}
+                      >
+                        <div style={{ color: "#6b7280", fontSize: "9px" }}>
+                          {r.timestamp}
+                          {pc ? ` · ${pc}` : ""}
+                        </div>
+                        <div style={{ color: "#e5e7eb" }}>
+                          {out}
+                          {String(r.roll_type || "").toUpperCase() === "FORTUNE"
+                            ? ""
+                            : ` · ${r.roll_type}`}{" "}
+                          · pool {r.dice_pool ?? 0}
+                          {diceStr ? ` · [${diceStr}]` : ""}
+                        </div>
+                        {pub ? (
+                          <div style={{ color: "#a78bfa", marginTop: "4px" }}>
+                            {pub}
+                          </div>
+                        ) : null}
+                        {!r.fortune_reveal_outcome &&
+                        String(r.roll_type || "").toUpperCase() ===
+                          "FORTUNE" ? (
+                          <div
+                            style={{
+                              color: "#57534e",
+                              fontSize: "9px",
+                              marginTop: "4px",
+                            }}
+                          >
+                            Outcome not revealed to players yet (GM view).
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <>
+                {npcSheetHistoryLoading ? (
+                  <div style={{ color: "#9ca3af" }}>Loading character history…</div>
+                ) : npcSheetHistoryErr ? (
+                  <div style={{ color: "#fca5a5" }}>{npcSheetHistoryErr}</div>
+                ) : npcSheetHistoryRows.length === 0 ? (
+                  <div style={{ color: "#6b7280", lineHeight: 1.45 }}>
+                    No history entries.
+                  </div>
+                ) : (
+                  npcSheetHistoryRows.slice(0, 200).map((row) => (
+                    <div
+                      key={row.key}
+                      style={{
+                        padding: "6px 0",
+                        borderBottom: "1px solid #1f2937",
+                      }}
+                    >
+                      <div style={{ color: "#9ca3af", fontSize: 10 }}>
+                        {row.timestamp
+                          ? new Date(row.timestamp).toLocaleString()
+                          : "No timestamp"}{" "}
+                        · {row.actor || "unknown"}
+                      </div>
+                      {row.text ? (
+                        <div style={{ color: "#d1d5db" }}>{row.text}</div>
+                      ) : null}
+                      {Array.isArray(row.details) &&
+                      row.details.length > 0 ? (
+                        row.details.map((d) => (
+                          <div
+                            key={`${row.key}-${d.key}`}
+                            style={{ fontSize: 10, color: "#d1d5db" }}
+                          >
+                            <strong>{d.label}</strong>:{" "}
+                            <span style={{ color: "#fca5a5" }}>
+                              {d.oldValue || "∅"}
+                            </span>{" "}
+                            →{" "}
+                            <span style={{ color: "#86efac" }}>
+                              {d.newValue || "∅"}
+                            </span>
+                          </div>
+                        ))
+                      ) : null}
+                      {row.modifiers?.length ? (
+                        <div style={{ fontSize: 10, color: "#a78bfa" }}>
+                          {row.modifiers.join(" · ")}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Mode Toggle ── */}
       <div
@@ -1897,6 +2716,121 @@ const NPCSheet = ({
                   </div>
                 </div>
 
+                {/* Heritage reference (recover-in-play defaults live under Heal ally → Recover in play) */}
+                <div style={S.card}>
+                  <span style={S.lbl}>Heritage</span>
+                  {resolvedHeritageDetails ? (
+                    <>
+                      <div
+                        style={{
+                          fontSize: "12px",
+                          fontWeight: 700,
+                          color: "#fde68a",
+                          marginBottom: "6px",
+                        }}
+                      >
+                        {resolvedHeritageDetails.name || "Heritage"}
+                      </div>
+                      {resolvedHeritageDetails.description ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#9ca3af",
+                            lineHeight: 1.55,
+                            marginBottom: "8px",
+                          }}
+                        >
+                          {resolvedHeritageDetails.description}
+                        </div>
+                      ) : null}
+                      {Array.isArray(resolvedHeritageDetails.benefits) &&
+                      resolvedHeritageDetails.benefits.length > 0 ? (
+                        <div style={{ marginBottom: "8px" }}>
+                          <div
+                            style={{
+                              fontSize: "9px",
+                              fontWeight: 600,
+                              color: "#6ee7b7",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            Benefits
+                          </div>
+                          <ul
+                            style={{
+                              margin: 0,
+                              paddingLeft: "18px",
+                              fontSize: "10px",
+                              color: "#a7f3d0",
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {resolvedHeritageDetails.benefits.map((b) => (
+                              <li key={b.id}>
+                                {b.name}
+                                {b.description ? (
+                                  <span style={{ color: "#6b7280" }}>
+                                    {" "}
+                                    — {b.description}
+                                  </span>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                      {Array.isArray(resolvedHeritageDetails.detriments) &&
+                      resolvedHeritageDetails.detriments.length > 0 ? (
+                        <div style={{ marginBottom: "8px" }}>
+                          <div
+                            style={{
+                              fontSize: "9px",
+                              fontWeight: 600,
+                              color: "#fca5a5",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            Detriments
+                          </div>
+                          <ul
+                            style={{
+                              margin: 0,
+                              paddingLeft: "18px",
+                              fontSize: "10px",
+                              color: "#fecaca",
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {resolvedHeritageDetails.detriments.map((d) => (
+                              <li key={d.id}>
+                                {d.name}
+                                {d.description ? (
+                                  <span style={{ color: "#6b7280" }}>
+                                    {" "}
+                                    — {d.description}
+                                  </span>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </>
+                  ) : (
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        color: "#6b7280",
+                        marginBottom: "10px",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      No heritage on this NPC. Choose one under Identity to show
+                      properties here.
+                    </div>
+                  )}
+                </div>
+
                 {/* Abilities */}
                 <div style={S.card}>
                   <span style={S.lbl}>Stand Abilities</span>
@@ -2336,26 +3270,48 @@ const NPCSheet = ({
                       <span style={S.lbl}>Armor Charges (S-DUR)</span>
                       <div
                         style={{
-                          display: "flex",
-                          gap: "24px",
-                          justifyContent: "center",
                           marginTop: "8px",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "10px",
                         }}
                       >
-                        <ArmorTracker
-                          label="REGULAR"
-                          max={regArmorMax}
-                          used={regularUsed}
-                          onChange={setRegularUsed}
-                          color="#f59e0b"
+                        <NpcPhysicalArmorBlock
+                          shortLabel
+                          hasItem={hasPhysicalArmorItem}
+                          onHasItemChange={(v) => {
+                            setHasPhysicalArmorItem(v);
+                            if (!v) setRegularUsed(0);
+                          }}
+                          bonusCharges={physicalArmorBonusCharges}
+                          onBonusChargesChange={setPhysicalArmorBonusCharges}
+                          regArmorMax={regArmorMax}
+                          regularUsed={regularUsed}
+                          onRegularUsed={setRegularUsed}
                         />
-                        <ArmorTracker
-                          label="SPECIAL"
-                          max={specArmorMax}
-                          used={specialUsed}
-                          onChange={setSpecialUsed}
-                          color="#7c3aed"
-                        />
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "16px",
+                            justifyContent: "center",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <ArmorTracker
+                            label="STAND"
+                            max={standArmorMax}
+                            used={standUsed}
+                            onChange={setStandUsed}
+                            color="#0ea5e9"
+                          />
+                          <ArmorTracker
+                            label="SPECIAL"
+                            max={specArmorMax}
+                            used={specialUsed}
+                            onChange={setSpecialUsed}
+                            color="#7c3aed"
+                          />
+                        </div>
                       </div>
                       <div
                         style={{
@@ -2365,8 +3321,8 @@ const NPCSheet = ({
                           marginTop: "6px",
                         }}
                       >
-                        Spend BEFORE filling any clock. Special = completely
-                        negates harm.
+                        Spend BEFORE filling any clock. Physical = −1 harm;
+                        Stand = path armor; Special = negates harm.
                       </div>
                     </div>
 
@@ -2672,12 +3628,25 @@ const NPCSheet = ({
                           Spend armor charges <strong>before</strong> filling
                           clocks.
                         </div>
+                        <NpcPhysicalArmorBlock
+                          shortLabel={false}
+                          hasItem={hasPhysicalArmorItem}
+                          onHasItemChange={(v) => {
+                            setHasPhysicalArmorItem(v);
+                            if (!v) setRegularUsed(0);
+                          }}
+                          bonusCharges={physicalArmorBonusCharges}
+                          onBonusChargesChange={setPhysicalArmorBonusCharges}
+                          regArmorMax={regArmorMax}
+                          regularUsed={regularUsed}
+                          onRegularUsed={setRegularUsed}
+                        />
                         <ArmorTracker
-                          label="REGULAR ARMOR"
-                          max={regArmorMax}
-                          used={regularUsed}
-                          onChange={setRegularUsed}
-                          color="#f59e0b"
+                          label="STAND ARMOR"
+                          max={standArmorMax}
+                          used={standUsed}
+                          onChange={setStandUsed}
+                          color="#0ea5e9"
                         />
                         <ArmorTracker
                           label="SPECIAL ARMOR"
@@ -2693,13 +3662,17 @@ const NPCSheet = ({
                             lineHeight: "1.5",
                           }}
                         >
-                          Regular: reduce harm by 1 level
+                          Physical: Durability baseline + optional GM extra — only
+                          when the physical armor item box is checked
                           <br />
-                          Special: completely negate harm
+                          Stand (Durability): path / Stand armor pool
+                          <br />
+                          Special (Durability): completely negate harm
                         </div>
                         <button
                           onClick={() => {
                             setRegularUsed(0);
+                            setStandUsed(0);
                             setSpecialUsed(0);
                           }}
                           style={{
@@ -2971,61 +3944,680 @@ const NPCSheet = ({
                   </div>
                 </div>
 
-                {/* Level Differential Reference */}
+                {/* Healing and Recovery — GM reference (no PC-style dice pool on NPCs) */}
                 <div style={S.card}>
-                  <span style={S.lbl}>Level Differential</span>
+                  <span style={S.lbl}>Healing and recovery</span>
                   <div
                     style={{
                       fontSize: "11px",
-                      lineHeight: "1.8",
+                      lineHeight: 1.75,
                       color: "#9ca3af",
                     }}
                   >
-                    <div>
-                      <span style={{ color: "#34d399" }}>
-                        PC Level &gt; NPC Level:
-                      </span>{" "}
-                      +1 Position OR +1 Effect (GM chooses)
-                    </div>
-                    <div>
-                      <span style={{ color: "#f87171" }}>
-                        NPC Level &gt; PC Level:
-                      </span>{" "}
-                      −1 Position OR −1 Effect (GM chooses)
-                    </div>
-                    <div>
-                      <span style={{ color: "#dc2626" }}>
-                        NPC Level 3+ higher:
-                      </span>{" "}
-                      Both worsen position AND reduce effect
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      marginTop: "8px",
-                      padding: "6px",
-                      background: "#0a0a14",
-                      borderRadius: "4px",
-                      fontSize: "11px",
-                      color: "#6b7280",
-                    }}
-                  >
-                    This NPC is Level{" "}
-                    <strong
+                    <div
                       style={{
-                        color:
-                          level >= 7
-                            ? "#f87171"
-                            : level >= 4
-                              ? "#fbbf24"
-                              : "#34d399",
+                        marginBottom: "10px",
+                        padding: "8px",
+                        background: "#0a0a14",
+                        borderRadius: "4px",
+                        border: "1px solid #2d1f52",
                       }}
                     >
-                      {level}
-                    </strong>{" "}
-                    ({totalSpentXP} XP in Stand Coin). Starting PCs are Level 1
-                    (~95 XP: 60 coin + 35 dots). Level differential effects
-                    apply automatically.
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: "bold",
+                          color: "#a78bfa",
+                          marginBottom: "4px",
+                          letterSpacing: "0.04em",
+                        }}
+                      >
+                        Heal ally
+                      </div>
+                      <div
+                        style={{
+                          marginBottom: "10px",
+                          padding: "8px",
+                          background: "#08080f",
+                          borderRadius: "4px",
+                          border: "1px solid #3b2d5c",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            fontWeight: "bold",
+                            color: "#c4b5fd",
+                            marginBottom: "6px",
+                            letterSpacing: "0.04em",
+                          }}
+                        >
+                          Quality tier
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#6b7280",
+                            marginBottom: "8px",
+                            lineHeight: 1.5,
+                          }}
+                        >
+                          Sets how many <strong style={{ color: "#a78bfa" }}>d6</strong>{" "}
+                          to roll on a <strong style={{ color: "#a78bfa" }}>fortune</strong>{" "}
+                          when this NPC provides care. After you pick a heal target,
+                          use <strong style={{ color: "#d1d5db" }}>Roll recover in play fortune</strong>{" "}
+                          under <strong style={{ color: "#d1d5db" }}>Recover in play</strong>{" "}
+                          (same card family as this tier), or{" "}
+                          <strong style={{ color: "#d1d5db" }}>
+                            Roll downtime recover fortune
+                          </strong>{" "}
+                          under <strong style={{ color: "#d1d5db" }}>Downtime recover</strong>{" "}
+                          below. Same tier for both; table preview only (not saved).
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "6px",
+                          }}
+                        >
+                          {[
+                            { dice: 1, label: "I", blurb: "1d" },
+                            { dice: 2, label: "II", blurb: "2d" },
+                            { dice: 3, label: "III", blurb: "3d" },
+                            { dice: 4, label: "IV", blurb: "4d" },
+                          ].map(({ dice, label, blurb }) => {
+                            const on = healQualityFortuneDice === dice;
+                            return (
+                              <button
+                                key={dice}
+                                type="button"
+                                onClick={() => setHealQualityFortuneDice(dice)}
+                                title={`Fortune pool ${blurb} when this NPC heals or stabilizes`}
+                                style={{
+                                  flex: "1 1 68px",
+                                  minWidth: "68px",
+                                  padding: "6px 4px",
+                                  borderRadius: "4px",
+                                  border: on
+                                    ? "1px solid #a78bfa"
+                                    : "1px solid #4b5563",
+                                  background: on ? "#4c1d95" : "#111827",
+                                  color: on ? "#f5f3ff" : "#9ca3af",
+                                  fontSize: "10px",
+                                  fontFamily: "monospace",
+                                  cursor: "pointer",
+                                  lineHeight: 1.35,
+                                }}
+                              >
+                                <div style={{ fontWeight: "bold", color: "#e9d5ff" }}>
+                                  Tier {label}
+                                </div>
+                                <div style={{ fontSize: "9px", opacity: 0.9 }}>
+                                  {blurb} fortune
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      <div style={{ color: "#6b7280", marginBottom: "10px" }}>
+                        When this NPC treats or stabilizes a PC (or another NPC),
+                        resolve with agreed fiction: fortune, clocks, consumables,
+                        or a direct consequence trade. NPCs do not use PC action
+                        dice or stand-coin pools for healing rolls unless the table
+                        explicitly homebrews it.
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: "bold",
+                          color: "#94a3b8",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        Fellow faction NPCs
+                      </div>
+                      {currentFactionId == null ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#57534e",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          Assign this NPC to a faction above to list allies in the
+                          same faction.
+                        </div>
+                      ) : factionNpcPeers.length === 0 ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#57534e",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          No other NPCs in this faction yet.
+                        </div>
+                      ) : (
+                        <ul
+                          style={{
+                            margin: "0 0 10px 0",
+                            paddingLeft: "18px",
+                            fontSize: "10px",
+                            color: "#d1d5db",
+                          }}
+                        >
+                          {factionNpcPeers.map((n) => (
+                            <li key={n.id}>
+                              {n.name || "NPC"}
+                              {n.stand_name ? (
+                                <span style={{ color: "#6b7280" }}>
+                                  {" "}
+                                  — {n.stand_name}
+                                </span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: "bold",
+                          color: "#94a3b8",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        Player character (heal target)
+                      </div>
+                      {campaignId == null ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#57534e",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          Link this NPC to a campaign to pick a PC from the roster.
+                        </div>
+                      ) : campaignPlayerCharacters.length === 0 ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#57534e",
+                            marginBottom: "10px",
+                          }}
+                        >
+                          No PCs on this campaign yet.
+                        </div>
+                      ) : (
+                        <select
+                          aria-label="Heal target player character"
+                          value={healAllyPcId}
+                          onChange={(e) => setHealAllyPcId(e.target.value)}
+                          style={{
+                            width: "100%",
+                            maxWidth: "320px",
+                            marginBottom: "10px",
+                            background: "#1f2937",
+                            color: "#e5e7eb",
+                            border: "1px solid #4b5563",
+                            padding: "6px 8px",
+                            fontSize: "11px",
+                            fontFamily: "monospace",
+                            borderRadius: "4px",
+                          }}
+                        >
+                          <option value="">— Choose PC —</option>
+                          {campaignPlayerCharacters.map((ch) => (
+                            <option key={ch.id} value={String(ch.id)}>
+                              {ch.true_name || ch.alias || `Character ${ch.id}`}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <div
+                        style={{
+                          marginTop: "10px",
+                          paddingTop: "10px",
+                          borderTop: "1px solid #2d1f52",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            fontWeight: "bold",
+                            color: "#38bdf8",
+                            marginBottom: "6px",
+                            letterSpacing: "0.03em",
+                          }}
+                        >
+                          Recover in play (mid-score)
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#57534e",
+                            marginBottom: "8px",
+                            lineHeight: 1.65,
+                          }}
+                        >
+                          <strong style={{ color: "#78716c" }}>Ruling:</strong>{" "}
+                          During an active score the fiction must allow a credible
+                          pause—time, cover, or pressure drop the table agrees on.
+                          Use position/effect to flag how dangerous rushed treatment
+                          is. If you mirror PC healing costs, stress and similar
+                          spends usually belong to the{" "}
+                          <strong style={{ color: "#a8a29e" }}>
+                            recipient PC
+                          </strong>
+                          , not this NPC’s sheet.
+                        </div>
+                        {campaignId != null &&
+                        campaignPlayerCharacters.length > 0 &&
+                        !healAllyPcId ? (
+                          <div
+                            style={{
+                              fontSize: "9px",
+                              color: "#78716c",
+                              marginBottom: "10px",
+                              lineHeight: 1.55,
+                              padding: "8px",
+                              background: "#0d1117",
+                              borderRadius: "4px",
+                              border: "1px solid #374151",
+                            }}
+                          >
+                            Choose a <strong style={{ color: "#a8a29e" }}>player character</strong>{" "}
+                            above to unlock recover-in-play{" "}
+                            <strong style={{ color: "#a8a29e" }}>position</strong>,{" "}
+                            <strong style={{ color: "#a8a29e" }}>effect</strong>, and{" "}
+                            <strong style={{ color: "#a8a29e" }}>fortune</strong>{" "}
+                            (same nested card style as{" "}
+                            <strong style={{ color: "#a8a29e" }}>Quality tier</strong>
+                            ).
+                          </div>
+                        ) : null}
+                        {healAllyPcId ? (
+                          <div
+                            style={{
+                              marginBottom: "10px",
+                              padding: "8px",
+                              background: "#08080f",
+                              borderRadius: "4px",
+                              border: "1px solid #3b2d5c",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: "9px",
+                                fontWeight: "bold",
+                                color: "#c4b5fd",
+                                marginBottom: "6px",
+                                letterSpacing: "0.04em",
+                              }}
+                            >
+                              Quality tier — recover in play
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "9px",
+                                fontWeight: "bold",
+                                color: "#6b7280",
+                                marginBottom: "6px",
+                              }}
+                            >
+                              Recover in play — default position & effect
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "10px",
+                                color: "#57534e",
+                                marginBottom: "8px",
+                                lineHeight: 1.55,
+                              }}
+                            >
+                              Saved on this NPC for recover in play under this
+                              character&apos;s care (current target: selected PC
+                              above).
+                            </div>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexWrap: "wrap",
+                                gap: "8px",
+                                alignItems: "center",
+                                marginBottom: "8px",
+                              }}
+                            >
+                              <label
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "2px",
+                                  fontSize: "9px",
+                                  color: "#6b7280",
+                                }}
+                              >
+                                Position
+                                <select
+                                  aria-label="Recover in play default position"
+                                  value={healAllyPosition}
+                                  onChange={(e) =>
+                                    setHealAllyPosition(e.target.value)
+                                  }
+                                  style={{
+                                    background: "#1f2937",
+                                    color: "#e5e7eb",
+                                    border: "1px solid #4b5563",
+                                    padding: "4px 6px",
+                                    fontSize: "11px",
+                                    fontFamily: "monospace",
+                                    borderRadius: "4px",
+                                  }}
+                                >
+                                  <option value="controlled">Controlled</option>
+                                  <option value="risky">Risky</option>
+                                  <option value="desperate">Desperate</option>
+                                </select>
+                              </label>
+                              <label
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  gap: "2px",
+                                  fontSize: "9px",
+                                  color: "#6b7280",
+                                }}
+                              >
+                                Effect
+                                <select
+                                  aria-label="Recover in play default effect tier"
+                                  value={healAllyEffect}
+                                  onChange={(e) =>
+                                    setHealAllyEffect(e.target.value)
+                                  }
+                                  style={{
+                                    background: "#1f2937",
+                                    color: "#e5e7eb",
+                                    border: "1px solid #4b5563",
+                                    padding: "4px 6px",
+                                    fontSize: "11px",
+                                    fontFamily: "monospace",
+                                    borderRadius: "4px",
+                                  }}
+                                >
+                                  <option value="limited">Limited</option>
+                                  <option value="standard">Standard</option>
+                                  <option value="extreme">Extreme</option>
+                                </select>
+                              </label>
+                            </div>
+                            <div
+                              style={{
+                                fontSize: "9px",
+                                color: "#6b7280",
+                                lineHeight: 1.45,
+                                marginBottom: "6px",
+                              }}
+                            >
+                              Fortune uses the <strong style={{ color: "#a8a29e" }}>d6 count</strong>{" "}
+                              from <strong style={{ color: "#a8a29e" }}>Quality tier</strong>{" "}
+                              above.
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                rollHealQualityFortune("recover_in_play")
+                              }
+                              title="Roll Nd6 using Quality tier (GM preview — not saved to session)"
+                              style={{
+                                padding: "8px 10px",
+                                borderRadius: "4px",
+                                border: "1px solid #7c3aed",
+                                background: "#5b21b6",
+                                color: "#faf5ff",
+                                fontSize: "11px",
+                                fontFamily: "monospace",
+                                fontWeight: "bold",
+                                cursor: "pointer",
+                                width: "100%",
+                                boxSizing: "border-box",
+                              }}
+                            >
+                              Roll recover in play fortune ({healQualityFortuneDice}d)
+                            </button>
+                            {healFortuneRollPreview?.kind === "recover_in_play" ? (
+                              <div
+                                style={{
+                                  marginTop: "6px",
+                                  fontSize: "10px",
+                                  color: "#c4b5fd",
+                                  textAlign: "center",
+                                  lineHeight: 1.5,
+                                  padding: "6px",
+                                  background: "#111827",
+                                  borderRadius: "4px",
+                                  border: "1px solid #4c1d95",
+                                }}
+                              >
+                                [
+                                {healFortuneRollPreview.results.join(", ")}] → highest{" "}
+                                <strong>{healFortuneRollPreview.highest}</strong>
+                                {healFortuneRollPreview.critical ? (
+                                  <span style={{ color: "#fbbf24" }}> · critical</span>
+                                ) : null}
+                                <div style={{ fontSize: "9px", color: "#6b7280" }}>
+                                  GM preview only — log to session history or a PC
+                                  roll if you need a saved record.
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                        <textarea
+                          value={healAllyRecoveryNote}
+                          onChange={(e) =>
+                            setHealAllyRecoveryNote(e.target.value)
+                          }
+                          placeholder="In-play notes: stress spent, clocks ticked, complications, scene beats…"
+                          style={{
+                            width: "100%",
+                            minHeight: "48px",
+                            background: "#0d1117",
+                            color: "#d1d5db",
+                            border: "1px solid #374151",
+                            padding: "6px 8px",
+                            fontSize: "10px",
+                            fontFamily: "monospace",
+                            borderRadius: "4px",
+                            resize: "vertical",
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+                      <div
+                        style={{
+                          marginTop: "10px",
+                          paddingTop: "10px",
+                          borderTop: "1px solid #2d1f52",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            fontWeight: "bold",
+                            color: "#34d399",
+                            marginBottom: "6px",
+                            letterSpacing: "0.03em",
+                          }}
+                        >
+                          Downtime recover
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#57534e",
+                            marginBottom: "8px",
+                            lineHeight: 1.65,
+                          }}
+                        >
+                          <strong style={{ color: "#78716c" }}>Ruling:</strong>{" "}
+                          Between scores (or any pause the table treats as
+                          downtime): longer treatment scenes, full kits, sleep,
+                          and healing clocks without the score breathing down your
+                          neck.{" "}
+                          <strong style={{ color: "#a8a29e" }}>
+                            Not the same bar as mid-action recover
+                          </strong>
+                          —no position/effect track here unless you deliberately
+                          re-introduce danger as a second beat.
+                        </div>
+                        {healAllyPcId ? (
+                          <div
+                            style={{
+                              marginBottom: "8px",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "6px",
+                              alignItems: "stretch",
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => rollHealQualityFortune("downtime")}
+                              title="Roll Nd6 using Quality tier (GM preview — not saved to session)"
+                              style={{
+                                padding: "8px 10px",
+                                borderRadius: "4px",
+                                border: "1px solid #059669",
+                                background: "#047857",
+                                color: "#ecfdf5",
+                                fontSize: "11px",
+                                fontFamily: "monospace",
+                                fontWeight: "bold",
+                                cursor: "pointer",
+                              }}
+                            >
+                              Roll downtime recover fortune ({healQualityFortuneDice}d)
+                            </button>
+                            {healFortuneRollPreview?.kind === "downtime" ? (
+                              <div
+                                style={{
+                                  fontSize: "10px",
+                                  color: "#6ee7b7",
+                                  textAlign: "center",
+                                  lineHeight: 1.5,
+                                  padding: "6px",
+                                  background: "#111827",
+                                  borderRadius: "4px",
+                                  border: "1px solid #065f46",
+                                }}
+                              >
+                                [
+                                {healFortuneRollPreview.results.join(", ")}] → highest{" "}
+                                <strong>{healFortuneRollPreview.highest}</strong>
+                                {healFortuneRollPreview.critical ? (
+                                  <span style={{ color: "#fbbf24" }}> · critical</span>
+                                ) : null}
+                                <div style={{ fontSize: "9px", color: "#6b7280" }}>
+                                  GM preview only — log to session history or a PC
+                                  roll if you need a saved record.
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : campaignId != null &&
+                          campaignPlayerCharacters.length > 0 ? (
+                          <div
+                            style={{
+                              fontSize: "9px",
+                              color: "#78716c",
+                              marginBottom: "8px",
+                              lineHeight: 1.55,
+                            }}
+                          >
+                            Choose a <strong style={{ color: "#a8a29e" }}>heal target</strong>{" "}
+                            above to roll downtime recover fortune.
+                          </div>
+                        ) : null}
+                        <textarea
+                          value={healAllyDowntimeNote}
+                          onChange={(e) =>
+                            setHealAllyDowntimeNote(e.target.value)
+                          }
+                          placeholder="Downtime notes: projects, healing clock fills, supplies used, off-screen care…"
+                          style={{
+                            width: "100%",
+                            minHeight: "48px",
+                            background: "#0d1117",
+                            color: "#d1d5db",
+                            border: "1px solid #374151",
+                            padding: "6px 8px",
+                            fontSize: "10px",
+                            fontFamily: "monospace",
+                            borderRadius: "4px",
+                            resize: "vertical",
+                            boxSizing: "border-box",
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: "8px",
+                        background: "#0a0a14",
+                        borderRadius: "4px",
+                        border: "1px solid #2d1f52",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          fontWeight: "bold",
+                          color: "#a78bfa",
+                          marginBottom: "4px",
+                          letterSpacing: "0.04em",
+                        }}
+                      >
+                        Rest & recovery
+                      </div>
+                      <div
+                        style={{
+                          color: "#6b7280",
+                          marginBottom: "10px",
+                          lineHeight: 1.55,
+                        }}
+                      >
+                        Complements <strong style={{ color: "#94a3b8" }}>
+                          Downtime recover
+                        </strong>{" "}
+                        above: armor resets, stress clears, long projects, and any
+                        other between-score upkeep the table tracks for this NPC.
+                      </div>
+                      <button
+                        type="button"
+                        aria-label="Refresh all clocks and armor charges for rest"
+                        title="Clears vulnerability, conflict, and alt clock progress; restores spent regular, stand, and special armor (autosaves)."
+                        onClick={refreshRestClocksAndArmor}
+                        style={{
+                          width: "100%",
+                          boxSizing: "border-box",
+                          padding: "8px 10px",
+                          borderRadius: "4px",
+                          border: "1px solid #7c3aed",
+                          background: "#4c1d95",
+                          color: "#f5f3ff",
+                          fontSize: "11px",
+                          fontFamily: "monospace",
+                          fontWeight: "bold",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Refresh clocks & armor charges
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -3194,21 +4786,6 @@ const NPCSheet = ({
                     >
                       ✕
                     </button>
-                  </div>
-                )}
-                {saveStatus === "saving" && (
-                  <div style={{ color: "#9ca3af", fontSize: "11px", marginTop: "4px" }}>
-                    Saving faction selection...
-                  </div>
-                )}
-                {saveStatus === "saved" && (
-                  <div style={{ color: "#34d399", fontSize: "11px", marginTop: "4px" }}>
-                    Faction selection saved.
-                  </div>
-                )}
-                {saveStatus === "error" && (
-                  <div style={{ color: "#f87171", fontSize: "11px", marginTop: "4px" }}>
-                    Failed to save faction selection.
                   </div>
                 )}
                 {factionCreateError && (

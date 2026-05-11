@@ -17,7 +17,17 @@ export function buildRouteHash(page, payload = {}) {
     return payload.characterId != null ? `character/${payload.characterId}` : "character";
   }
   if (page === "campaigns") {
-    return payload.campaignId != null ? `campaigns/${payload.campaignId}` : "campaigns";
+    const cid = payload.campaignId ?? null;
+    const sidNum =
+      payload.sessionId != null ? Number(payload.sessionId) : Number.NaN;
+    if (
+      cid != null &&
+      Number.isFinite(sidNum) &&
+      sidNum > 0
+    ) {
+      return `campaigns/${cid}/session/${sidNum}`;
+    }
+    return cid != null ? `campaigns/${cid}` : "campaigns";
   }
   if (page === "abilities") {
     return payload.filter ? `abilities-${payload.filter}` : "abilities";

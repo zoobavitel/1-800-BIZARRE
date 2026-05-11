@@ -126,15 +126,15 @@ export const TRAUMA_PK_TO_KEY = Object.fromEntries(
   TRAUMA_KEYS.map((k, i) => [i + 1, k]),
 );
 
-// Durability → stress max bonus and armor charges (PC/NPC sheet; index = stat value 0–5 for F–S)
-// S: +4 stress, 3 armor, resistance can reduce harm by 2 levels | A: +3, 3 | B: +2, 2 | C: +1, 1 | D: 0, 1 | F: -1, 0
+// Durability → Stand armor charges (+ resist tiers). SRD_DEV: durability does **not** change stress track length (baseline 9).
+// S: 3 armor, resistance may reduce harm by 2 levels | A: 3 | B: 2 | C: 1 | D: 1 | F: 0
 export const DUR_TABLE = [
-  { stressBonus: -1, armorCharges: 0, resistanceReduceLevels: 1 }, // F(0)
-  { stressBonus: 0, armorCharges: 1, resistanceReduceLevels: 1 }, // D(1)
-  { stressBonus: 1, armorCharges: 1, resistanceReduceLevels: 1 }, // C(2)
-  { stressBonus: 2, armorCharges: 2, resistanceReduceLevels: 1 }, // B(3)
-  { stressBonus: 3, armorCharges: 3, resistanceReduceLevels: 1 }, // A(4)
-  { stressBonus: 4, armorCharges: 3, resistanceReduceLevels: 2 }, // S(5)
+  { armorCharges: 0, resistanceReduceLevels: 1 }, // F(0)
+  { armorCharges: 1, resistanceReduceLevels: 1 }, // D(1)
+  { armorCharges: 1, resistanceReduceLevels: 1 }, // C(2)
+  { armorCharges: 2, resistanceReduceLevels: 1 }, // B(3)
+  { armorCharges: 3, resistanceReduceLevels: 1 }, // A(4)
+  { armorCharges: 3, resistanceReduceLevels: 2 }, // S(5)
 ];
 
 // Development → session XP bonus per grade (index = stat value 0–4)
@@ -164,12 +164,12 @@ export const PC_STAT_DESC = {
     "100(200) ft · Push to extend",
   ],
   durability: [
-    "−1 stress max · 0 armor charges",
-    "±0 stress max · 1 armor charge",
-    "+1 stress max · 1 armor charge",
-    "+2 stress max · 2 armor charges",
-    "+3 stress max · 3 armor charges",
-    "+4 stress max · 3 armor charges · Resistance can reduce harm by 2 levels",
+    "0 Stand armor charges (stress track stays 9 — durability does not add boxes)",
+    "1 Stand armor charge",
+    "1 Stand armor charge",
+    "2 Stand armor charges",
+    "3 Stand armor charges",
+    "3 Stand armor charges · Durability resist may reduce harm by two levels",
   ],
   precision: [
     "1s and double 1s count as critical fail",
@@ -196,6 +196,31 @@ export const STAND_STAT_KEYS = [
   "precision",
   "development",
 ];
+
+/** SRD_DEV: dice pools parallel to playbook actions — not Range/Development. */
+export const STAND_ROLL_KEYS_ACTIVE = ["power", "speed", "precision"];
+
+/** POWER / PRECISION / SPEED row order in ACTION RATINGS grid (Durability heading above). */
+export const STAND_COLUMN_ROLL_ORDER = ["power", "precision", "speed"];
+
+/** Includes durability when the Stand absorbs a hit (resistance-shaped). */
+export const STAND_ROLL_KEYS_ALL = [
+  ...STAND_ROLL_KEYS_ACTIVE,
+  "durability",
+];
+
+/** SRD_DEV Stand Coin passives — no dice pools. */
+export const STAND_PASSIVE_KEYS = ["range", "development"];
+
+/**
+ * Dice pool from Stand grade index 0–5 (F→S).
+ * Matches SRD_DEV A=4 … F=0; S uses same 4d cap as A (no fifth die).
+ */
+export function standGradeIndexToDicePool(idx) {
+  const diceByIdx = [0, 1, 2, 3, 4, 4];
+  const i = Math.min(5, Math.max(0, Math.floor(Number(idx) || 0)));
+  return diceByIdx[i] ?? 0;
+}
 
 // Default action rating keys (12 skills, uppercase)
 export const ACTION_RATING_KEYS = [

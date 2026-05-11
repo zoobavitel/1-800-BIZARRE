@@ -7,6 +7,7 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from django.contrib.auth.models import User
 from .models import (
+    AssistHelpPending,
     UserProfile,
     Heritage,
     Vice,
@@ -391,21 +392,6 @@ def _normalized_list(raw, cast=None):
             if s:
                 out.append(s)
     return out
-
-
-def _json_clock_show_to_players(c):
-    """True when NPC conflict/alt clock JSON marks this row visible to players."""
-    if not isinstance(c, dict):
-        return False
-    for key in ("show_to_players", "visible_to_players"):
-        v = c.get(key)
-        if v is True:
-            return True
-        if isinstance(v, str) and v.strip().lower() in ("1", "true", "yes", "on"):
-            return True
-        if isinstance(v, (int, float)) and int(v) == 1:
-            return True
-    return False
 
 
 def _ensure_npc_belongs_to_session_campaign(npc, session_campaign_id):
@@ -1744,6 +1730,32 @@ class CharacterSummarySerializer(serializers.ModelSerializer):
     user_id = serializers.IntegerField(source="user.id", read_only=True)
     username = serializers.CharField(source="user.username", read_only=True)
     crew_id = serializers.IntegerField(source="crew.id", read_only=True, default=None)
+    assist_help_pending = serializers.SerializerMethodField()
+
+    def get_assist_help_pending(self, obj):
+        """Active campaign session only; one pending +1d per beneficiary per session."""
+        pmap = self.context.get("assist_help_pending_map")
+        if isinstance(pmap, dict):
+            p = pmap.get(obj.id)
+            if not p:
+                return None
+        else:
+            sid = self.context.get("campaign_active_session_id")
+            if sid is None:
+                return None
+            p = AssistHelpPending.objects.filter(
+                session_id=sid, recipient_id=obj.id
+            ).select_related("helper").first()
+            if not p:
+                return None
+        h = p.helper
+        name = getattr(h, "true_name", None) or getattr(h, "alias", "") or ""
+        if not name:
+            name = f"Character {p.helper_id}"
+        return {
+            "helper_character_id": p.helper_id,
+            "helper_name": name,
+        }
 
     class Meta:
         model = Character
@@ -1760,6 +1772,7 @@ class CharacterSummarySerializer(serializers.ModelSerializer):
             # Portrait (upload or HTTPS URL) for GM session roster / crew lists
             "image",
             "image_url",
+            "assist_help_pending",
         ]
 
 
@@ -1965,9 +1978,7 @@ class CampaignSerializer(serializers.ModelSerializer):
     wanted_stars = serializers.IntegerField(required=False, default=0)
     factions = FactionSerializer(many=True, read_only=True)
     crews = CrewCampaignSerializer(many=True, read_only=True)
-    campaign_characters = CharacterSummarySerializer(
-        source="characters", many=True, read_only=True
-    )
+    campaign_characters = serializers.SerializerMethodField()
     campaign_npcs = NPCSummarySerializer(source="npcs", many=True, read_only=True)
     pending_invitations = serializers.SerializerMethodField()
     is_active = serializers.BooleanField(required=False, default=True)
@@ -2010,6 +2021,28 @@ class CampaignSerializer(serializers.ModelSerializer):
     def get_pending_invitations(self, obj):
         invitations = obj.invitations.filter(status="pending")
         return CampaignInvitationSerializer(invitations, many=True).data
+
+    def get_campaign_characters(self, obj):
+        qs = obj.characters.all().select_related(
+            "heritage", "crew", "user"
+        ).order_by("id")
+        sess_id = getattr(obj, "active_session_id", None)
+        pmap = {}
+        if sess_id:
+            ids = list(qs.values_list("id", flat=True))
+            pendings = AssistHelpPending.objects.filter(
+                session_id=sess_id, recipient_id__in=ids
+            ).select_related("helper")
+            pmap = {p.recipient_id: p for p in pendings}
+        return CharacterSummarySerializer(
+            qs,
+            many=True,
+            context={
+                **self.context,
+                "campaign_active_session_id": sess_id,
+                "assist_help_pending_map": pmap,
+            },
+        ).data
 
     def _npc_row_for_active_session_detail(self, npc, inv, viewer_is_gm_or_staff):
         """Build session NPC clock payload; strip hidden clocks for non-GM viewers."""
@@ -2056,6 +2089,9 @@ class CampaignSerializer(serializers.ModelSerializer):
             progress_clocks = [
                 c for c in base_progress if int(c.get("id") or 0) in revealed_progress_ids
             ]
+        # When Master "Clocks" (show_clocks_to_players) is off, rely only on
+        # session reveal lists—not per-clock JSON flags on the NPC—which would
+        # bypass what the GM expects from the session toggle (see SessionNPCInvolvement).
         conflict_clocks = (
             npc.conflict_clocks
             if show_all
@@ -2063,7 +2099,6 @@ class CampaignSerializer(serializers.ModelSerializer):
                 c
                 for c in (npc.conflict_clocks or [])
                 if str(c.get("name") or "") in revealed_conflict
-                or _json_clock_show_to_players(c)
             ]
         )
         alt_clocks = (
@@ -2073,7 +2108,6 @@ class CampaignSerializer(serializers.ModelSerializer):
                 c
                 for c in (npc.alt_clocks or [])
                 if str(c.get("name") or "") in revealed_alt
-                or _json_clock_show_to_players(c)
             ]
         )
         stand_stats = {}
@@ -2136,7 +2170,25 @@ class CampaignSerializer(serializers.ModelSerializer):
         base_qs = s.npc_involvements.select_related("npc")
         if not viewer_is_gm_or_staff:
             base_qs = base_qs.filter(npc__campaign_id=obj.id)
-        involvements = base_qs.order_by("npc__name")
+        involvements = list(base_qs.order_by("npc__name"))
+        # Minimal roster for any viewer (e.g. PC spends coin on NPC heal fortune);
+        # not filtered by session visibility toggles.
+        session_npc_heal_roster = [
+            {
+                "id": inv.npc_id,
+                "name": (inv.npc.name or "").strip() or "NPC",
+                "heal_quality_fortune_dice": max(
+                    1,
+                    min(
+                        4,
+                        int(
+                            getattr(inv.npc, "heal_quality_fortune_dice", 2) or 2
+                        ),
+                    ),
+                ),
+            }
+            for inv in involvements
+        ]
         session_npcs_with_clocks = []
         for inv in involvements:
             npc = inv.npc
@@ -2190,6 +2242,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             )
             or {},
             "session_npcs_with_clocks": session_npcs_with_clocks,
+            "session_npc_heal_roster": session_npc_heal_roster,
         }
 
     def get_sessions(self, obj):
@@ -2239,7 +2292,9 @@ class NPCSerializer(serializers.ModelSerializer):
         queryset=Heritage.objects.all(), allow_null=True, required=False
     )
     heritage_details = HeritageSerializer(source="heritage", read_only=True)
+    regular_armor_charges = serializers.IntegerField(read_only=True)
     special_armor_charges = serializers.IntegerField(read_only=True)
+    stand_armor_charges = serializers.IntegerField(read_only=True)
     vulnerability_clock_max = serializers.IntegerField(read_only=True)
     vulnerability_clock_current = serializers.IntegerField(required=False)
     image = serializers.FileField(required=False, allow_null=True)
@@ -2291,7 +2346,11 @@ class NPCSerializer(serializers.ModelSerializer):
             "relationships",
             "vulnerability_clock_current",
             "armor_charges",
+            "has_physical_armor_item",
+            "physical_armor_bonus_charges",
+            "regular_armor_charges",
             "regular_armor_used",
+            "stand_armor_used",
             "special_armor_used",
             "creator",
             "campaign",
@@ -2303,6 +2362,7 @@ class NPCSerializer(serializers.ModelSerializer):
             "stand_manifestation",
             "special_traits",
             "special_armor_charges",
+            "stand_armor_charges",
             "vulnerability_clock_max",
             "purveyor",
             "notes",
@@ -2313,6 +2373,9 @@ class NPCSerializer(serializers.ModelSerializer):
             "inventory",
             "conflict_clocks",
             "alt_clocks",
+            "heal_quality_fortune_dice",
+            "heal_recover_in_play_position",
+            "heal_recover_in_play_effect",
         ]
 
     def create(self, validated_data):

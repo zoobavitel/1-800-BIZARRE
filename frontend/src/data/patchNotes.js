@@ -4,23 +4,79 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-05-10",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "heal fortune, armor, recover-in-play UX"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-05-09",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "deep-link GM session view; assist +1d pending; roll pool labels",
+          "SRD_DEV pools, durability vs stress, hero coin UI"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "session list captions; heuristic heal recover copy"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-05-08",
+    "version": null,
+    "sections": [
+      {
+        "title": "Maintenance",
+        "items": [
+          "sync sheet notes and SRD dev draft"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-05-07",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #71 from zoobavitel/fix/remove-character-planning-load"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-05-06",
     "version": null,
     "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "enhance action dot budget calculations and add utility functions",
+          "per-track XP for level/minor advance; drop info cards",
+          "remove healing UI components and related files",
+          "add sheetDraftIsDirty prop to CharacterSheetWrapper",
+          "session retrieve P/E, stress overflow, downtime recovery UI"
+        ]
+      },
       {
         "title": "Fixed",
         "items": [
           "action dot budget includes action_dice_gained",
           "Copilot review — XP settlement on session delete, multi-tracker rolls, faction image clear, history ACL"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "per-track XP for level/minor advance; drop info cards",
-          "remove healing UI components and related files",
-          "add sheetDraftIsDirty prop to CharacterSheetWrapper",
-          "session retrieve P/E, stress overflow, downtime recovery UI"
         ]
       },
       {
@@ -499,12 +555,7 @@ export const PATCH_NOTES = [
           "Merge pull request #26 from zoobavitel/copilot/fix-npc-sheet-refresh-issue-again",
           "Fix trauma not saving: resolve traumaChecks object to ID array before backend call",
           "Merge pull request #24 from zoobavitel/copilot/fix-npc-faction-dropdown",
-          "Merge branch 'master' into copilot/fix-npc-faction-dropdown",
-          "Merge pull request #25 from zoobavitel/copilot/fix-issue-with-em-dash",
-          "Address review: simplify NPC.__str__ null check, add Unicode comments in test",
-          "Fix EM dash 500: null-safe NPC.__str__, blank=True for relationships, regression tests",
-          "Initial plan for em-dash 500 fix",
-          "added merge migration"
+          "Merge branch 'master' into copilot/fix-npc-faction-dropdown"
         ]
       },
       {
@@ -513,9 +564,7 @@ export const PATCH_NOTES = [
           "on NPC delete land on blank character sheet, guard auto-save for nameless new NPCs",
           "remove default conflict clock on new NPC creation",
           "restrict homepage characters to own user, add NPC delete button",
-          "update URL hash when saving/opening NPC so refresh restores the sheet",
-          "prevent duplicate faction names per campaign (backend + frontend)",
-          "parse campaign id to int on select change so factions populate"
+          "update URL hash when saving/opening NPC so refresh restores the sheet"
         ]
       },
       {

@@ -78,7 +78,7 @@ The `Character` model itself contains a `clean()` method that triggers several v
 *   **`_validate_level_1_creation()`**: A master validation method called during initial character creation. It orchestrates the following checks:
     *   **`_validate_action_dots_distribution()`**: Ensures the total number of action dots is exactly 7 for a new level 1 character, with a maximum of 2 dots per action. For characters above level 1, the maximum dots per action is 4.
     *   **`_validate_stand_coin_stats()`**: Verifies that a level 1 character has a Stand with defined coin stats, and that the total Stand Coin points sum to exactly 10. It also validates that each stat's grade is one of 'S', 'A', 'B', 'C', 'D', or 'F'.
-    *   **`_validate_stress_based_on_durability()`**: Calculates the expected stress value based on the Stand's Durability grade (from 8 for 'F' to 13 for 'S') and ensures the character's stress matches this expectation.
+    *   **`_validate_stress_based_on_durability()`**: Ensures level-1 configured characters have **stress = 9** (SRD_DEV: Stand Durability gates armor, not stress slot count).
     *   **`_validate_initial_abilities_count()`**: Confirms that a new level 1 character has exactly 3 abilities (standard, custom, or playbook).
 
 *   **`_validate_a_rank_abilities()`**: If a Stand exists, this method validates that the total number of abilities a character possesses aligns with the number of 'A' ratings in their Stand's coin stats. Each 'A' rank grants 2 additional abilities beyond the initial 3.
@@ -167,9 +167,12 @@ The `NPC` model contains fields tailored for GM utility and narrative purposes:
 *   **Personality & Narrative Hooks**: `weakness`, `need`, `desire`, `rumour`, `secret`, `passion`, `description`.
 *   **Relationships**: `relationships` (a `JSONField` for flexible tracking of connections to other entities).
 *   **Simplified Combat Tracking**: `vulnerability_clock_current`. This is simpler than the detailed harm levels of PCs. Armor is calculated dynamically based on durability.
-*   **Calculated Properties**: `regular_armor_charges`, `special_armor_charges`, and `vulnerability_clock_max` are properties that derive their values based on other NPC attributes (e.g., `stand_coin_stats`). The armor system provides two types of protection:
-    *   **Regular Armor**: Reduces harm/consequences by 1 level (1 charge for F-rank to 5 charges for S-rank)
-    *   **Special Armor**: Completely negates a consequence or harm (0 charges for F-rank to 3 charges for S/A-rank)
+*   **Calculated Properties**: `regular_armor_charges`, `stand_armor_charges`, `special_armor_charges`, and `vulnerability_clock_max` are properties that derive their values from `stand_coin_stats` (physical and special negate from **Durability**; stand/path pool from **Durability** as well). Tracked uses: `regular_armor_used`, `stand_armor_used`, `special_armor_used`.
+*   **Physical armor gate**: `has_physical_armor_item` (default False) — when False, `regular_armor_charges` is **0** (no physical pool). When True, pool = Durability baseline + `physical_armor_bonus_charges` (0–6, GM-tunable on the fly).
+*   **Healing / recovery**: `heal_quality_fortune_dice` (integer 1–4, default 2) is the GM-set fortune pool size when this NPC provides healing or stabilization (downtime or in-play); exposed on `active_session_detail.session_npc_heal_roster[]` for session heal flows.
+    *   **Physical armor** (`regular_*`): Only if **`has_physical_armor_item`** — Durability baseline + optional **`physical_armor_bonus_charges`** (GM); reduces harm by 1 level per spend.
+    *   **Stand armor** (`stand_*`): From **Durability** — separate path / Stand soak pool (same grade→charges ladder as the NPC sheet).
+    *   **Special armor** (`special_*`): From **Durability** — completely negates a consequence or harm.
 *   **Stand Information**: `stand_coin_stats` (a `JSONField` for flexible Stand stat representation), `stand_description`, `stand_appearance`, `stand_manifestation`, `special_traits`.
 *   **Creator and Campaign Association**: `creator` (the `User` who created the NPC) and `campaign` (the `Campaign` the NPC belongs to).
 *   **Playbook**: A simple `CharField` (`playbook`) to indicate their general combat style (STAND, HAMON, SPIN), unlike the detailed ability selection for PCs.
@@ -181,7 +184,7 @@ The `NPCSerializer` handles the serialization and deserialization of NPC data:
 
 *   It includes all fields from the `NPC` model.
 *   The `creator` field is automatically set to the current authenticated user during creation (`read_only=True, default=serializers.CurrentUserDefault()`).
-*   The calculated properties (`regular_armor_charges`, `special_armor_charges`, `vulnerability_clock_max`) are included as `read_only` fields.
+*   The calculated properties (`regular_armor_charges`, `stand_armor_charges`, `special_armor_charges`, `vulnerability_clock_max`) are included as `read_only` fields.
 
 ### 4.3. NPCViewSet (`backend/src/characters/views.py`)
 

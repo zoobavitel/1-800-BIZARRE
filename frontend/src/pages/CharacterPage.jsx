@@ -204,6 +204,10 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
     viceDetails: payload.viceDetails ?? payload.vice_details ?? "",
     fed_today:
       typeof payload.fed_today === "boolean" ? payload.fed_today : null,
+    disguised_as_human:
+      typeof payload.disguised_as_human === "boolean"
+        ? payload.disguised_as_human
+        : null,
     crew: payload.crew ?? "",
     crewId: payload.crewId ?? null,
     personal_crew_name: payload.personal_crew_name ?? "",
@@ -1369,8 +1373,8 @@ export default function CharacterPage({
             </>
           )}
 
-          {/* ── NPC tabs ── */}
-          {mode === MODES.NPC && npcTabs.length > 0 && (
+          {/* ── NPC tabs (+ New NPC always in NPC mode so empty list can create first tab) ── */}
+          {mode === MODES.NPC && (
             <>
               <div style={TAB_STYLES.divider} />
               {npcTabs.map((tab) => (
@@ -1648,6 +1652,7 @@ export default function CharacterPage({
                   npc={tab.npc ?? undefined}
                   onSave={handleSaveNpc}
                   campaigns={campaigns}
+                  allNpcs={npcs}
                   isGM={true}
                   onFactionChange={refreshCampaigns}
                   onCampaignRefresh={refreshCampaigns}

@@ -5,7 +5,6 @@ import { getApiErrorMessage } from "../../../utils/apiErrorMessage";
 import {
   gradeToIndex,
   indexToGrade,
-  DUR_TABLE,
   DEFAULT_TRAUMA,
   TRAUMA_PK_TO_KEY,
   MAX_CREATION_DOTS,
@@ -230,18 +229,27 @@ export const characterAPI = {
       method: "DELETE",
     }),
 
-  // Roll action dice
+  /**
+   * Roll action dice. `actionData` may include `pool_source: "stand_coin"` and
+   * `stand_stat` (`power`|`speed`|`precision`|`durability`) so server builds pool
+   * from Stand Coin grades; other fields match existing roll-action contract.
+   */
   rollAction: (id, actionData) =>
     apiRequest(`/characters/${id}/roll-action/`, {
       method: "POST",
       body: JSON.stringify(actionData),
     }),
 
-  /** Crew Help: helper spends 1 stress (same crew). */
-  assistHelp: (id, helperCharacterId) =>
-    apiRequest(`/characters/${id}/assist-help/`, {
+  /**
+   * Crew Assist: recipient is `recipientCharacterId` (gets pending +1d); helper spends 1 stress.
+   */
+  assistHelp: (recipientCharacterId, helperCharacterId, sessionId) =>
+    apiRequest(`/characters/${recipientCharacterId}/assist-help/`, {
       method: "POST",
-      body: JSON.stringify({ helper_character_id: helperCharacterId }),
+      body: JSON.stringify({
+        helper_character_id: helperCharacterId,
+        session_id: sessionId,
+      }),
     }),
 
   // Add XP to character
@@ -866,8 +874,7 @@ export const transformBackendToFrontend = (backendCharacter) => {
     // Stress: backend integer; frontend uses filled count + array for compatibility
     stressFilled: Math.max(0, backendCharacter.stress ?? 0),
     stress: (() => {
-      const dur = gradeToIndex(backendCharacter.stand?.durability);
-      const maxStress = 9 + (DUR_TABLE[dur]?.stressBonus ?? 0);
+      const maxStress = 9;
       const filled = Math.min(backendCharacter.stress ?? 0, maxStress);
       return Array(maxStress)
         .fill(false)
@@ -1075,6 +1082,10 @@ export const transformBackendToFrontend = (backendCharacter) => {
     fed_today:
       typeof backendCharacter.fed_today === "boolean"
         ? backendCharacter.fed_today
+        : null,
+    disguised_as_human:
+      typeof backendCharacter.disguised_as_human === "boolean"
+        ? backendCharacter.disguised_as_human
         : null,
 
     /** +1 Stand Coin ranks bought with XP beyond chargen (10 XP each on backend); chargen baseline is excluded. */
@@ -1291,6 +1302,10 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     fed_today:
       typeof frontendCharacter.fed_today === "boolean"
         ? frontendCharacter.fed_today
+        : null,
+    disguised_as_human:
+      typeof frontendCharacter.disguised_as_human === "boolean"
+        ? frontendCharacter.disguised_as_human
         : null,
 
     coin_boxes: normalizeCoinBoxes(frontendCharacter.coin),

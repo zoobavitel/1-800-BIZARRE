@@ -13,7 +13,10 @@ import {
   progressClockAPI,
 } from "../../features/character-sheet/services/api";
 import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
-import { ACTION_RATING_KEYS } from "../../features/character-sheet/constants/srd";
+import {
+  ACTION_RATING_KEYS,
+  STAND_ROLL_KEYS_ALL,
+} from "../../features/character-sheet/constants/srd";
 import NpcsStandCoin from "../NpcsStandCoin";
 import { PositionStack, EffectShapes } from "../position-effect/PositionEffectIndicators";
 import {
@@ -82,6 +85,297 @@ function unwrapApiArray(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.results)) return data.results;
   return [];
+}
+
+function rollHasTruthyFk(val) {
+  if (val == null || val === "") return false;
+  return true;
+}
+
+function recoveryContextTooltip(ctx) {
+  const c = String(ctx || "").trim().toLowerCase();
+  if (!c) return "";
+  if (c === "ally") return "Ally recovery (treating another PC)";
+  if (c === "self_downtime") return "Downtime self-recover (healing clock)";
+  if (c === "self_mid_action") return "Mid-action self-recover (healing clock)";
+  if (c === "self_treatment_roll") return "Self treatment roll";
+  return c.replace(/_/g, " ");
+}
+
+function isModifierAssistRow(s) {
+  if (!s || typeof s !== "object") return false;
+  if (String(s.kind || "").toLowerCase() === "assist") return true;
+  return /^assist\s*\(/i.test(String(s.name || ""));
+}
+
+function assistInfoFromRoll(r) {
+  const pad = Number(r.pool_assist_dice || 0) || 0;
+  const src = Array.isArray(r.modifier_sources) ? r.modifier_sources : [];
+  const row = src.find(isModifierAssistRow);
+  if (pad < 1 && !row) return null;
+  const fromName = row
+    ? String(row.name || "")
+        .replace(/^\s*[Aa]ssist\s*\(\s*/, "")
+        .replace(/\)\s*$/, "")
+        .trim()
+    : "";
+  const desc = String(r.description || "");
+  const m = desc.match(/\[Assist:\s*([^\]]+)\]/i);
+  const fromDesc = m ? String(m[1]).trim() : "";
+  const helper = fromName || fromDesc;
+  return {
+    label: "+1d",
+    title: helper
+      ? `Crew assist: +1d from ${helper}`
+      : "Crew assist: +1d (pool_assist_dice / modifier_sources)",
+  };
+}
+
+/** @returns {{ parts: string[], sum: number }} */
+function poolBreakdownPiecesFromStoredFields(r) {
+  const base = Number(r.pool_action_rating) || 0;
+  const attr = Number(r.pool_attribute_dice) || 0;
+  const bonus = Number(r.pool_bonus_dice) || 0;
+  const assist = Number(r.pool_assist_dice) || 0;
+  const pushDice = !!r.push_for_dice;
+  const devilDice = !!r.uses_devil_bargain;
+  const parts = [];
+  if (base > 0) parts.push(`base ${base}`);
+  if (attr > 0) parts.push(`attr ${attr}`);
+  if (bonus > 0) parts.push(`bonus ${bonus}`);
+  if (assist > 0) parts.push(`assist ${assist}`);
+  if (pushDice) parts.push("push +1");
+  if (devilDice) parts.push("devil +1");
+  const sum =
+    base +
+    attr +
+    bonus +
+    assist +
+    (pushDice ? 1 : 0) +
+    (devilDice ? 1 : 0);
+  return { parts, sum };
+}
+
+function humanizeModifierSourcesRows(mods) {
+  if (!Array.isArray(mods) || !mods.length) return [];
+  return mods.map((row) => {
+    if (!row || typeof row !== "object") return "";
+    const name = String(row.name ?? "").trim();
+    const delta = String(row.delta ?? "").trim();
+    const kind = String(row.kind ?? "").trim();
+    const cat = String(row.category ?? "").trim();
+    const bits = [];
+    if (kind) bits.push(kind);
+    if (name && name !== delta) bits.push(name);
+    if (delta) bits.push(delta);
+    if (!bits.length && cat) bits.push(cat);
+    return bits.join(": ").replace(/^:\s*/, "").trim();
+  }).filter(Boolean);
+}
+
+/** Physical dice rolled (tier pool may be 0 in Blades 0‑d tier rules). */
+function recentRollDiceCountDisplay(r) {
+  const stored = Number(r.dice_pool);
+  const rc = Array.isArray(r.results) ? r.results.length : 0;
+  if (Number.isFinite(stored) && stored > 0) return stored;
+  if (rc > 0) return rc;
+  return Number.isFinite(stored) ? stored : 0;
+}
+
+/**
+ * Visible line suffix for Recent rolls row: how many dice, from stored pool_* when present.
+ */
+function recentRollDiceSourcesSummary(r) {
+  const displayCount = recentRollDiceCountDisplay(r);
+  const { parts } = poolBreakdownPiecesFromStoredFields(r);
+  const mods = Array.isArray(r.modifier_sources) ? r.modifier_sources : [];
+  if (displayCount === 0 && parts.length === 0 && mods.length === 0)
+    return null;
+
+  const headNd = `${displayCount}d`;
+  if (parts.length > 0) {
+    return `${headNd} · ${parts.join(" + ")}`;
+  }
+
+  if (mods.length > 0) {
+    const short = mods
+      .map((row) => {
+        if (!row || typeof row !== "object") return "";
+        const n = String(row.name || "").trim();
+        const d = String(row.delta || "").trim();
+        if (/^assist\b/i.test(n) || String(row.kind || "").toLowerCase() === "assist")
+          return "+assist";
+        if (String(row.kind || "").toLowerCase() === "push") return "+push";
+        if (String(row.kind || "").toLowerCase() === "devil_bargain")
+          return "+devil";
+        if ((n || d).length <= 56)
+          return d && n !== d ? `${n} (${d})` : n || d || "";
+        return (n || d).slice(0, 53) + "…";
+      })
+      .filter(Boolean);
+    const uq = [...new Set(short)].slice(0, 5);
+    if (uq.length === 0) return headNd;
+    return `${headNd} · ${uq.join(", ")}`;
+  }
+
+  return displayCount > 0 ? headNd : null;
+}
+
+/** Long tooltip: stored pool_* lines + modifier_sources (+ push effect / devil text). */
+function recentRollDiceSourcesTooltip(r) {
+  const lines = [];
+  const storedTier = Number(r.dice_pool);
+  const diceRolled = Array.isArray(r.results) ? r.results.length : 0;
+  if (Number.isFinite(storedTier) && storedTier >= 0) {
+    lines.push(`Recorded tier dice_pool: ${storedTier}d`);
+  }
+  if (diceRolled > 0) lines.push(`Dice rolled (results): ${diceRolled}`);
+
+  const { parts, sum } = poolBreakdownPiecesFromStoredFields(r);
+  if (parts.length > 0) {
+    lines.push(`From stored pool_* (${sum}d):`);
+    lines.push(parts.map((p) => `  • ${p}`).join("\n"));
+  }
+  const base = Number(r.pool_action_rating) || 0;
+  const rt = String(r.roll_type || "").toUpperCase();
+  const compareTotal =
+    Number.isFinite(storedTier) && storedTier > 0 ? storedTier : diceRolled;
+  if (
+    compareTotal > 0 &&
+    parts.length > 0 &&
+    sum !== compareTotal &&
+    (rt === "ACTION" || base > 0)
+  )
+    lines.push(
+      `(Breakdown sums to ${sum}d vs tier/total ${compareTotal}d — edited or legacy.)`,
+    );
+
+  if (r.push_for_effect)
+    lines.push("Push for effect: yes (effect / position trade — not an extra risk die)");
+
+  const dc = String(r.devil_bargain_consequence || "").trim();
+  if (r.uses_devil_bargain && dc)
+    lines.push(`Devil's bargain note: ${dc}`);
+
+  const detailed = humanizeModifierSourcesRows(
+    Array.isArray(r.modifier_sources) ? r.modifier_sources : [],
+  );
+  if (detailed.length) {
+    lines.push("modifier_sources:");
+    detailed.forEach((t) => lines.push(`  • ${t}`));
+  }
+
+  return lines.filter(Boolean).join("\n").trim();
+}
+
+function isRecoveryLinkedRoll(r) {
+  const rt = String(r.roll_type || "").toUpperCase();
+  if (String(r.recovery_context || "").trim()) return true;
+  if (rollHasTruthyFk(r.recovery_target)) return true;
+  const mods = Array.isArray(r.modifier_sources) ? r.modifier_sources : [];
+  if (
+    mods.some((s) => {
+      const k = String(s?.kind || "").toLowerCase();
+      return (
+        k.startsWith("recovery") ||
+        k === "healing" ||
+        k === "recovery_treatment" ||
+        k === "recovery_bolster" ||
+        k === "recovery_resolution"
+      );
+    })
+  ) {
+    return true;
+  }
+  if (rt === "OTHER") {
+    const g = String(r.goal_label || "");
+    const d = String(r.description || "");
+    if (/healing clock recover/i.test(g)) return true;
+    if (
+      /self-recover|mid-action self-recover|recovery segments|healing clock/i.test(
+        d,
+      )
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * @param {object} options
+ * @param {boolean} options.showAllRecentRolls — all types except Fortune
+ * @param {boolean} options.showResistanceStressRolls — resistance / clear stress when not “all”
+ */
+function recentRollPassesGmFilter(r, options) {
+  const showAllRecentRolls = !!options.showAllRecentRolls;
+  const showResistanceStressRolls = !!options.showResistanceStressRolls;
+  const rt = String(r.roll_type || "").toUpperCase();
+  if (rt === "FORTUNE") return false;
+  if (showAllRecentRolls) return true;
+
+  const actionName = String(r.action_name || "").toUpperCase();
+  const isDefaultActionRow = rt === "ACTION" && actionName !== "FORTUNE";
+
+  if (showResistanceStressRolls && (rt === "RESISTANCE" || rt === "CLEAR_STRESS")) {
+    return true;
+  }
+  if (isDefaultActionRow) return true;
+  if (isRecoveryLinkedRoll(r)) return true;
+  if (rollHasTruthyFk(r.group_action)) return true;
+  return false;
+}
+
+function buildRecentRollDetailTitle(r) {
+  const parts = [];
+  if (rollHasTruthyFk(r.group_action)) {
+    parts.push(`Group action id ${r.group_action}`);
+  }
+  const rb = recoveryBadgeFromRoll(r);
+  if (rb?.title) parts.push(rb.title);
+  const ai = assistInfoFromRoll(r);
+  if (ai?.title) parts.push(ai.title);
+  const gl = String(r.goal_label || "").trim();
+  if (gl && !parts.some((p) => p.includes(gl))) parts.push(gl);
+  if (!parts.length) return undefined;
+  return parts.join(" · ");
+}
+
+function recoveryBadgeFromRoll(r) {
+  const rt = String(r.roll_type || "").toUpperCase();
+  const ctx = String(r.recovery_context || "").trim().toLowerCase();
+  const tgt = String(r.recovery_target_character_name || "").trim();
+  if (rollHasTruthyFk(r.recovery_target) || ctx === "ally") {
+    return {
+      label: "Heal",
+      title: tgt ? `Recovery treatment for ${tgt}` : "Ally recovery treatment",
+    };
+  }
+  if (
+    ctx === "self_downtime" ||
+    ctx === "self_mid_action" ||
+    (rt === "OTHER" && /healing clock recover/i.test(String(r.goal_label || "")))
+  ) {
+    return {
+      label: "Recover",
+      title: recoveryContextTooltip(ctx) || "Healing clock self-recover",
+    };
+  }
+  const mods = Array.isArray(r.modifier_sources) ? r.modifier_sources : [];
+  const healMod = mods.find((s) => {
+    const k = String(s?.kind || "").toLowerCase();
+    return k === "healing" || k.startsWith("recovery");
+  });
+  if (healMod) {
+    return {
+      label: "Heal",
+      title: String(healMod.name || healMod.notes || "Recovery / treatment"),
+    };
+  }
+  if (ctx) {
+    return { label: "Recover", title: recoveryContextTooltip(ctx) };
+  }
+  return null;
 }
 
 /** Progress clocks scoped to campaign session (aligned with CampaignManagement ClockManager). */
@@ -372,6 +666,86 @@ const grid = {
 
 const lbl = { fontSize: 10, color: "#9ca3af", textTransform: "uppercase" };
 
+const NPC_QUICK_PLAYBOOK_OPTIONS = [
+  { value: "STAND", label: "Stand User" },
+  { value: "HAMON", label: "Hamon User" },
+  { value: "SPIN", label: "Spin User" },
+  { value: "NON_BIZARRE", label: "Non-Bizarre" },
+];
+
+const NPC_QUICK_STAT_PRESETS = [
+  { value: "balanced", label: "Standard (all grade D)" },
+  { value: "bruiser", label: "Bruiser (Dur B, Power C)" },
+  { value: "skirmisher", label: "Skirmisher (Speed B, Prec C)" },
+  { value: "threat", label: "Even threat (all C)" },
+];
+
+function standCoinStatsFromQuickPreset(preset) {
+  const d = {
+    POWER: "D",
+    SPEED: "D",
+    RANGE: "D",
+    DURABILITY: "D",
+    PRECISION: "D",
+    DEVELOPMENT: "D",
+  };
+  if (preset === "bruiser") return { ...d, DURABILITY: "B", POWER: "C" };
+  if (preset === "skirmisher") return { ...d, SPEED: "B", PRECISION: "C" };
+  if (preset === "threat") {
+    return {
+      POWER: "C",
+      SPEED: "C",
+      RANGE: "C",
+      DURABILITY: "C",
+      PRECISION: "C",
+      DEVELOPMENT: "C",
+    };
+  }
+  return d;
+}
+
+function parseQuickNpcAbilityLines(text) {
+  const lines = String(text || "")
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const t = Date.now();
+  return lines.map((name, i) => ({
+    id: t + i,
+    name: name.slice(0, 120),
+    description: "",
+    type: "unique",
+  }));
+}
+
+function makeQuickNpcClockRow(name, idSalt = 0) {
+  return {
+    id: Date.now() + idSalt * 10000,
+    name,
+    segments: 8,
+    filled: 0,
+    show_to_players: false,
+  };
+}
+
+/** Opaque bg + dark options: `S.inp` uses transparent bg + white text → unreadable native option list on many OS themes. */
+const QUICK_NPC_SELECT_STYLE = {
+  fontSize: 12,
+  width: "100%",
+  boxSizing: "border-box",
+  backgroundColor: "#1f1035",
+  color: "#f9fafb",
+  border: "1px solid #4b2d8f",
+  borderRadius: 4,
+  padding: "6px 8px",
+  colorScheme: "dark",
+};
+
+const QUICK_NPC_OPTION_STYLE = {
+  backgroundColor: "#111827",
+  color: "#f3f4f6",
+};
+
 /** Visual severity for session compact harm grid (warns as higher tiers fill). */
 function compactHarmFieldStyle(key, rawValue) {
   const filled = String(rawValue ?? "").trim().length > 0;
@@ -434,6 +808,19 @@ export default function SessionGMManagementPanels({
   user = null,
 }) {
   const [showAddNpc, setShowAddNpc] = useState(false);
+  /** Quick-create NPC when every campaign NPC is already in this session */
+  const [quickNpcName, setQuickNpcName] = useState("");
+  const [quickNpcRole, setQuickNpcRole] = useState("");
+  const [quickNpcPlaybook, setQuickNpcPlaybook] = useState("STAND");
+  const [quickNpcStatPreset, setQuickNpcStatPreset] = useState("balanced");
+  const [quickNpcAbilitiesText, setQuickNpcAbilitiesText] = useState("");
+  const [quickNpcConflictClock, setQuickNpcConflictClock] = useState(false);
+  const [quickNpcAltClock, setQuickNpcAltClock] = useState(false);
+  const [quickNpcFactionId, setQuickNpcFactionId] = useState("");
+  const [quickNpcNewFactionName, setQuickNpcNewFactionName] = useState("");
+  const [quickNpcFactionCreateBusy, setQuickNpcFactionCreateBusy] =
+    useState(false);
+  const [quickNpcCreateBusy, setQuickNpcCreateBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [localNpcPatch, setLocalNpcPatch] = useState({});
   const [harmDraftByChar, setHarmDraftByChar] = useState({});
@@ -444,6 +831,8 @@ export default function SessionGMManagementPanels({
   /** Local crew field drafts; reset when `crews` refetch from parent. */
   const [crewDraftById, setCrewDraftById] = useState({});
   const [showAllRecentRolls, setShowAllRecentRolls] = useState(false);
+  const [showResistanceStressRecentRolls, setShowResistanceStressRecentRolls] =
+    useState(false);
   const [manualRollCardOpen, setManualRollCardOpen] = useState(true);
   const [sessionXpCardOpen, setSessionXpCardOpen] = useState(true);
   const [recentRollSavingId, setRecentRollSavingId] = useState(null);
@@ -565,6 +954,109 @@ export default function SessionGMManagementPanels({
       },
     ];
     return patchSessionInv(next);
+  };
+
+  useEffect(() => {
+    if (!showAddNpc) return;
+    setQuickNpcName("");
+    setQuickNpcRole("");
+    setQuickNpcPlaybook("STAND");
+    setQuickNpcStatPreset("balanced");
+    setQuickNpcAbilitiesText("");
+    setQuickNpcConflictClock(false);
+    setQuickNpcAltClock(false);
+    setQuickNpcFactionId("");
+    setQuickNpcNewFactionName("");
+    setQuickNpcFactionCreateBusy(false);
+    setQuickNpcCreateBusy(false);
+  }, [showAddNpc]);
+
+  const handleCreateQuickNpcModalFaction = async () => {
+    const trimmed = String(quickNpcNewFactionName || "").trim();
+    if (!trimmed || !campaign?.id) {
+      setError("Enter a name for the new faction.");
+      return;
+    }
+    const dup = (campaign?.factions || []).some(
+      (f) => String(f.name || "").trim().toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (dup) {
+      setError(`A faction named "${trimmed}" already exists in this campaign.`);
+      return;
+    }
+    setQuickNpcFactionCreateBusy(true);
+    setError(null);
+    try {
+      const created = await factionAPI.createFaction({
+        name: trimmed,
+        campaign: campaign.id,
+      });
+      setQuickNpcFactionId(String(created.id));
+      setQuickNpcNewFactionName("");
+      onRefresh?.();
+    } catch (e) {
+      setError(e?.message || "Could not create faction.");
+    } finally {
+      setQuickNpcFactionCreateBusy(false);
+    }
+  };
+
+  const handleQuickCreateNpcForSession = async (openSheetAfter) => {
+    const nameTrim = String(quickNpcName || "").trim();
+    if (!nameTrim) {
+      setError("Enter a name for the new NPC.");
+      return;
+    }
+    if (!campaign?.id) {
+      setError("Campaign is missing; cannot create NPC.");
+      return;
+    }
+    setQuickNpcCreateBusy(true);
+    setError(null);
+    try {
+      const abilities = parseQuickNpcAbilityLines(quickNpcAbilitiesText);
+      const conflict_clocks = quickNpcConflictClock
+        ? [makeQuickNpcClockRow("Conflict", 1)]
+        : [];
+      const alt_clocks = quickNpcAltClock
+        ? [makeQuickNpcClockRow("Alt track", 2)]
+        : [];
+      const factionNum =
+        quickNpcFactionId === ""
+          ? null
+          : parseInt(String(quickNpcFactionId), 10);
+      const payload = {
+        name: nameTrim,
+        campaign: campaign.id,
+        playbook: quickNpcPlaybook,
+        stand_coin_stats: standCoinStatsFromQuickPreset(quickNpcStatPreset),
+        role: String(quickNpcRole || "").trim(),
+        abilities,
+        conflict_clocks,
+        alt_clocks,
+        notes: "",
+        inventory_notes: "",
+      };
+      if (quickNpcFactionId !== "" && Number.isFinite(factionNum)) {
+        payload.faction = factionNum;
+      }
+      const created = await npcAPI.createNPC(payload);
+      await addNpcToSession(created.id);
+      setShowAddNpc(false);
+      onRefresh?.();
+      if (openSheetAfter && typeof onNavigateToNPC === "function") {
+        onNavigateToNPC(created.id, { campaignId: campaign.id });
+      }
+    } catch (e) {
+      const msg =
+        e?.message ||
+        e?.detail ||
+        (Array.isArray(e?.name) ? e.name[0] : null) ||
+        "Failed to create NPC.";
+      setError(typeof msg === "string" ? msg : "Failed to create NPC.");
+    } finally {
+      setQuickNpcCreateBusy(false);
+    }
   };
 
   const handleAddNpcCardClick = () => {
@@ -878,16 +1370,13 @@ export default function SessionGMManagementPanels({
       (sessionRolls || [])
         .filter((r) => {
           if (String(r.character) !== String(characterId)) return false;
-          // Fortune rolls are GM-authored and shown in the dedicated Fortune history panel.
-          if (String((r.roll_type || "").toUpperCase()) === "FORTUNE") return false;
-          if (showAllRecentRolls) return true;
-          return (
-            String((r.roll_type || "").toUpperCase()) === "ACTION" &&
-            String((r.action_name || "").toUpperCase()) !== "FORTUNE"
-          );
+          return recentRollPassesGmFilter(r, {
+            showAllRecentRolls,
+            showResistanceStressRolls: showResistanceStressRecentRolls,
+          });
         })
         .slice(0, 5),
-    [sessionRolls, showAllRecentRolls],
+    [sessionRolls, showAllRecentRolls, showResistanceStressRecentRolls],
   );
 
   const editRecentRoll = useCallback(
@@ -1292,9 +1781,9 @@ export default function SessionGMManagementPanels({
               const show = !inv.show_clocks_to_players;
               updateInv(npc.id, {
                 show_clocks_to_players: show,
-                show_vulnerability_clock_to_players: show
-                  ? true
-                  : inv.show_vulnerability_clock_to_players,
+                // Master "Clocks" off ⇒ no clock payload to players (vuln-only
+                // visibility is toggled from the NPC sheet, not left stale here).
+                show_vulnerability_clock_to_players: show ? true : false,
               });
             }}
             disabled={saving}
@@ -1704,7 +2193,7 @@ export default function SessionGMManagementPanels({
               border: "1px solid #4b5563",
               borderRadius: 8,
               padding: 16,
-              maxWidth: 420,
+              maxWidth: 480,
               width: "100%",
               maxHeight: "80vh",
               overflow: "auto",
@@ -1713,7 +2202,261 @@ export default function SessionGMManagementPanels({
           >
             <div style={{ fontWeight: "bold", marginBottom: 8 }}>Add campaign NPC</div>
             {addableNpcList.length === 0 ? (
-              <div style={{ color: "#9ca3af" }}>All campaign NPCs are already in this session.</div>
+              <>
+                <div style={{ color: "#9ca3af", marginBottom: 10, lineHeight: 1.45 }}>
+                  All campaign NPCs are already in this session. Create a new NPC for
+                  this campaign with stand coin grades, optional abilities and clocks,
+                  then add it to the session — or open the full sheet after save.
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={lbl}>Name</span>
+                    <input
+                      type="text"
+                      value={quickNpcName}
+                      onChange={(e) => setQuickNpcName(e.target.value)}
+                      placeholder="e.g. Highway Star"
+                      style={{ ...S.inp, fontSize: 12 }}
+                      disabled={quickNpcCreateBusy || saving}
+                    />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={lbl}>Role / type (optional)</span>
+                    <input
+                      type="text"
+                      value={quickNpcRole}
+                      onChange={(e) => setQuickNpcRole(e.target.value)}
+                      placeholder="Boss, ally, hazard…"
+                      style={{ ...S.inp, fontSize: 12 }}
+                      disabled={quickNpcCreateBusy || saving}
+                    />
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={lbl}>Playbook</span>
+                    <select
+                      value={quickNpcPlaybook}
+                      onChange={(e) => setQuickNpcPlaybook(e.target.value)}
+                      style={QUICK_NPC_SELECT_STYLE}
+                      disabled={quickNpcCreateBusy || saving}
+                    >
+                      {NPC_QUICK_PLAYBOOK_OPTIONS.map((o) => (
+                        <option
+                          key={o.value}
+                          value={o.value}
+                          style={QUICK_NPC_OPTION_STYLE}
+                        >
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={lbl}>Stand coin preset</span>
+                    <select
+                      value={quickNpcStatPreset}
+                      onChange={(e) => setQuickNpcStatPreset(e.target.value)}
+                      style={QUICK_NPC_SELECT_STYLE}
+                      disabled={quickNpcCreateBusy || saving}
+                    >
+                      {NPC_QUICK_STAT_PRESETS.map((o) => (
+                        <option
+                          key={o.value}
+                          value={o.value}
+                          style={QUICK_NPC_OPTION_STYLE}
+                        >
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {campaign?.id ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 8,
+                        padding: 10,
+                        background: "#0b1220",
+                        border: "1px solid #374151",
+                        borderRadius: 6,
+                      }}
+                    >
+                      <span style={lbl}>Faction (optional)</span>
+                      {(campaign.factions || []).length > 0 ? (
+                        <select
+                          value={quickNpcFactionId}
+                          onChange={(e) => setQuickNpcFactionId(e.target.value)}
+                          style={QUICK_NPC_SELECT_STYLE}
+                          disabled={
+                            quickNpcCreateBusy ||
+                            saving ||
+                            quickNpcFactionCreateBusy
+                          }
+                        >
+                          <option value="" style={QUICK_NPC_OPTION_STYLE}>
+                            — None —
+                          </option>
+                          {(campaign.factions || []).map((f) => (
+                            <option
+                              key={f.id}
+                              value={f.id}
+                              style={QUICK_NPC_OPTION_STYLE}
+                            >
+                              {f.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div style={{ fontSize: 10, color: "#6b7280" }}>
+                          No factions in this campaign yet — create one below, then it
+                          will appear in the list after refresh.
+                        </div>
+                      )}
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: 8,
+                          alignItems: "center",
+                        }}
+                      >
+                        <input
+                          type="text"
+                          value={quickNpcNewFactionName}
+                          onChange={(e) => setQuickNpcNewFactionName(e.target.value)}
+                          placeholder="New faction name"
+                          style={{
+                            ...S.inp,
+                            flex: "1 1 160px",
+                            minWidth: 140,
+                            fontSize: 12,
+                            backgroundColor: "#1f1035",
+                            color: "#f9fafb",
+                            border: "1px solid #4b2d8f",
+                            borderRadius: 4,
+                            padding: "6px 8px",
+                          }}
+                          disabled={
+                            quickNpcCreateBusy ||
+                            saving ||
+                            quickNpcFactionCreateBusy
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleCreateQuickNpcModalFaction();
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleCreateQuickNpcModalFaction()}
+                          style={{ ...S.btnPrimary, fontSize: 11 }}
+                          disabled={
+                            quickNpcCreateBusy ||
+                            saving ||
+                            quickNpcFactionCreateBusy ||
+                            !String(quickNpcNewFactionName || "").trim()
+                          }
+                        >
+                          {quickNpcFactionCreateBusy
+                            ? "Creating…"
+                            : "Create faction"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={lbl}>Abilities (optional, one per line)</span>
+                    <textarea
+                      value={quickNpcAbilitiesText}
+                      onChange={(e) => setQuickNpcAbilitiesText(e.target.value)}
+                      placeholder="Each line becomes a unique ability name on the sheet."
+                      rows={4}
+                      style={{
+                        ...S.inp,
+                        fontSize: 11,
+                        minHeight: 72,
+                        resize: "vertical",
+                        border: "1px solid #374151",
+                        borderRadius: 4,
+                        padding: 8,
+                      }}
+                      disabled={quickNpcCreateBusy || saving}
+                    />
+                  </label>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <span style={lbl}>Starting clocks</span>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 11,
+                        color: "#d1d5db",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={quickNpcConflictClock}
+                        onChange={(e) => setQuickNpcConflictClock(e.target.checked)}
+                        disabled={quickNpcCreateBusy || saving}
+                      />
+                      8-segment conflict clock (&quot;Conflict&quot;)
+                    </label>
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontSize: 11,
+                        color: "#d1d5db",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={quickNpcAltClock}
+                        onChange={(e) => setQuickNpcAltClock(e.target.checked)}
+                        disabled={quickNpcCreateBusy || saving}
+                      />
+                      8-segment alt clock (&quot;Alt track&quot;)
+                    </label>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickCreateNpcForSession(false)}
+                      style={{ ...S.btnPrimary, flex: "1 1 160px", fontSize: 11 }}
+                      disabled={quickNpcCreateBusy || saving || !quickNpcName.trim()}
+                    >
+                      {quickNpcCreateBusy ? "Creating…" : "Create & add to session"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickCreateNpcForSession(true)}
+                      style={{
+                        ...S.btnGhost,
+                        flex: "1 1 160px",
+                        fontSize: 11,
+                        border: "1px solid #4b5563",
+                      }}
+                      disabled={
+                        quickNpcCreateBusy ||
+                        saving ||
+                        !quickNpcName.trim() ||
+                        typeof onNavigateToNPC !== "function"
+                      }
+                      title={
+                        typeof onNavigateToNPC !== "function"
+                          ? "Navigation to NPC sheet is not available here."
+                          : undefined
+                      }
+                    >
+                      {quickNpcCreateBusy ? "Creating…" : "Create, add & open sheet"}
+                    </button>
+                  </div>
+                </div>
+              </>
             ) : (
               <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
                 {addableNpcList.map((n) => (
@@ -2257,7 +3000,8 @@ export default function SessionGMManagementPanels({
                     <div style={{ fontSize: 10, color: "#9ca3af", lineHeight: 1.35 }}>
                       Speed sets mobility and starting-position pressure by comparison. Precision
                       can swing position/effect. Range shapes distance penalties and practical
-                      effect. Durability maps to stress/armor pressure. Power frames destructive
+                      effect. Durability gates Stand armor and resist when your Stand absorbs harm—
+                      not PC stress boxes. Power frames destructive
                       output. Development frames evolution and ability growth.
                     </div>
                     <div style={lbl}>Actions (dots)</div>
@@ -2931,6 +3675,18 @@ export default function SessionGMManagementPanels({
                       </option>
                     );
                   })}
+                  <option disabled style={{ opacity: 0.5 }}>
+                    — Stand coin —
+                  </option>
+                  {STAND_ROLL_KEYS_ALL.map((sk) => {
+                    const v = `stand_${sk}`;
+                    const label = `Stand ${sk}`;
+                    return (
+                      <option key={v} value={v}>
+                        {label}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             ) : String(manualRoll.rollKind || "").toUpperCase() ===
@@ -2958,6 +3714,7 @@ export default function SessionGMManagementPanels({
                   <option value="insight">Insight</option>
                   <option value="prowess">Prowess</option>
                   <option value="resolve">Resolve</option>
+                  <option value="stand_durability">Stand durability</option>
                 </select>
               </div>
             ) : (
@@ -3942,23 +4699,57 @@ export default function SessionGMManagementPanels({
                       }}
                     >
                       <span>Recent rolls</span>
-                      <label
+                      <span
                         style={{
                           display: "inline-flex",
+                          flexWrap: "wrap",
                           alignItems: "center",
-                          gap: 4,
+                          justifyContent: "flex-end",
+                          gap: 8,
                           fontSize: 10,
                           color: "#9ca3af",
                           textTransform: "none",
                         }}
                       >
-                        <input
-                          type="checkbox"
-                          checked={showAllRecentRolls}
-                          onChange={(e) => setShowAllRecentRolls(e.target.checked)}
-                        />
-                        All roll types
-                      </label>
+                        <label
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            cursor: "pointer",
+                          }}
+                          title="Include resistance rolls and clear-stress (vice) records."
+                        >
+                          <input
+                            type="checkbox"
+                            checked={showResistanceStressRecentRolls}
+                            onChange={(e) =>
+                              setShowResistanceStressRecentRolls(e.target.checked)
+                            }
+                          />
+                          Resistance / stress
+                        </label>
+                        <label
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            cursor: "pointer",
+                          }}
+                          title="Show all roll kinds for this PC except Fortune (Fortune stays in Fortune history)."
+                        >
+                          <input
+                            type="checkbox"
+                            checked={showAllRecentRolls}
+                            onChange={(e) => {
+                              const v = e.target.checked;
+                              setShowAllRecentRolls(v);
+                              if (v) setShowResistanceStressRecentRolls(true);
+                            }}
+                          />
+                          All roll types
+                        </label>
+                      </span>
                     </div>
                     <div
                       style={{
@@ -3975,9 +4766,31 @@ export default function SessionGMManagementPanels({
                       {getRecentCharacterRolls(id).length === 0 ? (
                         <div>—</div>
                       ) : (
-                        getRecentCharacterRolls(id).map((r) => (
+                        getRecentCharacterRolls(id).map((r) => {
+                          const rtUp = String(r.roll_type || "").toUpperCase();
+                          const recBadge = recoveryBadgeFromRoll(r);
+                          const asst = assistInfoFromRoll(r);
+                          const rollHint = buildRecentRollDetailTitle(r);
+                          const diceSrcSummary = recentRollDiceSourcesSummary(r);
+                          const diceSrcTooltip =
+                            recentRollDiceSourcesTooltip(r) ||
+                            diceSrcSummary ||
+                            undefined;
+                          const compactType =
+                            !showAllRecentRolls &&
+                            rtUp &&
+                            rtUp !== "ACTION" &&
+                            rtUp !== "FORTUNE"
+                              ? rtUp === "CLEAR_STRESS"
+                                ? "VICE"
+                                : rtUp === "RESISTANCE"
+                                  ? "RES"
+                                  : rtUp.slice(0, 3)
+                              : null;
+                          return (
                           <div
                             key={r.id}
+                            title={rollHint}
                             style={{
                               marginBottom: 4,
                               display: "flex",
@@ -3989,12 +4802,91 @@ export default function SessionGMManagementPanels({
                             <div style={{ minWidth: 0 }}>
                               {showAllRecentRolls ? (
                                 <span style={{ color: "#6b7280" }}>
-                                  {String(r.roll_type || "").toUpperCase()} ·{" "}
+                                  {rtUp} ·{" "}
+                                </span>
+                              ) : compactType ? (
+                                <span style={{ color: "#6b7280" }} title={rtUp}>
+                                  {compactType} ·{" "}
                                 </span>
                               ) : null}
                               {(r.action_name || "action").toUpperCase()} ·{" "}
                               {(r.results || []).join(", ")} →{" "}
                               {(r.outcome || "").replace(/_/g, " ")}
+                              {diceSrcSummary ? (
+                                <span
+                                  title={diceSrcTooltip}
+                                  style={{
+                                    marginLeft: 6,
+                                    color: "#71717a",
+                                    fontSize: 9,
+                                    verticalAlign: "middle",
+                                  }}
+                                >
+                                  · {diceSrcSummary}
+                                </span>
+                              ) : null}
+                              <span
+                                style={{
+                                  marginLeft: 6,
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 3,
+                                  flexWrap: "wrap",
+                                  verticalAlign: "middle",
+                                }}
+                              >
+                                {rollHasTruthyFk(r.group_action) ? (
+                                  <span
+                                    title={`Group action id ${r.group_action}`}
+                                    style={{
+                                      fontSize: 8,
+                                      fontWeight: 700,
+                                      letterSpacing: "0.04em",
+                                      padding: "1px 5px",
+                                      borderRadius: 4,
+                                      border: "1px solid #1d4ed8",
+                                      background: "rgba(29, 78, 216, 0.2)",
+                                      color: "#93c5fd",
+                                    }}
+                                  >
+                                    GA
+                                  </span>
+                                ) : null}
+                                {recBadge ? (
+                                  <span
+                                    title={recBadge.title}
+                                    style={{
+                                      fontSize: 8,
+                                      fontWeight: 700,
+                                      letterSpacing: "0.04em",
+                                      padding: "1px 5px",
+                                      borderRadius: 4,
+                                      border: "1px solid #047857",
+                                      background: "rgba(4, 120, 87, 0.2)",
+                                      color: "#6ee7b7",
+                                    }}
+                                  >
+                                    {recBadge.label}
+                                  </span>
+                                ) : null}
+                                {asst ? (
+                                  <span
+                                    title={asst.title}
+                                    style={{
+                                      fontSize: 8,
+                                      fontWeight: 700,
+                                      letterSpacing: "0.04em",
+                                      padding: "1px 5px",
+                                      borderRadius: 4,
+                                      border: "1px solid #b45309",
+                                      background: "rgba(180, 83, 9, 0.2)",
+                                      color: "#fcd34d",
+                                    }}
+                                  >
+                                    {asst.label}
+                                  </span>
+                                ) : null}
+                              </span>
                               {(Array.isArray(r.xp_award_details) &&
                               r.xp_award_details.length > 0
                                 ? r.xp_award_details
@@ -4095,7 +4987,8 @@ export default function SessionGMManagementPanels({
                               </button>
                             </div>
                           </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                   </div>

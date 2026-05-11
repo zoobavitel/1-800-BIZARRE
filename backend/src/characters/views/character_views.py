@@ -13,17 +13,20 @@ import json
 
 import random
 from ..models import (
+    AssistHelpPending,
     Campaign,
     Character,
     CharacterHamonAbility,
     ExperienceTracker,
     GroupAction,
+    NPC,
     Session,
     Roll,
     RollHistory,
 )
 from ..parsers import MultipartJsonParser
 from ..roll_helpers import (
+    STAND_POOL_STAT_KEYS,
     action_rating_from_action_dots,
     award_desperate_action_xp,
     award_heritage_expression_xp,
@@ -35,6 +38,7 @@ from ..roll_helpers import (
     normalize_position,
     outcome_from_action_roll,
     recovery_healing_clock_segments,
+    stand_action_rating_from_character,
     tier_die_from_action_pool,
     award_struggle_for_new_traumas,
 )
@@ -324,13 +328,22 @@ class CharacterViewSet(viewsets.ModelViewSet):
             request.data.get("fortune_public_label", "") or ""
         ).strip()
         roll_type = request.data.get("roll_type", "ACTION")
+        npc_heal_fortune = _as_bool(request.data.get("npc_heal_fortune"))
+        npc_heal_coin_remaining = None
         bonus_dice = int(request.data.get("bonus_dice") or 0)
+        heritage_penalty_dice = int(request.data.get("heritage_penalty_dice") or 0)
+        if heritage_penalty_dice < 0:
+            heritage_penalty_dice = 0
+        if heritage_penalty_dice > 3:
+            heritage_penalty_dice = 3
         ability_effect_steps = int(request.data.get("ability_effect_steps") or 0)
         goal_label = (request.data.get("goal_label") or "").strip()
         ability_bonuses = request.data.get(
             "ability_bonuses"
         )  # optional list for audit string
         heritage_bonuses_raw = request.data.get("heritage_bonuses")
+        pool_source = str(request.data.get("pool_source") or "action_dots").strip().lower()
+        stand_stat_requested = str(request.data.get("stand_stat") or "").strip().lower()
         group_action_id = request.data.get("group_action_id")
         assist_helper_id_raw = request.data.get("assist_helper_id")
         assist_helper = None
@@ -541,11 +554,165 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
         # Fortune roll: GM sets dice_pool directly; no action/incapacitated/push
         if roll_type.upper() == "FORTUNE":
+            if npc_heal_fortune and not session:
+                return Response(
+                    {
+                        "error": (
+                            "npc_heal_fortune requires a valid session_id for this "
+                            "character's campaign."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             action_name = action_name or "Fortune"
-            dice_pool = max(1, min(6, int(request.data.get("dice_pool", 2))))
+            base_fortune = max(1, min(6, int(request.data.get("dice_pool", 2))))
+            dice_pool = base_fortune
             action_rating = 0
             attribute_dice = 0
+            if npc_heal_fortune:
+                if character.user_id != request.user.id and not request.user.is_staff:
+                    return Response(
+                        {
+                            "error": (
+                                "Only that character's player may spend coin on this "
+                                "NPC heal fortune roll."
+                            )
+                        },
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+                try:
+                    healer_npc_id = int(request.data.get("npc_healer_npc_id") or 0)
+                except (TypeError, ValueError):
+                    healer_npc_id = 0
+                if healer_npc_id <= 0:
+                    return Response(
+                        {"error": "npc_healer_npc_id is required for npc_heal_fortune."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if not session.npcs_involved.filter(pk=healer_npc_id).exists():
+                    return Response(
+                        {
+                            "error": (
+                                "That NPC is not involved in this session; the GM must "
+                                "add them to the session first."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                healer_npc = (
+                    NPC.objects.filter(
+                        pk=healer_npc_id, campaign_id=character.campaign_id
+                    )
+                    .only("id", "name")
+                    .first()
+                )
+                if not healer_npc:
+                    return Response(
+                        {"error": "NPC healer not found in this campaign."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                pch_raw = request.data.get("npc_heal_patient_character_id")
+                if pch_raw not in (None, "", False):
+                    try:
+                        pcid_chk = int(pch_raw)
+                    except (TypeError, ValueError):
+                        pcid_chk = 0
+                    if pcid_chk > 0 and not Character.objects.filter(
+                        pk=pcid_chk, campaign_id=character.campaign_id
+                    ).exists():
+                        return Response(
+                            {
+                                "error": (
+                                    "npc_heal_patient_character_id must be a character "
+                                    "in this campaign."
+                                )
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                pnpc_raw_pre = request.data.get("npc_heal_patient_npc_id")
+                if pnpc_raw_pre not in (None, "", False):
+                    try:
+                        pnid_chk = int(pnpc_raw_pre)
+                    except (TypeError, ValueError):
+                        pnid_chk = 0
+                    if pnid_chk > 0 and not session.npcs_involved.filter(
+                        pk=pnid_chk
+                    ).exists():
+                        return Response(
+                            {
+                                "error": (
+                                    "npc_heal_patient_npc_id must refer to an NPC "
+                                    "involved in this session."
+                                )
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                try:
+                    coin_n = int(request.data.get("npc_heal_fortune_coin") or 0)
+                except (TypeError, ValueError):
+                    coin_n = 0
+                coin_n = max(0, min(3, coin_n))
+                bump = coin_n
+
+                def _personal_coin_filled_count(ch):
+                    bx = getattr(ch, "coin_boxes", None) or []
+                    if not isinstance(bx, (list, tuple)):
+                        return 0
+                    return sum(1 for x in bx[:4] if x)
+
+                if coin_n > 0:
+                    with transaction.atomic():
+                        locked = Character.objects.select_for_update().get(
+                            pk=character.pk
+                        )
+                        boxes = list(locked.coin_boxes or [])
+                        if not isinstance(boxes, list):
+                            boxes = []
+                        while len(boxes) < 4:
+                            boxes.append(False)
+                        boxes = [bool(x) for x in boxes[:4]]
+                        cur_coin = sum(1 for x in boxes if x)
+                        if cur_coin < coin_n:
+                            return Response(
+                                {
+                                    "error": "Insufficient personal coin for this spend.",
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                        filled_indices = [i for i, v in enumerate(boxes) if v]
+                        for j in filled_indices[-coin_n:]:
+                            boxes[j] = False
+                        locked.coin_boxes = boxes
+                        locked.save(update_fields=["coin_boxes"])
+                        character.coin_boxes = boxes
+                    modifier_sources.append(
+                        {
+                            "kind": "coin",
+                            "name": (
+                                f"Coin: spent {coin_n} → +{coin_n}d NPC heal fortune "
+                                f"(base {base_fortune}d)"
+                            ),
+                            "delta": f"+{coin_n}d",
+                            "category": "system",
+                        }
+                    )
+                npc_heal_coin_remaining = _personal_coin_filled_count(character)
+                dice_pool = max(1, min(6, base_fortune + bump))
+                healer_label = (getattr(healer_npc, "name", None) or "").strip() or "NPC"
+                modifier_sources.append(
+                    {
+                        "kind": "npc_healer",
+                        "name": f"Healer (session NPC): {healer_label}",
+                        "delta": "fortune",
+                        "category": "system",
+                    }
+                )
         else:
+            if npc_heal_fortune:
+                return Response(
+                    {"error": "npc_heal_fortune is only valid for roll_type FORTUNE."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             if not action_name:
                 return Response(
                     {"error": "Action name is required"},
@@ -653,6 +820,15 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 request.data.get("ripple_breathing_free_push", False)
             )
             if ripple_free_push_claim:
+                if pool_source == "stand_coin":
+                    return Response(
+                        {
+                            "error": (
+                                "Ripple Breathing does not apply to stand coin rolls."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
                 if roll_type.upper() != "ACTION":
                     return Response(
                         {
@@ -755,14 +931,42 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     }
                 )
 
-        # Get action rating from action_dots (flat or nested) - skip for FORTUNE
+        # Get action rating from action_dots or Stand Coin grade — skip for FORTUNE
         if roll_type.upper() != "FORTUNE":
-            action_rating = action_rating_from_action_dots(
-                character.action_dots, action_name
-            )
+            if pool_source == "stand_coin":
+                if roll_type.upper() != "ACTION":
+                    return Response(
+                        {
+                            "error": (
+                                "Stand coin dice use roll_type ACTION with "
+                                "pool_source stand_coin and stand_stat "
+                                "(power|speed|precision|durability)."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if stand_stat_requested not in STAND_POOL_STAT_KEYS:
+                    return Response(
+                        {
+                            "error": (
+                                "stand_stat must be power, speed, precision, "
+                                "or durability when pool_source is stand_coin."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                action_rating = stand_action_rating_from_character(
+                    character, stand_stat_requested
+                )
+                action_name = (
+                    request.data.get("action") or f"stand_{stand_stat_requested}"
+                ).strip()
+            else:
+                action_rating = action_rating_from_action_dots(
+                    character.action_dots, action_name
+                )
 
-            # Base action pool: action rating only (no extra dice from other
-            # actions in the same attribute).
+            # Base action pool: action rating only (no cross-action attribute dice).
             attribute_dice = 0
 
             dice_pool = action_rating
@@ -796,17 +1000,84 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         "category": "ability",
                     }
                 )
+            if roll_type.upper() == "ACTION" and heritage_penalty_dice > 0:
+                dice_pool -= heritage_penalty_dice
+                modifier_sources.append(
+                    {
+                        "kind": "heritage",
+                        "name": "Alien Understanding",
+                        "delta": f"-{heritage_penalty_dice}d",
+                        "category": "heritage",
+                    }
+                )
 
+            ahid_requested = None
             if assist_helper_id_raw not in (None, "", False):
                 try:
-                    ahid = int(assist_helper_id_raw)
+                    ahid_requested = int(assist_helper_id_raw)
                 except (TypeError, ValueError):
                     return Response(
                         {"error": "Invalid assist_helper_id"},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
+
+            # Forfeit pending crew-assist (+1d) when the beneficiary commits an ACTION roll without assist.
+            if (
+                roll_type.upper() == "ACTION"
+                and session
+                and ahid_requested is None
+            ):
+                AssistHelpPending.objects.filter(
+                    session_id=session.id, recipient_id=character.id
+                ).delete()
+
+            if ahid_requested is not None:
+                if roll_type.upper() != "ACTION":
+                    return Response(
+                        {
+                            "error": (
+                                "assist_helper_id is only valid when roll_type is ACTION."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if not session:
+                    return Response(
+                        {
+                            "error": (
+                                "assist_helper_id requires session_id for this crew assist scene."
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
                 with transaction.atomic():
-                    assist_helper = Character.objects.select_for_update().get(pk=ahid)
+                    pending_row = (
+                        AssistHelpPending.objects.select_for_update()
+                        .filter(
+                            session_id=session.id,
+                            recipient_id=character.id,
+                        )
+                        .select_related("helper")
+                        .first()
+                    )
+                    prepaid = pending_row is not None
+                    if pending_row is not None and pending_row.helper_id != ahid_requested:
+                        ph = getattr(pending_row, "helper", None)
+                        hn = (getattr(ph, "true_name", None) or "").strip()
+                        hn = hn or (getattr(ph, "alias", None) or "").strip()
+                        hn = hn or str(pending_row.helper_id)
+                        return Response(
+                            {
+                                "error": (
+                                    f"Pending crew assist is tied to {hn}. Send "
+                                    f"matching assist_helper_id, or omit it on an ACTION roll "
+                                    "to abandon the prepaid assist die for this pending window."
+                                )
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+                    assist_helper = Character.objects.select_for_update().get(pk=ahid_requested)
                     if character.id == assist_helper.id:
                         return Response(
                             {"error": "Cannot help yourself"},
@@ -828,6 +1099,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                             {"error": "Must be in the same crew to Help"},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
+
                     hs = max(
                         0,
                         min(
@@ -836,17 +1108,21 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         ),
                     )
                     helper_max_stress = _max_stress_for_character(assist_helper)
-                    if hs >= helper_max_stress:
-                        return Response(
-                            {
-                                "error": (
-                                    "Helper's stress track is full (cannot mark another box)."
-                                )
-                            },
-                            status=status.HTTP_400_BAD_REQUEST,
-                        )
-                    assist_helper.stress = min(helper_max_stress, hs + 1)
-                    assist_helper.save(update_fields=["stress"])
+                    if not prepaid:
+                        if hs >= helper_max_stress:
+                            return Response(
+                                {
+                                    "error": (
+                                        "Helper's stress track is full (cannot mark another box)."
+                                    )
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                        assist_helper.stress = min(helper_max_stress, hs + 1)
+                        assist_helper.save(update_fields=["stress"])
+                    elif prepaid:
+                        AssistHelpPending.objects.filter(pk=pending_row.pk).delete()
+
                     dice_pool += 1
                     modifier_sources.append(
                         {
@@ -857,6 +1133,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                         }
                     )
 
+        dice_pool = max(0, dice_pool)
         pool_before_roll = dice_pool
         # 0d action pool (Blades-style): roll 2d take the lowest for outcome tiers; mirrors offline rollDice().
         if dice_pool > 0:
@@ -903,7 +1180,54 @@ class CharacterViewSet(viewsets.ModelViewSet):
             recovery_roll_target = None
             recovery_ctx_for_roll = ""
             rtc_raw = request.data.get("recovery_target_character_id")
-            if rtc_raw not in (None, "", False):
+            if npc_heal_fortune:
+                recovery_ctx_for_roll = "npc_heal_fortune"
+                pchar_raw = request.data.get("npc_heal_patient_character_id")
+                if pchar_raw not in (None, "", False):
+                    try:
+                        tid_rtc = int(pchar_raw)
+                        cand = Character.objects.filter(
+                            pk=tid_rtc, campaign_id=character.campaign_id
+                        ).first()
+                        if cand:
+                            if cand.id != character.id:
+                                recovery_roll_target = cand
+                                desc += (
+                                    " [NPC heal patient (PC): "
+                                    f"{recovery_roll_target.true_name}]"
+                                )
+                            else:
+                                desc += " [NPC heal patient (PC): self]"
+                    except (TypeError, ValueError):
+                        pass
+                pnpc_raw = request.data.get("npc_heal_patient_npc_id")
+                if pnpc_raw not in (None, "", False):
+                    try:
+                        pnid = int(pnpc_raw)
+                    except (TypeError, ValueError):
+                        pnid = 0
+                    if pnid > 0:
+                        if not session.npcs_involved.filter(pk=pnid).exists():
+                            return Response(
+                                {
+                                    "error": (
+                                        "npc_heal_patient_npc_id must refer to an NPC "
+                                        "involved in this session."
+                                    )
+                                },
+                                status=status.HTTP_400_BAD_REQUEST,
+                            )
+                        pnpc = (
+                            NPC.objects.filter(
+                                pk=pnid, campaign_id=character.campaign_id
+                            )
+                            .only("id", "name")
+                            .first()
+                        )
+                        if pnpc:
+                            pn = (getattr(pnpc, "name", None) or "").strip() or "NPC"
+                            desc += f" [NPC heal patient (NPC): {pn}]"
+            elif rtc_raw not in (None, "", False):
                 try:
                     tid_rtc = int(rtc_raw)
                     candidate_rt = Character.objects.filter(
@@ -916,7 +1240,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 except (TypeError, ValueError):
                     pass
             if (
-                recovery_ctx_for_roll != "ally"
+                recovery_ctx_for_roll not in ("ally", "npc_heal_fortune")
                 and recovery_ctx_sheet not in ("self_downtime", "self_mid_action")
                 and _as_bool(request.data.get("recovery_is_self_treatment", False))
                 and rtc_raw not in (None, "", False)
@@ -1038,46 +1362,90 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     character, session, roll, heritage_bonuses_raw
                 )
 
-        return Response(
-            {
-                "action": action_name,
-                "rating": action_rating,
-                "attribute_dice": attribute_dice,
-                "total_dice": dice_pool,
-                "dice_results": dice_results,
-                "highest": max_result,
-                "position": position,
-                "effect": effect,
-                "outcome": outcome.lower().replace("_", " "),
-                "roll_id": roll.id if roll else None,
-                "stress_spent": stress_cost,
-                "xp_gained": xp_awarded if session else 0,
-                "xp_track": xp_track,
-                "group_action_id": roll.group_action_id if roll else None,
-                "assist_helper_id": assist_helper.id if assist_helper else None,
-                "assist_helper_stress": assist_helper.stress if assist_helper else None,
-                "modifier_sources": modifier_sources,
-                "stress_sources": stress_sources,
-                "position_effect_sources": position_effect_sources,
-            }
-        )
+        roll_response_body = {
+            "action": action_name,
+            "rating": action_rating,
+            "attribute_dice": attribute_dice,
+            "total_dice": dice_pool,
+            "dice_results": dice_results,
+            "highest": max_result,
+            "position": position,
+            "effect": effect,
+            "outcome": outcome.lower().replace("_", " "),
+            "roll_id": roll.id if roll else None,
+            "stress_spent": stress_cost,
+            "xp_gained": xp_awarded if session else 0,
+            "xp_track": xp_track,
+            "group_action_id": roll.group_action_id if roll else None,
+            "assist_helper_id": assist_helper.id if assist_helper else None,
+            "assist_helper_stress": assist_helper.stress if assist_helper else None,
+            "modifier_sources": modifier_sources,
+            "stress_sources": stress_sources,
+            "position_effect_sources": position_effect_sources,
+        }
+        if npc_heal_coin_remaining is not None:
+            roll_response_body["coin"] = npc_heal_coin_remaining
+        return Response(roll_response_body)
 
     @action(detail=True, methods=["post"], url_path="assist-help")
     def assist_help(self, request, pk=None):
-        """Help: another PC in the same crew spends 1 stress to assist the acting character."""
+        """Crew Assist: beneficiary is URL character; helper spends 1 stress; at most one pending +1d per beneficiary per active session."""
         actor = self.get_object()
         helper_id = request.data.get("helper_character_id")
+        session_raw = request.data.get("session_id")
         if not helper_id:
             return Response(
                 {"error": "helper_character_id is required"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        if session_raw in (None, "", False):
+            return Response(
+                {"error": "session_id is required (campaign active scene)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
-            helper = Character.objects.get(pk=helper_id)
+            sess_id_body = int(session_raw)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "Invalid session_id"}, status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            helper = Character.objects.get(pk=int(helper_id))
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "Invalid helper_character_id"}, status=status.HTTP_400_BAD_REQUEST
+            )
         except Character.DoesNotExist:
             return Response(
                 {"error": "Helper not found"}, status=status.HTTP_404_NOT_FOUND
             )
+
+        cam = getattr(actor, "campaign", None)
+        if not cam:
+            return Response(
+                {"error": "Beneficiary character has no campaign."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        active_sid = getattr(cam, "active_session_id", None)
+        if not active_sid:
+            return Response(
+                {"error": "Campaign has no active session for crew assists."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if sess_id_body != active_sid:
+            return Response(
+                {"error": "session_id must be your campaign's active session."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            session_obj = Session.objects.get(pk=sess_id_body, campaign_id=cam.id)
+        except Session.DoesNotExist:
+            return Response(
+                {"error": "Session not found or not part of this campaign."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
         if actor.id == helper.id:
             return Response(
                 {"error": "Cannot help yourself"}, status=status.HTTP_400_BAD_REQUEST
@@ -1092,27 +1460,62 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 {"error": "Must be in the same crew to Help"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        hs = max(
-            0,
-            min(
-                _max_stress_for_character(helper),
-                int(getattr(helper, "stress", 0) or 0),
-            ),
-        )
-        helper_max_stress = _max_stress_for_character(helper)
-        if hs >= helper_max_stress:
-            return Response(
-                {
-                    "error": (
-                        "Helper's stress track is full (cannot mark another box)."
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST,
+
+        with transaction.atomic():
+            if AssistHelpPending.objects.select_for_update().filter(
+                session_id=session_obj.id, recipient_id=actor.id
+            ).exists():
+                return Response(
+                    {
+                        "error": (
+                            "This PC already has a pending crew assist for this session; "
+                            "resolve it by rolling before another assist grants +1d."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            hs = max(
+                0,
+                min(
+                    _max_stress_for_character(helper),
+                    int(getattr(helper, "stress", 0) or 0),
+                ),
             )
-        helper.stress = min(helper_max_stress, hs + 1)
-        helper.save(update_fields=["stress"])
+            helper_max_stress = _max_stress_for_character(helper)
+            if hs >= helper_max_stress:
+                return Response(
+                    {
+                        "error": (
+                            "Helper's stress track is full (cannot mark another box)."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            lock_helper = Character.objects.select_for_update().get(pk=helper.id)
+            lock_helper.stress = min(
+                helper_max_stress,
+                max(
+                    0,
+                    min(
+                        helper_max_stress,
+                        int(getattr(lock_helper, "stress", 0) or 0),
+                    ),
+                )
+                + 1,
+            )
+            lock_helper.save(update_fields=["stress"])
+            AssistHelpPending.objects.create(
+                session=session_obj,
+                recipient_id=actor.id,
+                helper_id=helper.id,
+            )
+
+        helper.refresh_from_db()
         return Response(
             {
+                "recipient_id": actor.id,
+                "session_id": session_obj.id,
                 "helper_id": helper.id,
                 "helper_name": helper.true_name,
                 "helper_stress": helper.stress,

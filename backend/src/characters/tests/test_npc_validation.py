@@ -190,6 +190,19 @@ class NPCArmorSystemTest(TestCase):
 
         self.assertEqual(npc.special_armor_charges, 0)
 
+    def test_stand_armor_charges_from_durability(self):
+        """Stand armor pool scales with DURABILITY (same grade table as sheet)."""
+        npc = NPC.objects.create(
+            name="Dur B NPC",
+            creator=self.gm_user,
+            campaign=self.campaign,
+            stand_coin_stats={"DURABILITY": "B", "DEVELOPMENT": "F"},
+        )
+        self.assertEqual(npc.stand_armor_charges, 1)
+
+        npc.stand_coin_stats = {"DURABILITY": "A", "DEVELOPMENT": "F"}
+        self.assertEqual(npc.stand_armor_charges, 2)
+
 
 class NPCVulnerabilityClockTest(TestCase):
     """Test NPC vulnerability clock system."""
@@ -278,15 +291,30 @@ class NPCVulnerabilityClockTest(TestCase):
 
         self.assertEqual(npc.vulnerability_clock_max, 4)
 
-    def test_regular_armor_charges_b_rank(self):
-        """B-rank Durability regular armor charges (see NPC.regular_armor_charges)."""
+    def test_regular_armor_charges_b_rank_requires_item(self):
+        """Physical armor pool is 0 without a gear item; with item, follows Durability."""
         npc = NPC.objects.create(
             name="B-Durability NPC",
             creator=self.gm_user,
             campaign=self.campaign,
             stand_coin_stats={"DURABILITY": "B"},
+            has_physical_armor_item=False,
         )
+        self.assertEqual(npc.regular_armor_charges, 0)
+
+        npc.has_physical_armor_item = True
         self.assertEqual(npc.regular_armor_charges, 2)
+
+    def test_regular_armor_bonus_charges(self):
+        npc = NPC.objects.create(
+            name="Bonus armor NPC",
+            creator=self.gm_user,
+            campaign=self.campaign,
+            stand_coin_stats={"DURABILITY": "C"},
+            has_physical_armor_item=True,
+            physical_armor_bonus_charges=2,
+        )
+        self.assertEqual(npc.regular_armor_charges, 3)
 
 
 class NPCMovementSpeedTest(TestCase):
