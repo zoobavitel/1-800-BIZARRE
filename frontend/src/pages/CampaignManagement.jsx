@@ -2780,17 +2780,30 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
   const [clearActiveManualXpByChar, setClearActiveManualXpByChar] = useState({});
   const [clearActiveManualReady, setClearActiveManualReady] = useState(false);
 
+  const campaignLiveSlotId = campaignActiveSessionId(campaign);
+
   useEffect(() => {
+    if (!campaign?.id) return;
+    let cancelled = false;
     setLoading(true);
     sessionAPI
       .getSessions(campaign.id)
-      .then(setSessions)
-      .catch((e) => {
-        setError(e.message);
-        setSessions([]);
+      .then((list) => {
+        if (!cancelled) setSessions(list || []);
       })
-      .finally(() => setLoading(false));
-  }, [campaign.id]);
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e.message);
+          setSessions([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [campaign.id, campaignLiveSlotId]);
 
   const handleCreateSession = async () => {
     setCreating(true);
