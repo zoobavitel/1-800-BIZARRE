@@ -1,4 +1,10 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import React, {
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
 import {
   sessionAPI,
   resolveMediaUrl,
@@ -11,6 +17,7 @@ import {
   xpHistoryAPI,
   characterHistoryAPI,
   progressClockAPI,
+  normalizeCharacterInventory,
 } from "../../features/character-sheet/services/api";
 import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import {
@@ -86,6 +93,70 @@ function unwrapApiArray(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.results)) return data.results;
   return [];
+}
+
+/** Count `true` entries in character sheet coin_boxes / stash_slots arrays. */
+function countSheetBoolSlots(arr) {
+  if (!Array.isArray(arr)) return 0;
+  return arr.reduce((n, x) => n + (x === true ? 1 : 0), 0);
+}
+
+function sheetCoinBoxesFromHandCount(n) {
+  const k = Math.max(0, Math.min(4, Number(n) || 0));
+  return [0, 1, 2, 3].map((i) => i < k);
+}
+
+function sheetStashSlotsFromFilledCount(n) {
+  const k = Math.max(0, Math.min(40, Number(n) || 0));
+  return Array.from({ length: 40 }, (_, i) => i < k);
+}
+
+/** Session FK on a progress clock row (API returns numeric id). */
+function normalizeProgressClockSessionId(clk) {
+  const raw = clk?.session;
+  if (raw == null || raw === "") return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function progressClockIsDone(clk) {
+  if (clk?.completed === true) return true;
+  const filled = Number(clk?.filled_segments) || 0;
+  const max = Number(clk?.max_segments) || 0;
+  return max > 0 && filled >= max;
+}
+
+/**
+ * Long-term project on a PC or crew sheet, not tied to an NPC row,
+ * and not created by the campaign GM (so mid-session / carryover player work shows here).
+ */
+function isPlayerOwnedProjectClock(clk, gmId) {
+  if (String(clk?.clock_type || "").toUpperCase() !== "PROJECT") return false;
+  if (clk?.npc != null && clk.npc !== "") return false;
+  const hasChar = clk?.character != null && clk.character !== "";
+  const hasCrew = clk?.crew != null && clk.crew !== "";
+  if (!hasChar && !hasCrew) return false;
+  const g =
+    gmId != null && gmId !== "" ? Number(gmId) : NaN;
+  const creator =
+    clk?.created_by != null && clk.created_by !== ""
+      ? Number(clk.created_by)
+      : null;
+  if (Number.isFinite(g) && Number.isFinite(creator) && creator === g) {
+    return false;
+  }
+  return true;
+}
+
+function progressClockSessionScopeShort(clk, currentSessionId) {
+  const cs = normalizeProgressClockSessionId(clk);
+  const cur =
+    currentSessionId != null && currentSessionId !== ""
+      ? Number(currentSessionId)
+      : NaN;
+  if (cs == null) return "Carryover / open";
+  if (Number.isFinite(cur) && cs === cur) return "This session";
+  return `Other session (#${cs})`;
 }
 
 function rollHasTruthyFk(val) {
@@ -630,6 +701,78 @@ function flatActionDots(actionDots) {
   return Object.entries(actionDots);
 }
 
+/** Blades-style attribute ratings: count of actions in each group with dot &gt; 0. */
+function insightProwessResolveFromActionDots(actionDots) {
+  const m = Object.fromEntries(flatActionDots(actionDots));
+  const c = (keys) =>
+    keys.reduce((n, k) => n + ((Number(m[k]) || 0) > 0 ? 1 : 0), 0);
+  return {
+    insight: c(["hunt", "study", "survey", "tinker"]),
+    prowess: c(["finesse", "prowl", "skirmish", "wreck"]),
+    resolve: c(["bizarre", "attune", "command", "consort", "sway"]),
+  };
+}
+
+/** One-line summary for roster inventory row (strings or common object shapes). */
+function rosterFormatInventoryLine(item) {
+  if (item == null || item === "") return null;
+  if (typeof item === "string") {
+    const t = item.trim();
+    return t || null;
+  }
+  if (typeof item === "object" && !Array.isArray(item)) {
+    const name = String(item.name ?? item.label ?? "").trim();
+    const desc = String(item.description ?? item.detail ?? "").trim();
+    const qty =
+      item.quantity != null && item.quantity !== ""
+        ? ` ×${item.quantity}`
+        : "";
+    if (name && desc) return `${name}${qty} — ${desc}`;
+    if (name) return `${name}${qty}`;
+    try {
+      return JSON.stringify(item);
+    } catch {
+      return "[item]";
+    }
+  }
+  try {
+    return JSON.stringify(item);
+  } catch {
+    return String(item);
+  }
+}
+
+function rosterCharacterNoteSections(ch) {
+  const out = [];
+  const push = (label, val) => {
+    const t = String(val ?? "").trim();
+    if (t) out.push({ label, text: t });
+  };
+  push("Background", ch.background_note);
+  push("Background (extra)", ch.background_note2);
+  push("Appearance", ch.appearance);
+  push("Vice details", ch.vice_details);
+  return out;
+}
+
+/** Durability grade → max stand path armor charges (SRD; mirrors NPC sheet). */
+const ROSTER_DUR_STAND_ARMOR_MAX = {
+  F: 0,
+  D: 0,
+  C: 1,
+  B: 1,
+  A: 2,
+  S: 2,
+};
+
+function rosterStandArmorMaxFromDurabilityGrade(letter) {
+  const k = String(letter ?? "F")
+    .trim()
+    .toUpperCase()
+    .slice(0, 1);
+  return ROSTER_DUR_STAND_ARMOR_MAX[k] ?? 0;
+}
+
 const card = {
   boxSizing: "border-box",
   width: 280,
@@ -836,9 +979,25 @@ export default function SessionGMManagementPanels({
   const [crewDraftById, setCrewDraftById] = useState({});
   const [manualRollCardOpen, setManualRollCardOpen] = useState(true);
   const [sessionXpCardOpen, setSessionXpCardOpen] = useState(true);
+  const [bulkPeSectionCollapsed, setBulkPeSectionCollapsed] = useState(false);
   const [recentRollSavingId, setRecentRollSavingId] = useState(null);
   const [factionSavingId, setFactionSavingId] = useState(null);
   const [factionDraftById, setFactionDraftById] = useState({});
+  const factionDraftByIdRef = useRef({});
+  const factionAutosaveTimersRef = useRef({});
+
+  useEffect(() => {
+    factionDraftByIdRef.current = factionDraftById;
+  }, [factionDraftById]);
+
+  useEffect(
+    () => () => {
+      const timers = factionAutosaveTimersRef.current;
+      Object.keys(timers).forEach((k) => clearTimeout(timers[k]));
+      factionAutosaveTimersRef.current = {};
+    },
+    [],
+  );
   const [npcFactionSavingId, setNpcFactionSavingId] = useState(null);
   /** `vuln:<npcId>` or `clk:<progressClockId>` while a roster NPC clock save runs */
   const [npcUiBusyKey, setNpcUiBusyKey] = useState(null);
@@ -868,6 +1027,10 @@ export default function SessionGMManagementPanels({
   /** Same shape as session ledger rows but full campaign (no session-date filter); used to surface pre-session initial buy-in. */
   const [campaignAdvancementLedgerEntries, setCampaignAdvancementLedgerEntries] =
     useState([]);
+  /** All progress clocks for campaign (any session); GM session view only — for player project list. */
+  const [campaignWideClocks, setCampaignWideClocks] = useState([]);
+  const [campaignWideClocksLoaded, setCampaignWideClocksLoaded] =
+    useState(false);
 
   /** Inline create for per-PC progress clocks on this session (roster card). */
   const [pcSessionClockDraftFor, setPcSessionClockDraftFor] = useState(null);
@@ -888,6 +1051,14 @@ export default function SessionGMManagementPanels({
     visible_to_players: false,
   });
   const [npcSessionClockBusyNpcId, setNpcSessionClockBusyNpcId] = useState(null);
+  const [pcSheetHandCoinEdits, setPcSheetHandCoinEdits] = useState({});
+  const [pcSheetStashFilledEdits, setPcSheetStashFilledEdits] = useState({});
+  const [pcSheetMoneySavingId, setPcSheetMoneySavingId] = useState(null);
+  const [pcRosterInvDraftByChar, setPcRosterInvDraftByChar] = useState({});
+  const [pcRosterNoteAppendDraftByChar, setPcRosterNoteAppendDraftByChar] =
+    useState({});
+  /** Inventory / note append PATCH from session roster PC cards */
+  const [pcRosterSheetBusyId, setPcRosterSheetBusyId] = useState(null);
 
   const npcInvolvements = useMemo(
     () => sessionData?.npc_involvements || [],
@@ -1228,21 +1399,45 @@ export default function SessionGMManagementPanels({
     return m;
   }, [sessionXpEntriesSorted]);
 
-  const sessionCompletedClocks = useMemo(() => {
-    const sid = session?.id != null ? Number(session.id) : NaN;
-    if (!Number.isFinite(sid)) return [];
-    return (clocks || []).filter((c) => {
-      const cs =
-        c.session != null ? Number(c.session) : NaN;
-      if (!Number.isFinite(cs) || cs !== sid) return false;
-      const filled = Number(c.filled_segments) || 0;
-      const max = Number(c.max_segments) || 0;
-      return (
-        c.completed === true ||
-        (max > 0 && filled >= max)
-      );
+  useEffect(() => {
+    if (!campaign?.id) {
+      setCampaignWideClocks([]);
+      setCampaignWideClocksLoaded(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setCampaignWideClocksLoaded(false);
+    progressClockAPI
+      .getProgressClocks({ campaign: campaign.id })
+      .then((data) => {
+        if (cancelled) return;
+        setCampaignWideClocks(unwrapApiArray(data));
+        setCampaignWideClocksLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCampaignWideClocks([]);
+        setCampaignWideClocksLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [campaign?.id, session?.id]);
+
+  const gmPlayerProjectClocks = useMemo(() => {
+    const gmRaw = campaign?.gm;
+    const gmId =
+      gmRaw && typeof gmRaw === "object" ? gmRaw.id : gmRaw ?? null;
+    const list = (campaignWideClocks || []).filter((c) =>
+      isPlayerOwnedProjectClock(c, gmId),
+    );
+    return [...list].sort((a, b) => {
+      const da = progressClockIsDone(a) ? 1 : 0;
+      const db = progressClockIsDone(b) ? 1 : 0;
+      if (da !== db) return da - db;
+      return String(a.name || "").localeCompare(String(b.name || ""));
     });
-  }, [clocks, session?.id]);
+  }, [campaignWideClocks, campaign?.gm]);
 
   /** Progress clocks on this session owned by an NPC (for roster quick ticks). */
   const npcSessionClocksByNpcId = useMemo(() => {
@@ -1481,6 +1676,19 @@ export default function SessionGMManagementPanels({
     return sorted.slice(0, 5);
   }, [sessionRolls]);
 
+  /** Sum of stress logged on rolls for this PC in the current session (resistance, push, etc.). */
+  const sessionStressSpentForCharacter = useCallback(
+    (characterId) => {
+      let total = 0;
+      for (const r of sessionRolls || []) {
+        if (String(r.character) !== String(characterId)) continue;
+        total += Math.max(0, Number(r.roller_stress_spent) || 0);
+      }
+      return total;
+    },
+    [sessionRolls],
+  );
+
   const editRecentRoll = useCallback(
     async (roll) => {
       if (!roll?.id) return;
@@ -1622,9 +1830,9 @@ export default function SessionGMManagementPanels({
     }
   };
 
-  const patchFactionSnapshot = async (factionId) => {
+  const patchFactionSnapshot = useCallback(async (factionId) => {
     if (!factionId) return;
-    const draft = factionDraftById[factionId];
+    const draft = factionDraftByIdRef.current[factionId];
     if (!draft) return;
     const parseJsonText = (raw, fallback) => {
       const txt = String(raw ?? "").trim();
@@ -1653,7 +1861,142 @@ export default function SessionGMManagementPanels({
     } finally {
       setFactionSavingId(null);
     }
-  };
+  }, [onRefresh, setError]);
+
+  const scheduleFactionAutosave = useCallback(
+    (factionId) => {
+      if (!factionId) return;
+      const timers = factionAutosaveTimersRef.current;
+      if (timers[factionId]) clearTimeout(timers[factionId]);
+      timers[factionId] = setTimeout(() => {
+        patchFactionSnapshot(factionId);
+        delete timers[factionId];
+      }, 450);
+    },
+    [patchFactionSnapshot],
+  );
+
+  const handlePcSheetHandCoinBlur = useCallback(
+    async (characterId, raw, currentCoinBoxes) => {
+      const val = Math.max(0, Math.min(4, parseInt(String(raw).trim(), 10) || 0));
+      const cur = countSheetBoolSlots(currentCoinBoxes);
+      if (val === cur) {
+        setPcSheetHandCoinEdits((p) => {
+          const n = { ...p };
+          delete n[characterId];
+          return n;
+        });
+        return;
+      }
+      setPcSheetMoneySavingId(characterId);
+      setError(null);
+      try {
+        await characterAPI.patchCharacter(characterId, {
+          coin_boxes: sheetCoinBoxesFromHandCount(val),
+        });
+        setPcSheetHandCoinEdits((p) => {
+          const n = { ...p };
+          delete n[characterId];
+          return n;
+        });
+        await onSessionCharactersRefresh?.();
+        await onRefresh();
+      } catch (e) {
+        setError(e.message || "Could not update character coin.");
+      } finally {
+        setPcSheetMoneySavingId(null);
+      }
+    },
+    [onRefresh, onSessionCharactersRefresh, setError],
+  );
+
+  const handlePcSheetStashFilledBlur = useCallback(
+    async (characterId, raw, currentStashSlots) => {
+      const val = Math.max(0, Math.min(40, parseInt(String(raw).trim(), 10) || 0));
+      const cur = countSheetBoolSlots(currentStashSlots);
+      if (val === cur) {
+        setPcSheetStashFilledEdits((p) => {
+          const n = { ...p };
+          delete n[characterId];
+          return n;
+        });
+        return;
+      }
+      setPcSheetMoneySavingId(characterId);
+      setError(null);
+      try {
+        await characterAPI.patchCharacter(characterId, {
+          stash_slots: sheetStashSlotsFromFilledCount(val),
+        });
+        setPcSheetStashFilledEdits((p) => {
+          const n = { ...p };
+          delete n[characterId];
+          return n;
+        });
+        await onSessionCharactersRefresh?.();
+        await onRefresh();
+      } catch (e) {
+        setError(e.message || "Could not update character stash.");
+      } finally {
+        setPcSheetMoneySavingId(null);
+      }
+    },
+    [onRefresh, onSessionCharactersRefresh, setError],
+  );
+
+  const handlePcRosterAppendInventory = useCallback(
+    async (characterId, currentInventory, draftLine) => {
+      const trimmed = String(draftLine ?? "").trim();
+      if (!trimmed) return;
+      const base = normalizeCharacterInventory(currentInventory);
+      const next = [...base, trimmed];
+      setPcRosterSheetBusyId(characterId);
+      setError(null);
+      try {
+        await characterAPI.patchCharacter(characterId, { inventory: next });
+        setPcRosterInvDraftByChar((p) => {
+          const n = { ...p };
+          delete n[characterId];
+          return n;
+        });
+        await onSessionCharactersRefresh?.();
+        await onRefresh();
+      } catch (e) {
+        setError(e.message || "Could not update inventory.");
+      } finally {
+        setPcRosterSheetBusyId(null);
+      }
+    },
+    [onRefresh, onSessionCharactersRefresh, setError],
+  );
+
+  const handlePcRosterAppendBackgroundNote = useCallback(
+    async (characterId, currentBackground, appendText) => {
+      const t = String(appendText ?? "").trim();
+      if (!t) return;
+      const cur = String(currentBackground ?? "").trim();
+      const merged = cur ? `${cur}\n\n${t}` : t;
+      setPcRosterSheetBusyId(characterId);
+      setError(null);
+      try {
+        await characterAPI.patchCharacter(characterId, {
+          background_note: merged,
+        });
+        setPcRosterNoteAppendDraftByChar((p) => {
+          const n = { ...p };
+          delete n[characterId];
+          return n;
+        });
+        await onSessionCharactersRefresh?.();
+        await onRefresh();
+      } catch (e) {
+        setError(e.message || "Could not update notes.");
+      } finally {
+        setPcRosterSheetBusyId(null);
+      }
+    },
+    [onRefresh, onSessionCharactersRefresh, setError],
+  );
 
   useEffect(() => {
     if (!goalAssignCharId) return;
@@ -2394,11 +2737,13 @@ export default function SessionGMManagementPanels({
               inventory: JSON.stringify(fac.inventory ?? [], null, 2),
               faction_status: JSON.stringify(fac.faction_status ?? {}, null, 2),
             };
-            const setDraftField = (field, value) =>
+            const setDraftField = (field, value) => {
               setFactionDraftById((prev) => ({
                 ...prev,
                 [fid]: { ...(prev[fid] || draft), [field]: value },
               }));
+              scheduleFactionAutosave(fid);
+            };
             const factionCollapseKey = String(fid);
             const factionCollapsed = !!collapsedFactionCards[factionCollapseKey];
             return (
@@ -2556,16 +2901,13 @@ export default function SessionGMManagementPanels({
                     </div>
                   </div>
                   <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
-                    <button
-                      type="button"
-                      style={S.btnPrimary}
-                      onClick={() => patchFactionSnapshot(fid)}
-                      disabled={factionSavingId === fid}
-                    >
-                      {factionSavingId === fid ? "Saving..." : "Save faction fields"}
-                    </button>
+                    {factionSavingId === fid ? (
+                      <span style={{ fontSize: 10, color: "#9ca3af" }}>
+                        Saving faction…
+                      </span>
+                    ) : null}
                     <span style={{ fontSize: 10, color: "#6b7280" }}>
-                      Edit fields here; changes apply to this faction everywhere.
+                      Faction fields save automatically shortly after you edit.
                     </span>
                   </div>
                     </div>
@@ -3051,9 +3393,9 @@ export default function SessionGMManagementPanels({
         {!playerRosterSectionCollapsed ? (
           <>
             <p style={{ fontSize: 11, color: "#6b7280", margin: "4px 0 0" }}>
-              Quick view: portrait, stand coin, action dots, XP tracks, personal clocks in
-              this session. Crew summary (edit here or on campaign). Below: PCs in this
-              crew’s campaign.
+              Quick view: portrait, stand coin, action dots, XP tracks, personal coin
+              &amp; stash, session clocks. Crew pool coin/stash in each crew card. PCs
+              in this crew&apos;s campaign below.
             </p>
             {(crews || []).length === 0 ? (
           <div style={{ fontSize: 12, color: "#6b7280", marginTop: 10 }}>
@@ -3467,9 +3809,33 @@ export default function SessionGMManagementPanels({
               precision: stand.precision,
               development: stand.development,
             });
+            const standArmorMax = rosterStandArmorMaxFromDurabilityGrade(
+              grades.durability,
+            );
+            const standArmorUsed = Math.max(
+              0,
+              Math.floor(Number(full.stand_armor_used) || 0),
+            );
+            const hasPhyArmor = !!full.has_physical_armor_item;
+            const phyArmorMax = Math.min(
+              6,
+              Math.max(
+                0,
+                Math.floor(Number(full.physical_armor_bonus_charges) || 0),
+              ),
+            );
+            const phyArmorUsed = Math.min(
+              6,
+              Math.max(0, Math.floor(Number(full.physical_armor_used) || 0)),
+            );
             const xp = full.xp_clocks || {};
             const ad = full.action_dots || {};
+            const ipr = insightProwessResolveFromActionDots(ad);
             const name = full.true_name || full.name || `PC ${full.id}`;
+            const invLines = (Array.isArray(full.inventory) ? full.inventory : [])
+              .map(rosterFormatInventoryLine)
+              .filter(Boolean);
+            const noteSections = rosterCharacterNoteSections(full);
             const pcClks = (clocks || []).filter(
               (c) =>
                 Number(c.character) === Number(full.id) &&
@@ -3565,23 +3931,318 @@ export default function SessionGMManagementPanels({
                         pcMaxGrade={canSRank ? "S" : "A"}
                       />
                     </div>
-                    <div style={{ fontSize: 10, color: "#9ca3af", lineHeight: 1.35 }}>
-                      Speed sets mobility and starting-position pressure by comparison. Precision
-                      can swing position/effect. Range shapes distance penalties and practical
-                      effect. Durability gates Stand armor and resist when your Stand absorbs harm—
-                      not PC stress boxes. Power frames destructive
-                      output. Development frames evolution and ability growth.
-                    </div>
-                    <div style={lbl}>Actions (dots)</div>
+                    <div style={lbl}>Actions (dot ratings)</div>
                     <div style={{ fontSize: 10, color: "#9ca3af", maxHeight: 56, overflow: "auto" }}>
                       {flatActionDots(ad)
                         .map(([a, d]) => `${a}: ${d}`)
                         .join(" · ") || "—"}
                     </div>
+                    <div style={lbl}>Attribute ratings (from dots)</div>
+                    <div style={{ fontSize: 10, color: "#9ca3af", lineHeight: 1.35 }}>
+                      Insight {ipr.insight} · Prowess {ipr.prowess} · Resolve {ipr.resolve}{" "}
+                      <span style={{ color: "#6b7280" }}>
+                        (actions with ≥1 dot in each group)
+                      </span>
+                    </div>
+                    <div style={lbl}>Armor uses</div>
+                    <div style={{ fontSize: 10, color: "#9ca3af", lineHeight: 1.35 }}>
+                      Physical{" "}
+                      {hasPhyArmor ? `${phyArmorUsed}/${phyArmorMax}` : "—"} · Stand{" "}
+                      {standArmorUsed}/{standArmorMax}
+                    </div>
                     <div style={lbl}>XP tracks</div>
                     <div style={{ fontSize: 10, color: "#9ca3af" }}>
                       In {xp.insight ?? 0} · Pw {xp.prowess ?? 0} · Re {xp.resolve ?? 0} ·
                       Pb {xp.playbook ?? 0}
+                    </div>
+                    <div style={lbl}>Inventory</div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "#9ca3af",
+                        maxHeight: 96,
+                        overflowY: "auto",
+                        lineHeight: 1.35,
+                        padding: "6px 8px",
+                        background: "#0d1117",
+                        borderRadius: 6,
+                        border: "1px solid #30363d",
+                      }}
+                    >
+                      {invLines.length > 0 ? (
+                        <ul style={{ margin: 0, paddingLeft: 16 }}>
+                          {invLines.map((line, li) => (
+                            <li key={`inv-${full.id}-${li}`}>{line}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <span style={{ color: "#52525b" }}>—</span>
+                      )}
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 6,
+                        marginTop: 6,
+                        alignItems: "center",
+                      }}
+                    >
+                      <input
+                        type="text"
+                        value={pcRosterInvDraftByChar[full.id] ?? ""}
+                        onChange={(e) =>
+                          setPcRosterInvDraftByChar((p) => ({
+                            ...p,
+                            [full.id]: e.target.value,
+                          }))
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            handlePcRosterAppendInventory(
+                              full.id,
+                              full.inventory,
+                              e.currentTarget.value,
+                            );
+                          }
+                        }}
+                        placeholder="New item…"
+                        aria-label={`Add inventory for ${name}`}
+                        style={{
+                          ...S.inp,
+                          flex: 1,
+                          fontSize: 11,
+                          minWidth: 0,
+                        }}
+                        disabled={
+                          saving ||
+                          pcSheetMoneySavingId === full.id ||
+                          pcRosterSheetBusyId === full.id
+                        }
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handlePcRosterAppendInventory(
+                            full.id,
+                            full.inventory,
+                            pcRosterInvDraftByChar[full.id],
+                          )
+                        }
+                        disabled={
+                          saving ||
+                          pcSheetMoneySavingId === full.id ||
+                          pcRosterSheetBusyId === full.id
+                        }
+                        style={{ ...S.btnGhost, fontSize: 10, flexShrink: 0 }}
+                      >
+                        Add
+                      </button>
+                    </div>
+                    <div style={lbl}>Notes</div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        maxHeight: 120,
+                        overflowY: "auto",
+                        lineHeight: 1.35,
+                        padding: "6px 8px",
+                        background: "#0d1117",
+                        borderRadius: 6,
+                        border: "1px solid #30363d",
+                      }}
+                    >
+                      {noteSections.length > 0 ? (
+                        noteSections.map((sec, si) => (
+                          <div
+                            key={`${full.id}-note-${si}`}
+                            style={{
+                              marginBottom:
+                                si < noteSections.length - 1 ? 8 : 0,
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: 9,
+                                color: "#6b7280",
+                                fontWeight: 600,
+                                marginBottom: 3,
+                              }}
+                            >
+                              {sec.label}
+                            </div>
+                            <div
+                              style={{
+                                whiteSpace: "pre-wrap",
+                                color: "#9ca3af",
+                              }}
+                            >
+                              {sec.text}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <span style={{ color: "#52525b" }}>—</span>
+                      )}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: 6,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                    >
+                      <textarea
+                        value={pcRosterNoteAppendDraftByChar[full.id] ?? ""}
+                        onChange={(e) =>
+                          setPcRosterNoteAppendDraftByChar((p) => ({
+                            ...p,
+                            [full.id]: e.target.value,
+                          }))
+                        }
+                        rows={2}
+                        placeholder="Append to background (shown above as Background)…"
+                        aria-label={`Append background note for ${name}`}
+                        style={{
+                          width: "100%",
+                          boxSizing: "border-box",
+                          fontSize: 11,
+                          lineHeight: 1.35,
+                          padding: "6px 8px",
+                          background: "#010409",
+                          color: "#e5e7eb",
+                          border: "1px solid #30363d",
+                          borderRadius: 6,
+                          resize: "vertical",
+                          minHeight: 44,
+                          fontFamily: "inherit",
+                        }}
+                        disabled={
+                          saving ||
+                          pcSheetMoneySavingId === full.id ||
+                          pcRosterSheetBusyId === full.id
+                        }
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handlePcRosterAppendBackgroundNote(
+                            full.id,
+                            full.background_note,
+                            pcRosterNoteAppendDraftByChar[full.id],
+                          )
+                        }
+                        disabled={
+                          saving ||
+                          pcSheetMoneySavingId === full.id ||
+                          pcRosterSheetBusyId === full.id
+                        }
+                        style={{
+                          ...S.btnGhost,
+                          fontSize: 10,
+                          alignSelf: "flex-start",
+                        }}
+                      >
+                        Append to background
+                      </button>
+                    </div>
+                    <div style={lbl}>Coin &amp; stash (personal)</div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: "8px 12px",
+                        alignItems: "center",
+                        marginTop: 4,
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          fontSize: 10,
+                          color: "#9ca3af",
+                        }}
+                      >
+                        On hand (0–4)
+                        <input
+                          type="number"
+                          min={0}
+                          max={4}
+                          disabled={
+                            saving || pcSheetMoneySavingId === full.id
+                          }
+                          style={{ ...S.inp, width: 52, fontSize: 11 }}
+                          value={
+                            pcSheetHandCoinEdits[full.id] !== undefined
+                              ? pcSheetHandCoinEdits[full.id]
+                              : String(countSheetBoolSlots(full.coin_boxes))
+                          }
+                          onChange={(e) =>
+                            setPcSheetHandCoinEdits((p) => ({
+                              ...p,
+                              [full.id]: e.target.value,
+                            }))
+                          }
+                          onBlur={(e) =>
+                            handlePcSheetHandCoinBlur(
+                              full.id,
+                              e.target.value,
+                              full.coin_boxes,
+                            )
+                          }
+                        />
+                      </label>
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          fontSize: 10,
+                          color: "#9ca3af",
+                        }}
+                      >
+                        Stash filled (0–40)
+                        <input
+                          type="number"
+                          min={0}
+                          max={40}
+                          disabled={
+                            saving || pcSheetMoneySavingId === full.id
+                          }
+                          style={{ ...S.inp, width: 52, fontSize: 11 }}
+                          value={
+                            pcSheetStashFilledEdits[full.id] !== undefined
+                              ? pcSheetStashFilledEdits[full.id]
+                              : String(countSheetBoolSlots(full.stash_slots))
+                          }
+                          onChange={(e) =>
+                            setPcSheetStashFilledEdits((p) => ({
+                              ...p,
+                              [full.id]: e.target.value,
+                            }))
+                          }
+                          onBlur={(e) =>
+                            handlePcSheetStashFilledBlur(
+                              full.id,
+                              e.target.value,
+                              full.stash_slots,
+                            )
+                          }
+                        />
+                      </label>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 9,
+                        color: "#52525b",
+                        marginTop: 2,
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      Matches sheet coin boxes / stash slots (filled from the left).
                     </div>
                     <div
                       style={{
@@ -3923,8 +4584,53 @@ export default function SessionGMManagementPanels({
       </div>
 
       <div style={S.card}>
-        <span style={S.sectionLbl}>Bulk position / effect (per character)</span>
-        <p style={{ fontSize: 11, color: "#6b7280" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 10,
+            marginBottom: bulkPeSectionCollapsed ? 0 : 8,
+          }}
+        >
+          <span
+            style={{
+              ...S.sectionLbl,
+              display: "block",
+              marginTop: 0,
+              marginBottom: 0,
+              flex: "1 1 auto",
+              minWidth: 0,
+            }}
+          >
+            Bulk position / effect (per character)
+          </span>
+          <button
+            type="button"
+            onClick={() => setBulkPeSectionCollapsed((o) => !o)}
+            aria-expanded={!bulkPeSectionCollapsed}
+            style={{
+              flexShrink: 0,
+              fontSize: 11,
+              color: "#9ca3af",
+              background: "#161b22",
+              border: "1px solid #374151",
+              borderRadius: 4,
+              padding: "4px 8px",
+              cursor: "pointer",
+            }}
+            title={
+              bulkPeSectionCollapsed
+                ? "Expand bulk position / effect panel"
+                : "Collapse bulk position / effect panel"
+            }
+          >
+            {bulkPeSectionCollapsed ? "Expand" : "Collapse"}
+          </button>
+        </div>
+        {!bulkPeSectionCollapsed ? (
+          <>
+        <p style={{ fontSize: 11, color: "#6b7280", marginTop: 0 }}>
           Overrides session defaults for these PCs on action rolls. Use{" "}
           <strong>PE default</strong> next to a name to clear that PC&apos;s
           position/effect override. Use <strong>Reset harm</strong> to wipe that
@@ -4552,7 +5258,7 @@ export default function SessionGMManagementPanels({
                 fontWeight: "bold",
               }}
             >
-              Clocks completed this session
+              Player projects (campaign)
             </div>
             <div
               style={{
@@ -4562,8 +5268,15 @@ export default function SessionGMManagementPanels({
                 lineHeight: 1.45,
               }}
             >
-              {sessionCompletedClocks.length === 0 ? (
-                <span>No progress clocks on this session are marked complete yet.</span>
+              {!campaignWideClocksLoaded ? (
+                <span>Loading player projects…</span>
+              ) : gmPlayerProjectClocks.length === 0 ? (
+                <span>
+                  No player-owned long-term projects yet. Lists{" "}
+                  <strong>PROJECT</strong> clocks on a <strong>PC or crew</strong> in
+                  this campaign when the creator is not the GM (mid-session and
+                  carryover clocks both appear).
+                </span>
               ) : (
                 <ul
                   style={{
@@ -4572,16 +5285,31 @@ export default function SessionGMManagementPanels({
                     color: "#9ca3af",
                   }}
                 >
-                  {sessionCompletedClocks.map((clk) => (
-                    <li key={`done-clk-${clk.id}`}>
-                      <span style={{ color: "#d1d5db" }}>
-                        {clk.name || "Clock"}
-                      </span>
-                      {` · ${progressClockOwnerLabel(clk)} · `}
-                      {Number(clk.filled_segments) || 0}/{Number(clk.max_segments) || 0}
-                      {clk.clock_type ? ` (${clk.clock_type})` : ""}
-                    </li>
-                  ))}
+                  {gmPlayerProjectClocks.map((clk) => {
+                    const done = progressClockIsDone(clk);
+                    const scope = progressClockSessionScopeShort(clk, session?.id);
+                    return (
+                      <li key={`player-proj-${clk.id}`}>
+                        <span
+                          style={{
+                            color: done ? "#6b7280" : "#d1d5db",
+                            opacity: done ? 0.85 : 1,
+                          }}
+                        >
+                          {clk.name || "Project"}
+                        </span>
+                        {` · ${progressClockOwnerLabel(clk)} · `}
+                        {Number(clk.filled_segments) || 0}/
+                        {Number(clk.max_segments) || 0}
+                        <span style={{ color: "#71717a" }}>{` · ${scope}`}</span>
+                        {done ? (
+                          <span style={{ color: "#22c55e", marginLeft: 4 }}>
+                            complete
+                          </span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </div>
@@ -5335,6 +6063,20 @@ export default function SessionGMManagementPanels({
                       <span>Recent rolls</span>
                     </div>
                     <div
+                      title="Total stress recorded on this character’s rolls in this session (e.g. resistance cost, push). From roll payloads, not live clock ticks."
+                      style={{
+                        fontSize: 10,
+                        color: "#a78bfa",
+                        marginBottom: 6,
+                        lineHeight: 1.35,
+                      }}
+                    >
+                      Stress (session):{" "}
+                      <span style={{ fontWeight: 800, color: "#e9d5ff" }}>
+                        {sessionStressSpentForCharacter(id)}
+                      </span>
+                    </div>
+                    <div
                       style={{
                         border: "1px solid #374151",
                         borderRadius: 6,
@@ -5610,6 +6352,8 @@ export default function SessionGMManagementPanels({
             );
           })}
         </div>
+          </>
+        ) : null}
       </div>
       {xpLifetimeModalOpen && xpLifetimeCharId ? (
         <div

@@ -363,7 +363,7 @@ class CrewSerializer(serializers.ModelSerializer):
         out = []
         for rel in qs:
             fac = rel.faction
-            if not show_all and not getattr(fac, "visible_to_players", True):
+            if not show_all and not getattr(fac, "visible_to_players", False):
                 continue
             out.append(
                 {
@@ -372,7 +372,7 @@ class CrewSerializer(serializers.ModelSerializer):
                     "faction_name": fac.name,
                     "reputation_value": rel.reputation_value,
                     "notes": rel.notes or "",
-                    "visible_to_players": getattr(fac, "visible_to_players", True),
+                    "visible_to_players": getattr(fac, "visible_to_players", False),
                 }
             )
         return out

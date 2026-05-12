@@ -90,7 +90,7 @@ class Faction(models.Model):
     )
     reputation = models.IntegerField(default=0)
     visible_to_players = models.BooleanField(
-        default=True,
+        default=False,
         help_text="When false, crew reputation with this faction is hidden from players until the GM reveals it.",
     )
 
