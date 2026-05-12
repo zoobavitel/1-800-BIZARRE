@@ -124,6 +124,19 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
                         campaign_player_ids = list(campaign.players.values_list('id', flat=True)) + list(
                             campaign.characters.values_list('user_id', flat=True).distinct()
                         )
+                        active_sid = getattr(campaign, "active_session_id", None)
+                        gm_public_session = Q(session__isnull=True)
+                        if active_sid:
+                            gm_public_session |= Q(session_id=active_sid)
+                        legacy_gm_session_visible = (
+                            Q(
+                                created_by__isnull=True,
+                                visible_to_players=True,
+                                session_id=active_sid,
+                            )
+                            if active_sid
+                            else Q(pk__in=[])
+                        )
                         qs = qs.filter(
                             Q(
                                 Q(created_by__isnull=True, visible_to_players=True)
@@ -131,6 +144,11 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
                             )
                             | Q(created_by_id=user.id)
                             | Q(visible_to_party=True, created_by_id__in=campaign_player_ids)
+                            | (
+                                Q(created_by_id=campaign.gm_id, visible_to_players=True)
+                                & gm_public_session
+                            )
+                            | legacy_gm_session_visible
                         )
                         qs = qs.filter(
                             Q(npc__isnull=True) | Q(npc__campaign_id=campaign_id)
@@ -156,7 +174,7 @@ class ProgressClockViewSet(viewsets.ModelViewSet):
                 raise PermissionDenied("Only campaign members can create progress clocks.")
             clock = serializer.save(created_by=user)
         else:
-            clock = serializer.save()
+            clock = serializer.save(created_by=user)
         _log_progress_clock_audit(clock, user, "clock_created")
 
     def perform_update(self, serializer):

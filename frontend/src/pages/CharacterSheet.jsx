@@ -639,6 +639,35 @@ function buildHealRollBoostPresetFromSelections(
   return { abilities: abilitiesPreset, heritage: heritagePreset };
 }
 
+/** SESSION card: GM-shared progress clocks (creator GM, or legacy null+visible on active session). */
+function isSessionGmSharedProgressClock(clk, gmId, activeSessionId) {
+  const gmid = Number(gmId);
+  const creatorRaw = clk?.created_by;
+  const creator =
+    creatorRaw != null && creatorRaw !== ""
+      ? Number(creatorRaw)
+      : null;
+  const sid =
+    activeSessionId != null && activeSessionId !== ""
+      ? Number(activeSessionId)
+      : NaN;
+  const cs =
+    clk?.session != null && clk.session !== ""
+      ? Number(clk.session)
+      : NaN;
+  const sessionMatches =
+    Number.isFinite(sid) && Number.isFinite(cs) && cs === sid;
+  if (Number.isFinite(creator) && creator === gmid) return true;
+  if (
+    (creator == null || !Number.isFinite(creator)) &&
+    !!clk?.visible_to_players &&
+    sessionMatches
+  ) {
+    return true;
+  }
+  return false;
+}
+
 // ─── CharacterSheetWrapper ────────────────────────────────────────────────────
 
 const CATEGORY_LABELS = {
@@ -10324,11 +10353,13 @@ const CharacterSheetWrapper = ({
                         <span style={{ fontSize: "11px", color: "#9ca3af" }}>
                           Clocks:{" "}
                         </span>
-                        {(charCampaign.progress_clocks || []).filter((clk) => {
-                          const creator = Number(clk.created_by);
-                          const gmId = Number(charCampaign?.gm);
-                          return creator && creator === gmId;
-                        }).length > 0 ? (
+                        {(charCampaign.progress_clocks || []).filter((clk) =>
+                          isSessionGmSharedProgressClock(
+                            clk,
+                            charCampaign?.gm,
+                            activeSessionId,
+                          ),
+                        ).length > 0 ? (
                           <div
                             style={{
                               display: "flex",
@@ -10339,14 +10370,17 @@ const CharacterSheetWrapper = ({
                             }}
                           >
                             {(charCampaign.progress_clocks || [])
-                              .filter((clk) => {
-                                const creator = Number(clk.created_by);
-                                const gmId = Number(charCampaign?.gm);
-                                return creator && creator === gmId;
-                              })
+                              .filter((clk) =>
+                                isSessionGmSharedProgressClock(
+                                  clk,
+                                  charCampaign?.gm,
+                                  activeSessionId,
+                                ),
+                              )
                               .map((clk) => {
                               const canEdit =
-                                isGM || clk.created_by === user?.id;
+                                isGM ||
+                                Number(clk.created_by) === Number(user?.id);
                               return (
                                 <div
                                   key={clk.id}
