@@ -1,4 +1,6 @@
 """settle_encoded_session_xp: STRUGGLE/STANDOUT from rolls; idempotent flag."""
+import re
+
 from django.contrib.auth.models import User
 from django.db.models import Sum
 from django.test import TestCase
@@ -14,7 +16,49 @@ from characters.models import (
     Session,
     Stand,
 )
-from characters.services.session_xp_settlement import settle_encoded_session_xp
+from characters.services.session_xp_settlement import (
+    development_session_xp_to_pool_amount,
+    settle_encoded_session_xp,
+)
+
+_SESSION_ENCODED_XP_CAP = 2
+_MANUAL_TRACK_PREFIX_RE = re.compile(
+    r"^\[(insight|prowess|resolve|heritage|playbook)\]",
+    re.IGNORECASE,
+)
+
+
+def _manual_track_xp_for_session(character, session):
+    """Matches CampaignManagement `sumManualTrackXpForSession` (modal Manual→tracks)."""
+    total = 0
+    for e in ExperienceTracker.objects.filter(
+        character=character, session=session, trigger="MANUAL"
+    ):
+        if _MANUAL_TRACK_PREFIX_RE.match((e.description or "").strip()):
+            total += int(e.xp_gained or 0)
+    return total
+
+
+def _encoded_playbook_preview_from_rolls(character, session):
+    """Mirror `buildSessionEndLiveSummary` caps for STANDOUT / STRUGGLE (modal columns)."""
+    rolls = list(Roll.objects.filter(session=session, character=character))
+    standout_events = sum(
+        1 for r in rolls if "[abilities:" in (r.description or "").lower()
+    )
+    struggle_events = 0
+    for r in rolls:
+        if (r.roll_type or "").upper() != "CLEAR_STRESS":
+            continue
+        if "vice" not in (r.action_name or "").lower():
+            continue
+        desc = (r.description or "").lower()
+        if "overindulgence" in desc:
+            struggle_events += 1
+        elif (r.outcome or "") in ("FAILURE", "BOTCH"):
+            struggle_events += 1
+    standout_would = min(_SESSION_ENCODED_XP_CAP, standout_events)
+    struggle_would = min(_SESSION_ENCODED_XP_CAP, struggle_events)
+    return standout_would, struggle_would, standout_would + struggle_would
 
 
 class SessionEncodedXpSettlementTests(TestCase):
@@ -213,3 +257,188 @@ class SessionEncodedXpSettlementTests(TestCase):
                 description__icontains="Session end (pool)",
             ).exists()
         )
+
+    def test_patch_clear_active_applies_encoded_xp_end_live_ui_path(self):
+        """
+        Same HTTP path as SessionDetail "End & apply encoded XP":
+        PATCH /api/campaigns/:id/ with active_session=null (no skip flag).
+
+        Asserts DB state matches modal columns: STANDOUT/STRUGGLE/Enc. playbook
+        (playbook clock + tracker rows), Dev→pool (unallocated_xp + pool MANUAL
+        row), Manual→tracks (prefixed MANUAL rows unchanged total), Total.
+        """
+        user_b = User.objects.create_user(username="pl_sxp_b", password="pw")
+        dots = self.character.action_dots
+        char_b = Character.objects.create(
+            user=user_b,
+            campaign=self.campaign,
+            crew=self.crew,
+            true_name="Second PC",
+            heritage=self.h,
+            action_dots=dots,
+            xp_clocks={"playbook": 4},
+            unallocated_xp=0,
+        )
+        self.session.characters_involved.add(self.character, char_b)
+
+        self._roll(
+            description="[Abilities: stand rush]",
+            outcome="FULL_SUCCESS",
+            action_name="skirmish",
+        )
+        self._roll(
+            roll_type="CLEAR_STRESS",
+            action_name="vice",
+            outcome="FAILURE",
+            description="no relief",
+        )
+        Roll.objects.create(
+            character=char_b,
+            session=self.session,
+            roll_type="ACTION",
+            outcome="FULL_SUCCESS",
+            description="other pc roll",
+            action_name="command",
+        )
+
+        ExperienceTracker.objects.create(
+            character=self.character,
+            session=self.session,
+            trigger="MANUAL",
+            description="[playbook] GM spot award",
+            xp_gained=1,
+        )
+
+        Stand.objects.create(
+            character=self.character,
+            name="Stand A",
+            type="FIGHTING",
+            form="Humanoid",
+            consciousness_level="C",
+            power="D",
+            speed="D",
+            range="D",
+            durability="D",
+            precision="D",
+            development="C",
+        )
+        Stand.objects.create(
+            character=char_b,
+            name="Stand B",
+            type="FIGHTING",
+            form="Humanoid",
+            consciousness_level="C",
+            power="D",
+            speed="D",
+            range="D",
+            durability="D",
+            precision="D",
+            development="D",
+        )
+
+        prev_play_a = int(self.character.xp_clocks.get("playbook", 0) or 0)
+        prev_play_b = int(char_b.xp_clocks.get("playbook", 0) or 0)
+        st_a, sg_a, enc_a = _encoded_playbook_preview_from_rolls(
+            self.character, self.session
+        )
+        st_b, sg_b, enc_b = _encoded_playbook_preview_from_rolls(char_b, self.session)
+        dev_a = development_session_xp_to_pool_amount(self.character)
+        dev_b = development_session_xp_to_pool_amount(char_b)
+        manual_a = _manual_track_xp_for_session(self.character, self.session)
+        manual_b = _manual_track_xp_for_session(char_b, self.session)
+        total_preview_a = enc_a + dev_a + manual_a
+        total_preview_b = enc_b + dev_b + manual_b
+
+        client = APIClient()
+        client.force_authenticate(user=self.gm)
+        self.campaign.active_session = self.session
+        self.campaign.save(update_fields=["active_session"])
+        res = client.patch(
+            f"/api/campaigns/{self.campaign.id}/",
+            {"active_session": None},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, getattr(res, "data", res.content))
+        self.session.refresh_from_db()
+        self.assertTrue(self.session.auto_encoded_xp_settled)
+
+        self.character.refresh_from_db()
+        char_b.refresh_from_db()
+
+        # Enc. playbook → playbook clock (modal totalEncodedPlaybookXp)
+        self.assertEqual(
+            int(self.character.xp_clocks.get("playbook", 0) or 0),
+            prev_play_a + enc_a,
+        )
+        self.assertEqual(
+            int(char_b.xp_clocks.get("playbook", 0) or 0),
+            prev_play_b + enc_b,
+        )
+        self.assertEqual(
+            ExperienceTracker.objects.filter(
+                character=self.character,
+                session=self.session,
+                trigger="STANDOUT",
+            ).aggregate(s=Sum("xp_gained"))["s"]
+            or 0,
+            st_a,
+        )
+        self.assertEqual(
+            ExperienceTracker.objects.filter(
+                character=self.character,
+                session=self.session,
+                trigger="STRUGGLE",
+            ).aggregate(s=Sum("xp_gained"))["s"]
+            or 0,
+            sg_a,
+        )
+        self.assertFalse(
+            ExperienceTracker.objects.filter(
+                character=char_b, session=self.session, trigger="STANDOUT"
+            ).exists()
+        )
+        self.assertFalse(
+            ExperienceTracker.objects.filter(
+                character=char_b, session=self.session, trigger="STRUGGLE"
+            ).exists()
+        )
+
+        # Dev→pool → Character.unallocated_xp + MANUAL "Session end (pool)" row
+        self.assertEqual(self.character.unallocated_xp, dev_a)
+        self.assertEqual(char_b.unallocated_xp, dev_b)
+        pool_row_a = ExperienceTracker.objects.filter(
+            character=self.character,
+            session=self.session,
+            trigger="MANUAL",
+            description__icontains="Session end (pool)",
+        )
+        self.assertEqual(
+            pool_row_a.aggregate(s=Sum("xp_gained"))["s"] or 0, dev_a
+        )
+        pool_row_b = ExperienceTracker.objects.filter(
+            character=char_b,
+            session=self.session,
+            trigger="MANUAL",
+            description__icontains="Session end (pool)",
+        )
+        self.assertEqual(
+            pool_row_b.aggregate(s=Sum("xp_gained"))["s"] or 0, dev_b
+        )
+
+        # Manual→tracks: prefixed MANUAL unchanged (already on sheet before settle)
+        self.assertEqual(
+            _manual_track_xp_for_session(self.character, self.session),
+            manual_a,
+        )
+        self.assertEqual(
+            _manual_track_xp_for_session(char_b, self.session),
+            manual_b,
+        )
+
+        # Total column = enc + dev + manual (modal totalSessionXpPreview)
+        gained_play_a = (
+            int(self.character.xp_clocks.get("playbook", 0) or 0) - prev_play_a
+        )
+        gained_play_b = int(char_b.xp_clocks.get("playbook", 0) or 0) - prev_play_b
+        self.assertEqual(gained_play_a + dev_a + manual_a, total_preview_a)
+        self.assertEqual(gained_play_b + dev_b + manual_b, total_preview_b)

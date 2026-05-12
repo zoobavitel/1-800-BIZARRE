@@ -31,6 +31,13 @@ function hasLinkedCrew(crewId) {
   return Number.isFinite(n) && n > 0;
 }
 
+/** Backend `inventory` is a JSON array; legacy data may be a single object. */
+export function normalizeCharacterInventory(inv) {
+  if (Array.isArray(inv)) return inv;
+  if (inv != null && typeof inv === "object") return [inv];
+  return [];
+}
+
 /** Map sheet labels or backend enums to API playbook */
 export function playbookToBackend(pb) {
   if (pb == null || pb === "") return "STAND";
@@ -827,6 +834,25 @@ export function normalizeHarmObject(h) {
 
 export { EMPTY_HARM_SHAPE };
 
+/** PC sheet progress clocks: unify `segments`/`filled` with API `max_segments`/`filled_segments`. */
+function normalizeProgressClocksFromBackend(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((c) => ({
+    ...c,
+    id: c.id,
+    name: c.name ?? "",
+    segments: c.segments ?? c.max_segments ?? 4,
+    filled: c.filled ?? c.filled_segments ?? 0,
+    visible_to_party: Boolean(c.visible_to_party),
+    visible_to_players: Boolean(c.visible_to_players),
+    clock_type: c.clock_type,
+    session: c.session,
+    description: c.description ?? "",
+    completed: Boolean(c.completed),
+    created_by: c.created_by,
+  }));
+}
+
 // Data transformation helpers
 export const transformBackendToFrontend = (backendCharacter) => {
   return {
@@ -838,6 +864,7 @@ export const transformBackendToFrontend = (backendCharacter) => {
     heritage: backendCharacter.heritage ?? null,
     heritageName: backendCharacter.heritage_details?.name || null,
     background: backendCharacter.background_note || "",
+    sheetNotes: backendCharacter.background_note2 ?? "",
     look: backendCharacter.appearance || "",
     // DRF returns vice as FK id (number); nested name is on vice_info (see CharacterSerializer)
     vice: backendCharacter.vice_info?.name || backendCharacter.vice?.name || "",
@@ -1080,7 +1107,7 @@ export const transformBackendToFrontend = (backendCharacter) => {
     ],
 
     // Progress clocks
-    clocks: backendCharacter.progress_clocks || [],
+    clocks: normalizeProgressClocksFromBackend(backendCharacter.progress_clocks),
 
     gm_can_have_s_rank_stand_stats: Boolean(
       backendCharacter.gm_can_have_s_rank_stand_stats,
@@ -1091,7 +1118,7 @@ export const transformBackendToFrontend = (backendCharacter) => {
     playbook: playbookToDisplay(backendCharacter.playbook),
     level: backendCharacter.level,
     loadout: backendCharacter.loadout,
-    inventory: backendCharacter.inventory || [],
+    inventory: normalizeCharacterInventory(backendCharacter.inventory),
     reputation_status: backendCharacter.reputation_status || {},
 
     // Heritage benefits and detriments (arrays of IDs)
@@ -1160,6 +1187,7 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     heritage: heritageOut,
     playbook: playbookToBackend(frontendCharacter.playbook),
     background_note: frontendCharacter.background,
+    background_note2: String(frontendCharacter.sheetNotes ?? ""),
     appearance: frontendCharacter.look,
     ...vicePayload,
     vice_details:
@@ -1295,7 +1323,9 @@ export const transformFrontendToBackend = (frontendCharacter) => {
           ? frontendCharacter.campaign?.id
           : frontendCharacter.campaign
         : null,
-    inventory: frontendCharacter.inventory ?? [],
+    inventory: Array.isArray(frontendCharacter.inventory)
+      ? frontendCharacter.inventory
+      : normalizeCharacterInventory(frontendCharacter.inventory),
     reputation_status: frontendCharacter.reputation_status ?? {},
 
     // Standard abilities (array of Ability IDs)

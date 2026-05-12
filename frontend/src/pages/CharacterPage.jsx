@@ -580,10 +580,18 @@ export default function CharacterPage({
           )
         )
           return;
-      } else if (tab?.characterId != null && meta?.isDirty) {
+      } else if (
+        tab?.characterId != null &&
+        (meta?.isDirty || meta?.isSaving)
+      ) {
+        const savingNote = meta?.isSaving
+          ? "\n\nA save may still be finishing; leaving now can lose edits if the server has not stored them yet."
+          : "";
         if (
           !window.confirm(
-            "Close this tab and discard unsaved changes to this character?\n\nPress OK to discard, or Cancel to stay here.",
+            "Close this tab and discard unsaved changes to this character?" +
+              savingNote +
+              "\n\nPress OK to discard, or Cancel to stay here.",
           )
         )
           return;
@@ -842,7 +850,7 @@ export default function CharacterPage({
       const activeTab = charTabs.find((t) => t.tabId === activeCharTabId);
       const activeMeta =
         activeCharTabId != null ? charTabUnsavedMeta[activeCharTabId] : null;
-      if (activeMeta?.isDirty) {
+      if (activeMeta?.isDirty || activeMeta?.isSaving) {
         const isNew = activeTab?.characterId == null;
         const saveNow = window.confirm(
           isNew
@@ -1178,7 +1186,7 @@ export default function CharacterPage({
       const tab = charTabs.find((t) => t.tabId === activeCharTabId);
       const meta = activeCharTabId != null ? charTabUnsavedMeta[activeCharTabId] : null;
       const hasDraft =
-        !!meta?.isDirty || isUnsavedCharacterDirty(tab);
+        !!meta?.isDirty || !!meta?.isSaving || isUnsavedCharacterDirty(tab);
       if (!hasDraft) {
         onContinue?.();
         return true;
@@ -1229,7 +1237,7 @@ export default function CharacterPage({
         activeCharTabId != null ? charTabUnsavedMeta[activeCharTabId] : null;
       const tab = charTabs.find((t) => t.tabId === activeCharTabId);
       const hasDraft =
-        !!meta?.isDirty || isUnsavedCharacterDirty(tab);
+        !!meta?.isDirty || !!meta?.isSaving || isUnsavedCharacterDirty(tab);
       if (!hasDraft) return true;
       const isNew = tab?.characterId == null;
       const savePrompt = isNew
@@ -1268,8 +1276,10 @@ export default function CharacterPage({
   ]);
 
   useEffect(() => {
-    const dirty = Object.values(charTabUnsavedMeta).some((m) => m?.isDirty);
-    if (!dirty || typeof window === "undefined") return undefined;
+    const needsGuard = Object.values(charTabUnsavedMeta).some(
+      (m) => m?.isDirty || m?.isSaving,
+    );
+    if (!needsGuard || typeof window === "undefined") return undefined;
     const onBeforeUnload = (e) => {
       e.preventDefault();
       e.returnValue = "";

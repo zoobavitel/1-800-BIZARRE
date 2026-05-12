@@ -44,6 +44,7 @@ import {
   normalizeHarmObject,
   computeActionDotBudget,
   resolveMediaUrl,
+  normalizeCharacterInventory,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -53,12 +54,25 @@ import {
 } from "../components/position-effect/PositionEffectIndicators";
 import {
   computeActionPoolBreakdown,
+  computeBaseDicePool,
   computeStandRollPool,
   INSIGHT_ACTIONS,
   PROWESS_ACTIONS,
   RESOLVE_ACTIONS,
 } from "../features/character-sheet/utils/actionDicePool";
-import { bumpEffectTier } from "../features/character-sheet/utils/rollEffectPreview";
+import { computeAbilityHeritageRollBonuses } from "../features/character-sheet/utils/rollAbilityHeritageModifiers";
+import { defaultPositionEffectFromSessionDetail } from "../features/character-sheet/utils/sessionPositionEffectDefaults";
+import {
+  tierDieFromActionPool,
+  outcomeFromActionRoll,
+  outcomeFromFortuneDiceResults,
+  OUTCOME_BAND_SHORT_LABEL,
+  outcomeApiToSheetDisplay,
+} from "../features/character-sheet/utils/actionRollOutcome";
+import {
+  bumpEffectTier,
+  normalizeEffectTier,
+} from "../features/character-sheet/utils/rollEffectPreview";
 import {
   buildXpRequirementSnapshot,
   formatAttrTally,
@@ -74,9 +88,7 @@ import {
 } from "../features/character-sheet/utils/abilityRollBonusMeta";
 import {
   alienUnderstandingHeritagePenaltyApplies,
-  heritageBenefitIsReflexOverclock,
   heritageEntryIsAlienUnderstanding,
-  reflexOverclockHeritageBonusApplies,
 } from "../features/character-sheet/utils/heritageRollBonusMeta";
 import { derivePartyFacingSessionNpc } from "../features/character-sheet/utils/sessionNpcPartyFace";
 import { getResistanceResultSheetAbilityReminders } from "../features/character-sheet/utils/sheetAbilityResistanceReminders";
@@ -735,7 +747,285 @@ function hasMeaningfulDraftChanges(payload) {
     payload.selected_detriments.length > 0
   )
     return true;
+  if (String(payload.sheetNotes ?? "").trim() !== "") return true;
+  if (Array.isArray(payload.inventory) && payload.inventory.length > 0)
+    return true;
   return false;
+}
+
+function isPlainInventoryObject(item) {
+  return item != null && typeof item === "object" && !Array.isArray(item);
+}
+
+/** Structured row: strings, `{name|label,...}`, or opaque JSON values. */
+function inventoryRowKind(item) {
+  if (typeof item === "string") return "string";
+  if (isPlainInventoryObject(item)) {
+    const keys = Object.keys(item);
+    if (
+      keys.some((k) =>
+        ["name", "label", "detail", "description", "quantity", "uses"].includes(
+          k,
+        ),
+      )
+    ) {
+      return "object";
+    }
+  }
+  return "opaque";
+}
+
+function inventoryOpaqueText(item) {
+  try {
+    return JSON.stringify(item, null, 2);
+  } catch {
+    return String(item);
+  }
+}
+
+function objectRowExtraJson(obj) {
+  const omit = new Set(["name", "label", "detail", "description"]);
+  const rest = {};
+  for (const k of Object.keys(obj)) {
+    if (!omit.has(k)) rest[k] = obj[k];
+  }
+  const keys = Object.keys(rest);
+  if (keys.length === 0) return "";
+  try {
+    return JSON.stringify(rest);
+  } catch {
+    return "";
+  }
+}
+
+/** List editor for `charData.inventory` (JSON array persisted as-is). */
+function CharacterSheetInventoryList({ panelId, inventory, readOnly, onChange }) {
+  const inv = normalizeCharacterInventory(inventory);
+
+  const patchAt = (index, nextItem) => {
+    const next = [...inv];
+    next[index] = nextItem;
+    onChange(next);
+  };
+
+  const removeAt = (index) => {
+    onChange(inv.filter((_, i) => i !== index));
+  };
+
+  const addRow = () => {
+    onChange([...inv, ""]);
+  };
+
+  const move = (from, to) => {
+    if (to < 0 || to >= inv.length) return;
+    const next = [...inv];
+    const [row] = next.splice(from, 1);
+    next.splice(to, 0, row);
+    onChange(next);
+  };
+
+  const rowInputStyle = {
+    flex: 1,
+    minWidth: 0,
+    background: "#010409",
+    color: "#fff",
+    border: "1px solid #30363d",
+    padding: "6px 8px",
+    fontFamily: "monospace",
+    fontSize: "12px",
+    borderRadius: "4px",
+    boxSizing: "border-box",
+  };
+
+  const btnStyle = {
+    background: "#21262d",
+    color: "#c9d1d9",
+    border: "1px solid #30363d",
+    borderRadius: "4px",
+    padding: "4px 8px",
+    fontFamily: "monospace",
+    fontSize: "11px",
+    cursor: readOnly ? "default" : "pointer",
+    opacity: readOnly ? 0.45 : 1,
+  };
+
+  return (
+    <div
+      id={panelId}
+      role="list"
+      aria-label="Character inventory"
+      style={{
+        width: "100%",
+        minHeight: "48px",
+        background: "#0d1117",
+        color: "#fff",
+        border: "1px solid #374151",
+        padding: "8px",
+        fontFamily: "monospace",
+        fontSize: "12px",
+        boxSizing: "border-box",
+      }}
+    >
+      {inv.length === 0 ? (
+        <div style={{ color: "#9ca3af", marginBottom: readOnly ? 0 : "8px" }}>
+          No items.
+        </div>
+      ) : (
+        inv.map((item, index) => {
+          const kind = inventoryRowKind(item);
+          return (
+            <div
+              key={`inv-row-${index}`}
+              role="listitem"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "6px",
+                marginBottom: index < inv.length - 1 ? "10px" : 0,
+                paddingBottom: index < inv.length - 1 ? "10px" : 0,
+                borderBottom:
+                  index < inv.length - 1 ? "1px solid #21262d" : "none",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "6px" }}>
+                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {kind === "string" ? (
+                    <input
+                      type="text"
+                      aria-label={`Inventory item ${index + 1}`}
+                      readOnly={readOnly}
+                      disabled={readOnly}
+                      value={item}
+                      placeholder="Item…"
+                      onChange={(e) => patchAt(index, e.target.value)}
+                      style={{ ...rowInputStyle, width: "100%" }}
+                    />
+                  ) : null}
+                  {kind === "object" && isPlainInventoryObject(item) ? (
+                    <>
+                      <input
+                        type="text"
+                        aria-label={`Inventory item ${index + 1} name`}
+                        readOnly={readOnly}
+                        disabled={readOnly}
+                        value={String(item.name ?? item.label ?? "")}
+                        placeholder="Name…"
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          const next = { ...item, name: v };
+                          if (next.label != null) delete next.label;
+                          patchAt(index, next);
+                        }}
+                        style={{ ...rowInputStyle, width: "100%" }}
+                      />
+                      <input
+                        type="text"
+                        aria-label={`Inventory item ${index + 1} detail`}
+                        readOnly={readOnly}
+                        disabled={readOnly}
+                        value={String(item.detail ?? item.description ?? "")}
+                        placeholder="Detail (optional)…"
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          const next = { ...item, detail: v };
+                          if (next.description != null) delete next.description;
+                          patchAt(index, next);
+                        }}
+                        style={{ ...rowInputStyle, width: "100%" }}
+                      />
+                      {objectRowExtraJson(item) ? (
+                        <div
+                          style={{
+                            color: "#8b949e",
+                            fontSize: "10px",
+                            wordBreak: "break-all",
+                          }}
+                        >
+                          {objectRowExtraJson(item)}
+                        </div>
+                      ) : null}
+                    </>
+                  ) : null}
+                  {kind === "opaque" ? (
+                    <pre
+                      style={{
+                        margin: 0,
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                        color: "#c9d1d9",
+                        fontSize: "11px",
+                        background: "#010409",
+                        border: "1px solid #30363d",
+                        borderRadius: "4px",
+                        padding: "6px 8px",
+                      }}
+                    >
+                      {inventoryOpaqueText(item)}
+                    </pre>
+                  ) : null}
+                </div>
+                {!readOnly ? (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      aria-label={`Move inventory item ${index + 1} up`}
+                      style={btnStyle}
+                      onClick={() => move(index, index - 1)}
+                      disabled={index === 0}
+                    >
+                      Up
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Move inventory item ${index + 1} down`}
+                      style={btnStyle}
+                      onClick={() => move(index, index + 1)}
+                      disabled={index >= inv.length - 1}
+                    >
+                      Dn
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Remove inventory item ${index + 1}`}
+                      style={{ ...btnStyle, color: "#f85149" }}
+                      onClick={() => removeAt(index)}
+                    >
+                      Del
+                    </button>
+                  </div>
+                ) : null}
+              </div>
+              {!readOnly && kind === "opaque" ? (
+                <button
+                  type="button"
+                  style={{ ...btnStyle, alignSelf: "flex-start" }}
+                  onClick={() => patchAt(index, inventoryOpaqueText(item))}
+                >
+                  Edit as text
+                </button>
+              ) : null}
+            </div>
+          );
+        })
+      )}
+      {!readOnly ? (
+        <button
+          type="button"
+          style={{ ...btnStyle, marginTop: inv.length ? "8px" : 0 }}
+          onClick={addRow}
+        >
+          Add item
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 /**
@@ -942,6 +1232,8 @@ const CharacterSheetWrapper = ({
     viceDetails: character?.viceDetails ?? character?.vice_details ?? "",
     crew: initialCrew.crew,
     crewId: initialCrew.crewId,
+    sheetNotes: character?.sheetNotes ?? "",
+    inventory: normalizeCharacterInventory(character?.inventory),
     fed_today:
       typeof character?.fed_today === "boolean" ? character.fed_today : null,
     disguised_as_human:
@@ -1080,6 +1372,26 @@ const CharacterSheetWrapper = ({
       return prev;
     });
   }, [charCampaign?.id, charCampaign?.campaign_characters, characterId]);
+
+  useEffect(() => {
+    if (sheetDraftIsDirty) return;
+    const sn = character?.sheetNotes ?? "";
+    const inv = normalizeCharacterInventory(character?.inventory);
+    setCharData((prev) => {
+      if (
+        (prev.sheetNotes ?? "") === sn &&
+        JSON.stringify(prev.inventory ?? []) === JSON.stringify(inv)
+      ) {
+        return prev;
+      }
+      return { ...prev, sheetNotes: sn, inventory: inv };
+    });
+  }, [
+    character?.id,
+    character?.sheetNotes,
+    character?.inventory,
+    sheetDraftIsDirty,
+  ]);
 
   /** Persist crew label: shared campaign crew (PATCH crew) or personal_crew_name / create+link. Used in Character and Crew mode. */
   const commitCrewName = useCallback(async () => {
@@ -1815,6 +2127,20 @@ const CharacterSheetWrapper = ({
   );
 
   const [clocks, setClocks] = useState(character?.clocks || []);
+  useEffect(() => {
+    if (sheetDraftIsDirty) return;
+    const incoming = Array.isArray(character?.clocks)
+      ? character.clocks.map((c) => ({
+          ...c,
+          segments: c.segments ?? c.max_segments ?? 4,
+          filled: c.filled ?? c.filled_segments ?? 0,
+        }))
+      : [];
+    setClocks((prev) => {
+      if (JSON.stringify(prev) === JSON.stringify(incoming)) return prev;
+      return incoming;
+    });
+  }, [character?.id, character?.clocks, sheetDraftIsDirty]);
   const [clockEditorOpen, setClockEditorOpen] = useState(false);
   const [newClockName, setNewClockName] = useState("");
   const [newClockSegments, setNewClockSegments] = useState(4);
@@ -2471,6 +2797,9 @@ const CharacterSheetWrapper = ({
   const [historyRefreshTick, setHistoryRefreshTick] = useState(0);
   const [showHistoryManualModal, setShowHistoryManualModal] = useState(false);
   const [historyManualSaving, setHistoryManualSaving] = useState(false);
+  /** Manual history ACTION row: same shape as roll modal `rollAbilityBoost` (+1d / +1 effect toggles). */
+  const [historyManualAbilityBoost, setHistoryManualAbilityBoost] = useState({});
+  const [historyManualHeritageBoost, setHistoryManualHeritageBoost] = useState({});
   const [historyManual, setHistoryManual] = useState({
     rollType: "ACTION",
     sessionId: "",
@@ -2493,6 +2822,23 @@ const CharacterSheetWrapper = ({
     xpAmount: "1",
     xpReason: "",
   });
+  /** GM-only: allow editing outcome band on manual session history (audit); default derived from dice. */
+  const [historyOutcomeBandGmUnlock, setHistoryOutcomeBandGmUnlock] =
+    useState(false);
+
+  useEffect(() => {
+    setHistoryOutcomeBandGmUnlock(false);
+  }, [
+    historyManual.rollType,
+    historyManual.dice,
+    historyManual.action,
+    historyManual.pushDice,
+    historyManual.devil,
+    historyManual.helpDie,
+    historyManualAbilityBoost,
+    historyManualHeritageBoost,
+  ]);
+
   const [showXpHistoryModal, setShowXpHistoryModal] = useState(false);
   const [xpTimelineLoading, setXpTimelineLoading] = useState(false);
   const [xpTimelineError, setXpTimelineError] = useState(null);
@@ -3702,12 +4048,7 @@ const CharacterSheetWrapper = ({
         } else {
           const pool = Number(roll.dice_pool) || 0;
           const dots = Number(roll.pool_action_rating) || 0;
-          // FiTD 0-dot + 0 pool rolls 2d and takes lower; if dots > 0 but pool 0,
-          // treat as inconsistent data and read highest die (a 6 still succeeds).
-          const tierDie =
-            dice.length >= 2 && pool === 0 && dots === 0
-              ? Math.min(...dice)
-              : Math.max(...dice);
+          const tierDie = tierDieFromActionPool(dice, pool, dots);
           // Match backend group resolve: tier 1–3 fails (ignore stale outcome field).
           failed = tierDie <= 3;
           const sixes = dice.filter((d) => d === 6).length;
@@ -3923,41 +4264,25 @@ const CharacterSheetWrapper = ({
           abilityBonusAudit: [],
         };
       }
-      let d = 0;
-      let e = 0;
-      const audit = [];
-      abilityRollBonusOptions.forEach((ab) => {
-        const id = ab.id ?? ab.name;
-        const b = rollAbilityBoost[id];
-        const invigoratedHeal =
-          healingTreatmentBonusContext &&
-          String(ab?.name || "")
-            .trim()
-            .toLowerCase() === "invigorated" &&
-          ab.supportsDice;
-        if (ab.supportsDice && (invigoratedHeal || (b && b.dice))) {
-          d += 1;
-          audit.push(
-            invigoratedHeal
-              ? `${ab.name}: +1d (healing treatment — auto)`
-              : `${ab.name}: +1d`,
-          );
-        }
-        if (ab.supportsEffect && b && b.effect) {
-          e += 1;
-          audit.push(`${ab.name}: +1 effect`);
-        }
+      const r = computeAbilityHeritageRollBonuses({
+        abilityRollBonusOptions,
+        heritageRollBonusOptions: [],
+        abilityBoostMap: rollAbilityBoost,
+        heritageBoostMap: {},
+        healingTreatmentBonusContext,
+        standRoll: false,
+        reflexCtx: { rollPending, healingTreatmentBonusContext },
       });
       return {
-        bonusDiceFromAbilities: d,
-        abilityEffectSteps: e,
-        abilityBonusAudit: audit,
+        bonusDiceFromAbilities: r.bonusDiceFromAbilities,
+        abilityEffectSteps: r.abilityEffectSteps,
+        abilityBonusAudit: r.abilityBonusAudit,
       };
     }, [
       abilityRollBonusOptions,
       rollAbilityBoost,
       healingTreatmentBonusContext,
-      rollPending?.standRoll,
+      rollPending,
     ]);
 
   const {
@@ -3965,43 +4290,19 @@ const CharacterSheetWrapper = ({
     heritageEffectSteps,
     heritageBonusAudit,
   } = useMemo(() => {
-    const reflexCtx = {
-      rollPending,
+    const r = computeAbilityHeritageRollBonuses({
+      abilityRollBonusOptions: [],
+      heritageRollBonusOptions,
+      abilityBoostMap: {},
+      heritageBoostMap: heritageRollBoost,
       healingTreatmentBonusContext,
-    };
-    let d = 0;
-    let e = 0;
-    const audit = [];
-    heritageRollBonusOptions.forEach((hb) => {
-      if (rollPending?.standRoll && !heritageBenefitIsReflexOverclock(hb)) {
-        return;
-      }
-      if (
-        heritageBenefitIsReflexOverclock(hb) &&
-        !reflexOverclockHeritageBonusApplies(reflexCtx)
-      ) {
-        return;
-      }
-      const id = hb.id ?? hb.name;
-      const b = heritageRollBoost[id];
-      if (!b) return;
-      if (hb.supportsDice && b.dice) {
-        d += 1;
-        audit.push(
-          rollPending?.standRoll
-            ? `${hb.name}: +1d (heritage — stand speed)`
-            : `${hb.name}: +1d (heritage)`,
-        );
-      }
-      if (hb.supportsEffect && b.effect) {
-        e += 1;
-        audit.push(`${hb.name}: +1 effect (heritage)`);
-      }
+      standRoll: !!rollPending?.standRoll,
+      reflexCtx: { rollPending, healingTreatmentBonusContext },
     });
     return {
-      bonusDiceFromHeritage: d,
-      heritageEffectSteps: e,
-      heritageBonusAudit: audit,
+      bonusDiceFromHeritage: r.bonusDiceFromHeritage,
+      heritageEffectSteps: r.heritageEffectSteps,
+      heritageBonusAudit: r.heritageBonusAudit,
     };
   }, [
     heritageRollBonusOptions,
@@ -4037,6 +4338,121 @@ const CharacterSheetWrapper = ({
 
   const totalBonusDiceFromAbilitiesAndHeritage =
     bonusDiceFromAbilities + bonusDiceFromHeritage;
+
+  /** Manual session-history ACTION record: same +1d / +1 effect rules as `rollAction` payload (no Invigorated auto — not a declared heal/recovery roll). */
+  const manualHistoryAbilityTotals = useMemo(
+    () =>
+      computeAbilityHeritageRollBonuses({
+        abilityRollBonusOptions,
+        heritageRollBonusOptions,
+        abilityBoostMap: historyManualAbilityBoost,
+        heritageBoostMap: historyManualHeritageBoost,
+        healingTreatmentBonusContext: false,
+        standRoll: false,
+        reflexCtx: { rollPending: null, healingTreatmentBonusContext: false },
+      }),
+    [
+      abilityRollBonusOptions,
+      heritageRollBonusOptions,
+      historyManualAbilityBoost,
+      historyManualHeritageBoost,
+    ],
+  );
+
+  const manualHistoryEffectPreview = useMemo(() => {
+    const base = normalizeEffectTier(historyManual.effect);
+    const steps =
+      (historyManual.pushEffect ? 1 : 0) +
+      manualHistoryAbilityTotals.abilityEffectSteps +
+      manualHistoryAbilityTotals.heritageEffectSteps;
+    return bumpEffectTier(base, steps);
+  }, [
+    historyManual.effect,
+    historyManual.pushEffect,
+    manualHistoryAbilityTotals.abilityEffectSteps,
+    manualHistoryAbilityTotals.heritageEffectSteps,
+  ]);
+
+  const manualHistorySuggestedDice = useMemo(() => {
+    if (String(historyManual.rollType || "").toUpperCase() !== "ACTION")
+      return null;
+    const an = String(historyManual.action || "").trim();
+    const base = computeBaseDicePool(an, actionRatings);
+    const push = historyManual.pushDice ? 1 : 0;
+    const devil = historyManual.devil ? 1 : 0;
+    const help = historyManual.helpDie ? 1 : 0;
+    const bonus =
+      manualHistoryAbilityTotals.bonusDiceFromAbilities +
+      manualHistoryAbilityTotals.bonusDiceFromHeritage;
+    return base + push + devil + help + bonus;
+  }, [
+    historyManual.rollType,
+    historyManual.action,
+    historyManual.pushDice,
+    historyManual.devil,
+    historyManual.helpDie,
+    actionRatings,
+    manualHistoryAbilityTotals.bonusDiceFromAbilities,
+    manualHistoryAbilityTotals.bonusDiceFromHeritage,
+  ]);
+
+  const historyManualParsedDice = useMemo(() => {
+    return String(historyManual.dice || "")
+      .split(/[\s,]+/)
+      .map((n) => parseInt(n.trim(), 10))
+      .filter((n) => Number.isFinite(n) && n >= 1 && n <= 6);
+  }, [historyManual.dice  ]);
+
+  const historyManualDerivedOutcomeApi = useMemo(() => {
+    const rt = String(historyManual.rollType || "").toUpperCase();
+    if (!historyManualParsedDice.length) return null;
+    if (rt === "FORTUNE") {
+      return outcomeFromFortuneDiceResults(historyManualParsedDice);
+    }
+    if (rt === "ACTION" && manualHistorySuggestedDice != null) {
+      const { action_rating } = computeActionPoolBreakdown(
+        historyManual.action,
+        actionRatings,
+      );
+      return outcomeFromActionRoll(
+        historyManualParsedDice,
+        manualHistorySuggestedDice,
+        action_rating,
+      );
+    }
+    return null;
+  }, [
+    historyManual.rollType,
+    historyManualParsedDice,
+    manualHistorySuggestedDice,
+    historyManual.action,
+    actionRatings,
+  ]);
+
+  const openHistoryManualModal = useCallback(() => {
+    if (!canCreateManualHistoryRecord) return;
+    const d = defaultPositionEffectFromSessionDetail(
+      characterId,
+      charCampaign?.active_session_detail,
+    );
+    setHistoryManualAbilityBoost({});
+    setHistoryManualHeritageBoost({});
+    setHistoryOutcomeBandGmUnlock(false);
+    setHistoryManual((prev) => ({
+      ...prev,
+      position: d.position,
+      effect: d.effect,
+      sessionId:
+        prev.sessionId ||
+        (activeSessionId != null ? String(activeSessionId) : ""),
+    }));
+    setShowHistoryManualModal(true);
+  }, [
+    canCreateManualHistoryRecord,
+    characterId,
+    charCampaign?.active_session_detail,
+    activeSessionId,
+  ]);
 
   const hasRippleBreathingAbility = useMemo(
     () => characterHasRippleBreathing(abilities),
@@ -5271,23 +5687,31 @@ const CharacterSheetWrapper = ({
       setRippleBreathingFreePush(false);
     }
 
+    const healAttemptOffline =
+      extras &&
+      typeof extras === "object" &&
+      extras.healAttempt &&
+      typeof extras.healAttempt === "object"
+        ? extras.healAttempt
+        : null;
+    const offlineDowntimeHeal =
+      !isResistance && isDowntimeHealingHealAttempt(healAttemptOffline);
+
     let dice, highest, sixes, isCritical, outcome;
 
-    if (diceCount === 0) {
-      const d1 = Math.floor(Math.random() * 6) + 1;
-      const d2 = Math.floor(Math.random() * 6) + 1;
-      highest = Math.min(d1, d2);
-      dice = [d1, d2];
-      sixes = 0;
-      isCritical = false;
-      outcome =
-        highest >= 6 ? "Success" : highest >= 4 ? "Partial Success" : "Failure";
-    } else {
-      dice = Array.from(
-        { length: diceCount },
-        () => Math.floor(Math.random() * 6) + 1,
-      );
-      highest = Math.max(...dice);
+    if (isResistance) {
+      if (diceCount === 0) {
+        const d1 = Math.floor(Math.random() * 6) + 1;
+        const d2 = Math.floor(Math.random() * 6) + 1;
+        highest = Math.min(d1, d2);
+        dice = [d1, d2];
+      } else {
+        dice = Array.from(
+          { length: diceCount },
+          () => Math.floor(Math.random() * 6) + 1,
+        );
+        highest = Math.max(...dice);
+      }
       sixes = dice.filter((d) => d === 6).length;
       isCritical = sixes >= 2;
       outcome =
@@ -5298,6 +5722,29 @@ const CharacterSheetWrapper = ({
           : highest >= 4
             ? "Partial Success"
             : "Failure";
+    } else {
+      if (diceCount === 0) {
+        const d1 = Math.floor(Math.random() * 6) + 1;
+        const d2 = Math.floor(Math.random() * 6) + 1;
+        dice = [d1, d2];
+      } else {
+        dice = Array.from(
+          { length: diceCount },
+          () => Math.floor(Math.random() * 6) + 1,
+        );
+      }
+      sixes = dice.filter((d) => d === 6).length;
+      const an = String(actionName ?? "").trim();
+      const standM = /^stand_(power|speed|precision|durability)$/.exec(
+        an.toLowerCase(),
+      );
+      const arForTier = standM
+        ? computeStandRollPool(standM[1], standStats)
+        : computeActionPoolBreakdown(an, actionRatings).action_rating;
+      const apiOut = outcomeFromActionRoll(dice, diceCount, arForTier);
+      isCritical = apiOut === "CRITICAL_SUCCESS";
+      highest = tierDieFromActionPool(dice, diceCount, arForTier);
+      outcome = offlineDowntimeHeal ? "" : outcomeApiToSheetDisplay(apiOut);
     }
 
     /** User resistance critical = clear stress (-1 sentinel). Durability resist: SRD_DEV two sixes ⇒ 0 spent; otherwise 6−highest, min 1. */
@@ -5332,15 +5779,6 @@ const CharacterSheetWrapper = ({
         ? `${criticalPart} · ${resistanceNote}`
         : resistanceNote || criticalPart;
 
-    const healAttemptOffline =
-      extras &&
-      typeof extras === "object" &&
-      extras.healAttempt &&
-      typeof extras.healAttempt === "object"
-        ? extras.healAttempt
-        : null;
-    const offlineDowntimeHeal =
-      !isResistance && isDowntimeHealingHealAttempt(healAttemptOffline);
     const offlineDowntimeSelfTreatment =
       offlineDowntimeHeal &&
       Number(healAttemptOffline?.targetId) === Number(characterId);
@@ -5718,8 +6156,9 @@ const CharacterSheetWrapper = ({
       payload,
       isNewCharacter: !payload.id,
       isDirty,
+      isSaving: saveStatus === "saving",
     });
-  }, [onDraftMetaChange, buildPayload]);
+  }, [onDraftMetaChange, buildPayload, saveStatus]);
 
   // Debounced auto-save
   useEffect(() => {
@@ -6398,7 +6837,12 @@ const CharacterSheetWrapper = ({
                                   type="button"
                                   onClick={() => {
                                     if (!canCreateManualHistoryRecord) return;
-                                    setShowHistoryManualModal((v) => !v);
+                                    setHistoryOutcomeBandGmUnlock(false);
+                                    if (showHistoryManualModal) {
+                                      setShowHistoryManualModal(false);
+                                    } else {
+                                      openHistoryManualModal();
+                                    }
                                   }}
                                   style={{
                                     ...S.btn,
@@ -6743,63 +7187,159 @@ const CharacterSheetWrapper = ({
                                           </div>
                                         </>
                                       ) : historyManual.rollType === "FORTUNE" ? (
-                                        <select
-                                          value={historyManual.outcome}
-                                          onChange={(e) =>
-                                            setHistoryManual((p) => ({
-                                              ...p,
-                                              outcome: e.target.value,
-                                            }))
-                                          }
+                                        <div
                                           style={{
-                                            ...S.sel,
+                                            ...S.inp,
                                             fontSize: 10,
-                                            padding: "2px 6px",
+                                            padding: "6px 8px",
                                             gridColumn: "1 / -1",
+                                            color: "#d1d5db",
+                                            display: "flex",
+                                            flexDirection: "column",
+                                            gap: 6,
                                           }}
                                         >
-                                          <option value="CRITICAL_SUCCESS">
-                                            Critical
-                                          </option>
-                                          <option value="FULL_SUCCESS">
-                                            Full
-                                          </option>
-                                          <option value="PARTIAL_SUCCESS">
-                                            Partial
-                                          </option>
-                                          <option value="FAILURE">
-                                            Failure
-                                          </option>
-                                        </select>
+                                          <div>
+                                            Outcome:{" "}
+                                            <strong style={{ color: "#e5e7eb" }}>
+                                              {historyManualDerivedOutcomeApi
+                                                ? OUTCOME_BAND_SHORT_LABEL[
+                                                    historyManualDerivedOutcomeApi
+                                                  ]
+                                                : "— enter dice"}
+                                            </strong>
+                                          </div>
+                                          {isGM && historyOutcomeBandGmUnlock ? (
+                                            <select
+                                              value={historyManual.outcome}
+                                              onChange={(e) =>
+                                                setHistoryManual((p) => ({
+                                                  ...p,
+                                                  outcome: e.target.value,
+                                                }))
+                                              }
+                                              style={{
+                                                ...S.sel,
+                                                fontSize: 10,
+                                                padding: "2px 6px",
+                                                maxWidth: 220,
+                                              }}
+                                            >
+                                              <option value="CRITICAL_SUCCESS">
+                                                Critical
+                                              </option>
+                                              <option value="FULL_SUCCESS">
+                                                Full
+                                              </option>
+                                              <option value="PARTIAL_SUCCESS">
+                                                Partial
+                                              </option>
+                                              <option value="FAILURE">
+                                                Failure
+                                              </option>
+                                            </select>
+                                          ) : null}
+                                          {isGM && !historyOutcomeBandGmUnlock ? (
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setHistoryOutcomeBandGmUnlock(true);
+                                                if (historyManualDerivedOutcomeApi) {
+                                                  setHistoryManual((p) => ({
+                                                    ...p,
+                                                    outcome:
+                                                      historyManualDerivedOutcomeApi,
+                                                  }));
+                                                }
+                                              }}
+                                              style={{
+                                                ...S.btn,
+                                                fontSize: 9,
+                                                alignSelf: "flex-start",
+                                                padding: "2px 8px",
+                                              }}
+                                            >
+                                              Unlock outcome override (GM)
+                                            </button>
+                                          ) : null}
+                                        </div>
                                       ) : (
                                         <>
-                                          <select
-                                            value={historyManual.outcome}
-                                            onChange={(e) =>
-                                              setHistoryManual((p) => ({
-                                                ...p,
-                                                outcome: e.target.value,
-                                              }))
-                                            }
+                                          <div
                                             style={{
-                                              ...S.sel,
+                                              ...S.inp,
                                               fontSize: 10,
-                                              padding: "2px 6px",
+                                              padding: "6px 8px",
+                                              color: "#d1d5db",
+                                              display: "flex",
+                                              flexDirection: "column",
+                                              gap: 6,
                                             }}
                                           >
-                                            <option value="CRITICAL_SUCCESS">
-                                              Critical
-                                            </option>
-                                            <option value="FULL_SUCCESS">
-                                              Full
-                                            </option>
-                                            <option value="PARTIAL_SUCCESS">
-                                              Partial
-                                            </option>
-                                            <option value="FAILURE">
-                                              Failure
-                                            </option>
-                                          </select>
+                                            <div>
+                                              Outcome:{" "}
+                                              <strong style={{ color: "#e5e7eb" }}>
+                                                {historyManualDerivedOutcomeApi
+                                                  ? OUTCOME_BAND_SHORT_LABEL[
+                                                      historyManualDerivedOutcomeApi
+                                                    ]
+                                                  : "— enter dice"}
+                                              </strong>
+                                            </div>
+                                            {isGM && historyOutcomeBandGmUnlock ? (
+                                              <select
+                                                value={historyManual.outcome}
+                                                onChange={(e) =>
+                                                  setHistoryManual((p) => ({
+                                                    ...p,
+                                                    outcome: e.target.value,
+                                                  }))
+                                                }
+                                                style={{
+                                                  ...S.sel,
+                                                  fontSize: 10,
+                                                  padding: "2px 6px",
+                                                  maxWidth: 220,
+                                                }}
+                                              >
+                                                <option value="CRITICAL_SUCCESS">
+                                                  Critical
+                                                </option>
+                                                <option value="FULL_SUCCESS">
+                                                  Full
+                                                </option>
+                                                <option value="PARTIAL_SUCCESS">
+                                                  Partial
+                                                </option>
+                                                <option value="FAILURE">
+                                                  Failure
+                                                </option>
+                                              </select>
+                                            ) : null}
+                                            {isGM && !historyOutcomeBandGmUnlock ? (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setHistoryOutcomeBandGmUnlock(true);
+                                                  if (historyManualDerivedOutcomeApi) {
+                                                    setHistoryManual((p) => ({
+                                                      ...p,
+                                                      outcome:
+                                                        historyManualDerivedOutcomeApi,
+                                                    }));
+                                                  }
+                                                }}
+                                                style={{
+                                                  ...S.btn,
+                                                  fontSize: 9,
+                                                  alignSelf: "flex-start",
+                                                  padding: "2px 8px",
+                                                }}
+                                              >
+                                                Unlock outcome override (GM)
+                                              </button>
+                                            ) : null}
+                                          </div>
                                           <select
                                             value={historyManual.position}
                                             onChange={(e) =>
@@ -6846,6 +7386,73 @@ const CharacterSheetWrapper = ({
                                               Extreme
                                             </option>
                                           </select>
+                                          <div
+                                            style={{
+                                              gridColumn: "1 / -1",
+                                              fontSize: 9,
+                                              color: "#6b7280",
+                                              lineHeight: 1.35,
+                                              marginTop: 2,
+                                            }}
+                                          >
+                                            Defaults: GM session row (
+                                            <code style={{ color: "#9ca3af" }}>
+                                              active_session_detail.position_effect_by_character
+                                            </code>
+                                            ) then session{" "}
+                                            <code style={{ color: "#9ca3af" }}>
+                                              default_position
+                                            </code>
+                                            /
+                                            <code style={{ color: "#9ca3af" }}>
+                                              default_effect
+                                            </code>
+                                            . Override here for this offline record. Online{" "}
+                                            <code style={{ color: "#9ca3af" }}>rollAction</code>{" "}
+                                            still resolves P/E from the same session map on the server
+                                            (no client-sent position override).
+                                          </div>
+                                          <div
+                                            style={{
+                                              gridColumn: "1 / -1",
+                                              marginTop: 6,
+                                              padding: "6px 8px",
+                                              borderRadius: 6,
+                                              border: "1px solid #374151",
+                                              background: "#0d1117",
+                                            }}
+                                          >
+                                            <div
+                                              style={{
+                                                fontSize: 9,
+                                                color: "#9ca3af",
+                                                marginBottom: 4,
+                                              }}
+                                            >
+                                              Effect tier after push + ability/heritage steps (same
+                                              order as server roll)
+                                            </div>
+                                            <EffectShapes
+                                              activeEffect={manualHistoryEffectPreview}
+                                              readOnly
+                                            />
+                                          </div>
+                                          {manualHistorySuggestedDice != null ? (
+                                            <div
+                                              style={{
+                                                gridColumn: "1 / -1",
+                                                fontSize: 9,
+                                                color: "#a78bfa",
+                                                marginTop: 4,
+                                                lineHeight: 1.35,
+                                              }}
+                                            >
+                                              Suggested dice count (action rating + push/devil/help
+                                              + toggles below):{" "}
+                                              <strong>{manualHistorySuggestedDice}</strong> — enter
+                                              the dice you actually rolled.
+                                            </div>
+                                          ) : null}
                                         </>
                                       )}
                                     </div>
@@ -6888,6 +7495,245 @@ const CharacterSheetWrapper = ({
                                         ))}
                                       </div>
                                     )}
+                                    {historyManual.rollType !== "RESISTANCE" &&
+                                    historyManual.rollType !== "VICE" &&
+                                    historyManual.rollType !== "XP" &&
+                                    historyManual.rollType !== "FORTUNE" &&
+                                    (abilityRollBonusOptions.length > 0 ||
+                                      heritageRollBonusOptions.length > 0) ? (
+                                      <div
+                                        style={{
+                                          marginTop: 8,
+                                          padding: "8px",
+                                          borderRadius: 8,
+                                          border: "1px solid #374151",
+                                          background: "#0d1117",
+                                        }}
+                                      >
+                                        <div
+                                          style={{
+                                            fontSize: 10,
+                                            color: "#a78bfa",
+                                            marginBottom: 6,
+                                            fontWeight: "bold",
+                                          }}
+                                        >
+                                          Abilities / heritage (+1d, +1 effect)
+                                        </div>
+                                        <div
+                                          style={{
+                                            fontSize: 9,
+                                            color: "#6b7280",
+                                            marginBottom: 6,
+                                            lineHeight: 1.35,
+                                          }}
+                                        >
+                                          Same rules as the action roll modal; tallies feed{" "}
+                                          <code style={{ color: "#9ca3af" }}>pool_bonus_dice</code>,{" "}
+                                          stored effect tier, and modifier rows on the saved roll.
+                                        </div>
+                                        {abilityRollBonusOptions.length > 0 ? (
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              flexDirection: "column",
+                                              gap: 4,
+                                              maxHeight: 100,
+                                              overflow: "auto",
+                                              marginBottom: 6,
+                                            }}
+                                          >
+                                            {abilityRollBonusOptions.map((ab) => {
+                                              const id = ab.id ?? ab.name;
+                                              const b = historyManualAbilityBoost[id] || {};
+                                              return (
+                                                <div
+                                                  key={String(id)}
+                                                  style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    justifyContent: "space-between",
+                                                    gap: 6,
+                                                    fontSize: 10,
+                                                    flexWrap: "wrap",
+                                                  }}
+                                                >
+                                                  <span
+                                                    style={{
+                                                      color: "#d1d5db",
+                                                      flex: "1 1 100px",
+                                                    }}
+                                                    title={
+                                                      ab.rollBonusResolvedDescription
+                                                        ? String(
+                                                            ab.rollBonusResolvedDescription,
+                                                          ).slice(0, 500)
+                                                        : undefined
+                                                    }
+                                                  >
+                                                    {ab.name}
+                                                  </span>
+                                                  {ab.supportsDice ? (
+                                                    <label
+                                                      style={{
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        gap: 3,
+                                                        cursor: "pointer",
+                                                      }}
+                                                    >
+                                                      <input
+                                                        type="checkbox"
+                                                        checked={!!b.dice}
+                                                        onChange={(e) =>
+                                                          setHistoryManualAbilityBoost(
+                                                            (p) => ({
+                                                              ...p,
+                                                              [id]: {
+                                                                ...p[id],
+                                                                dice: e.target.checked,
+                                                                effect: !!p[id]?.effect,
+                                                              },
+                                                            }),
+                                                          )
+                                                        }
+                                                      />
+                                                      +1d
+                                                    </label>
+                                                  ) : null}
+                                                  {ab.supportsEffect ? (
+                                                    <label
+                                                      style={{
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        gap: 3,
+                                                        cursor: "pointer",
+                                                      }}
+                                                    >
+                                                      <input
+                                                        type="checkbox"
+                                                        checked={!!b.effect}
+                                                        onChange={(e) =>
+                                                          setHistoryManualAbilityBoost(
+                                                            (p) => ({
+                                                              ...p,
+                                                              [id]: {
+                                                                ...p[id],
+                                                                effect: e.target.checked,
+                                                                dice: !!p[id]?.dice,
+                                                              },
+                                                            }),
+                                                          )
+                                                        }
+                                                      />
+                                                      +1 effect
+                                                    </label>
+                                                  ) : null}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        ) : null}
+                                        {heritageRollBonusOptions.length > 0 ? (
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              flexDirection: "column",
+                                              gap: 4,
+                                              maxHeight: 80,
+                                              overflow: "auto",
+                                            }}
+                                          >
+                                            {heritageRollBonusOptions.map((hb) => {
+                                              const id = hb.id ?? hb.name;
+                                              const b = historyManualHeritageBoost[id] || {};
+                                              return (
+                                                <div
+                                                  key={String(id)}
+                                                  style={{
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                    justifyContent: "space-between",
+                                                    gap: 6,
+                                                    fontSize: 10,
+                                                    flexWrap: "wrap",
+                                                  }}
+                                                >
+                                                  <span
+                                                    style={{ color: "#d1d5db", flex: "1 1 100px" }}
+                                                    title={String(hb.description || "").slice(
+                                                      0,
+                                                      400,
+                                                    )}
+                                                  >
+                                                    {hb.name}{" "}
+                                                    <span style={{ color: "#6b7280" }}>
+                                                      (heritage)
+                                                    </span>
+                                                  </span>
+                                                  {hb.supportsDice ? (
+                                                    <label
+                                                      style={{
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        gap: 3,
+                                                        cursor: "pointer",
+                                                      }}
+                                                    >
+                                                      <input
+                                                        type="checkbox"
+                                                        checked={!!b.dice}
+                                                        onChange={(e) =>
+                                                          setHistoryManualHeritageBoost(
+                                                            (p) => ({
+                                                              ...p,
+                                                              [id]: {
+                                                                ...p[id],
+                                                                dice: e.target.checked,
+                                                                effect: !!p[id]?.effect,
+                                                              },
+                                                            }),
+                                                          )
+                                                        }
+                                                      />
+                                                      +1d
+                                                    </label>
+                                                  ) : null}
+                                                  {hb.supportsEffect ? (
+                                                    <label
+                                                      style={{
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        gap: 3,
+                                                        cursor: "pointer",
+                                                      }}
+                                                    >
+                                                      <input
+                                                        type="checkbox"
+                                                        checked={!!b.effect}
+                                                        onChange={(e) =>
+                                                          setHistoryManualHeritageBoost(
+                                                            (p) => ({
+                                                              ...p,
+                                                              [id]: {
+                                                                ...p[id],
+                                                                effect: e.target.checked,
+                                                                dice: !!p[id]?.dice,
+                                                              },
+                                                            }),
+                                                          )
+                                                        }
+                                                      />
+                                                      +1 effect
+                                                    </label>
+                                                  ) : null}
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    ) : null}
                                     {historyManual.rollType !== "RESISTANCE" &&
                                     historyManual.rollType !== "VICE" &&
                                     historyManual.rollType !== "XP" &&
@@ -7058,6 +7904,7 @@ const CharacterSheetWrapper = ({
                                                 }));
                                               }
                                               setHistoryRefreshTick((v) => v + 1);
+                                              setHistoryOutcomeBandGmUnlock(false);
                                               setShowHistoryManualModal(false);
                                               return;
                                             }
@@ -7090,6 +7937,121 @@ const CharacterSheetWrapper = ({
                                               rt === "RESISTANCE";
                                             const isViceManual = rt === "VICE";
                                             const isFortuneManual = rt === "FORTUNE";
+                                            const actionRatingForManual =
+                                              !isResistanceManual &&
+                                              !isViceManual &&
+                                              !isFortuneManual
+                                                ? computeActionPoolBreakdown(
+                                                    historyManual.action,
+                                                    actionRatings,
+                                                  ).action_rating
+                                                : 0;
+                                            const actionPoolBeforeManual =
+                                              !isResistanceManual &&
+                                              !isViceManual &&
+                                              !isFortuneManual
+                                                ? Math.max(
+                                                    0,
+                                                    actionRatingForManual +
+                                                      (historyManual.pushDice
+                                                        ? 1
+                                                        : 0) +
+                                                      (historyManual.devil
+                                                        ? 1
+                                                        : 0) +
+                                                      (historyManual.helpDie
+                                                        ? 1
+                                                        : 0),
+                                                  )
+                                                : 0;
+                                            const mhBon =
+                                              computeAbilityHeritageRollBonuses({
+                                                abilityRollBonusOptions,
+                                                heritageRollBonusOptions,
+                                                abilityBoostMap:
+                                                  historyManualAbilityBoost,
+                                                heritageBoostMap:
+                                                  historyManualHeritageBoost,
+                                                healingTreatmentBonusContext: false,
+                                                standRoll: false,
+                                                reflexCtx: {
+                                                  rollPending: null,
+                                                  healingTreatmentBonusContext: false,
+                                                },
+                                              });
+                                            const abilityBonusDiceManual =
+                                              mhBon.bonusDiceFromAbilities +
+                                              mhBon.bonusDiceFromHeritage;
+                                            const actionPoolForOutcome =
+                                              actionPoolBeforeManual +
+                                              abilityBonusDiceManual;
+                                            const manualStoredEffect =
+                                              !isResistanceManual &&
+                                              !isViceManual &&
+                                              !isFortuneManual
+                                                ? bumpEffectTier(
+                                                    normalizeEffectTier(
+                                                      historyManual.effect,
+                                                    ),
+                                                    (historyManual.pushEffect
+                                                      ? 1
+                                                      : 0) +
+                                                      mhBon.abilityEffectSteps +
+                                                      mhBon.heritageEffectSteps,
+                                                  )
+                                                : historyManual.effect;
+                                            const manualModifierSources = [
+                                              ...mhBon.abilityBonusAudit.map(
+                                                (t) => ({
+                                                  kind: "ability",
+                                                  name: String(t).slice(0, 160),
+                                                  category: "ability",
+                                                }),
+                                              ),
+                                              ...mhBon.heritageBonusAudit.map(
+                                                (t) => ({
+                                                  kind: "ability",
+                                                  name: String(t).slice(0, 160),
+                                                  category: "heritage",
+                                                }),
+                                              ),
+                                            ];
+                                            const manualPositionEffectSources = [];
+                                            if (
+                                              !isResistanceManual &&
+                                              !isViceManual &&
+                                              !isFortuneManual &&
+                                              historyManual.pushEffect
+                                            ) {
+                                              manualPositionEffectSources.push({
+                                                kind: "push",
+                                                name: "Push for effect",
+                                                delta: "+1 effect",
+                                                category: "system",
+                                              });
+                                            }
+                                            if (
+                                              !isResistanceManual &&
+                                              !isViceManual &&
+                                              !isFortuneManual
+                                            ) {
+                                              [
+                                                ...mhBon.abilityBonusAudit,
+                                                ...mhBon.heritageBonusAudit,
+                                              ].forEach((line) => {
+                                                if (!String(line).includes("+1 effect"))
+                                                  return;
+                                                const name =
+                                                  String(line).split(":")[0]?.trim() ||
+                                                  "Effect boost";
+                                                manualPositionEffectSources.push({
+                                                  kind: "ability",
+                                                  name: name.slice(0, 120),
+                                                  delta: "+1 effect",
+                                                  category: "ability",
+                                                });
+                                              });
+                                            }
                                             const resistanceSummary =
                                               computeResistanceSummary(
                                                 diceResults,
@@ -7175,7 +8137,13 @@ const CharacterSheetWrapper = ({
                                                 action_name: "fortune",
                                                 dice_pool: diceResults.length,
                                                 results: diceResults,
-                                                outcome: historyManual.outcome,
+                                                outcome:
+                                                  historyOutcomeBandGmUnlock &&
+                                                  isGM
+                                                    ? historyManual.outcome
+                                                    : outcomeFromFortuneDiceResults(
+                                                        diceResults,
+                                                      ),
                                                 fortune_public_label: lbl,
                                                 fortune_reveal_outcome:
                                                   !!historyManual.fortuneRevealPlayers,
@@ -7202,15 +8170,34 @@ const CharacterSheetWrapper = ({
                                                   : {
                                                       position:
                                                         historyManual.position,
-                                                      effect: historyManual.effect,
+                                                      effect: manualStoredEffect,
                                                     }),
-                                                dice_pool: diceResults.length,
+                                                dice_pool:
+                                                  isResistanceManual ||
+                                                  isViceManual
+                                                    ? diceResults.length
+                                                    : actionPoolForOutcome,
                                                 results: diceResults,
                                                 outcome: isResistanceManual
                                                   ? resistanceSummary.outcome
                                                   : isViceManual
                                                     ? viceSummary.outcome
-                                                    : historyManual.outcome,
+                                                    : historyOutcomeBandGmUnlock &&
+                                                        isGM
+                                                      ? historyManual.outcome
+                                                      : outcomeFromActionRoll(
+                                                          diceResults,
+                                                          actionPoolForOutcome,
+                                                          actionRatingForManual,
+                                                        ),
+                                                ...(!isResistanceManual &&
+                                                !isViceManual &&
+                                                !isFortuneManual
+                                                  ? {
+                                                      pool_action_rating:
+                                                        actionRatingForManual,
+                                                    }
+                                                  : {}),
                                                 ...(isResistanceManual
                                                   ? {
                                                       roller_stress_spent:
@@ -7242,6 +8229,26 @@ const CharacterSheetWrapper = ({
                                                                 10,
                                                               )
                                                             : undefined,
+                                                        ...(abilityBonusDiceManual > 0
+                                                          ? {
+                                                              pool_bonus_dice:
+                                                                abilityBonusDiceManual,
+                                                            }
+                                                          : {}),
+                                                        ...(manualModifierSources.length >
+                                                        0
+                                                          ? {
+                                                              modifier_sources:
+                                                                manualModifierSources,
+                                                            }
+                                                          : {}),
+                                                        ...(manualPositionEffectSources.length >
+                                                        0
+                                                          ? {
+                                                              position_effect_sources:
+                                                                manualPositionEffectSources,
+                                                            }
+                                                          : {}),
                                                       }),
                                                 description:
                                                   isResistanceManual
@@ -7252,6 +8259,7 @@ const CharacterSheetWrapper = ({
                                               });
                                             }
                                             setHistoryRefreshTick((v) => v + 1);
+                                            setHistoryOutcomeBandGmUnlock(false);
                                             setShowHistoryManualModal(false);
                                           } catch (e) {
                                             setHistoryWriteError(
@@ -7279,9 +8287,10 @@ const CharacterSheetWrapper = ({
                                       </button>
                                       <button
                                         type="button"
-                                        onClick={() =>
-                                          setShowHistoryManualModal(false)
-                                        }
+                                        onClick={() => {
+                                          setHistoryOutcomeBandGmUnlock(false);
+                                          setShowHistoryManualModal(false);
+                                        }}
                                         style={{ ...S.btn, fontSize: 10 }}
                                       >
                                         Cancel
@@ -15402,59 +16411,19 @@ const CharacterSheetWrapper = ({
                         </div>
                       )}
                       <button
+                        type="button"
                         onClick={() => {
-                          const customs = abilities.filter(
-                            (a) => a.type === "custom",
-                          );
-                          const single = customs.find(
-                            (a) => a.id === "custom-single" || a._uses,
-                          );
-                          if (single && single._uses) {
-                            setCustomAbilityModal({
-                              type: "single_with_3_uses",
-                              name: single.name || "",
-                              uses: [...(single._uses || []), "", "", ""].slice(
-                                0,
-                                3,
-                              ),
-                              items: [
-                                { name: "", description: "" },
-                                { name: "", description: "" },
-                                { name: "", description: "" },
-                              ],
-                            });
-                          } else if (customs.length > 0) {
-                            const three = customs.filter((a) => !a._uses);
-                            const items = three.length
-                              ? three.map((a) => ({
-                                  name: a.name || "",
-                                  description: a.description || "",
-                                }))
-                              : [
-                                  { name: "", description: "" },
-                                  { name: "", description: "" },
-                                  { name: "", description: "" },
-                                ];
-                            while (items.length < 3)
-                              items.push({ name: "", description: "" });
-                            setCustomAbilityModal({
-                              type: "three_separate_uses",
-                              name: "",
-                              uses: ["", "", ""],
-                              items: items.slice(0, 3),
-                            });
-                          } else {
-                            setCustomAbilityModal({
-                              type: "single_with_3_uses",
-                              name: "",
-                              uses: ["", "", ""],
-                              items: [
-                                { name: "", description: "" },
-                                { name: "", description: "" },
-                                { name: "", description: "" },
-                              ],
-                            });
-                          }
+                          setCustomAbilityModal({
+                            type: "single_with_3_uses",
+                            name: "",
+                            groupName: "",
+                            uses: ["", "", ""],
+                            items: [
+                              { name: "", description: "" },
+                              { name: "", description: "" },
+                              { name: "", description: "" },
+                            ],
+                          });
                         }}
                         style={{
                           ...S.btn,
@@ -16322,6 +17291,13 @@ const CharacterSheetWrapper = ({
                       <textarea
                         id="character-sheet-notes-panel"
                         placeholder="Notes…"
+                        value={charData.sheetNotes ?? ""}
+                        onChange={(e) =>
+                          setCharData((p) => ({
+                            ...p,
+                            sheetNotes: e.target.value,
+                          }))
+                        }
                         style={{
                           width: "100%",
                           height: "80px",
@@ -16386,21 +17362,13 @@ const CharacterSheetWrapper = ({
                       </span>
                     </button>
                     {notesInventoryExpanded.inventory ? (
-                      <textarea
-                        id="character-sheet-inventory-panel"
-                        placeholder="Inventory…"
-                        style={{
-                          width: "100%",
-                          height: "80px",
-                          background: "#0d1117",
-                          color: "#fff",
-                          border: "1px solid #374151",
-                          padding: "8px",
-                          fontFamily: "monospace",
-                          fontSize: "12px",
-                          resize: "vertical",
-                          boxSizing: "border-box",
-                        }}
+                      <CharacterSheetInventoryList
+                        panelId="character-sheet-inventory-panel"
+                        inventory={charData.inventory}
+                        readOnly={!canEditSheet}
+                        onChange={(next) =>
+                          setCharData((p) => ({ ...p, inventory: next }))
+                        }
                       />
                     ) : null}
                   </div>

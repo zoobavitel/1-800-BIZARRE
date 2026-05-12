@@ -978,6 +978,7 @@ You make the roll using one of your character’s attributes (Insight, Prowess, 
 Insight: Consequences from deception or understanding.  
 Prowess: Consequences from physical strain or injury.  
 Resolve: Consequences from mental strain or willpower.  
+Durability: Consequences from a Stand fighting another Stand.  
 Your character suffers 6 stress when they resist, minus the highest die result from the resistance check. So, if you rolled a 4, you’d suffer 2 stress. If you rolled a 6, you’d suffer zero stress. If you get a critical result, you also clear 1 stress.
 
 *Ian’s character, Silas, is in a desperate Skirmish with several duelists and one of them lands a blow with their sword. Since the position was desperate, the GM inflicts severe harm (modified by any other factors). They tell Ian to record level 3 harm, “Gut Stabbed” on Silas’s sheet. Ian decides to resist the harm, instead. The GM says he can reduce the harm by one level if he resists it. Ian rolls 3d for Silas’s Prowess attribute and gets a 5\. Silas takes 1 stress and the harm is reduced to level 2, “Cut to the Ribs.”*
@@ -985,6 +986,10 @@ Your character suffers 6 stress when they resist, minus the highest die result f
 Usually, a resistance check reduces the severity of a consequence. If you’re going to suffer fatal harm, for example, a resistance check would reduce the harm to severe, instead. Or if you got a complication when you were sneaking into the manor house, and the GM was going to mark three ticks on the “Alert” clock, she’d only mark two (or maybe one) if you resisted the complication.
 
 You may only roll against a given consequence once.
+
+*When your Stand takes a hit from another Stand, you resist using your **Durability** dice instead of a user attribute. The mechanic is the same — roll your Durability dice, spend stress equal to 6 minus the highest result. If you have F-rank Durability (0 dice), roll 2d and take the lowest.*
+
+If you can pay 2 stress, you can recall your stand from its current position in order to roll **Durability** to resist a consequence.
 
 The GM also has the option to rule that your character completely avoids the consequence. For instance, maybe you’re in a sword fight and the consequence is getting disarmed. When you resist, the GM says that you avoid that consequence completely: you keep hold of your weapon.
 
@@ -1011,7 +1016,11 @@ Critical: Clear 1 stress.
 **Armor:**  
 If you have a type of armor that applies to the situation, you can mark an armor box to reduce or avoid a consequence, instead of rolling to resist.
 
-*Silas is taking level 2 harm, “Cut to the Ribs,” and the fight isn’t even over yet, so Ian decides to use Silas’s armor to reduce the harm. He marks the armor box and the harm becomes level 1, “Bruised.” If Silas was wearing heavy armor, he could mark a second armor box and reduce the harm again, to zero.*
+* **Regular Armor** — user takes a hit. Mark a charge to reduce consequence by 1 level.  
+* **Stand Armor** — your Stand takes a hit. Mark a charge to reduce consequence by 1 level. Cannot be used for direct hits on your user.  
+* **Special Armor** — NPC-only (GM tool). Flat negation rather than reduction.
+
+  *Silas is taking level 2 harm, “Cut to the Ribs,” and the fight isn’t even over yet, so Ian decides to use Silas’s armor to reduce the harm. He marks the armor box and the harm becomes level 1, “Bruised.” If Silas was wearing heavy armor, he could mark a second armor box and reduce the harm again, to zero.*
 
 When an armor box is marked, it can’t be used again until it’s restored. All of your armor is restored when you choose your load for the next score.
 
@@ -1829,6 +1838,8 @@ Along with your character’s heritage and background, their vice tells us what 
 Every player character is familiar with all of the various feats of skulduggery represented by the actions of the game. They’re all able to Skirmish in a knife-fight, Prowl in the shadows, Attune to strange energy, Consort with contacts for information, and so on.
 
 Of course, you’ll also have your specializations and skills, the qualities that make your character uniquely effective. You might want the ability to compel obedience from ghosts and channel arcane energy through your body, or maybe you want to manipulate the network of the underworld to your advantage and see danger before it strikes, or maybe you just want to be the deadliest fighter with a blade. In this chapter, you’ll learn how to create your own unique scoundrel and choose the abilities that suit the style of play you prefer.
+
+**Stand Users:** special persons capable of manifesting their ‘fighting spirit,’ a bizarre entity that can perform various feats but is unseen by non Stand Users. Stands are a reflection of the user’s soul, and harbor abilities tailored to that person’s livelihood or personality. It is rare for two people to have the same stand. Stand users are bizarrely attracted to other stand users
 
 # ✏️ Character Creation
 
