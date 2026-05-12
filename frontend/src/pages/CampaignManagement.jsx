@@ -2769,18 +2769,41 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
   const [creating, setCreating] = useState(false);
   const [recordsModalSession, setRecordsModalSession] = useState(null);
   const [busySessionId, setBusySessionId] = useState(null);
+  const [clearActiveModalSession, setClearActiveModalSession] = useState(null);
+  const [clearActiveBusy, setClearActiveBusy] = useState(false);
+  const [clearActiveSessionDetail, setClearActiveSessionDetail] = useState(null);
+  const [clearActiveRolls, setClearActiveRolls] = useState([]);
+  const [clearActiveClocks, setClearActiveClocks] = useState([]);
+  const [clearActiveChars, setClearActiveChars] = useState([]);
+  const [clearActiveCharsLoaded, setClearActiveCharsLoaded] = useState(false);
+  const [clearActiveDataLoading, setClearActiveDataLoading] = useState(false);
+  const [clearActiveManualXpByChar, setClearActiveManualXpByChar] = useState({});
+  const [clearActiveManualReady, setClearActiveManualReady] = useState(false);
+
+  const campaignLiveSlotId = campaignActiveSessionId(campaign);
 
   useEffect(() => {
+    if (!campaign?.id) return;
+    let cancelled = false;
     setLoading(true);
     sessionAPI
       .getSessions(campaign.id)
-      .then(setSessions)
-      .catch((e) => {
-        setError(e.message);
-        setSessions([]);
+      .then((list) => {
+        if (!cancelled) setSessions(list || []);
       })
-      .finally(() => setLoading(false));
-  }, [campaign.id]);
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e.message);
+          setSessions([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [campaign.id, campaignLiveSlotId]);
 
   const handleCreateSession = async () => {
     setCreating(true);
@@ -2802,16 +2825,164 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
 
   const activeId = campaignActiveSessionId(campaign);
 
-  const handleClearActiveSession = async (s) => {
-    if (!campaign?.id || activeId == null || Number(activeId) !== Number(s.id)) return;
+  const resetClearActiveModal = useCallback(() => {
+    setClearActiveModalSession(null);
+    setClearActiveSessionDetail(null);
+    setClearActiveRolls([]);
+    setClearActiveClocks([]);
+    setClearActiveChars([]);
+    setClearActiveCharsLoaded(false);
+    setClearActiveManualXpByChar({});
+    setClearActiveManualReady(false);
+    setClearActiveDataLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (!clearActiveModalSession?.id || !campaign?.id) return undefined;
+    let cancelled = false;
+    const sid = clearActiveModalSession.id;
+    const fallbackRow = clearActiveModalSession;
+    setClearActiveDataLoading(true);
+    setClearActiveCharsLoaded(false);
+    setClearActiveManualReady(false);
+    Promise.all([
+      sessionAPI.getSession(sid).catch(() => null),
+      rollAPI.getRolls({ session: sid }).catch(() => []),
+      progressClockAPI
+        .getProgressClocks({ campaign: campaign.id, session: sid })
+        .catch(() => []),
+      characterAPI
+        .getCharacters()
+        .then((list) =>
+          (list || []).filter((c) => Number(c.campaign) === Number(campaign.id)),
+        )
+        .catch(() => []),
+    ]).then(([sess, rollsData, clocksData, charsData]) => {
+      if (cancelled) return;
+      setClearActiveSessionDetail(sess || fallbackRow);
+      const rollList = Array.isArray(rollsData)
+        ? rollsData
+        : rollsData?.results || [];
+      const clockList = Array.isArray(clocksData)
+        ? clocksData
+        : clocksData?.results || [];
+      setClearActiveRolls(rollList);
+      setClearActiveClocks(clockList);
+      setClearActiveChars(charsData);
+      setClearActiveCharsLoaded(true);
+      setClearActiveDataLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [clearActiveModalSession?.id, campaign?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- row captured at start via fallbackRow
+
+  useEffect(() => {
+    if (!clearActiveModalSession?.id || !clearActiveCharsLoaded) return undefined;
+    if (!clearActiveChars.length) {
+      setClearActiveManualXpByChar({});
+      setClearActiveManualReady(true);
+      return undefined;
+    }
+    let cancelled = false;
+    setClearActiveManualReady(false);
+    const sid = clearActiveModalSession.id;
+    (async () => {
+      const pairs = await Promise.all(
+        clearActiveChars.map(async (ch) => {
+          const raw = await experienceTrackerAPI
+            .list({ character: ch.id })
+            .catch(() => []);
+          const arr = Array.isArray(raw) ? raw : raw?.results || [];
+          return [ch.id, sumManualTrackXpForSession(arr, sid)];
+        }),
+      );
+      if (cancelled) return;
+      setClearActiveManualXpByChar(Object.fromEntries(pairs));
+      setClearActiveManualReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [clearActiveModalSession?.id, clearActiveChars, clearActiveCharsLoaded]);
+
+  const clearActiveCampaignChars = useMemo(() => {
+    const embedded = campaign?.campaign_characters;
+    if (Array.isArray(embedded) && embedded.length) return embedded;
+    return (clearActiveChars || []).map((c) => ({
+      id: c.id,
+      true_name: c.true_name,
+      name: c.name,
+      ...c,
+    }));
+  }, [campaign?.campaign_characters, clearActiveChars]);
+
+  const clearActiveEndLivePreview = useMemo(
+    () =>
+      buildSessionEndLivePreview(
+        clearActiveRolls,
+        clearActiveCampaignChars,
+        clearActiveClocks,
+        clearActiveChars,
+      ),
+    [
+      clearActiveRolls,
+      clearActiveCampaignChars,
+      clearActiveClocks,
+      clearActiveChars,
+    ],
+  );
+
+  const clearActiveRowsWithManual = useMemo(() => {
+    return (clearActiveEndLivePreview.perPcRows || []).map((row) => {
+      const manualSessionXp = clearActiveManualXpByChar[row.characterId] ?? 0;
+      const totalSessionXpPreview =
+        (row.developmentPoolXp || 0) +
+        (row.totalEncodedPlaybookXp || 0) +
+        manualSessionXp;
+      return {
+        ...row,
+        manualSessionXp,
+        totalSessionXpPreview,
+      };
+    });
+  }, [clearActiveEndLivePreview.perPcRows, clearActiveManualXpByChar]);
+
+  const clearActivePreviewReady =
+    !clearActiveDataLoading && clearActiveManualReady;
+
+  const openClearActiveModal = (s) => {
+    setError(null);
+    setClearActiveDataLoading(true);
+    setClearActiveCharsLoaded(false);
+    setClearActiveManualReady(false);
+    setClearActiveModalSession(s);
+  };
+
+  const runClearActiveFromList = async (skipEncodedXp) => {
+    const s = clearActiveModalSession;
+    if (
+      !campaign?.id ||
+      !s?.id ||
+      activeId == null ||
+      Number(activeId) !== Number(s.id)
+    ) {
+      return;
+    }
+    setClearActiveBusy(true);
     setBusySessionId(s.id);
     setError(null);
     try {
-      await campaignAPI.patchCampaign(campaign.id, { active_session: null });
+      await campaignAPI.patchCampaign(campaign.id, {
+        active_session: null,
+        skip_encoded_xp_settlement: skipEncodedXp === true,
+      });
+      resetClearActiveModal();
       onRefresh?.();
     } catch (e) {
-      setError(e.message || "Could not clear active session");
+      setError(e.message || "Could not end live session");
     } finally {
+      setClearActiveBusy(false);
       setBusySessionId(null);
     }
   };
@@ -2840,7 +3011,212 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
 
   return (
     <>
-      {error && <div style={{ ...S.err, marginTop: "12px" }}>{error}</div>}
+      {clearActiveModalSession && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="clear-active-session-title"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 50,
+            background: "rgba(0,0,0,0.7)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+          }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !clearActiveBusy) {
+              resetClearActiveModal();
+            }
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "520px",
+              maxHeight: "88vh",
+              overflow: "auto",
+              background: "#111827",
+              border: "1px solid #4b5563",
+              borderRadius: "8px",
+              padding: "20px",
+              color: "#e5e7eb",
+              fontSize: "13px",
+              lineHeight: 1.45,
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h2
+              id="clear-active-session-title"
+              style={{ margin: "0 0 12px", fontSize: "18px", color: "#fff" }}
+            >
+              End live session?
+            </h2>
+            {error ? (
+              <div style={{ ...S.err, marginBottom: "12px" }}>{error}</div>
+            ) : null}
+            <p style={{ margin: "0 0 8px", color: "#9ca3af", fontSize: "12px" }}>
+              Session:{" "}
+              <strong style={{ color: "#e5e7eb" }}>
+                {clearActiveModalSession.name || `Session ${clearActiveModalSession.id}`}
+              </strong>
+            </p>
+            <p style={{ margin: "0 0 12px", color: "#d1d5db" }}>
+              You are clearing the campaign&apos;s live slot (character sheets, clocks,
+              etc.). <strong>End &amp; apply encoded XP</strong> runs the one-time encoded{" "}
+              <strong>playbook</strong> pass (STANDOUT / STRUGGLE from the roll log, capped
+              per session) <strong>and</strong> banks each PC&apos;s{" "}
+              <strong>Stand Development</strong> session XP into their{" "}
+              <strong>session XP pool</strong>.{" "}
+              <strong>End without encoded XP</strong> clears live only and marks the
+              encoded pass settled without granting that automatic playbook XP or
+              banking Development→pool from this action. Use manual XP for off-roll
+              awards.{" "}
+              <span style={{ color: "#9ca3af" }}>
+                Durability affects armor/resist only, not XP.
+              </span>
+            </p>
+            {clearActiveSessionDetail?.auto_encoded_xp_settled ? (
+              <div
+                style={{
+                  marginBottom: "12px",
+                  padding: "8px 10px",
+                  borderRadius: "6px",
+                  background: "rgba(234, 179, 8, 0.12)",
+                  border: "1px solid rgba(234, 179, 8, 0.45)",
+                  color: "#fcd34d",
+                  fontSize: "12px",
+                }}
+              >
+                This session&apos;s encoded XP pass was already marked settled. Ending
+                live will <strong>not</strong> apply additional automatic playbook XP
+                from rolls or bank Development session XP again.
+              </div>
+            ) : null}
+            {!clearActivePreviewReady ? (
+              <div style={{ color: "#6b7280", marginBottom: "12px", fontSize: "12px" }}>
+                Loading session summary…
+              </div>
+            ) : (
+              <>
+                <div
+                  style={{
+                    marginBottom: "10px",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    color: "#9ca3af",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  Session snapshot
+                </div>
+                <ul style={{ margin: "0 0 12px 18px", padding: 0, color: "#d1d5db" }}>
+                  <li>
+                    <strong>{clearActiveEndLivePreview.rollCount}</strong> roll
+                    {clearActiveEndLivePreview.rollCount === 1 ? "" : "s"} logged on this
+                    session
+                    {clearActiveEndLivePreview.rollCount > 0 ? (
+                      <span style={{ color: "#9ca3af" }}>
+                        {" "}
+                        (
+                        {Object.entries(clearActiveEndLivePreview.byType)
+                          .map(([k, v]) => `${k}: ${v}`)
+                          .join(", ")}
+                        )
+                      </span>
+                    ) : null}
+                    .
+                  </li>
+                  {clearActiveEndLivePreview.desperateCount > 0 ? (
+                    <li>
+                      <strong>{clearActiveEndLivePreview.desperateCount}</strong>{" "}
+                      desperate-position roll
+                      {clearActiveEndLivePreview.desperateCount === 1 ? "" : "s"} (desperate
+                      action XP is applied when each roll is committed, not here).
+                    </li>
+                  ) : null}
+                  <li>
+                    Progress clocks in this session:{" "}
+                    <strong>{clearActiveEndLivePreview.clockCount}</strong> tracked,{" "}
+                    <strong>{clearActiveEndLivePreview.clocksCompleted}</strong> completed
+                    (fiction / clocks are not auto-converted to XP).
+                  </li>
+                </ul>
+                <div
+                  style={{
+                    marginBottom: "8px",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    color: "#9ca3af",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.06em",
+                  }}
+                >
+                  Per-PC XP preview (if you apply encoded pass)
+                </div>
+                {clearActiveRowsWithManual.length === 0 ? (
+                  <div
+                    style={{ color: "#9ca3af", marginBottom: "12px", fontSize: "12px" }}
+                  >
+                    No PCs in this campaign roster — nothing to preview.
+                  </div>
+                ) : (
+                  <SessionXpAllocationTable rows={clearActiveRowsWithManual} />
+                )}
+                <p style={{ margin: "0 0 16px", fontSize: "11px", color: "#9ca3af" }}>
+                  <strong>Total</strong> column = encoded playbook XP (goes straight to the
+                  playbook clock) + Development session XP (banked to the{" "}
+                  <strong>session XP pool</strong>) + manual awards logged this session
+                  (already on tracks). Pool XP is spent on the character sheet.
+                </p>
+              </>
+            )}
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                justifyContent: "flex-end",
+              }}
+            >
+              <button
+                type="button"
+                disabled={clearActiveBusy}
+                onClick={() => {
+                  if (!clearActiveBusy) resetClearActiveModal();
+                }}
+                style={S.btnGhost}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={clearActiveBusy || !clearActivePreviewReady}
+                onClick={() => runClearActiveFromList(true)}
+                style={S.btnGhost}
+                title="Clears live session only; marks encoded pass done without granting STANDOUT/STRUGGLE XP."
+              >
+                {clearActiveBusy ? "…" : "End without encoded XP"}
+              </button>
+              <button
+                type="button"
+                disabled={clearActiveBusy || !clearActivePreviewReady}
+                onClick={() => runClearActiveFromList(false)}
+                style={S.btnPrimary}
+                title="Clears live session and runs the automatic playbook XP pass (no-op if this session was already settled)."
+              >
+                {clearActiveBusy ? "…" : "End & apply encoded XP"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {error && !clearActiveModalSession ? (
+        <div style={{ ...S.err, marginTop: "12px" }}>{error}</div>
+      ) : null}
       <div
         style={{
           marginTop: "14px",
@@ -2955,11 +3331,15 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleClearActiveSession(s);
+                          openClearActiveModal(s);
                         }}
                         style={{ ...S.btnGhost, fontSize: "10px", padding: "4px 8px" }}
-                        disabled={busySessionId === s.id}
-                        title="Stop using this session as the campaign live session (tables, clocks, etc.)"
+                        disabled={
+                          busySessionId === s.id ||
+                          (clearActiveModalSession != null &&
+                            Number(clearActiveModalSession.id) === Number(s.id))
+                        }
+                        title="End this live session for players: choose whether to apply encoded playbook XP and Development→pool, or skip that pass."
                       >
                         {busySessionId === s.id ? "…" : "Clear active"}
                       </button>
@@ -3155,7 +3535,7 @@ function SessionDetail({
 
   useEffect(() => {
     if (!session?.id) return;
-    const needManual = endLiveModalOpen || !isCurrentActiveSession;
+    const needManual = endLiveModalOpen || !isCurrentActiveSession || isGM;
     if (!needManual) return;
 
     let cancelled = false;
@@ -3187,12 +3567,12 @@ function SessionDetail({
   }, [
     endLiveModalOpen,
     isCurrentActiveSession,
+    isGM,
     session?.id,
     campaignChars,
   ]);
 
-  const endedSessionXpPanelMode = useMemo(() => {
-    if (isCurrentActiveSession) return "hidden";
+  const sessionXpAllocationPanelMode = useMemo(() => {
     const roster = campaignChars || [];
     if (!roster.length) return "no_roster";
     if (!sessionManualXpSyncReady) return "loading";
@@ -3204,13 +3584,7 @@ function SessionDetail({
       return "empty_session";
     }
     return "table";
-  }, [
-    isCurrentActiveSession,
-    campaignChars,
-    sessionManualXpSyncReady,
-    rolls,
-    endLiveRowsWithManual,
-  ]);
+  }, [campaignChars, sessionManualXpSyncReady, rolls, endLiveRowsWithManual]);
 
   const handleSetActiveSession = async () => {
     try {
@@ -3757,7 +4131,7 @@ function SessionDetail({
             </span>
           )}
         </div>
-        {!isCurrentActiveSession && endedSessionXpPanelMode !== "hidden" ? (
+        {!isCurrentActiveSession || isGM ? (
           <div
             style={{
               width: "100%",
@@ -3776,8 +4150,38 @@ function SessionDetail({
                 letterSpacing: "0.06em",
               }}
             >
-              Session XP allocation (read-only)
+              {sessionEnded
+                ? "Session XP allocation (read-only)"
+                : isCurrentActiveSession
+                  ? "Session XP allocation (live preview — before XP is applied)"
+                  : "Session XP allocation (preview — before XP is applied)"}
             </div>
+            {!sessionEnded ? (
+              <div
+                style={{
+                  marginBottom: "8px",
+                  fontSize: "11px",
+                  color: "#9ca3af",
+                  lineHeight: 1.45,
+                }}
+              >
+                {isCurrentActiveSession ? (
+                  <>
+                    While this episode is live, the table updates from rolls and
+                    trackers as they come in. Encoded playbook XP and
+                    Development→pool settlement still run only when you end live (or
+                    mark complete) with the usual options.
+                  </>
+                ) : (
+                  <>
+                    This episode is not marked ended; the table is a running preview
+                    from rolls and trackers. Encoded playbook XP and Development→pool
+                    settlement finalize when you end live (or mark complete) with the
+                    usual options.
+                  </>
+                )}
+              </div>
+            ) : null}
             {sessionData?.auto_encoded_xp_settled ? (
               <div
                 style={{
@@ -3792,23 +4196,23 @@ function SessionDetail({
                 preview (for reference).
               </div>
             ) : null}
-            {endedSessionXpPanelMode === "no_roster" ? (
+            {sessionXpAllocationPanelMode === "no_roster" ? (
               <div style={{ color: "#9ca3af", fontSize: "12px", marginBottom: "4px" }}>
                 No PCs in this campaign roster.
               </div>
             ) : null}
-            {endedSessionXpPanelMode === "loading" ? (
+            {sessionXpAllocationPanelMode === "loading" ? (
               <div style={{ color: "#6b7280", fontSize: "12px", marginBottom: "4px" }}>
                 Loading session XP summary…
               </div>
             ) : null}
-            {endedSessionXpPanelMode === "empty_session" ? (
+            {sessionXpAllocationPanelMode === "empty_session" ? (
               <div style={{ color: "#9ca3af", fontSize: "12px", marginBottom: "4px" }}>
                 No rolls logged and no session XP (encoded playbook, Development→pool,
                 or manual track awards) recorded for this session.
               </div>
             ) : null}
-            {endedSessionXpPanelMode === "table" ? (
+            {sessionXpAllocationPanelMode === "table" ? (
               <>
                 <SessionXpAllocationTable rows={endLiveRowsWithManual} />
                 <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#9ca3af" }}>

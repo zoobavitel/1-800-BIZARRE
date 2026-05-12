@@ -11,6 +11,8 @@ import {
   Divider,
   Label,
   TextInput,
+  authPageShellStyle,
+  AuthCardTopStripe,
 } from "./AuthFormShared";
 
 const SignupForm = ({ onSwitchToLogin }) => {
@@ -122,18 +124,7 @@ const SignupForm = ({ onSwitchToLogin }) => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: token.bg,
-        backgroundImage: `radial-gradient(ellipse 60% 50% at 50% 40%, rgba(124,58,237,0.08) 0%, transparent 70%)`,
-        fontFamily: "'Rajdhani', sans-serif",
-        padding: 24,
-      }}
-    >
+    <div style={authPageShellStyle}>
       {/* Card */}
       <div
         className="lf-card"
@@ -144,68 +135,35 @@ const SignupForm = ({ onSwitchToLogin }) => {
           border: `1px solid ${token.border}`,
           borderRadius: 16,
           padding: "40px 36px",
+          overflow: "hidden",
           boxShadow: `
-            0 0 0 1px rgba(255,255,255,0.03) inset,
-            0 32px 64px rgba(0,0,0,0.6),
-            0 0 80px rgba(124,58,237,0.06)
+            0 0 0 1px rgba(255,255,255,0.04) inset,
+            0 24px 48px rgba(0,0,0,0.75)
           `,
         }}
       >
+        <AuthCardTopStripe />
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: 32 }}>
-          {/* Decorative top accent */}
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 8,
-              marginBottom: 16,
-            }}
-          >
-            <div
-              style={{
-                width: 28,
-                height: 1,
-                background: `linear-gradient(to right, transparent, ${token.gold})`,
-              }}
-            />
-            <div
-              style={{
-                width: 8,
-                height: 8,
-                background: token.gold,
-                transform: "rotate(45deg)",
-                boxShadow: `0 0 12px ${token.gold}`,
-              }}
-            />
-            <div
-              style={{
-                width: 28,
-                height: 1,
-                background: `linear-gradient(to left, transparent, ${token.gold})`,
-              }}
-            />
-          </div>
-
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
           <h1
             className="lf-title"
             style={{
               margin: 0,
-              fontSize: 26,
-              fontFamily: "'Cinzel Decorative', cursive",
-              fontWeight: 700,
-              letterSpacing: "0.04em",
+              fontSize: 40,
+              fontWeight: 400,
             }}
           >
             1(800)BIZARRE
           </h1>
           <p
             style={{
-              marginTop: 8,
+              marginTop: 10,
               fontSize: 12,
-              letterSpacing: "0.2em",
+              letterSpacing: "0.18em",
               textTransform: "uppercase",
               color: token.muted,
+              fontFamily: "'Oswald', sans-serif",
+              fontWeight: 500,
             }}
           >
             Create your account
@@ -290,7 +248,7 @@ const SignupForm = ({ onSwitchToLogin }) => {
                 padding: 0,
                 fontSize: 12,
                 letterSpacing: "0.08em",
-                color: "#4a4a6a",
+                color: token.muted,
                 display: "flex",
                 alignItems: "center",
                 gap: 6,
@@ -336,7 +294,7 @@ const SignupForm = ({ onSwitchToLogin }) => {
                     marginTop: 6,
                     marginBottom: 0,
                     fontSize: 11.5,
-                    color: "#3d3d5c",
+                    color: token.muted,
                     lineHeight: 1.5,
                   }}
                 >
@@ -447,8 +405,8 @@ const SignupForm = ({ onSwitchToLogin }) => {
               borderRadius: 8,
               color: "#fff",
               fontSize: 13,
-              fontFamily: "'Rajdhani', sans-serif",
-              fontWeight: 700,
+              fontFamily: "'Oswald', sans-serif",
+              fontWeight: 600,
               letterSpacing: "0.15em",
               textTransform: "uppercase",
               cursor: isLoading ? "not-allowed" : "pointer",
@@ -492,7 +450,7 @@ const SignupForm = ({ onSwitchToLogin }) => {
                 border: "none",
                 cursor: "pointer",
                 fontSize: 12.5,
-                color: "#5b5b7d",
+                color: token.muted,
                 letterSpacing: "0.04em",
                 transition: "color 0.2s",
                 padding: 0,
