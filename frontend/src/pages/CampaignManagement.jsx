@@ -3699,6 +3699,56 @@ function SessionDetail({
     return "table";
   }, [campaignChars, sessionManualXpSyncReady, rolls, endLiveRowsWithManual]);
 
+  const sessionXpEntriesSortedForScorecard = useMemo(() => {
+    const raw = sessionData?.xp_entries;
+    const list = Array.isArray(raw)
+      ? raw
+      : raw != null && Array.isArray(raw.results)
+        ? raw.results
+        : [];
+    return [...list].sort(
+      (a, b) =>
+        new Date(b.session_date || 0) - new Date(a.session_date || 0),
+    );
+  }, [sessionData?.xp_entries]);
+
+  const pcXpRequirementsByCharacterForScorecard = useMemo(() => {
+    const m = new Map();
+    for (const row of sessionXpEntriesSortedForScorecard) {
+      const cid = Number(row.character);
+      if (!Number.isFinite(cid)) continue;
+      const typeLbl = row.trigger_display || row.trigger || "XP";
+      const desc = String(row.description || "").trim();
+      const line = desc
+        ? `${typeLbl} (+${row.xp_gained ?? 0}) — ${desc}`
+        : `${typeLbl} (+${row.xp_gained ?? 0})`;
+      if (!m.has(cid)) m.set(cid, []);
+      m.get(cid).push(line);
+    }
+    return m;
+  }, [sessionXpEntriesSortedForScorecard]);
+
+  const charDisplayNameByIdScorecard = useMemo(() => {
+    const m = new Map();
+    for (const ch of campaignChars || []) {
+      const cid = Number(ch?.id);
+      if (!Number.isFinite(cid)) continue;
+      const full =
+        (characters || []).find((c) => Number(c?.id) === cid) || ch;
+      m.set(cid, full.true_name || full.name || `PC ${cid}`);
+    }
+    return m;
+  }, [campaignChars, characters]);
+
+  const scorecardHasAnyTrackerLines = useMemo(
+    () =>
+      (campaignChars || []).some((ch) => {
+        const lines = pcXpRequirementsByCharacterForScorecard.get(Number(ch.id));
+        return lines?.length > 0;
+      }),
+    [campaignChars, pcXpRequirementsByCharacterForScorecard],
+  );
+
   const handleSetActiveSession = async () => {
     try {
       await campaignAPI.patchCampaign(campaign.id, {
@@ -3965,25 +4015,6 @@ function SessionDetail({
     }
   };
 
-  const [coinEdits, setCoinEdits] = useState({});
-  const handleCrewCoinChange = async (crewId, coin) => {
-    const val = parseInt(coin, 10) || 0;
-    try {
-      await crewAPI.patchCrew(crewId, { coin: val });
-      setCrews((prev) =>
-        prev.map((c) => (c.id === crewId ? { ...c, coin: val } : c)),
-      );
-      setCoinEdits((p) => {
-        const n = { ...p };
-        delete n[crewId];
-        return n;
-      });
-      onRefresh();
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-
   return (
     <div>
       <button onClick={onBack} style={{ ...S.btnGhost, marginBottom: "12px" }}>
@@ -4132,6 +4163,80 @@ function SessionDetail({
               <strong>session XP pool</strong>) + manual awards logged this
               session (already on tracks). Pool XP is spent on the character sheet.
             </p>
+            {endLiveRowsWithManual.length > 0 ? (
+              <div
+                style={{
+                  marginBottom: "14px",
+                  paddingTop: "12px",
+                  borderTop: "1px solid #374151",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "#9ca3af",
+                    marginBottom: "6px",
+                    fontWeight: "bold",
+                  }}
+                >
+                  By PC — requirements logged (experience tracker)
+                </div>
+                <div
+                  style={{
+                    fontSize: "10px",
+                    color: "#6b7280",
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {scorecardHasAnyTrackerLines ? (
+                    (campaignChars || []).map((ch) => {
+                      const cid = Number(ch.id);
+                      const lines =
+                        pcXpRequirementsByCharacterForScorecard.get(cid);
+                      if (!lines?.length) return null;
+                      const title =
+                        charDisplayNameByIdScorecard.get(cid) ||
+                        ch.true_name ||
+                        ch.name ||
+                        `PC ${cid}`;
+                      return (
+                        <div
+                          key={`endlive-xp-req-${cid}`}
+                          style={{ marginBottom: "8px" }}
+                        >
+                          <div
+                            style={{
+                              color: "#d1d5db",
+                              fontWeight: 600,
+                              marginBottom: "4px",
+                            }}
+                          >
+                            {title}
+                          </div>
+                          <ul
+                            style={{
+                              margin: 0,
+                              paddingLeft: "18px",
+                              color: "#9ca3af",
+                            }}
+                          >
+                            {lines.map((line, i) => (
+                              <li key={`endlive-${cid}-${i}`}>{line}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <span>
+                      No tracker rows for this session yet. Auto awards (e.g.
+                      desperate rolls, heritage on rolls) and manual grants show
+                      here once the backend logs them.
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : null}
             <div
               style={{
                 display: "flex",
@@ -4422,6 +4527,88 @@ function SessionDetail({
                 </p>
               </>
             ) : null}
+            {(sessionXpAllocationPanelMode === "table" ||
+              sessionXpAllocationPanelMode === "empty_session") &&
+            (campaignChars || []).length > 0 ? (
+              <div
+                style={{
+                  marginTop:
+                    sessionXpAllocationPanelMode === "table" ? "14px" : "10px",
+                  paddingTop:
+                    sessionXpAllocationPanelMode === "table" ? "12px" : "0",
+                  borderTop:
+                    sessionXpAllocationPanelMode === "table"
+                      ? "1px solid #374151"
+                      : "none",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: "11px",
+                    color: "#9ca3af",
+                    marginBottom: "6px",
+                    fontWeight: "bold",
+                  }}
+                >
+                  By PC — requirements logged (experience tracker)
+                </div>
+                <div
+                  style={{
+                    fontSize: "10px",
+                    color: "#6b7280",
+                    marginBottom: "4px",
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {scorecardHasAnyTrackerLines ? (
+                    (campaignChars || []).map((ch) => {
+                      const cid = Number(ch.id);
+                      const lines =
+                        pcXpRequirementsByCharacterForScorecard.get(cid);
+                      if (!lines?.length) return null;
+                      const title =
+                        charDisplayNameByIdScorecard.get(cid) ||
+                        ch.true_name ||
+                        ch.name ||
+                        `PC ${cid}`;
+                      return (
+                        <div
+                          key={`scorecard-xp-req-${cid}`}
+                          style={{ marginBottom: "8px" }}
+                        >
+                          <div
+                            style={{
+                              color: "#d1d5db",
+                              fontWeight: 600,
+                              marginBottom: "4px",
+                            }}
+                          >
+                            {title}
+                          </div>
+                          <ul
+                            style={{
+                              margin: 0,
+                              paddingLeft: "18px",
+                              color: "#9ca3af",
+                            }}
+                          >
+                            {lines.map((line, i) => (
+                              <li key={`${cid}-${i}`}>{line}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <span>
+                      No tracker rows for this session yet. Auto awards (e.g.
+                      desperate rolls, heritage on rolls) and manual grants show
+                      here once the backend logs them.
+                    </span>
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
         <div
@@ -4519,44 +4706,6 @@ function SessionDetail({
 
       {/* Goals */}
       <GoalsEditor sessionData={sessionData} onSave={handleUpdateSession} />
-
-      {/* Coin (crew-level) */}
-      <div style={S.card}>
-        <span style={S.sectionLbl}>Coin</span>
-        {crews.length === 0 ? (
-          <div style={{ color: "#6b7280" }}>No crews in campaign.</div>
-        ) : (
-          crews.map((crew) => (
-            <div
-              key={crew.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                marginTop: "8px",
-              }}
-            >
-              <span style={{ minWidth: "120px" }}>
-                {crew.name || `Crew ${crew.id}`}
-              </span>
-              <input
-                type="number"
-                style={{ ...S.inp, width: "60px" }}
-                value={
-                  coinEdits[crew.id] !== undefined
-                    ? coinEdits[crew.id]
-                    : (crew.coin ?? 0)
-                }
-                onChange={(e) =>
-                  setCoinEdits((p) => ({ ...p, [crew.id]: e.target.value }))
-                }
-                onBlur={(e) => handleCrewCoinChange(crew.id, e.target.value)}
-              />
-              <span style={{ fontSize: "11px", color: "#9ca3af" }}>coin</span>
-            </div>
-          ))
-        )}
-      </div>
 
       {/* Fortune rolls */}
       <div style={S.card}>
