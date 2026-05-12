@@ -2294,6 +2294,19 @@ class CampaignSerializer(serializers.ModelSerializer):
         campaign_player_ids = list(obj.players.values_list("id", flat=True)) + list(
             obj.characters.values_list("user_id", flat=True).distinct()
         )
+        active_sid = getattr(obj, "active_session_id", None)
+        gm_public_session = Q(session__isnull=True)
+        if active_sid:
+            gm_public_session |= Q(session_id=active_sid)
+        legacy_gm_session_visible = (
+            Q(
+                created_by__isnull=True,
+                visible_to_players=True,
+                session_id=active_sid,
+            )
+            if active_sid
+            else Q(pk__in=[])
+        )
         clocks = clocks.filter(
             Q(
                 Q(created_by__isnull=True, visible_to_players=True)
@@ -2301,6 +2314,11 @@ class CampaignSerializer(serializers.ModelSerializer):
             )
             | Q(created_by_id=user.id)
             | Q(visible_to_party=True, created_by_id__in=campaign_player_ids)
+            | (
+                Q(created_by_id=obj.gm_id, visible_to_players=True)
+                & gm_public_session
+            )
+            | legacy_gm_session_visible
         )
         return ProgressClockSerializer(clocks, many=True).data
 
