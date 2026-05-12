@@ -4,9 +4,29 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-05-12",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #75 from zoobavitel/cursor/stand-coin-srd-dev-sync"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-05-11",
     "version": null,
     "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "session XP settle, sheet rolls, campaign GM UI",
+          "Stand recall row + stress button on Stand coin column",
+          "stand coin sync, session XP pool, collapsible GM rosters"
+        ]
+      },
       {
         "title": "Fixed",
         "items": [
@@ -26,10 +46,13 @@ export const PATCH_NOTES = [
         ]
       },
       {
-        "title": "Added",
+        "title": "Other",
         "items": [
-          "Stand recall row + stress button on Stand coin column",
-          "stand coin sync, session XP pool, collapsible GM rosters"
+          "Merge pull request #74 from zoobavitel/cursor/stand-coin-srd-dev-sync",
+          "Merge pull request #73 from zoobavitel/cursor/stand-coin-srd-dev-sync",
+          "Merge pull request #72 from zoobavitel/cursor/stand-coin-srd-dev-sync",
+          "Session GM: quick NPC create, dark selects, inline faction",
+          "Show NPC character/session history"
         ]
       },
       {
@@ -37,13 +60,6 @@ export const PATCH_NOTES = [
         "items": [
           "regenerate patch notes from git log",
           "regenerate patch notes from git log"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Session GM: quick NPC create, dark selects, inline faction",
-          "Show NPC character/session history"
         ]
       }
     ]
@@ -602,17 +618,7 @@ export const PATCH_NOTES = [
           "security: remove PII, add gitleaks scanning, add SECURITY.md",
           "Merge pull request #35 from zoobavitel/copilot/discuss-npc-deletion-issues",
           "Merge pull request #33 from zoobavitel/copilot/remove-conflict-clocks-on-npc-creation",
-          "Merge pull request #32 from zoobavitel/copilot/fix-npc-level-display",
-          "Merge pull request #34 from zoobavitel/zoobavitel-patch-2",
-          "Change pull request target branch to 'master'",
-          "Align NPCSerializer and NPCSummarySerializer to compute level consistently from stand_coin_stats"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "on NPC delete land on blank character sheet, guard auto-save for nameless new NPCs",
-          "remove default conflict clock on new NPC creation"
+          "Merge pull request #32 from zoobavitel/copilot/fix-npc-level-display"
         ]
       }
     ]
