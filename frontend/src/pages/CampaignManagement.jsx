@@ -2728,7 +2728,7 @@ function sessionListStatusCaption(session, campaignActiveSessionId) {
 
   if (isCampaignLiveSlot) return "In session";
 
-  // Backend often leaves status PLANNED after "end live"; settlement marks this (see SessionDetail).
+  // Backend sets COMPLETED and auto_encoded_xp_settled when live ends (see campaign PATCH).
   if (raw === "COMPLETED" || session?.auto_encoded_xp_settled) return "Ended";
 
   const anotherLive = aid !== null && Number.isFinite(sid) && sid !== aid;
@@ -3009,6 +3009,68 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
     }
   };
 
+  const handleSetLiveFromList = async (s) => {
+    if (sessionIsEndedForManagementHeader(s)) {
+      setError("That session is ended. Reopen it from session detail first.");
+      return;
+    }
+    setBusySessionId(s.id);
+    setError(null);
+    try {
+      await campaignAPI.patchCampaign(campaign.id, { active_session: s.id });
+      onRefresh?.();
+    } catch (e) {
+      setError(e.message || "Could not set live session");
+    } finally {
+      setBusySessionId(null);
+    }
+  };
+
+  const handleMarkSessionEndedFromList = async (s, skipEncodedXp) => {
+    const isRowLive =
+      activeId != null && Number(activeId) === Number(s.id);
+    if (isRowLive) {
+      setError("Use Clear active to end the live session.");
+      return;
+    }
+    if (sessionIsEndedForManagementHeader(s)) return;
+    const label = s.name || `Session ${s.id}`;
+    if (
+      skipEncodedXp !== true &&
+      !window.confirm(
+        `Mark "${label}" ended and run the automatic encoded playbook XP pass (STANDOUT / STRUGGLE) plus Development→pool where applicable?`,
+      )
+    ) {
+      return;
+    }
+    if (
+      skipEncodedXp === true &&
+      !window.confirm(
+        `Mark "${label}" ended without automatic encoded playbook XP? (Encoded pass marked settled.)`,
+      )
+    ) {
+      return;
+    }
+    setBusySessionId(s.id);
+    setError(null);
+    try {
+      const updated = await sessionAPI.patchSession(s.id, {
+        status: "COMPLETED",
+        skip_encoded_xp_settlement: skipEncodedXp === true,
+      });
+      setSessions((prev) =>
+        (prev || []).map((row) =>
+          Number(row.id) === Number(s.id) ? { ...row, ...updated } : row,
+        ),
+      );
+      onRefresh?.();
+    } catch (e) {
+      setError(e.message || "Could not mark session ended");
+    } finally {
+      setBusySessionId(null);
+    }
+  };
+
   return (
     <>
       {clearActiveModalSession && (
@@ -3254,7 +3316,11 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
           </div>
         ) : (
           <div style={{ marginTop: "4px" }}>
-            {sessions.map((s) => (
+            {sessions.map((s) => {
+              const rowEnded = sessionIsEndedForManagementHeader(s);
+              const rowLive =
+                activeId != null && Number(activeId) === Number(s.id);
+              return (
               <div
                 key={s.id}
                 style={{
@@ -3326,6 +3392,46 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                     >
                       View records
                     </button>
+                    {!rowEnded && !rowLive ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSetLiveFromList(s);
+                          }}
+                          style={{ ...S.btnPrimary, fontSize: "10px", padding: "4px 8px" }}
+                          disabled={busySessionId === s.id}
+                          title="Point campaign live session at this episode."
+                        >
+                          {busySessionId === s.id ? "…" : "Set live"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMarkSessionEndedFromList(s, true);
+                          }}
+                          style={{ ...S.btnGhost, fontSize: "10px", padding: "4px 8px" }}
+                          disabled={busySessionId === s.id}
+                          title="Mark ended without automatic encoded playbook XP."
+                        >
+                          {busySessionId === s.id ? "…" : "End skip XP"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleMarkSessionEndedFromList(s, false);
+                          }}
+                          style={{ ...S.btnGhost, fontSize: "10px", padding: "4px 8px" }}
+                          disabled={busySessionId === s.id}
+                          title="Mark ended and run encoded playbook XP pass."
+                        >
+                          {busySessionId === s.id ? "…" : "End + XP"}
+                        </button>
+                      </>
+                    ) : null}
                     {activeId != null && Number(activeId) === Number(s.id) && (
                       <button
                         type="button"
@@ -3358,7 +3464,8 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -3414,6 +3521,8 @@ function SessionDetail({
   const [fortuneRolling, setFortuneRolling] = useState(false);
   const [error, setError] = useState(null);
   const [sessionDateInput, setSessionDateInput] = useState("");
+  const [sessionTitleInput, setSessionTitleInput] = useState("");
+  const [sessionTitleSaving, setSessionTitleSaving] = useState(false);
   const [endLiveModalOpen, setEndLiveModalOpen] = useState(false);
   const [endLiveBusy, setEndLiveBusy] = useState(false);
   const [sessionManualXpByChar, setSessionManualXpByChar] = useState({});
@@ -3490,6 +3599,10 @@ function SessionDetail({
     const day = String(parsed.getDate()).padStart(2, "0");
     setSessionDateInput(`${year}-${month}-${day}`);
   }, [sessionData?.id, sessionData?.session_date]);
+
+  useEffect(() => {
+    setSessionTitleInput(String(sessionData?.name ?? "").trim());
+  }, [sessionData?.id, sessionData?.name]);
 
   const campaignChars =
     campaign?.campaign_characters ||
@@ -3621,19 +3734,64 @@ function SessionDetail({
       setError("Pick a session date first.");
       return;
     }
+    const endedNow = sessionIsEndedForManagementHeader(sessionData);
+    const stUp = String(sessionData?.status ?? "PLANNED").trim().toUpperCase();
+    const settled = Boolean(sessionData?.auto_encoded_xp_settled);
+    if (isGM && endedNow) {
+      const needReopenFields =
+        stUp === "COMPLETED" || (stUp === "PLANNED" && settled);
+      if (needReopenFields) {
+        const ok = window.confirm(
+          "Save this date and reopen the episode for play? Planned status clears the encoded-XP-settled flag so a future end-live can run automatic STANDOUT/STRUGGLE again unless you choose skip.",
+        );
+        if (!ok) return;
+      }
+    }
     try {
       const [yearStr, monthStr, dayStr] = sessionDateInput.split("-");
       const year = Number(yearStr);
       const month = Number(monthStr);
       const day = Number(dayStr);
       const value = new Date(year, month - 1, day, 12, 0, 0, 0).toISOString();
-      const updated = await sessionAPI.patchSession(session.id, {
-        session_date: value,
-      });
+      const payload = { session_date: value };
+      if (isGM && endedNow) {
+        if (stUp === "COMPLETED") {
+          payload.status = "PLANNED";
+          payload.auto_encoded_xp_settled = false;
+        } else if (settled) {
+          payload.auto_encoded_xp_settled = false;
+        }
+      }
+      const updated = await sessionAPI.patchSession(session.id, payload);
       setSessionData((prev) => ({ ...prev, ...updated }));
       onRefresh();
     } catch (e) {
       setError(e.message);
+    }
+  };
+
+  const handleSaveSessionTitle = async () => {
+    if (!isGM) return;
+    setError(null);
+    const name = String(sessionTitleInput ?? "").trim();
+    if (!name) {
+      setError("Session title cannot be empty.");
+      return;
+    }
+    if (name.length > 200) {
+      setError("Session title must be 200 characters or less.");
+      return;
+    }
+    if (name === String(sessionData?.name ?? "").trim()) return;
+    setSessionTitleSaving(true);
+    try {
+      const updated = await sessionAPI.patchSession(session.id, { name });
+      setSessionData((prev) => ({ ...prev, ...updated }));
+      onRefresh();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSessionTitleSaving(false);
     }
   };
 
@@ -4016,9 +4174,52 @@ function SessionDetail({
       )}
 
       <div style={S.card}>
-        <span style={S.sectionLbl}>
-          Session: {sessionData?.name || session?.name || "Unnamed"}
-        </span>
+        {isGM ? (
+          <div style={{ marginBottom: "10px" }}>
+            <div style={{ ...S.sectionLbl, marginBottom: "6px" }}>
+              Session title (editable)
+            </div>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                alignItems: "center",
+              }}
+            >
+              <input
+                type="text"
+                value={sessionTitleInput}
+                onChange={(e) => setSessionTitleInput(e.target.value)}
+                maxLength={200}
+                style={{
+                  flex: "1 1 220px",
+                  minWidth: "160px",
+                  fontFamily: "monospace",
+                  fontSize: "12px",
+                  background: "#0d1117",
+                  color: "#fff",
+                  border: "1px solid #374151",
+                  borderRadius: "4px",
+                  padding: "6px 8px",
+                  outline: "none",
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleSaveSessionTitle}
+                disabled={sessionTitleSaving}
+                style={S.btnGhost}
+              >
+                {sessionTitleSaving ? "…" : "Save title"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <span style={S.sectionLbl}>
+            Session: {sessionData?.name || session?.name || "Unnamed"}
+          </span>
+        )}
         <div
           style={{
             display: "flex",
@@ -4270,6 +4471,22 @@ function SessionDetail({
               ? new Date(sessionData.session_date).toLocaleString()
               : "—"}
           </div>
+          {isGM && sessionEnded ? (
+            <p
+              style={{
+                fontSize: "10px",
+                color: "#9ca3af",
+                marginTop: "8px",
+                lineHeight: 1.45,
+                maxWidth: "560px",
+              }}
+            >
+              <strong>Save date</strong> on an ended episode also reopens it to{" "}
+              <strong>planned</strong> (clears encoded-XP settled) so you can set it
+              live again. You will be asked to confirm. A later end-live can apply
+              automatic playbook XP again unless you choose skip.
+            </p>
+          ) : null}
         </div>
       </div>
 

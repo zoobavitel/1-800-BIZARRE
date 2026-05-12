@@ -613,10 +613,41 @@ class SessionSerializer(serializers.ModelSerializer):
     )
     proposed_by = UserSerializer(read_only=True)
     votes = UserSerializer(many=True, read_only=True)
+    skip_encoded_xp_settlement = serializers.BooleanField(
+        write_only=True,
+        required=False,
+        default=False,
+        help_text=(
+            "When PATCH sets status to COMPLETED, skip automatic STANDOUT/STRUGGLE "
+            "playbook XP (still marks encoded pass settled)."
+        ),
+    )
 
     class Meta:
         model = Session
         fields = "__all__"
+
+    def validate(self, attrs):
+        inst = self.instance
+        if inst is None:
+            return attrs
+        new_status = attrs.get("status", inst.status)
+        if inst.status == "COMPLETED" and new_status == "PLANNED":
+            aid = (
+                Campaign.objects.filter(pk=inst.campaign_id)
+                .values_list("active_session_id", flat=True)
+                .first()
+            )
+            if aid == inst.pk:
+                raise serializers.ValidationError(
+                    {
+                        "status": (
+                            "Clear this episode as the campaign live session "
+                            "before reopening to planned."
+                        )
+                    }
+                )
+        return attrs
 
     def get_npcs_involved(self, obj):
         """Return list of NPC ids for backward compatibility."""
@@ -645,6 +676,10 @@ class SessionSerializer(serializers.ModelSerializer):
         npcs_involved_data = self.initial_data.get("npcs_involved")
         validated_data.pop("npcs_involved", None)
         validated_data.pop("npc_involvements", None)
+        skip = bool(validated_data.pop("skip_encoded_xp_settlement", False))
+        new_status = validated_data.get("status", instance.status)
+        if instance.status == "COMPLETED" and new_status == "PLANNED":
+            validated_data["auto_encoded_xp_settled"] = False
 
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -746,6 +781,7 @@ class SessionSerializer(serializers.ModelSerializer):
                 if npc_id not in new_ids:
                     instance.npc_involvements.filter(npc_id=npc_id).delete()
 
+        setattr(instance, "_skip_encoded_xp_settlement", skip)
         return instance
 
     def create(self, validated_data):
@@ -753,6 +789,7 @@ class SessionSerializer(serializers.ModelSerializer):
         npcs_involved_data = self.initial_data.get("npcs_involved")
         validated_data.pop("npcs_involved", None)
         validated_data.pop("npc_involvements", None)
+        validated_data.pop("skip_encoded_xp_settlement", None)
         instance = super().create(validated_data)
         if npc_involvements_data is not None:
             involvement_rows = []
