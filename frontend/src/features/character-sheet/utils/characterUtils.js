@@ -84,6 +84,8 @@ export const createDefaultCharacter = () => ({
   },
   abilities: [],
   clocks: [],
+  sheetNotes: "",
+  inventory: [],
   selected_benefits: [],
   selected_detriments: [],
 });
@@ -253,4 +255,38 @@ export function resolveHeritagePkForSave(heritageValue, heritageList) {
   const asStr = String(heritageValue).trim();
   if (/^\d+$/.test(asStr)) return parseInt(asStr, 10);
   return firstPk;
+}
+
+/**
+ * Crew PK from a Character-like API object (`crew_id` or nested `crew`).
+ * CharacterSheet only loads crew-mode faction reputation when this is set
+ * (`activeMode === "CREW MODE"` + `charData.crewId`).
+ *
+ * @param {Record<string, unknown>|null|undefined} c
+ * @returns {number|string|null}
+ */
+export function getCharacterCrewId(c) {
+  if (c == null || typeof c !== "object") return null;
+  if (c.crew_id != null && c.crew_id !== "") return c.crew_id;
+  const crew = c.crew;
+  if (crew != null && typeof crew === "object" && crew.id != null) return crew.id;
+  if (crew != null && crew !== "") return crew;
+  return null;
+}
+
+/**
+ * True when some campaign PC is assigned to a crew — same precondition as
+ * CharacterSheet crew sheet loading `crewAPI.getCrew` for FACTION REPUTATION.
+ *
+ * @param {unknown[]} charactersOrRoster
+ */
+export function rosterHasLinkedCrewForCrewSheetFactionUi(charactersOrRoster) {
+  const list = Array.isArray(charactersOrRoster) ? charactersOrRoster : [];
+  return list.some((ch) => {
+    const raw = getCharacterCrewId(ch);
+    if (raw == null || raw === "") return false;
+    const n =
+      typeof raw === "number" ? raw : parseInt(String(raw).trim(), 10);
+    return Number.isFinite(n) && n > 0;
+  });
 }

@@ -3,6 +3,7 @@ import {
   transformBackendToFrontend,
   playbookToBackend,
   normalizeListResponse,
+  normalizeCharacterInventory,
   normalizeCoinBoxes,
   normalizeStashSlots,
   buildMultipartOrJson,
@@ -61,6 +62,47 @@ function makeSheet(overrides = {}) {
   };
   return { ...base, ...overrides };
 }
+
+describe("normalizeCharacterInventory", () => {
+  test("passes arrays through by reference", () => {
+    const a = ["rope", { name: "coin", quantity: 2 }];
+    expect(normalizeCharacterInventory(a)).toBe(a);
+  });
+
+  test("wraps non-array object as one-element array", () => {
+    expect(normalizeCharacterInventory({ legacy: true })).toEqual([
+      { legacy: true },
+    ]);
+  });
+
+  test("empty array for null or primitives", () => {
+    expect(normalizeCharacterInventory(null)).toEqual([]);
+    expect(normalizeCharacterInventory(undefined)).toEqual([]);
+    expect(normalizeCharacterInventory(3)).toEqual([]);
+  });
+});
+
+describe("transformBackendToFrontend inventory", () => {
+  test("normalizes legacy object inventory to array", () => {
+    const fe = transformBackendToFrontend({
+      inventory: { imported: "blob" },
+    });
+    expect(fe.inventory).toEqual([{ imported: "blob" }]);
+  });
+});
+
+describe("transformFrontendToBackend inventory", () => {
+  test("sends array through; coerces non-array via normalizer", () => {
+    expect(
+      transformFrontendToBackend(makeSheet({ inventory: ["a"] })).inventory,
+    ).toEqual(["a"]);
+    expect(
+      transformFrontendToBackend(
+        makeSheet({ inventory: { only: "one" } }),
+      ).inventory,
+    ).toEqual([{ only: "one" }]);
+  });
+});
 
 describe("normalizeListResponse", () => {
   test("returns empty array for null and undefined", () => {
@@ -176,6 +218,40 @@ describe("normalizeCoinBoxes and normalizeStashSlots", () => {
     expect(normalizeStashSlots(undefined).length).toBe(40);
     expect(normalizeStashSlots([true])[0]).toBe(true);
     expect(normalizeStashSlots([true])[1]).toBe(false);
+  });
+});
+
+describe("transformBackendToFrontend sheet notes and clocks", () => {
+  test("maps background_note2 to sheetNotes", () => {
+    const fe = transformBackendToFrontend({
+      background_note2: "GM notes line",
+    });
+    expect(fe.sheetNotes).toBe("GM notes line");
+  });
+
+  test("normalizes progress_clocks max_segments / filled_segments to segments / filled", () => {
+    const fe = transformBackendToFrontend({
+      progress_clocks: [
+        {
+          id: 9,
+          name: "Heat",
+          max_segments: 6,
+          filled_segments: 2,
+          visible_to_party: true,
+        },
+      ],
+    });
+    expect(fe.clocks).toHaveLength(1);
+    expect(fe.clocks[0].segments).toBe(6);
+    expect(fe.clocks[0].filled).toBe(2);
+    expect(fe.clocks[0].name).toBe("Heat");
+  });
+
+  test("maps sheetNotes to background_note2 on save payload", () => {
+    const be = transformFrontendToBackend(
+      makeSheet({ sheetNotes: "  spare sheet  " }),
+    );
+    expect(be.background_note2).toBe("  spare sheet  ");
   });
 });
 

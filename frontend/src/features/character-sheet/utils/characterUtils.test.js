@@ -1,7 +1,9 @@
 import {
   computeActionDotBudget,
   createDefaultCharacter,
+  getCharacterCrewId,
   resolveHeritagePkForSave,
+  rosterHasLinkedCrewForCrewSheetFactionUi,
 } from "./characterUtils";
 
 const list = [
@@ -72,6 +74,26 @@ describe("createDefaultCharacter", () => {
     });
     expect(c.name).toBe("");
     expect(c.heritage).toBe(null);
+  });
+});
+
+describe("getCharacterCrewId / rosterHasLinkedCrewForCrewSheetFactionUi", () => {
+  test("reads crew_id or nested crew.id", () => {
+    expect(getCharacterCrewId({ crew_id: 7 })).toBe(7);
+    expect(getCharacterCrewId({ crew: { id: 9 } })).toBe(9);
+    expect(getCharacterCrewId({ crew: 12 })).toBe(12);
+    expect(getCharacterCrewId({})).toBeNull();
+  });
+
+  test("roster gate is true when any PC has a positive crew PK", () => {
+    expect(rosterHasLinkedCrewForCrewSheetFactionUi([])).toBe(false);
+    expect(rosterHasLinkedCrewForCrewSheetFactionUi([{ id: 1 }])).toBe(false);
+    expect(
+      rosterHasLinkedCrewForCrewSheetFactionUi([
+        { id: 1 },
+        { id: 2, crew_id: 5 },
+      ]),
+    ).toBe(true);
   });
 });
 

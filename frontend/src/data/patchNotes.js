@@ -8,15 +8,35 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
-        "title": "Maintenance",
+        "title": "Fixed",
         "items": [
-          "regenerate patch notes from git log"
+          "open blank custom ability modal on + Custom",
+          "GM visible session clocks for players; set clock created_by",
+          "list all four Stand-coin roll stats in Stand pill",
+          "drop hero badge, tighten copy, readable coin hint",
+          "define new_sid after campaign save in perform_update",
+          "remove unused isRecoveryLinkedRoll (CI eslint)"
+        ]
+      },
+      {
+        "title": "Documentation",
+        "items": [
+          "SRD — Durability resist, stand recall, armor types, Stand Users",
+          "align canonical SRD with dev (stand coin, structure)"
         ]
       },
       {
         "title": "Added",
         "items": [
+          "Stand recall row + stress button on Stand coin column",
           "stand coin sync, session XP pool, collapsible GM rosters"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "regenerate patch notes from git log",
+          "regenerate patch notes from git log"
         ]
       },
       {
@@ -585,29 +605,14 @@ export const PATCH_NOTES = [
           "Merge pull request #32 from zoobavitel/copilot/fix-npc-level-display",
           "Merge pull request #34 from zoobavitel/zoobavitel-patch-2",
           "Change pull request target branch to 'master'",
-          "Align NPCSerializer and NPCSummarySerializer to compute level consistently from stand_coin_stats",
-          "Add tests for NPCSummarySerializer level computation",
-          "Fix NPC level display in campaign management to compute from stand_coin_stats",
-          "Merge pull request #31 from zoobavitel/copilot/fix-alter-faction-unique-together",
-          "Add missing Meta.unique_together to Faction model",
-          "migrate",
-          "Merge pull request #30 from zoobavitel/copilot/fix-characters-visibility-and-delete-npcs",
-          "Merge pull request #29 from zoobavitel/copilot/add-crew-name-and-characteristics-again",
-          "Merge pull request #28 from zoobavitel/copilot/add-delete-npc-button"
+          "Align NPCSerializer and NPCSummarySerializer to compute level consistently from stand_coin_stats"
         ]
       },
       {
         "title": "Fixed",
         "items": [
           "on NPC delete land on blank character sheet, guard auto-save for nameless new NPCs",
-          "remove default conflict clock on new NPC creation",
-          "restrict homepage characters to own user, add NPC delete button"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "add crew management panel to campaign page and auto-assign crew on character assignment"
+          "remove default conflict clock on new NPC creation"
         ]
       }
     ]

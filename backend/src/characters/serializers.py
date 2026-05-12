@@ -63,6 +63,110 @@ _NPC_STAND_STAT_KEYS = (
 _NPC_DEFAULT_GRADE = "D"
 _NPC_LEVEL_OFFSET = 9
 
+_PC_CLOCK_TYPES = {c[0] for c in ProgressClock.CLOCK_TYPE_CHOICES}
+
+
+def _sync_character_progress_clocks(character, raw_clocks, user):
+    """Replace character-scoped progress clocks from sheet JSON (PUT/PATCH/POST body).
+
+    Frontend sends `progress_clocks` as a list of dicts with `segments`/`filled` or
+    `max_segments`/`filled_segments`. Omitted or non-list `raw_clocks` leaves DB unchanged.
+    """
+    from django.db import transaction
+
+    if raw_clocks is None or not isinstance(raw_clocks, list):
+        return
+    campaign_id = character.campaign_id
+    kept_ids = []
+    with transaction.atomic():
+        for item in raw_clocks:
+            if not isinstance(item, dict):
+                continue
+            name = (str(item.get("name") or "")).strip()[:100] or "Clock"
+            max_segments = item.get("max_segments")
+            if max_segments is None:
+                max_segments = item.get("segments")
+            try:
+                max_segments = int(max_segments)
+            except (TypeError, ValueError):
+                max_segments = 4
+            max_segments = max(1, min(12, max_segments))
+            filled = item.get("filled_segments")
+            if filled is None:
+                filled = item.get("filled")
+            try:
+                filled = int(filled)
+            except (TypeError, ValueError):
+                filled = 0
+            filled = max(0, min(max_segments, filled))
+            ct = item.get("clock_type") or "COUNTDOWN"
+            if ct not in _PC_CLOCK_TYPES:
+                ct = "COUNTDOWN"
+            vis_party = bool(item.get("visible_to_party"))
+            vis_players = bool(item.get("visible_to_players"))
+            desc = str(item.get("description") or "")[:5000]
+            session_raw = item.get("session")
+            session_id = None
+            if session_raw is not None and session_raw != "":
+                try:
+                    session_id = int(session_raw)
+                except (TypeError, ValueError):
+                    session_id = None
+            if session_id and campaign_id:
+                if not Session.objects.filter(
+                    id=session_id, campaign_id=campaign_id
+                ).exists():
+                    session_id = None
+            elif session_id and not campaign_id:
+                session_id = None
+
+            raw_id = item.get("id")
+            try:
+                pk = int(raw_id)
+            except (TypeError, ValueError):
+                pk = None
+            if pk and pk > 0:
+                existing = ProgressClock.objects.filter(
+                    id=pk, character_id=character.id
+                ).first()
+                if existing:
+                    existing.name = name
+                    existing.clock_type = ct
+                    existing.max_segments = max_segments
+                    existing.filled_segments = filled
+                    existing.visible_to_party = vis_party
+                    existing.visible_to_players = vis_players
+                    existing.description = desc
+                    if session_id is not None:
+                        existing.session_id = session_id
+                    elif item.get("session") is None:
+                        existing.session_id = None
+                    existing.save()
+                    kept_ids.append(existing.id)
+                    continue
+            created_by_id = (
+                user.id if getattr(user, "is_authenticated", False) else None
+            )
+            nu = ProgressClock.objects.create(
+                name=name,
+                clock_type=ct,
+                max_segments=max_segments,
+                filled_segments=filled,
+                description=desc,
+                character=character,
+                campaign_id=campaign_id,
+                session_id=session_id,
+                visible_to_party=vis_party,
+                visible_to_players=vis_players,
+                created_by_id=created_by_id,
+            )
+            kept_ids.append(nu.id)
+        qs = ProgressClock.objects.filter(character_id=character.id)
+        if kept_ids:
+            qs.exclude(id__in=kept_ids).delete()
+        else:
+            qs.delete()
+
 
 def _compute_npc_level(stand_coin_stats):
     """Derive NPC level from stand_coin_stats, defaulting missing stats to 'D'."""
@@ -1183,6 +1287,30 @@ class CharacterSerializer(serializers.ModelSerializer):
         model = Character
         fields = "__all__"
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        clocks = list(instance.progress_clocks.all().order_by("id"))
+        data["progress_clocks"] = [
+            {
+                "id": c.id,
+                "name": c.name,
+                "clock_type": c.clock_type,
+                "max_segments": c.max_segments,
+                "filled_segments": c.filled_segments,
+                "segments": c.max_segments,
+                "filled": c.filled_segments,
+                "description": c.description or "",
+                "visible_to_party": c.visible_to_party,
+                "visible_to_players": c.visible_to_players,
+                "session": c.session_id,
+                "campaign": c.campaign_id,
+                "completed": c.completed,
+                "created_by": c.created_by_id,
+            }
+            for c in clocks
+        ]
+        return data
+
     def validate_coin_boxes(self, value):
         if value is None:
             return value
@@ -1476,6 +1604,12 @@ class CharacterSerializer(serializers.ModelSerializer):
         if character.crew_id and character.personal_crew_name:
             Character.objects.filter(pk=character.pk).update(personal_crew_name="")
             character.personal_crew_name = ""
+        req = self.context.get("request")
+        _sync_character_progress_clocks(
+            character,
+            self.initial_data.get("progress_clocks"),
+            req.user if req else None,
+        )
         return character
 
     def update(self, instance, validated_data):
@@ -1645,6 +1779,12 @@ class CharacterSerializer(serializers.ModelSerializer):
                 CharacterSpinAbility.objects.create(
                     character=character, spin_ability=sa
                 )
+        req = self.context.get("request")
+        _sync_character_progress_clocks(
+            character,
+            self.initial_data.get("progress_clocks"),
+            req.user if req else None,
+        )
         return character
 
     def get_hamon_ability_details(self, obj):
@@ -2274,6 +2414,8 @@ class CampaignSerializer(serializers.ModelSerializer):
                 "name": s.name,
                 "session_date": s.session_date,
                 "proposed_date": s.proposed_date.isoformat() if s.proposed_date else None,
+                "status": s.status,
+                "auto_encoded_xp_settled": bool(s.auto_encoded_xp_settled),
             }
             for s in sessions
         ]

@@ -14,6 +14,11 @@ import {
 import { useAuth } from "../features/auth";
 import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
+import SessionXpAllocationTable from "../features/campaign-management/SessionXpAllocationTable";
+import {
+  buildSessionEndLivePreview,
+  sumManualTrackXpForSession,
+} from "../features/campaign-management/sessionEndLiveXpPreview";
 
 const NPC_SESSION_RETURN_KEY = "hftf-npc-return-to-session";
 
@@ -2721,9 +2726,10 @@ function sessionListStatusCaption(session, campaignActiveSessionId) {
   const isCampaignLiveSlot =
     aid !== null && Number.isFinite(sid) && sid === aid;
 
-  if (raw === "COMPLETED") return "Ended";
-
   if (isCampaignLiveSlot) return "In session";
+
+  // Backend often leaves status PLANNED after "end live"; settlement marks this (see SessionDetail).
+  if (raw === "COMPLETED" || session?.auto_encoded_xp_settled) return "Ended";
 
   const anotherLive = aid !== null && Number.isFinite(sid) && sid !== aid;
 
@@ -2740,6 +2746,17 @@ function sessionListStatusCaption(session, campaignActiveSessionId) {
   if (raw === "PLANNED") return "Planned";
   if (raw === "ACTIVE") return "In session";
   return raw;
+}
+
+/**
+ * Session detail header: treat as ended when status is COMPLETED (matches session
+ * list "Ended") or when the encoded session-end pass ran (GM ended live / cleared
+ * active_session, or session was completed and settled on the server).
+ */
+function sessionIsEndedForManagementHeader(sess) {
+  const raw = String(sess?.status ?? "PLANNED").trim().toUpperCase();
+  if (raw === "COMPLETED") return true;
+  return Boolean(sess?.auto_encoded_xp_settled);
 }
 
 // ---------------------------------------------------------------------------
@@ -2976,154 +2993,6 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
   );
 }
 
-const SESSION_ENCODED_XP_CAP = 2;
-
-function rollHasAbilitiesTagForEncodedXp(roll) {
-  return String(roll?.description || "")
-    .toLowerCase()
-    .includes("[abilities:");
-}
-
-function viceStruggleSignalsForEncodedXp(roll) {
-  if (String(roll?.roll_type || "").toUpperCase() !== "CLEAR_STRESS") return 0;
-  if (!String(roll?.action_name || "").toLowerCase().includes("vice")) return 0;
-  const desc = String(roll?.description || "").toLowerCase();
-  if (desc.includes("overindulgence")) return 1;
-  const o = String(roll?.outcome || "");
-  if (o === "FAILURE" || o === "BOTCH") return 1;
-  return 0;
-}
-
-/** GM preview for end-live modal (mirrors backend settle heuristics, not exact caps from prior grants). */
-function buildSessionEndLiveSummary(rolls, campaignChars, clocks) {
-  const list = Array.isArray(rolls) ? rolls : [];
-  const byType = {};
-  let desperateCount = 0;
-  for (const r of list) {
-    const t = String(r.roll_type || "").toUpperCase() || "UNKNOWN";
-    byType[t] = (byType[t] || 0) + 1;
-    if (String(r.position || "").toLowerCase() === "desperate") desperateCount += 1;
-  }
-  const nameById = new Map(
-    (campaignChars || []).map((c) => [
-      Number(c.id),
-      c.true_name || c.name || `PC #${c.id}`,
-    ]),
-  );
-  const byChar = new Map();
-  for (const r of list) {
-    const cid = r.character != null ? Number(r.character) : null;
-    if (!cid || Number.isNaN(cid)) continue;
-    if (!byChar.has(cid)) byChar.set(cid, []);
-    byChar.get(cid).push(r);
-  }
-  const encodedRows = [];
-  for (const [cid, crolls] of byChar) {
-    const standoutEvents = crolls.filter(rollHasAbilitiesTagForEncodedXp).length;
-    const struggleEvents = crolls.reduce(
-      (sum, rr) => sum + viceStruggleSignalsForEncodedXp(rr),
-      0,
-    );
-    const standoutWouldGrant = Math.min(
-      SESSION_ENCODED_XP_CAP,
-      standoutEvents,
-    );
-    const struggleWouldGrant = Math.min(
-      SESSION_ENCODED_XP_CAP,
-      struggleEvents,
-    );
-    encodedRows.push({
-      characterId: cid,
-      name: nameById.get(cid) || `Character ${cid}`,
-      standoutEvents,
-      struggleEvents,
-      standoutWouldGrant,
-      struggleWouldGrant,
-      totalEncodedPlaybookXp: standoutWouldGrant + struggleWouldGrant,
-    });
-  }
-  encodedRows.sort((a, b) => a.name.localeCompare(b.name));
-  const clockList = Array.isArray(clocks) ? clocks : [];
-  const clocksCompleted = clockList.filter((c) => {
-    const max = Number(c.max_segments) || 0;
-    const filled = Number(c.filled_segments) || 0;
-    return max > 0 && filled >= max;
-  }).length;
-  return {
-    rollCount: list.length,
-    byType,
-    desperateCount,
-    encodedRows,
-    clockCount: clockList.length,
-    clocksCompleted,
-  };
-}
-
-/** Preview Stand Development session XP banked to the session pool at settle (SRD_DEV). */
-function developmentSessionXpPreviewFromCharacter(ch) {
-  if (!ch) return 0;
-  const g = String(
-    ch?.stand?.development ??
-      ch?.coin_stats?.DEVELOPMENT ??
-      ch?.coin_stats?.development ??
-      "",
-  )
-    .trim()
-    .charAt(0)
-    .toUpperCase();
-  if (g && "FDCBAS".includes(g)) {
-    const map = { F: 0, D: 1, C: 2, B: 3, A: 4, S: 5 };
-    return map[g] ?? 0;
-  }
-  const idx = Math.floor(Number(ch?.standStats?.development));
-  if (Number.isFinite(idx) && idx >= 0 && idx <= 5) {
-    const table = [0, 1, 2, 3, 4, 5];
-    return table[idx] ?? 0;
-  }
-  return 0;
-}
-
-function sumManualTrackXpForSession(entries, sessionId) {
-  const sid = Number(sessionId);
-  if (!Number.isFinite(sid)) return 0;
-  const re = /^\[(insight|prowess|resolve|heritage|playbook)\]/i;
-  const list = Array.isArray(entries) ? entries : entries?.results || [];
-  return list.reduce((sum, e) => {
-    if (Number(e?.session) !== sid) return sum;
-    if (String(e?.trigger || "").toUpperCase() !== "MANUAL") return sum;
-    if (!re.test(String(e?.description || ""))) return sum;
-    return sum + (Number(e?.xp_gained) || 0);
-  }, 0);
-}
-
-/** End-live modal data: roll snapshot + per-PC encoded playbook preview + Development→pool preview. */
-function buildSessionEndLivePreview(rolls, campaignChars, clocks, characters) {
-  const inner = buildSessionEndLiveSummary(rolls, campaignChars, clocks);
-  const charById = new Map((characters || []).map((c) => [Number(c.id), c]));
-  const encById = new Map(inner.encodedRows.map((r) => [r.characterId, r]));
-  const perPcRows = (campaignChars || []).map((ch) => {
-    const id = Number(ch.id);
-    const enc = encById.get(id) || {
-      characterId: id,
-      name: ch.true_name || ch.name || `PC ${id}`,
-      standoutEvents: 0,
-      struggleEvents: 0,
-      standoutWouldGrant: 0,
-      struggleWouldGrant: 0,
-      totalEncodedPlaybookXp: 0,
-    };
-    const full = charById.get(id) || ch;
-    const developmentPoolXp = developmentSessionXpPreviewFromCharacter(full);
-    return {
-      ...enc,
-      characterId: id,
-      name: enc.name || ch.true_name || ch.name || `PC ${id}`,
-      developmentPoolXp,
-    };
-  });
-  return { ...inner, perPcRows };
-}
-
 // ---------------------------------------------------------------------------
 // Session Detail View (GM-only)
 // ---------------------------------------------------------------------------
@@ -3136,6 +3005,7 @@ function SessionDetail({
   onNavigateToNPC,
 }) {
   const { user } = useAuth();
+  const isGM = Number(campaign?.gm?.id) === Number(user?.id);
   const [sessionData, setSessionData] = useState(session);
   const [rolls, setRolls] = useState([]);
   const [clocks, setClocks] = useState([]);
@@ -3167,6 +3037,8 @@ function SessionDetail({
   const [endLiveModalOpen, setEndLiveModalOpen] = useState(false);
   const [endLiveBusy, setEndLiveBusy] = useState(false);
   const [sessionManualXpByChar, setSessionManualXpByChar] = useState({});
+  const [sessionManualXpSyncReady, setSessionManualXpSyncReady] =
+    useState(false);
 
   const refreshSessionCharacters = useCallback(async () => {
     if (!campaign?.id) return;
@@ -3271,15 +3143,30 @@ function SessionDetail({
     });
   }, [endLivePreview.perPcRows, sessionManualXpByChar]);
 
+  const activeSessionId =
+    campaign?.active_session?.id ?? campaign?.active_session ?? null;
+  const isCurrentActiveSession =
+    activeSessionId != null && Number(activeSessionId) === Number(session.id);
+
+  const sessionEnded = sessionIsEndedForManagementHeader(sessionData);
+  const sessionStatusUpper = String(sessionData?.status ?? "PLANNED")
+    .trim()
+    .toUpperCase();
+
   useEffect(() => {
-    if (!endLiveModalOpen || !session?.id) return;
+    if (!session?.id) return;
+    const needManual = endLiveModalOpen || !isCurrentActiveSession;
+    if (!needManual) return;
+
     let cancelled = false;
     const sid = session.id;
     const chars = campaignChars || [];
     if (!chars.length) {
       setSessionManualXpByChar({});
+      setSessionManualXpSyncReady(true);
       return;
     }
+    setSessionManualXpSyncReady(false);
     (async () => {
       const pairs = await Promise.all(
         chars.map(async (ch) => {
@@ -3292,11 +3179,38 @@ function SessionDetail({
       );
       if (cancelled) return;
       setSessionManualXpByChar(Object.fromEntries(pairs));
+      setSessionManualXpSyncReady(true);
     })();
     return () => {
       cancelled = true;
     };
-  }, [endLiveModalOpen, session?.id, campaignChars]);
+  }, [
+    endLiveModalOpen,
+    isCurrentActiveSession,
+    session?.id,
+    campaignChars,
+  ]);
+
+  const endedSessionXpPanelMode = useMemo(() => {
+    if (isCurrentActiveSession) return "hidden";
+    const roster = campaignChars || [];
+    if (!roster.length) return "no_roster";
+    if (!sessionManualXpSyncReady) return "loading";
+    const rollList = rolls || [];
+    if (
+      rollList.length === 0 &&
+      endLiveRowsWithManual.every((r) => !(Number(r.totalSessionXpPreview) > 0))
+    ) {
+      return "empty_session";
+    }
+    return "table";
+  }, [
+    isCurrentActiveSession,
+    campaignChars,
+    sessionManualXpSyncReady,
+    rolls,
+    endLiveRowsWithManual,
+  ]);
 
   const handleSetActiveSession = async () => {
     try {
@@ -3308,11 +3222,6 @@ function SessionDetail({
       setError(e.message);
     }
   };
-
-  const activeSessionId =
-    campaign?.active_session?.id ?? campaign?.active_session ?? null;
-  const isCurrentActiveSession =
-    activeSessionId != null && Number(activeSessionId) === Number(session.id);
 
   const runEndLiveSession = async (skipEncodedXp) => {
     if (!isCurrentActiveSession) return;
@@ -3683,84 +3592,7 @@ function SessionDetail({
                 No PCs in this campaign roster — nothing to preview.
               </div>
             ) : (
-              <div
-                style={{
-                  marginBottom: "12px",
-                  border: "1px solid #374151",
-                  borderRadius: "6px",
-                  overflow: "auto",
-                }}
-              >
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
-                  <thead>
-                    <tr style={{ background: "#0d1117", color: "#9ca3af" }}>
-                      <th style={{ textAlign: "left", padding: "6px 8px" }}>Character</th>
-                      <th style={{ textAlign: "right", padding: "6px 8px" }}>STANDOUT</th>
-                      <th style={{ textAlign: "right", padding: "6px 8px" }}>STRUGGLE</th>
-                      <th style={{ textAlign: "right", padding: "6px 8px" }}>Enc. playbook</th>
-                      <th style={{ textAlign: "right", padding: "6px 8px" }}>Dev→pool</th>
-                      <th style={{ textAlign: "right", padding: "6px 8px" }}>Manual→tracks</th>
-                      <th style={{ textAlign: "right", padding: "6px 8px" }}>Total</th>
-                      <th style={{ textAlign: "left", padding: "6px 8px" }}>Sources</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {endLiveRowsWithManual.map((row) => (
-                      <tr key={row.characterId} style={{ borderTop: "1px solid #374151" }}>
-                        <td style={{ padding: "6px 8px", color: "#e5e7eb" }}>{row.name}</td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#d1d5db" }}>
-                          {row.standoutWouldGrant}/{SESSION_ENCODED_XP_CAP}
-                          <span style={{ color: "#6b7280", fontSize: "10px" }}>
-                            {" "}
-                            ({row.standoutEvents})
-                          </span>
-                        </td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#d1d5db" }}>
-                          {row.struggleWouldGrant}/{SESSION_ENCODED_XP_CAP}
-                          <span style={{ color: "#6b7280", fontSize: "10px" }}>
-                            {" "}
-                            ({row.struggleEvents})
-                          </span>
-                        </td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>
-                          {row.totalEncodedPlaybookXp}
-                        </td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#c4b5fd" }}>
-                          {row.developmentPoolXp}
-                        </td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#d1d5db" }}>
-                          {row.manualSessionXp}
-                        </td>
-                        <td style={{ padding: "6px 8px", textAlign: "right" }}>
-                          <span
-                            style={{
-                              color: "rgb(167, 139, 250)",
-                              fontWeight: "bold",
-                            }}
-                          >
-                            {row.totalSessionXpPreview}
-                          </span>
-                        </td>
-                        <td style={{ padding: "6px 8px", color: "#9ca3af", fontSize: "10px" }}>
-                          {[
-                            row.totalEncodedPlaybookXp
-                              ? `Encoded playbook +${row.totalEncodedPlaybookXp}`
-                              : null,
-                            row.developmentPoolXp
-                              ? `Stand Development (session) +${row.developmentPoolXp} → pool`
-                              : null,
-                            row.manualSessionXp
-                              ? `Manual GM awards +${row.manualSessionXp} (already on tracks)`
-                              : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ") || "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <SessionXpAllocationTable rows={endLiveRowsWithManual} />
             )}
             <p style={{ margin: "0 0 16px", fontSize: "11px", color: "#9ca3af" }}>
               <strong>Total</strong> column = encoded playbook XP (goes straight to
@@ -3827,31 +3659,91 @@ function SessionDetail({
               <span style={{ fontSize: "12px", color: "#a78bfa" }}>
                 This session is live for players (character sheets).
               </span>
-              <button
-                type="button"
-                onClick={() => setEndLiveModalOpen(true)}
-                style={S.btnGhost}
-                title="Opens a confirmation with a session tally. You can end live with or without the one-time encoded playbook XP pass."
-              >
-                End live session
-              </button>
-              <div
+              {isGM ? (
+                <button
+                  type="button"
+                  onClick={() => setEndLiveModalOpen(true)}
+                  style={S.btnGhost}
+                  title="Opens a confirmation with a session tally. You can end live with or without the one-time encoded playbook XP pass."
+                >
+                  End live session
+                </button>
+              ) : null}
+              {isGM ? (
+                <div
+                  style={{
+                    width: "100%",
+                    marginTop: "4px",
+                    fontSize: "11px",
+                    color: "#9ca3af",
+                    lineHeight: 1.45,
+                    maxWidth: "560px",
+                  }}
+                >
+                  Opens a confirmation: review rolls / clocks, then end live{" "}
+                  <strong>with</strong> or <strong>without</strong> automatic encoded
+                  playbook XP (STANDOUT/STRUGGLE) plus Development→session pool. Use
+                  manual XP for off-roll awards to tracks.
+                </div>
+              ) : (
+                <div
+                  style={{
+                    width: "100%",
+                    marginTop: "4px",
+                    fontSize: "11px",
+                    color: "#6b7280",
+                    lineHeight: 1.45,
+                    maxWidth: "560px",
+                  }}
+                >
+                  Live session is active; only the GM can end live or change the
+                  campaign slot.
+                </div>
+              )}
+            </>
+          ) : sessionEnded ? (
+            <>
+              <span
                 style={{
-                  width: "100%",
-                  marginTop: "4px",
+                  fontSize: "9px",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  color: "#d1d5db",
+                  border: "1px solid #6b7280",
+                  borderRadius: "4px",
+                  padding: "2px 6px",
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                  background: "rgba(75, 85, 99, 0.35)",
+                }}
+              >
+                Ended
+              </span>
+              <span
+                style={{
                   fontSize: "11px",
                   color: "#9ca3af",
+                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
                   lineHeight: 1.45,
                   maxWidth: "560px",
                 }}
               >
-                Opens a confirmation: review rolls / clocks, then end live{" "}
-                <strong>with</strong> or <strong>without</strong> automatic encoded
-                playbook XP (STANDOUT/STRUGGLE) plus Development→session pool. Use
-                manual XP for off-roll awards to tracks.
-              </div>
+                {sessionStatusUpper === "COMPLETED"
+                  ? "Rolls frozen — episode marked complete."
+                  : "Live cleared for character sheets. Rolls frozen on this episode until you go live again."}
+              </span>
+              {isGM && sessionStatusUpper !== "COMPLETED" ? (
+                <button
+                  type="button"
+                  onClick={handleSetActiveSession}
+                  style={S.btnGhost}
+                  title="Point campaign live session at this episode again. Encoded playbook pass is already settled for this slot."
+                >
+                  Set as current session (enable for players)
+                </button>
+              ) : null}
             </>
-          ) : (
+          ) : isGM ? (
             <button
               type="button"
               onClick={handleSetActiveSession}
@@ -3859,8 +3751,74 @@ function SessionDetail({
             >
               Set as current session (enable for players)
             </button>
+          ) : (
+            <span style={{ fontSize: "12px", color: "#6b7280" }}>
+              Only the GM can enable this session for players.
+            </span>
           )}
         </div>
+        {!isCurrentActiveSession && endedSessionXpPanelMode !== "hidden" ? (
+          <div
+            style={{
+              width: "100%",
+              marginTop: "12px",
+              paddingTop: "12px",
+              borderTop: "1px solid #374151",
+            }}
+          >
+            <div
+              style={{
+                marginBottom: "8px",
+                fontSize: "12px",
+                fontWeight: 600,
+                color: "#9ca3af",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+              }}
+            >
+              Session XP allocation (read-only)
+            </div>
+            {sessionData?.auto_encoded_xp_settled ? (
+              <div
+                style={{
+                  marginBottom: "8px",
+                  fontSize: "11px",
+                  color: "#9ca3af",
+                  lineHeight: 1.45,
+                }}
+              >
+                Encoded playbook pass was already settled for this session; table
+                still reflects the roll log and current character Development→pool
+                preview (for reference).
+              </div>
+            ) : null}
+            {endedSessionXpPanelMode === "no_roster" ? (
+              <div style={{ color: "#9ca3af", fontSize: "12px", marginBottom: "4px" }}>
+                No PCs in this campaign roster.
+              </div>
+            ) : null}
+            {endedSessionXpPanelMode === "loading" ? (
+              <div style={{ color: "#6b7280", fontSize: "12px", marginBottom: "4px" }}>
+                Loading session XP summary…
+              </div>
+            ) : null}
+            {endedSessionXpPanelMode === "empty_session" ? (
+              <div style={{ color: "#9ca3af", fontSize: "12px", marginBottom: "4px" }}>
+                No rolls logged and no session XP (encoded playbook, Development→pool,
+                or manual track awards) recorded for this session.
+              </div>
+            ) : null}
+            {endedSessionXpPanelMode === "table" ? (
+              <>
+                <SessionXpAllocationTable rows={endLiveRowsWithManual} />
+                <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#9ca3af" }}>
+                  <strong>Total</strong> = encoded playbook + Development session XP
+                  (session pool) + manual GM awards this session (already on tracks).
+                </p>
+              </>
+            ) : null}
+          </div>
+        ) : null}
         <div
           style={{
             marginTop: "12px",

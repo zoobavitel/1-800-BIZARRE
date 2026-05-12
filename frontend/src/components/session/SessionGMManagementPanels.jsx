@@ -23,6 +23,7 @@ import {
   getPositionEffectModifierHints,
   peModifierBucketLabel,
 } from "./peModifierAbilityHints";
+import { rosterHasLinkedCrewForCrewSheetFactionUi } from "../../features/character-sheet/utils/characterUtils";
 
 const GRADES = ["F", "D", "C", "B", "A", "S"];
 
@@ -1143,6 +1144,12 @@ export default function SessionGMManagementPanels({
         ...c,
       })),
     [campaign, characters],
+  );
+
+  /** Same precondition as CharacterSheet crew-mode faction reputation (linked crew PK). */
+  const canToggleFactionVisibleToPlayers = useMemo(
+    () => rosterHasLinkedCrewForCrewSheetFactionUi(campaignChars),
+    [campaignChars],
   );
 
   const charDisplayNameById = useMemo(() => {
@@ -2495,9 +2502,26 @@ export default function SessionGMManagementPanels({
                       />
                     </div>
                     <div style={{ display: "flex", alignItems: "flex-end", paddingBottom: 4 }}>
-                      <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 11 }}>
+                      <label
+                        style={{
+                          display: "flex",
+                          gap: 6,
+                          alignItems: "center",
+                          fontSize: 11,
+                          opacity: canToggleFactionVisibleToPlayers ? 1 : 0.55,
+                          cursor: canToggleFactionVisibleToPlayers
+                            ? "pointer"
+                            : "not-allowed",
+                        }}
+                        title={
+                          canToggleFactionVisibleToPlayers
+                            ? undefined
+                            : "Enable faction visibility on crew sheet first. Assign at least one PC to a campaign crew."
+                        }
+                      >
                         <input
                           type="checkbox"
+                          disabled={!canToggleFactionVisibleToPlayers}
                           checked={!!draft.visible_to_players}
                           onChange={(e) =>
                             setDraftField("visible_to_players", e.target.checked)
