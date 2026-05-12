@@ -1,12 +1,13 @@
 from django.db import models
 from django.core.exceptions import PermissionDenied
 from rest_framework import viewsets, status
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 
-from ..models import Crew
+from ..models import Character, Crew, ExperienceTracker
 from ..serializers import CrewSerializer
 
 # Crew members (non-GM) may PATCH these fields; GM/staff have full access.
@@ -29,8 +30,18 @@ _CREW_MEMBER_ALLOWED_PATCH_FIELDS = frozenset(
         "stash",
         "image",
         "image_url",
+        # Per-session crew XP trigger toggles; players write only the row for
+        # the campaign's current active_session and must have an XP entry there.
+        "session_xp_triggers",
+        # Server-managed alongside session_xp_triggers merges (rep tally).
+        "session_rep_contributions",
     }
 )
+
+# Trigger boolean keys that players may toggle in session_xp_triggers[sid].
+# `credited` is set server-side by the settlement service and must NOT be
+# changed via PATCH (we strip it before saving in the view).
+_CREW_XP_TRIGGER_BOOL_KEYS = frozenset({"challenge", "reputation", "goals"})
 
 
 class CrewViewSet(viewsets.ModelViewSet):
@@ -147,8 +158,12 @@ class CrewViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         crew = self.get_object()
         user = self.request.user
-        # GM and staff can update anything
-        if crew.campaign.gm == user or user.is_staff:
+        is_gm_or_staff = crew.campaign.gm_id == user.id or user.is_staff
+        if "session_xp_triggers" in serializer.validated_data:
+            self._authorize_session_xp_triggers_patch(
+                user, crew, serializer.validated_data, is_gm_or_staff
+            )
+        if is_gm_or_staff:
             serializer.save()
             crew.refresh_from_db()
             if "name" in serializer.validated_data:
@@ -170,6 +185,113 @@ class CrewViewSet(viewsets.ModelViewSet):
                     crew.approved_by.clear()
                 return
         raise PermissionDenied("Only the GM or crew members can update this crew")
+
+    def _authorize_session_xp_triggers_patch(
+        self, user, crew, validated_data, is_gm_or_staff
+    ):
+        """Merge + gate writes to `Crew.session_xp_triggers`.
+
+        Rules:
+          * Players may only toggle triggers for the campaign's current
+            `active_session` and only after **some** PC in this crew has earned
+            at least one XP entry in that session (`xp_gained > 0`).
+            This implements "Toggle only if a crew member triggered XP this
+            session" — see `Crew.session_xp_triggers` doc.
+          * Players may never set the `credited` flag (that is owned by
+            `services.crew_xp_triggers.credit_crew_xp_triggers_for_session`).
+            We strip it from incoming rows here.
+          * GM/staff can edit any session row (used for manual fixes); we
+            still strip stale rows to keep the JSON small but accept whatever
+            booleans the GM sends.
+          * Other session rows in the PATCH body are dropped unless they
+            already exist on the crew with the same shape (read-modify-write
+            preservation). This avoids letting a stale client overwrite older
+            credited rows.
+        """
+        incoming = validated_data.get("session_xp_triggers") or {}
+        if not isinstance(incoming, dict):
+            raise DRFValidationError(
+                {"session_xp_triggers": "Expected an object keyed by session id."}
+            )
+        active_session_id = getattr(crew.campaign, "active_session_id", None)
+        existing = dict(crew.session_xp_triggers or {})
+        merged: dict[str, dict] = {
+            sid: dict(row) for sid, row in existing.items() if isinstance(row, dict)
+        }
+        rep_data = dict(crew.session_rep_contributions or {})
+        actor_cid = Character.objects.filter(user=user, crew_id=crew.id).values_list(
+            "id", flat=True
+        ).first()
+        for sid_raw, row in incoming.items():
+            sid = str(sid_raw)
+            if not isinstance(row, dict):
+                continue
+            sanitized = {
+                k: bool(row[k])
+                for k in _CREW_XP_TRIGGER_BOOL_KEYS
+                if k in row
+            }
+            if not sanitized:
+                # Empty row: leave existing untouched (no implicit deletes).
+                continue
+            before_row = dict(merged.get(sid, {}) or {})
+            if is_gm_or_staff:
+                merged[sid] = {**before_row, **sanitized}
+            else:
+                # Player path: only the current active session, and only if a
+                # crew PC has earned XP this session.
+                if active_session_id is None:
+                    raise DRFValidationError(
+                        {
+                            "session_xp_triggers": (
+                                "No active session on this campaign; only the GM can "
+                                "edit crew XP triggers outside a live session."
+                            )
+                        }
+                    )
+                if sid != str(active_session_id):
+                    raise DRFValidationError(
+                        {
+                            "session_xp_triggers": (
+                                "Players may only toggle the crew XP row for the "
+                                "current active session."
+                            )
+                        }
+                    )
+                earned = ExperienceTracker.objects.filter(
+                    character__crew_id=crew.id,
+                    session_id=active_session_id,
+                    xp_gained__gt=0,
+                ).exists()
+                if not earned:
+                    raise DRFValidationError(
+                        {
+                            "session_xp_triggers": (
+                                "Crew XP triggers unlock once any crew member has "
+                                "earned XP in this session."
+                            )
+                        }
+                    )
+                prev = dict(merged.get(sid, {}) or {})
+                # Toggling clears `credited` — the settlement service re-credits
+                # when the session is finalized.
+                prev.pop("credited", None)
+                merged[sid] = {**prev, **sanitized}
+            old_rep = bool(before_row.get("reputation"))
+            new_rep = bool((merged.get(sid) or {}).get("reputation"))
+            if actor_cid and old_rep != new_rep:
+                sid_rep = dict(rep_data.get(sid, {}) or {})
+                k = str(actor_cid)
+                cur = int(sid_rep.get(k, 0) or 0)
+                if not old_rep and new_rep:
+                    sid_rep[k] = cur + 1
+                elif old_rep and not new_rep:
+                    sid_rep[k] = max(0, cur - 1)
+                rep_data[sid] = sid_rep
+        validated_data["session_xp_triggers"] = merged
+        validated_data["session_rep_contributions"] = CrewSerializer(
+            context=self.get_serializer_context()
+        ).validate_session_rep_contributions(rep_data)
 
     def _is_crew_member(self, user, crew):
         """Check if a user has a character in this crew."""

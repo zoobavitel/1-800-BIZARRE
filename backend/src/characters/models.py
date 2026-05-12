@@ -247,6 +247,37 @@ class Crew(models.Model):
     special_abilities = models.ManyToManyField(
         CrewSpecialAbility, related_name="crews", blank=True
     )
+    # Per-session toggles for Blades-style crew XP triggers (Contend with
+    # challenges, Bolster reputation, Express goals). Shape:
+    # { "<session_id>": { "challenge": bool, "reputation": bool, "goals": bool,
+    #                     "credited": bool } }
+    # Frontend reads only the row for the campaign's current `active_session`,
+    # which gives the player-visible "reset each session" behavior. When the
+    # campaign's `active_session` changes (or the session is finalized),
+    # `characters.services.crew_xp_triggers.credit_crew_xp_triggers_for_session`
+    # converts each toggled trigger into +1 on Crew.xp (capped at xp_track_size)
+    # once, then sets `credited=True` so re-running the sweep is idempotent.
+    session_xp_triggers = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Per-session crew XP trigger toggles. Each session id maps to "
+            "{challenge, reputation, goals, credited}. Toggled triggers are "
+            "credited to Crew.xp once when the active session changes."
+        ),
+    )
+    # Per-session: who turned “Bolster reputation” on/off (edge-counted).
+    # Applied to Crew.rep (capped) in `credit_crew_xp_triggers_for_session`.
+    session_rep_contributions = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Per-session rep contribution tallies keyed by character id, e.g. "
+            '{ "<session_id>": { "<character_id>": int } }. Incremented when a '
+            "crew member toggles the reputation trigger false→true (decrement "
+            "on true→false). Summed into Crew.rep when the session is settled."
+        ),
+    )
 
     def __str__(self):
         return self.name
