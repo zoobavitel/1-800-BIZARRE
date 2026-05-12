@@ -2253,7 +2253,19 @@ const CharacterSheetWrapper = ({
     notes: "",
     image: "",
     image_url: "",
+    // Per-session crew XP trigger toggles ({sid: {challenge, reputation, goals,
+    // credited}}). Reset visually each session because the UI only reads the
+    // row for the campaign's current active_session.
+    sessionXpTriggers: {},
+    // { sid: { characterIdStr: int } } — server tallies “Bolster reputation” edges.
+    sessionRepContributions: {},
+    // True when any crew PC has ExperienceTracker xp_gained>0 this active session.
+    activeSessionCrewXpAvailable: false,
   });
+  // Network state for the crew XP trigger PATCH; surfaces errors next to the
+  // toggles without blocking the rest of the sheet.
+  const [crewXpTriggerSaving, setCrewXpTriggerSaving] = useState(false);
+  const [crewXpTriggerError, setCrewXpTriggerError] = useState(null);
   const [crewPortraitUrlDraft, setCrewPortraitUrlDraft] = useState("");
   const [crewPortraitSaving, setCrewPortraitSaving] = useState(false);
   const [crewPortraitMsg, setCrewPortraitMsg] = useState(null);
@@ -2317,6 +2329,16 @@ const CharacterSheetWrapper = ({
             name: a.name,
             description: a.description || "",
           })),
+          sessionXpTriggers:
+            d.session_xp_triggers && typeof d.session_xp_triggers === "object"
+              ? d.session_xp_triggers
+              : {},
+          sessionRepContributions:
+            d.session_rep_contributions &&
+            typeof d.session_rep_contributions === "object"
+              ? d.session_rep_contributions
+              : {},
+          activeSessionCrewXpAvailable: !!d.active_session_crew_earned_xp,
         }));
         setCrewPortraitUrlDraft(String(d.image_url || "").trim());
         setCrewFactionLinks(d.faction_relationships || []);
@@ -2339,6 +2361,23 @@ const CharacterSheetWrapper = ({
       .then((d) => {
         if (cancelled) return;
         setCrewFactionLinks(d.faction_relationships || []);
+        if (d.session_xp_triggers && typeof d.session_xp_triggers === "object") {
+          setCrewData((p) => ({
+            ...p,
+            sessionXpTriggers: d.session_xp_triggers,
+            sessionRepContributions:
+              d.session_rep_contributions &&
+              typeof d.session_rep_contributions === "object"
+                ? d.session_rep_contributions
+                : p.sessionRepContributions,
+            activeSessionCrewXpAvailable: !!d.active_session_crew_earned_xp,
+          }));
+        } else {
+          setCrewData((p) => ({
+            ...p,
+            activeSessionCrewXpAvailable: !!d.active_session_crew_earned_xp,
+          }));
+        }
       })
       .catch(() => {});
     return () => {
@@ -2356,6 +2395,97 @@ const CharacterSheetWrapper = ({
       })
       .catch(() => setCrewHistoryEntries([]));
   }, [activeMode, charData.crewId]);
+
+  /**
+   * Toggle one of the three crew XP trigger booleans for the active session.
+   * Read-modify-write of `crewData.sessionXpTriggers[activeSessionId]`; the
+   * backend merges with existing rows and gates by active-session + crew XP.
+   */
+  const handleCrewXpTriggerToggle = useCallback(
+    (triggerKey) => {
+      if (!charData.crewId || !activeSessionId) return;
+      const sid = String(activeSessionId);
+      const prevRow = (crewData.sessionXpTriggers || {})[sid] || {};
+      const nextRow = {
+        challenge: !!prevRow.challenge,
+        reputation: !!prevRow.reputation,
+        goals: !!prevRow.goals,
+        [triggerKey]: !prevRow[triggerKey],
+      };
+      setCrewData((p) => ({
+        ...p,
+        sessionXpTriggers: {
+          ...(p.sessionXpTriggers || {}),
+          [sid]: { ...(p.sessionXpTriggers?.[sid] || {}), ...nextRow },
+        },
+      }));
+      setCrewXpTriggerSaving(true);
+      setCrewXpTriggerError(null);
+      crewAPI
+        .patchCrew(charData.crewId, {
+          session_xp_triggers: { [sid]: nextRow },
+        })
+        .then((d) => {
+          if (d && typeof d.session_xp_triggers === "object") {
+            setCrewData((p) => ({
+              ...p,
+              sessionXpTriggers: d.session_xp_triggers,
+              sessionRepContributions:
+                d.session_rep_contributions &&
+                typeof d.session_rep_contributions === "object"
+                  ? d.session_rep_contributions
+                  : p.sessionRepContributions,
+              activeSessionCrewXpAvailable: !!d.active_session_crew_earned_xp,
+            }));
+          }
+        })
+        .catch((err) => {
+          setCrewXpTriggerError(err?.message || "Failed to save toggle");
+          setCrewData((p) => ({
+            ...p,
+            sessionXpTriggers: {
+              ...(p.sessionXpTriggers || {}),
+              [sid]: prevRow,
+            },
+          }));
+        })
+        .finally(() => setCrewXpTriggerSaving(false));
+    },
+    [
+      activeSessionId,
+      charData.crewId,
+      crewData.sessionXpTriggers,
+    ],
+  );
+
+  const activeSessionCrewXpRow = useMemo(() => {
+    if (!activeSessionId) return null;
+    const map = crewData.sessionXpTriggers || {};
+    const row = map[String(activeSessionId)] || map[activeSessionId];
+    return row && typeof row === "object" ? row : null;
+  }, [activeSessionId, crewData.sessionXpTriggers]);
+
+  const activeSessionRepContribLines = useMemo(() => {
+    if (!activeSessionId) return [];
+    const sid = String(activeSessionId);
+    const row = (crewData.sessionRepContributions || {})[sid];
+    if (!row || typeof row !== "object") return [];
+    const roster = charCampaign?.campaign_characters || [];
+    return Object.entries(row)
+      .map(([cid, raw]) => {
+        const n = Number(raw) || 0;
+        if (n <= 0) return null;
+        const c = roster.find((x) => String(x.id) === String(cid));
+        const label =
+          (c && (c.name || c.true_name || c.display_name)) || `PC #${cid}`;
+        return { cid, label, n };
+      })
+      .filter(Boolean);
+  }, [
+    activeSessionId,
+    crewData.sessionRepContributions,
+    charCampaign?.campaign_characters,
+  ]);
 
   useEffect(() => {
     if (!crewHydratedRef.current || !charData.crewId) return undefined;
@@ -18016,6 +18146,133 @@ const CharacterSheetWrapper = ({
                   </label>
                 ))}
               </div>
+              <div
+                style={{
+                  marginTop: "12px",
+                  paddingTop: "12px",
+                  borderTop: "1px solid #374151",
+                }}
+              >
+                <span style={S.lbl}>CREW XP TRIGGERS</span>
+                {(() => {
+                  const triggerOptions = [
+                    {
+                      key: "challenge",
+                      label: "Contend with challenges above your station",
+                    },
+                    {
+                      key: "reputation",
+                      label: "Bolster your crew's reputation",
+                    },
+                    {
+                      key: "goals",
+                      label: "Express goals, drives, or nature of the crew",
+                    },
+                  ];
+                  const row = activeSessionCrewXpRow || {};
+                  const credited = !!row.credited;
+                  const playerGate =
+                    !isGM && !crewData.activeSessionCrewXpAvailable;
+                  const disabled =
+                    !canEditSheet ||
+                    !activeSessionId ||
+                    crewXpTriggerSaving ||
+                    playerGate ||
+                    credited;
+                  const lockReason = !canEditSheet
+                    ? "Read-only: edit crew toggles on your own character sheet."
+                    : !activeSessionId
+                      ? "No active session — toggles unlock when the GM starts a session."
+                      : credited
+                        ? "Already banked into crew XP for this session."
+                        : playerGate
+                          ? "Locked until a crew PC earns XP this session (any member)."
+                          : "";
+                  let helpText = lockReason || null;
+                  if (!helpText && crewXpTriggerSaving) {
+                    helpText = "Saving…";
+                  }
+                  return (
+                    <>
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          color: "#d1d5db",
+                          lineHeight: "1.7",
+                          marginTop: "6px",
+                        }}
+                      >
+                        {triggerOptions.map((opt) => (
+                          <label
+                            key={opt.key}
+                            style={{
+                              display: "flex",
+                              alignItems: "flex-start",
+                              gap: "6px",
+                              cursor: disabled ? "not-allowed" : "pointer",
+                              opacity: disabled ? 0.55 : 1,
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              title={
+                                disabled
+                                  ? lockReason || "Saving…"
+                                  : opt.label
+                              }
+                              checked={!!row[opt.key]}
+                              disabled={disabled}
+                              onChange={() =>
+                                void handleCrewXpTriggerToggle(opt.key)
+                              }
+                              style={{ marginTop: "3px" }}
+                            />
+                            <span>{opt.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                      {activeSessionRepContribLines.length > 0 ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#9ca3af",
+                            marginTop: "6px",
+                          }}
+                        >
+                          <span style={{ color: "#a7f3d0" }}>
+                            Bolster rep (this session, toward crew rep on settle):
+                          </span>{" "}
+                          {activeSessionRepContribLines
+                            .map((x) => `${x.label} +${x.n}`)
+                            .join(" · ")}
+                        </div>
+                      ) : null}
+                      {helpText ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: credited ? "#86efac" : "#9ca3af",
+                            marginTop: "4px",
+                          }}
+                        >
+                          {helpText}
+                        </div>
+                      ) : null}
+                      {crewXpTriggerError ? (
+                        <div
+                          style={{
+                            fontSize: "10px",
+                            color: "#f87171",
+                            marginTop: "4px",
+                          }}
+                        >
+                          {crewXpTriggerError}
+                        </div>
+                      ) : null}
+                    </>
+                  );
+                })()}
+              </div>
             </div>
             {charData.crewId ? (
               <div
@@ -18157,22 +18414,6 @@ const CharacterSheetWrapper = ({
                 >
                   + Add Ability
                 </button>
-                <div style={{ marginTop: "12px" }}>
-                  <span style={S.lbl}>CREW XP TRIGGERS</span>
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "#d1d5db",
-                      lineHeight: "1.7",
-                    }}
-                  >
-                    🔷 Contend with challenges above your station
-                    <br />
-                    🔷 Bolster your crew's reputation
-                    <br />
-                    🔷 Express goals, drives, or nature of the crew
-                  </div>
-                </div>
               </div>
               <div style={S.card}>
                 <span style={S.lbl}>DESCRIPTION</span>

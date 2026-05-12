@@ -213,6 +213,7 @@ class CrewSerializer(serializers.ModelSerializer):
     approved_by = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
     image = serializers.FileField(required=False)
     faction_relationships = serializers.SerializerMethodField(read_only=True)
+    active_session_crew_earned_xp = serializers.SerializerMethodField(read_only=True)
 
     def validate_image_url(self, value):
         s = (value or "").strip()
@@ -221,6 +222,99 @@ class CrewSerializer(serializers.ModelSerializer):
         if not s.startswith("https://"):
             raise serializers.ValidationError("Use an HTTPS image URL.")
         return s
+
+    # Allowed inner keys for each session-id row in session_xp_triggers; mirrors
+    # frontend toggle keys + the server-side `credited` flag set by the crew XP
+    # trigger settlement service.
+    _CREW_XP_TRIGGER_BOOL_KEYS = frozenset({"challenge", "reputation", "goals"})
+    _CREW_XP_TRIGGER_ALLOWED_KEYS = _CREW_XP_TRIGGER_BOOL_KEYS | {"credited"}
+
+    def validate_session_xp_triggers(self, value):
+        """Whitelist shape: {sid_str: {challenge, reputation, goals, credited}}."""
+        if value in (None, ""):
+            return {}
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Expected an object keyed by session id.")
+        cleaned: dict[str, dict] = {}
+        for sid, row in value.items():
+            sid_str = str(sid)
+            try:
+                int(sid_str)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError(
+                    f"session id keys must be integers, got {sid!r}."
+                )
+            if not isinstance(row, dict):
+                raise serializers.ValidationError(
+                    f"session_xp_triggers[{sid_str}] must be an object."
+                )
+            extra = set(row.keys()) - self._CREW_XP_TRIGGER_ALLOWED_KEYS
+            if extra:
+                raise serializers.ValidationError(
+                    f"Unknown keys for session {sid_str}: {sorted(extra)}."
+                )
+            cleaned_row: dict = {}
+            for k in self._CREW_XP_TRIGGER_BOOL_KEYS:
+                if k in row:
+                    cleaned_row[k] = bool(row[k])
+            if "credited" in row:
+                cleaned_row["credited"] = bool(row["credited"])
+            cleaned[sid_str] = cleaned_row
+        return cleaned
+
+    def validate_session_rep_contributions(self, value):
+        """Whitelist shape: {sid_str: {character_id_str: non-negative int}}."""
+        if value in (None, ""):
+            return {}
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Expected an object keyed by session id.")
+        cleaned: dict[str, dict[str, int]] = {}
+        for sid, row in value.items():
+            sid_str = str(sid)
+            try:
+                int(sid_str)
+            except (TypeError, ValueError):
+                raise serializers.ValidationError(
+                    f"session id keys must be integers, got {sid!r}."
+                )
+            if not isinstance(row, dict):
+                raise serializers.ValidationError(
+                    f"session_rep_contributions[{sid_str}] must be an object."
+                )
+            inner: dict[str, int] = {}
+            for ck, cv in row.items():
+                ck_str = str(ck)
+                try:
+                    int(ck_str)
+                except (TypeError, ValueError):
+                    raise serializers.ValidationError(
+                        f"character id keys must be integers, got {ck!r}."
+                    )
+                try:
+                    n = int(cv)
+                except (TypeError, ValueError):
+                    raise serializers.ValidationError(
+                        f"session_rep_contributions[{sid_str}][{ck_str}] must be an integer."
+                    )
+                inner[ck_str] = max(0, n)
+            cleaned[sid_str] = inner
+        return cleaned
+
+    def validate(self, attrs):
+        # Written only by CrewViewSet when merging session_xp_triggers; ignore
+        # any client-supplied rep contribution object.
+        attrs.pop("session_rep_contributions", None)
+        return super().validate(attrs)
+
+    def get_active_session_crew_earned_xp(self, obj):
+        aid = getattr(obj.campaign, "active_session_id", None)
+        if not aid:
+            return False
+        return ExperienceTracker.objects.filter(
+            character__crew_id=obj.id,
+            session_id=aid,
+            xp_gained__gt=0,
+        ).exists()
 
     class Meta:
         model = Crew
@@ -251,6 +345,9 @@ class CrewSerializer(serializers.ModelSerializer):
             "proposed_by",
             "approved_by",
             "faction_relationships",
+            "session_xp_triggers",
+            "session_rep_contributions",
+            "active_session_crew_earned_xp",
         ]
 
     def get_faction_relationships(self, obj):

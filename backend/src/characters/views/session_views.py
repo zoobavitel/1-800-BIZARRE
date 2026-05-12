@@ -77,6 +77,18 @@ class SessionViewSet(viewsets.ModelViewSet):
                     "(session=%s)",
                     instance.id,
                 )
+            try:
+                from ..services.crew_xp_triggers import (
+                    credit_crew_xp_triggers_for_session,
+                )
+
+                credit_crew_xp_triggers_for_session(instance, self.request.user)
+            except Exception:
+                logger.exception(
+                    "Crew XP trigger credit failed on session COMPLETED "
+                    "(session=%s)",
+                    instance.id,
+                )
 
     def perform_destroy(self, instance):
         try:
@@ -88,6 +100,18 @@ class SessionViewSet(viewsets.ModelViewSet):
         except Exception:
             logger.exception(
                 "Encoded session XP settlement failed before session DELETE "
+                "(session=%s)",
+                instance.id,
+            )
+        try:
+            from ..services.crew_xp_triggers import (
+                credit_crew_xp_triggers_for_session,
+            )
+
+            credit_crew_xp_triggers_for_session(instance, self.request.user)
+        except Exception:
+            logger.exception(
+                "Crew XP trigger credit failed before session DELETE "
                 "(session=%s)",
                 instance.id,
             )
