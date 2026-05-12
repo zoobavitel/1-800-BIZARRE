@@ -2,7 +2,8 @@ import React from "react";
 import { SESSION_ENCODED_XP_CAP } from "./sessionEndLiveXpPreview";
 
 /**
- * Same columns as the end-live confirmation modal (read-only).
+ * Same columns as the end-live confirmation modal. Used for read-only settled
+ * sessions and for pre-end previews in session detail.
  */
 export default function SessionXpAllocationTable({ rows }) {
   if (!Array.isArray(rows) || rows.length === 0) return null;
