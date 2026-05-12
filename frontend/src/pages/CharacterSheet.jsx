@@ -1590,6 +1590,9 @@ const CharacterSheetWrapper = ({
       .catch(() => setHamonAbilitiesList([]));
   }, []);
 
+  /** Stand / Hamon / Spin path — declared before combined abilities so recall row can key off it. */
+  const [playbook, setPlaybook] = useState(character?.playbook || "Stand");
+
   // Load abilities when switching character only — do not re-sync on every `character.abilities`
   // reference change or removals are overwritten by stale server data before autosave completes.
   useEffect(() => {
@@ -1653,10 +1656,30 @@ const CharacterSheetWrapper = ({
       seen.add(key);
       out.push({ ...a, _uiOrigin: "heritage" });
     });
+    /** Universal Stand-playbook option: `playbook === "Stand"` (sheet label; API `STAND`). Not tied to heritage name. */
+    const hasStandPlaybook = playbook === "Stand";
+    if (hasStandPlaybook) {
+      const recallNorm = normalizeAbilityName("Stand Recall");
+      const alreadyHasRecall = out.some(
+        (a) => normalizeAbilityName(a?.name) === recallNorm,
+      );
+      const ukey = "universal:stand-recall";
+      if (!alreadyHasRecall && !seen.has(ukey)) {
+        seen.add(ukey);
+        out.push({
+          id: "stand-universal-recall",
+          name: "Stand Recall",
+          description:
+            "Pay 2 stress (push yourself) to recall your Stand from wherever it is to your position—this is effectively instantaneous. After that, the fiction may call for a Stand-coin roll: often Durability to resist harm to the Stand, but if you are acting with the recalled Stand right away, Power, Speed, or Precision may apply instead (table agrees which pool fits).",
+          type: "stand",
+          _uiOrigin: "stand_universal",
+        });
+      }
+    }
     return out.filter(
       (a) => !RETIRED_SHEET_ABILITY_NAMES.has(normalizeAbilityName(a?.name)),
     );
-  }, [abilities, heritageAutoAbilities]);
+  }, [abilities, heritageAutoAbilities, playbook]);
 
   /** SRD Invigorated on self-recover — read sheet state, server `character.abilities`, and heritage echoes. */
   const selfRecoverInvigoratedDice = useMemo(
@@ -1768,7 +1791,6 @@ const CharacterSheetWrapper = ({
   const [newClockSegments, setNewClockSegments] = useState(4);
   const [newClockShared, setNewClockShared] = useState(false);
   const [customAbilityModal, setCustomAbilityModal] = useState(null); // { type, name, uses, items } or null
-  const [playbook, setPlaybook] = useState(character?.playbook || "Stand");
   // Standard ability picker (Option A: searchable dropdown + preview)
   const [standardAbilitySearch, setStandardAbilitySearch] = useState("");
   const [standardAbilitySelected, setStandardAbilitySelected] = useState(null);
@@ -10974,6 +10996,27 @@ const CharacterSheetWrapper = ({
                             </React.Fragment>
                           );
                         })}
+                        <button
+                          type="button"
+                          disabled={!canEditSheet}
+                          onClick={() => applyStressCost(2)}
+                          style={{
+                            marginTop: "8px",
+                            width: "100%",
+                            fontSize: "11px",
+                            fontWeight: 600,
+                            padding: "6px 8px",
+                            borderRadius: "4px",
+                            border: "1px solid #155e75",
+                            background: canEditSheet ? "#0e7490" : "#374151",
+                            color: "#ecfeff",
+                            cursor: canEditSheet ? "pointer" : "not-allowed",
+                            opacity: canEditSheet ? 1 : 0.55,
+                          }}
+                          title="Spend 2 stress (push yourself) to recall your Stand to your position. Marks 2 filled stress on this sheet (same as other stress spends; autosave applies)."
+                        >
+                          Stand recall (+2 stress)
+                        </button>
                       </div>
                     ) : null}
                     </div>
@@ -14349,7 +14392,9 @@ const CharacterSheetWrapper = ({
                                     ? "#b45309"
                                     : ab.type === "hamon"
                                       ? "#b91c1c"
-                                      : "#7c3aed",
+                                      : ab.type === "stand"
+                                        ? "#0e7490"
+                                        : "#7c3aed",
                                 borderRadius: "10px",
                                 fontSize: "10px",
                               }}
