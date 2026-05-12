@@ -223,6 +223,7 @@ class SessionEncodedXpSettlementTests(TestCase):
         self.assertEqual(res.status_code, 200, getattr(res, "data", res.content))
         self.session.refresh_from_db()
         self.assertTrue(self.session.auto_encoded_xp_settled)
+        self.assertEqual(self.session.status, "COMPLETED")
         self.character.refresh_from_db()
         self.assertEqual(self.character.xp_clocks.get("playbook", 0), 5)
         self.assertFalse(
@@ -361,6 +362,7 @@ class SessionEncodedXpSettlementTests(TestCase):
         self.assertEqual(res.status_code, 200, getattr(res, "data", res.content))
         self.session.refresh_from_db()
         self.assertTrue(self.session.auto_encoded_xp_settled)
+        self.assertEqual(self.session.status, "COMPLETED")
 
         self.character.refresh_from_db()
         char_b.refresh_from_db()

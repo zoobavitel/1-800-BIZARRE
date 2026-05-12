@@ -129,6 +129,41 @@ class CampaignViewSet(viewsets.ModelViewSet):
                             campaign.id,
                             prev_sid,
                         )
+                    # Crew XP trigger credit always runs on session change —
+                    # even when the GM opts out of encoded PC XP — because
+                    # crew XP is player-driven (toggles), not derived from
+                    # rolls. Idempotent via row's `credited` flag.
+                    try:
+                        from ..services.crew_xp_triggers import (
+                            credit_crew_xp_triggers_for_session,
+                        )
+
+                        credit_crew_xp_triggers_for_session(
+                            old_sess, self.request.user
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Crew XP trigger credit failed after "
+                            "active_session change (campaign=%s, session=%s)",
+                            campaign.id,
+                            prev_sid,
+                        )
+                    # Denormalize episode lifecycle: leaving live → COMPLETED.
+                    # Use ORM update so SessionViewSet.perform_update COMPLETED hook
+                    # does not run twice (settlement already ran above).
+                    Session.objects.filter(pk=old_sess.pk).exclude(
+                        status="COMPLETED"
+                    ).update(status="COMPLETED")
+
+            if new_sid and new_sid != prev_sid:
+                try:
+                    new_sess = Session.objects.get(pk=new_sid)
+                except Session.DoesNotExist:
+                    new_sess = None
+                if new_sess is not None and new_sess.campaign_id == campaign.id:
+                    Session.objects.filter(pk=new_sess.pk).exclude(
+                        status="ACTIVE"
+                    ).update(status="ACTIVE")
         finally:
             try:
                 delattr(campaign, "_skip_encoded_xp_settlement")
