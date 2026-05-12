@@ -82,7 +82,7 @@ After that? They dive back in—pushing forward, spiraling out, chasing destiny,
 **THE CORE SYSTEM**
 
 **JUDGEMENT CALLS:**  
-When you play, you’ll make several key judgment calls. Everyone contributes, but it’s either the players or the GM gets final say for each:
+When you play, you’ll make several key judgment calls. Everyone contributes, but either the players or the GM has final say for each:
 
 - Which skills are reasonable as a solution to a problem? Can this person be ***Swayed***? Must we get out the tools and ***Tinker*** with this old rusty lock, or could it also be quietly ***Finessed***? The players have final say.
 

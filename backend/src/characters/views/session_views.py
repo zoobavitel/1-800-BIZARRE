@@ -64,13 +64,25 @@ class SessionViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Only the GM can update this session")
         prev_status = session.status
         instance = serializer.save()
+        skip = getattr(instance, "_skip_encoded_xp_settlement", False)
+        try:
+            delattr(instance, "_skip_encoded_xp_settlement")
+        except AttributeError:
+            pass
+
         if prev_status != "COMPLETED" and instance.status == "COMPLETED":
             try:
                 from ..services.session_xp_settlement import (
+                    mark_encoded_session_xp_settled_without_xp,
                     settle_encoded_session_xp,
                 )
 
-                settle_encoded_session_xp(instance, self.request.user)
+                if skip:
+                    mark_encoded_session_xp_settled_without_xp(
+                        instance, self.request.user
+                    )
+                else:
+                    settle_encoded_session_xp(instance, self.request.user)
             except Exception:
                 logger.exception(
                     "Encoded session XP settlement failed on session COMPLETED "
@@ -89,6 +101,12 @@ class SessionViewSet(viewsets.ModelViewSet):
                     "(session=%s)",
                     instance.id,
                 )
+        elif prev_status == "COMPLETED" and instance.status == "PLANNED":
+            logger.info(
+                "session reopened to PLANNED (session=%s user=%s)",
+                instance.id,
+                getattr(self.request.user, "id", None),
+            )
 
     def perform_destroy(self, instance):
         try:
