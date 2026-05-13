@@ -1399,6 +1399,61 @@ export default function SessionGMManagementPanels({
     return m;
   }, [sessionXpEntriesSorted]);
 
+  /**
+   * Per-PC tally of end-of-session XP triggers (BELIEFS / STRUGGLE / STANDOUT)
+   * for this session, summed from the tracker and SRD-capped at 2 / trigger.
+   * Drives the GM scorecard toggle UI below.
+   */
+  const pcXpTriggerCountsByCharacter = useMemo(() => {
+    const m = new Map();
+    for (const row of sessionXpEntriesSorted) {
+      const cid = Number(row.character);
+      if (!Number.isFinite(cid)) continue;
+      const trig = String(row.trigger || "").toUpperCase();
+      if (
+        trig !== "BELIEFS" &&
+        trig !== "STRUGGLE" &&
+        trig !== "STANDOUT"
+      ) {
+        continue;
+      }
+      const amt = Math.max(0, Number(row.xp_gained) || 0);
+      if (!m.has(cid)) m.set(cid, { BELIEFS: 0, STRUGGLE: 0, STANDOUT: 0 });
+      m.get(cid)[trig] = Math.min(2, m.get(cid)[trig] + amt);
+    }
+    return m;
+  }, [sessionXpEntriesSorted]);
+
+  const [xpToggleBusy, setXpToggleBusy] = useState({ cid: null, trigger: null });
+  const [xpToggleError, setXpToggleError] = useState(null);
+
+  const handleGmXpTriggerToggle = useCallback(
+    async (characterId, trigger, delta) => {
+      if (!characterId || !trigger) return;
+      setXpToggleError(null);
+      setXpToggleBusy({ cid: characterId, trigger });
+      try {
+        if (delta > 0) {
+          await experienceTrackerAPI.award({
+            character: characterId,
+            trigger,
+          });
+        } else {
+          await experienceTrackerAPI.revoke({
+            character: characterId,
+            trigger,
+          });
+        }
+        await onRefresh?.();
+      } catch (err) {
+        setXpToggleError(err?.message || "Could not toggle XP trigger.");
+      } finally {
+        setXpToggleBusy({ cid: null, trigger: null });
+      }
+    },
+    [onRefresh],
+  );
+
   useEffect(() => {
     if (!campaign?.id) {
       setCampaignWideClocks([]);
@@ -5180,6 +5235,178 @@ export default function SessionGMManagementPanels({
                 </li>
               </ul>
             </details>
+            <div
+              style={{
+                fontSize: 10,
+                color: "#9ca3af",
+                marginBottom: 6,
+                fontWeight: "bold",
+              }}
+            >
+              End-of-session XP scorecard (toggle per PC, this session only)
+            </div>
+            <div
+              style={{
+                fontSize: 10,
+                color: "#6b7280",
+                marginBottom: 10,
+                lineHeight: 1.45,
+              }}
+            >
+              {(campaignChars || []).length === 0 ? (
+                <span>No player characters in this campaign yet.</span>
+              ) : (
+                <>
+                  {xpToggleError && (
+                    <div
+                      style={{
+                        color: "#fca5a5",
+                        fontSize: 11,
+                        marginBottom: 6,
+                      }}
+                    >
+                      {xpToggleError}
+                    </div>
+                  )}
+                  {(campaignChars || []).map((ch) => {
+                    const cid = Number(ch.id);
+                    const counts =
+                      pcXpTriggerCountsByCharacter.get(cid) || {
+                        BELIEFS: 0,
+                        STRUGGLE: 0,
+                        STANDOUT: 0,
+                      };
+                    const title =
+                      charDisplayNameById.get(cid) ||
+                      ch.true_name ||
+                      ch.name ||
+                      `PC ${cid}`;
+                    const rows = [
+                      {
+                        label: "Playbook / standout",
+                        trigger: "STANDOUT",
+                        v: counts.STANDOUT,
+                      },
+                      {
+                        label: "Beliefs / drives / heritage",
+                        trigger: "BELIEFS",
+                        v: counts.BELIEFS,
+                      },
+                      {
+                        label: "Struggle (vice / trauma / entanglement)",
+                        trigger: "STRUGGLE",
+                        v: counts.STRUGGLE,
+                      },
+                    ];
+                    return (
+                      <div
+                        key={`xp-toggle-${cid}`}
+                        style={{
+                          marginBottom: 10,
+                          padding: 6,
+                          border: "1px solid #1f2937",
+                          borderRadius: 4,
+                        }}
+                      >
+                        <div
+                          style={{
+                            color: "#d1d5db",
+                            fontWeight: 600,
+                            marginBottom: 4,
+                          }}
+                        >
+                          {title}
+                        </div>
+                        {rows.map((row) => {
+                          const busy =
+                            xpToggleBusy.cid === cid &&
+                            xpToggleBusy.trigger === row.trigger;
+                          return (
+                            <div
+                              key={`${cid}-${row.trigger}`}
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                gap: 8,
+                                padding: "3px 0",
+                              }}
+                            >
+                              <span style={{ color: "#9ca3af" }}>
+                                {row.label}
+                              </span>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                }}
+                              >
+                                {[0, 1].map((idx) => {
+                                  const filled = idx < row.v;
+                                  const action = filled ? -1 : 1;
+                                  const isNextPip =
+                                    (filled && idx === row.v - 1) ||
+                                    (!filled && idx === row.v);
+                                  const disabled = busy || !isNextPip;
+                                  return (
+                                    <button
+                                      key={idx}
+                                      type="button"
+                                      disabled={disabled}
+                                      onClick={() =>
+                                        handleGmXpTriggerToggle(
+                                          cid,
+                                          row.trigger,
+                                          action,
+                                        )
+                                      }
+                                      aria-label={`${filled ? "Revoke" : "Award"} ${row.trigger} XP for ${title}`}
+                                      title={
+                                        filled
+                                          ? "Click to untoggle (-1 XP)"
+                                          : "Click to award +1 XP"
+                                      }
+                                      style={{
+                                        width: 14,
+                                        height: 14,
+                                        padding: 0,
+                                        borderRadius: 3,
+                                        border: filled
+                                          ? "1px solid #a78bfa"
+                                          : "1px solid #374151",
+                                        background: filled
+                                          ? "#7c3aed"
+                                          : "transparent",
+                                        cursor: disabled
+                                          ? "not-allowed"
+                                          : "pointer",
+                                        opacity:
+                                          disabled && !filled ? 0.45 : 1,
+                                      }}
+                                    />
+                                  );
+                                })}
+                                <span
+                                  style={{
+                                    fontFamily: "monospace",
+                                    color: "#e5e7eb",
+                                    minWidth: 28,
+                                    textAlign: "right",
+                                  }}
+                                >
+                                  {row.v} / 2
+                                </span>
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </div>
             <div
               style={{
                 fontSize: 10,

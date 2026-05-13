@@ -3503,6 +3503,67 @@ const CharacterSheetWrapper = ({
     [activeSessionId, characterId, xpReqTracker, xpReqRolls],
   );
 
+  const [xpToggleBusyTrigger, setXpToggleBusyTrigger] = useState(null);
+  const [xpToggleError, setXpToggleError] = useState(null);
+
+  const refetchXpReqTracker = useCallback(async () => {
+    if (!characterId) return;
+    const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
+    try {
+      const r = await experienceTrackerAPI.list({ character: characterId });
+      setXpReqTracker(asArray(r));
+    } catch {
+      // keep prior state; error surfacing handled where relevant
+    }
+  }, [characterId]);
+
+  /**
+   * Toggle an end-of-session XP trigger (BELIEFS / STRUGGLE / STANDOUT) for the
+   * character. delta > 0 awards +1 (capped per SRD 2 / trigger / session); delta < 0
+   * revokes the most recent manual toggle entry. Both player owner and GM can call.
+   */
+  const handleXpTriggerToggle = useCallback(
+    async (trigger, delta) => {
+      if (!characterId || !trigger) return;
+      if (!xpReqSnapshot.hasActiveSession) return;
+      setXpToggleError(null);
+      setXpToggleBusyTrigger(trigger);
+      try {
+        if (delta > 0) {
+          const res = await experienceTrackerAPI.award({
+            character: characterId,
+            trigger,
+          });
+          const granted = Number(res?.granted) || 0;
+          if (granted > 0) {
+            setXp((prev) => ({
+              ...prev,
+              playbook: Math.min(10, (Number(prev.playbook) || 0) + granted),
+            }));
+          }
+        } else {
+          const res = await experienceTrackerAPI.revoke({
+            character: characterId,
+            trigger,
+          });
+          const revoked = Number(res?.revoked) || 0;
+          if (revoked > 0) {
+            setXp((prev) => ({
+              ...prev,
+              playbook: Math.max(0, (Number(prev.playbook) || 0) - revoked),
+            }));
+          }
+        }
+        await refetchXpReqTracker();
+      } catch (err) {
+        setXpToggleError(err?.message || "Could not toggle XP trigger.");
+      } finally {
+        setXpToggleBusyTrigger(null);
+      }
+    },
+    [characterId, xpReqSnapshot.hasActiveSession, refetchXpReqTracker],
+  );
+
   useEffect(() => {
     if (!characterId) {
       setXpReqTracker([]);
@@ -9359,11 +9420,12 @@ const CharacterSheetWrapper = ({
                     <div
                       style={{
                         display: "flex",
+                        flexWrap: "wrap",
                         gap: "16px",
                         alignItems: "flex-start",
                       }}
                     >
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ flex: "1 1 220px", minWidth: 0 }}>
                       <span style={S.lbl}>HARM</span>
                       {(
                         [
@@ -9507,7 +9569,13 @@ const CharacterSheetWrapper = ({
                       ))}
                     </div>
                     {/* SRD_DEV: Stand path armor (Durability) vs physical gear; special negate = NPC/GM */}
-                    <div style={{ minWidth: "200px", maxWidth: "240px" }}>
+                    <div
+                      style={{
+                        flex: "1 1 200px",
+                        minWidth: 0,
+                        maxWidth: "240px",
+                      }}
+                    >
                       <span
                         style={{
                           fontSize: "10px",
@@ -10411,41 +10479,120 @@ const CharacterSheetWrapper = ({
                           {
                             label: "Playbook or standout (end of session, max 2)",
                             v: xpReqSnapshot.playbook,
+                            trigger: "STANDOUT",
                           },
                           {
                             label:
                               "Beliefs, drives, heritage, or background (end of session, max 2)",
                             v: xpReqSnapshot.beliefs,
+                            trigger: "BELIEFS",
                           },
                           {
                             label:
                               "Struggle: vice, trauma, entanglements (end of session, max 2)",
                             v: xpReqSnapshot.struggle,
+                            trigger: "STRUGGLE",
                           },
-                        ].map((row) => (
-                          <div
-                            key={row.label}
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                              gap: "8px",
-                              padding: "5px 0",
-                              borderBottom: "1px solid #1f2937",
-                            }}
-                          >
-                            <span style={{ color: "#d1d5db" }}>{row.label}</span>
-                            <span
+                        ].map((row) => {
+                          const canToggle =
+                            xpReqSnapshot.hasActiveSession && canEditSheet;
+                          const busy = xpToggleBusyTrigger === row.trigger;
+                          return (
+                            <div
+                              key={row.label}
                               style={{
-                                fontFamily: "monospace",
-                                color: "#e5e7eb",
-                                flexShrink: 0,
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                gap: "8px",
+                                padding: "5px 0",
+                                borderBottom: "1px solid #1f2937",
                               }}
                             >
-                              {row.v} / 2
-                            </span>
+                              <span style={{ color: "#d1d5db" }}>
+                                {row.label}
+                              </span>
+                              <span
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "6px",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {[0, 1].map((idx) => {
+                                  const filled = idx < row.v;
+                                  const action = filled ? -1 : 1;
+                                  const disabled =
+                                    !canToggle ||
+                                    busy ||
+                                    (filled && idx !== row.v - 1) ||
+                                    (!filled && idx !== row.v);
+                                  return (
+                                    <button
+                                      key={idx}
+                                      type="button"
+                                      onClick={() =>
+                                        handleXpTriggerToggle(
+                                          row.trigger,
+                                          action,
+                                        )
+                                      }
+                                      disabled={disabled}
+                                      aria-label={`${filled ? "Revoke" : "Award"} ${row.trigger} XP`}
+                                      title={
+                                        !canToggle
+                                          ? xpReqSnapshot.hasActiveSession
+                                            ? "Only the character owner or GM can toggle"
+                                            : "Requires an active session"
+                                          : filled
+                                            ? "Click to untoggle (-1 XP)"
+                                            : "Click to award +1 XP"
+                                      }
+                                      style={{
+                                        width: 16,
+                                        height: 16,
+                                        padding: 0,
+                                        borderRadius: 3,
+                                        border: filled
+                                          ? "1px solid #a78bfa"
+                                          : "1px solid #374151",
+                                        background: filled
+                                          ? "#7c3aed"
+                                          : "transparent",
+                                        cursor: disabled
+                                          ? "not-allowed"
+                                          : "pointer",
+                                        opacity: disabled && !filled ? 0.45 : 1,
+                                      }}
+                                    />
+                                  );
+                                })}
+                                <span
+                                  style={{
+                                    fontFamily: "monospace",
+                                    color: "#e5e7eb",
+                                    minWidth: 28,
+                                    textAlign: "right",
+                                  }}
+                                >
+                                  {row.v} / 2
+                                </span>
+                              </span>
+                            </div>
+                          );
+                        })}
+                        {xpToggleError && (
+                          <div
+                            style={{
+                              color: "#fca5a5",
+                              fontSize: 11,
+                              marginTop: 4,
+                            }}
+                          >
+                            {xpToggleError}
                           </div>
-                        ))}
+                        )}
                         {xpReqSnapshot.beliefs === 0 &&
                           xpReqSnapshot.struggle === 0 &&
                           xpReqSnapshot.playbook === 0 &&
