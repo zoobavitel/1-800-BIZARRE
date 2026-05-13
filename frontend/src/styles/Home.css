@@ -1401,6 +1401,200 @@
   color: #c84040;
   background: rgba(200, 64, 64, 0.08);
 }
+.home-poc .f-card-btn-primary {
+  border-color: var(--p1);
+  color: var(--cream);
+  background: rgba(108, 57, 137, 0.18);
+}
+.home-poc .f-card-btn-primary:hover {
+  background: rgba(108, 57, 137, 0.35);
+}
+
+.home-poc .f-card-wrap {
+  margin-bottom: 8px;
+}
+.home-poc .f-card-wrap.is-expanded > .f-card {
+  margin-bottom: 0;
+  border-color: var(--p1);
+  border-bottom-color: transparent;
+}
+
+.home-poc .f-edit-panel {
+  background: var(--dark-bg-card);
+  border: 1px solid var(--p1);
+  border-top: 1px solid var(--dark-border);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--cream);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.home-poc .f-edit-error {
+  background: rgba(192, 57, 43, 0.15);
+  border: 1px solid rgba(192, 57, 43, 0.4);
+  color: var(--red);
+  padding: 6px 8px;
+  font-size: 11px;
+}
+.home-poc .f-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.home-poc .f-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cream-dim);
+}
+.home-poc .f-edit-field-wide {
+  grid-column: span 2;
+}
+.home-poc .f-edit-field-notes {
+  grid-column: 1 / -1;
+}
+.home-poc .f-edit-field-checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 11px;
+  color: var(--cream);
+  align-self: end;
+}
+.home-poc .f-edit-field input[type="text"],
+.home-poc .f-edit-field input[type="number"],
+.home-poc .f-edit-field select,
+.home-poc .f-edit-field textarea {
+  background: var(--bg);
+  border: 1px solid var(--dark-border);
+  color: var(--cream);
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: normal;
+  text-transform: none;
+  border-radius: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.home-poc .f-edit-field textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+.home-poc .f-edit-field input:focus,
+.home-poc .f-edit-field select:focus,
+.home-poc .f-edit-field textarea:focus {
+  outline: none;
+  border-color: var(--p1);
+}
+
+.home-poc .f-edit-section {
+  border-top: 1px solid var(--dark-border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.home-poc .f-edit-section-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dark-text-3);
+}
+.home-poc .f-edit-empty {
+  font-size: 11px;
+  color: var(--cream-dim);
+  font-style: italic;
+}
+.home-poc .f-edit-npc-list,
+.home-poc .f-edit-clock-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.home-poc .f-edit-npc-row,
+.home-poc .f-edit-clock-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.home-poc .f-edit-npc-name {
+  flex: 1;
+  color: var(--cream);
+  font-size: 12px;
+}
+.home-poc .f-edit-npc-add,
+.home-poc .f-edit-clock-create {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.home-poc .f-edit-npc-add select,
+.home-poc .f-edit-clock-create input,
+.home-poc .f-edit-clock-create select {
+  background: var(--bg);
+  border: 1px solid var(--dark-border);
+  color: var(--cream);
+  padding: 4px 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.home-poc .f-edit-npc-add select {
+  flex: 1;
+  min-width: 140px;
+}
+.home-poc .f-edit-clock-name {
+  flex: 1;
+  color: var(--cream);
+  font-size: 12px;
+}
+.home-poc .f-edit-clock-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--dark-text-2);
+  min-width: 38px;
+  text-align: center;
+}
+.home-poc .f-edit-clock-vis {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  color: var(--cream-dim);
+}
+
+.home-poc .f-edit-actions {
+  display: flex;
+  gap: 6px;
+  border-top: 1px solid var(--dark-border);
+  padding-top: 10px;
+}
+.home-poc .f-edit-actions .f-card-btn-delete {
+  margin-left: auto;
+}
+
+@media (max-width: 700px) {
+  .home-poc .f-edit-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .home-poc .f-edit-field-wide {
+    grid-column: span 2;
+  }
+}
 
 .home-poc .quick-strip {
   max-width: 1200px;
