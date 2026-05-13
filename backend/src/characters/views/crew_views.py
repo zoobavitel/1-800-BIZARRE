@@ -155,6 +155,32 @@ class CrewViewSet(viewsets.ModelViewSet):
             }
         )
 
+    def perform_create(self, serializer):
+        """Restrict crew creation to GMs/staff or players already in the campaign.
+
+        The personal-crew-name auto-attach path in CharacterSerializer creates
+        crews server-side. This guard ensures direct POSTs to `/api/crews/`
+        from the UI still require the caller to belong to the target campaign
+        (matches the "any player or GM in the campaign" intent for crew
+        ownership without letting outsiders seed crews into other campaigns).
+        """
+        user = self.request.user
+        campaign = serializer.validated_data.get("campaign")
+        if campaign is None:
+            raise DRFValidationError({"campaign": "Crew must be tied to a campaign."})
+        if user.is_staff or campaign.gm_id == user.id:
+            serializer.save()
+            return
+        is_campaign_player = (
+            campaign.players.filter(id=user.id).exists()
+            or Character.objects.filter(campaign=campaign, user=user).exists()
+        )
+        if not is_campaign_player:
+            raise PermissionDenied(
+                "Only the GM or a player in this campaign can create its crew."
+            )
+        serializer.save()
+
     def perform_update(self, serializer):
         crew = self.get_object()
         user = self.request.user

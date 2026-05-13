@@ -1,6 +1,12 @@
 import React from "react";
 import { SESSION_ENCODED_XP_CAP } from "./sessionEndLiveXpPreview";
 
+// SRD trigger XP caps at 2/session per trigger; the underlying tracker can
+// legitimately store more rows (e.g. auto settle + a stray manual toggle),
+// but the headline number should never imply more credit than the cap.
+const capTrigger = (n) =>
+  Math.min(SESSION_ENCODED_XP_CAP, Math.max(0, Number(n) || 0));
+
 /**
  * Same columns as the end-live confirmation modal. Used for read-only settled
  * sessions and for pre-end previews in session detail.
@@ -80,20 +86,22 @@ export default function SessionXpAllocationTable({ rows }) {
             <tr key={row.characterId} style={{ borderTop: "1px solid #374151" }}>
               <td style={{ padding: "6px 8px", color: "#e5e7eb" }}>{row.name}</td>
               <td style={{ padding: "6px 8px", textAlign: "right", color: "#d1d5db" }}>
-                {row.beliefsToggleCount ?? 0}/{SESSION_ENCODED_XP_CAP}
+                {capTrigger(row.beliefsToggleCount)}/{SESSION_ENCODED_XP_CAP}
               </td>
               <td style={{ padding: "6px 8px", textAlign: "right", color: "#d1d5db" }}>
-                {row.standoutToggleCount ?? row.standoutWouldGrant}/{SESSION_ENCODED_XP_CAP}
+                {capTrigger(row.standoutToggleCount ?? row.standoutWouldGrant)}/
+                {SESSION_ENCODED_XP_CAP}
                 <span style={{ color: "#6b7280", fontSize: "10px" }}>
                   {" "}
-                  (auto {row.standoutEvents})
+                  (auto {capTrigger(row.standoutEvents)})
                 </span>
               </td>
               <td style={{ padding: "6px 8px", textAlign: "right", color: "#d1d5db" }}>
-                {row.struggleToggleCount ?? row.struggleWouldGrant}/{SESSION_ENCODED_XP_CAP}
+                {capTrigger(row.struggleToggleCount ?? row.struggleWouldGrant)}/
+                {SESSION_ENCODED_XP_CAP}
                 <span style={{ color: "#6b7280", fontSize: "10px" }}>
                   {" "}
-                  (auto {row.struggleEvents})
+                  (auto {capTrigger(row.struggleEvents)})
                 </span>
               </td>
               <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>

@@ -743,13 +743,16 @@ function rosterFormatInventoryLine(item) {
 }
 
 function rosterCharacterNoteSections(ch) {
+  // Context-only fields (read-only) shown in a collapsible <details> under
+  // the editable NOTES textarea. `background_note2` is intentionally
+  // excluded because it IS the editable notes field and showing it twice
+  // would imply two separate stores.
   const out = [];
   const push = (label, val) => {
     const t = String(val ?? "").trim();
     if (t) out.push({ label, text: t });
   };
   push("Background", ch.background_note);
-  push("Background (extra)", ch.background_note2);
   push("Appearance", ch.appearance);
   push("Vice details", ch.vice_details);
   return out;
@@ -1055,9 +1058,9 @@ export default function SessionGMManagementPanels({
   const [pcSheetStashFilledEdits, setPcSheetStashFilledEdits] = useState({});
   const [pcSheetMoneySavingId, setPcSheetMoneySavingId] = useState(null);
   const [pcRosterInvDraftByChar, setPcRosterInvDraftByChar] = useState({});
-  const [pcRosterNoteAppendDraftByChar, setPcRosterNoteAppendDraftByChar] =
-    useState({});
-  /** Inventory / note append PATCH from session roster PC cards */
+  /** GM-side draft of the PC sheet NOTES (`background_note2`) keyed by character id. */
+  const [pcRosterNotesDraftByChar, setPcRosterNotesDraftByChar] = useState({});
+  /** Inventory + notes PATCH from session roster PC cards */
   const [pcRosterSheetBusyId, setPcRosterSheetBusyId] = useState(null);
 
   const npcInvolvements = useMemo(
@@ -2038,6 +2041,42 @@ export default function SessionGMManagementPanels({
     [onRefresh, onSessionCharactersRefresh, setError],
   );
 
+  /**
+   * Save the GM-edited NOTES textarea on a roster PC card.
+   *
+   * PC sheet's NOTES panel is wired to `background_note2` server-side (the
+   * `sheetNotes` alias in the frontend transform); this lets the GM edit
+   * that same field directly from session view without opening the PC
+   * sheet. No-op if the draft equals the server value to avoid spurious
+   * PATCH + SSE rebroadcasts.
+   */
+  const handlePcRosterSaveNotes = useCallback(
+    async (characterId, currentNotes, draftValue) => {
+      const cur = String(currentNotes ?? "");
+      const next = String(draftValue ?? "");
+      if (cur === next) return;
+      setPcRosterSheetBusyId(characterId);
+      setError(null);
+      try {
+        await characterAPI.patchCharacter(characterId, {
+          background_note2: next,
+        });
+        setPcRosterNotesDraftByChar((p) => {
+          const n = { ...p };
+          delete n[characterId];
+          return n;
+        });
+        await onSessionCharactersRefresh?.();
+        await onRefresh();
+      } catch (e) {
+        setError(e.message || "Could not update notes.");
+      } finally {
+        setPcRosterSheetBusyId(null);
+      }
+    },
+    [onRefresh, onSessionCharactersRefresh, setError],
+  );
+
   const handlePcRosterAppendInventory = useCallback(
     async (characterId, currentInventory, draftLine) => {
       const trimmed = String(draftLine ?? "").trim();
@@ -2057,34 +2096,6 @@ export default function SessionGMManagementPanels({
         await onRefresh();
       } catch (e) {
         setError(e.message || "Could not update inventory.");
-      } finally {
-        setPcRosterSheetBusyId(null);
-      }
-    },
-    [onRefresh, onSessionCharactersRefresh, setError],
-  );
-
-  const handlePcRosterAppendBackgroundNote = useCallback(
-    async (characterId, currentBackground, appendText) => {
-      const t = String(appendText ?? "").trim();
-      if (!t) return;
-      const cur = String(currentBackground ?? "").trim();
-      const merged = cur ? `${cur}\n\n${t}` : t;
-      setPcRosterSheetBusyId(characterId);
-      setError(null);
-      try {
-        await characterAPI.patchCharacter(characterId, {
-          background_note: merged,
-        });
-        setPcRosterNoteAppendDraftByChar((p) => {
-          const n = { ...p };
-          delete n[characterId];
-          return n;
-        });
-        await onSessionCharactersRefresh?.();
-        await onRefresh();
-      } catch (e) {
-        setError(e.message || "Could not update notes.");
       } finally {
         setPcRosterSheetBusyId(null);
       }
@@ -4133,114 +4144,165 @@ export default function SessionGMManagementPanels({
                         Add
                       </button>
                     </div>
-                    <div style={lbl}>Notes</div>
-                    <div
-                      style={{
-                        fontSize: 10,
-                        maxHeight: 120,
-                        overflowY: "auto",
-                        lineHeight: 1.35,
-                        padding: "6px 8px",
-                        background: "#0d1117",
-                        borderRadius: 6,
-                        border: "1px solid #30363d",
-                      }}
-                    >
-                      {noteSections.length > 0 ? (
-                        noteSections.map((sec, si) => (
-                          <div
-                            key={`${full.id}-note-${si}`}
+                    <div style={lbl}>Notes (PC sheet)</div>
+                    {(() => {
+                      const serverNotes = String(
+                        full.background_note2 ?? "",
+                      );
+                      const hasDraft = Object.prototype.hasOwnProperty.call(
+                        pcRosterNotesDraftByChar,
+                        full.id,
+                      );
+                      const draftVal = hasDraft
+                        ? pcRosterNotesDraftByChar[full.id]
+                        : serverNotes;
+                      const dirty = hasDraft && draftVal !== serverNotes;
+                      const busy =
+                        saving ||
+                        pcSheetMoneySavingId === full.id ||
+                        pcRosterSheetBusyId === full.id;
+                      return (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
+                          }}
+                        >
+                          <textarea
+                            value={draftVal}
+                            onChange={(e) =>
+                              setPcRosterNotesDraftByChar((p) => ({
+                                ...p,
+                                [full.id]: e.target.value,
+                              }))
+                            }
+                            placeholder="Notes…"
+                            aria-label={`Edit sheet notes for ${name}`}
+                            rows={4}
                             style={{
-                              marginBottom:
-                                si < noteSections.length - 1 ? 8 : 0,
+                              width: "100%",
+                              boxSizing: "border-box",
+                              fontSize: 11,
+                              lineHeight: 1.35,
+                              padding: "6px 8px",
+                              background: "#010409",
+                              color: "#e5e7eb",
+                              border: dirty
+                                ? "1px solid #d97706"
+                                : "1px solid #30363d",
+                              borderRadius: 6,
+                              resize: "vertical",
+                              minHeight: 60,
+                              fontFamily: "inherit",
+                            }}
+                            disabled={busy}
+                          />
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 6,
+                              alignItems: "center",
                             }}
                           >
-                            <div
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handlePcRosterSaveNotes(
+                                  full.id,
+                                  serverNotes,
+                                  draftVal,
+                                )
+                              }
+                              disabled={busy || !dirty}
                               style={{
-                                fontSize: 9,
-                                color: "#6b7280",
-                                fontWeight: 600,
-                                marginBottom: 3,
+                                ...S.btnGhost,
+                                fontSize: 10,
+                                opacity: !dirty ? 0.5 : 1,
                               }}
                             >
-                              {sec.label}
-                            </div>
-                            <div
-                              style={{
-                                whiteSpace: "pre-wrap",
-                                color: "#9ca3af",
-                              }}
-                            >
-                              {sec.text}
-                            </div>
+                              {busy ? "Saving…" : dirty ? "Save notes" : "Saved"}
+                            </button>
+                            {dirty && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPcRosterNotesDraftByChar((p) => {
+                                    const n = { ...p };
+                                    delete n[full.id];
+                                    return n;
+                                  })
+                                }
+                                disabled={busy}
+                                style={{
+                                  ...S.btnGhost,
+                                  fontSize: 10,
+                                }}
+                              >
+                                Revert
+                              </button>
+                            )}
                           </div>
-                        ))
-                      ) : (
-                        <span style={{ color: "#52525b" }}>—</span>
-                      )}
-                    </div>
-                    <div
-                      style={{
-                        marginTop: 6,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 6,
-                      }}
-                    >
-                      <textarea
-                        value={pcRosterNoteAppendDraftByChar[full.id] ?? ""}
-                        onChange={(e) =>
-                          setPcRosterNoteAppendDraftByChar((p) => ({
-                            ...p,
-                            [full.id]: e.target.value,
-                          }))
-                        }
-                        rows={2}
-                        placeholder="Append to background (shown above as Background)…"
-                        aria-label={`Append background note for ${name}`}
-                        style={{
-                          width: "100%",
-                          boxSizing: "border-box",
-                          fontSize: 11,
-                          lineHeight: 1.35,
-                          padding: "6px 8px",
-                          background: "#010409",
-                          color: "#e5e7eb",
-                          border: "1px solid #30363d",
-                          borderRadius: 6,
-                          resize: "vertical",
-                          minHeight: 44,
-                          fontFamily: "inherit",
-                        }}
-                        disabled={
-                          saving ||
-                          pcSheetMoneySavingId === full.id ||
-                          pcRosterSheetBusyId === full.id
-                        }
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handlePcRosterAppendBackgroundNote(
-                            full.id,
-                            full.background_note,
-                            pcRosterNoteAppendDraftByChar[full.id],
-                          )
-                        }
-                        disabled={
-                          saving ||
-                          pcSheetMoneySavingId === full.id ||
-                          pcRosterSheetBusyId === full.id
-                        }
-                        style={{
-                          ...S.btnGhost,
-                          fontSize: 10,
-                          alignSelf: "flex-start",
-                        }}
-                      >
-                        Append to background
-                      </button>
-                    </div>
+                          {noteSections.length > 0 && (
+                            <details
+                              style={{ fontSize: 10, color: "#6b7280" }}
+                            >
+                              <summary
+                                style={{
+                                  cursor: "pointer",
+                                  color: "#6b7280",
+                                  marginBottom: 3,
+                                }}
+                              >
+                                Sheet context (background / appearance / vice)
+                              </summary>
+                              <div
+                                style={{
+                                  maxHeight: 120,
+                                  overflowY: "auto",
+                                  padding: "6px 8px",
+                                  background: "#0d1117",
+                                  border: "1px solid #30363d",
+                                  borderRadius: 6,
+                                  marginTop: 4,
+                                }}
+                              >
+                                {noteSections.map((sec, si) => (
+                                  <div
+                                    key={`${full.id}-ctx-${si}`}
+                                    style={{
+                                      marginBottom:
+                                        si < noteSections.length - 1
+                                          ? 8
+                                          : 0,
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        fontSize: 9,
+                                        color: "#6b7280",
+                                        fontWeight: 600,
+                                        marginBottom: 3,
+                                      }}
+                                    >
+                                      {sec.label}
+                                    </div>
+                                    <div
+                                      style={{
+                                        whiteSpace: "pre-wrap",
+                                        color: "#9ca3af",
+                                      }}
+                                    >
+                                      {sec.text}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <div style={lbl}>Coin &amp; stash (personal)</div>
                     <div
                       style={{

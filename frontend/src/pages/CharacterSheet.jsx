@@ -1142,7 +1142,6 @@ const CharacterSheetWrapper = ({
   character,
   onClose,
   onSave,
-  onCreateNew,
   onSwitchCharacter,
   onCrewNameUpdated,
   allCharacters = [],
@@ -1732,13 +1731,21 @@ const CharacterSheetWrapper = ({
   );
   const [poolAllocateBusy, setPoolAllocateBusy] = useState(false);
 
-  // Hydrate sheet from server when character payload arrives after first paint (same class of bug as actionRatings)
+  // Hydrate sheet from server when character payload arrives after first paint (same class of bug as actionRatings).
+  // Each of these gates on `sheetDraftIsDirty` because a teammate-triggered
+  // poll/SSE refresh can land *between* the player's toggle and the debounced
+  // autosave commit; without the gate, the server snapshot (which still has
+  // the pre-toggle value) clobbers local state and the toggle visually
+  // reverts. The autosave's own onSave -> server fetch lifecycle clears the
+  // dirty flag, so the next poll after that can safely re-sync.
   useEffect(() => {
+    if (sheetDraftIsDirty) return;
     const v = character?.stressFilled;
     if (typeof v === "number") setStressFilled((p) => (p !== v ? v : p));
-  }, [character?.id, character?.stressFilled]);
+  }, [character?.id, character?.stressFilled, sheetDraftIsDirty]);
 
   useEffect(() => {
+    if (sheetDraftIsDirty) return;
     const t = character?.trauma;
     if (!t || typeof t !== "object" || Array.isArray(t)) return;
     setTrauma((prev) => {
@@ -1747,9 +1754,10 @@ const CharacterSheetWrapper = ({
         ? prev
         : merged;
     });
-  }, [character?.id, character?.trauma]);
+  }, [character?.id, character?.trauma, sheetDraftIsDirty]);
 
   useEffect(() => {
+    if (sheetDraftIsDirty) return;
     const h = character?.harm || character?.harmEntries;
     if (!h || typeof h !== "object") return;
     setHarm((prev) => {
@@ -1760,7 +1768,12 @@ const CharacterSheetWrapper = ({
       );
       return same ? prev : { ...prev, ...next };
     });
-  }, [character?.id, character?.harm, character?.harmEntries]);
+  }, [
+    character?.id,
+    character?.harm,
+    character?.harmEntries,
+    sheetDraftIsDirty,
+  ]);
 
   useEffect(() => {
     const h = character?.healingClock;
@@ -8737,14 +8750,6 @@ const CharacterSheetWrapper = ({
                     </div>
                   )}
                 </div>
-                {onCreateNew && (
-                  <button
-                    onClick={onCreateNew}
-                    style={{ ...S.btn, background: "#16a34a", color: "#fff" }}
-                  >
-                    + New Character
-                  </button>
-                )}
               </div>
             </div>
 

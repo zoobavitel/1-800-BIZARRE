@@ -66,6 +66,45 @@ _NPC_LEVEL_OFFSET = 9
 _PC_CLOCK_TYPES = {c[0] for c in ProgressClock.CLOCK_TYPE_CHOICES}
 
 
+def _attach_or_create_party_crew_from_personal_name(character):
+    """Realize the personal_crew_name text field into the campaign's party Crew.
+
+    Treats the sheet's crew text field as a player-driven "the crew exists
+    now" signal: if the character is in a campaign with no crew yet, create
+    one named from `personal_crew_name`. If the campaign already has a crew,
+    silently attach this character to the existing party crew (FitD-style
+    single-crew assumption). Either way the character becomes a crew member,
+    which the CrewViewSet uses to gate write permissions on the shared sheet.
+
+    Always clears `personal_crew_name` after a successful attach so the text
+    field doesn't drift out of sync with the FK.
+    """
+    if not character or not character.campaign_id:
+        return
+    if character.crew_id:
+        if character.personal_crew_name:
+            Character.objects.filter(pk=character.pk).update(personal_crew_name="")
+            character.personal_crew_name = ""
+        return
+    desired_name = (character.personal_crew_name or "").strip()
+    if not desired_name:
+        return
+    crew = (
+        Crew.objects.filter(campaign_id=character.campaign_id)
+        .order_by("id")
+        .first()
+    )
+    if crew is None:
+        crew = Crew.objects.create(
+            campaign_id=character.campaign_id, name=desired_name[:100]
+        )
+    Character.objects.filter(pk=character.pk).update(
+        crew=crew, personal_crew_name=""
+    )
+    character.crew_id = crew.id
+    character.personal_crew_name = ""
+
+
 def _sync_character_progress_clocks(character, raw_clocks, user):
     """Replace character-scoped progress clocks from sheet JSON (PUT/PATCH/POST body).
 
@@ -1762,9 +1801,7 @@ class CharacterSerializer(serializers.ModelSerializer):
             CharacterHamonAbility.objects.create(character=character, hamon_ability=ha)
         for sa in spin_ids:
             CharacterSpinAbility.objects.create(character=character, spin_ability=sa)
-        if character.crew_id and character.personal_crew_name:
-            Character.objects.filter(pk=character.pk).update(personal_crew_name="")
-            character.personal_crew_name = ""
+        _attach_or_create_party_crew_from_personal_name(character)
         req = self.context.get("request")
         _sync_character_progress_clocks(
             character,
@@ -1861,9 +1898,7 @@ class CharacterSerializer(serializers.ModelSerializer):
 
         character = super().update(instance, validated_data)
 
-        if character.crew_id and character.personal_crew_name:
-            Character.objects.filter(pk=character.pk).update(personal_crew_name="")
-            character.personal_crew_name = ""
+        _attach_or_create_party_crew_from_personal_name(character)
 
         # #region agent log
         try:

@@ -12,6 +12,7 @@ import {
   resolveMediaUrl,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
+import { subscribeCampaignEvents } from "../features/character-sheet/services/campaignEvents";
 import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 import SessionXpAllocationTable from "../features/campaign-management/SessionXpAllocationTable";
@@ -1501,7 +1502,8 @@ function CampaignDetail({
               }}
             >
               No crew created yet.{" "}
-              {isGM && "Create one to share stats with all characters."}
+              Any player or the GM can create one — once it exists, every
+              campaign member can edit the shared crew sheet.
             </div>
           )}
           {(campaign.crews || []).map((c) => {
@@ -1767,7 +1769,7 @@ function CampaignDetail({
               </div>
             </div>
           )}
-          {isGM && !crewForm && (
+          {!crewForm && (campaign.crews || []).length === 0 && (
             <button
               onClick={startCrewCreate}
               style={{ ...S.btnPrimary, marginTop: "8px" }}
@@ -3544,7 +3546,11 @@ function SessionDetail({
     }
   }, [campaign?.id]);
 
-  useEffect(() => {
+  // Refetch every panel data source (session, rolls, clocks, crews, characters).
+  // Used both for the initial mount/session-switch effect and for the realtime
+  // campaign-events stream so any teammate's roll, clock tick, sheet save, or
+  // XP toggle reflects here without a manual refresh.
+  const refetchSessionPanel = useCallback(() => {
     if (!session?.id) return;
     sessionAPI
       .getSession(session.id)
@@ -3570,8 +3576,34 @@ function SessionDetail({
         setCharacters(list?.filter((c) => c.campaign === campaign.id) || []),
       )
       .catch(() => setCharacters([]));
+  }, [session?.id, session, campaign?.id]);
+
+  useEffect(() => {
+    refetchSessionPanel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id, campaign?.id, campaign?.wanted_stars]);
+
+  // Realtime: listen to campaign SSE stream and refetch this panel on any
+  // backend-broadcast change (rolls, character saves, clocks). Coalesce bursts
+  // through a short timer so a flurry of updates only triggers one refetch.
+  useEffect(() => {
+    if (!campaign?.id || !session?.id) return undefined;
+    let pending = null;
+    const schedule = () => {
+      if (pending) return;
+      pending = setTimeout(() => {
+        pending = null;
+        refetchSessionPanel();
+      }, 350);
+    };
+    const unsubscribe = subscribeCampaignEvents(campaign.id, {
+      onUpdate: schedule,
+    });
+    return () => {
+      if (pending) clearTimeout(pending);
+      unsubscribe();
+    };
+  }, [campaign?.id, session?.id, refetchSessionPanel]);
 
   // Refetch NPCs when the campaign payload is refreshed (e.g. new factions) or session
   // changes, so session faction dropdowns stay in sync with server `faction` fields.
@@ -3845,6 +3877,10 @@ function SessionDetail({
 
   const [scorecardXpDeleteBusy, setScorecardXpDeleteBusy] = useState(null);
   const [scorecardXpDeleteError, setScorecardXpDeleteError] = useState(null);
+  // Inline scorecard "By PC — requirements logged" audit list can grow long
+  // mid-session; keep it collapsible so the rest of the GM panel stays scannable.
+  const [scorecardReqLoggedCollapsed, setScorecardReqLoggedCollapsed] =
+    useState(false);
   const handleScorecardDeleteXp = useCallback(
     async (entryId) => {
       if (!entryId) return;
@@ -4782,17 +4818,54 @@ function SessionDetail({
                       : "none",
                 }}
               >
-                <div
+                <button
+                  type="button"
+                  onClick={() =>
+                    setScorecardReqLoggedCollapsed((v) => !v)
+                  }
+                  aria-expanded={!scorecardReqLoggedCollapsed}
                   style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
                     fontSize: "11px",
                     color: "#9ca3af",
                     marginBottom: "6px",
                     fontWeight: "bold",
+                    background: "transparent",
+                    border: "none",
+                    padding: 0,
+                    cursor: "pointer",
+                    textAlign: "left",
+                    fontFamily: "inherit",
                   }}
                 >
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      display: "inline-block",
+                      width: 10,
+                      color: "#6b7280",
+                    }}
+                  >
+                    {scorecardReqLoggedCollapsed ? "▸" : "▾"}
+                  </span>
                   By PC — requirements logged (experience tracker)
-                </div>
+                  {scorecardReqLoggedCollapsed &&
+                  scorecardHasAnyTrackerLines ? (
+                    <span
+                      style={{
+                        color: "#6b7280",
+                        fontWeight: 400,
+                        fontSize: 10,
+                      }}
+                    >
+                      (hidden — click to show)
+                    </span>
+                  ) : null}
+                </button>
                 <div
+                  hidden={scorecardReqLoggedCollapsed}
                   style={{
                     fontSize: "10px",
                     color: "#6b7280",
