@@ -4207,6 +4207,7 @@ const CharacterSheetWrapper = ({
     characterId,
     charCampaign?.id,
     charCampaign?.campaign_characters,
+    charCampaign?.sessions,
     isGM,
     historyRefreshTick,
   ]);
