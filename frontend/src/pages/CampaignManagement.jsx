@@ -3712,6 +3712,103 @@ function SessionDetail({
     );
   }, [sessionData?.xp_entries]);
 
+  /**
+   * Per-PC scorecard stats derived from `ExperienceTracker` rows recorded
+   * for this session:
+   *   - `triggerCount[BELIEFS|STRUGGLE|STANDOUT]`: capped tracker totals
+   *     for each end-of-session trigger family (player/GM toggles + any
+   *     auto-grants that have already been written, e.g. heritage on
+   *     rolls or settled vice/trauma/standout passes). SRD cap: 2/trigger.
+   *   - `xpSum`: sum of every `xp_gained` recorded against this session
+   *     for that PC (toggles + auto + manual track grants + dev-pool row
+   *     + desperate-roll attribute XP). This is the authoritative
+   *     "session XP earned" for read-only / settled sessions.
+   *
+   * Used to (a) populate the BELIEFS / STRUGGLE / STANDOUT columns from
+   * the live tracker rather than only roll-signal heuristics, and (b)
+   * make the Total column reflect the actual records that drive the
+   * "By PC — requirements logged" audit list below — so toggling a pip
+   * never silently disagrees with the totals.
+   */
+  const sessionScorecardStatsByChar = useMemo(() => {
+    const m = new Map();
+    for (const row of sessionXpEntriesSortedForScorecard) {
+      const cid = Number(row.character);
+      if (!Number.isFinite(cid)) continue;
+      const amt = Math.max(0, Number(row.xp_gained) || 0);
+      const entry =
+        m.get(cid) ||
+        {
+          triggerCount: { BELIEFS: 0, STRUGGLE: 0, STANDOUT: 0 },
+          xpSum: 0,
+        };
+      entry.xpSum += amt;
+      const trig = String(row.trigger || "").toUpperCase();
+      if (
+        trig === "BELIEFS" ||
+        trig === "STRUGGLE" ||
+        trig === "STANDOUT"
+      ) {
+        entry.triggerCount[trig] = Math.min(
+          2,
+          entry.triggerCount[trig] + amt,
+        );
+      }
+      m.set(cid, entry);
+    }
+    return m;
+  }, [sessionXpEntriesSortedForScorecard]);
+
+  const endLiveRowsWithBeliefs = useMemo(() => {
+    const settled = !!sessionData?.auto_encoded_xp_settled;
+    return endLiveRowsWithManual.map((row) => {
+      const stats =
+        sessionScorecardStatsByChar.get(row.characterId) ||
+        {
+          triggerCount: { BELIEFS: 0, STRUGGLE: 0, STANDOUT: 0 },
+          xpSum: 0,
+        };
+      const beliefsToggleCount = stats.triggerCount.BELIEFS;
+      const standoutToggleCount = stats.triggerCount.STANDOUT;
+      const struggleToggleCount = stats.triggerCount.STRUGGLE;
+      // Unsettled preview portions only add what the encoded settle would
+      // still grant on top of what's already in tracker — caps each trigger
+      // at the SRD 2 and never re-counts toggled XP.
+      const unsettledStandoutAdd = settled
+        ? 0
+        : Math.max(
+            0,
+            (row.standoutWouldGrant || 0) - standoutToggleCount,
+          );
+      const unsettledStruggleAdd = settled
+        ? 0
+        : Math.max(
+            0,
+            (row.struggleWouldGrant || 0) - struggleToggleCount,
+          );
+      const unsettledDevPool = settled ? 0 : row.developmentPoolXp || 0;
+      const totalSessionXpPreview =
+        stats.xpSum +
+        unsettledStandoutAdd +
+        unsettledStruggleAdd +
+        unsettledDevPool;
+      return {
+        ...row,
+        beliefsToggleCount,
+        standoutToggleCount,
+        struggleToggleCount,
+        sessionXpRecorded: stats.xpSum,
+        unsettledPreviewAdd:
+          unsettledStandoutAdd + unsettledStruggleAdd + unsettledDevPool,
+        totalSessionXpPreview,
+      };
+    });
+  }, [
+    endLiveRowsWithManual,
+    sessionScorecardStatsByChar,
+    sessionData?.auto_encoded_xp_settled,
+  ]);
+
   const pcXpRequirementsByCharacterForScorecard = useMemo(() => {
     const m = new Map();
     for (const row of sessionXpEntriesSortedForScorecard) {
@@ -4192,7 +4289,7 @@ function SessionDetail({
                 No PCs in this campaign roster — nothing to preview.
               </div>
             ) : (
-              <SessionXpAllocationTable rows={endLiveRowsWithManual} />
+              <SessionXpAllocationTable rows={endLiveRowsWithBeliefs} />
             )}
             <p style={{ margin: "0 0 16px", fontSize: "11px", color: "#9ca3af" }}>
               <strong>Total</strong> column = encoded playbook XP (goes straight to
@@ -4633,10 +4730,40 @@ function SessionDetail({
             ) : null}
             {sessionXpAllocationPanelMode === "table" ? (
               <>
-                <SessionXpAllocationTable rows={endLiveRowsWithManual} />
+                <SessionXpAllocationTable rows={endLiveRowsWithBeliefs} />
                 <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#9ca3af" }}>
-                  <strong>Total</strong> = encoded playbook + Development session XP
-                  (session pool) + manual GM awards this session (already on tracks).
+                  <strong>Total</strong> = every XP record logged this session
+                  (Beliefs/Struggle/Standout toggles + heritage / vice / trauma /
+                  desperate-roll auto + manual GM track grants + dev-pool entry on
+                  settle) <em>plus</em> the encoded XP the end-live settle would
+                  still add on top (only while not yet settled).
+                </p>
+                <p
+                  style={{
+                    margin: "4px 0 0",
+                    fontSize: "10px",
+                    color: "#6b7280",
+                    lineHeight: 1.45,
+                  }}
+                >
+                  <strong style={{ color: "#9ca3af" }}>BELIEFS</strong> = expressed
+                  beliefs/drives/heritage/background · {" "}
+                  <strong style={{ color: "#9ca3af" }}>STRUGGLE</strong> = vice
+                  overindulgence, trauma, or entanglements · {" "}
+                  <strong style={{ color: "#9ca3af" }}>STANDOUT</strong> = playbook /
+                  stand ability use or leadership. Each capped at 2 XP/session. The
+                  headline number in each column is the experience-tracker XP
+                  recorded for that trigger (the same rows shown in "By PC —
+                  requirements logged" below — delete a row to roll it back). The
+                  "(auto N)" hint in Standout/Struggle is the count of pre-settle
+                  roll signals (rolls tagged <code>[abilities: …]</code> /
+                  vice-overindulgence / vice-failure / new trauma) that the
+                  end-live encoded pass will still apply on top, capped to the
+                  remaining 2/session. <strong>Manual→tracks</strong> is the
+                  separate ledger of <code>MANUAL</code>-trigger track grants
+                  ([insight]/[prowess]/[resolve]/[heritage]/[playbook]) added via
+                  the character sheet's <em>Add XP</em> action — never double-counted
+                  with the trigger toggles.
                 </p>
               </>
             ) : null}
