@@ -3520,7 +3520,7 @@ const CharacterSheetWrapper = ({
   /**
    * Toggle an end-of-session XP trigger (BELIEFS / STRUGGLE / STANDOUT) for the
    * character. delta > 0 awards +1 (capped per SRD 2 / trigger / session); delta < 0
-   * revokes the most recent manual toggle entry. Both player owner and GM can call.
+   * revokes the most recent toggled trigger entry. Both player owner and GM can call.
    */
   const handleXpTriggerToggle = useCallback(
     async (trigger, delta) => {

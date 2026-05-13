@@ -21,7 +21,15 @@ from ..services.session_xp_settlement import grant_encoded_trigger_xp
 
 
 MANUAL_TOGGLE_TRIGGERS = {"BELIEFS", "STRUGGLE", "STANDOUT"}
-MANUAL_TOGGLE_DESCRIPTION_PREFIX = "Manual session XP toggle"
+# Trigger toggles are SRD end-of-session trigger records confirmed by a human
+# (player or GM) rather than auto-detected from a roll. They are not the same
+# thing as the free-form "MANUAL" track-grant rows from the character sheet's
+# "Add XP" flow — `trigger` differs (BELIEFS/STRUGGLE/STANDOUT vs MANUAL) and
+# the audit / scorecard accounting treats them in separate columns.
+SESSION_TRIGGER_DESCRIPTION_PREFIX = "Session XP trigger"
+# Legacy prefix kept so `manual_revoke` can still find rows written before
+# the rename data migration applied. New rows are written with the new prefix.
+LEGACY_MANUAL_TOGGLE_DESCRIPTION_PREFIX = "Manual session XP toggle"
 
 
 class HeritageViewSet(viewsets.ModelViewSet):
@@ -328,7 +336,7 @@ class ExperienceTrackerViewSet(
                 clock_key="playbook",
                 clock_max=10,
                 want=1,
-                description=f"{MANUAL_TOGGLE_DESCRIPTION_PREFIX}: {trigger}",
+                description=f"{SESSION_TRIGGER_DESCRIPTION_PREFIX}: {trigger}",
                 awarded_by=user,
                 award_source=source,
             )
@@ -359,10 +367,13 @@ class ExperienceTrackerViewSet(
             base = ExperienceTracker.objects.select_for_update().filter(
                 character=character, session=session, trigger=trigger,
             )
+            toggle_q = Q(
+                description__startswith=SESSION_TRIGGER_DESCRIPTION_PREFIX,
+            ) | Q(
+                description__startswith=LEGACY_MANUAL_TOGGLE_DESCRIPTION_PREFIX,
+            )
             entry = (
-                base.filter(
-                    description__startswith=MANUAL_TOGGLE_DESCRIPTION_PREFIX,
-                )
+                base.filter(toggle_q)
                 .order_by("-session_date", "-id")
                 .first()
             ) or base.order_by("-session_date", "-id").first()

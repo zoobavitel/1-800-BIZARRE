@@ -5222,12 +5222,17 @@ export default function SessionGMManagementPanels({
               }}
             >
               <strong style={{ color: "#9ca3af" }}>Manual award</strong> — for
-              offline dice, table rulings, or end-of-session trigger marks with no
-              auto XP. The panels below pull together{" "}
-              <strong>experience tracker</strong> rows, <strong>linked XP history</strong>,
+              free-form XP grants to a specific track (offline dice, table
+              rulings) — distinct from the{" "}
+              <strong>Beliefs / Struggle / Standout trigger toggles</strong>{" "}
+              above (those record an SRD end-of-session trigger and always go
+              to the playbook clock, capped at 2 / trigger / session). The
+              panels below pull together <strong>experience tracker</strong>{" "}
+              rows, <strong>linked XP history</strong>,{" "}
               <strong>completed progress clocks</strong> on this session, and{" "}
-              <strong>sheet saves</strong> that changed XP tracks (spend / refill), scoped
-              roughly to this session&apos;s <strong>session date</strong>.
+              <strong>sheet saves</strong> that changed XP tracks (spend /
+              refill), scoped roughly to this session&apos;s{" "}
+              <strong>session date</strong>.
             </div>
             <details
               style={{

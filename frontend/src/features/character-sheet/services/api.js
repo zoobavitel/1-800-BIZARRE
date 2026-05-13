@@ -712,7 +712,7 @@ export const experienceTrackerAPI = {
       method: "POST",
       body: JSON.stringify({ character, trigger }),
     }),
-  // Untoggle (delete latest manual toggle entry) and roll back playbook XP.
+  // Untoggle (delete latest toggled trigger entry) and roll back playbook XP.
   revoke: ({ character, trigger }) =>
     apiRequest("/experience-tracker/revoke/", {
       method: "POST",
