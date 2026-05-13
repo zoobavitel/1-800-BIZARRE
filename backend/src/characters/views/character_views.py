@@ -1726,6 +1726,13 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 trigger="MANUAL",
                 description=f"[{track}] {description}",
                 xp_gained=amount,
+                awarded_by=user,
+                award_source=(
+                    "GM"
+                    if (is_gm and not is_owner)
+                    else ("PLAYER" if is_owner else "GM")
+                ),
+                clock_key=track,
             )
 
         return Response(

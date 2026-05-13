@@ -907,8 +907,20 @@ class SessionEventSerializer(serializers.ModelSerializer):
 class ExperienceTrackerSerializer(serializers.ModelSerializer):
     character = serializers.PrimaryKeyRelatedField(queryset=Character.objects.all())
     session = serializers.PrimaryKeyRelatedField(read_only=True, allow_null=True)
+    session_name = serializers.CharField(
+        source="session.name", read_only=True, default=None
+    )
     trigger_display = serializers.CharField(
         source="get_trigger_display", read_only=True
+    )
+    award_source_display = serializers.CharField(
+        source="get_award_source_display", read_only=True
+    )
+    awarded_by = serializers.PrimaryKeyRelatedField(
+        read_only=True, allow_null=True
+    )
+    awarded_by_username = serializers.CharField(
+        source="awarded_by.username", read_only=True, default=None
     )
 
     class Meta:
@@ -917,13 +929,28 @@ class ExperienceTrackerSerializer(serializers.ModelSerializer):
             "id",
             "character",
             "session",
+            "session_name",
             "session_date",
             "trigger",
             "trigger_display",
             "description",
             "xp_gained",
+            "award_source",
+            "award_source_display",
+            "awarded_by",
+            "awarded_by_username",
+            "clock_key",
         ]
-        read_only_fields = ["session_date", "session"]
+        read_only_fields = [
+            "session_date",
+            "session",
+            "session_name",
+            "award_source",
+            "award_source_display",
+            "awarded_by",
+            "awarded_by_username",
+            "clock_key",
+        ]
 
 
 class GroupActionSerializer(serializers.ModelSerializer):

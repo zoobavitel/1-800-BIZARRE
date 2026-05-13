@@ -72,8 +72,16 @@ def grant_encoded_trigger_xp(
     description: str,
     roll: Roll | None = None,
     session_trigger_cap: int | None = None,
+    awarded_by: Any = None,
+    award_source: str = "AUTO",
 ) -> int:
-    """Apply encoded XP toward ``xp_clocks[clock_key]`` for BitD-style session caps."""
+    """Apply encoded XP toward ``xp_clocks[clock_key]`` for BitD-style session caps.
+
+    ``awarded_by`` + ``award_source`` are stored on the tracker entry so the
+    XP records UI can attribute each row to a player / GM / automatic source;
+    ``clock_key`` is also persisted so that deleting the entry can roll back
+    the exact track it advanced.
+    """
     if want <= 0 or session is None:
         return 0
     cap = (
@@ -102,6 +110,9 @@ def grant_encoded_trigger_xp(
         trigger=trigger,
         description=(description or "")[:500],
         xp_gained=actual,
+        awarded_by=awarded_by,
+        award_source=award_source,
+        clock_key=clock_key,
     )
     return actual
 
@@ -254,6 +265,8 @@ def settle_encoded_session_xp(session: Session, acting_user: Any) -> dict:
                         f"(+{dev_pool}; allocate from pool on character sheet)."
                     )[:500],
                     xp_gained=dev_pool,
+                    award_source="AUTO",
+                    clock_key="",
                 )
                 out["applied"].append(
                     {"character": cid, "trigger": "DEVELOPMENT_POOL", "xp": dev_pool}

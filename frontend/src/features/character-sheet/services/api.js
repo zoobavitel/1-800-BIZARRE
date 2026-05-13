@@ -705,6 +705,23 @@ export const experienceTrackerAPI = {
     const qs = new URLSearchParams(params).toString();
     return apiRequest(`/experience-tracker/${qs ? "?" + qs : ""}`);
   },
+  // Toggle +1 XP for an end-of-session trigger; SRD-capped at 2 / trigger / session.
+  // Requires an active session on the character's campaign.
+  award: ({ character, trigger }) =>
+    apiRequest("/experience-tracker/award/", {
+      method: "POST",
+      body: JSON.stringify({ character, trigger }),
+    }),
+  // Untoggle (delete latest manual toggle entry) and roll back playbook XP.
+  revoke: ({ character, trigger }) =>
+    apiRequest("/experience-tracker/revoke/", {
+      method: "POST",
+      body: JSON.stringify({ character, trigger }),
+    }),
+  // Delete a specific XP entry by id; rolls back the entry's clock_key track
+  // (or unallocated_xp pool, for end-of-session pool rows).
+  remove: (id) =>
+    apiRequest(`/experience-tracker/${id}/`, { method: "DELETE" }),
 };
 
 export const xpHistoryAPI = {

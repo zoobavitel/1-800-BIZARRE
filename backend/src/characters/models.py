@@ -1536,6 +1536,12 @@ class ExperienceTracker(models.Model):
         ("MANUAL", "Manual or offline XP award"),
     ]
 
+    AWARD_SOURCE_CHOICES = [
+        ("AUTO", "Automatic (roll/save settlement)"),
+        ("PLAYER", "Player self-award"),
+        ("GM", "GM award"),
+    ]
+
     character = models.ForeignKey(
         "Character", on_delete=models.CASCADE, related_name="experience_entries"
     )
@@ -1559,6 +1565,33 @@ class ExperienceTracker(models.Model):
         help_text="What did the character do to earn this XP?"
     )
     xp_gained = models.IntegerField(default=1)
+    awarded_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="awarded_xp_entries",
+        help_text=(
+            "User who triggered this award. Null for automatic awards "
+            "(roll/save/session-end settlement)."
+        ),
+    )
+    award_source = models.CharField(
+        max_length=8,
+        choices=AWARD_SOURCE_CHOICES,
+        default="AUTO",
+        help_text="Whether this XP came from auto rules, player self-toggle, or GM grant.",
+    )
+    clock_key = models.CharField(
+        max_length=16,
+        blank=True,
+        default="",
+        help_text=(
+            "xp_clocks key this entry advanced (e.g. 'playbook', 'insight'); empty "
+            "for entries that did not directly tick a single clock. Used to roll "
+            "back the matching clock when the entry is deleted."
+        ),
+    )
 
     def __str__(self):
         return f"{self.character.true_name} - {self.get_trigger_display()} ({self.xp_gained} XP)"
