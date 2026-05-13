@@ -3564,6 +3564,49 @@ const CharacterSheetWrapper = ({
     [characterId, xpReqSnapshot.hasActiveSession, refetchXpReqTracker],
   );
 
+  /**
+   * Active-session XP tracker entries for this character (most recent first).
+   * Exposes attribution (PLAYER / GM / AUTO + awarded_by_username), session
+   * name, and the entry id so the UI can render a per-row delete button.
+   */
+  const xpReqActiveSessionEntries = useMemo(() => {
+    if (!activeSessionId) return [];
+    const rows = Array.isArray(xpReqTracker) ? xpReqTracker : [];
+    return rows
+      .filter((r) => Number(r?.session) === Number(activeSessionId))
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(b.session_date || 0) - new Date(a.session_date || 0),
+      );
+  }, [activeSessionId, xpReqTracker]);
+
+  const [xpEntryDeleteBusy, setXpEntryDeleteBusy] = useState(null);
+  const handleDeleteXpEntry = useCallback(
+    async (entry) => {
+      if (!entry?.id) return;
+      const amount = Number(entry.xp_gained) || 0;
+      const clockKey = (entry.clock_key || "").trim();
+      setXpToggleError(null);
+      setXpEntryDeleteBusy(entry.id);
+      try {
+        await experienceTrackerAPI.remove(entry.id);
+        if (amount > 0 && clockKey) {
+          setXp((prev) => {
+            const cur = Number(prev?.[clockKey]) || 0;
+            return { ...prev, [clockKey]: Math.max(0, cur - amount) };
+          });
+        }
+        await refetchXpReqTracker();
+      } catch (err) {
+        setXpToggleError(err?.message || "Could not delete XP entry.");
+      } finally {
+        setXpEntryDeleteBusy(null);
+      }
+    },
+    [refetchXpReqTracker],
+  );
+
   useEffect(() => {
     if (!characterId) {
       setXpReqTracker([]);
@@ -3597,10 +3640,9 @@ const CharacterSheetWrapper = ({
   }, [activeSessionId]);
 
   useEffect(() => {
-    if (isGM) return;
     if (characterId == null) return;
     setHistoryCharacterFilter(String(characterId));
-  }, [isGM, characterId, showHistoryPanel, historyMode]);
+  }, [characterId, showHistoryPanel, historyMode]);
 
   useEffect(() => {
     if (!showHistoryPanel) return;
@@ -3788,6 +3830,160 @@ const CharacterSheetWrapper = ({
                 type: "xp_spend",
                 text: `[${cname}] ${spend}`,
                 modifiers: [],
+              });
+            });
+          }
+          rows.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+          setHistoryRows(rows);
+        })
+        .catch((e) => setHistoryError(e.message))
+        .finally(() => setHistoryLoading(false));
+      return;
+    }
+    if (historySessionId === "all") {
+      const sessions = charCampaign?.sessions || [];
+      const sessionNameById = new Map(
+        sessions.map((s) => [Number(s.id), s.name || `Session ${s.id}`]),
+      );
+      if (!sessions.length) {
+        setHistoryRows([]);
+        setHistoryLoading(false);
+        return;
+      }
+      Promise.all(
+        sessions.map((s) =>
+          Promise.all([
+            rollAPI.getRolls({ session: s.id }).catch(() => []),
+            sessionAPI.getSession(s.id).catch(() => null),
+            progressClockAPI
+              .getProgressClocks({
+                session: s.id,
+                ...(charCampaign?.id ? { campaign: charCampaign.id } : {}),
+              })
+              .catch(() => []),
+          ]).then(([rollsRes, sessionRes, clocksRes]) => ({
+            sid: Number(s.id),
+            rollsRes,
+            sessionRes,
+            clocksRes,
+          })),
+        ),
+      )
+        .then((bundles) => {
+          const rows = [];
+          const targetCid = String(characterId);
+          for (const b of bundles) {
+            const sLabel =
+              sessionNameById.get(b.sid) || `Session ${b.sid}`;
+            const sTag = `[${sLabel}]`;
+            asArray(b.rollsRes).forEach((r) => {
+              const isFortune =
+                String(r.roll_type || "").toUpperCase() === "FORTUNE";
+              if (isFortune && !r.fortune_reveal_outcome && !isGM) return;
+              if (
+                String(r.character || "") !== targetCid &&
+                String(r.recovery_target ?? r.recoveryTarget ?? "") !==
+                  targetCid
+              )
+                return;
+              const diceStr = [].concat(r.results || []).join(", ");
+              const outcomeDisp = String(r.outcome || "").replace(/_/g, " ");
+              rows.push({
+                key: `roll-${r.id}-all`,
+                timestamp: r.timestamp,
+                actor: r.rolled_by_username || r.character_name || "unknown",
+                characterId: r.character,
+                recoveryTargetId:
+                  r.recovery_target == null
+                    ? null
+                    : Number(r.recovery_target),
+                type: "roll",
+                rollType: r.roll_type,
+                text: `${sTag} ${
+                  (r.roll_type || "").toUpperCase() === "FORTUNE" &&
+                  !r.fortune_reveal_outcome
+                    ? `${r.action_name || "Fortune"} (redacted)`
+                    : `${r.action_name || "Roll"} · ${diceStr} → ${outcomeDisp}`
+                }`,
+                modifiers: [
+                  r.position ? `Pos ${r.position}` : null,
+                  r.effect ? `Eff ${r.effect}` : null,
+                  r.push_for_dice ? "Push(+1d)" : null,
+                  r.push_for_effect ? "Push(+effect)" : null,
+                  r.uses_devil_bargain ? "Devil's bargain" : null,
+                  r.roller_stress_spent
+                    ? `Stress ${r.roller_stress_spent}`
+                    : null,
+                ].filter(Boolean),
+              });
+            });
+            (b.sessionRes?.events || []).forEach((evt) => {
+              if (evt.character && String(evt.character) !== targetCid)
+                return;
+              rows.push({
+                key: `evt-${evt.id}-all`,
+                timestamp: evt.timestamp,
+                actor: "session",
+                characterId: evt.character || null,
+                type: "event",
+                text: `${sTag} ${evt.event_type}: ${stringifyValue(evt.details)}`,
+                modifiers: [],
+              });
+            });
+            (b.sessionRes?.stress_history || []).forEach((s) => {
+              if (s.character && String(s.character) !== targetCid) return;
+              rows.push({
+                key: `stress-${s.id}-all`,
+                timestamp: s.timestamp,
+                actor: "stress",
+                characterId: s.character || null,
+                type: "stress",
+                text: `${sTag} Stress ${s.amount > 0 ? "+" : ""}${s.amount} (${s.reason || "update"})`,
+                modifiers: [],
+              });
+            });
+            (b.sessionRes?.xp_entries || []).forEach((x) => {
+              if (String(x.character || "") !== targetCid) return;
+              const desc = String(x.description || "").trim();
+              rows.push({
+                key: `xp-${x.id}-all`,
+                timestamp: x.session_date || b.sessionRes?.session_date,
+                actor: "xp (tracker)",
+                characterId: x.character || null,
+                type: "xp",
+                text: `${sTag} +${x.xp_gained ?? 0} XP — ${
+                  x.trigger_display || x.trigger || "trigger"
+                }${desc ? `: ${desc}` : ""}`,
+                modifiers: [],
+              });
+            });
+            (b.sessionRes?.xp_history || []).forEach((x) => {
+              if (String(x.character || "") !== targetCid) return;
+              rows.push({
+                key: `xph-${x.id}-all`,
+                timestamp: x.timestamp,
+                actor: "xp (ledger)",
+                characterId: x.character || null,
+                type: "xp_ledger",
+                text: `${sTag} +${x.amount ?? 0} XP — ${x.reason || "—"}`,
+                modifiers: [],
+              });
+            });
+            asArray(b.clocksRes).forEach((clk) => {
+              rows.push({
+                key: `clock-${clk.id}-all`,
+                timestamp:
+                  clk.updated_at || clk.created_at || b.sessionRes?.session_date,
+                actor:
+                  clk.created_by_username ||
+                  clk.created_by_character_name ||
+                  "clock",
+                characterId: null,
+                type: "clock",
+                text: `${sTag} Clock ${clk.name}: ${clk.filled_segments}/${clk.max_segments}`,
+                modifiers: [
+                  clk.visible_to_party ? "Shared party" : "Private",
+                ],
               });
             });
           }
@@ -6973,50 +7169,31 @@ const CharacterSheetWrapper = ({
                             <>
                               <div
                                 style={{
-                                  display: "grid",
-                                  gridTemplateColumns: "1fr 1fr",
-                                  gap: 6,
                                   marginBottom: 8,
                                 }}
                               >
                                 <select
-                                  value={historySessionId || ""}
-                                  onChange={(e) =>
-                                    setHistorySessionId(
-                                      e.target.value ? Number(e.target.value) : null,
-                                    )
+                                  value={
+                                    historySessionId == null
+                                      ? ""
+                                      : String(historySessionId)
                                   }
-                                  style={{ ...S.sel, fontSize: 10, padding: "2px 6px" }}
+                                  onChange={(e) => {
+                                    const v = e.target.value;
+                                    if (v === "") setHistorySessionId(null);
+                                    else if (v === "all")
+                                      setHistorySessionId("all");
+                                    else setHistorySessionId(Number(v));
+                                  }}
+                                  style={{ ...S.sel, fontSize: 10, padding: "2px 6px", width: "100%" }}
                                 >
                                   <option value="">No session</option>
+                                  <option value="all">All sessions</option>
                                   {(charCampaign?.sessions || []).map((s) => (
                                     <option key={s.id} value={s.id}>
                                       {s.name || `Session ${s.id}`}
                                     </option>
                                   ))}
-                                </select>
-                                <select
-                                  value={historyCharacterFilter}
-                                  onChange={(e) =>
-                                    setHistoryCharacterFilter(e.target.value)
-                                  }
-                                  disabled={!isGM}
-                                  style={{ ...S.sel, fontSize: 10, padding: "2px 6px" }}
-                                >
-                                  {isGM ? (
-                                    <option value="all">All players</option>
-                                  ) : null}
-                                  {(charCampaign?.campaign_characters || [])
-                                    .filter((pc) =>
-                                      isGM
-                                        ? true
-                                        : String(pc.id) === String(characterId),
-                                    )
-                                    .map((pc) => (
-                                    <option key={pc.id} value={pc.id}>
-                                      {pc.true_name || pc.name || `PC ${pc.id}`}
-                                    </option>
-                                    ))}
                                 </select>
                               </div>
                               <div
@@ -10591,6 +10768,134 @@ const CharacterSheetWrapper = ({
                             }}
                           >
                             {xpToggleError}
+                          </div>
+                        )}
+                        {xpReqActiveSessionEntries.length > 0 && (
+                          <div style={{ marginTop: 10 }}>
+                            <div
+                              style={{
+                                fontSize: 10,
+                                color: "#9ca3af",
+                                marginBottom: 4,
+                                fontWeight: 600,
+                                textTransform: "uppercase",
+                                letterSpacing: "0.04em",
+                              }}
+                            >
+                              This session's XP records
+                            </div>
+                            <ul
+                              style={{
+                                listStyle: "none",
+                                margin: 0,
+                                padding: 0,
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: 4,
+                              }}
+                            >
+                              {xpReqActiveSessionEntries.map((entry) => {
+                                const trig =
+                                  entry.trigger_display || entry.trigger || "XP";
+                                const amt = Number(entry.xp_gained) || 0;
+                                const desc = String(
+                                  entry.description || "",
+                                ).trim();
+                                const src = (
+                                  entry.award_source || "AUTO"
+                                ).toUpperCase();
+                                const who =
+                                  src === "AUTO"
+                                    ? "Auto"
+                                    : src === "GM"
+                                      ? `GM${entry.awarded_by_username ? ` (${entry.awarded_by_username})` : ""}`
+                                      : `Self${entry.awarded_by_username ? ` (${entry.awarded_by_username})` : ""}`;
+                                const sessLbl = entry.session_name
+                                  ? entry.session_name
+                                  : entry.session
+                                    ? `session ${entry.session}`
+                                    : "out of session";
+                                const busy = xpEntryDeleteBusy === entry.id;
+                                return (
+                                  <li
+                                    key={`xp-entry-${entry.id}`}
+                                    style={{
+                                      display: "flex",
+                                      alignItems: "flex-start",
+                                      justifyContent: "space-between",
+                                      gap: 6,
+                                      padding: "4px 6px",
+                                      background: "#0b1220",
+                                      border: "1px solid #1f2937",
+                                      borderRadius: 4,
+                                      fontSize: 11,
+                                    }}
+                                  >
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div
+                                        style={{
+                                          color: "#e5e7eb",
+                                          fontWeight: 600,
+                                        }}
+                                      >
+                                        +{amt} {trig}
+                                      </div>
+                                      <div
+                                        style={{
+                                          color: "#9ca3af",
+                                          fontSize: 10,
+                                          marginTop: 1,
+                                        }}
+                                      >
+                                        {who} · {sessLbl}
+                                      </div>
+                                      {desc && (
+                                        <div
+                                          style={{
+                                            color: "#6b7280",
+                                            fontSize: 10,
+                                            marginTop: 1,
+                                            wordBreak: "break-word",
+                                          }}
+                                        >
+                                          {desc}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {canEditSheet && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleDeleteXpEntry(entry)
+                                        }
+                                        disabled={busy}
+                                        aria-label="Delete XP entry"
+                                        title="Delete this XP record"
+                                        style={{
+                                          flexShrink: 0,
+                                          width: 22,
+                                          height: 22,
+                                          borderRadius: 4,
+                                          border: "1px solid #7f1d1d",
+                                          background: busy
+                                            ? "#374151"
+                                            : "#1f2937",
+                                          color: "#fca5a5",
+                                          cursor: busy
+                                            ? "not-allowed"
+                                            : "pointer",
+                                          fontSize: 12,
+                                          lineHeight: 1,
+                                          padding: 0,
+                                        }}
+                                      >
+                                        ×
+                                      </button>
+                                    )}
+                                  </li>
+                                );
+                              })}
+                            </ul>
                           </div>
                         )}
                         {xpReqSnapshot.beliefs === 0 &&

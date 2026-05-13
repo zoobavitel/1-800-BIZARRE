@@ -3719,14 +3719,51 @@ function SessionDetail({
       if (!Number.isFinite(cid)) continue;
       const typeLbl = row.trigger_display || row.trigger || "XP";
       const desc = String(row.description || "").trim();
-      const line = desc
+      const label = desc
         ? `${typeLbl} (+${row.xp_gained ?? 0}) — ${desc}`
         : `${typeLbl} (+${row.xp_gained ?? 0})`;
+      const src = String(row.award_source || "AUTO").toUpperCase();
+      const who =
+        src === "AUTO"
+          ? "Auto"
+          : src === "GM"
+            ? `GM${row.awarded_by_username ? ` (${row.awarded_by_username})` : ""}`
+            : `Self${row.awarded_by_username ? ` (${row.awarded_by_username})` : ""}`;
+      const sessLbl = row.session_name
+        ? row.session_name
+        : row.session
+          ? `session ${row.session}`
+          : "out of session";
       if (!m.has(cid)) m.set(cid, []);
-      m.get(cid).push(line);
+      m.get(cid).push({
+        id: row.id,
+        label,
+        who,
+        source: src,
+        sessionLabel: sessLbl,
+      });
     }
     return m;
   }, [sessionXpEntriesSortedForScorecard]);
+
+  const [scorecardXpDeleteBusy, setScorecardXpDeleteBusy] = useState(null);
+  const [scorecardXpDeleteError, setScorecardXpDeleteError] = useState(null);
+  const handleScorecardDeleteXp = useCallback(
+    async (entryId) => {
+      if (!entryId) return;
+      setScorecardXpDeleteError(null);
+      setScorecardXpDeleteBusy(entryId);
+      try {
+        await experienceTrackerAPI.remove(entryId);
+        if (typeof onRefresh === "function") onRefresh();
+      } catch (err) {
+        setScorecardXpDeleteError(err?.message || "Could not delete XP entry.");
+      } finally {
+        setScorecardXpDeleteBusy(null);
+      }
+    },
+    [onRefresh],
+  );
 
   const charDisplayNameByIdScorecard = useMemo(() => {
     const m = new Map();
@@ -4216,13 +4253,78 @@ function SessionDetail({
                           <ul
                             style={{
                               margin: 0,
-                              paddingLeft: "18px",
+                              padding: 0,
+                              listStyle: "none",
                               color: "#9ca3af",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 3,
                             }}
                           >
-                            {lines.map((line, i) => (
-                              <li key={`endlive-${cid}-${i}`}>{line}</li>
-                            ))}
+                            {lines.map((entry, i) => {
+                              const busy =
+                                scorecardXpDeleteBusy === entry.id;
+                              return (
+                                <li
+                                  key={`endlive-${cid}-${entry.id ?? i}`}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "flex-start",
+                                    justifyContent: "space-between",
+                                    gap: 6,
+                                    background: "#0b1220",
+                                    border: "1px solid #1f2937",
+                                    borderRadius: 3,
+                                    padding: "3px 6px",
+                                  }}
+                                >
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ color: "#d1d5db" }}>
+                                      {entry.label}
+                                    </div>
+                                    <div
+                                      style={{
+                                        color: "#6b7280",
+                                        fontSize: 9,
+                                        marginTop: 1,
+                                      }}
+                                    >
+                                      {entry.who} · {entry.sessionLabel}
+                                    </div>
+                                  </div>
+                                  {entry.id && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleScorecardDeleteXp(entry.id)
+                                      }
+                                      disabled={busy}
+                                      aria-label="Delete XP entry"
+                                      title="Delete this XP record"
+                                      style={{
+                                        flexShrink: 0,
+                                        width: 18,
+                                        height: 18,
+                                        borderRadius: 3,
+                                        border: "1px solid #7f1d1d",
+                                        background: busy
+                                          ? "#374151"
+                                          : "#1f2937",
+                                        color: "#fca5a5",
+                                        cursor: busy
+                                          ? "not-allowed"
+                                          : "pointer",
+                                        fontSize: 11,
+                                        lineHeight: 1,
+                                        padding: 0,
+                                      }}
+                                    >
+                                      ×
+                                    </button>
+                                  )}
+                                </li>
+                              );
+                            })}
                           </ul>
                         </div>
                       );
@@ -4235,6 +4337,17 @@ function SessionDetail({
                     </span>
                   )}
                 </div>
+                {scorecardXpDeleteError && (
+                  <div
+                    style={{
+                      color: "#fca5a5",
+                      fontSize: 10,
+                      marginTop: 4,
+                    }}
+                  >
+                    {scorecardXpDeleteError}
+                  </div>
+                )}
               </div>
             ) : null}
             <div
@@ -4588,13 +4701,78 @@ function SessionDetail({
                           <ul
                             style={{
                               margin: 0,
-                              paddingLeft: "18px",
+                              padding: 0,
+                              listStyle: "none",
                               color: "#9ca3af",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: 3,
                             }}
                           >
-                            {lines.map((line, i) => (
-                              <li key={`${cid}-${i}`}>{line}</li>
-                            ))}
+                            {lines.map((entry, i) => {
+                              const busy =
+                                scorecardXpDeleteBusy === entry.id;
+                              return (
+                                <li
+                                  key={`${cid}-${entry.id ?? i}`}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "flex-start",
+                                    justifyContent: "space-between",
+                                    gap: 6,
+                                    background: "#0b1220",
+                                    border: "1px solid #1f2937",
+                                    borderRadius: 3,
+                                    padding: "3px 6px",
+                                  }}
+                                >
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ color: "#d1d5db" }}>
+                                      {entry.label}
+                                    </div>
+                                    <div
+                                      style={{
+                                        color: "#6b7280",
+                                        fontSize: 9,
+                                        marginTop: 1,
+                                      }}
+                                    >
+                                      {entry.who} · {entry.sessionLabel}
+                                    </div>
+                                  </div>
+                                  {entry.id && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleScorecardDeleteXp(entry.id)
+                                      }
+                                      disabled={busy}
+                                      aria-label="Delete XP entry"
+                                      title="Delete this XP record"
+                                      style={{
+                                        flexShrink: 0,
+                                        width: 18,
+                                        height: 18,
+                                        borderRadius: 3,
+                                        border: "1px solid #7f1d1d",
+                                        background: busy
+                                          ? "#374151"
+                                          : "#1f2937",
+                                        color: "#fca5a5",
+                                        cursor: busy
+                                          ? "not-allowed"
+                                          : "pointer",
+                                        fontSize: 11,
+                                        lineHeight: 1,
+                                        padding: 0,
+                                      }}
+                                    >
+                                      ×
+                                    </button>
+                                  )}
+                                </li>
+                              );
+                            })}
                           </ul>
                         </div>
                       );

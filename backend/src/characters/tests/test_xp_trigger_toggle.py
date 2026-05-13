@@ -165,3 +165,107 @@ class XpTriggerToggleTests(TestCase):
             format="json",
         )
         self.assertEqual(res.status_code, 400)
+
+    def test_award_records_player_attribution(self):
+        self._auth(self.player)
+        res = self.client.post(
+            "/api/experience-tracker/award/",
+            {"character": self.character.id, "trigger": "BELIEFS"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        entry = ExperienceTracker.objects.filter(
+            character=self.character, trigger="BELIEFS"
+        ).latest("id")
+        self.assertEqual(entry.award_source, "PLAYER")
+        self.assertEqual(entry.awarded_by_id, self.player.id)
+        self.assertEqual(entry.clock_key, "playbook")
+
+    def test_award_records_gm_attribution_when_gm_awards(self):
+        self._auth(self.gm)
+        res = self.client.post(
+            "/api/experience-tracker/award/",
+            {"character": self.character.id, "trigger": "STRUGGLE"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        entry = ExperienceTracker.objects.filter(
+            character=self.character, trigger="STRUGGLE"
+        ).latest("id")
+        self.assertEqual(entry.award_source, "GM")
+        self.assertEqual(entry.awarded_by_id, self.gm.id)
+
+    def test_delete_endpoint_removes_entry_and_rolls_back_clock(self):
+        entry = ExperienceTracker.objects.create(
+            character=self.character,
+            session=self.session,
+            trigger="STRUGGLE",
+            description="Auto: trauma",
+            xp_gained=1,
+            award_source="AUTO",
+            clock_key="playbook",
+        )
+        self.character.xp_clocks = {"playbook": 3}
+        self.character.save(update_fields=["xp_clocks"])
+        self._auth(self.gm)
+        res = self.client.delete(f"/api/experience-tracker/{entry.id}/")
+        self.assertEqual(res.status_code, 204)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.xp_clocks.get("playbook"), 2)
+        self.assertFalse(
+            ExperienceTracker.objects.filter(pk=entry.id).exists()
+        )
+
+    def test_delete_endpoint_uses_entry_clock_key_for_attribute_track(self):
+        entry = ExperienceTracker.objects.create(
+            character=self.character,
+            session=self.session,
+            trigger="DESPERATE_ROLL",
+            description="Desperate roll: Hunt",
+            xp_gained=1,
+            award_source="AUTO",
+            clock_key="insight",
+        )
+        self.character.xp_clocks = {"playbook": 1, "insight": 2}
+        self.character.save(update_fields=["xp_clocks"])
+        self._auth(self.player)
+        res = self.client.delete(f"/api/experience-tracker/{entry.id}/")
+        self.assertEqual(res.status_code, 204)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.xp_clocks.get("insight"), 1)
+        self.assertEqual(self.character.xp_clocks.get("playbook"), 1)
+
+    def test_delete_endpoint_rolls_back_pool_for_session_end_rows(self):
+        self.character.unallocated_xp = 3
+        self.character.save(update_fields=["unallocated_xp"])
+        entry = ExperienceTracker.objects.create(
+            character=self.character,
+            session=self.session,
+            trigger="MANUAL",
+            description="Session end (pool): Stand Development session XP (+2).",
+            xp_gained=2,
+            award_source="AUTO",
+            clock_key="",
+        )
+        self._auth(self.gm)
+        res = self.client.delete(f"/api/experience-tracker/{entry.id}/")
+        self.assertEqual(res.status_code, 204)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.unallocated_xp, 1)
+
+    def test_delete_endpoint_forbidden_for_outsider(self):
+        entry = ExperienceTracker.objects.create(
+            character=self.character,
+            session=self.session,
+            trigger="STRUGGLE",
+            description="x",
+            xp_gained=1,
+            award_source="AUTO",
+            clock_key="playbook",
+        )
+        self._auth(self.other)
+        res = self.client.delete(f"/api/experience-tracker/{entry.id}/")
+        self.assertIn(res.status_code, (403, 404))
+        self.assertTrue(
+            ExperienceTracker.objects.filter(pk=entry.id).exists()
+        )

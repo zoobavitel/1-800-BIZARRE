@@ -201,6 +201,8 @@ def award_desperate_action_xp(character, session, roll, action_name, request_use
         trigger='DESPERATE_ROLL',
         description=f'Desperate roll: {action_name}',
         xp_gained=1,
+        award_source='AUTO',
+        clock_key=track,
     )
     return 1, track
 

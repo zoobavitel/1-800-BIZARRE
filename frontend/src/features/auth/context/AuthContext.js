@@ -59,6 +59,11 @@ export const AuthProvider = ({ children }) => {
       setToken(newToken);
       setUser(userData);
       localStorage.setItem("authToken", newToken);
+      // Drop stale #character/… (or other) hash so signing in lands on home,
+      // not whatever page the previous user (or this user pre-logout) was on.
+      if (typeof window !== "undefined") {
+        window.location.hash = "";
+      }
 
       return { success: true };
     } catch (err) {
@@ -110,6 +115,11 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
     setError(null);
     localStorage.removeItem("authToken");
+    // Reset the route so the next sign-in (this or another user) opens on
+    // the home page instead of restoring the previous user's deep link.
+    if (typeof window !== "undefined") {
+      window.location.hash = "";
+    }
   };
 
   const isAuthenticated = !!token && !!user;

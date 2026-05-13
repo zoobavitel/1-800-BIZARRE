@@ -885,11 +885,22 @@ class CharacterViewSet(viewsets.ModelViewSet):
             
             # Create experience entry
             from .models import ExperienceTracker
+            user = request.user
+            is_owner = character.user_id == getattr(user, 'id', None)
+            is_gm = bool(
+                character.campaign_id
+                and character.campaign.gm_id == getattr(user, 'id', None)
+            )
             ExperienceTracker.objects.create(
                 character=character,
                 trigger=trigger,
                 description=description,
-                xp_gained=amount
+                xp_gained=amount,
+                awarded_by=user if getattr(user, 'is_authenticated', False) else None,
+                award_source=(
+                    'GM' if (is_gm and not is_owner) else ('PLAYER' if is_owner else 'GM')
+                ),
+                clock_key=track,
             )
             
             return Response({
@@ -978,6 +989,11 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     f'({pool} in pool before).'
                 ),
                 xp_gained=amount,
+                awarded_by=user if getattr(user, 'is_authenticated', False) else None,
+                award_source=(
+                    'GM' if (is_gm and not is_owner) else ('PLAYER' if is_owner else 'GM')
+                ),
+                clock_key=track,
             )
 
         return Response({

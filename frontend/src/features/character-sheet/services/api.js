@@ -718,6 +718,10 @@ export const experienceTrackerAPI = {
       method: "POST",
       body: JSON.stringify({ character, trigger }),
     }),
+  // Delete a specific XP entry by id; rolls back the entry's clock_key track
+  // (or unallocated_xp pool, for end-of-session pool rows).
+  remove: (id) =>
+    apiRequest(`/experience-tracker/${id}/`, { method: "DELETE" }),
 };
 
 export const xpHistoryAPI = {

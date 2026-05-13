@@ -1,6 +1,6 @@
 from django.db import transaction
 from django.db.models import Q
-from rest_framework import status, viewsets, permissions
+from rest_framework import mixins, status, viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
@@ -173,8 +173,17 @@ class CrewHistoryViewSet(viewsets.ReadOnlyModelViewSet):
         return base.order_by("-timestamp")
 
 
-class ExperienceTrackerViewSet(viewsets.ReadOnlyModelViewSet):
-    """Desperate-roll and other tracked XP gains; read-only. Filter by ?character= (owner or GM)."""
+class ExperienceTrackerViewSet(
+    mixins.DestroyModelMixin,
+    viewsets.ReadOnlyModelViewSet,
+):
+    """Desperate-roll and other tracked XP gains.
+
+    List/retrieve are filterable by ``?character=`` (owner or GM); ``destroy``
+    deletes a specific XP entry and rolls back the matching xp clock so that
+    GMs and players can remove *any* XP record (manual, auto, mid-session or
+    end-of-session settlement) during an active session.
+    """
     permission_classes = [IsAuthenticated]
     queryset = ExperienceTracker.objects.all()
     serializer_class = ExperienceTrackerSerializer
@@ -255,7 +264,9 @@ class ExperienceTrackerViewSet(viewsets.ReadOnlyModelViewSet):
             if char and (char.user_id == user.id or (char.campaign_id and char.campaign.gm_id == user.id)):
                 return qs.filter(character_id=char_id)
             return ExperienceTracker.objects.none()
-        return qs.filter(character__user=user)
+        return qs.filter(
+            Q(character__user=user) | Q(character__campaign__gm=user)
+        ).distinct()
 
     def _resolve_toggle_context(self, request):
         """Validate character, trigger, and active session for award/revoke toggles."""
@@ -297,9 +308,18 @@ class ExperienceTrackerViewSet(viewsets.ReadOnlyModelViewSet):
 
         Respects the SRD 2-cap per session per trigger and writes to the
         character's playbook XP clock; idempotent at the cap (returns the
-        current totals without creating a new entry).
+        current totals without creating a new entry). Records the caller
+        as ``awarded_by`` and tags ``award_source`` as ``PLAYER`` or ``GM``
+        so the XP record UI can show who toggled it.
         """
         character, session, trigger = self._resolve_toggle_context(request)
+        user = request.user
+        is_owner = character.user_id == user.id
+        is_gm = bool(
+            character.campaign_id
+            and character.campaign.gm_id == user.id
+        )
+        source = "GM" if (is_gm and not is_owner) else "PLAYER"
         with transaction.atomic():
             granted = grant_encoded_trigger_xp(
                 character,
@@ -309,6 +329,8 @@ class ExperienceTrackerViewSet(viewsets.ReadOnlyModelViewSet):
                 clock_max=10,
                 want=1,
                 description=f"{MANUAL_TOGGLE_DESCRIPTION_PREFIX}: {trigger}",
+                awarded_by=user,
+                award_source=source,
             )
         return Response(
             {
@@ -328,7 +350,8 @@ class ExperienceTrackerViewSet(viewsets.ReadOnlyModelViewSet):
         first; falls back to the most recent auto-grant (e.g. heritage,
         vice overindulgence, trauma) for the same trigger so that GMs and
         players can also delete those records from the scorecard. Rolls back
-        the entry's ``xp_gained`` on the playbook clock (clamped to 0).
+        ``xp_gained`` on the entry's stored ``clock_key`` (defaulting to
+        ``playbook`` for legacy rows that predate the field).
         No-op if no entry exists for this trigger in the active session.
         """
         character, session, trigger = self._resolve_toggle_context(request)
@@ -354,13 +377,10 @@ class ExperienceTrackerViewSet(viewsets.ReadOnlyModelViewSet):
                     status=status.HTTP_200_OK,
                 )
             amount = int(entry.xp_gained or 0)
+            clock_key = entry.clock_key or "playbook"
             entry.delete()
             if amount > 0:
-                clocks = dict(character.xp_clocks or {})
-                cur = int(clocks.get("playbook", 0) or 0)
-                clocks["playbook"] = max(0, cur - amount)
-                character.xp_clocks = clocks
-                character.save(update_fields=["xp_clocks"])
+                _rollback_clock(character, clock_key, amount)
         return Response(
             {
                 "character": character.id,
@@ -370,3 +390,53 @@ class ExperienceTrackerViewSet(viewsets.ReadOnlyModelViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete an XP entry and roll back its ``clock_key`` track.
+
+        Allowed for the character owner or the campaign GM. The matching
+        ``xp_clocks[clock_key]`` value is decremented by ``xp_gained``
+        (clamped at zero); pool entries created by the development XP
+        settlement also decrement ``unallocated_xp`` so deleting them keeps
+        the session pool consistent.
+        """
+        entry = self.get_object()
+        character = entry.character
+        user = request.user
+        is_owner = character.user_id == user.id
+        is_gm = bool(
+            character.campaign_id
+            and character.campaign.gm_id == user.id
+        )
+        if not (user.is_staff or is_owner or is_gm):
+            raise PermissionDenied(
+                "Only the character owner or campaign GM can delete XP entries."
+            )
+
+        with transaction.atomic():
+            locked_entry = ExperienceTracker.objects.select_for_update().get(
+                pk=entry.pk
+            )
+            locked_char = Character.objects.select_for_update().get(
+                pk=character.pk
+            )
+            amount = int(locked_entry.xp_gained or 0)
+            clock_key = (locked_entry.clock_key or "").strip()
+            desc = locked_entry.description or ""
+            locked_entry.delete()
+            if amount > 0 and clock_key:
+                _rollback_clock(locked_char, clock_key, amount)
+            elif amount > 0 and "Session end (pool)" in desc:
+                cur = int(getattr(locked_char, "unallocated_xp", 0) or 0)
+                locked_char.unallocated_xp = max(0, cur - amount)
+                locked_char.save(update_fields=["unallocated_xp"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _rollback_clock(character, clock_key: str, amount: int) -> None:
+    """Decrement ``character.xp_clocks[clock_key]`` by ``amount`` (clamped)."""
+    clocks = dict(character.xp_clocks or {})
+    cur = int(clocks.get(clock_key, 0) or 0)
+    clocks[clock_key] = max(0, cur - int(amount))
+    character.xp_clocks = clocks
+    character.save(update_fields=["xp_clocks"])
