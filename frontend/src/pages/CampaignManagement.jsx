@@ -3576,7 +3576,7 @@ function SessionDetail({
         setCharacters(list?.filter((c) => c.campaign === campaign.id) || []),
       )
       .catch(() => setCharacters([]));
-  }, [session?.id, session, campaign?.id]);
+  }, [session, campaign?.id]);
 
   useEffect(() => {
     refetchSessionPanel();
