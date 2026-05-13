@@ -52,6 +52,17 @@ class SessionViewSet(viewsets.ModelViewSet):
             | models.Q(campaign__characters__user=user)
             | models.Q(campaign__players=user)
         ).distinct()
+
+        # Narrow by query params so a campaign-scoped list page doesn't
+        # accidentally show or affect sessions from other campaigns the
+        # user happens to be a member of.
+        campaign_id = self.request.query_params.get("campaign")
+        if campaign_id:
+            base = base.filter(campaign_id=campaign_id)
+        status_param = self.request.query_params.get("status")
+        if status_param:
+            base = base.filter(status=status_param)
+
         return base.prefetch_related(Prefetch("rolls", queryset=rolls_qs))
 
     def perform_create(self, serializer):
