@@ -22,6 +22,7 @@ import {
 import HomeSessionScatterChart from "../components/home/HomeSessionScatterChart";
 import HomeStatsBarChart from "../components/home/HomeStatsBarChart";
 import HomeStandCoin from "../components/home/HomeStandCoin";
+import HomeFactionInlineEditor from "../components/home/HomeFactionInlineEditor";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 
 /** Hero “tradition” pills: short blurbs for home only (not rules text). */
@@ -156,6 +157,7 @@ const HomePage = ({
   const [crewCount, setCrewCount] = useState(0);
   const [siteStats, setSiteStats] = useState(null);
   const [openHeroPill, setOpenHeroPill] = useState(null);
+  const [expandedFactionId, setExpandedFactionId] = useState(null);
 
   const loadCharacters = useCallback(async () => {
     setLoading(true);
@@ -286,12 +288,22 @@ const HomePage = ({
     return list.map((h) => `${h.name} (${h.count})`).join(", ");
   }, [siteStats]);
 
-  const primaryCampaignForFactions = useMemo(() => {
-    const withF = (campaigns || []).find(
-      (c) => Array.isArray(c.factions) && c.factions.length,
-    );
-    return withF || (campaigns || [])[0] || null;
-  }, [campaigns]);
+  const gmFactionGroups = useMemo(() => {
+    if (!user) return [];
+    return (campaigns || [])
+      .filter((c) => c.gm?.id === user.id)
+      .map((c) => ({
+        campaign: c,
+        factions: Array.isArray(c.factions) ? c.factions : [],
+      }))
+      .filter((g) => g.factions.length > 0);
+  }, [campaigns, user]);
+
+  const firstGmCampaignId = useMemo(() => {
+    if (!user) return null;
+    const gm = (campaigns || []).find((c) => c.gm?.id === user.id);
+    return gm?.id ?? null;
+  }, [campaigns, user]);
 
   const handleCreateCharacter = () => {
     if (typeof onNavigateToCharacter === "function")
@@ -359,19 +371,34 @@ const HomePage = ({
     }
   };
 
+  const refreshCampaigns = useCallback(() => {
+    setCampaignsLoading(true);
+    return campaignAPI
+      .getCampaigns()
+      .then((list) => setCampaigns(Array.isArray(list) ? list : []))
+      .catch(() => setCampaigns([]))
+      .finally(() => setCampaignsLoading(false));
+  }, []);
+
   const handleDeleteFaction = async (factionId) => {
     if (!window.confirm("Delete this faction?")) return;
     try {
       await factionAPI.deleteFaction(factionId);
-      setCampaignsLoading(true);
-      campaignAPI
-        .getCampaigns()
-        .then((list) => setCampaigns(Array.isArray(list) ? list : []))
-        .catch(() => setCampaigns([]))
-        .finally(() => setCampaignsLoading(false));
+      if (expandedFactionId === factionId) setExpandedFactionId(null);
+      refreshCampaigns();
     } catch (err) {
       console.error("Failed to delete faction:", err);
     }
+  };
+
+  const handleFactionEditorSaved = () => {
+    setExpandedFactionId(null);
+    refreshCampaigns();
+  };
+
+  const handleFactionEditorDeleted = (factionId) => {
+    if (expandedFactionId === factionId) setExpandedFactionId(null);
+    refreshCampaigns();
   };
 
   return (
@@ -867,91 +894,130 @@ const HomePage = ({
             <span className="split-divider-label">Your Factions</span>
             <div className="split-divider-bar" />
           </div>
-          <div className="split-npc-row">
-            <div>
-              {primaryCampaignForFactions ? (
-                <div className="split-label">
-                  {primaryCampaignForFactions.name}
-                </div>
-              ) : (
-                <div className="split-label">Factions</div>
-              )}
-            </div>
-            <button
-              type="button"
-              className="split-btn split-btn-amber"
-              onClick={() => onNavigateToCampaign?.(null)}
-            >
-              + New Faction
-            </button>
-          </div>
 
-          {!primaryCampaignForFactions ||
-          !Array.isArray(primaryCampaignForFactions.factions) ? (
-            <p className="home-muted-dark">No factions yet.</p>
-          ) : (
-            primaryCampaignForFactions.factions.map((f) => (
-              <div key={f.id} className="f-card" role="presentation">
-                <div className="f-card-info">
-                  <div className="f-card-name">{f.name}</div>
-                  <div className="f-card-meta">
-                    <span>
-                      Tier
-                      <span className="f-card-meta-val">
-                        {" "}
-                        {tierRoman(f.level)}
-                      </span>
-                    </span>
-                    <span>
-                      Hold
-                      <span className="f-card-meta-val">
-                        {" "}
-                        {holdLabel(f.hold)}
-                      </span>
-                    </span>
-                    <span>
-                      Rep
-                      <span className="f-card-meta-val">
-                        {" "}
-                        {(f.reputation ?? 0) > 0 ? "+" : ""}
-                        {f.reputation ?? 0}
-                      </span>
-                    </span>
-                  </div>
+          {gmFactionGroups.length === 0 ? (
+            <>
+              <div className="split-npc-row">
+                <div>
+                  <div className="split-label">Factions</div>
                 </div>
-                <div className="f-card-right">
-                  <div
-                    className={`f-card-status ${factionStatusClass(f.reputation)}`}
-                  >
-                    {factionStatusLabel(f.reputation)}
-                  </div>
-                  <div className="f-card-actions">
-                    <button
-                      type="button"
-                      className="f-card-btn f-card-btn-edit"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onNavigateToCampaign?.(
-                          primaryCampaignForFactions.id,
-                          { factionId: f.id },
-                        );
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="f-card-btn f-card-btn-delete"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteFaction(f.id);
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  className="split-btn split-btn-amber"
+                  onClick={() => onNavigateToCampaign?.(firstGmCampaignId)}
+                >
+                  + New Faction
+                </button>
               </div>
+              <p className="home-muted-dark">No factions yet.</p>
+            </>
+          ) : (
+            gmFactionGroups.map(({ campaign, factions }) => (
+              <React.Fragment key={campaign.id}>
+                <div className="split-npc-row">
+                  <div>
+                    <div className="split-label">{campaign.name}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="split-btn split-btn-amber"
+                    onClick={() => onNavigateToCampaign?.(campaign.id)}
+                  >
+                    + New Faction
+                  </button>
+                </div>
+                {factions.map((f) => {
+                  const isExpanded = expandedFactionId === f.id;
+                  const toggleExpanded = () =>
+                    setExpandedFactionId(isExpanded ? null : f.id);
+                  return (
+                    <div
+                      key={f.id}
+                      className={`f-card-wrap${isExpanded ? " is-expanded" : ""}`}
+                    >
+                      <div
+                        className="f-card"
+                        role="button"
+                        tabIndex={0}
+                        aria-expanded={isExpanded}
+                        onClick={toggleExpanded}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            toggleExpanded();
+                          }
+                        }}
+                      >
+                        <div className="f-card-info">
+                          <div className="f-card-name">{f.name}</div>
+                          <div className="f-card-meta">
+                            <span>
+                              Tier
+                              <span className="f-card-meta-val">
+                                {" "}
+                                {tierRoman(f.level)}
+                              </span>
+                            </span>
+                            <span>
+                              Hold
+                              <span className="f-card-meta-val">
+                                {" "}
+                                {holdLabel(f.hold)}
+                              </span>
+                            </span>
+                            <span>
+                              Rep
+                              <span className="f-card-meta-val">
+                                {" "}
+                                {(f.reputation ?? 0) > 0 ? "+" : ""}
+                                {f.reputation ?? 0}
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                        <div className="f-card-right">
+                          <div
+                            className={`f-card-status ${factionStatusClass(f.reputation)}`}
+                          >
+                            {factionStatusLabel(f.reputation)}
+                          </div>
+                          <div className="f-card-actions">
+                            <button
+                              type="button"
+                              className="f-card-btn f-card-btn-edit"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleExpanded();
+                              }}
+                            >
+                              {isExpanded ? "Close" : "Edit"}
+                            </button>
+                            <button
+                              type="button"
+                              className="f-card-btn f-card-btn-delete"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteFaction(f.id);
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      {isExpanded && (
+                        <HomeFactionInlineEditor
+                          faction={f}
+                          campaign={campaign}
+                          onCancel={() => setExpandedFactionId(null)}
+                          onSaved={handleFactionEditorSaved}
+                          onDeleted={handleFactionEditorDeleted}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </React.Fragment>
             ))
           )}
         </div>
