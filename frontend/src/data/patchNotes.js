@@ -4,12 +4,37 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-05-14",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "0-dot desperate +2; drop encoded col"
+        ]
+      },
+      {
+        "title": "Other",
+        "items": [
+          "Merge branch 'master' into feature/xp-trigger-toggle"
+        ]
+      },
+      {
+        "title": "Tests",
+        "items": [
+          "expect STRUGGLE encode on complete, not Abilities roll"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-05-13",
     "version": null,
     "sections": [
       {
         "title": "Fixed",
         "items": [
+          "hide NPC/GM 'special negate' blurb from PC sheet",
           "remove redundant session?.id from refetchSessionPanel deps",
           "toggle XP feeds BELIEFS/STRUGGLE/STANDOUT columns + Total",
           "add charCampaign?.sessions to history-fetch deps",
@@ -17,8 +42,22 @@ export const PATCH_NOTES = [
         ]
       },
       {
+        "title": "Documentation",
+        "items": [
+          "rename canonical SRD to 1-(800)-BIZARRE; drop root duplicates",
+          "prune obsolete AI reports and integration plans"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "remove legacy root scripts and update docs"
+        ]
+      },
+      {
         "title": "Added",
         "items": [
+          "playbook-specific trigger + award attribution in session XP log",
           "realtime session panel, crew autoattach, sheet fixes",
           "attribution + delete-any on XP records; misc sheet polish",
           "toggle end-of-session triggers from sheet + GM scorecard",
@@ -34,6 +73,7 @@ export const PATCH_NOTES = [
       {
         "title": "Other",
         "items": [
+          "Merge pull request #82 from zoobavitel/feature/xp-trigger-toggle",
           "Merge pull request #81 from zoobavitel/fix/sessions-filter-by-campaign",
           "Merge pull request #80 from zoobavitel/fix/sessions-filter-by-campaign"
         ]
@@ -610,12 +650,7 @@ export const PATCH_NOTES = [
           "Merge pull request #48 from zoobavitel/copilot/fix-persist-trauma-checkboxes",
           "Merge pull request #47 from zoobavitel/copilot/fix-load-characters-order",
           "Merge pull request #40 from zoobavitel/fix/trauma-checkbox-sync",
-          "Initial plan",
-          "Merge branch 'master' into fix/trauma-checkbox-sync",
-          "Merge pull request #46 from zoobavitel/copilot/fix-patch-notes-display-issue",
-          "Merge pull request #45 from zoobavitel/copilot/update-home-page-characters-section",
-          "Merge pull request #44 from zoobavitel/copilot/apply-css-faction-section",
-          "Add faction, camp-card, patch-notes, footer CSS to Home.css"
+          "Initial plan"
         ]
       },
       {
@@ -628,16 +663,7 @@ export const PATCH_NOTES = [
           "prevent GM from claiming ownership of player character sheets",
           "restore patchNotes.js accidentally truncated by build in shallow clone",
           "resolve no-use-before-define lint error for loadCharacters",
-          "move loadCharacters before useEffect to fix no-use-before-define",
-          "move loadCharacters before useEffect to fix no-use-before-define",
-          "deduplicate date key, hasOwnProperty guard, batch trauma name lookup",
-          "add missing commas at lines 95 and 649"
-        ]
-      },
-      {
-        "title": "Refactored",
-        "items": [
-          "wrap loadCharacters in useCallback and add it to effect deps"
+          "move loadCharacters before useEffect to fix no-use-before-define"
         ]
       }
     ]

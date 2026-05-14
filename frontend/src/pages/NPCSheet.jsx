@@ -30,7 +30,8 @@ const DUR_REGULAR_ARMOR = { F: 0, D: 1, C: 1, B: 2, A: 3, S: 3 };
 const DUR_SPECIAL_ARMOR = { F: 0, D: 0, C: 1, B: 1, A: 2, S: 2 };
 
 // Durability → Stand armor charges (path / Stand soak; separate from physical reduce & special negate)
-const DUR_STAND_ARMOR = { F: 0, D: 0, C: 1, B: 1, A: 2, S: 2 };
+/** SRD Stand Armor Charges (same table as PC sheet / NPC `stand_armor_charges`). */
+const DUR_STAND_ARMOR = { F: 0, D: 1, C: 2, B: 3, A: 4, S: 5 };
 
 // Power → base harm level + position note
 /** Session involvement rows use `npc` FK from JSON — may be number or string */

@@ -1,36 +1,73 @@
 # 1-800-BIZARRE
 
-This is the root directory of the 1-800-BIZARRE project. It serves as the central hub for both the frontend and backend applications, along with shared configurations, documentation, and scripts.
+Monorepo for the **1-800-BIZARRE** TTRPG platform: a Django REST backend (`backend/`) and a React SPA frontend (`frontend/`) for the JoJo-flavored Bizarre tabletop ruleset.
 
-## Purpose
+Live site (GitHub Pages): <https://zoobavitel.github.io/1-800-BIZARRE/>
 
-The primary purpose of this directory is to:
-*   **Organize the Monorepo**: Act as the top-level container for the distinct `frontend` and `backend` services. This monorepo structure facilitates shared configurations, consistent development practices, and streamlined deployment.
-*   **Provide Project-Wide Configuration**: Host configuration files that apply to the entire project, such as ESLint (`.eslintrc.json`), Git ignore rules (`.gitignore`), and TypeScript configuration (`tsconfig.json`).
-*   **Manage Dependencies**: The `package.json` and `package-lock.json` files at this level manage development dependencies and scripts that might be used across both frontend and backend (e.g., for linting, formatting, or shared build processes).
-*   **Offer High-Level Documentation**: The `README.md` (this file) provides an overview of the entire project, its structure, and how to get started.
+## Repo layout
 
-## Key Contents
+| Path | What lives there |
+|------|------------------|
+| [`backend/`](backend/) | Django 4 + DRF API. Apps: `app/` (project), `characters/`, `authentication/`, `campaigns/`, `crews/`, `factions/`. |
+| [`frontend/`](frontend/) | React 18 SPA built with `react-scripts` (CRA) + Tailwind. |
+| [`docs/`](docs/) | Project docs, SRD markdown, codebase index. Start at [`docs/README.md`](docs/README.md). |
+| [`scripts/`](scripts/) | Shell helpers + perf scripts (`scripts/perf/`). See [`scripts/README.md`](scripts/README.md). |
+| [`deploy/`](deploy/) | Self-hosted LXC / Caddy / systemd templates. See [`deploy/bizarre-api/README.md`](deploy/bizarre-api/README.md). |
+| [`.github/`](.github/) | Actions workflows + CI / deploy automation. See [`.github/README.md`](.github/README.md). |
+| [`.cursor/`](.cursor/) | Cursor IDE rules, subagents, skills, plans. |
 
-*   `.eslintrc.json`: ESLint configuration for consistent JavaScript/TypeScript code style.
-*   `.gitignore`: Specifies intentionally untracked files to ignore by Git.
-*   `package.json`, `package-lock.json`: Node.js project metadata and dependency management.
-*   `tailwind.config.js`: Tailwind CSS configuration, potentially shared or influencing both frontend and backend if CSS is processed at this level.
-*   `tsconfig.json`: TypeScript compiler configuration for the entire project.
-*   `CUSTOM_ABILITIES_FINAL_REPORT.md`, `DYNAMIC_ABILITIES_COMPLETE.md`: Project-specific documentation or reports.
-*   `backend/`: Contains the Django-based backend application.
-*   `frontend/`: Contains the React-based frontend application.
-*   `docs/`: Stores project documentation, including architectural overviews, API usage, and game-specific rules.
-*   `scripts/`: Houses various utility scripts for deployment, setup, and other operational tasks.
-*   `.github/`: Contains GitHub-specific configurations, such as CI/CD workflows.
+## Key root files
 
-## Code Quality and Structure
+| File | Role |
+|------|------|
+| `package.json` | npm workspace root. Hosts `dev`, `test:*`, `lint`, `build`, `deploy`, `format` scripts that orchestrate frontend + backend. |
+| `.venv/` | Python virtualenv used by `npm run dev:backend` and most scripts (`source .venv/bin/activate`). |
+| `.eslintrc.json` | ESLint config (frontend lint). |
+| `.prettierrc`, `.prettierignore` | Prettier config for `npm run format`. |
+| `.gitleaks.toml` | Secret-scan rules used by `.github/workflows/secret-scan.yml`. |
+| `BUGBOT.md` | Review standards for the critical-bug review bot. |
+| `SECURITY.md` | Security policy / vulnerability reporting. |
+| `MVP.md` | Historical MVP scope doc (not a living spec). |
+| `tsconfig.json`, `tailwind.config.js`, `postcss.config.js` | Vestigial root configs — the live tooling lives under `frontend/`. Kept for IDE compatibility. |
 
-The monorepo structure promotes:
-*   **Consistency**: Shared linting and formatting rules ensure a uniform codebase.
-*   **Modularity**: Clear separation between frontend and backend concerns, allowing independent development and deployment of each service while maintaining a unified project context.
-*   **Maintainability**: Centralized configuration and top-level scripts simplify project setup and ongoing maintenance.
+## Getting started
 
-## Logic Behind Decisions
+```bash
+git clone https://github.com/zoobavitel/1-800-BIZARRE.git
+cd 1-800-BIZARRE
 
-The decision to use a monorepo structure is driven by the desire to manage related but distinct services (frontend and backend) within a single repository. This approach simplifies dependency management, facilitates code sharing (though minimal in this specific structure), and streamlines CI/CD pipelines. Project-wide configuration files ensure that coding standards and build processes are consistently applied across both applications.
+# Python venv at repo root
+python -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
+
+# Node deps for frontend (npm workspace)
+npm run install:all
+
+# DB + fixtures
+cd backend/src && python manage.py migrate
+python manage.py loaddata characters/fixtures/*.json
+cd ../..
+
+# Run both servers
+npm run dev          # frontend on :3000, Django on :8000
+```
+
+For the full local-dev walkthrough, CI parity, and deploy notes, see [`docs/development.md`](docs/development.md) and [`.github/README.md`](.github/README.md).
+
+## Common commands
+
+| Command | What it does |
+|---------|--------------|
+| `npm run dev` | Concurrently runs Django (`:8000`) + React (`:3000`). |
+| `npm test` | Unit + integration suites (frontend Jest + backend Django). |
+| `npm run test:automated-ui` | Playwright E2E (in `frontend/e2e/`). |
+| `npm run test:performance` | Backend latency probe + Lighthouse budget check. |
+| `npm run lint` / `npm run lint:fix` | ESLint over `frontend/src/`. |
+| `npm run format` / `format:check` | Prettier across the repo. |
+| `npm run build` | Production frontend bundle (`frontend/build/`). |
+| `npm run deploy` | `gh-pages` publish of `frontend/build` to GitHub Pages. |
+
+## Game rules
+
+The canonical ruleset lives in [`docs/1-(800)-BIZARRE SRD.md`](docs/1-\(800\)-BIZARRE%20SRD.md) (player-facing) and `docs/1-(800)-BIZARRE SRD_DEV.md` (work-in-progress). Backend validation should match the SRD; deviations are called out in PR descriptions per [`.cursor/rules/pr-doc-links-mechanics.mdc`](.cursor/rules/pr-doc-links-mechanics.mdc).

@@ -127,27 +127,27 @@ export const TRAUMA_PK_TO_KEY = Object.fromEntries(
 );
 
 // Durability → Stand armor charges (+ resist tiers). SRD_DEV: durability does **not** change stress track length (baseline 9).
-// S: 3 armor, resistance may reduce harm by 2 levels | A: 3 | B: 2 | C: 1 | D: 1 | F: 0
+// SRD `docs/1-(800)-BIZARRE SRD.md` Stand Armor table: F:0, D:1, C:2, B:3, A:4 (S not in table — use 5 charges for S-grade).
 export const DUR_TABLE = [
   { armorCharges: 0, resistanceReduceLevels: 1 }, // F(0)
   { armorCharges: 1, resistanceReduceLevels: 1 }, // D(1)
-  { armorCharges: 1, resistanceReduceLevels: 1 }, // C(2)
-  { armorCharges: 2, resistanceReduceLevels: 1 }, // B(3)
-  { armorCharges: 3, resistanceReduceLevels: 1 }, // A(4)
-  { armorCharges: 3, resistanceReduceLevels: 2 }, // S(5)
+  { armorCharges: 2, resistanceReduceLevels: 1 }, // C(2)
+  { armorCharges: 3, resistanceReduceLevels: 1 }, // B(3)
+  { armorCharges: 4, resistanceReduceLevels: 1 }, // A(4)
+  { armorCharges: 5, resistanceReduceLevels: 2 }, // S(5)
 ];
 
 /**
  * Stand / path armor pool (when the Stand takes the hit) — matches NPC
- * `stand_armor_charges` (SRD_DEV). Separate from physical user armor.
+ * `stand_armor_charges` and SRD Stand Armor table. Separate from physical user armor.
  */
 export const STAND_PATH_ARMOR_CHARGES_BY_GRADE = {
-  S: 2,
-  A: 2,
-  B: 1,
-  C: 1,
-  D: 0,
   F: 0,
+  D: 1,
+  C: 2,
+  B: 3,
+  A: 4,
+  S: 5,
 };
 
 /** @param {number} durabilityIdx Stand Coin durability index 0–5 (F…S) */
@@ -185,10 +185,10 @@ export const PC_STAT_DESC = {
   durability: [
     "0 Stand armor charges (stress track stays 9 — durability does not add boxes)",
     "1 Stand armor charge",
-    "1 Stand armor charge",
     "2 Stand armor charges",
     "3 Stand armor charges",
-    "3 Stand armor charges · Durability resist may reduce harm by two levels",
+    "4 Stand armor charges",
+    "5 Stand armor charges · Durability resist may reduce harm by two levels",
   ],
   precision: [
     "1s and double 1s count as critical fail",

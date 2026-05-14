@@ -1,33 +1,19 @@
 # frontend/public/
 
-This directory contains static assets that are served directly by the web server without being processed by the frontend's build pipeline. These files are typically accessible at the root of the web application.
+Static assets served as-is by Create React App / `react-scripts`. Files in this folder are copied verbatim into `frontend/build/` at production-build time and are referenced from `index.html` via `%PUBLIC_URL%/...`.
 
-## Purpose
+## Contents
 
-The primary purpose of this directory is to:
+| File / dir | Role |
+|------------|------|
+| `index.html` | CRA's HTML shell — the React app mounts into `<div id="root">`. |
+| `favicon.ico`, `logo192.png`, `logo512.png` | Browser tab icon + PWA icons referenced by `manifest.json`. |
+| `manifest.json` | PWA manifest (name, icons, theme). |
+| `robots.txt` | Crawler directives. |
+| `media/` | Static images used in-app (e.g. `1(800)Bizarre Character Sheet.png`). |
+| `srd/` | Generated **at build time** by `scripts/copySrd.js` / `splitSrd.js` — the SRD markdown gets split into per-section files so `RulesPage` can fetch them. Do not hand-edit; edit [`docs/1-(800)-BIZARRE SRD.md`](../../docs/1-\(800\)-BIZARRE%20SRD.md) and re-run the build instead. |
 
-- **Serve Static Assets**: Provide files like `index.html`, favicons, manifest files, and other static resources directly to the browser.
-- **Root HTML File**: Host the main HTML file (`index.html`) where the React application is mounted.
-- **SEO and PWA Configuration**: Include files essential for Search Engine Optimization (SEO) and Progressive Web App (PWA) functionality, such as `manifest.json` and `robots.txt`.
+## Conventions
 
-## Key Contents
-
-- `index.html`: The main entry point for the web application. The React application is typically injected into a `div` element within this HTML file.
-- `favicon.ico`: The icon displayed in the browser tab or bookmarks.
-- `logo192.png`, `logo512.png`: Application icons for various platforms and devices.
-- `manifest.json`: A web app manifest file that provides information about the web application in a JSON text file, including its name, author, icon, and description. It's crucial for Progressive Web Apps (PWAs).
-- `robots.txt`: A file that tells web crawlers which pages or files the crawler can or can't request from your site.
-- `media/`: A subdirectory for other static media assets like images or videos that don't need to be processed by the build tools.
-
-## Code Quality and Structure
-
-Placing static assets in a `public/` directory is a standard convention in modern web development frameworks (like Create React App, which this project was bootstrapped with). This structure ensures:
-
-- **Clear Separation**: Distinguishes static assets from source code that needs compilation or processing.
-- **Direct Access**: Files in this directory are directly served, simplifying their access via URLs.
-
-## Logic Behind Decisions
-
-The decision to use a `public/` directory aligns with the conventions of the React ecosystem and build tools like Vite. This approach simplifies asset management by providing a clear location for files that do not require bundling or transformation. It also ensures that essential files for web standards (like `manifest.json` and `robots.txt`) are correctly placed for web server and browser consumption.
-
-**Note on "Logic Behind Decisions"**: The explanations regarding decision logic primarily reflect discussions from the current chat session and general software engineering best practices. This document does not have access to the full history of all previous, unlogged interactions or design discussions that may have influenced the project's evolution.
+- Put **hashed, processed assets** (anything imported from JSX/CSS) in [`src/assets/`](../src/assets/) instead. Use `public/` only for files you need at a stable URL or that must not be processed.
+- The CRA `homepage` field in [`../package.json`](../package.json) determines the public path prefix for these assets (currently the GitHub Pages URL).

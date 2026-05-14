@@ -125,7 +125,7 @@ class RollViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='grant-xp')
     def grant_xp(self, request, pk=None):
-        """GM-only: Grant 1 XP for a desperate action roll that has not yet awarded XP."""
+        """GM-only: Grant desperate-action XP (+1, or +2 for 0-dot per SRD)."""
         roll = self.get_object()
         campaign = roll.session.campaign
         if campaign.gm_id != request.user.id and not request.user.is_staff:
@@ -156,7 +156,7 @@ class RollViewSet(viewsets.ModelViewSet):
         return Response({
             'success': True,
             'track': track,
-            'amount': 1,
+            'amount': xp_awarded,
             'new_total': xp_clocks.get(track, 0),
         })
 

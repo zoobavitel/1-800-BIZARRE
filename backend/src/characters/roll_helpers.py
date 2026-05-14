@@ -174,7 +174,14 @@ def xp_track_for_action_name(action_name):
 
 def award_desperate_action_xp(character, session, roll, action_name, request_user):
     """
-    If this is a desperate ACTION roll with a mappable action name, award 1 XP on the attribute track.
+    Desperate ACTION roll → 1 XP on the relevant attribute track (cap 5).
+
+    SRD bonus (`docs/1-(800)-BIZARRE SRD.md` lines 1356–1358): if the roller had
+    **0 dots** in the rolled action, mark **2 XP** instead of 1. We use
+    `roll.pool_action_rating` as the dot-count signal (same field the tier-die
+    logic already trusts for "0 dots in that action"). The grant is still capped
+    by the per-track ceiling, so a 0-dot bonus near the cap may be clipped to 1.
+
     Returns (xp_awarded: int, xp_track: str|None).
     """
     position = (roll.position or '').lower()
@@ -187,24 +194,37 @@ def award_desperate_action_xp(character, session, roll, action_name, request_use
         return 0, None
 
     xp_clocks = character.xp_clocks or {}
-    current = xp_clocks.get(track, 0)
+    current = int(xp_clocks.get(track, 0) or 0)
     if current >= 5:
         return 0, None
 
-    xp_clocks[track] = current + 1
+    par = getattr(roll, 'pool_action_rating', None)
+    zero_dot_bonus = par is not None and int(par) == 0
+    want = 2 if zero_dot_bonus else 1
+    grant = min(want, 5 - current)
+    if grant <= 0:
+        return 0, None
+
+    xp_clocks[track] = current + grant
     character.xp_clocks = xp_clocks
     character.save(update_fields=['xp_clocks'])
+    if zero_dot_bonus and grant == 2:
+        description = f'Desperate roll (0-dot bonus): {action_name}'
+    elif zero_dot_bonus and grant == 1:
+        description = f'Desperate roll (0-dot bonus clipped by cap): {action_name}'
+    else:
+        description = f'Desperate roll: {action_name}'
     ExperienceTracker.objects.create(
         character=character,
         session=session,
         roll=roll,
         trigger='DESPERATE_ROLL',
-        description=f'Desperate roll: {action_name}',
-        xp_gained=1,
+        description=description,
+        xp_gained=grant,
         award_source='AUTO',
         clock_key=track,
     )
-    return 1, track
+    return grant, track
 
 
 def normalized_trauma_pks(raw):

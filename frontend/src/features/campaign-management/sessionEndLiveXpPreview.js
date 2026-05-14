@@ -124,7 +124,7 @@ export function sumManualTrackXpForSession(entries, sessionId) {
   }, 0);
 }
 
-/** Roll snapshot + per-PC encoded playbook preview + Development→pool preview. */
+/** Roll snapshot + per-PC pending auto-settle preview (STRUGGLE only) + Development→pool preview. */
 export function buildSessionEndLivePreview(rolls, campaignChars, clocks, characters) {
   const inner = buildSessionEndLiveSummary(rolls, campaignChars, clocks);
   const charById = new Map((characters || []).map((c) => [Number(c.id), c]));

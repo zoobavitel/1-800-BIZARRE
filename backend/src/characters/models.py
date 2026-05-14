@@ -457,9 +457,9 @@ class NPC(models.Model):
 
     @property
     def stand_armor_charges(self):
-        """Stand / path armor pool from Durability (separate from physical reduce & special negate)."""
+        """Stand / path armor pool from Durability (SRD Stand Armor table; separate from physical & special)."""
         durability_grade = self.stand_coin_stats.get("DURABILITY", "F")
-        return {"S": 2, "A": 2, "B": 1, "C": 1, "D": 0, "F": 0}.get(
+        return {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 5}.get(
             durability_grade, 0
         )
 
