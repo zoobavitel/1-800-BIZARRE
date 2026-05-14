@@ -58,12 +58,6 @@ export default function SessionXpAllocationTable({ rows }) {
             </th>
             <th
               style={{ textAlign: "right", padding: "6px 8px" }}
-              title="Encoded STRUGGLE XP queued for the next end-live settlement (vice / trauma signals), capped per SRD. Becomes 0 once auto_encoded_xp_settled, since those values are then in tracker. Playbook-specific XP is no longer granted from the roll log here."
-            >
-              Enc. playbook
-            </th>
-            <th
-              style={{ textAlign: "right", padding: "6px 8px" }}
               title="Stand Development XP that will be banked to the session pool at end-live. 0 once settled."
             >
               Dev→pool
@@ -130,9 +124,6 @@ export default function SessionXpAllocationTable({ rows }) {
                   (auto {capTrigger(row.struggleEvents)})
                 </span>
               </td>
-              <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>
-                {row.totalEncodedPlaybookXp}
-              </td>
               <td style={{ padding: "6px 8px", textAlign: "right", color: "#c4b5fd" }}>
                 {row.developmentPoolXp}
               </td>
@@ -151,9 +142,6 @@ export default function SessionXpAllocationTable({ rows }) {
               </td>
               <td style={{ padding: "6px 8px", color: "#9ca3af", fontSize: "10px" }}>
                 {[
-                  row.totalEncodedPlaybookXp
-                    ? `Encoded playbook +${row.totalEncodedPlaybookXp}`
-                    : null,
                   row.developmentPoolXp
                     ? `Stand Development (session) +${row.developmentPoolXp} → pool`
                     : null,

@@ -3048,7 +3048,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
     if (
       skipEncodedXp === true &&
       !window.confirm(
-        `Mark "${label}" ended without automatic encoded playbook XP? (Encoded pass marked settled.)`,
+        `Mark "${label}" ended without the auto session XP pass? (Pass marked settled; no STRUGGLE or Development→pool grant.)`,
       )
     ) {
       return;
@@ -3230,10 +3230,11 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                   <SessionXpAllocationTable rows={clearActiveRowsWithManual} />
                 )}
                 <p style={{ margin: "0 0 16px", fontSize: "11px", color: "#9ca3af" }}>
-                  <strong>Total</strong> column = encoded playbook XP (goes straight to the
-                  playbook clock) + Development session XP (banked to the{" "}
-                  <strong>session XP pool</strong>) + manual awards logged this session
-                  (already on tracks). Pool XP is spent on the character sheet.
+                  <strong>Total</strong> column = auto session XP (STRUGGLE from
+                  vice / trauma signals on the playbook clock) + Development session
+                  XP (banked to the <strong>session XP pool</strong>) + manual awards
+                  logged this session (already on tracks). Pool XP is spent on the
+                  character sheet.
                 </p>
               </>
             )}
@@ -3415,7 +3416,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                           }}
                           style={{ ...S.btnGhost, fontSize: "10px", padding: "4px 8px" }}
                           disabled={busySessionId === s.id}
-                          title="Mark ended without automatic encoded playbook XP."
+                          title="Mark ended without the auto session XP pass."
                         >
                           {busySessionId === s.id ? "…" : "End skip XP"}
                         </button>
@@ -3427,7 +3428,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                           }}
                           style={{ ...S.btnGhost, fontSize: "10px", padding: "4px 8px" }}
                           disabled={busySessionId === s.id}
-                          title="Mark ended and run encoded playbook XP pass."
+                          title="Mark ended and run the auto session XP pass (STRUGGLE + Development→pool)."
                         >
                           {busySessionId === s.id ? "…" : "End + XP"}
                         </button>
@@ -3446,7 +3447,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                           (clearActiveModalSession != null &&
                             Number(clearActiveModalSession.id) === Number(s.id))
                         }
-                        title="End this live session for players: choose whether to apply encoded playbook XP and Development→pool, or skip that pass."
+                        title="End this live session for players: choose whether to apply the auto session XP pass (STRUGGLE + Development→pool), or skip it."
                       >
                         {busySessionId === s.id ? "…" : "Clear active"}
                       </button>
@@ -4335,9 +4336,9 @@ function SessionDetail({
               <SessionXpAllocationTable rows={endLiveRowsWithBeliefs} />
             )}
             <p style={{ margin: "0 0 16px", fontSize: "11px", color: "#9ca3af" }}>
-              <strong>Total</strong> column = encoded playbook XP (goes straight to
-              the playbook clock) + Development session XP (banked to the{" "}
-              <strong>session XP pool</strong>) + manual awards logged this
+              <strong>Total</strong> column = auto session XP (STRUGGLE from vice /
+              trauma signals on the playbook clock) + Development session XP (banked
+              to the <strong>session XP pool</strong>) + manual awards logged this
               session (already on tracks). Pool XP is spent on the character sheet.
             </p>
             {endLiveRowsWithManual.length > 0 ? (
@@ -4597,7 +4598,7 @@ function SessionDetail({
                   type="button"
                   onClick={() => setEndLiveModalOpen(true)}
                   style={S.btnGhost}
-                  title="Opens a confirmation with a session tally. You can end live with or without the one-time encoded playbook XP pass."
+                  title="Opens a confirmation with a session tally. You can end live with or without the one-time auto session XP pass."
                 >
                   End live session
                 </button>
@@ -4671,7 +4672,7 @@ function SessionDetail({
                   type="button"
                   onClick={handleSetActiveSession}
                   style={S.btnGhost}
-                  title="Point campaign live session at this episode again. Encoded playbook pass is already settled for this slot."
+                  title="Point campaign live session at this episode again. Auto session XP pass is already settled for this slot."
                 >
                   Set as current session (enable for players)
                 </button>
@@ -4728,16 +4729,16 @@ function SessionDetail({
                 {isCurrentActiveSession ? (
                   <>
                     While this episode is live, the table updates from rolls and
-                    trackers as they come in. Encoded playbook XP and
-                    Development→pool settlement still run only when you end live (or
-                    mark complete) with the usual options.
+                    trackers as they come in. Auto session XP (STRUGGLE from vice /
+                    trauma) and Development→pool settlement still run only when you
+                    end live (or mark complete) with the usual options.
                   </>
                 ) : (
                   <>
                     This episode is not marked ended; the table is a running preview
-                    from rolls and trackers. Encoded playbook XP and Development→pool
-                    settlement finalize when you end live (or mark complete) with the
-                    usual options.
+                    from rolls and trackers. Auto session XP (STRUGGLE from vice /
+                    trauma) and Development→pool settlement finalize when you end
+                    live (or mark complete) with the usual options.
                   </>
                 )}
               </div>
@@ -4751,7 +4752,7 @@ function SessionDetail({
                   lineHeight: 1.45,
                 }}
               >
-                Encoded playbook pass was already settled for this session; table
+                Auto session XP pass was already settled for this session; table
                 still reflects the roll log and current character Development→pool
                 preview (for reference).
               </div>
@@ -4768,7 +4769,7 @@ function SessionDetail({
             ) : null}
             {sessionXpAllocationPanelMode === "empty_session" ? (
               <div style={{ color: "#9ca3af", fontSize: "12px", marginBottom: "4px" }}>
-                No rolls logged and no session XP (encoded playbook, Development→pool,
+                No rolls logged and no session XP (auto STRUGGLE, Development→pool,
                 or manual track awards) recorded for this session.
               </div>
             ) : null}
