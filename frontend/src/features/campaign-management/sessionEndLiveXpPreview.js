@@ -1,5 +1,10 @@
 /** Pure helpers for GM session end-live XP preview (mirrors backend settle heuristics). */
 
+import {
+  archetypeLabelsJoined,
+  normalizePlaybookXpArchetypeKeys,
+} from "../character-sheet/utils/playbookXpTriggerSrd";
+
 export const SESSION_ENCODED_XP_CAP = 2;
 
 export function rollHasAbilitiesTagForEncodedXp(roll) {
@@ -42,15 +47,12 @@ export function buildSessionEndLiveSummary(rolls, campaignChars, clocks) {
   }
   const encodedRows = [];
   for (const [cid, crolls] of byChar) {
-    const standoutEvents = crolls.filter(rollHasAbilitiesTagForEncodedXp).length;
+    const playbookEvents = 0;
     const struggleEvents = crolls.reduce(
       (sum, rr) => sum + viceStruggleSignalsForEncodedXp(rr),
       0,
     );
-    const standoutWouldGrant = Math.min(
-      SESSION_ENCODED_XP_CAP,
-      standoutEvents,
-    );
+    const playbookWouldGrant = 0;
     const struggleWouldGrant = Math.min(
       SESSION_ENCODED_XP_CAP,
       struggleEvents,
@@ -58,11 +60,14 @@ export function buildSessionEndLiveSummary(rolls, campaignChars, clocks) {
     encodedRows.push({
       characterId: cid,
       name: nameById.get(cid) || `Character ${cid}`,
-      standoutEvents,
+      /** @deprecated use playbookEvents — kept for roll signal debugging */
+      standoutEvents: playbookEvents,
+      playbookEvents,
       struggleEvents,
-      standoutWouldGrant,
+      standoutWouldGrant: playbookWouldGrant,
+      playbookWouldGrant,
       struggleWouldGrant,
-      totalEncodedPlaybookXp: standoutWouldGrant + struggleWouldGrant,
+      totalEncodedPlaybookXp: playbookWouldGrant + struggleWouldGrant,
     });
   }
   encodedRows.sort((a, b) => a.name.localeCompare(b.name));
@@ -130,18 +135,36 @@ export function buildSessionEndLivePreview(rolls, campaignChars, clocks, charact
       characterId: id,
       name: ch.true_name || ch.name || `PC ${id}`,
       standoutEvents: 0,
+      playbookEvents: 0,
       struggleEvents: 0,
       standoutWouldGrant: 0,
+      playbookWouldGrant: 0,
       struggleWouldGrant: 0,
       totalEncodedPlaybookXp: 0,
     };
     const full = charById.get(id) || ch;
     const developmentPoolXp = developmentSessionXpPreviewFromCharacter(full);
+    const pbDisplay =
+      full.playbook ??
+      full.playbook_display ??
+      ch.playbook ??
+      ch.playbook_display ??
+      "Stand";
+    const rawArch =
+      full.playbookXpArchetypes ??
+      full.playbook_xp_archetypes ??
+      ch.playbookXpArchetypes ??
+      ch.playbook_xp_archetypes;
+    const pbKeys = normalizePlaybookXpArchetypeKeys(pbDisplay, rawArch);
+    const playbookArchetypeCaption = pbKeys.length
+      ? archetypeLabelsJoined(pbKeys, pbDisplay)
+      : "";
     return {
       ...enc,
       characterId: id,
       name: enc.name || ch.true_name || ch.name || `PC ${id}`,
       developmentPoolXp,
+      playbookArchetypeCaption,
     };
   });
   return { ...inner, perPcRows };

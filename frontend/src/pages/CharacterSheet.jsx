@@ -78,6 +78,12 @@ import {
   formatAttrTally,
 } from "../features/character-sheet/utils/xpRequirements";
 import {
+  archetypeRowsForCharacterPlaybook,
+  inferSeedArchetypeKeys,
+  mergedTriggerSentencesForKeys,
+  normalizePlaybookXpArchetypeKeys,
+} from "../features/character-sheet/utils/playbookXpTriggerSrd";
+import {
   adjustActionRollBonusSupports,
   abilityExcludedFromActionRollDicePoolBonuses,
   characterHasIronWill,
@@ -2096,6 +2102,54 @@ const CharacterSheetWrapper = ({
     }
   }, [character?.id, character?.playbook]);
 
+  const [standType, setStandType] = useState(character?.standType || "");
+  const [playbookXpArchetypes, setPlaybookXpArchetypes] = useState(() =>
+    normalizePlaybookXpArchetypeKeys(
+      character?.playbook || "Stand",
+      character?.playbookXpArchetypes,
+    ),
+  );
+
+  useEffect(() => {
+    setStandType(String(character?.standType || "").trim());
+  }, [character?.id, character?.standType]);
+
+  useEffect(() => {
+    setPlaybookXpArchetypes(
+      normalizePlaybookXpArchetypeKeys(
+        character?.playbook,
+        character?.playbookXpArchetypes,
+      ),
+    );
+  }, [character?.id, character?.playbook, character?.playbookXpArchetypes]);
+
+  useEffect(() => {
+    setPlaybookXpArchetypes((prev) =>
+      normalizePlaybookXpArchetypeKeys(playbook, prev),
+    );
+  }, [playbook]);
+
+  useEffect(() => {
+    if (sheetDraftIsDirty) return;
+    if (!characterId) return;
+    const fromServer = normalizePlaybookXpArchetypeKeys(
+      character?.playbook,
+      character?.playbookXpArchetypes,
+    );
+    if (fromServer.length > 0) return;
+    const seed = inferSeedArchetypeKeys(playbook, { standType, abilities });
+    if (!seed.length) return;
+    setPlaybookXpArchetypes(seed);
+  }, [
+    sheetDraftIsDirty,
+    characterId,
+    character?.playbook,
+    character?.playbookXpArchetypes,
+    playbook,
+    standType,
+    abilities,
+  ]);
+
   // Sync campaign when character changes
   useEffect(() => {
     const c = character?.campaign;
@@ -3530,9 +3584,22 @@ const CharacterSheetWrapper = ({
     }
   }, [characterId]);
 
+  const togglePlaybookXpArchetypeKey = useCallback((key) => {
+    setPlaybookXpArchetypes((prev) => {
+      const had = prev.includes(key);
+      const nextSet = new Set(prev);
+      if (had) nextSet.delete(key);
+      else nextSet.add(key);
+      const order = archetypeRowsForCharacterPlaybook(playbook).map(
+        (r) => r.key,
+      );
+      return order.filter((k) => nextSet.has(k));
+    });
+  }, [playbook]);
+
   /**
-   * Toggle an end-of-session XP trigger (BELIEFS / STRUGGLE / STANDOUT) for the
-   * character. delta > 0 awards +1 (capped per SRD 2 / trigger / session); delta < 0
+   * Toggle an end-of-session XP trigger (BELIEFS / STRUGGLE / playbook-specific)
+   * for the character. delta > 0 awards +1 (capped per SRD 2 / trigger / session); delta < 0
    * revokes the most recent toggled trigger entry. Both player owner and GM can call.
    */
   const handleXpTriggerToggle = useCallback(
@@ -6508,6 +6575,8 @@ const CharacterSheetWrapper = ({
       abilities,
       clocks,
       playbook,
+      playbookXpArchetypes,
+      standType,
       campaign: campaignId || null,
       image_url: imageUrl,
       ...(removeImageRequested ? { image: null } : {}),
@@ -6534,6 +6603,8 @@ const CharacterSheetWrapper = ({
     abilities,
     clocks,
     playbook,
+    playbookXpArchetypes,
+    standType,
     campaignId,
     imageUrl,
     removeImageRequested,
@@ -6638,6 +6709,8 @@ const CharacterSheetWrapper = ({
     abilities,
     clocks,
     playbook,
+    playbookXpArchetypes,
+    standType,
     campaignId,
     imageUrl,
     removeImageRequested,
@@ -10658,43 +10731,22 @@ const CharacterSheetWrapper = ({
                             )}
                           </div>
                         </div>
-                        {[
-                          {
-                            label: "Playbook or standout (end of session, max 2)",
+                        {(() => {
+                          const playbookRow = {
                             v: xpReqSnapshot.playbook,
-                            trigger: "STANDOUT",
-                          },
-                          {
-                            label:
-                              "Beliefs, drives, heritage, or background (end of session, max 2)",
-                            v: xpReqSnapshot.beliefs,
-                            trigger: "BELIEFS",
-                          },
-                          {
-                            label:
-                              "Struggle: vice, trauma, entanglements (end of session, max 2)",
-                            v: xpReqSnapshot.struggle,
-                            trigger: "STRUGGLE",
-                          },
-                        ].map((row) => {
-                          const canToggle =
-                            xpReqSnapshot.hasActiveSession && canEditSheet;
-                          const busy = xpToggleBusyTrigger === row.trigger;
-                          return (
-                            <div
-                              key={row.label}
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                gap: "8px",
-                                padding: "5px 0",
-                                borderBottom: "1px solid #1f2937",
-                              }}
-                            >
-                              <span style={{ color: "#d1d5db" }}>
-                                {row.label}
-                              </span>
+                            trigger: "PLAYBOOK_SPECIFIC",
+                          };
+                          const archetypeOpts =
+                            archetypeRowsForCharacterPlaybook(playbook);
+                          const mergedArc = mergedTriggerSentencesForKeys(
+                            playbookXpArchetypes,
+                            playbook,
+                          );
+                          const renderPips = (row) => {
+                            const canToggle =
+                              xpReqSnapshot.hasActiveSession && canEditSheet;
+                            const busy = xpToggleBusyTrigger === row.trigger;
+                            return (
                               <span
                                 style={{
                                   display: "inline-flex",
@@ -10762,9 +10814,227 @@ const CharacterSheetWrapper = ({
                                   {row.v} / 2
                                 </span>
                               </span>
-                            </div>
+                            );
+                          };
+                          return (
+                            <>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  alignItems: "flex-start",
+                                  gap: "10px",
+                                  padding: "5px 0",
+                                  borderBottom: "1px solid #1f2937",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    flex: "1 1 0",
+                                    minWidth: 0,
+                                    color: "#d1d5db",
+                                  }}
+                                >
+                                  <div style={{ fontWeight: 500 }}>
+                                    Playbook-specific (end of session, max 2)
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "10px",
+                                      color: "#6b7280",
+                                      marginTop: "4px",
+                                      lineHeight: 1.45,
+                                    }}
+                                  >
+                                    SRD: mark XP when you used your playbook
+                                    abilities in the fiction (for example resisting harm,
+                                    boosting rolls, or shifting position or effect with
+                                    Stand, Hamon, or Spin). Max 2 XP total for this
+                                    category; multiple archetype lines below only choose
+                                    which trigger text you are showing—they do not add
+                                    extra pools.
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: "10px",
+                                      color: "#9ca3af",
+                                      marginTop: "6px",
+                                      lineHeight: 1.45,
+                                    }}
+                                  >
+                                    {mergedArc ||
+                                      "Pick one or more archetype trigger lines you are playing toward."}
+                                  </div>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      flexWrap: "wrap",
+                                      gap: "10px 14px",
+                                      marginTop: "8px",
+                                    }}
+                                  >
+                                    {archetypeOpts.map((opt) => (
+                                      <label
+                                        key={opt.key}
+                                        style={{
+                                          display: "flex",
+                                          alignItems: "flex-start",
+                                          gap: "6px",
+                                          fontSize: "10px",
+                                          color: "#d1d5db",
+                                          cursor: canEditSheet
+                                            ? "pointer"
+                                            : "default",
+                                        }}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={playbookXpArchetypes.includes(
+                                            opt.key,
+                                          )}
+                                          disabled={!canEditSheet || !characterId}
+                                          onChange={() =>
+                                            togglePlaybookXpArchetypeKey(opt.key)
+                                          }
+                                          style={{ marginTop: 2 }}
+                                        />
+                                        <span>
+                                          <strong>{opt.label}</strong>
+                                          <span
+                                            style={{
+                                              color: "#6b7280",
+                                              display: "block",
+                                              marginTop: 2,
+                                              lineHeight: 1.35,
+                                            }}
+                                          >
+                                            {opt.trigger}
+                                          </span>
+                                        </span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                  <details
+                                    style={{
+                                      marginTop: "8px",
+                                      fontSize: "10px",
+                                      color: "#9ca3af",
+                                    }}
+                                  >
+                                    <summary
+                                      style={{
+                                        cursor: "pointer",
+                                        userSelect: "none",
+                                      }}
+                                    >
+                                      Full archetype table (SRD)
+                                    </summary>
+                                    <div
+                                      style={{
+                                        marginTop: "6px",
+                                        border: "1px solid #374151",
+                                        borderRadius: "4px",
+                                        overflow: "hidden",
+                                      }}
+                                    >
+                                      <table
+                                        style={{
+                                          width: "100%",
+                                          borderCollapse: "collapse",
+                                          fontSize: "10px",
+                                        }}
+                                      >
+                                        <thead>
+                                          <tr style={{ background: "#111827" }}>
+                                            <th
+                                              style={{
+                                                textAlign: "left",
+                                                padding: "4px 6px",
+                                                color: "#9ca3af",
+                                              }}
+                                            >
+                                              Archetype
+                                            </th>
+                                            <th
+                                              style={{
+                                                textAlign: "left",
+                                                padding: "4px 6px",
+                                                color: "#9ca3af",
+                                              }}
+                                            >
+                                              XP trigger
+                                            </th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {archetypeOpts.map((opt) => (
+                                            <tr
+                                              key={`tbl-${opt.key}`}
+                                              style={{
+                                                borderTop: "1px solid #1f2937",
+                                              }}
+                                            >
+                                              <td
+                                                style={{
+                                                  padding: "4px 6px",
+                                                  color: "#e5e7eb",
+                                                  verticalAlign: "top",
+                                                }}
+                                              >
+                                                {opt.label}
+                                              </td>
+                                              <td
+                                                style={{
+                                                  padding: "4px 6px",
+                                                  color: "#d1d5db",
+                                                  verticalAlign: "top",
+                                                }}
+                                              >
+                                                {opt.trigger}
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </details>
+                                </div>
+                                {renderPips(playbookRow)}
+                              </div>
+                              {[
+                                {
+                                  label:
+                                    "Beliefs, drives, heritage, or background (end of session, max 2)",
+                                  v: xpReqSnapshot.beliefs,
+                                  trigger: "BELIEFS",
+                                },
+                                {
+                                  label:
+                                    "Struggle: vice, trauma, entanglements (end of session, max 2)",
+                                  v: xpReqSnapshot.struggle,
+                                  trigger: "STRUGGLE",
+                                },
+                              ].map((row) => (
+                                <div
+                                  key={row.label}
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    gap: "8px",
+                                    padding: "5px 0",
+                                    borderBottom: "1px solid #1f2937",
+                                  }}
+                                >
+                                  <span style={{ color: "#d1d5db" }}>
+                                    {row.label}
+                                  </span>
+                                  {renderPips(row)}
+                                </div>
+                              ))}
+                            </>
                           );
-                        })}
+                        })()}
                         {xpToggleError && (
                           <div
                             style={{
@@ -10934,7 +11204,7 @@ const CharacterSheetWrapper = ({
                           action roll; express{" "}
                           <strong style={{ color: "#9ca3af" }}>beliefs, drives, heritage, or background</strong>; struggle with your{" "}
                           <strong style={{ color: "#9ca3af" }}>vice, trauma, or crew</strong>{" "}
-                          entanglements; plus playbook / standout at end of session.
+                          entanglements; plus playbook-specific marks at end of session.
                         </div>
                         <details
                           style={{ marginTop: "8px", fontSize: "10px", color: "#6b7280" }}
@@ -13025,7 +13295,7 @@ const CharacterSheetWrapper = ({
                             session dice history, and add{" "}
                             <code style={{ color: "#9ca3af" }}>[Abilities: …]</code> /{" "}
                             <code style={{ color: "#9ca3af" }}>[Heritage: …]</code> on the
-                            stored roll (STANDOUT settle + heritage XP hooks read those).
+                            stored roll (encoded vice/trauma pass + heritage XP hooks read those).
                           </div>
                           <DicePoolStrip
                             label="Action rating (dice in this action only)"

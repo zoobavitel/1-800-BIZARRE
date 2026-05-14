@@ -30,6 +30,10 @@ import {
   getPositionEffectModifierHints,
   peModifierBucketLabel,
 } from "./peModifierAbilityHints";
+import {
+  archetypeLabelsJoined,
+  normalizePlaybookXpArchetypeKeys,
+} from "../../features/character-sheet/utils/playbookXpTriggerSrd";
 import { rosterHasLinkedCrewForCrewSheetFactionUi } from "../../features/character-sheet/utils/characterUtils";
 
 const GRADES = ["F", "D", "C", "B", "A", "S"];
@@ -927,6 +931,38 @@ function compactHarmFieldStyle(key, rawValue) {
   };
 }
 
+/** End-of-session playbook clock triggers (ExperienceTracker). */
+const SESSION_PLAYBOOK_TRIGGER_CODES = new Set([
+  "BELIEFS",
+  "STRUGGLE",
+  "PLAYBOOK_SPECIFIC",
+  "STANDOUT",
+]);
+
+/** POST /experience-tracker/award/ — playbook-specific column. */
+const PLAYBOOK_SESSION_TOGGLE_TRIGGER = "PLAYBOOK_SPECIFIC";
+
+function formatSessionXpAwardHow(awardSource, awardedByUsername) {
+  const s = String(awardSource || "AUTO").toUpperCase();
+  if (s === "AUTO") return "Automatic";
+  if (s === "GM") {
+    const u = String(awardedByUsername || "").trim();
+    return u ? `GM toggle (${u})` : "GM toggle";
+  }
+  if (s === "PLAYER") {
+    const u = String(awardedByUsername || "").trim();
+    return u ? `Player toggle (${u})` : "Player toggle";
+  }
+  return s;
+}
+
+function sessionPlaybookTriggerTag(code) {
+  const c = String(code || "").toUpperCase();
+  if (c === "PLAYBOOK_SPECIFIC") return "PLAYBOOK";
+  if (SESSION_PLAYBOOK_TRIGGER_CODES.has(c)) return c;
+  return "";
+}
+
 /**
  * Session GM quick-flow: NPC roster, player roster, bulk position/effect, add-NPC.
  */
@@ -1354,12 +1390,19 @@ export default function SessionGMManagementPanels({
       : unwrapApiArray(histRaw);
     const rows = [];
     for (const e of sessionXpEntriesSorted) {
+      const trig = String(e.trigger || "").toUpperCase();
       rows.push({
         key: `et-${e.id}`,
         when: e.session_date,
         character: e.character,
         xp: Number(e.xp_gained) || 0,
         typeLabel: e.trigger_display || e.trigger || "—",
+        triggerCode: trig,
+        isPlaybookSessionTrigger: SESSION_PLAYBOOK_TRIGGER_CODES.has(trig),
+        awardHow: formatSessionXpAwardHow(
+          e.award_source,
+          e.awarded_by_username,
+        ),
         note: String(e.description || "").trim(),
         source: "Tracker",
       });
@@ -1377,6 +1420,9 @@ export default function SessionGMManagementPanels({
             : amt > 0
               ? "Ledger (+)"
               : "Ledger",
+        triggerCode: "",
+        isPlaybookSessionTrigger: false,
+        awardHow: null,
         note: String(h.reason || "").trim(),
         source: "XP history",
       });
@@ -1396,23 +1442,26 @@ export default function SessionGMManagementPanels({
       const label = desc
         ? `${typeLbl} (+${row.xp_gained ?? 0}) — ${desc}`
         : `${typeLbl} (+${row.xp_gained ?? 0})`;
-      const src = String(row.award_source || "AUTO").toUpperCase();
-      const who =
-        src === "AUTO"
-          ? "Auto"
-          : src === "GM"
-            ? `GM${row.awarded_by_username ? ` (${row.awarded_by_username})` : ""}`
-            : `Self${row.awarded_by_username ? ` (${row.awarded_by_username})` : ""}`;
       const sessLbl = row.session_name
         ? row.session_name
         : row.session
           ? `session ${row.session}`
           : "out of session";
+      const src = String(row.award_source || "AUTO").toUpperCase();
+      const trig = String(row.trigger || "").toUpperCase();
+      const awardHow = formatSessionXpAwardHow(
+        row.award_source,
+        row.awarded_by_username,
+      );
+      const triggerTag = SESSION_PLAYBOOK_TRIGGER_CODES.has(trig)
+        ? sessionPlaybookTriggerTag(trig)
+        : "";
       if (!m.has(cid)) m.set(cid, []);
       m.get(cid).push({
         id: row.id,
         label,
-        who,
+        awardHow,
+        triggerTag,
         source: src,
         sessionLabel: sessLbl,
         xp: Number(row.xp_gained) || 0,
@@ -1442,25 +1491,22 @@ export default function SessionGMManagementPanels({
   );
 
   /**
-   * Per-PC tally of end-of-session XP triggers (BELIEFS / STRUGGLE / STANDOUT)
+   * Per-PC tally of end-of-session XP triggers (BELIEFS / STRUGGLE / playbook)
    * for this session, summed from the tracker and SRD-capped at 2 / trigger.
-   * Drives the GM scorecard toggle UI below.
+   * PLAYBOOK_SPECIFIC and legacy STANDOUT map to the PLAYBOOK scorecard bucket.
    */
   const pcXpTriggerCountsByCharacter = useMemo(() => {
     const m = new Map();
     for (const row of sessionXpEntriesSorted) {
       const cid = Number(row.character);
       if (!Number.isFinite(cid)) continue;
-      const trig = String(row.trigger || "").toUpperCase();
-      if (
-        trig !== "BELIEFS" &&
-        trig !== "STRUGGLE" &&
-        trig !== "STANDOUT"
-      ) {
+      let trig = String(row.trigger || "").toUpperCase();
+      if (trig === "PLAYBOOK_SPECIFIC" || trig === "STANDOUT") trig = "PLAYBOOK";
+      if (trig !== "BELIEFS" && trig !== "STRUGGLE" && trig !== "PLAYBOOK") {
         continue;
       }
       const amt = Math.max(0, Number(row.xp_gained) || 0);
-      if (!m.has(cid)) m.set(cid, { BELIEFS: 0, STRUGGLE: 0, STANDOUT: 0 });
+      if (!m.has(cid)) m.set(cid, { BELIEFS: 0, STRUGGLE: 0, PLAYBOOK: 0 });
       m.get(cid)[trig] = Math.min(2, m.get(cid)[trig] + amt);
     }
     return m;
@@ -5336,8 +5382,9 @@ export default function SessionGMManagementPanels({
                   track), when logged by the server.
                 </li>
                 <li>
-                  Other trigger labels (beliefs, struggle, standout, etc.) appear when
-                  the site or a GM logs them (manual or automation).
+                  Other trigger labels (beliefs, struggle, playbook-specific,
+                  etc.) appear when the site or a GM logs them (manual or
+                  automation).
                 </li>
               </ul>
             </details>
@@ -5380,26 +5427,43 @@ export default function SessionGMManagementPanels({
                       pcXpTriggerCountsByCharacter.get(cid) || {
                         BELIEFS: 0,
                         STRUGGLE: 0,
-                        STANDOUT: 0,
+                        PLAYBOOK: 0,
                       };
                     const title =
                       charDisplayNameById.get(cid) ||
                       ch.true_name ||
                       ch.name ||
                       `PC ${cid}`;
+                    const fullSheet =
+                      (characters || []).find((c) => Number(c?.id) === cid) ||
+                      ch;
+                    const pbDisp = fullSheet?.playbook ?? ch?.playbook ?? "Stand";
+                    const rawArch =
+                      fullSheet?.playbookXpArchetypes ??
+                      fullSheet?.playbook_xp_archetypes;
+                    const archKeys = normalizePlaybookXpArchetypeKeys(
+                      pbDisp,
+                      rawArch,
+                    );
+                    const archCaption = archKeys.length
+                      ? archetypeLabelsJoined(archKeys, pbDisp)
+                      : "";
                     const rows = [
                       {
-                        label: "Playbook / standout",
-                        trigger: "STANDOUT",
-                        v: counts.STANDOUT,
+                        label: "Playbook-specific (abilities)",
+                        detail: archCaption,
+                        trigger: PLAYBOOK_SESSION_TOGGLE_TRIGGER,
+                        v: counts.PLAYBOOK,
                       },
                       {
                         label: "Beliefs / drives / heritage",
+                        detail: "",
                         trigger: "BELIEFS",
                         v: counts.BELIEFS,
                       },
                       {
                         label: "Struggle (vice / trauma / entanglement)",
+                        detail: "",
                         trigger: "STRUGGLE",
                         v: counts.STRUGGLE,
                       },
@@ -5440,6 +5504,19 @@ export default function SessionGMManagementPanels({
                             >
                               <span style={{ color: "#9ca3af" }}>
                                 {row.label}
+                                {row.detail ? (
+                                  <span
+                                    style={{
+                                      display: "block",
+                                      fontSize: 10,
+                                      color: "#6b7280",
+                                      marginTop: 2,
+                                      fontWeight: 400,
+                                    }}
+                                  >
+                                    {row.detail}
+                                  </span>
+                                ) : null}
                               </span>
                               <span
                                 style={{
@@ -5606,17 +5683,39 @@ export default function SessionGMManagementPanels({
                               }}
                             >
                               <div style={{ flex: 1, minWidth: 0 }}>
+                                {entry.triggerTag ? (
+                                  <div
+                                    style={{
+                                      fontSize: 9,
+                                      fontFamily:
+                                        "ui-monospace, SFMono-Regular, Menlo, monospace",
+                                      color: "#a78bfa",
+                                      marginBottom: 2,
+                                      fontWeight: 600,
+                                    }}
+                                    title="End-of-session playbook XP trigger (SRD cap 2/session)"
+                                  >
+                                    {entry.triggerTag}
+                                  </div>
+                                ) : null}
                                 <div style={{ color: "#d1d5db" }}>
                                   {entry.label}
                                 </div>
                                 <div
                                   style={{
-                                    color: "#6b7280",
+                                    color:
+                                      entry.awardHow === "Automatic"
+                                        ? "#6b7280"
+                                        : "#9ca3af",
                                     fontSize: 9,
                                     marginTop: 1,
+                                    lineHeight: 1.35,
                                   }}
+                                  title={
+                                    "Automatic = rolls / settlement · GM or Player toggle = session-trigger pip"
+                                  }
                                 >
-                                  {entry.who} · {entry.sessionLabel}
+                                  {entry.awardHow} · {entry.sessionLabel}
                                 </div>
                               </div>
                               {entry.id && (
@@ -5921,6 +6020,7 @@ export default function SessionGMManagementPanels({
                     <th style={{ textAlign: "left", padding: 6 }}>PC</th>
                     <th style={{ textAlign: "right", padding: 6 }}>Δ XP</th>
                     <th style={{ textAlign: "left", padding: 6 }}>Type</th>
+                    <th style={{ textAlign: "left", padding: 6 }}>Award</th>
                     <th style={{ textAlign: "left", padding: 6 }}>Source</th>
                     <th style={{ textAlign: "left", padding: 6 }}>Note</th>
                   </tr>
@@ -5929,7 +6029,7 @@ export default function SessionGMManagementPanels({
                   {sessionXpFeedSorted.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         style={{ padding: 8, color: "#6b7280" }}
                       >
                         No tracker or linked XP-history rows yet. Grant manual XP or refresh
@@ -5990,7 +6090,45 @@ export default function SessionGMManagementPanels({
                               color: "#c9d1d9",
                             }}
                           >
-                            {row.typeLabel || "—"}
+                            {row.isPlaybookSessionTrigger ? (
+                              <div
+                                style={{
+                                  fontSize: 9,
+                                  fontFamily:
+                                    "ui-monospace, SFMono-Regular, Menlo, monospace",
+                                  color: "#a78bfa",
+                                  marginBottom: 2,
+                                  fontWeight: 600,
+                                }}
+                                title="End-of-session playbook XP trigger (SRD cap 2/session)"
+                              >
+                                {sessionPlaybookTriggerTag(row.triggerCode)}
+                              </div>
+                            ) : null}
+                            <div>{row.typeLabel || "—"}</div>
+                          </td>
+                          <td
+                            style={{
+                              padding: 6,
+                              verticalAlign: "top",
+                              color:
+                                row.awardHow === "Automatic"
+                                  ? "#6b7280"
+                                  : row.awardHow
+                                    ? "#9ca3af"
+                                    : "#52525b",
+                              fontSize: 9,
+                              lineHeight: 1.35,
+                              maxWidth: 120,
+                              wordBreak: "break-word",
+                            }}
+                            title={
+                              row.source === "Tracker"
+                                ? "Automatic = rolls / settlement · GM or Player toggle = logged session-trigger pip"
+                                : undefined
+                            }
+                          >
+                            {row.awardHow ?? "—"}
                           </td>
                           <td
                             style={{

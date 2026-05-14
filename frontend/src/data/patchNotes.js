@@ -4,13 +4,88 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-05-13",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "remove redundant session?.id from refetchSessionPanel deps",
+          "toggle XP feeds BELIEFS/STRUGGLE/STANDOUT columns + Total",
+          "add charCampaign?.sessions to history-fetch deps",
+          "scope list endpoint to ?campaign=<id>"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "realtime session panel, crew autoattach, sheet fixes",
+          "attribution + delete-any on XP records; misc sheet polish",
+          "toggle end-of-session triggers from sheet + GM scorecard",
+          "inline faction editor and all-campaign roster"
+        ]
+      },
+      {
+        "title": "Refactored",
+        "items": [
+          "rename 'Manual session XP toggle' to 'Session XP trigger'"
+        ]
+      },
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #81 from zoobavitel/fix/sessions-filter-by-campaign",
+          "Merge pull request #80 from zoobavitel/fix/sessions-filter-by-campaign"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-05-12",
     "version": null,
     "sections": [
       {
         "title": "Other",
         "items": [
+          "Merge pull request #79 from zoobavitel/cursor/session-status-lifecycle",
+          "Merge pull request #78 from zoobavitel/cursor/session-status-lifecycle",
+          "Merge pull request #77 from zoobavitel/cursor/gm-xp-preview-clear-active-end-live",
+          "Merge pull request #76 from zoobavitel/feature/crew-xp-trigger-toggles",
           "Merge pull request #75 from zoobavitel/cursor/stand-coin-srd-dev-sync"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "GM session roster and session management",
+          "GM session lifecycle from list and detail",
+          "GM live XP scorecard and Clear active end-live modal",
+          "session-end XP toggles and rep contributions",
+          "sync Session.status with campaign live slot"
+        ]
+      },
+      {
+        "title": "Style",
+        "items": [
+          "JoJo-inspired login and signup cards"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "refetch session list when live slot changes"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "add migration 0080 for Crew JSONField help_text"
+        ]
+      },
+      {
+        "title": "Documentation",
+        "items": [
+          "add SRD dev copy and refresh patch notes"
         ]
       }
     ]
@@ -540,10 +615,7 @@ export const PATCH_NOTES = [
           "Merge pull request #46 from zoobavitel/copilot/fix-patch-notes-display-issue",
           "Merge pull request #45 from zoobavitel/copilot/update-home-page-characters-section",
           "Merge pull request #44 from zoobavitel/copilot/apply-css-faction-section",
-          "Add faction, camp-card, patch-notes, footer CSS to Home.css",
-          "Merge pull request #43 from zoobavitel/copilot/update-ui-elements-styles",
-          "Merge pull request #42 from zoobavitel/copilot/fix-incorrect-character-visibility",
-          "Merge pull request #41 from zoobavitel/copilot/add-navigation-back-to-home"
+          "Add faction, camp-card, patch-notes, footer CSS to Home.css"
         ]
       },
       {
@@ -559,66 +631,13 @@ export const PATCH_NOTES = [
           "move loadCharacters before useEffect to fix no-use-before-define",
           "move loadCharacters before useEffect to fix no-use-before-define",
           "deduplicate date key, hasOwnProperty guard, batch trauma name lookup",
-          "add missing commas at lines 95 and 649",
-          "make characters section reload on user change and clear on logout",
-          "fetch full git history in deploy-github-pages so patch notes generate correctly",
-          "use --p1-rgb token for semi-transparent purple rgba values",
-          "apply mine filter in correct viewset files and make params composable",
-          "filter home page to only show owned characters and NPCs"
+          "add missing commas at lines 95 and 649"
         ]
       },
       {
         "title": "Refactored",
         "items": [
           "wrap loadCharacters in useCallback and add it to effect deps"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "redesign homepage color palette with new design tokens",
-          "make AppBar logo clickable to go home; fix nav-logo button background in hamburger drawer"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-11",
-    "version": null,
-    "sections": [
-      {
-        "title": "Fixed",
-        "items": [
-          "persist trauma checkboxes after save/refetch",
-          "remove global overflow-x hidden, rely on responsive layout fixes",
-          "mobile layout responsiveness for CharacterSheet and NPCSheet",
-          "add trauma reference data re-fetch fallback in handleSaveCharacter"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #39 from zoobavitel/copilot/fix-character-sheet-width-issues",
-          "Merge pull request #36 from zoobavitel/copilot/remove-personal-information",
-          "Merge pull request #38 from zoobavitel/copilot/fix-trauma-selections-save-issue",
-          "Add edit button for custom abilities on character sheet"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-10",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #37 from zoobavitel/copilot/add-edit-character-abilities-button",
-          "security: address code review feedback on PII removal",
-          "security: remove PII, add gitleaks scanning, add SECURITY.md",
-          "Merge pull request #35 from zoobavitel/copilot/discuss-npc-deletion-issues",
-          "Merge pull request #33 from zoobavitel/copilot/remove-conflict-clocks-on-npc-creation",
-          "Merge pull request #32 from zoobavitel/copilot/fix-npc-level-display"
         ]
       }
     ]

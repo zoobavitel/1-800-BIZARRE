@@ -88,6 +88,8 @@ export const createDefaultCharacter = () => ({
   inventory: [],
   selected_benefits: [],
   selected_detriments: [],
+  standType: "",
+  playbookXpArchetypes: [],
 });
 
 export const countActionDots = (actionRatings = {}) => {

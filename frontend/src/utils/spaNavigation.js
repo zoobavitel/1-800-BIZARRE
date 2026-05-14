@@ -12,9 +12,38 @@ export function handleSpaNavClick(event, navigate) {
   if (typeof navigate === "function") navigate();
 }
 
+export function slugifyCharacterHashSegment(name) {
+  if (name == null) return "";
+  const s = String(name)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return s.length > 80 ? s.slice(0, 80) : s;
+}
+
+/**
+ * Hash path without leading `#`, e.g. `character/10-walter-white` or `character/10`.
+ * @param {number|string|null|undefined} id
+ * @param {string|undefined|null} trueName Character `name` / true_name
+ */
+export function characterHashFromIdAndName(id, trueName) {
+  if (id == null || id === "") return "character";
+  const slug = slugifyCharacterHashSegment(trueName);
+  return slug ? `character/${id}-${slug}` : `character/${id}`;
+}
+
 export function buildRouteHash(page, payload = {}) {
   if (page === "character") {
-    return payload.characterId != null ? `character/${payload.characterId}` : "character";
+    if (payload.characterId == null) return "character";
+    const id = payload.characterId;
+    const slugRaw = payload.characterSlug ?? payload.slug ?? null;
+    const slug =
+      typeof slugRaw === "string" && slugRaw.trim()
+        ? slugifyCharacterHashSegment(slugRaw)
+        : "";
+    if (slug) return `character/${id}-${slug}`;
+    return `character/${id}`;
   }
   if (page === "campaigns") {
     const cid = payload.campaignId ?? null;

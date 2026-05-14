@@ -50,6 +50,8 @@ from .models import (
     CampaignAuditLog,
 )
 
+from .services.playbook_xp_archetype import normalize_playbook_xp_archetypes
+
 # ── NPC level computation (mirrors NPCSheet.jsx formula) ─────────────────────
 _NPC_GRADE_PTS = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 5}
 _NPC_STAND_STAT_KEYS = (
@@ -657,7 +659,7 @@ class SessionSerializer(serializers.ModelSerializer):
         required=False,
         default=False,
         help_text=(
-            "When PATCH sets status to COMPLETED, skip automatic STANDOUT/STRUGGLE "
+            "When PATCH sets status to COMPLETED, skip automatic STRUGGLE "
             "playbook XP (still marks encoded pass settled)."
         ),
     )
@@ -1084,7 +1086,7 @@ class RollSerializer(serializers.ModelSerializer):
             return xp_track_for_action_name(roll.action_name or "")
         if t == "BELIEFS":
             return "heritage"
-        if t in ("STRUGGLE", "STANDOUT"):
+        if t in ("STRUGGLE", "PLAYBOOK_SPECIFIC"):
             return "playbook"
         return None
 
@@ -1753,6 +1755,11 @@ class CharacterSerializer(serializers.ModelSerializer):
                         {"crew_id": "You cannot change this character's crew."}
                     )
 
+        if "playbook_xp_archetypes" in data:
+            data["playbook_xp_archetypes"] = normalize_playbook_xp_archetypes(
+                playbook_val, data.get("playbook_xp_archetypes")
+            )
+
         return data
 
     def create(self, validated_data):
@@ -2101,6 +2108,7 @@ class CharacterSummarySerializer(serializers.ModelSerializer):
             "alias",
             "stand_name",
             "playbook",
+            "playbook_xp_archetypes",
             "heritage_name",
             "user_id",
             "username",
@@ -2328,7 +2336,7 @@ class CampaignSerializer(serializers.ModelSerializer):
         default=False,
         help_text=(
             "When PATCH clears or changes active_session, skip automatic "
-            "STANDOUT/STRUGGLE playbook XP for the previous session (still "
+            "PLAYBOOK_SPECIFIC/STRUGGLE playbook XP for the previous session (still "
             "marks that pass as settled)."
         ),
     )

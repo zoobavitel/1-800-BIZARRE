@@ -122,7 +122,12 @@ export function buildXpRequirementSnapshot(p) {
 
   const beliefs = sumTrackerXpByTriggers(trackerEntries, sessionId, ["BELIEFS"], 2);
   const struggle = sumTrackerXpByTriggers(trackerEntries, sessionId, ["STRUGGLE"], 2);
-  const playbook = sumTrackerXpByTriggers(trackerEntries, sessionId, ["STANDOUT"], 2);
+  const playbook = sumTrackerXpByTriggers(
+    trackerEntries,
+    sessionId,
+    ["PLAYBOOK_SPECIFIC", "STANDOUT"],
+    2,
+  );
   const desperateTrackerNote = sumTrackerXpByTriggers(
     trackerEntries,
     sessionId,

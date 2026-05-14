@@ -18,13 +18,14 @@ from ..serializers import (
     ExperienceTrackerSerializer,
 )
 from ..services.session_xp_settlement import grant_encoded_trigger_xp
+from ..services.playbook_xp_archetype import resolve_playbook_xp_archetype_labels
 
 
-MANUAL_TOGGLE_TRIGGERS = {"BELIEFS", "STRUGGLE", "STANDOUT"}
+MANUAL_TOGGLE_TRIGGERS = {"BELIEFS", "STRUGGLE", "PLAYBOOK_SPECIFIC"}
 # Trigger toggles are SRD end-of-session trigger records confirmed by a human
 # (player or GM) rather than auto-detected from a roll. They are not the same
 # thing as the free-form "MANUAL" track-grant rows from the character sheet's
-# "Add XP" flow — `trigger` differs (BELIEFS/STRUGGLE/STANDOUT vs MANUAL) and
+# "Add XP" flow — `trigger` differs (BELIEFS/STRUGGLE/PLAYBOOK_SPECIFIC vs MANUAL) and
 # the audit / scorecard accounting treats them in separate columns.
 SESSION_TRIGGER_DESCRIPTION_PREFIX = "Session XP trigger"
 # Legacy prefix kept so `manual_revoke` can still find rows written before
@@ -288,7 +289,11 @@ class ExperienceTrackerViewSet(
             )
         try:
             character = (
-                Character.objects.select_related("campaign")
+                Character.objects.select_related("campaign", "stand")
+                .prefetch_related(
+                    "hamon_abilities__hamon_ability",
+                    "spin_abilities__spin_ability",
+                )
                 .get(pk=character_id)
             )
         except Character.DoesNotExist:
@@ -312,7 +317,7 @@ class ExperienceTrackerViewSet(
 
     @action(detail=False, methods=["post"], url_path="award")
     def manual_award(self, request):
-        """Award +1 XP for an end-of-session trigger (BELIEFS/STRUGGLE/STANDOUT).
+        """Award +1 XP for an end-of-session trigger (BELIEFS/STRUGGLE/PLAYBOOK_SPECIFIC).
 
         Respects the SRD 2-cap per session per trigger and writes to the
         character's playbook XP clock; idempotent at the cap (returns the
@@ -328,6 +333,11 @@ class ExperienceTrackerViewSet(
             and character.campaign.gm_id == user.id
         )
         source = "GM" if (is_gm and not is_owner) else "PLAYER"
+        desc = f"{SESSION_TRIGGER_DESCRIPTION_PREFIX}: {trigger}"
+        if trigger == "PLAYBOOK_SPECIFIC":
+            labels = resolve_playbook_xp_archetype_labels(character)
+            if labels:
+                desc = f"{desc} ({labels})"
         with transaction.atomic():
             granted = grant_encoded_trigger_xp(
                 character,
@@ -336,7 +346,7 @@ class ExperienceTrackerViewSet(
                 clock_key="playbook",
                 clock_max=10,
                 want=1,
-                description=f"{SESSION_TRIGGER_DESCRIPTION_PREFIX}: {trigger}",
+                description=desc,
                 awarded_by=user,
                 award_source=source,
             )

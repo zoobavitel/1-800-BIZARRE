@@ -921,6 +921,7 @@ export const transformBackendToFrontend = (backendCharacter) => {
       precision: gradeToIndex(backendCharacter.stand?.precision),
       development: gradeToIndex(backendCharacter.stand?.development),
     },
+    standType: String(backendCharacter.stand?.type || "").trim(),
 
     // Stress: backend integer; frontend uses filled count + array for compatibility
     stressFilled: Math.max(0, backendCharacter.stress ?? 0),
@@ -1133,6 +1134,9 @@ export const transformBackendToFrontend = (backendCharacter) => {
     // Additional backend fields
     campaign: backendCharacter.campaign,
     playbook: playbookToDisplay(backendCharacter.playbook),
+    playbookXpArchetypes: Array.isArray(backendCharacter.playbook_xp_archetypes)
+      ? [...backendCharacter.playbook_xp_archetypes]
+      : [],
     level: backendCharacter.level,
     loadout: backendCharacter.loadout,
     inventory: normalizeCharacterInventory(backendCharacter.inventory),
@@ -1203,6 +1207,13 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     stand_name: frontendCharacter.standName,
     heritage: heritageOut,
     playbook: playbookToBackend(frontendCharacter.playbook),
+    playbook_xp_archetypes: Array.isArray(frontendCharacter.playbookXpArchetypes)
+      ? frontendCharacter.playbookXpArchetypes.map((x) =>
+          String(x || "")
+            .trim()
+            .toUpperCase(),
+        )
+      : [],
     background_note: frontendCharacter.background,
     background_note2: String(frontendCharacter.sheetNotes ?? ""),
     appearance: frontendCharacter.look,
@@ -1246,6 +1257,11 @@ export const transformFrontendToBackend = (frontendCharacter) => {
       durability: indexToGrade(frontendCharacter.standStats?.durability),
       precision: indexToGrade(frontendCharacter.standStats?.precision),
       development: indexToGrade(frontendCharacter.standStats?.development),
+      ...(String(frontendCharacter.standType || "").trim()
+        ? {
+            type: String(frontendCharacter.standType).trim().toUpperCase(),
+          }
+        : {}),
     },
 
     // Stress: backend integer; accept stressFilled or array length

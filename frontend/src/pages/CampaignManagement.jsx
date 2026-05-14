@@ -3040,7 +3040,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
     if (
       skipEncodedXp !== true &&
       !window.confirm(
-        `Mark "${label}" ended and run the automatic encoded playbook XP pass (STANDOUT / STRUGGLE) plus Development→pool where applicable?`,
+        `Mark "${label}" ended and run the automatic encoded XP pass (STRUGGLE from the roll log) plus Development→pool where applicable?`,
       )
     ) {
       return;
@@ -3130,12 +3130,11 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
             <p style={{ margin: "0 0 12px", color: "#d1d5db" }}>
               You are clearing the campaign&apos;s live slot (character sheets, clocks,
               etc.). <strong>End &amp; apply encoded XP</strong> runs the one-time encoded{" "}
-              <strong>playbook</strong> pass (STANDOUT / STRUGGLE from the roll log, capped
-              per session) <strong>and</strong> banks each PC&apos;s{" "}
+              pass (STRUGGLE from the roll log, capped per session) <strong>and</strong> banks each PC&apos;s{" "}
               <strong>Stand Development</strong> session XP into their{" "}
               <strong>session XP pool</strong>.{" "}
               <strong>End without encoded XP</strong> clears live only and marks the
-              encoded pass settled without granting that automatic playbook XP or
+              encoded pass settled without granting that automatic STRUGGLE XP or
               banking Development→pool from this action. Use manual XP for off-roll
               awards.{" "}
               <span style={{ color: "#9ca3af" }}>
@@ -3261,7 +3260,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                 disabled={clearActiveBusy || !clearActivePreviewReady}
                 onClick={() => runClearActiveFromList(true)}
                 style={S.btnGhost}
-                title="Clears live session only; marks encoded pass done without granting STANDOUT/STRUGGLE XP."
+                title="Clears live session only; marks encoded pass done without granting automatic STRUGGLE XP."
               >
                 {clearActiveBusy ? "…" : "End without encoded XP"}
               </button>
@@ -3747,16 +3746,16 @@ function SessionDetail({
   /**
    * Per-PC scorecard stats derived from `ExperienceTracker` rows recorded
    * for this session:
-   *   - `triggerCount[BELIEFS|STRUGGLE|STANDOUT]`: capped tracker totals
+   *   - `triggerCount[BELIEFS|STRUGGLE|PLAYBOOK]`: capped tracker totals
    *     for each end-of-session trigger family (player/GM toggles + any
    *     auto-grants that have already been written, e.g. heritage on
-   *     rolls or settled vice/trauma/standout passes). SRD cap: 2/trigger.
+   *     rolls or settled vice/trauma passes). SRD cap: 2/trigger.
    *   - `xpSum`: sum of every `xp_gained` recorded against this session
    *     for that PC (toggles + auto + manual track grants + dev-pool row
    *     + desperate-roll attribute XP). This is the authoritative
    *     "session XP earned" for read-only / settled sessions.
    *
-   * Used to (a) populate the BELIEFS / STRUGGLE / STANDOUT columns from
+   * Used to (a) populate the BELIEFS / STRUGGLE / PLAYBOOK columns from
    * the live tracker rather than only roll-signal heuristics, and (b)
    * make the Total column reflect the actual records that drive the
    * "By PC — requirements logged" audit list below — so toggling a pip
@@ -3771,7 +3770,7 @@ function SessionDetail({
       const entry =
         m.get(cid) ||
         {
-          triggerCount: { BELIEFS: 0, STRUGGLE: 0, STANDOUT: 0 },
+          triggerCount: { BELIEFS: 0, STRUGGLE: 0, PLAYBOOK: 0 },
           xpSum: 0,
         };
       entry.xpSum += amt;
@@ -3779,11 +3778,16 @@ function SessionDetail({
       if (
         trig === "BELIEFS" ||
         trig === "STRUGGLE" ||
-        trig === "STANDOUT"
+        trig === "STANDOUT" ||
+        trig === "PLAYBOOK_SPECIFIC"
       ) {
-        entry.triggerCount[trig] = Math.min(
+        const bucket =
+          trig === "PLAYBOOK_SPECIFIC" || trig === "STANDOUT"
+            ? "PLAYBOOK"
+            : trig;
+        entry.triggerCount[bucket] = Math.min(
           2,
-          entry.triggerCount[trig] + amt,
+          entry.triggerCount[bucket] + amt,
         );
       }
       m.set(cid, entry);
@@ -3797,20 +3801,22 @@ function SessionDetail({
       const stats =
         sessionScorecardStatsByChar.get(row.characterId) ||
         {
-          triggerCount: { BELIEFS: 0, STRUGGLE: 0, STANDOUT: 0 },
+          triggerCount: { BELIEFS: 0, STRUGGLE: 0, PLAYBOOK: 0 },
           xpSum: 0,
         };
       const beliefsToggleCount = stats.triggerCount.BELIEFS;
-      const standoutToggleCount = stats.triggerCount.STANDOUT;
+      const playbookToggleCount = stats.triggerCount.PLAYBOOK;
       const struggleToggleCount = stats.triggerCount.STRUGGLE;
       // Unsettled preview portions only add what the encoded settle would
       // still grant on top of what's already in tracker — caps each trigger
       // at the SRD 2 and never re-counts toggled XP.
-      const unsettledStandoutAdd = settled
+      const unsettledPlaybookAdd = settled
         ? 0
         : Math.max(
             0,
-            (row.standoutWouldGrant || 0) - standoutToggleCount,
+            (row.playbookWouldGrant ??
+              row.standoutWouldGrant ??
+              0) - playbookToggleCount,
           );
       const unsettledStruggleAdd = settled
         ? 0
@@ -3821,17 +3827,18 @@ function SessionDetail({
       const unsettledDevPool = settled ? 0 : row.developmentPoolXp || 0;
       const totalSessionXpPreview =
         stats.xpSum +
-        unsettledStandoutAdd +
+        unsettledPlaybookAdd +
         unsettledStruggleAdd +
         unsettledDevPool;
       return {
         ...row,
         beliefsToggleCount,
-        standoutToggleCount,
+        playbookToggleCount,
+        standoutToggleCount: playbookToggleCount,
         struggleToggleCount,
         sessionXpRecorded: stats.xpSum,
         unsettledPreviewAdd:
-          unsettledStandoutAdd + unsettledStruggleAdd + unsettledDevPool,
+          unsettledPlaybookAdd + unsettledStruggleAdd + unsettledDevPool,
         totalSessionXpPreview,
       };
     });
@@ -3962,7 +3969,7 @@ function SessionDetail({
         stUp === "COMPLETED" || (stUp === "PLANNED" && settled);
       if (needReopenFields) {
         const ok = window.confirm(
-          "Save this date and reopen the episode for play? Planned status clears the encoded-XP-settled flag so a future end-live can run automatic STANDOUT/STRUGGLE again unless you choose skip.",
+          "Save this date and reopen the episode for play? Planned status clears the encoded-XP-settled flag so a future end-live can run automatic STRUGGLE settlement again unless you choose skip.",
         );
         if (!ok) return;
       }
@@ -4238,8 +4245,8 @@ function SessionDetail({
             <p style={{ margin: "0 0 12px", color: "#d1d5db" }}>
               Review this session before you stop live character sheets for the
               campaign. <strong>End &amp; apply encoded XP</strong> runs the
-              one-time encoded <strong>playbook</strong> pass (STANDOUT /
-              STRUGGLE from the roll log, capped per session){" "}
+              one-time encoded STRUGGLE pass (vice / trauma signals from the
+              roll log, capped per session){" "}
               <strong>and</strong> banks each PC&apos;s{" "}
               <strong>Stand Development</strong> session XP into their{" "}
               <strong>session XP pool</strong> on the character sheet (players
@@ -4263,7 +4270,7 @@ function SessionDetail({
               >
                 This session&apos;s encoded XP pass was already marked settled.
                 Ending live will <strong>not</strong> apply additional automatic
-                playbook XP from rolls or bank Development session XP again.
+                STRUGGLE XP from rolls or bank Development session XP again.
               </div>
             ) : null}
             <div
@@ -4506,7 +4513,7 @@ function SessionDetail({
                 disabled={endLiveBusy}
                 onClick={() => runEndLiveSession(true)}
                 style={S.btnGhost}
-                title="Clears live session only; marks encoded pass done without granting STANDOUT/STRUGGLE XP."
+                title="Clears live session only; marks encoded pass done without granting automatic STRUGGLE XP."
               >
                 {endLiveBusy ? "…" : "End without encoded XP"}
               </button>
@@ -4608,8 +4615,9 @@ function SessionDetail({
                 >
                   Opens a confirmation: review rolls / clocks, then end live{" "}
                   <strong>with</strong> or <strong>without</strong> automatic encoded
-                  playbook XP (STANDOUT/STRUGGLE) plus Development→session pool. Use
-                  manual XP for off-roll awards to tracks.
+                  STRUGGLE XP plus Development→session pool. Use manual XP for
+                  off-roll awards to tracks (including playbook-specific end-of-session
+                  marks on the sheet).
                 </div>
               ) : (
                 <div
@@ -4769,10 +4777,10 @@ function SessionDetail({
                 <SessionXpAllocationTable rows={endLiveRowsWithBeliefs} />
                 <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#9ca3af" }}>
                   <strong>Total</strong> = every XP record logged this session
-                  (Beliefs/Struggle/Standout toggles + heritage / vice / trauma /
+                  (Beliefs/Playbook/Struggle toggles + heritage / vice / trauma /
                   desperate-roll auto + manual GM track grants + dev-pool entry on
-                  settle) <em>plus</em> the encoded XP the end-live settle would
-                  still add on top (only while not yet settled).
+                  settle) <em>plus</em> the encoded STRUGGLE XP the end-live settle
+                  would still add on top (only while not yet settled).
                 </p>
                 <p
                   style={{
@@ -4783,23 +4791,23 @@ function SessionDetail({
                   }}
                 >
                   <strong style={{ color: "#9ca3af" }}>BELIEFS</strong> = expressed
-                  beliefs/drives/heritage/background · {" "}
+                  beliefs/drives/heritage/background ·{" "}
+                  <strong style={{ color: "#9ca3af" }}>PLAYBOOK</strong> =
+                  playbook-specific end-of-session marks (experience-tracker toggles;
+                  no roll-log auto for this column) ·{" "}
                   <strong style={{ color: "#9ca3af" }}>STRUGGLE</strong> = vice
-                  overindulgence, trauma, or entanglements · {" "}
-                  <strong style={{ color: "#9ca3af" }}>STANDOUT</strong> = playbook /
-                  stand ability use or leadership. Each capped at 2 XP/session. The
-                  headline number in each column is the experience-tracker XP
-                  recorded for that trigger (the same rows shown in "By PC —
-                  requirements logged" below — delete a row to roll it back). The
-                  "(auto N)" hint in Standout/Struggle is the count of pre-settle
-                  roll signals (rolls tagged <code>[abilities: …]</code> /
-                  vice-overindulgence / vice-failure / new trauma) that the
-                  end-live encoded pass will still apply on top, capped to the
-                  remaining 2/session. <strong>Manual→tracks</strong> is the
-                  separate ledger of <code>MANUAL</code>-trigger track grants
-                  ([insight]/[prowess]/[resolve]/[heritage]/[playbook]) added via
-                  the character sheet's <em>Add XP</em> action — never double-counted
-                  with the trigger toggles.
+                  overindulgence, trauma, or entanglements. Each capped at 2
+                  XP/session. The headline number in each column is the
+                  experience-tracker XP recorded for that trigger (the same rows
+                  shown in &quot;By PC — requirements logged&quot; below — delete a
+                  row to roll it back). The &quot;(auto N)&quot; hint on STRUGGLE is
+                  the count of pre-settle roll signals (vice-overindulgence /
+                  vice-failure / new trauma) that the end-live encoded pass will
+                  still apply on top, capped to the remaining 2/session.{" "}
+                  <strong>Manual→tracks</strong> is the separate ledger of{" "}
+                  <code>MANUAL</code>-trigger track grants ([insight]/[prowess]/[resolve]/[heritage]/[playbook])
+                  added via the character sheet&apos;s <em>Add XP</em> action — never
+                  double-counted with the trigger toggles.
                 </p>
               </>
             ) : null}
@@ -5049,7 +5057,7 @@ function SessionDetail({
               <strong>Save date</strong> on an ended episode also reopens it to{" "}
               <strong>planned</strong> (clears encoded-XP settled) so you can set it
               live again. You will be asked to confirm. A later end-live can apply
-              automatic playbook XP again unless you choose skip.
+              automatic STRUGGLE encoded XP again unless you choose skip.
             </p>
           ) : null}
         </div>
