@@ -269,7 +269,7 @@ def heritage_bonus_labels(raw):
 def award_heritage_expression_xp(character, session, roll, heritage_bonuses_raw):
     """
     BELIEFS XP on heritage track when a roll applies optional heritage bonuses.
-    Separate session bucket from playbook STRUGGLE/STANDOUT; track max 5 (sheet).
+    Separate session bucket from playbook STRUGGLE/PLAYBOOK_SPECIFIC; track max 5 (sheet).
     """
     labels = heritage_bonus_labels(heritage_bonuses_raw)
     if not labels or session is None or roll is None or character is None:

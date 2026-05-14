@@ -77,14 +77,15 @@ describe("buildXpRequirementSnapshot", () => {
       trackerEntries: [
         { session: 1, trigger: "BELIEFS", xp_gained: 1 },
         { session: 1, trigger: "STRUGGLE", xp_gained: 2 },
-        { session: 1, trigger: "STANDOUT", xp_gained: 1 },
+        { session: 1, trigger: "PLAYBOOK_SPECIFIC", xp_gained: 1 },
+        { session: 1, trigger: "PLAYBOOK_SPECIFIC", xp_gained: 1 },
         { session: 1, trigger: "DESPERATE_ROLL", xp_gained: 1 },
       ],
       rolls: [],
     });
     expect(s.beliefs).toBe(1);
     expect(s.struggle).toBe(2);
-    expect(s.playbook).toBe(1);
+    expect(s.playbook).toBe(2);
     expect(s.desperateTrackerNote).toBe(1);
   });
 });

@@ -44,7 +44,7 @@ class _BaseCrewXp(TestCase):
         c.force_authenticate(user=user)
         return c
 
-    def _mark_xp(self, character, *, xp=1, trigger="STANDOUT"):
+    def _mark_xp(self, character, *, xp=1, trigger="PLAYBOOK_SPECIFIC"):
         return ExperienceTracker.objects.create(
             character=character,
             session=self.session,

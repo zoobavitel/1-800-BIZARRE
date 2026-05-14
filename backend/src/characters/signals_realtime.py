@@ -1,10 +1,72 @@
-"""Broadcast campaign updates when session, campaign, character, or rolls change."""
+"""Broadcast campaign updates when relevant rows change.
 
-from django.db.models.signals import post_save
+Subscribers (frontend `subscribeCampaignEvents`) refetch their panel-level
+data on any `campaign_update` event for the matching campaign. We coalesce
+on the client side, so it is fine to emit a few extra events here — we'd
+rather over-broadcast and keep panels honest than miss a change.
+"""
+
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from .models import Campaign, Character, GroupAction, Roll, Session
+from .models import (
+    Campaign,
+    Character,
+    Crew,
+    ExperienceTracker,
+    Faction,
+    GroupAction,
+    NPC,
+    ProgressClock,
+    Roll,
+    Session,
+)
 from .realtime import broadcast_campaign_update
+
+
+def _campaign_id_for_session(session_id):
+    if not session_id:
+        return None
+    return (
+        Session.objects.filter(pk=session_id)
+        .values_list("campaign_id", flat=True)
+        .first()
+    )
+
+
+def _campaign_id_for_clock(instance):
+    """Resolve campaign id for any ProgressClock variant (campaign/crew/char/faction)."""
+    if instance.campaign_id:
+        return instance.campaign_id
+    if instance.character_id:
+        return (
+            Character.objects.filter(pk=instance.character_id)
+            .values_list("campaign_id", flat=True)
+            .first()
+        )
+    if instance.crew_id:
+        return (
+            Crew.objects.filter(pk=instance.crew_id)
+            .values_list("campaign_id", flat=True)
+            .first()
+        )
+    if instance.faction_id:
+        return (
+            Faction.objects.filter(pk=instance.faction_id)
+            .values_list("campaign_id", flat=True)
+            .first()
+        )
+    return None
+
+
+def _campaign_id_for_xp(instance):
+    if instance.character_id:
+        return (
+            Character.objects.filter(pk=instance.character_id)
+            .values_list("campaign_id", flat=True)
+            .first()
+        )
+    return None
 
 
 @receiver(post_save, sender=Session)
@@ -26,25 +88,52 @@ def _character_saved_broadcast(sender, instance, **kwargs):
 
 @receiver(post_save, sender=Roll)
 def _roll_saved_broadcast(sender, instance, **kwargs):
-    if not instance.session_id:
-        return
-    cid = (
-        Session.objects.filter(pk=instance.session_id)
-        .values_list("campaign_id", flat=True)
-        .first()
-    )
+    cid = _campaign_id_for_session(instance.session_id)
     if cid:
         broadcast_campaign_update(cid, "roll")
 
 
 @receiver(post_save, sender=GroupAction)
 def _group_action_saved_broadcast(sender, instance, **kwargs):
-    if not instance.session_id:
-        return
-    cid = (
-        Session.objects.filter(pk=instance.session_id)
-        .values_list("campaign_id", flat=True)
-        .first()
-    )
+    cid = _campaign_id_for_session(instance.session_id)
     if cid:
         broadcast_campaign_update(cid, "group_action")
+
+
+@receiver(post_save, sender=ProgressClock)
+@receiver(post_delete, sender=ProgressClock)
+def _progress_clock_changed_broadcast(sender, instance, **kwargs):
+    cid = _campaign_id_for_clock(instance)
+    if cid:
+        broadcast_campaign_update(cid, "progress_clock")
+
+
+@receiver(post_save, sender=ExperienceTracker)
+@receiver(post_delete, sender=ExperienceTracker)
+def _experience_tracker_changed_broadcast(sender, instance, **kwargs):
+    """Cover trigger toggles, GM/player manual grants, and auto-encoded XP.
+
+    Session XP scorecards + character-sheet trigger pips read from this
+    table, so a delete-to-rollback must also pulse the campaign stream.
+    """
+    cid = _campaign_id_for_xp(instance)
+    if cid:
+        broadcast_campaign_update(cid, "experience_tracker")
+
+
+@receiver(post_save, sender=Crew)
+def _crew_saved_broadcast(sender, instance, **kwargs):
+    if instance.campaign_id:
+        broadcast_campaign_update(instance.campaign_id, "crew")
+
+
+@receiver(post_save, sender=NPC)
+def _npc_saved_broadcast(sender, instance, **kwargs):
+    if instance.campaign_id:
+        broadcast_campaign_update(instance.campaign_id, "npc")
+
+
+@receiver(post_save, sender=Faction)
+def _faction_saved_broadcast(sender, instance, **kwargs):
+    if instance.campaign_id:
+        broadcast_campaign_update(instance.campaign_id, "faction")

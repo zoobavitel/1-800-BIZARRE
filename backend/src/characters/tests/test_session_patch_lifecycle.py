@@ -73,13 +73,14 @@ class SessionPatchLifecycleTests(TestCase):
         self.assertEqual(self.character.xp_clocks.get("playbook", 0), 4)
 
     def test_patch_status_completed_applies_encoded_xp(self):
+        # Encoded settle grants STRUGGLE from vice stress rolls (not [Abilities: …] tags).
         Roll.objects.create(
             character=self.character,
             session=self.session,
-            roll_type="ACTION",
-            action_name="skirmish",
-            outcome="FULL_SUCCESS",
-            description="[Abilities: test]",
+            roll_type="CLEAR_STRESS",
+            action_name="vice gamble",
+            outcome="FAILURE",
+            description="stress clear failed",
         )
         self.client.force_authenticate(user=self.gm)
         res = self.client.patch(

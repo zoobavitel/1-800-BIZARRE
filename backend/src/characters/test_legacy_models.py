@@ -670,7 +670,7 @@ class ExperienceTrackerModelTest(TestCase):
     
     def test_multiple_xp_sources(self):
         """Test that characters can gain XP from multiple sources."""
-        triggers = ['BELIEFS', 'STRUGGLE', 'DESPERATE', 'STANDOUT']
+        triggers = ['BELIEFS', 'STRUGGLE', 'DESPERATE', 'PLAYBOOK_SPECIFIC']
         descriptions = [
             'Expressed heritage beliefs',
             'Struggled with trauma condition',

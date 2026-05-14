@@ -33,6 +33,7 @@ import {
 import { subscribeCampaignEvents } from "../features/character-sheet/services/campaignEvents";
 import { useAuth } from "../features/auth";
 import { CharacterSheetWrapper } from "./CharacterSheet";
+import { characterHashFromIdAndName } from "../utils/spaNavigation";
 import { NPCSheet } from "./NPCSheet";
 
 const MODES = { CHARACTER: "character", NPC: "npc" };
@@ -749,7 +750,10 @@ export default function CharacterPage({
           saved = await saveOnce(repairedWithFile);
         }
         if (!payload.id && saved.id && typeof window !== "undefined")
-          window.location.hash = `character/${saved.id}`;
+          window.location.hash = characterHashFromIdAndName(
+            saved.id,
+            saved.true_name || frontend.name,
+          );
         let stashMerged = null;
         if (saved?.id && Array.isArray(frontend.stash)) {
           const crewPk =
@@ -1074,6 +1078,34 @@ export default function CharacterPage({
     });
   }, [mode, campaignIdForRealtime, syncOpenSheetsFromServer]);
 
+  useEffect(() => {
+    if (mode !== MODES.CHARACTER) {
+      document.title = "1(800)BIZARRE";
+      return;
+    }
+    const id = sheetCharacter?.id;
+    if (id == null || id === "") {
+      document.title = "1(800)BIZARRE";
+      return;
+    }
+    const disp =
+      String(sheetCharacter?.name || "").trim() || `Character ${id}`;
+    document.title = `${disp} — Character`;
+  }, [mode, sheetCharacter?.id, sheetCharacter?.name]);
+
+  useEffect(() => {
+    if (mode !== MODES.CHARACTER) return;
+    const id = sheetCharacter?.id;
+    if (id == null || id === "") return;
+    if (typeof window === "undefined") return;
+    const next = characterHashFromIdAndName(id, sheetCharacter?.name);
+    const cur = window.location.hash.replace(/^#/, "");
+    if (cur === next) return;
+    const url = new URL(window.location.href);
+    url.hash = next;
+    window.history.replaceState(null, "", url.toString());
+  }, [mode, sheetCharacter?.id, sheetCharacter?.name]);
+
   const activeNpcTab = npcTabs.find((t) => t.tabId === activeNpcTabId);
 
   const handleDeleteActiveCharacter = useCallback(async () => {
@@ -1116,7 +1148,10 @@ export default function CharacterPage({
         const nextHashId = nextTab?.characterId ?? nextTab?.character?.id;
         if (typeof window !== "undefined") {
           window.location.hash = nextHashId
-            ? `character/${nextHashId}`
+            ? characterHashFromIdAndName(
+                nextHashId,
+                nextTab?.character?.name,
+              )
             : "character";
         }
         return sortCharTabs(filtered);
@@ -1331,7 +1366,10 @@ export default function CharacterPage({
               setMode(MODES.CHARACTER);
               if (typeof window !== "undefined") {
                 window.location.hash = hashId
-                  ? `character/${hashId}`
+                  ? characterHashFromIdAndName(
+                      hashId,
+                      activeCharTab?.character?.name,
+                    )
                   : "character";
               }
             }}
@@ -1545,7 +1583,10 @@ export default function CharacterPage({
                         setMode(MODES.CHARACTER);
                         openCharacterInTab(char);
                         if (typeof window !== "undefined") {
-                          window.location.hash = `character/${char.id}`;
+                          window.location.hash = characterHashFromIdAndName(
+                          char.id,
+                          char.name,
+                        );
                         }
                       });
                     }

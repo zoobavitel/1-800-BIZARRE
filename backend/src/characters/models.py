@@ -639,6 +639,14 @@ class Character(models.Model):
         choices=[("STAND", "Stand"), ("HAMON", "Hamon"), ("SPIN", "Spin")],
         default="STAND",
     )
+    playbook_xp_archetypes = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "SRD playbook-specific XP archetype keys (multi-select). "
+            "Stand: Stand.TYPE_CHOICES; Hamon/Spin: non-FOUNDATION ability path keys."
+        ),
+    )
 
     stand_type = models.CharField(max_length=50, blank=True, null=True)
     stand_name = models.CharField(max_length=100, blank=True, null=True)
@@ -1532,7 +1540,7 @@ class ExperienceTracker(models.Model):
         ("STRUGGLE", "Struggle with issues from vice or trauma"),
         ("DESPERATE", "Address a challenge with action rating 0"),
         ("DESPERATE_ROLL", "Desperate skill check"),
-        ("STANDOUT", "Standout action or leadership"),
+        ("PLAYBOOK_SPECIFIC", "Playbook-specific XP (end of session)"),
         ("MANUAL", "Manual or offline XP award"),
     ]
 

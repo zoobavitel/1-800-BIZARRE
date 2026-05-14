@@ -2,13 +2,14 @@
 Apply once-per-session encoded XP when a session is deactivated or completed.
 
 Desperate action XP is already awarded per roll (DESPERATE_ROLL). This pass adds:
-  - Capped playbook-track XP from stored rolls (STANDOUT / STRUGGLE), and
+  - Capped playbook-track XP from stored rolls (STRUGGLE only — vice signals), and
   - Stand Development session XP into each PC's ``Character.unallocated_xp`` pool
     (players allocate pool XP to tracks on the character sheet).
 
 Encoded signals from stored rolls:
-  - STANDOUT: roll description includes [Abilities: …] (playbook / stand ability used)
   - STRUGGLE: vice (CLEAR_STRESS) with overindulgence note, or vice clear failed (FAILURE/BOTCH)
+
+Playbook-specific session XP is toggled on the sheet (PLAYBOOK_SPECIFIC), not inferred from rolls.
 
 Immediate awards (outside this settle sweep): BELIEFS XP on the heritage clock when rolls
 carry ``[Heritage: …]`` (`roll_helpers.award_heritage_expression_xp`); playbook STRUGGLE when
@@ -125,7 +126,7 @@ def _grant_playbook_track(
     description: str,
     roll: Roll | None = None,
 ) -> int:
-    """Add up to ``want`` XP on playbook clock (max 10) for STRUGGLE / STANDOUT style triggers."""
+    """Add up to ``want`` XP on playbook clock (max 10) for STRUGGLE / playbook toggles."""
     return grant_encoded_trigger_xp(
         character,
         session,
@@ -137,11 +138,6 @@ def _grant_playbook_track(
         roll=roll,
         session_trigger_cap=_SESSION_TRIGGER_CAP,
     )
-
-
-def _roll_has_playbook_abilities_note(roll: Roll) -> bool:
-    d = (roll.description or "").lower()
-    return "[abilities:" in d
 
 
 def _vice_struggle_signals(roll: Roll) -> int:
@@ -163,8 +159,8 @@ def mark_encoded_session_xp_settled_without_xp(
     """
     Mark the one-time encoded playbook XP pass as done without granting XP.
 
-    Used when the GM ends the live session but opts out of the automatic
-    STANDOUT/STRUGGLE settlement (manual awards only).
+    Used when the GM ends the live session but opts out of automatic encoded
+    STRUGGLE settlement (playbook-specific XP remains manual toggles only).
     """
     out: dict[str, Any] = {"session_id": session.id, "encoded_xp_skipped": True}
     with transaction.atomic():
@@ -220,8 +216,6 @@ def settle_encoded_session_xp(session: Session, acting_user: Any) -> dict:
             crolls = [r for r in rolls if r.character_id == cid]
             struggle_events = sum(_vice_struggle_signals(r) for r in crolls)
             struggle_want = min(_SESSION_TRIGGER_CAP, struggle_events)
-            standout_events = sum(1 for r in crolls if _roll_has_playbook_abilities_note(r))
-            standout_want = min(_SESSION_TRIGGER_CAP, standout_events)
             if struggle_want:
                 n = _grant_playbook_track(
                     char,
@@ -235,20 +229,6 @@ def settle_encoded_session_xp(session: Session, acting_user: Any) -> dict:
                 if n:
                     out["applied"].append(
                         {"character": cid, "trigger": "STRUGGLE", "xp": n}
-                    )
-            if standout_want:
-                n = _grant_playbook_track(
-                    char,
-                    locked,
-                    "STANDOUT",
-                    standout_want,
-                    "Auto (session settle): playbook / stand ability noted on a roll "
-                    "([Abilities: …] in roll description).",
-                    None,
-                )
-                if n:
-                    out["applied"].append(
-                        {"character": cid, "trigger": "STANDOUT", "xp": n}
                     )
             dev_pool = development_session_xp_to_pool_amount(char)
             if dev_pool > 0:

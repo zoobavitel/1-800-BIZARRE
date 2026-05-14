@@ -50,6 +50,8 @@ from .models import (
     CampaignAuditLog,
 )
 
+from .services.playbook_xp_archetype import normalize_playbook_xp_archetypes
+
 # ── NPC level computation (mirrors NPCSheet.jsx formula) ─────────────────────
 _NPC_GRADE_PTS = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 5}
 _NPC_STAND_STAT_KEYS = (
@@ -64,6 +66,45 @@ _NPC_DEFAULT_GRADE = "D"
 _NPC_LEVEL_OFFSET = 9
 
 _PC_CLOCK_TYPES = {c[0] for c in ProgressClock.CLOCK_TYPE_CHOICES}
+
+
+def _attach_or_create_party_crew_from_personal_name(character):
+    """Realize the personal_crew_name text field into the campaign's party Crew.
+
+    Treats the sheet's crew text field as a player-driven "the crew exists
+    now" signal: if the character is in a campaign with no crew yet, create
+    one named from `personal_crew_name`. If the campaign already has a crew,
+    silently attach this character to the existing party crew (FitD-style
+    single-crew assumption). Either way the character becomes a crew member,
+    which the CrewViewSet uses to gate write permissions on the shared sheet.
+
+    Always clears `personal_crew_name` after a successful attach so the text
+    field doesn't drift out of sync with the FK.
+    """
+    if not character or not character.campaign_id:
+        return
+    if character.crew_id:
+        if character.personal_crew_name:
+            Character.objects.filter(pk=character.pk).update(personal_crew_name="")
+            character.personal_crew_name = ""
+        return
+    desired_name = (character.personal_crew_name or "").strip()
+    if not desired_name:
+        return
+    crew = (
+        Crew.objects.filter(campaign_id=character.campaign_id)
+        .order_by("id")
+        .first()
+    )
+    if crew is None:
+        crew = Crew.objects.create(
+            campaign_id=character.campaign_id, name=desired_name[:100]
+        )
+    Character.objects.filter(pk=character.pk).update(
+        crew=crew, personal_crew_name=""
+    )
+    character.crew_id = crew.id
+    character.personal_crew_name = ""
 
 
 def _sync_character_progress_clocks(character, raw_clocks, user):
@@ -618,7 +659,7 @@ class SessionSerializer(serializers.ModelSerializer):
         required=False,
         default=False,
         help_text=(
-            "When PATCH sets status to COMPLETED, skip automatic STANDOUT/STRUGGLE "
+            "When PATCH sets status to COMPLETED, skip automatic STRUGGLE "
             "playbook XP (still marks encoded pass settled)."
         ),
     )
@@ -1045,7 +1086,7 @@ class RollSerializer(serializers.ModelSerializer):
             return xp_track_for_action_name(roll.action_name or "")
         if t == "BELIEFS":
             return "heritage"
-        if t in ("STRUGGLE", "STANDOUT"):
+        if t in ("STRUGGLE", "PLAYBOOK_SPECIFIC"):
             return "playbook"
         return None
 
@@ -1714,6 +1755,11 @@ class CharacterSerializer(serializers.ModelSerializer):
                         {"crew_id": "You cannot change this character's crew."}
                     )
 
+        if "playbook_xp_archetypes" in data:
+            data["playbook_xp_archetypes"] = normalize_playbook_xp_archetypes(
+                playbook_val, data.get("playbook_xp_archetypes")
+            )
+
         return data
 
     def create(self, validated_data):
@@ -1762,9 +1808,7 @@ class CharacterSerializer(serializers.ModelSerializer):
             CharacterHamonAbility.objects.create(character=character, hamon_ability=ha)
         for sa in spin_ids:
             CharacterSpinAbility.objects.create(character=character, spin_ability=sa)
-        if character.crew_id and character.personal_crew_name:
-            Character.objects.filter(pk=character.pk).update(personal_crew_name="")
-            character.personal_crew_name = ""
+        _attach_or_create_party_crew_from_personal_name(character)
         req = self.context.get("request")
         _sync_character_progress_clocks(
             character,
@@ -1861,9 +1905,7 @@ class CharacterSerializer(serializers.ModelSerializer):
 
         character = super().update(instance, validated_data)
 
-        if character.crew_id and character.personal_crew_name:
-            Character.objects.filter(pk=character.pk).update(personal_crew_name="")
-            character.personal_crew_name = ""
+        _attach_or_create_party_crew_from_personal_name(character)
 
         # #region agent log
         try:
@@ -2066,6 +2108,7 @@ class CharacterSummarySerializer(serializers.ModelSerializer):
             "alias",
             "stand_name",
             "playbook",
+            "playbook_xp_archetypes",
             "heritage_name",
             "user_id",
             "username",
@@ -2293,7 +2336,7 @@ class CampaignSerializer(serializers.ModelSerializer):
         default=False,
         help_text=(
             "When PATCH clears or changes active_session, skip automatic "
-            "STANDOUT/STRUGGLE playbook XP for the previous session (still "
+            "PLAYBOOK_SPECIFIC/STRUGGLE playbook XP for the previous session (still "
             "marks that pass as settled)."
         ),
     )

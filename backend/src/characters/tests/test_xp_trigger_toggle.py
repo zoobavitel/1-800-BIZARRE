@@ -55,7 +55,7 @@ class XpTriggerToggleTests(TestCase):
         for _ in range(3):
             res = self.client.post(
                 "/api/experience-tracker/award/",
-                {"character": self.character.id, "trigger": "STANDOUT"},
+                {"character": self.character.id, "trigger": "PLAYBOOK_SPECIFIC"},
                 format="json",
             )
             self.assertEqual(res.status_code, 200)
@@ -65,7 +65,7 @@ class XpTriggerToggleTests(TestCase):
             for e in ExperienceTracker.objects.filter(
                 character=self.character,
                 session=self.session,
-                trigger="STANDOUT",
+                trigger="PLAYBOOK_SPECIFIC",
             )
         )
         self.assertEqual(granted_total, 2)
@@ -122,7 +122,7 @@ class XpTriggerToggleTests(TestCase):
         self._auth(self.player)
         res = self.client.post(
             "/api/experience-tracker/revoke/",
-            {"character": self.character.id, "trigger": "STANDOUT"},
+            {"character": self.character.id, "trigger": "PLAYBOOK_SPECIFIC"},
             format="json",
         )
         self.assertEqual(res.status_code, 200)
@@ -132,7 +132,7 @@ class XpTriggerToggleTests(TestCase):
         self._auth(self.gm)
         res = self.client.post(
             "/api/experience-tracker/award/",
-            {"character": self.character.id, "trigger": "STANDOUT"},
+            {"character": self.character.id, "trigger": "PLAYBOOK_SPECIFIC"},
             format="json",
         )
         self.assertEqual(res.status_code, 200)
@@ -141,7 +141,7 @@ class XpTriggerToggleTests(TestCase):
         self._auth(self.other)
         res = self.client.post(
             "/api/experience-tracker/award/",
-            {"character": self.character.id, "trigger": "STANDOUT"},
+            {"character": self.character.id, "trigger": "PLAYBOOK_SPECIFIC"},
             format="json",
         )
         self.assertEqual(res.status_code, 403)
@@ -152,7 +152,7 @@ class XpTriggerToggleTests(TestCase):
         self._auth(self.player)
         res = self.client.post(
             "/api/experience-tracker/award/",
-            {"character": self.character.id, "trigger": "STANDOUT"},
+            {"character": self.character.id, "trigger": "PLAYBOOK_SPECIFIC"},
             format="json",
         )
         self.assertEqual(res.status_code, 400)

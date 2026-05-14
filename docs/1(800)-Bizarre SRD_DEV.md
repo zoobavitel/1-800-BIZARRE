@@ -82,7 +82,7 @@ After that? They dive back in—pushing forward, spiraling out, chasing destiny,
 **THE CORE SYSTEM**
 
 **JUDGEMENT CALLS:**  
-When you play, you’ll make several key judgment calls. Everyone contributes, but either the players or the GM has final say for each:
+When you play, you’ll make several key judgment calls. Everyone contributes, but it’s either the players or the GM gets final say for each:
 
 - Which skills are reasonable as a solution to a problem? Can this person be ***Swayed***? Must we get out the tools and ***Tinker*** with this old rusty lock, or could it also be quietly ***Finessed***? The players have final say.
 
@@ -1363,6 +1363,36 @@ When you fill an xp track, clear all the marks and take an advance. When you tak
 You can also earn xp by training during downtime. When you train, mark XP in one of your attributes or in your playbook. A given xp track can be trained only once per downtime phase.
 
 It is 5 xp to gain a \+1d in a skill rating. It is 10xp to gain a \+1 stand coin stat, heritage ability, or \+2d in a skill rating. 
+
+**STAND USERS**
+
+| Archetype | XP Trigger |
+| ----- | ----- |
+| **Colony** | Address a challenge by coordinating your Stand's units across multiple targets or fronts. |
+| **Automatic** | Address a challenge by allowing your Stand to act on a trigger you set in advance. |
+| **Tool-Bound** | Address a challenge by channeling your Stand through an object, machine, or medium. |
+| **Fighting Spirit** | Address a challenge through direct Stand confrontation or sustained physical force. |
+| **Phenomena** | Address a challenge by exploiting the bizarre or reality-defying nature of your Stand. |
+| **Shared** | Address a challenge by extending your Stand's reach to cover allies or multiple locations. |
+
+**SPIN USERS**
+
+| Archetype | XP Trigger |
+| ----- | ----- |
+| **Cavalier** | Address a challenge through momentum, speed, or superior positioning. |
+| **Executioner** | Address a challenge by targeting a specific vulnerability or body part with precision. |
+| **Medico** | Address a challenge by treating harm, diagnosing injury, or stabilizing an ally with Spin. |
+| **Ballbreaker** | Address a challenge by disabling or nullifying an enemy's power, resource, or ability. |
+
+**HAMON USERS**
+
+| Archetype | XP Trigger |
+| ----- | ----- |
+| **Traditionalist** | Address a challenge through disciplined Hamon technique, mentorship, or self-sacrifice. |
+| **Adaptive Flow** | Address a challenge by applying Hamon in an improvised or unexpected way. |
+| **Cyber-Hamonist** | Address a challenge by channeling Ripple through technology or cybernetics. |
+| **Dark Resonance** | Address a challenge by draining, corrupting, or inverting another's life force. |
+| **Bio-Harmonics** | Address a challenge through biological dominance, absorption, or physical transformation. |
 
 # 🥷 The Mission
 

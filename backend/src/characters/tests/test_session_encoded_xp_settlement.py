@@ -1,4 +1,7 @@
-"""settle_encoded_session_xp: STRUGGLE/STANDOUT from rolls; idempotent flag."""
+"""settle_encoded_session_xp: STRUGGLE from rolls; idempotent flag; dev pool.
+
+Playbook-specific (PLAYBOOK_SPECIFIC) XP is not auto-granted from roll tags.
+"""
 import re
 
 from django.contrib.auth.models import User
@@ -40,11 +43,8 @@ def _manual_track_xp_for_session(character, session):
 
 
 def _encoded_playbook_preview_from_rolls(character, session):
-    """Mirror `buildSessionEndLiveSummary` caps for STANDOUT / STRUGGLE (modal columns)."""
+    """Mirror frontend: STRUGGLE-only encoded playbook (no ability-tag auto)."""
     rolls = list(Roll.objects.filter(session=session, character=character))
-    standout_events = sum(
-        1 for r in rolls if "[abilities:" in (r.description or "").lower()
-    )
     struggle_events = 0
     for r in rolls:
         if (r.roll_type or "").upper() != "CLEAR_STRESS":
@@ -56,9 +56,8 @@ def _encoded_playbook_preview_from_rolls(character, session):
             struggle_events += 1
         elif (r.outcome or "") in ("FAILURE", "BOTCH"):
             struggle_events += 1
-    standout_would = min(_SESSION_ENCODED_XP_CAP, standout_events)
     struggle_would = min(_SESSION_ENCODED_XP_CAP, struggle_events)
-    return standout_would, struggle_would, standout_would + struggle_would
+    return 0, struggle_would, struggle_would
 
 
 class SessionEncodedXpSettlementTests(TestCase):
@@ -134,14 +133,16 @@ class SessionEncodedXpSettlementTests(TestCase):
         ).count()
         self.assertEqual(struggle_n, 1)
 
-    def test_standout_from_abilities_tag(self):
+    def test_abilities_tag_does_not_auto_grant_playbook_xp(self):
         self._roll(description="[Abilities: Stand ability foo]")
         settle_encoded_session_xp(self.session, self.gm)
         self.character.refresh_from_db()
-        self.assertEqual(self.character.xp_clocks.get("playbook", 0), 6)
-        self.assertTrue(
+        self.assertEqual(self.character.xp_clocks.get("playbook", 0), 5)
+        self.assertFalse(
             ExperienceTracker.objects.filter(
-                trigger="STANDOUT", character=self.character, session=self.session
+                trigger="PLAYBOOK_SPECIFIC",
+                character=self.character,
+                session=self.session,
             ).exists()
         )
 
@@ -176,7 +177,6 @@ class SessionEncodedXpSettlementTests(TestCase):
         self.character.refresh_from_db()
         # 5 + 2 cap
         self.assertEqual(self.character.xp_clocks.get("playbook", 0), 7)
-        # ... + 2 STRUGGLE tracker rows (actual grant may be one row of 2 xp)
         total_struggle_xp = (
             ExperienceTracker.objects.filter(
                 character=self.character,
@@ -228,7 +228,9 @@ class SessionEncodedXpSettlementTests(TestCase):
         self.assertEqual(self.character.xp_clocks.get("playbook", 0), 5)
         self.assertFalse(
             ExperienceTracker.objects.filter(
-                trigger="STANDOUT", character=self.character, session=self.session
+                trigger="PLAYBOOK_SPECIFIC",
+                character=self.character,
+                session=self.session,
             ).exists()
         )
 
@@ -264,9 +266,8 @@ class SessionEncodedXpSettlementTests(TestCase):
         Same HTTP path as SessionDetail "End & apply encoded XP":
         PATCH /api/campaigns/:id/ with active_session=null (no skip flag).
 
-        Asserts DB state matches modal columns: STANDOUT/STRUGGLE/Enc. playbook
-        (playbook clock + tracker rows), Dev→pool (unallocated_xp + pool MANUAL
-        row), Manual→tracks (prefixed MANUAL rows unchanged total), Total.
+        Asserts DB state: STRUGGLE/Enc. playbook (playbook clock + tracker rows),
+ Dev→pool, Manual→tracks, Total.
         """
         user_b = User.objects.create_user(username="pl_sxp_b", password="pw")
         dots = self.character.action_dots
@@ -343,6 +344,8 @@ class SessionEncodedXpSettlementTests(TestCase):
             self.character, self.session
         )
         st_b, sg_b, enc_b = _encoded_playbook_preview_from_rolls(char_b, self.session)
+        self.assertEqual(st_a, 0)
+        self.assertEqual(st_b, 0)
         dev_a = development_session_xp_to_pool_amount(self.character)
         dev_b = development_session_xp_to_pool_amount(char_b)
         manual_a = _manual_track_xp_for_session(self.character, self.session)
@@ -367,7 +370,6 @@ class SessionEncodedXpSettlementTests(TestCase):
         self.character.refresh_from_db()
         char_b.refresh_from_db()
 
-        # Enc. playbook → playbook clock (modal totalEncodedPlaybookXp)
         self.assertEqual(
             int(self.character.xp_clocks.get("playbook", 0) or 0),
             prev_play_a + enc_a,
@@ -380,10 +382,10 @@ class SessionEncodedXpSettlementTests(TestCase):
             ExperienceTracker.objects.filter(
                 character=self.character,
                 session=self.session,
-                trigger="STANDOUT",
+                trigger="PLAYBOOK_SPECIFIC",
             ).aggregate(s=Sum("xp_gained"))["s"]
             or 0,
-            st_a,
+            0,
         )
         self.assertEqual(
             ExperienceTracker.objects.filter(
@@ -396,7 +398,7 @@ class SessionEncodedXpSettlementTests(TestCase):
         )
         self.assertFalse(
             ExperienceTracker.objects.filter(
-                character=char_b, session=self.session, trigger="STANDOUT"
+                character=char_b, session=self.session, trigger="PLAYBOOK_SPECIFIC"
             ).exists()
         )
         self.assertFalse(
@@ -405,7 +407,6 @@ class SessionEncodedXpSettlementTests(TestCase):
             ).exists()
         )
 
-        # Dev→pool → Character.unallocated_xp + MANUAL "Session end (pool)" row
         self.assertEqual(self.character.unallocated_xp, dev_a)
         self.assertEqual(char_b.unallocated_xp, dev_b)
         pool_row_a = ExperienceTracker.objects.filter(
@@ -427,7 +428,6 @@ class SessionEncodedXpSettlementTests(TestCase):
             pool_row_b.aggregate(s=Sum("xp_gained"))["s"] or 0, dev_b
         )
 
-        # Manual→tracks: prefixed MANUAL unchanged (already on sheet before settle)
         self.assertEqual(
             _manual_track_xp_for_session(self.character, self.session),
             manual_a,
@@ -437,7 +437,6 @@ class SessionEncodedXpSettlementTests(TestCase):
             manual_b,
         )
 
-        # Total column = enc + dev + manual (modal totalSessionXpPreview)
         gained_play_a = (
             int(self.character.xp_clocks.get("playbook", 0) or 0) - prev_play_a
         )

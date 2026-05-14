@@ -30,6 +30,10 @@ import {
   getPositionEffectModifierHints,
   peModifierBucketLabel,
 } from "./peModifierAbilityHints";
+import {
+  archetypeLabelsJoined,
+  normalizePlaybookXpArchetypeKeys,
+} from "../../features/character-sheet/utils/playbookXpTriggerSrd";
 import { rosterHasLinkedCrewForCrewSheetFactionUi } from "../../features/character-sheet/utils/characterUtils";
 
 const GRADES = ["F", "D", "C", "B", "A", "S"];
@@ -743,13 +747,16 @@ function rosterFormatInventoryLine(item) {
 }
 
 function rosterCharacterNoteSections(ch) {
+  // Context-only fields (read-only) shown in a collapsible <details> under
+  // the editable NOTES textarea. `background_note2` is intentionally
+  // excluded because it IS the editable notes field and showing it twice
+  // would imply two separate stores.
   const out = [];
   const push = (label, val) => {
     const t = String(val ?? "").trim();
     if (t) out.push({ label, text: t });
   };
   push("Background", ch.background_note);
-  push("Background (extra)", ch.background_note2);
   push("Appearance", ch.appearance);
   push("Vice details", ch.vice_details);
   return out;
@@ -924,6 +931,38 @@ function compactHarmFieldStyle(key, rawValue) {
   };
 }
 
+/** End-of-session playbook clock triggers (ExperienceTracker). */
+const SESSION_PLAYBOOK_TRIGGER_CODES = new Set([
+  "BELIEFS",
+  "STRUGGLE",
+  "PLAYBOOK_SPECIFIC",
+  "STANDOUT",
+]);
+
+/** POST /experience-tracker/award/ — playbook-specific column. */
+const PLAYBOOK_SESSION_TOGGLE_TRIGGER = "PLAYBOOK_SPECIFIC";
+
+function formatSessionXpAwardHow(awardSource, awardedByUsername) {
+  const s = String(awardSource || "AUTO").toUpperCase();
+  if (s === "AUTO") return "Automatic";
+  if (s === "GM") {
+    const u = String(awardedByUsername || "").trim();
+    return u ? `GM toggle (${u})` : "GM toggle";
+  }
+  if (s === "PLAYER") {
+    const u = String(awardedByUsername || "").trim();
+    return u ? `Player toggle (${u})` : "Player toggle";
+  }
+  return s;
+}
+
+function sessionPlaybookTriggerTag(code) {
+  const c = String(code || "").toUpperCase();
+  if (c === "PLAYBOOK_SPECIFIC") return "PLAYBOOK";
+  if (SESSION_PLAYBOOK_TRIGGER_CODES.has(c)) return c;
+  return "";
+}
+
 /**
  * Session GM quick-flow: NPC roster, player roster, bulk position/effect, add-NPC.
  */
@@ -1055,9 +1094,9 @@ export default function SessionGMManagementPanels({
   const [pcSheetStashFilledEdits, setPcSheetStashFilledEdits] = useState({});
   const [pcSheetMoneySavingId, setPcSheetMoneySavingId] = useState(null);
   const [pcRosterInvDraftByChar, setPcRosterInvDraftByChar] = useState({});
-  const [pcRosterNoteAppendDraftByChar, setPcRosterNoteAppendDraftByChar] =
-    useState({});
-  /** Inventory / note append PATCH from session roster PC cards */
+  /** GM-side draft of the PC sheet NOTES (`background_note2`) keyed by character id. */
+  const [pcRosterNotesDraftByChar, setPcRosterNotesDraftByChar] = useState({});
+  /** Inventory + notes PATCH from session roster PC cards */
   const [pcRosterSheetBusyId, setPcRosterSheetBusyId] = useState(null);
 
   const npcInvolvements = useMemo(
@@ -1351,12 +1390,19 @@ export default function SessionGMManagementPanels({
       : unwrapApiArray(histRaw);
     const rows = [];
     for (const e of sessionXpEntriesSorted) {
+      const trig = String(e.trigger || "").toUpperCase();
       rows.push({
         key: `et-${e.id}`,
         when: e.session_date,
         character: e.character,
         xp: Number(e.xp_gained) || 0,
         typeLabel: e.trigger_display || e.trigger || "—",
+        triggerCode: trig,
+        isPlaybookSessionTrigger: SESSION_PLAYBOOK_TRIGGER_CODES.has(trig),
+        awardHow: formatSessionXpAwardHow(
+          e.award_source,
+          e.awarded_by_username,
+        ),
         note: String(e.description || "").trim(),
         source: "Tracker",
       });
@@ -1374,6 +1420,9 @@ export default function SessionGMManagementPanels({
             : amt > 0
               ? "Ledger (+)"
               : "Ledger",
+        triggerCode: "",
+        isPlaybookSessionTrigger: false,
+        awardHow: null,
         note: String(h.reason || "").trim(),
         source: "XP history",
       });
@@ -1393,23 +1442,26 @@ export default function SessionGMManagementPanels({
       const label = desc
         ? `${typeLbl} (+${row.xp_gained ?? 0}) — ${desc}`
         : `${typeLbl} (+${row.xp_gained ?? 0})`;
-      const src = String(row.award_source || "AUTO").toUpperCase();
-      const who =
-        src === "AUTO"
-          ? "Auto"
-          : src === "GM"
-            ? `GM${row.awarded_by_username ? ` (${row.awarded_by_username})` : ""}`
-            : `Self${row.awarded_by_username ? ` (${row.awarded_by_username})` : ""}`;
       const sessLbl = row.session_name
         ? row.session_name
         : row.session
           ? `session ${row.session}`
           : "out of session";
+      const src = String(row.award_source || "AUTO").toUpperCase();
+      const trig = String(row.trigger || "").toUpperCase();
+      const awardHow = formatSessionXpAwardHow(
+        row.award_source,
+        row.awarded_by_username,
+      );
+      const triggerTag = SESSION_PLAYBOOK_TRIGGER_CODES.has(trig)
+        ? sessionPlaybookTriggerTag(trig)
+        : "";
       if (!m.has(cid)) m.set(cid, []);
       m.get(cid).push({
         id: row.id,
         label,
-        who,
+        awardHow,
+        triggerTag,
         source: src,
         sessionLabel: sessLbl,
         xp: Number(row.xp_gained) || 0,
@@ -1439,25 +1491,22 @@ export default function SessionGMManagementPanels({
   );
 
   /**
-   * Per-PC tally of end-of-session XP triggers (BELIEFS / STRUGGLE / STANDOUT)
+   * Per-PC tally of end-of-session XP triggers (BELIEFS / STRUGGLE / playbook)
    * for this session, summed from the tracker and SRD-capped at 2 / trigger.
-   * Drives the GM scorecard toggle UI below.
+   * PLAYBOOK_SPECIFIC and legacy STANDOUT map to the PLAYBOOK scorecard bucket.
    */
   const pcXpTriggerCountsByCharacter = useMemo(() => {
     const m = new Map();
     for (const row of sessionXpEntriesSorted) {
       const cid = Number(row.character);
       if (!Number.isFinite(cid)) continue;
-      const trig = String(row.trigger || "").toUpperCase();
-      if (
-        trig !== "BELIEFS" &&
-        trig !== "STRUGGLE" &&
-        trig !== "STANDOUT"
-      ) {
+      let trig = String(row.trigger || "").toUpperCase();
+      if (trig === "PLAYBOOK_SPECIFIC" || trig === "STANDOUT") trig = "PLAYBOOK";
+      if (trig !== "BELIEFS" && trig !== "STRUGGLE" && trig !== "PLAYBOOK") {
         continue;
       }
       const amt = Math.max(0, Number(row.xp_gained) || 0);
-      if (!m.has(cid)) m.set(cid, { BELIEFS: 0, STRUGGLE: 0, STANDOUT: 0 });
+      if (!m.has(cid)) m.set(cid, { BELIEFS: 0, STRUGGLE: 0, PLAYBOOK: 0 });
       m.get(cid)[trig] = Math.min(2, m.get(cid)[trig] + amt);
     }
     return m;
@@ -2038,6 +2087,42 @@ export default function SessionGMManagementPanels({
     [onRefresh, onSessionCharactersRefresh, setError],
   );
 
+  /**
+   * Save the GM-edited NOTES textarea on a roster PC card.
+   *
+   * PC sheet's NOTES panel is wired to `background_note2` server-side (the
+   * `sheetNotes` alias in the frontend transform); this lets the GM edit
+   * that same field directly from session view without opening the PC
+   * sheet. No-op if the draft equals the server value to avoid spurious
+   * PATCH + SSE rebroadcasts.
+   */
+  const handlePcRosterSaveNotes = useCallback(
+    async (characterId, currentNotes, draftValue) => {
+      const cur = String(currentNotes ?? "");
+      const next = String(draftValue ?? "");
+      if (cur === next) return;
+      setPcRosterSheetBusyId(characterId);
+      setError(null);
+      try {
+        await characterAPI.patchCharacter(characterId, {
+          background_note2: next,
+        });
+        setPcRosterNotesDraftByChar((p) => {
+          const n = { ...p };
+          delete n[characterId];
+          return n;
+        });
+        await onSessionCharactersRefresh?.();
+        await onRefresh();
+      } catch (e) {
+        setError(e.message || "Could not update notes.");
+      } finally {
+        setPcRosterSheetBusyId(null);
+      }
+    },
+    [onRefresh, onSessionCharactersRefresh, setError],
+  );
+
   const handlePcRosterAppendInventory = useCallback(
     async (characterId, currentInventory, draftLine) => {
       const trimmed = String(draftLine ?? "").trim();
@@ -2057,34 +2142,6 @@ export default function SessionGMManagementPanels({
         await onRefresh();
       } catch (e) {
         setError(e.message || "Could not update inventory.");
-      } finally {
-        setPcRosterSheetBusyId(null);
-      }
-    },
-    [onRefresh, onSessionCharactersRefresh, setError],
-  );
-
-  const handlePcRosterAppendBackgroundNote = useCallback(
-    async (characterId, currentBackground, appendText) => {
-      const t = String(appendText ?? "").trim();
-      if (!t) return;
-      const cur = String(currentBackground ?? "").trim();
-      const merged = cur ? `${cur}\n\n${t}` : t;
-      setPcRosterSheetBusyId(characterId);
-      setError(null);
-      try {
-        await characterAPI.patchCharacter(characterId, {
-          background_note: merged,
-        });
-        setPcRosterNoteAppendDraftByChar((p) => {
-          const n = { ...p };
-          delete n[characterId];
-          return n;
-        });
-        await onSessionCharactersRefresh?.();
-        await onRefresh();
-      } catch (e) {
-        setError(e.message || "Could not update notes.");
       } finally {
         setPcRosterSheetBusyId(null);
       }
@@ -4133,114 +4190,165 @@ export default function SessionGMManagementPanels({
                         Add
                       </button>
                     </div>
-                    <div style={lbl}>Notes</div>
-                    <div
-                      style={{
-                        fontSize: 10,
-                        maxHeight: 120,
-                        overflowY: "auto",
-                        lineHeight: 1.35,
-                        padding: "6px 8px",
-                        background: "#0d1117",
-                        borderRadius: 6,
-                        border: "1px solid #30363d",
-                      }}
-                    >
-                      {noteSections.length > 0 ? (
-                        noteSections.map((sec, si) => (
-                          <div
-                            key={`${full.id}-note-${si}`}
+                    <div style={lbl}>Notes (PC sheet)</div>
+                    {(() => {
+                      const serverNotes = String(
+                        full.background_note2 ?? "",
+                      );
+                      const hasDraft = Object.prototype.hasOwnProperty.call(
+                        pcRosterNotesDraftByChar,
+                        full.id,
+                      );
+                      const draftVal = hasDraft
+                        ? pcRosterNotesDraftByChar[full.id]
+                        : serverNotes;
+                      const dirty = hasDraft && draftVal !== serverNotes;
+                      const busy =
+                        saving ||
+                        pcSheetMoneySavingId === full.id ||
+                        pcRosterSheetBusyId === full.id;
+                      return (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
+                          }}
+                        >
+                          <textarea
+                            value={draftVal}
+                            onChange={(e) =>
+                              setPcRosterNotesDraftByChar((p) => ({
+                                ...p,
+                                [full.id]: e.target.value,
+                              }))
+                            }
+                            placeholder="Notes…"
+                            aria-label={`Edit sheet notes for ${name}`}
+                            rows={4}
                             style={{
-                              marginBottom:
-                                si < noteSections.length - 1 ? 8 : 0,
+                              width: "100%",
+                              boxSizing: "border-box",
+                              fontSize: 11,
+                              lineHeight: 1.35,
+                              padding: "6px 8px",
+                              background: "#010409",
+                              color: "#e5e7eb",
+                              border: dirty
+                                ? "1px solid #d97706"
+                                : "1px solid #30363d",
+                              borderRadius: 6,
+                              resize: "vertical",
+                              minHeight: 60,
+                              fontFamily: "inherit",
+                            }}
+                            disabled={busy}
+                          />
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 6,
+                              alignItems: "center",
                             }}
                           >
-                            <div
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handlePcRosterSaveNotes(
+                                  full.id,
+                                  serverNotes,
+                                  draftVal,
+                                )
+                              }
+                              disabled={busy || !dirty}
                               style={{
-                                fontSize: 9,
-                                color: "#6b7280",
-                                fontWeight: 600,
-                                marginBottom: 3,
+                                ...S.btnGhost,
+                                fontSize: 10,
+                                opacity: !dirty ? 0.5 : 1,
                               }}
                             >
-                              {sec.label}
-                            </div>
-                            <div
-                              style={{
-                                whiteSpace: "pre-wrap",
-                                color: "#9ca3af",
-                              }}
-                            >
-                              {sec.text}
-                            </div>
+                              {busy ? "Saving…" : dirty ? "Save notes" : "Saved"}
+                            </button>
+                            {dirty && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setPcRosterNotesDraftByChar((p) => {
+                                    const n = { ...p };
+                                    delete n[full.id];
+                                    return n;
+                                  })
+                                }
+                                disabled={busy}
+                                style={{
+                                  ...S.btnGhost,
+                                  fontSize: 10,
+                                }}
+                              >
+                                Revert
+                              </button>
+                            )}
                           </div>
-                        ))
-                      ) : (
-                        <span style={{ color: "#52525b" }}>—</span>
-                      )}
-                    </div>
-                    <div
-                      style={{
-                        marginTop: 6,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 6,
-                      }}
-                    >
-                      <textarea
-                        value={pcRosterNoteAppendDraftByChar[full.id] ?? ""}
-                        onChange={(e) =>
-                          setPcRosterNoteAppendDraftByChar((p) => ({
-                            ...p,
-                            [full.id]: e.target.value,
-                          }))
-                        }
-                        rows={2}
-                        placeholder="Append to background (shown above as Background)…"
-                        aria-label={`Append background note for ${name}`}
-                        style={{
-                          width: "100%",
-                          boxSizing: "border-box",
-                          fontSize: 11,
-                          lineHeight: 1.35,
-                          padding: "6px 8px",
-                          background: "#010409",
-                          color: "#e5e7eb",
-                          border: "1px solid #30363d",
-                          borderRadius: 6,
-                          resize: "vertical",
-                          minHeight: 44,
-                          fontFamily: "inherit",
-                        }}
-                        disabled={
-                          saving ||
-                          pcSheetMoneySavingId === full.id ||
-                          pcRosterSheetBusyId === full.id
-                        }
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handlePcRosterAppendBackgroundNote(
-                            full.id,
-                            full.background_note,
-                            pcRosterNoteAppendDraftByChar[full.id],
-                          )
-                        }
-                        disabled={
-                          saving ||
-                          pcSheetMoneySavingId === full.id ||
-                          pcRosterSheetBusyId === full.id
-                        }
-                        style={{
-                          ...S.btnGhost,
-                          fontSize: 10,
-                          alignSelf: "flex-start",
-                        }}
-                      >
-                        Append to background
-                      </button>
-                    </div>
+                          {noteSections.length > 0 && (
+                            <details
+                              style={{ fontSize: 10, color: "#6b7280" }}
+                            >
+                              <summary
+                                style={{
+                                  cursor: "pointer",
+                                  color: "#6b7280",
+                                  marginBottom: 3,
+                                }}
+                              >
+                                Sheet context (background / appearance / vice)
+                              </summary>
+                              <div
+                                style={{
+                                  maxHeight: 120,
+                                  overflowY: "auto",
+                                  padding: "6px 8px",
+                                  background: "#0d1117",
+                                  border: "1px solid #30363d",
+                                  borderRadius: 6,
+                                  marginTop: 4,
+                                }}
+                              >
+                                {noteSections.map((sec, si) => (
+                                  <div
+                                    key={`${full.id}-ctx-${si}`}
+                                    style={{
+                                      marginBottom:
+                                        si < noteSections.length - 1
+                                          ? 8
+                                          : 0,
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        fontSize: 9,
+                                        color: "#6b7280",
+                                        fontWeight: 600,
+                                        marginBottom: 3,
+                                      }}
+                                    >
+                                      {sec.label}
+                                    </div>
+                                    <div
+                                      style={{
+                                        whiteSpace: "pre-wrap",
+                                        color: "#9ca3af",
+                                      }}
+                                    >
+                                      {sec.text}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </details>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <div style={lbl}>Coin &amp; stash (personal)</div>
                     <div
                       style={{
@@ -5222,12 +5330,17 @@ export default function SessionGMManagementPanels({
               }}
             >
               <strong style={{ color: "#9ca3af" }}>Manual award</strong> — for
-              offline dice, table rulings, or end-of-session trigger marks with no
-              auto XP. The panels below pull together{" "}
-              <strong>experience tracker</strong> rows, <strong>linked XP history</strong>,
+              free-form XP grants to a specific track (offline dice, table
+              rulings) — distinct from the{" "}
+              <strong>Beliefs / Struggle / Standout trigger toggles</strong>{" "}
+              above (those record an SRD end-of-session trigger and always go
+              to the playbook clock, capped at 2 / trigger / session). The
+              panels below pull together <strong>experience tracker</strong>{" "}
+              rows, <strong>linked XP history</strong>,{" "}
               <strong>completed progress clocks</strong> on this session, and{" "}
-              <strong>sheet saves</strong> that changed XP tracks (spend / refill), scoped
-              roughly to this session&apos;s <strong>session date</strong>.
+              <strong>sheet saves</strong> that changed XP tracks (spend /
+              refill), scoped roughly to this session&apos;s{" "}
+              <strong>session date</strong>.
             </div>
             <details
               style={{
@@ -5269,8 +5382,9 @@ export default function SessionGMManagementPanels({
                   track), when logged by the server.
                 </li>
                 <li>
-                  Other trigger labels (beliefs, struggle, standout, etc.) appear when
-                  the site or a GM logs them (manual or automation).
+                  Other trigger labels (beliefs, struggle, playbook-specific,
+                  etc.) appear when the site or a GM logs them (manual or
+                  automation).
                 </li>
               </ul>
             </details>
@@ -5313,26 +5427,43 @@ export default function SessionGMManagementPanels({
                       pcXpTriggerCountsByCharacter.get(cid) || {
                         BELIEFS: 0,
                         STRUGGLE: 0,
-                        STANDOUT: 0,
+                        PLAYBOOK: 0,
                       };
                     const title =
                       charDisplayNameById.get(cid) ||
                       ch.true_name ||
                       ch.name ||
                       `PC ${cid}`;
+                    const fullSheet =
+                      (characters || []).find((c) => Number(c?.id) === cid) ||
+                      ch;
+                    const pbDisp = fullSheet?.playbook ?? ch?.playbook ?? "Stand";
+                    const rawArch =
+                      fullSheet?.playbookXpArchetypes ??
+                      fullSheet?.playbook_xp_archetypes;
+                    const archKeys = normalizePlaybookXpArchetypeKeys(
+                      pbDisp,
+                      rawArch,
+                    );
+                    const archCaption = archKeys.length
+                      ? archetypeLabelsJoined(archKeys, pbDisp)
+                      : "";
                     const rows = [
                       {
-                        label: "Playbook / standout",
-                        trigger: "STANDOUT",
-                        v: counts.STANDOUT,
+                        label: "Playbook-specific (abilities)",
+                        detail: archCaption,
+                        trigger: PLAYBOOK_SESSION_TOGGLE_TRIGGER,
+                        v: counts.PLAYBOOK,
                       },
                       {
                         label: "Beliefs / drives / heritage",
+                        detail: "",
                         trigger: "BELIEFS",
                         v: counts.BELIEFS,
                       },
                       {
                         label: "Struggle (vice / trauma / entanglement)",
+                        detail: "",
                         trigger: "STRUGGLE",
                         v: counts.STRUGGLE,
                       },
@@ -5373,6 +5504,19 @@ export default function SessionGMManagementPanels({
                             >
                               <span style={{ color: "#9ca3af" }}>
                                 {row.label}
+                                {row.detail ? (
+                                  <span
+                                    style={{
+                                      display: "block",
+                                      fontSize: 10,
+                                      color: "#6b7280",
+                                      marginTop: 2,
+                                      fontWeight: 400,
+                                    }}
+                                  >
+                                    {row.detail}
+                                  </span>
+                                ) : null}
                               </span>
                               <span
                                 style={{
@@ -5539,17 +5683,39 @@ export default function SessionGMManagementPanels({
                               }}
                             >
                               <div style={{ flex: 1, minWidth: 0 }}>
+                                {entry.triggerTag ? (
+                                  <div
+                                    style={{
+                                      fontSize: 9,
+                                      fontFamily:
+                                        "ui-monospace, SFMono-Regular, Menlo, monospace",
+                                      color: "#a78bfa",
+                                      marginBottom: 2,
+                                      fontWeight: 600,
+                                    }}
+                                    title="End-of-session playbook XP trigger (SRD cap 2/session)"
+                                  >
+                                    {entry.triggerTag}
+                                  </div>
+                                ) : null}
                                 <div style={{ color: "#d1d5db" }}>
                                   {entry.label}
                                 </div>
                                 <div
                                   style={{
-                                    color: "#6b7280",
+                                    color:
+                                      entry.awardHow === "Automatic"
+                                        ? "#6b7280"
+                                        : "#9ca3af",
                                     fontSize: 9,
                                     marginTop: 1,
+                                    lineHeight: 1.35,
                                   }}
+                                  title={
+                                    "Automatic = rolls / settlement · GM or Player toggle = session-trigger pip"
+                                  }
                                 >
-                                  {entry.who} · {entry.sessionLabel}
+                                  {entry.awardHow} · {entry.sessionLabel}
                                 </div>
                               </div>
                               {entry.id && (
@@ -5854,6 +6020,7 @@ export default function SessionGMManagementPanels({
                     <th style={{ textAlign: "left", padding: 6 }}>PC</th>
                     <th style={{ textAlign: "right", padding: 6 }}>Δ XP</th>
                     <th style={{ textAlign: "left", padding: 6 }}>Type</th>
+                    <th style={{ textAlign: "left", padding: 6 }}>Award</th>
                     <th style={{ textAlign: "left", padding: 6 }}>Source</th>
                     <th style={{ textAlign: "left", padding: 6 }}>Note</th>
                   </tr>
@@ -5862,7 +6029,7 @@ export default function SessionGMManagementPanels({
                   {sessionXpFeedSorted.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={6}
+                        colSpan={7}
                         style={{ padding: 8, color: "#6b7280" }}
                       >
                         No tracker or linked XP-history rows yet. Grant manual XP or refresh
@@ -5923,7 +6090,45 @@ export default function SessionGMManagementPanels({
                               color: "#c9d1d9",
                             }}
                           >
-                            {row.typeLabel || "—"}
+                            {row.isPlaybookSessionTrigger ? (
+                              <div
+                                style={{
+                                  fontSize: 9,
+                                  fontFamily:
+                                    "ui-monospace, SFMono-Regular, Menlo, monospace",
+                                  color: "#a78bfa",
+                                  marginBottom: 2,
+                                  fontWeight: 600,
+                                }}
+                                title="End-of-session playbook XP trigger (SRD cap 2/session)"
+                              >
+                                {sessionPlaybookTriggerTag(row.triggerCode)}
+                              </div>
+                            ) : null}
+                            <div>{row.typeLabel || "—"}</div>
+                          </td>
+                          <td
+                            style={{
+                              padding: 6,
+                              verticalAlign: "top",
+                              color:
+                                row.awardHow === "Automatic"
+                                  ? "#6b7280"
+                                  : row.awardHow
+                                    ? "#9ca3af"
+                                    : "#52525b",
+                              fontSize: 9,
+                              lineHeight: 1.35,
+                              maxWidth: 120,
+                              wordBreak: "break-word",
+                            }}
+                            title={
+                              row.source === "Tracker"
+                                ? "Automatic = rolls / settlement · GM or Player toggle = logged session-trigger pip"
+                                : undefined
+                            }
+                          >
+                            {row.awardHow ?? "—"}
                           </td>
                           <td
                             style={{
