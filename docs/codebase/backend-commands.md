@@ -1,4 +1,4 @@
-# Management commands and loose scripts
+# Management commands
 
 **Run management commands from** `backend/src/` **with venv active:**
 
@@ -68,17 +68,7 @@ For exact arguments, read each file’s `add_arguments` and `handle` docstrings.
 
 ---
 
-## Loose Python scripts (`backend/src/` root and misc)
-
-These are **not** registered `manage.py` commands unless noted. Many are one-off maintenance; treat as examples unless you own the migration.
-
-| Path | Role |
-|------|------|
-| `create_users.py`, `create_test_characters.py`, `create_campaign.py` | Legacy or alternate seed entrypoints |
-| `game_entities_overview.py` | Entity overview dump / analysis |
-| `clean_heritages.py`, `cleanup_duplicates.py`, `check_*`, `compare_*`, `rename_test_characters.py` | Data hygiene / checks |
-| `temp_list_characters.py`, `temp_query.py`, `temp_update_gm.py`, `check_daniel_dumile_temp.py` | Temporary dev scripts (may be stale) |
-| `get_pooj_token.py`, `get_zoob_token.py` | Local token helpers (dev convenience) |
+**Ad-hoc Python in `backend/src/` root:** Legacy one-off scripts were removed; use the table above or shell helpers in [`scripts/`](../../scripts/) (see [scripts.md](scripts.md)).
 
 **Other apps:** `authentication/`, `campaigns/`, `crews/`, `factions/` exist under `backend/src/` with their own `models`/`views` — smaller than `characters`. Explore before relying on them in production; main product API is `characters` + `app.urls`.
 
