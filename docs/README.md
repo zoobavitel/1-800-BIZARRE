@@ -2,14 +2,14 @@
 
 Project documentation hub: game rules of record, codebase maps, integration / deploy guides, and operational checklists.
 
-The canonical **game rules** live in [`1(800)-Bizarre SRD.md`](1\(800\)-Bizarre%20SRD.md). The backend's validation logic should match it; deviations must be called out in PRs per [`../.cursor/rules/pr-doc-links-mechanics.mdc`](../.cursor/rules/pr-doc-links-mechanics.mdc).
+The canonical **game rules** live in [`1-(800)-BIZARRE SRD.md`](1-\(800\)-BIZARRE%20SRD.md). The backend's validation logic should match it; deviations must be called out in PRs per [`../.cursor/rules/pr-doc-links-mechanics.mdc`](../.cursor/rules/pr-doc-links-mechanics.mdc).
 
 ## Game rules (SRD)
 
 | File | Role |
 |------|------|
-| [`1(800)-Bizarre SRD.md`](1\(800\)-Bizarre%20SRD.md) | Player-facing SRD. Source of truth. Copied into `frontend/public/srd/` at build time. |
-| [`1(800)-Bizarre SRD_DEV.md`](1\(800\)-Bizarre%20SRD_DEV.md) | Work-in-progress rules being staged before they land in the public SRD. |
+| [`1-(800)-BIZARRE SRD.md`](1-\(800\)-BIZARRE%20SRD.md) | Player-facing SRD. Source of truth. Copied into `frontend/public/srd/` at build time. |
+| [`1-(800)-BIZARRE SRD_DEV.md`](1-\(800\)-BIZARRE%20SRD_DEV.md) | Work-in-progress rules being staged before they land in the public SRD. |
 | [`GAME_RULES.md`](GAME_RULES.md) | Short summaries / quick references derived from the SRD. |
 | [`NPC_CREATION_RULES.md`](NPC_CREATION_RULES.md) | NPC-specific rules (lighter than PC validation). |
 | [`stand_coin_srd_dev_contract.md`](stand_coin_srd_dev_contract.md) | Contract between Stand Coin SRD changes and the dev branch. |

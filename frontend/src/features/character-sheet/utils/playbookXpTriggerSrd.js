@@ -1,6 +1,6 @@
 /**
  * Canonical SRD copy for playbook-specific XP archetypes (Advancement tables).
- * Keep in sync with docs/1(800)-Bizarre SRD.md and backend
+ * Keep in sync with docs/1-(800)-BIZARRE SRD.md and backend
  * characters.services.playbook_xp_archetype.
  */
 

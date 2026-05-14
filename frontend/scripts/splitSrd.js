@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Splits docs/1(800)-Bizarre SRD.md on top-level (#) headings into public/srd/<slug>.md
+ * Splits docs/1-(800)-BIZARRE SRD.md on top-level (#) headings into public/srd/<slug>.md
  * for per-section rules pages. Run from prebuild/prestart (via copySrd.js).
  */
 
@@ -8,7 +8,7 @@ const fs = require("fs");
 const path = require("path");
 
 const REPO_ROOT = path.resolve(__dirname, "../..");
-const SRD_SOURCE = path.join(REPO_ROOT, "docs", "1(800)-Bizarre SRD.md");
+const SRD_SOURCE = path.join(REPO_ROOT, "docs", "1-(800)-BIZARRE SRD.md");
 const OUT_DIR = path.join(__dirname, "../public/srd");
 const LEGACY_MONOLITH = path.join(__dirname, "../public/game-rules-srd.md");
 const RULES_NAV_PATH = path.join(__dirname, "../src/data/rulesNav.js");

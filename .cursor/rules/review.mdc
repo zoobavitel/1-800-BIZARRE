@@ -30,7 +30,7 @@ Trace full caller/callee path before reporting.
 ## Mechanics consistency
 
 If change touches rolls, sessions, XP, stress, assist, group actions, position/effect, or advancement:
-- cross-check behavior against `docs/1(800)-Bizarre SRD.md`
+- cross-check behavior against `docs/1-(800)-BIZARRE SRD.md`
 - call out intentional deviations explicitly
 
 ## Test expectations

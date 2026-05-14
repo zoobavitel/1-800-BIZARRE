@@ -1,6 +1,6 @@
 # Codebase map (`docs/codebase/`)
 
-Implementation-oriented docs: what each major area of the repo does and where to edit. **Game rules** live in [1(800)-Bizarre SRD.md](../1(800)-Bizarre%20SRD.md). **Narrative backend overview:** [backend_documentation.md](../backend_documentation.md).
+Implementation-oriented docs: what each major area of the repo does and where to edit. **Game rules** live in [1-(800)-BIZARRE SRD.md](../1-\(800\)-BIZARRE%20SRD.md). **Narrative backend overview:** [backend_documentation.md](../backend_documentation.md).
 
 | Doc | Covers |
 |-----|--------|

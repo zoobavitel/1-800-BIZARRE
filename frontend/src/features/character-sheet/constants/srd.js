@@ -1,5 +1,5 @@
 /**
- * SRD-derived constants for 1(800)Bizarre (see docs/1(800)-Bizarre SRD.txt).
+ * SRD-derived constants for 1-(800)-BIZARRE (see docs/1-(800)-BIZARRE SRD.md).
  * Single source of truth for grades, skills, trauma, vice, and stat tables.
  */
 

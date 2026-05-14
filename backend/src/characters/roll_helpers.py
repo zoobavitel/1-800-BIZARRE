@@ -350,7 +350,7 @@ def outcome_from_action_roll(
 ):
     """
     SRD-aligned buckets: critical if ≥2 sixes; otherwise 6 = full success, 4–5 = partial with
-    consequence, 1–3 = failure (`docs/1(800)-Bizarre SRD.md`: read highest; 4–5 mixed; 1–3 fail).
+    consequence, 1–3 = failure (`docs/1-(800)-BIZARRE SRD.md`: read highest; 4–5 mixed; 1–3 fail).
     For true 0-dot + 0 pool (two dice, take lower), tier uses min(...) after crit check.
     """
     if not results:

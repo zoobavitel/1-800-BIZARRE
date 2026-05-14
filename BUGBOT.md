@@ -17,7 +17,7 @@ Prioritize changed files and call chains under:
 - `frontend/src/pages/CampaignManagement.jsx`
 
 When mechanics behavior changes, cross-check against:
-- `docs/1(800)-Bizarre SRD.md`
+- `docs/1-(800)-BIZARRE SRD.md`
 
 ## Required Evidence For Any Finding
 

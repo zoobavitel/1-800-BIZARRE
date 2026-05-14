@@ -1,4 +1,4 @@
-# Align Bizarre Intuition ability text with docs/1(800)-Bizarre SRD.md (no "act first in ambush").
+# Align Bizarre Intuition ability text with docs/1-(800)-BIZARRE SRD.md (no "act first in ambush").
 
 from django.db import migrations
 
