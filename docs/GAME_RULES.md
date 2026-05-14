@@ -281,4 +281,4 @@ Full **HP, required/optional detriments, benefit costs** are in the SRD. List: *
 - **Full SRD:** `docs/1(800)-Bizarre SRD.md`
 - **Platform integration:** `docs/SRD_INTEGRATION.md`
 - **NPC rules:** `docs/NPC_CREATION_RULES.md`
-- **Abilities (dev):** `docs/ABILITY_MANAGEMENT_SYSTEM.md`
+- **Abilities (codebase map):** [`docs/codebase/backend-characters-core.md`](codebase/backend-characters-core.md) and [`docs/codebase/frontend.md`](codebase/frontend.md)

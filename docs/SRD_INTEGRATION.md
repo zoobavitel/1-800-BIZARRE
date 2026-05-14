@@ -4,7 +4,8 @@ This document outlines how the Standard Reference Document (SRD) is integrated i
 
 ## Canonical SRD and Rules Reference
 
-* **Official SRD (full text):** `docs/1(800)-Bizarre SRD.txt` — The complete 1(800)Bizarre Game Rules SRD. Use this for full wording, examples, heritage tables, playbook abilities, entanglements, and every rule in detail.
+* **Official SRD (full text):** `docs/1(800)-Bizarre SRD.md` — The complete 1(800)Bizarre Game Rules SRD. Use this for full wording, examples, heritage tables, playbook abilities, entanglements, and every rule in detail.
+* **Dev SRD (work in progress):** `docs/1(800)-Bizarre SRD_DEV.md` — Rules being staged before they land in the public SRD.
 * **Structured rules reference:** `docs/GAME_RULES.md` — A concise, scannable rules reference derived from the SRD. Use this for quick lookup during development or at the table; it points back to the SRD for extended content.
 
 All game mechanics implemented in the backend, fixtures, and tests should align with the SRD and can be cross-checked against `GAME_RULES.md`.
@@ -55,7 +56,7 @@ These tests directly reflect the rules outlined in the SRD, providing a programm
 
 The **definitive source** of game rules is the text SRD:
 
-* **`docs/1(800)-Bizarre SRD.txt`** — Full ruleset, lore, and mechanics for 1(800)Bizarre (core system, skills, Stand Coin, stress/trauma, skill checks, position & effect, consequences, resistance, flashbacks, clocks, fortune, gathering information, coin & stash, reputation, advancement, combat, teamwork, claims, downtime, payoff, wanted level, entanglements, downtime activities, vice, character creation, heritages, Stand/Spin/Hamon playbooks, and resources).
+* **`docs/1(800)-Bizarre SRD.md`** — Full ruleset, lore, and mechanics for 1(800)Bizarre (core system, skills, Stand Coin, stress/trauma, skill checks, position & effect, consequences, resistance, flashbacks, clocks, fortune, gathering information, coin & stash, reputation, advancement, combat, teamwork, claims, downtime, payoff, wanted level, entanglements, downtime activities, vice, character creation, heritages, Stand/Spin/Hamon playbooks, and resources).
 
 For quick reference and implementation checks, use **`docs/GAME_RULES.md`**, which summarizes these rules and links back to the SRD for detail.
 
