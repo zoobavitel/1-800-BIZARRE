@@ -1,33 +1,67 @@
 # backend/src/characters/management/commands/
 
-This directory is where custom Django management commands for the `characters` application are defined. Each Python file within this directory (excluding `__init__.py` and `__pycache__`) represents a callable command that extends Django's `manage.py` utility.
+Custom `manage.py` subcommands for the `characters` app. Run as:
 
-## Purpose
+```bash
+source .venv/bin/activate
+cd backend/src
+python manage.py <command> [options]
+```
 
-The primary purpose of this directory is to:
-*   **Implement Custom Commands**: House the executable Python scripts that perform specific administrative or development tasks related to game data.
-*   **Automate Repetitive Tasks**: Provide convenient command-line tools for operations like creating test users, generating sample characters, or setting specific game master roles.
-*   **Isolate Command Logic**: Keep the code for these utilities separate from the main application logic (models, views, serializers), ensuring a clean and organized codebase.
+## Catalogue (by role)
 
-## Key Contents
+### Reference data / seeding
 
-*   `create_alonzo_fortuna_npc.py`: A command to create a specific NPC named Alonzo Fortuna, likely for testing or demonstration purposes.
-*   `create_mf_doom_npc.py`: A command to create a specific NPC named MF DOOM, also likely for testing or demonstration.
-*   `create_test_character.py`: A general command to generate test player characters.
-*   `create_test_users.py`: A command to create test user accounts for development and testing.
-*   `set_gm.py`: A command to assign Game Master (GM) privileges to a user.
-*   `__init__.py`: Marks the directory as a Python package.
-*   `__pycache__/`: Contains compiled Python bytecode files.
+| Command | Purpose |
+|---------|---------|
+| `load_srd_reference_data` | Idempotently loads `srd_benefits` / `srd_detriments` from `characters/fixtures/` when the tables are empty. Safe to re-run on prod. |
+| `create_stand_playbook_test_characters` | Creates five SRD playbook example PCs (Colony, Automatic, Tool-Bound, Fighting Spirit, Phenomena) under a test account. Supports `--username`, `--password`, `--clear`. |
 
-## Code Quality and Structure
+### User / permission helpers
 
-This structure is a standard and effective way to organize custom Django management commands. It ensures:
-*   **Discoverability**: Commands are automatically registered with `manage.py`.
-*   **Modularity**: Each command is self-contained within its own file.
-*   **Maintainability**: Changes to one command do not directly impact others.
+| Command | Purpose |
+|---------|---------|
+| `create_user`, `create_test_users` | Make users for local dev / seeded test scenarios. |
+| `delete_users`, `delete_slickrick_user` | Remove specific users. |
+| `set_user_password`, `rename_user` | One-off user-record maintenance. |
+| `list_users` | Print user list. |
+| `set_gm`, `update_gm` | Toggle GM role for a user on a campaign. |
+| `get_campaign_gm`, `list_gm_crews_factions` | Inspect GM / crew / faction state. |
 
-## Logic Behind Decisions
+### Campaigns / crews / factions
 
-The decision to create these specific management commands is driven by common development and testing needs within a game platform. Automating the creation of test data (users, characters, NPCs) significantly speeds up development and testing cycles. Commands like `set_gm` provide convenient ways to manage user roles without direct database manipulation. This approach promotes efficiency and reduces manual setup efforts.
+| Command | Purpose |
+|---------|---------|
+| `create_campaign` | Bootstrap a campaign row. |
+| `create_crew`, `rename_crew`, `get_campaign_crew_name` | Crew lifecycle. |
+| `create_new_factions`, `move_factions`, `display_campaign_factions_data` | Faction lifecycle and inspection. |
 
-**Note on "Logic Behind Decisions"**: The explanations regarding decision logic primarily reflect discussions from the current chat session and general software engineering best practices. This document does not have access to the full history of all previous, unlogged interactions or design discussions that may have influenced the project's evolution.
+### Specific PCs / NPCs (demo + scenario data)
+
+These hand-build named characters used in playtesting and screenshots. Treat them as scratch fixtures — they reference real user accounts and campaigns.
+
+| Command | Purpose |
+|---------|---------|
+| `create_test_character` | Generic PC factory. |
+| `create_npc` | Generic NPC factory. |
+| `create_alecb100_jack_rice`, `create_aya_funsami`, `create_bobo_jizarre`, `create_clean_bandit`, `create_furio`, `create_lucky_luciano`, `create_mingo`, `create_solomon_weiss` | Specific PC builds. |
+| `create_alonzo_fortuna_npc`, `create_mf_doom_npc` | Specific NPC builds. |
+| `bind_aya_funsami_to_user`, `bind_slick_rick_to_user`, `bind_slick_rick_gulp_to_campaign`, `list_slick_ricks` | Wire those characters to specific users / campaigns. |
+| `assign_and_list_characters`, `list_all_characters` | Character listing utilities. |
+| `delete_solomon_weiss`, `update_solomon_weiss_xp` | One-off maintenance commands. |
+| `lock_character_fields` | Apply GM-lock to a character. |
+
+### Inspection / maintenance
+
+| Command | Purpose |
+|---------|---------|
+| `display_character_data`, `display_xp_breakdown` | Pretty-print character / XP state for debugging. |
+| `backup_database` | Backend-side DB snapshot (see `scripts/backup-database.sh` for the shell wrapper). |
+
+## Conventions
+
+- New commands go here as `<verb>_<noun>.py` with a `Command(BaseCommand)` class.
+- Prefer a management command over an ad-hoc script in `characters/` or `backend/src/` — discoverability matters.
+- One-off, character-specific commands are fine but should not gate prod deploys. The `load_srd_reference_data` + `create_stand_playbook_test_characters` pair is what we actually rely on.
+
+For a deeper write-up, see [`docs/codebase/backend-commands.md`](../../../../docs/codebase/backend-commands.md).

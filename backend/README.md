@@ -1,32 +1,59 @@
 # backend/
 
-This directory contains the Django-based backend application for the 1-800-BIZARRE platform. It is responsible for managing all game data, business logic, and providing a RESTful API for the frontend application.
+Django 4 + Django REST Framework API for the 1-800-BIZARRE platform. Serves all character, NPC, crew, campaign, session, and reference data consumed by the React frontend.
 
-## Purpose
+## Layout
 
-The primary purpose of this directory is to:
-*   **Serve as the API Backend**: Expose a comprehensive set of API endpoints for character management, campaign management, game mechanics, and data retrieval.
-*   **Manage Game Data**: Define and manage the database models for all game entities (e.g., Characters, Stands, Campaigns, NPCs, Abilities, Heritages, Vices, Traumas).
-*   **Implement Business Logic**: Enforce game rules and validation, such as character creation constraints, XP advancements, and crew consensus mechanisms.
-*   **Handle Authentication and Authorization**: Manage user accounts, login, registration, and ensure secure access to API resources.
+| Path | Role |
+|------|------|
+| [`src/`](src/) | Django project root. Contains `manage.py` and all installed apps: `app/` (settings, URLs, WSGI/ASGI, Celery), `characters/`, `authentication/`, `campaigns/`, `crews/`, `factions/`. |
+| [`requirements.txt`](requirements.txt) | Runtime + dev Python dependencies. |
+| [`requirements-prod.txt`](requirements-prod.txt) | Additional production dependencies (gunicorn, psycopg, etc.). |
+| [`.env.example`](.env.example) | Template for the `.env` file consumed by `python-decouple`. Copy to `backend/src/.env` for local dev and to `/opt/bizarre/backend/src/.env` on prod. |
+| `package.json`, `package-lock.json`, `node_modules/` | **Vestigial** — leftover Tailwind 4 / react-router-dom deps not used by Django. Safe to ignore; do not add backend-side Node code here. |
 
-## Key Contents
+## Quick start
 
-*   `src/`: The core Django project source code.
-*   `requirements.txt`, `requirements-prod.txt`: Python dependency lists for development and production environments, respectively.
-*   `package.json`, `package-lock.json`: Node.js related files, likely for development tools or scripts specific to the backend (e.g., linting, formatting, or build steps that involve Node.js).
-*   `.env.example`: An example file for environment variables, typically used for sensitive information like database credentials or API keys.
-*   `README.md`: This file, providing an overview of the backend.
+```bash
+# From repo root, with the shared .venv activated
+source .venv/bin/activate
+pip install -r backend/requirements.txt
 
-## Code Quality and Structure
+cd backend/src
+python manage.py migrate
+python manage.py loaddata characters/fixtures/*.json
+python manage.py runserver
+```
 
-The backend follows a standard Django project structure, promoting:
-*   **Modularity**: Separation of concerns into distinct Django apps (e.g., `characters` for game-specific logic).
-*   **Maintainability**: Clear organization of models, views, serializers, and tests within their respective apps.
-*   **Scalability**: Designed to handle API requests efficiently and manage a growing dataset of game information.
+The repo-root convention is a single venv at `../.venv` (see root `package.json` → `dev:backend`). Don't create a `backend/venv` — older docs that mention it are stale.
 
-## Logic Behind Decisions
+## Apps
 
-The decision to use Django and Django REST Framework for the backend is based on their robustness, extensive features, and the rapid development capabilities they offer for building powerful web APIs. Django's robust ecosystem provides excellent tools for data management and business logic implementation.
+| App | Purpose |
+|-----|---------|
+| `app/` | Django project (`settings.py`, `settings_prod.py`, `urls.py`, `wsgi.py`, `asgi.py`, `celery.py`, `api_exceptions.py`). |
+| `characters/` | Core game data: `Character`, `Stand`, `Heritage`, `Ability`, `Trauma`, NPCs, Sessions, Rolls, services, DRF views. **Most game logic lives here.** See [`src/characters/README.md`](src/characters/README.md). |
+| `authentication/` | Login / signup / profile endpoints (split out from `characters.views.auth_views`). |
+| `campaigns/`, `crews/`, `factions/` | Newer per-domain apps split out as the project grew. |
 
-**Note on "Logic Behind Decisions"**: The explanations regarding decision logic primarily reflect discussions from the current chat session and general software engineering best practices. This document does not have access to the full history of all previous, unlogged interactions or design discussions that may have influenced the project's evolution.
+## Tests
+
+```bash
+source .venv/bin/activate
+cd backend/src
+python manage.py test                 # full suite
+python manage.py test characters      # one app
+coverage run --source=characters manage.py test && coverage report
+```
+
+CI runs the same suite plus `makemigrations --check --dry-run` (see [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)).
+
+## Deployment
+
+Production deploy templates (gunicorn, Celery, Caddy, systemd, Postgres) live under [`../deploy/bizarre-api/`](../deploy/bizarre-api/). The `app.settings_prod` module is selected via `DJANGO_SETTINGS_MODULE=app.settings_prod`.
+
+## Where to read more
+
+- [`docs/backend_documentation.md`](../docs/backend_documentation.md) — narrative architecture overview.
+- [`docs/codebase/backend-app.md`](../docs/codebase/backend-app.md), [`backend-characters-core.md`](../docs/codebase/backend-characters-core.md), [`backend-characters-views.md`](../docs/codebase/backend-characters-views.md), [`backend-commands.md`](../docs/codebase/backend-commands.md) — implementation maps.
+- [`docs/1-(800)-BIZARRE SRD.md`](../docs/1-\(800\)-BIZARRE%20SRD.md) — game rules backend validation must match.

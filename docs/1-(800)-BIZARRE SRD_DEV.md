@@ -1353,6 +1353,10 @@ At the end of the session, review the xp triggers on your character sheet. For e
 
 When you fill an xp track, clear all the marks and take an advance. When you take an advance from your playbook track, you may choose an additional special ability. When you take an advance from an attribute, you may add an additional skill dot to one of the skills under that attribute.
 
+**Any desperate roll** marks 1 XP in the relevant attribute (Insight, Prowess, or Resolve), regardless of how many dots you have in the action.
+
+**Rolling with zero dots** at desperate position marks **2 XP** instead of 1\. That's the bonus for taking on serious risk with no training at all.
+
 ***Example Session:***  
 *Johnny Joestar is tracking his XP at the end of a session. He rolled two desperate **Hunt** action checks during the session (tracking enemy Stand users through the desert), so he marks **2 XP on his Insight XP track**. He addressed several challenges using **Tusk ACT 2's** spinning nail bullets, so he marks **2 XP** for his Stand-specific trigger. He expressed his drive to walk again and his connection to his jockey heritage multiple times during a flashback scene, so he takes **2 XP** for that. He also showcased his character's determination, but **2 XP is the maximum** for that category, so he doesn't get any more. He struggled with his **Trauma: Obsessed** (fixating on the Corpse Parts), which caused him to make a reckless decision. He marks **1 XP** for struggling with trauma.*
 

@@ -198,10 +198,10 @@ class NPCArmorSystemTest(TestCase):
             campaign=self.campaign,
             stand_coin_stats={"DURABILITY": "B", "DEVELOPMENT": "F"},
         )
-        self.assertEqual(npc.stand_armor_charges, 1)
+        self.assertEqual(npc.stand_armor_charges, 3)
 
         npc.stand_coin_stats = {"DURABILITY": "A", "DEVELOPMENT": "F"}
-        self.assertEqual(npc.stand_armor_charges, 2)
+        self.assertEqual(npc.stand_armor_charges, 4)
 
 
 class NPCVulnerabilityClockTest(TestCase):

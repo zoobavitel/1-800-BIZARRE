@@ -9990,7 +9990,7 @@ const CharacterSheetWrapper = ({
                         </span>
                         {standArmorMax === 0 ? (
                           <div style={{ fontSize: "9px", color: "#6b7280" }}>
-                            F/D durability: no stand path armor.
+                            F-grade durability: no stand path armor.
                           </div>
                         ) : (
                           <div

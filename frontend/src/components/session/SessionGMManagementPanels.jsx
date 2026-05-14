@@ -765,11 +765,11 @@ function rosterCharacterNoteSections(ch) {
 /** Durability grade → max stand path armor charges (SRD; mirrors NPC sheet). */
 const ROSTER_DUR_STAND_ARMOR_MAX = {
   F: 0,
-  D: 0,
-  C: 1,
-  B: 1,
-  A: 2,
-  S: 2,
+  D: 1,
+  C: 2,
+  B: 3,
+  A: 4,
+  S: 5,
 };
 
 function rosterStandArmorMaxFromDurabilityGrade(letter) {

@@ -1,30 +1,41 @@
 # backend/src/characters/fixtures/
 
-This directory contains JSON fixture files used by the Django `characters` application. These fixtures are primarily used for populating the database with initial data, especially data derived from the Standard Reference Document (SRD), and for providing consistent test data.
+JSON fixtures loaded into the `characters` app via Django's `loaddata`. Two flavors live here: **SRD reference data** (consumed in every environment) and **demo / scenario data** (only used locally).
 
-## Purpose
+## Files
 
-The primary purpose of this directory is to:
-*   **Initial Data Population**: Load essential game data (e.g., heritages, abilities, vices, traumas) into the database when the application is first set up or when migrations are run.
-*   **SRD Integration**: Serve as the direct integration point for core game rules and data defined in the SRD, ensuring that the application's foundational data aligns with the game's design.
-*   **Testing**: Provide a reliable and consistent set of data for unit and integration tests, ensuring that tests run against a known state and that game logic is validated against expected SRD values.
+### SRD reference data
 
-## Key Contents
+| File | Contents |
+|------|----------|
+| `srd_heritages.json`, `heritages_updated.json` | Heritage rows. |
+| `srd_benefits.json`, `srd_detriments.json` | Heritage-linked benefit / detriment options. |
+| `srd_hamon_abilities.json`, `srd_spin_abilities.json` | Hamon / Spin playbook abilities. |
+| `srd_traumas.json` | Trauma catalogue. |
+| `standard_abilities.json` | Standard / cross-playbook abilities. |
 
-*   `srd_benefits.json`, `srd_detriments.json`, `srd_hamon_abilities.json`, `srd_heritages.json`, `srd_spin_abilities.json`, `srd_traumas.json`: These files contain data directly extracted or derived from the SRD, defining various game elements like character benefits, detriments, abilities specific to Hamon and Spin users, heritages, and traumas.
-*   `standard_abilities.json`: Contains data for general abilities available to characters.
-*   `example_campaign.json`, `initial_data.json`, `jack_rice_fixture.json`: These are likely used for setting up specific test scenarios or providing initial default data for campaigns and characters.
-*   `heritages_updated.json`: Suggests an updated version of heritage data, possibly for migration or specific testing.
+These are the rows the app cannot run without. The `load_srd_reference_data` management command idempotently seeds the benefits / detriments tables in production.
 
-## Code Quality and Structure
+### Demo & scenario data
 
-Placing fixtures in a dedicated `fixtures/` directory within a Django app is a standard and recommended practice. This organization:
-*   **Centralizes Data**: Keeps all initial and test data in a well-defined location.
-*   **Separates Data from Code**: Clearly distinguishes data definitions from application logic.
-*   **Facilitates Management**: Makes it easy to manage, update, and load data using Django's `loaddata` management command.
+| File | Contents |
+|------|----------|
+| `initial_data.json` | Bootstrap data for an empty dev DB. |
+| `example_campaign.json` | A sample campaign for screenshots / tests. |
+| `jack_rice_fixture.json` | A specific PC build used in demo flows. |
 
-## Logic Behind Decisions
+## Loading
 
-The decision to use Django fixtures for SRD data is crucial for maintaining data integrity and consistency with the game's rules. By loading SRD data directly from these JSON files, the application ensures that core game elements are always aligned with the source material. This approach also simplifies testing, as tests can rely on a predictable dataset. The use of separate fixture files for different data types (e.g., `srd_benefits.json` vs. `srd_heritages.json`) promotes modularity and easier management of individual data sets.
+```bash
+source .venv/bin/activate
+cd backend/src
+python manage.py loaddata characters/fixtures/*.json
+# or, in prod (only seeds empty tables):
+python manage.py load_srd_reference_data
+```
 
-**Note on "Logic Behind Decisions"**: The explanations regarding decision logic primarily reflect discussions from the current chat session and general software engineering best practices. This document does not have access to the full history of all previous, unlogged interactions or design discussions that may have influenced the project's evolution.
+## Conventions
+
+- Anything derived from [`docs/1-(800)-BIZARRE SRD.md`](../../../../docs/1-\(800\)-BIZARRE%20SRD.md) must round-trip through the SRD doc — change the rule first, then the fixture.
+- Demo fixtures are fair game to edit, but don't reference users that may not exist on prod.
+- If you add a new SRD fixture, wire it into `load_srd_reference_data` so prod can seed it without `loaddata`.

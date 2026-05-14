@@ -1,30 +1,41 @@
 # backend/src/characters/tests/
 
-This directory contains the unit and integration tests for the `characters` Django application. These tests are crucial for ensuring the correctness, reliability, and adherence to game rules of the backend's core logic.
+Active test suite for the `characters` app. Discovered automatically by `python manage.py test characters`.
 
-## Purpose
+## Layout
 
-The primary purpose of this directory is to:
-*   **Verify Functionality**: Ensure that models, serializers, and views behave as expected under various conditions.
-*   **Enforce Game Rules**: Validate that the application's logic correctly implements the rules and constraints defined in the Standard Reference Document (SRD).
-*   **Prevent Regressions**: Act as a safety net, catching unintended side effects or bugs introduced by new code changes.
-*   **Document Behavior**: Serve as executable documentation, illustrating how different parts of the system are intended to work.
+Tests are split per concern. Roughly:
 
-## Key Contents
+| Area | Files |
+|------|-------|
+| **Character / NPC validation** | `test_pc_validation.py`, `test_npc_validation.py`, `test_npc_summary_serializer.py`, `test_heritage_hp_budget.py`, `test_character_stash_slots.py`, `test_character_importer.py` |
+| **Permissions / GM lock** | `test_character_viewset_access.py`, `test_character_permissions_and_creator.py`, `test_gm_lock.py`, `test_character_patch_clear_abilities.py` |
+| **Roll / action mechanics** | `test_roll_action_assist.py`, `test_roll_action_push_exclusive.py`, `test_roll_action_npc_heal_fortune.py`, `test_assist_help_pending.py`, `test_group_action_resolve_stress.py`, `test_parry_and_break_removed.py`, `test_ripple_breathing_free_push.py` |
+| **Crew / XP** | `test_crew_name_consensus.py`, `test_crew_xp_triggers.py`, `test_personal_crew_name_autoattach.py` |
+| **Campaigns / sessions / SSE** | `test_campaign_active_session_status_sync.py`, `test_campaign_gm_player_management.py`, `test_campaign_sse.py` |
+| **Cross-cutting integration** | `test_integration_business_flows.py` (run by `npm run test:integration:backend`) |
 
-*   `test_pc_validation.py`: Contains comprehensive tests for Player Character (PC) validation. This includes checks for action dot distribution, Stand Coin point allocation, stress calculation, and ability counts, all of which are critical for ensuring characters conform to SRD rules.
-*   `test_npc_validation.py`: Focuses on tests for Non-Player Character (NPC) validation, ensuring that NPCs adhere to their specific, often simplified, rules.
-*   `test_crew_name_consensus.py`: Tests the logic related to the crew name consensus mechanism, verifying the proposal, approval, and final name change process.
+A legacy top-level `characters/test_legacy_models.py` exists outside this folder; it's still discovered by `manage.py test` and kept for historical model fixtures.
 
-## Code Quality and Structure
+## Running
 
-Organizing tests in a dedicated `tests/` directory within a Django app is a standard and highly recommended practice. This structure promotes:
-*   **Discoverability**: Tests are easily located and run.
-*   **Modularity**: Tests are grouped by the application they cover.
-*   **Maintainability**: Changes to application code can be quickly followed by updates to relevant tests.
+```bash
+source .venv/bin/activate
+cd backend/src
+python manage.py test characters                              # whole app
+python manage.py test characters.tests.test_pc_validation     # one file
+python manage.py test characters.tests.test_roll_action_push_exclusive.RollActionPushTests.test_push_costs_two_stress  # one case
+```
 
-## Logic Behind Decisions
+For coverage gating (CI requires ≥70%):
 
-The decision to implement a comprehensive test suite, particularly for character and NPC validation, is paramount for a game platform. The complexity of game rules necessitates automated testing to ensure that the backend accurately reflects the SRD. These tests provide confidence that changes to the codebase do not inadvertently break core game mechanics. The specific focus on validation tests (e.g., `test_pc_validation.py`) directly reflects the importance of data integrity and rule enforcement in a TTRPG system.
+```bash
+coverage run --source=characters manage.py test
+coverage report --fail-under=70
+```
 
-**Note on "Logic Behind Decisions"**: The explanations regarding decision logic primarily reflect discussions from the current chat session and general software engineering best practices. This document does not have access to the full history of all previous, unlogged interactions or design discussions that may have influenced the project's evolution.
+## Conventions
+
+- New rules behavior gets a test under the matching area file or a new `test_<area>.py`.
+- Tests that hit the SRD should reference the relevant section so future readers can confirm intent — see [`.cursor/rules/pr-doc-links-mechanics.mdc`](../../../../.cursor/rules/pr-doc-links-mechanics.mdc).
+- For the broader test pyramid (unit / integration / Playwright / manual sign-off), see [`docs/TEST_PYRAMID.md`](../../../../docs/TEST_PYRAMID.md).

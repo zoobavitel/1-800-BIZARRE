@@ -1,33 +1,28 @@
 # .github/workflows/
 
-This directory contains the YAML workflow definitions for GitHub Actions. Each `.yml` file within this directory represents an automated workflow that GitHub will execute based on defined triggers.
+GitHub Actions definitions for the 1-800-BIZARRE repo. The high-level overview, contributor flow, and "reproduce CI locally" recipes live in [`../README.md`](../README.md); this file is the per-workflow index.
 
-## Purpose
+## Workflows
 
-The primary purpose of this directory is to:
-*   **Define CI/CD Pipelines**: House the specific instructions for Continuous Integration (e.g., running tests, linting) and Continuous Deployment (e.g., building and deploying the application).
-*   **Automate Development Tasks**: Automate repetitive tasks that ensure code quality, consistency, and efficient delivery.
-*   **Version Control Workflows**: Keep the automation logic under version control alongside the application code, ensuring that changes to the workflow are tracked and reviewed.
+| Workflow | Trigger | What it does |
+|----------|---------|--------------|
+| [`ci.yml`](ci.yml) | Push + PR to `master` / `main` | Frontend job (`npm ci`, `jest --coverage`, `eslint`, `npm run build`), backend job (`pip install`, `manage.py test`, `makemigrations --check`), integration job (boots Django, runs `RUN_BACKEND_INTEGRATION=1` Jest suite). On `master` / `main` pushes also runs `deploy-github-pages` and the optional `deploy-lxc` (manual `workflow_dispatch`). |
+| [`secret-scan.yml`](secret-scan.yml) | Push + PR | Runs `gitleaks` with the repo-root [`.gitleaks.toml`](../../.gitleaks.toml) rule set. |
+| [`black-autofix-pr.yml`](black-autofix-pr.yml) | PR | Auto-formats Python with `black` and pushes the fix back to the PR branch. |
+| [`daily-critical-bug-review.yml`](daily-critical-bug-review.yml) | Scheduled (daily) | Runs [`scripts/daily_critical_bug_review.py`](../../scripts/daily_critical_bug_review.py) to surface high-risk diffs from the last day. |
 
-## Key Contents
+## Versions of record
 
-*   `ci.yml`: This file typically defines the Continuous Integration workflow. It specifies the steps to be executed when code is pushed or a pull request is opened, such as:
-    *   Checking out the code.
-    *   Setting up the appropriate environment (e.g., Python, Node.js).
-    *   Installing project dependencies.
-    *   Running unit tests and integration tests.
-    *   Performing code linting and static analysis.
-    *   Building the application artifacts.
+CI is authoritative for tool versions:
 
-## Code Quality and Structure
+- **Node** 24 (`node-version` in `ci.yml`).
+- **Python** 3.11.
 
-Organizing workflows in `.github/workflows/` is a standard and recommended practice for GitHub Actions. This clear separation makes it easy to:
-*   **Identify Automation**: Quickly locate and understand the automated processes associated with the repository.
-*   **Manage Workflows**: Add, modify, or remove workflows without cluttering the root directory.
-*   **Promote Reusability**: Define reusable jobs or steps that can be shared across multiple workflows.
+Root `package.json` lists `engines.node` as `>=18` for local convenience; CI is the source of truth.
 
-## Logic Behind Decisions
+## Adding / editing a workflow
 
-The decision to place workflow definitions here aligns with GitHub's conventions for Actions. This structure inherently promotes best practices for CI/CD by making automation a first-class citizen of the repository. It ensures that the build and test processes are transparent, repeatable, and integrated directly into the development lifecycle.
-
-**Note on "Logic Behind Decisions"**: The explanations regarding decision logic primarily reflect discussions from the current chat session and general software engineering best practices. This document does not have access to the full history of all previous, unlogged interactions or design discussions that may have influenced the project's evolution.
+1. Edit / add the `.yml` file here.
+2. Keep CI fast — if a new check is slow, gate it on path filters or run it on a schedule rather than every PR.
+3. If the workflow needs new secrets, document them in [`../README.md`](../README.md) under **Deployment (CI)**.
+4. Test by pushing to a feature branch; GitHub will run the workflow on the PR.
