@@ -10026,21 +10026,6 @@ const CharacterSheetWrapper = ({
                           </div>
                         )}
                       </div>
-                      <div
-                        style={{
-                          fontSize: "9px",
-                          color: "#6b7280",
-                          lineHeight: 1.35,
-                          marginBottom: "6px",
-                        }}
-                      >
-                        <strong style={{ color: "#9ca3af" }}>
-                          Special negate
-                        </strong>{" "}
-                        (flat cancel harm) is an NPC/GM tool in SRD_DEV. PCs rely
-                        on abilities (below) or table agreement — not a generic
-                        special-armor row.
-                      </div>
                       {characterHasLegendaryGuard(abilities) ? (
                         <div
                           title={
