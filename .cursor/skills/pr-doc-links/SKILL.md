@@ -13,7 +13,7 @@ disable-model-invocation: true
 
 ## Instructions
 
-- Add a **References** line to the PR body citing `docs/1(800)-Bizarre SRD.md` (section or keywords).
+- Add a **References** line to the PR body citing `docs/1-(800)-BIZARRE SRD.md` (section or keywords).
 - If behavior **diverges** from the SRD intentionally, one sentence explaining why.
 - For UI/refactor/infra only, write “No mechanics change” or omit References.
 

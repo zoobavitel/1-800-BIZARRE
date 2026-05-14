@@ -1,39 +1,62 @@
 # docs/
 
-This directory serves as the central repository for all project documentation, encompassing technical specifications, architectural overviews, API usage guides, and game-specific rules derived from the Standard Reference Document (SRD).
+Project documentation hub: game rules of record, codebase maps, integration / deploy guides, and operational checklists.
 
-## Purpose
+The canonical **game rules** live in [`1-(800)-BIZARRE SRD.md`](1-\(800\)-BIZARRE%20SRD.md). The backend's validation logic should match it; deviations must be called out in PRs per [`../.cursor/rules/pr-doc-links-mechanics.mdc`](../.cursor/rules/pr-doc-links-mechanics.mdc).
 
-The primary purpose of this directory is to:
-*   **Provide Comprehensive Documentation**: Offer detailed explanations of the project's various components, functionalities, and underlying logic.
-*   **Centralize Information**: Act as a single source of truth for all project-related documentation, making it easy for developers, designers, and users to find relevant information.
-*   **Support Onboarding**: Facilitate the onboarding of new team members by providing clear and structured documentation of the codebase and game rules.
-*   **Integrate SRD**: Directly host or reference the official game rules (SRD), ensuring that the application's implementation aligns with the game design.
+## Game rules (SRD)
 
-## Key Contents
+| File | Role |
+|------|------|
+| [`1-(800)-BIZARRE SRD.md`](1-\(800\)-BIZARRE%20SRD.md) | Player-facing SRD. Source of truth. Copied into `frontend/public/srd/` at build time. |
+| [`1-(800)-BIZARRE SRD_DEV.md`](1-\(800\)-BIZARRE%20SRD_DEV.md) | Work-in-progress rules being staged before they land in the public SRD. |
+| [`GAME_RULES.md`](GAME_RULES.md) | Short summaries / quick references derived from the SRD. |
+| [`NPC_CREATION_RULES.md`](NPC_CREATION_RULES.md) | NPC-specific rules (lighter than PC validation). |
+| [`stand_coin_srd_dev_contract.md`](stand_coin_srd_dev_contract.md) | Contract between Stand Coin SRD changes and the dev branch. |
 
-*   `codebase/`: File- and module-level map of scripts, backend, and frontend ([codebase/README.md](codebase/README.md)) — implementation index; complements narrative docs below.
-*   `TEST_PYRAMID.md`: Test taxonomy, command matrix, CI gates, and coverage expectations for unit/integration/automated-ui/manual layers.
-*   `backend_documentation.md`: Comprehensive documentation on the backend's architecture, core functionalities (e.g., character creation, crew consensus, NPC differences), and API endpoints.
-*   `SRD_INTEGRATION.md`: Details how the Standard Reference Document (SRD) is integrated into the platform, covering data loading, backend validation, and test coverage.
-*   `INTERACTION_SUMMARY.md`: A log of the interactions and tasks performed during the current chat session, serving as a historical record of development decisions and progress.
-*   `API_USAGE.md`, `BACKEND_INTEGRATION.md`, `development.md`: Other technical documentation files covering API usage, backend integration details, and development guidelines.
-*   PDF files (e.g., `Character Creation.pdf`, `Combat & Initiative.pdf`, `Hamon Playbook.pdf`): These are the official SRD documents, detailing the complete ruleset, lore, and mechanics of the 1-800-BIZARRE game. They are the definitive source for game rules.
+## Codebase map
 
-## Code Quality and Structure
+[`codebase/`](codebase/) — file- and module-level implementation index. Start with [`codebase/README.md`](codebase/README.md).
 
-Organizing documentation in a dedicated `docs/` directory is a standard practice in software development. This structure promotes:
-*   **Accessibility**: Documentation is easily found and separated from source code.
-*   **Maintainability**: Documentation can be updated independently of code changes.
-*   **Completeness**: Encourages thorough documentation by providing a clear place for all project knowledge.
+| Doc | Covers |
+|-----|--------|
+| [`codebase/backend-app.md`](codebase/backend-app.md) | `backend/src/app/` (settings, URLs, Celery). |
+| [`codebase/backend-characters-core.md`](codebase/backend-characters-core.md) | `characters/` models, serializers, services. |
+| [`codebase/backend-characters-views.md`](codebase/backend-characters-views.md) | DRF view modules under `characters/views/`. |
+| [`codebase/backend-commands.md`](codebase/backend-commands.md) | `manage.py` custom commands. |
+| [`codebase/frontend.md`](codebase/frontend.md) | `frontend/src/` — hash routing, features, pages. |
+| [`codebase/scripts.md`](codebase/scripts.md) | Shell + Node helpers under `../scripts/`. |
+| [`codebase/standard-ability-roll-bonus-audit.md`](codebase/standard-ability-roll-bonus-audit.md) | Ability `+1d` / `+1 effect` UI rules audit. |
 
-## Logic Behind Decisions
+## Backend & API
 
-The decision to maintain a dedicated `docs/` directory stems from the understanding that a complex project like a TTRPG platform requires a robust knowledge base. This centralization ensures:
+| File | Role |
+|------|------|
+| [`backend_documentation.md`](backend_documentation.md) | Narrative architecture overview. |
+| [`API_USAGE.md`](API_USAGE.md) | API consumption examples (signup, login, character CRUD via curl). |
+| [`SESSION_MANAGEMENT.md`](SESSION_MANAGEMENT.md) | Session / faction model overview (factions, sessions, events). For per-field detail see [`codebase/backend-characters-core.md`](codebase/backend-characters-core.md). |
+| [`SRD_INTEGRATION.md`](SRD_INTEGRATION.md) | How SRD data flows into fixtures, backend validation, and frontend rendering. |
 
-*   **Single Source of Truth:** Prevents information silos and ensures everyone refers to the same, authoritative documentation.
-*   **Onboarding New Contributors:** New team members can quickly get up to speed by consulting the development guides and system overviews.
-*   **Game Rule Consistency:** Detailed rule documents ensure that game mechanics are consistently understood and implemented across the platform.
-*   **API Discoverability:** Clear API documentation is vital for seamless integration between the frontend and backend, and for any third-party applications that might interact with the platform.
+## Development / testing / release
 
-**Note on "Logic Behind Decisions"**: The explanations regarding decision logic primarily reflect discussions from the current chat session and general software engineering best practices. This document does not have access to the full history of all previous, unlogged interactions or design discussions that may have influenced the project's evolution.
+| File | Role |
+|------|------|
+| [`development.md`](development.md) | Local-dev walkthrough (clone → venv → migrate → `npm run dev`). |
+| [`TEST_PYRAMID.md`](TEST_PYRAMID.md) | Test taxonomy (unit / integration / automated-UI / manual) + CI gates + coverage expectations. |
+| [`E2E_TOOL_DECISION.md`](E2E_TOOL_DECISION.md) | Why Playwright for end-to-end. |
+| [`MANUAL_RELEASE_SIGNOFF.md`](MANUAL_RELEASE_SIGNOFF.md) | Manual checks performed before deploy. Driven by [`../scripts/manual-release-signoff.sh`](../scripts/manual-release-signoff.sh). |
+| [`BRANCH_FLOW.md`](BRANCH_FLOW.md) | Branching model + PR conventions. |
+
+## Deployment
+
+| File | Role |
+|------|------|
+| [`DEPLOY_GITHUB_PAGES.md`](DEPLOY_GITHUB_PAGES.md) | Static frontend deploy via GitHub Pages. |
+| [`DEPLOY_SQLITE_TO_POSTGRES.md`](DEPLOY_SQLITE_TO_POSTGRES.md) | One-time SQLite → Postgres migration for the LXC deploy. |
+| [`operations/session-status-prod-checklist.md`](operations/session-status-prod-checklist.md) | Production session-status sanity checks. |
+
+## Conventions
+
+- The SRD markdown is authoritative — don't change behavior in code without first updating the SRD section it relates to.
+- Long-form plans / specs live under `~/.cursor/plans/` (out of repo); only stable references belong here.
+- When a rule-driven file changes (rolls, XP, stress, sessions, advancement), include a **References** line in the PR pointing at the relevant SRD section, per [`../.cursor/rules/pr-doc-links-mechanics.mdc`](../.cursor/rules/pr-doc-links-mechanics.mdc).

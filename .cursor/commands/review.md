@@ -13,7 +13,7 @@ Investigation requirements:
 - Trace full caller/callee path for changed code.
 - Compare behavior with similar patterns elsewhere in this repo.
 - Prioritize `backend/src/characters/**`, `frontend/src/pages/CharacterSheet.jsx`, and `frontend/src/pages/CampaignManagement.jsx`.
-- If mechanics logic changed (rolls/sessions/XP/stress/assist/group actions/position/effect/advancement), cross-check with `docs/1(800)-Bizarre SRD.md`.
+- If mechanics logic changed (rolls/sessions/XP/stress/assist/group actions/position/effect/advancement), cross-check with `docs/1-(800)-BIZARRE SRD.md`.
 
 Confidence bar:
 - Only report findings with a plausible concrete trigger scenario.

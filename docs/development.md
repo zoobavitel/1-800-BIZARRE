@@ -50,28 +50,40 @@
 ### Frontend (React)
 ```
 frontend/src/
-├── components/          # Reusable UI components
-│   ├── character/      # Character-specific components
-│   └── shared/         # Shared UI components
-├── pages/              # Route components
-├── utils/              # Utility functions
-├── api/                # API communication
-├── styles/             # CSS styles
-└── tests/              # Jest tests
+├── pages/              # Route components (CharacterSheet, NPCSheet, CampaignManagement, …)
+├── features/           # Feature-scoped code (e.g. character-sheet/ with services/, constants/, components/)
+├── components/         # Shared UI components (session/, modals, etc.)
+├── layouts/            # Page layouts and shells
+├── services/           # Cross-feature service modules
+├── data/               # Static frontend data (patch notes, etc.)
+├── config/             # apiConfig and friends
+├── utils/              # Helpers
+├── styles/             # Global CSS
+├── assets/             # Images, fonts
+├── integration/        # Jest backend-integration suite (RUN_BACKEND_INTEGRATION=1)
+└── lib/                # Misc shared library code
 ```
+
+For a deeper map see [`codebase/frontend.md`](codebase/frontend.md).
 
 ### Backend (Django)
 ```
 backend/src/
-├── app/                # Django project configuration
-├── characters/         # Character management app
-│   ├── models.py      # Data models
-│   ├── views.py       # API views
-│   ├── serializers.py # Data serialization
-│   ├── tests.py       # Django tests
-│   └── fixtures/      # Test data
-└── manage.py          # Django management
+├── app/                # Django project config (settings, urls, celery)
+├── authentication/     # Auth views / accounts endpoints
+├── characters/         # PCs, NPCs, sessions, rolls, XP, abilities
+│   ├── models.py
+│   ├── views/          # DRF viewsets split by domain
+│   ├── serializers.py
+│   ├── tests/          # Django test package
+│   └── fixtures/       # SRD seed data
+├── campaigns/          # Campaign-level models (legacy + active_session)
+├── crews/              # Crew models
+├── factions/           # Faction models + relationships
+└── manage.py
 ```
+
+For per-module detail see [`codebase/`](codebase/).
 
 ## Development Workflow
 

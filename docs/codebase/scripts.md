@@ -2,7 +2,7 @@
 
 Operational scripts for setup, local dev, backups, and production deploy. Detailed narrative lives here; [scripts/README.md](../../scripts/README.md) is a short index.
 
-For game rules, see [1(800)-Bizarre SRD.md](../1(800)-Bizarre%20SRD.md). For backend architecture overview, see [backend_documentation.md](../backend_documentation.md).
+For game rules, see [1-(800)-BIZARRE SRD.md](../1-\(800\)-BIZARRE%20SRD.md). For backend architecture overview, see [backend_documentation.md](../backend_documentation.md).
 
 ## Conventions
 

@@ -22,7 +22,7 @@ alwaysApply: true
 - Never delete a plan file without explicit user confirmation
 
 ## General
-- Always read existing related plans and docs/1(800)-Bizarre SRD.md before creating a new plan
+- Always read existing related plans and docs/1-(800)-BIZARRE SRD.md before creating a new plan
 - Prefer editing an existing plan over creating a duplicate
 
 ## Python Environment

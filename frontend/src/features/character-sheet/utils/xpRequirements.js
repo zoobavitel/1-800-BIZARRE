@@ -1,6 +1,6 @@
 /**
  * SRD XP requirement buckets for the character sheet (session + tracker evidence).
- * See docs/1(800)-Bizarre SRD.md — end-of-session category caps, desperate rolls, etc.
+ * See docs/1-(800)-BIZARRE SRD.md — end-of-session category caps, desperate rolls, etc.
  */
 
 import { ACTION_ATTR } from "../constants/srd";

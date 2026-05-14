@@ -1,6 +1,6 @@
 # Stand Coin mechanics contract (SRD_DEV)
 
-Source: [`../1(800)-Bizarre SRD_DEV.md`](../1(800)-Bizarre%20SRD_DEV.md) (canonical for this rollout).
+Source: [`1-(800)-BIZARRE SRD_DEV.md`](1-\(800\)-BIZARRE%20SRD_DEV.md) (canonical for this rollout).
 
 ## Roll stats vs passives
 

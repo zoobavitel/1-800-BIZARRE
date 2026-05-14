@@ -5,7 +5,7 @@ Markdown files in this directory define **subagents**: specialized assistants wi
 | File | Purpose |
 |------|---------|
 | [api-parity-checker.md](api-parity-checker.md) | Frontend ↔ backend parity for rolls / `roll_action` / `extreme` vs legacy `greater` |
-| [srd-alignment-spot-check.md](srd-alignment-spot-check.md) | Rules vs `docs/1(800)-Bizarre SRD.md` |
+| [srd-alignment-spot-check.md](srd-alignment-spot-check.md) | Rules vs `docs/1-(800)-BIZARRE SRD.md` |
 | [migration-sanity.md](migration-sanity.md) | Migrations, `on_delete`, session roll history |
 | [test-runner-django-frontend.md](test-runner-django-frontend.md) | `manage.py test` + `npm run build` |
 | [security-hardening-web.md](security-hardening-web.md) | Web research + Django/React security hardening with tests and `check --deploy` |

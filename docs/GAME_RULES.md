@@ -1,6 +1,6 @@
 # 1(800) Bizarre — Game Rules Reference
 
-This document is the structured rules reference for the platform, derived from the **1(800)-Bizarre SRD** (`docs/1(800)-Bizarre SRD.md`). For full wording, examples, and extended content (heritages, playbook abilities, entanglements), use the SRD.
+This document is the structured rules reference for the platform, derived from the **1-(800)-BIZARRE SRD** (`docs/1-(800)-BIZARRE SRD.md`). For full wording, examples, and extended content (heritages, playbook abilities, entanglements), use the SRD.
 
 ---
 
@@ -278,7 +278,7 @@ Full **HP, required/optional detriments, benefit costs** are in the SRD. List: *
 
 ## References
 
-- **Full SRD:** `docs/1(800)-Bizarre SRD.md`
+- **Full SRD:** `docs/1-(800)-BIZARRE SRD.md`
 - **Platform integration:** `docs/SRD_INTEGRATION.md`
 - **NPC rules:** `docs/NPC_CREATION_RULES.md`
-- **Abilities (dev):** `docs/ABILITY_MANAGEMENT_SYSTEM.md`
+- **Abilities (codebase map):** [`docs/codebase/backend-characters-core.md`](codebase/backend-characters-core.md) and [`docs/codebase/frontend.md`](codebase/frontend.md)
