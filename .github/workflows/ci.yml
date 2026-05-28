@@ -163,14 +163,36 @@ jobs:
         timeout-minutes: 10
 
       - name: Install Playwright browser
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: cd frontend && npx playwright install chromium
         timeout-minutes: 10
 
+      # Production build + static serve — faster and stable than `npm start` (webpack dev) on CI.
       - name: Run automated UI smoke
-        run: npm run test:automated-ui
         timeout-minutes: 15
         env:
           CI: "true"
+          PLAYWRIGHT_SKIP_WEBSERVER: "1"
+          PLAYWRIGHT_BASE_URL: "http://127.0.0.1:3000/1-800-BIZARRE"
+        run: |
+          set -e
+          cd frontend
+          npm run build
+          SITE="$(mktemp -d)"
+          mkdir -p "${SITE}/1-800-BIZARRE"
+          cp -a build/. "${SITE}/1-800-BIZARRE/"
+          npx --yes serve@14 "${SITE}" -l "tcp://127.0.0.1:3000" -n &
+          SERVE_PID=$!
+          trap 'kill $SERVE_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 60); do
+            if curl -sf "http://127.0.0.1:3000/1-800-BIZARRE/" >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -sf "http://127.0.0.1:3000/1-800-BIZARRE/" >/dev/null
+          cd ..
+          npm run test:automated-ui
 
   performance-budget:
     needs: [automated-ui-smoke]
