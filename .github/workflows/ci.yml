@@ -176,7 +176,7 @@ jobs:
       - name: Install Playwright browsers and OS deps
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: cd frontend && npx playwright install --with-deps chromium
-        timeout-minutes: 5
+        timeout-minutes: 15
 
       - name: Install Playwright OS deps only
         if: steps.playwright-cache.outputs.cache-hit == 'true'
