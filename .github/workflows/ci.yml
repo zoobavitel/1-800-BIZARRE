@@ -167,6 +167,12 @@ jobs:
           echo "playwright-version=${{ steps.playwright-version.outputs.version }}"
           echo "cache-hit=${{ steps.playwright-cache.outputs.cache-hit }}"
 
+      # install-deps / --with-deps can stall on "Processing triggers for man-db" on ubuntu-latest.
+      - name: Avoid man-db apt trigger stalls
+        run: |
+          sudo apt-get --yes remove --purge man-db || true
+        timeout-minutes: 5
+
       - name: Install Playwright browsers and OS deps
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: cd frontend && npx playwright install --with-deps chromium
