@@ -8,15 +8,17 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
-        "title": "Added",
+        "title": "Other",
         "items": [
-          "0-dot desperate +2; drop encoded col"
+          "Merge pull request #86 from zoobavitel/feature/xp-trigger-toggle",
+          "Massive README sweep, revising Durability armor charge pool",
+          "Merge branch 'master' into feature/xp-trigger-toggle"
         ]
       },
       {
-        "title": "Other",
+        "title": "Added",
         "items": [
-          "Merge branch 'master' into feature/xp-trigger-toggle"
+          "0-dot desperate +2; drop encoded col"
         ]
       },
       {
@@ -31,6 +33,17 @@ export const PATCH_NOTES = [
     "date": "2026-05-13",
     "version": null,
     "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #85 from zoobavitel/feature/xp-trigger-toggle",
+          "Merge pull request #84 from zoobavitel/feature/xp-trigger-toggle",
+          "Merge pull request #83 from zoobavitel/feature/xp-trigger-toggle",
+          "Merge pull request #82 from zoobavitel/feature/xp-trigger-toggle",
+          "Merge pull request #81 from zoobavitel/fix/sessions-filter-by-campaign",
+          "Merge pull request #80 from zoobavitel/fix/sessions-filter-by-campaign"
+        ]
+      },
       {
         "title": "Fixed",
         "items": [
@@ -68,14 +81,6 @@ export const PATCH_NOTES = [
         "title": "Refactored",
         "items": [
           "rename 'Manual session XP toggle' to 'Session XP trigger'"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #82 from zoobavitel/feature/xp-trigger-toggle",
-          "Merge pull request #81 from zoobavitel/fix/sessions-filter-by-campaign",
-          "Merge pull request #80 from zoobavitel/fix/sessions-filter-by-campaign"
         ]
       }
     ]
@@ -647,10 +652,7 @@ export const PATCH_NOTES = [
           "Restore footer top stripe; remove stripe-bar div after footer",
           "Remove striped border-image from site-footer top edge",
           "Remove top stripe-bar from homepage, keep the one below the footer",
-          "Merge pull request #48 from zoobavitel/copilot/fix-persist-trauma-checkboxes",
-          "Merge pull request #47 from zoobavitel/copilot/fix-load-characters-order",
-          "Merge pull request #40 from zoobavitel/fix/trauma-checkbox-sync",
-          "Initial plan"
+          "Merge pull request #48 from zoobavitel/copilot/fix-persist-trauma-checkboxes"
         ]
       },
       {
@@ -661,9 +663,7 @@ export const PATCH_NOTES = [
           "sync perform_update ownership guard; strengthen ownership test",
           "address code review comments - strict null check, clearer guard comment",
           "prevent GM from claiming ownership of player character sheets",
-          "restore patchNotes.js accidentally truncated by build in shallow clone",
-          "resolve no-use-before-define lint error for loadCharacters",
-          "move loadCharacters before useEffect to fix no-use-before-define"
+          "restore patchNotes.js accidentally truncated by build in shallow clone"
         ]
       }
     ]
