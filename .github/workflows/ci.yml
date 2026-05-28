@@ -154,39 +154,28 @@ jobs:
           VERSION=$(node -p "require('./package-lock.json').packages['node_modules/@playwright/test'].version")
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      # Cache browsers; avoid `install --with-deps` (apt + download in one step — can hang 50m+ with no fail-fast).
+      # Exact Playwright version only — no restore-keys (partial browser trees hang install).
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-playwright-${{ steps.playwright-version.outputs.version }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-
 
       - name: Playwright cache status
         run: |
           echo "playwright-version=${{ steps.playwright-version.outputs.version }}"
           echo "cache-hit=${{ steps.playwright-cache.outputs.cache-hit }}"
-          echo "cache-matched-key=${{ steps.playwright-cache.outputs.cache-matched-key }}"
 
-      # Runners are ephemeral — OS libs are never cached; only ~/.cache/ms-playwright is.
-      - name: Install Playwright OS dependencies
+      - name: Install Playwright browsers and OS deps
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: cd frontend && npx playwright install --with-deps chromium
+        timeout-minutes: 20
+
+      - name: Install Playwright OS deps only
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: cd frontend && npx playwright install-deps chromium
         timeout-minutes: 10
-
-      # Skip download on exact cache hit; partial restore-keys leave a broken tree (playwright#7249).
-      - name: Install Playwright browser
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: |
-          set -euo pipefail
-          cd frontend
-          if [ -n "${{ steps.playwright-cache.outputs.cache-matched-key }}" ]; then
-            echo "Partial Playwright cache — clearing before install"
-            rm -rf "${HOME}/.cache/ms-playwright"
-          fi
-          npx playwright install chromium
-        timeout-minutes: 15
 
       # Production build + static serve — faster and stable than `npm start` (webpack dev) on CI.
       - name: Run automated UI smoke
