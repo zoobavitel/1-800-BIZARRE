@@ -147,11 +147,30 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Cache browsers; avoid `install --with-deps` (apt + download in one step — can hang 50m+ with no fail-fast).
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright OS dependencies
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: cd frontend && npx playwright install-deps chromium
+        timeout-minutes: 10
+
       - name: Install Playwright browser
-        run: cd frontend && npx playwright install --with-deps chromium
+        run: cd frontend && npx playwright install chromium
+        timeout-minutes: 10
 
       - name: Run automated UI smoke
         run: npm run test:automated-ui
+        timeout-minutes: 15
+        env:
+          CI: "true"
 
   performance-budget:
     needs: [automated-ui-smoke]
