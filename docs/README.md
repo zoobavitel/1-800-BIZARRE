@@ -24,7 +24,7 @@ The canonical **game rules** live in [`1-(800)-BIZARRE SRD.md`](1-\(800\)-BIZARR
 | [`codebase/backend-characters-core.md`](codebase/backend-characters-core.md) | `characters/` models, serializers, services. |
 | [`codebase/backend-characters-views.md`](codebase/backend-characters-views.md) | DRF view modules under `characters/views/`. |
 | [`codebase/backend-commands.md`](codebase/backend-commands.md) | `manage.py` custom commands. |
-| [`codebase/frontend.md`](codebase/frontend.md) | `frontend/src/` — hash routing, features, pages. |
+| [`codebase/frontend.md`](codebase/frontend.md) | `frontend/src/` — hash routing, features, pages, SRD-aligned UI map. |
 | [`codebase/scripts.md`](codebase/scripts.md) | Shell + Node helpers under `../scripts/`. |
 | [`codebase/standard-ability-roll-bonus-audit.md`](codebase/standard-ability-roll-bonus-audit.md) | Ability `+1d` / `+1 effect` UI rules audit. |
 
