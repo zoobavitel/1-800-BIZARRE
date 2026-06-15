@@ -234,7 +234,10 @@ def build_pc_field_values(character: Character) -> dict[str, str]:
     values.update(harm_map)
 
     healing_filled = max(0, int(character.healing_clock_filled or 0))
-    healing_max = max(1, int(character.healing_clock_segments or 4))
+    healing_max = min(
+        MAX_HEALING_SEGMENTS,
+        max(1, int(character.healing_clock_segments or MAX_HEALING_SEGMENTS)),
+    )
     for i in range(MAX_HEALING_SEGMENTS):
         values[f"pc_healing_{i}"] = _checkbox(i < min(healing_filled, healing_max))
 

@@ -10,7 +10,11 @@ from rest_framework.test import APIClient
 
 from characters.models import Campaign, Character, Heritage, NPC
 from characters.services.sheet_export import export_npc_pdf, export_pc_pdf
-from characters.services.sheet_export.pc_builder import CHECKBOX_ON, build_pc_field_values
+from characters.services.sheet_export.pc_builder import (
+    CHECKBOX_OFF,
+    CHECKBOX_ON,
+    build_pc_field_values,
+)
 from characters.services.sheet_export.template_builder import ensure_templates
 
 
@@ -68,6 +72,24 @@ class SheetExportServiceTests(TestCase):
         fields = reader.get_fields() or {}
         self.assertIn("pc_name", fields)
         self.assertEqual(fields["pc_name"].get("/V"), "Jotaro Kujo")
+
+    def test_healing_clock_exports_four_segments(self):
+        self.character.healing_clock_filled = 3
+        self.character.healing_clock_segments = 4
+        self.character.save(
+            update_fields=["healing_clock_filled", "healing_clock_segments"]
+        )
+
+        values = build_pc_field_values(self.character)
+        for i in range(4):
+            expected = CHECKBOX_ON if i < 3 else CHECKBOX_OFF
+            self.assertEqual(values[f"pc_healing_{i}"], expected)
+        self.assertNotIn("pc_healing_4", values)
+
+        pdf_bytes, _ = export_pc_pdf(self.character)
+        fields = PdfReader(io.BytesIO(pdf_bytes)).get_fields() or {}
+        self.assertIn("pc_healing_3", fields)
+        self.assertNotIn("pc_healing_4", fields)
 
     def test_playbook_xp_track_exports_ten_marks(self):
         self.character.xp_clocks = {
