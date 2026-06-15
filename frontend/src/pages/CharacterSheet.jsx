@@ -1264,6 +1264,8 @@ const CharacterSheetWrapper = ({
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState(null);
   const [saveErrorMessage, setSaveErrorMessage] = useState(null);
+  const [exportPdfStatus, setExportPdfStatus] = useState(null);
+  const [exportPdfError, setExportPdfError] = useState(null);
   const debounceRef = useRef(null);
   const mountedRef = useRef(false);
   const savingRef = useRef(false);
@@ -1297,6 +1299,31 @@ const CharacterSheetWrapper = ({
     setImagePreview("");
     setRemoveImageRequested(true);
   }, []);
+
+  const handleExportPdf = useCallback(async () => {
+    if (!characterId) return;
+    setExportPdfStatus("exporting");
+    setExportPdfError(null);
+    try {
+      const baseName = String(charData.name || character?.name || "character")
+        .trim()
+        .replace(/[^\w\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .slice(0, 80);
+      await characterAPI.exportPdf(
+        characterId,
+        `${baseName || "character"}-character-sheet.pdf`,
+      );
+      setExportPdfStatus("done");
+      window.setTimeout(
+        () => setExportPdfStatus((s) => (s === "done" ? null : s)),
+        2500,
+      );
+    } catch (err) {
+      setExportPdfStatus("error");
+      setExportPdfError(err?.message || "Export failed");
+    }
+  }, [characterId, charData.name, character?.name]);
 
   useEffect(() => {
     if (!portraitUrlModalOpen) return;
@@ -6887,6 +6914,28 @@ const CharacterSheetWrapper = ({
           </span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          {characterId && (
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              disabled={saveStatus === "saving" || exportPdfStatus === "exporting"}
+              style={S.btnGhost}
+              title="Download fillable PDF of this character sheet"
+            >
+              {exportPdfStatus === "exporting" ? "Exporting…" : "Export PDF"}
+            </button>
+          )}
+          {exportPdfStatus === "error" && (
+            <span
+              style={{ fontSize: "11px", color: "#f87171", maxWidth: "180px" }}
+              title={exportPdfError || "Export failed"}
+            >
+              Export failed
+              {exportPdfError
+                ? `: ${exportPdfError.slice(0, 40)}${exportPdfError.length > 40 ? "…" : ""}`
+                : ""}
+            </span>
+          )}
           {saveStatus === "saving" && (
             <span style={{ fontSize: "11px", color: "#fbbf24" }}>
               Saving...

@@ -4,10 +4,12 @@ from rest_framework.parsers import JSONParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import Q
+from django.http import HttpResponse
 
 from ..models import NPC
 from ..parsers import MultipartJsonParser
 from ..serializers import NPCSerializer
+from ..services.sheet_export import export_npc_pdf
 
 # Effect level to clock ticks (SRD: Limited=1, Standard=2, top tier=3; aligns with Roll effect "extreme")
 EFFECT_TO_TICKS = {'limited': 1, 'standard': 2, 'great': 3, 'greater': 3, 'extreme': 3}
@@ -87,4 +89,13 @@ class NPCViewSet(viewsets.ModelViewSet):
         })
 
     def perform_create(self, serializer):
-        serializer.save(creator=self.request.user) 
+        serializer.save(creator=self.request.user)
+
+    @action(detail=True, methods=["get"], url_path="export-pdf")
+    def export_pdf(self, request, pk=None):
+        """Download a fillable PDF snapshot of this NPC sheet."""
+        npc = self.get_object()
+        pdf_bytes, filename = export_npc_pdf(npc)
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
