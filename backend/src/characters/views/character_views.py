@@ -44,7 +44,6 @@ from ..roll_helpers import (
 )
 from ..serializers import CharacterSerializer
 from ..history_context import bind_character_history_editor, reset_character_history_editor
-from ..services.sheet_export import export_pc_pdf
 
 
 def _character_queryset_for_user(user):
@@ -1817,8 +1816,21 @@ class CharacterViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="export-pdf")
     def export_pdf(self, request, pk=None):
         """Download a fillable PDF snapshot of this character sheet."""
+        try:
+            from ..services.sheet_export import export_pc_pdf
+        except ImportError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         character = self.get_object()
-        pdf_bytes, filename = export_pc_pdf(character)
+        try:
+            pdf_bytes, filename = export_pc_pdf(character)
+        except ImportError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response

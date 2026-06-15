@@ -9,7 +9,6 @@ from django.http import HttpResponse
 from ..models import NPC
 from ..parsers import MultipartJsonParser
 from ..serializers import NPCSerializer
-from ..services.sheet_export import export_npc_pdf
 
 # Effect level to clock ticks (SRD: Limited=1, Standard=2, top tier=3; aligns with Roll effect "extreme")
 EFFECT_TO_TICKS = {'limited': 1, 'standard': 2, 'great': 3, 'greater': 3, 'extreme': 3}
@@ -94,8 +93,21 @@ class NPCViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["get"], url_path="export-pdf")
     def export_pdf(self, request, pk=None):
         """Download a fillable PDF snapshot of this NPC sheet."""
+        try:
+            from ..services.sheet_export import export_npc_pdf
+        except ImportError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         npc = self.get_object()
-        pdf_bytes, filename = export_npc_pdf(npc)
+        try:
+            pdf_bytes, filename = export_npc_pdf(npc)
+        except ImportError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         response = HttpResponse(pdf_bytes, content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response

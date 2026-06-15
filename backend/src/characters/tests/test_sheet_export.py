@@ -10,7 +10,7 @@ from rest_framework.test import APIClient
 
 from characters.models import Campaign, Character, Heritage, NPC
 from characters.services.sheet_export import export_npc_pdf, export_pc_pdf
-from characters.services.sheet_export.pc_builder import build_pc_field_values
+from characters.services.sheet_export.pc_builder import CHECKBOX_ON, build_pc_field_values
 from characters.services.sheet_export.template_builder import ensure_templates
 
 
@@ -68,6 +68,29 @@ class SheetExportServiceTests(TestCase):
         fields = reader.get_fields() or {}
         self.assertIn("pc_name", fields)
         self.assertEqual(fields["pc_name"].get("/V"), "Jotaro Kujo")
+
+    def test_playbook_xp_track_exports_ten_marks(self):
+        self.character.xp_clocks = {
+            "insight": 8,
+            "prowess": 3,
+            "resolve": 0,
+            "heritage": 0,
+            "playbook": 10,
+        }
+        self.character.save(update_fields=["xp_clocks"])
+
+        values = build_pc_field_values(self.character)
+        for i in range(8):
+            self.assertEqual(values[f"pc_xp_insight_{i}"], CHECKBOX_ON)
+        self.assertNotIn("pc_xp_insight_8", values)
+        for i in range(10):
+            self.assertEqual(values[f"pc_xp_playbook_{i}"], CHECKBOX_ON)
+
+        pdf_bytes, _ = export_pc_pdf(self.character)
+        fields = PdfReader(io.BytesIO(pdf_bytes)).get_fields() or {}
+        self.assertIn("pc_xp_playbook_9", fields)
+        self.assertNotIn("pc_xp_insight_8", fields)
+        self.assertEqual(fields["pc_xp_playbook_9"].get("/V"), "/Yes")
 
 
 class SheetExportAPITests(TestCase):

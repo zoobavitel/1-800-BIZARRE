@@ -109,6 +109,12 @@ MAX_STASH_SLOTS = 40
 MAX_HEALING_SEGMENTS = 8
 MAX_CLOCK_SEGMENTS = 8
 MAX_XP_PER_TRACK = 8
+MAX_XP_PLAYBOOK_TRACK = 10
+
+
+def xp_track_max_segments(track: str) -> int:
+    """Playbook XP track holds 10 marks; other attribute tracks hold 8."""
+    return MAX_XP_PLAYBOOK_TRACK if track == "playbook" else MAX_XP_PER_TRACK
 
 NPC_TEXT_FIELDS = (
     "npc_name",

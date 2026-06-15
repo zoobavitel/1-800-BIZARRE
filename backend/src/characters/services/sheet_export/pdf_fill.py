@@ -6,20 +6,12 @@ import io
 import logging
 import re
 from pathlib import Path
-from typing import BinaryIO
 from urllib.request import urlopen
 
-from PIL import Image
-from pypdf import PdfReader, PdfWriter
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.utils import ImageReader
-from reportlab.pdfgen import canvas
-
-from .template_builder import ensure_templates
+from .deps import ensure_pdf_dependencies
 
 logger = logging.getLogger(__name__)
 
-PAGE_W, PAGE_H = letter
 PORTRAIT_RECT = (0.45 * 72, 620, 90, 110)  # x, y, w, h in points (approx top-left)
 
 
@@ -46,6 +38,13 @@ def load_portrait_bytes(image_field, image_url: str = "") -> bytes | None:
 
 
 def _overlay_portrait(pdf_bytes: bytes, portrait_bytes: bytes) -> bytes:
+    ensure_pdf_dependencies()
+    from PIL import Image
+    from pypdf import PdfReader, PdfWriter
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.utils import ImageReader
+    from reportlab.pdfgen import canvas
+
     x, y, w, h = PORTRAIT_RECT
     packet = io.BytesIO()
     can = canvas.Canvas(packet, pagesize=letter)
@@ -55,7 +54,15 @@ def _overlay_portrait(pdf_bytes: bytes, portrait_bytes: bytes) -> bytes:
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
-        can.drawImage(ImageReader(buf), x, y, width=w, height=h, preserveAspectRatio=True, anchor="sw")
+        can.drawImage(
+            ImageReader(buf),
+            x,
+            y,
+            width=w,
+            height=h,
+            preserveAspectRatio=True,
+            anchor="sw",
+        )
     except Exception:
         logger.exception("Portrait overlay failed; returning PDF without image")
         return pdf_bytes
@@ -71,9 +78,7 @@ def _overlay_portrait(pdf_bytes: bytes, portrait_bytes: bytes) -> bytes:
         writer.add_page(page)
 
     if reader.trailer.get("/Root", {}).get("/AcroForm"):
-        writer._root_object.update(
-            {"/AcroForm": reader.trailer["/Root"]["/AcroForm"]}
-        )
+        writer._root_object.update({"/AcroForm": reader.trailer["/Root"]["/AcroForm"]})
 
     out = io.BytesIO()
     writer.write(out)
@@ -85,6 +90,9 @@ def fill_pdf(
     field_values: dict[str, str],
     portrait_bytes: bytes | None = None,
 ) -> bytes:
+    ensure_pdf_dependencies()
+    from pypdf import PdfReader, PdfWriter
+
     reader = PdfReader(str(template_path))
     writer = PdfWriter()
     writer.append(reader)
@@ -110,7 +118,9 @@ def fill_pdf(
 
 def export_pc_pdf(character) -> tuple[bytes, str]:
     from .pc_builder import build_pc_field_values
+    from .template_builder import ensure_templates
 
+    ensure_pdf_dependencies()
     pc_path, _ = ensure_templates()
     field_values = build_pc_field_values(character)
     portrait = load_portrait_bytes(character.image, character.image_url)
@@ -121,7 +131,9 @@ def export_pc_pdf(character) -> tuple[bytes, str]:
 
 def export_npc_pdf(npc) -> tuple[bytes, str]:
     from .npc_builder import build_npc_field_values
+    from .template_builder import ensure_templates
 
+    ensure_pdf_dependencies()
     _, npc_path = ensure_templates()
     field_values = build_npc_field_values(npc)
     portrait = load_portrait_bytes(npc.image, npc.image_url)

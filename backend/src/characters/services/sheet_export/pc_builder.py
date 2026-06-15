@@ -15,10 +15,12 @@ from .field_maps import (
     MAX_STASH_SLOTS,
     MAX_STRESS_SLOTS,
     MAX_XP_PER_TRACK,
+    MAX_XP_PLAYBOOK_TRACK,
     STAND_PATH_ARMOR_BY_GRADE,
     STAND_STAT_KEYS,
     TRAUMA_KEYS,
     XP_TRACK_KEYS,
+    xp_track_max_segments,
 )
 
 CHECKBOX_ON = "/Yes"
@@ -258,8 +260,9 @@ def build_pc_field_values(character: Character) -> dict[str, str]:
 
     xp = character.xp_clocks or {}
     for track in XP_TRACK_KEYS:
-        filled = max(0, min(MAX_XP_PER_TRACK, int(xp.get(track) or 0)))
-        for i in range(MAX_XP_PER_TRACK):
+        max_segments = xp_track_max_segments(track)
+        filled = max(0, min(max_segments, int(xp.get(track) or 0)))
+        for i in range(max_segments):
             values[f"pc_xp_{track}_{i}"] = _checkbox(i < filled)
 
     values["pc_unallocated_xp"] = str(max(0, int(character.unallocated_xp or 0)))

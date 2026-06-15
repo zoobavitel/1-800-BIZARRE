@@ -2,13 +2,9 @@
 
 from __future__ import annotations
 
-import io
 from pathlib import Path
 
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import inch
-from reportlab.pdfgen import canvas
-
+from .deps import ensure_pdf_dependencies
 from .field_maps import (
     ACTION_KEYS,
     MAX_CLOCK_SEGMENTS,
@@ -17,12 +13,20 @@ from .field_maps import (
     MAX_STASH_SLOTS,
     MAX_STRESS_SLOTS,
     MAX_XP_PER_TRACK,
+    MAX_XP_PLAYBOOK_TRACK,
     TRAUMA_KEYS,
     XP_TRACK_KEYS,
+    xp_track_max_segments,
 )
 
-PAGE_W, PAGE_H = letter
-MARGIN = 0.45 * inch
+
+def _canvas_for_template(output_path: Path):
+    ensure_pdf_dependencies()
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.units import inch
+    from reportlab.pdfgen import canvas
+
+    return letter, inch, canvas.Canvas(str(output_path), pagesize=letter)
 
 
 def _section_title(c: canvas.Canvas, title: str, x: float, y: float) -> None:
@@ -70,7 +74,9 @@ def _checkbox_row(
 
 def build_pc_template(output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    c = canvas.Canvas(str(output_path), pagesize=letter)
+    letter_size, inch, c = _canvas_for_template(output_path)
+    PAGE_W, PAGE_H = letter_size
+    MARGIN = 0.45 * inch
     form = c.acroForm
 
     # Page 1 header
@@ -174,10 +180,20 @@ def build_pc_template(output_path: Path) -> None:
     _section_title(c, "XP Tracks", MARGIN, y)
     xp_x = MARGIN
     for track in XP_TRACK_KEYS:
+        max_segments = xp_track_max_segments(track)
+        spacing = 8 if track == "playbook" else 10
         c.setFont("Helvetica", 7)
-        c.drawString(xp_x, y - 10, track.title())
-        _checkbox_row(form, f"pc_xp_{track}_", MAX_XP_PER_TRACK, xp_x, y - 22, spacing=10)
-        xp_x += 1.15 * inch
+        label = "Playbook (10)" if track == "playbook" else track.title()
+        c.drawString(xp_x, y - 10, label)
+        _checkbox_row(
+            form,
+            f"pc_xp_{track}_",
+            max_segments,
+            xp_x,
+            y - 22,
+            spacing=spacing,
+        )
+        xp_x += 1.15 * inch if track != "playbook" else 1.25 * inch
     _add_text_field(form, "pc_unallocated_xp", MARGIN + 5.8 * inch, y - 18, 0.8 * inch, 12)
     c.drawString(MARGIN + 5.8 * inch, y - 10, "Pool")
 
@@ -223,7 +239,9 @@ def build_pc_template(output_path: Path) -> None:
 
 def build_npc_template(output_path: Path) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    c = canvas.Canvas(str(output_path), pagesize=letter)
+    letter_size, inch, c = _canvas_for_template(output_path)
+    PAGE_W, PAGE_H = letter_size
+    MARGIN = 0.45 * inch
     form = c.acroForm
 
     c.setFont("Helvetica-Bold", 14)
