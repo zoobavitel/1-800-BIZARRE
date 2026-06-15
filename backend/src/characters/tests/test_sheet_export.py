@@ -73,6 +73,21 @@ class SheetExportServiceTests(TestCase):
         self.assertIn("pc_name", fields)
         self.assertEqual(fields["pc_name"].get("/V"), "Jotaro Kujo")
 
+    def test_stress_track_exports_nine_boxes(self):
+        self.character.stress = 4
+        self.character.save(update_fields=["stress"])
+
+        values = build_pc_field_values(self.character)
+        for i in range(9):
+            expected = CHECKBOX_ON if i < 4 else CHECKBOX_OFF
+            self.assertEqual(values[f"pc_stress_{i}"], expected)
+        self.assertNotIn("pc_stress_9", values)
+
+        pdf_bytes, _ = export_pc_pdf(self.character)
+        fields = PdfReader(io.BytesIO(pdf_bytes)).get_fields() or {}
+        self.assertIn("pc_stress_8", fields)
+        self.assertNotIn("pc_stress_9", fields)
+
     def test_healing_clock_exports_four_segments(self):
         self.character.healing_clock_filled = 3
         self.character.healing_clock_segments = 4

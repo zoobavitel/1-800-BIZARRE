@@ -103,7 +103,8 @@ XP_TRACK_KEYS = ("insight", "prowess", "resolve", "heritage", "playbook")
 
 STAND_PATH_ARMOR_BY_GRADE = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 5}
 
-MAX_STRESS_SLOTS = 13
+# SRD / SRD_DEV: PC stress track is always 9 boxes; Stand Durability gates armor, not stress length.
+MAX_STRESS_SLOTS = 9
 MAX_COIN_BOXES = 4
 MAX_STASH_SLOTS = 40
 MAX_HEALING_SEGMENTS = 4

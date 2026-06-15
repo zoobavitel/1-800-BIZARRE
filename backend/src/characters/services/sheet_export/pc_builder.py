@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from characters.models import Character, Trauma
+from characters.roll_helpers import max_stress_slots_for_character
 
 from .field_maps import (
     ACTION_KEYS,
@@ -13,7 +14,6 @@ from .field_maps import (
     MAX_COIN_BOXES,
     MAX_HEALING_SEGMENTS,
     MAX_STASH_SLOTS,
-    MAX_STRESS_SLOTS,
     MAX_XP_PER_TRACK,
     MAX_XP_PLAYBOOK_TRACK,
     STAND_PATH_ARMOR_BY_GRADE,
@@ -216,8 +216,9 @@ def build_pc_field_values(character: Character) -> dict[str, str]:
         values[f"pc_action_{action}"] = str(dots.get(action, 0))
 
     stress = max(0, int(character.stress or 0))
-    for i in range(MAX_STRESS_SLOTS):
-        values[f"pc_stress_{i}"] = _checkbox(i < stress)
+    max_stress = max_stress_slots_for_character(character)
+    for i in range(max_stress):
+        values[f"pc_stress_{i}"] = _checkbox(i < min(stress, max_stress))
 
     trauma_flags = _trauma_flags(character)
     for key in TRAUMA_KEYS:
