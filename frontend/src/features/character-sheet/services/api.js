@@ -13,6 +13,7 @@ import {
 
 /** Backend Character.playbook values */
 const PLAYBOOK_BACKEND = ["STAND", "HAMON", "SPIN"];
+const PLAYBOOK_DISPLAY = ["Stand", "Hamon", "Spin"];
 
 /** Map API playbook (STAND/HAMON/SPIN) to CharacterSheet select labels */
 export function playbookToDisplay(pb) {
@@ -22,6 +23,26 @@ export function playbookToDisplay(pb) {
   if (u === "SPIN") return "Spin";
   return "Stand";
 }
+
+/** True when target playbook (display or backend label) is in primary or secondary slot. */
+export function hasPlaybook(primary, secondary, target) {
+  const want = playbookToDisplay(target);
+  const slots = [playbookToDisplay(primary)];
+  if (secondary != null && String(secondary).trim() !== "") {
+    slots.push(playbookToDisplay(secondary));
+  }
+  return slots.includes(want);
+}
+
+/** Human-readable dual-playbook label for roster cards. */
+export function formatPlaybookPair(primary, secondary) {
+  const main = playbookToDisplay(primary);
+  if (secondary == null || String(secondary).trim() === "") return main;
+  return `${main} + ${playbookToDisplay(secondary)}`;
+}
+
+/** Sheet select options for playbook dropdowns. */
+export const PLAYBOOK_SHEET_OPTIONS = [...PLAYBOOK_DISPLAY];
 
 /** True when the sheet is linked to a campaign crew (stash lives on Crew). */
 function hasLinkedCrew(crewId) {
@@ -47,6 +68,14 @@ export function playbookToBackend(pb) {
   if (lower === "hamon") return "HAMON";
   if (lower === "spin") return "SPIN";
   return "STAND";
+}
+
+/** Map optional second playbook sheet value to API (null when empty). */
+export function secondaryPlaybookToBackend(pb) {
+  if (pb == null || String(pb).trim() === "" || String(pb).trim() === "—") {
+    return null;
+  }
+  return playbookToBackend(pb);
 }
 
 function abilityIdsByType(abilities, type) {
@@ -1134,6 +1163,9 @@ export const transformBackendToFrontend = (backendCharacter) => {
     // Additional backend fields
     campaign: backendCharacter.campaign,
     playbook: playbookToDisplay(backendCharacter.playbook),
+    secondaryPlaybook: backendCharacter.secondary_playbook
+      ? playbookToDisplay(backendCharacter.secondary_playbook)
+      : "",
     playbookXpArchetypes: Array.isArray(backendCharacter.playbook_xp_archetypes)
       ? [...backendCharacter.playbook_xp_archetypes]
       : [],
@@ -1207,6 +1239,9 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     stand_name: frontendCharacter.standName,
     heritage: heritageOut,
     playbook: playbookToBackend(frontendCharacter.playbook),
+    secondary_playbook: secondaryPlaybookToBackend(
+      frontendCharacter.secondaryPlaybook,
+    ),
     playbook_xp_archetypes: Array.isArray(frontendCharacter.playbookXpArchetypes)
       ? frontendCharacter.playbookXpArchetypes.map((x) =>
           String(x || "")

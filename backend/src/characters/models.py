@@ -639,6 +639,13 @@ class Character(models.Model):
         choices=[("STAND", "Stand"), ("HAMON", "Hamon"), ("SPIN", "Spin")],
         default="STAND",
     )
+    secondary_playbook = models.CharField(
+        max_length=20,
+        choices=[("STAND", "Stand"), ("HAMON", "Hamon"), ("SPIN", "Spin")],
+        null=True,
+        blank=True,
+        default=None,
+    )
     playbook_xp_archetypes = models.JSONField(
         default=list,
         blank=True,

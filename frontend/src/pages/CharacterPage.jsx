@@ -254,6 +254,7 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
     clocks: Array.isArray(payload.clocks) ? payload.clocks : [],
     campaign: payload.campaign ?? null,
     playbook: payload.playbook ?? "Stand",
+    secondaryPlaybook: payload.secondaryPlaybook ?? "",
     id: payload.id,
     inventory: payload.inventory ?? [],
     reputation_status: payload.reputation_status ?? {},

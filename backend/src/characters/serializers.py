@@ -1568,6 +1568,26 @@ class CharacterSerializer(serializers.ModelSerializer):
         if playbook_val is None:
             playbook_val = "STAND"
 
+        secondary_playbook_val = data.get("secondary_playbook")
+        if secondary_playbook_val is None and self.instance:
+            secondary_playbook_val = self.instance.secondary_playbook
+        if secondary_playbook_val == "":
+            secondary_playbook_val = None
+        if secondary_playbook_val is not None:
+            valid_playbooks = {"STAND", "HAMON", "SPIN"}
+            if secondary_playbook_val not in valid_playbooks:
+                raise serializers.ValidationError(
+                    {"secondary_playbook": "Invalid secondary playbook."}
+                )
+            if secondary_playbook_val == playbook_val:
+                raise serializers.ValidationError(
+                    {
+                        "secondary_playbook": (
+                            "Secondary playbook must differ from primary playbook."
+                        )
+                    }
+                )
+
         for ha in hamon_ids:
             if count_A < ha.required_a_count:
                 raise serializers.ValidationError(
@@ -1690,6 +1710,7 @@ class CharacterSerializer(serializers.ModelSerializer):
                         "selected_benefits",
                         "selected_detriments",
                         "playbook",
+                        "secondary_playbook",
                     ]
                     for field in restricted_fields:
                         if field in data and not allowed_fields.get(field, True):
@@ -2108,6 +2129,7 @@ class CharacterSummarySerializer(serializers.ModelSerializer):
             "alias",
             "stand_name",
             "playbook",
+            "secondary_playbook",
             "playbook_xp_archetypes",
             "heritage_name",
             "user_id",

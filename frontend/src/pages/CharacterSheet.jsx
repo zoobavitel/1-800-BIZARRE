@@ -45,6 +45,7 @@ import {
   computeActionDotBudget,
   resolveMediaUrl,
   normalizeCharacterInventory,
+  PLAYBOOK_SHEET_OPTIONS,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -714,6 +715,7 @@ function hasMeaningfulDraftChanges(payload) {
   if (textFields.some((v) => String(v ?? "").trim() !== "")) return true;
   if (payload.campaign != null && payload.campaign !== "") return true;
   if ((payload.playbook || "Stand") !== "Stand") return true;
+  if (String(payload.secondaryPlaybook || "").trim() !== "") return true;
   if ((payload.stressFilled || 0) > 0) return true;
   if ((payload.standArmorUsed || 0) > 0) return true;
   if (Boolean(payload.hasPhysicalArmorItem)) return true;
@@ -1952,6 +1954,17 @@ const CharacterSheetWrapper = ({
 
   /** Stand / Hamon / Spin path — declared before combined abilities so recall row can key off it. */
   const [playbook, setPlaybook] = useState(character?.playbook || "Stand");
+  const [secondaryPlaybook, setSecondaryPlaybook] = useState(
+    character?.secondaryPlaybook || "",
+  );
+
+  const hasStandPlaybook =
+    playbook === "Stand" || secondaryPlaybook === "Stand";
+  const isHamonPlaybook =
+    playbook === "Hamon" || secondaryPlaybook === "Hamon";
+  const isSpinPlaybook = playbook === "Spin" || secondaryPlaybook === "Spin";
+  /** Stand in either slot: Durability + Power/Precision/Speed column. */
+  const showStandCoinActionColumn = hasStandPlaybook;
 
   // Load abilities when switching character only — do not re-sync on every `character.abilities`
   // reference change or removals are overwritten by stale server data before autosave completes.
@@ -2016,9 +2029,9 @@ const CharacterSheetWrapper = ({
       seen.add(key);
       out.push({ ...a, _uiOrigin: "heritage" });
     });
-    /** Universal Stand-playbook option: `playbook === "Stand"` (sheet label; API `STAND`). Not tied to heritage name. */
-    const hasStandPlaybook = playbook === "Stand";
-    if (hasStandPlaybook) {
+    /** Universal Stand-playbook option when Stand is in either slot. */
+    const recallStandPlaybook = hasStandPlaybook;
+    if (recallStandPlaybook) {
       const recallNorm = normalizeAbilityName("Stand Recall");
       const alreadyHasRecall = out.some(
         (a) => normalizeAbilityName(a?.name) === recallNorm,
@@ -2039,7 +2052,7 @@ const CharacterSheetWrapper = ({
     return out.filter(
       (a) => !RETIRED_SHEET_ABILITY_NAMES.has(normalizeAbilityName(a?.name)),
     );
-  }, [abilities, heritageAutoAbilities, playbook]);
+  }, [abilities, heritageAutoAbilities, hasStandPlaybook]);
 
   /** SRD Invigorated on self-recover — read sheet state, server `character.abilities`, and heritage echoes. */
   const selfRecoverInvigoratedDice = useMemo(
@@ -2095,12 +2108,13 @@ const CharacterSheetWrapper = ({
     });
   }, [charData.disguised_as_human, alienUnderstandingDetrimentId]);
 
-  // Sync playbook label when character changes (API uses STAND/HAMON/SPIN; sheet uses Stand/Hamon/Spin)
+  // Sync playbook labels when character changes (API uses STAND/HAMON/SPIN; sheet uses Stand/Hamon/Spin)
   useEffect(() => {
     if (character?.playbook != null && character.playbook !== "") {
       setPlaybook(character.playbook);
     }
-  }, [character?.id, character?.playbook]);
+    setSecondaryPlaybook(character?.secondaryPlaybook || "");
+  }, [character?.id, character?.playbook, character?.secondaryPlaybook]);
 
   const [standType, setStandType] = useState(character?.standType || "");
   const [playbookXpArchetypes, setPlaybookXpArchetypes] = useState(() =>
@@ -2751,10 +2765,6 @@ const CharacterSheetWrapper = ({
     (n, idx) => n + (INDEX_TO_GRADE(idx) === "A" ? 1 : 0),
     0,
   );
-  const isSpinPlaybook = playbook === "Spin";
-  const isHamonPlaybook = playbook === "Hamon";
-  /** Stand playbook only: Durability + Power/Precision/Speed column (Hamon/Spin use core actions only). */
-  const showStandCoinActionColumn = playbook === "Stand";
   const totalXP = Object.values(xp).reduce((s, v) => s + v, 0);
   const maxXpOnAnyTrack = useMemo(
     () =>
@@ -6575,6 +6585,7 @@ const CharacterSheetWrapper = ({
       abilities,
       clocks,
       playbook,
+      secondaryPlaybook,
       playbookXpArchetypes,
       standType,
       campaign: campaignId || null,
@@ -6603,6 +6614,7 @@ const CharacterSheetWrapper = ({
     abilities,
     clocks,
     playbook,
+    secondaryPlaybook,
     playbookXpArchetypes,
     standType,
     campaignId,
@@ -6709,6 +6721,7 @@ const CharacterSheetWrapper = ({
     abilities,
     clocks,
     playbook,
+    secondaryPlaybook,
     playbookXpArchetypes,
     standType,
     campaignId,
@@ -11236,21 +11249,53 @@ const CharacterSheetWrapper = ({
                     >
                       PLAYBOOK
                     </h2>
-                    <select
-                      value={playbook}
-                      onChange={(e) => setPlaybook(e.target.value)}
-                      style={S.sel}
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "8px",
+                        alignItems: "center",
+                      }}
                     >
-                      <option>Stand</option>
-                      <option>Hamon</option>
-                      <option>Spin</option>
-                    </select>
+                      <select
+                        value={playbook}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          setPlaybook(next);
+                          if (secondaryPlaybook === next) {
+                            setSecondaryPlaybook("");
+                          }
+                        }}
+                        style={S.sel}
+                        aria-label="Primary playbook"
+                      >
+                        {PLAYBOOK_SHEET_OPTIONS.map((opt) => (
+                          <option key={opt} value={opt}>
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={secondaryPlaybook}
+                        onChange={(e) => setSecondaryPlaybook(e.target.value)}
+                        style={S.sel}
+                        aria-label="Secondary playbook"
+                        title="Optional second playbook"
+                      >
+                        <option value="">—</option>
+                        {PLAYBOOK_SHEET_OPTIONS.filter((opt) => opt !== playbook).map(
+                          (opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </div>
                   </div>
-                  {((playbook === "Stand" &&
+                  {((hasStandPlaybook &&
                     standardAbilitiesList.length === 0) ||
-                    (playbook === "Hamon" && hamonAbilitiesList.length === 0) ||
-                    (playbook === "Spin" &&
-                      spinAbilitiesList.length === 0)) && (
+                    (isHamonPlaybook && hamonAbilitiesList.length === 0) ||
+                    (isSpinPlaybook && spinAbilitiesList.length === 0)) && (
                     <div
                       style={{
                         fontSize: "11px",
@@ -11638,7 +11683,8 @@ const CharacterSheetWrapper = ({
                       );
                     })()}
 
-                  {/* Stand Coin Stats — FIX 2 + 3 + 4 + 5 */}
+                  {/* Stand Coin Stats — only when Stand is in either playbook slot */}
+                  {hasStandPlaybook ? (
                   <div style={{ marginBottom: "16px" }}>
                     <div
                       style={{
@@ -11768,6 +11814,7 @@ const CharacterSheetWrapper = ({
                       </span>
                     </div>
                   </div>
+                  ) : null}
 
                   {/* Session info the table shares with this sheet (wanted, clocks, position/effect when enabled). */}
                   {charCampaign && activeSessionId && (
