@@ -1,6 +1,6 @@
 import logging
 from django.shortcuts import render
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.db.models import Q
 from rest_framework import viewsets, status, permissions
 from rest_framework.permissions import IsAuthenticated
@@ -1812,3 +1812,25 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "template": template_data,
             }
         )
+
+    @action(detail=True, methods=["get"], url_path="export-pdf")
+    def export_pdf(self, request, pk=None):
+        """Download a fillable PDF snapshot of this character sheet."""
+        try:
+            from ..services.sheet_export import export_pc_pdf
+        except ImportError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        character = self.get_object()
+        try:
+            pdf_bytes, filename = export_pc_pdf(character)
+        except ImportError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response

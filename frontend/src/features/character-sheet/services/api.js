@@ -179,6 +179,37 @@ async function readFetchResponseBody(response) {
   }
 }
 
+/** Download a binary export (e.g. PDF) from the API and trigger a browser save. */
+async function downloadBinaryExport(endpoint, filename) {
+  const token = localStorage.getItem("authToken");
+  const base = requireApiBaseUrl();
+  const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  const url = `${base}${path}`;
+  const headers = {};
+  if (token) headers.Authorization = `Token ${token}`;
+  if (url.includes("ngrok")) headers["ngrok-skip-browser-warning"] = "1";
+
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    const { parsed } = await readFetchResponseBody(response);
+    const errorData =
+      parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    throw new Error(
+      getApiErrorMessage(errorData, response.status, response.statusText),
+    );
+  }
+
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = filename || "export.pdf";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
 // Helper function for API requests
 const apiRequest = async (endpoint, options = {}) => {
   const token = localStorage.getItem("authToken");
@@ -329,6 +360,13 @@ export const characterAPI = {
       method: "POST",
       body: JSON.stringify(armorData),
     }),
+
+  exportPdf: async (id, filename) => {
+    const safeName =
+      filename ||
+      `character-${id}-sheet.pdf`.replace(/[^\w.-]+/g, "-").slice(0, 120);
+    await downloadBinaryExport(`/characters/${id}/export-pdf/`, safeName);
+  },
 
   // Add progress clock
   addProgressClock: (id, clockData) =>
@@ -647,6 +685,11 @@ export const npcAPI = {
       body: JSON.stringify(data),
     }),
   deleteNPC: (id) => apiRequest(`/npcs/${id}/`, { method: "DELETE" }),
+  exportPdf: async (id, filename) => {
+    const safeName =
+      filename || `npc-${id}-sheet.pdf`.replace(/[^\w.-]+/g, "-").slice(0, 120);
+    await downloadBinaryExport(`/npcs/${id}/export-pdf/`, safeName);
+  },
 };
 
 // Session API functions

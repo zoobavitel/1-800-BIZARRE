@@ -7,6 +7,7 @@ import {
   characterHistoryAPI,
   experienceTrackerAPI,
   xpHistoryAPI,
+  npcAPI,
 } from "../features/character-sheet";
 import { HistoryBranchIcon } from "../components/position-effect/PositionEffectIndicators";
 import NpcsStandCoin from "../components/NpcsStandCoin";
@@ -1276,6 +1277,8 @@ const NPCSheet = ({
   const [saveStatus, setSaveStatus] = useState(null);
   /** Last autosave failure (API message); cleared on next successful save attempt. */
   const [saveErrorDetail, setSaveErrorDetail] = useState(null);
+  const [exportPdfStatus, setExportPdfStatus] = useState(null);
+  const [exportPdfError, setExportPdfError] = useState(null);
   const debounceRef = useRef(null);
   const mountedRef = useRef(false);
   const npcIdRef = useRef(npc?.id || null);
@@ -1842,6 +1845,29 @@ const NPCSheet = ({
     },
   };
 
+  const handleExportPdf = useCallback(async () => {
+    const npcId = npc?.id;
+    if (!npcId) return;
+    setExportPdfStatus("exporting");
+    setExportPdfError(null);
+    try {
+      const baseName = String(name || npc?.name || "npc")
+        .trim()
+        .replace(/[^\w\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .slice(0, 80);
+      await npcAPI.exportPdf(npcId, `${baseName || "npc"}-npc-sheet.pdf`);
+      setExportPdfStatus("done");
+      window.setTimeout(
+        () => setExportPdfStatus((s) => (s === "done" ? null : s)),
+        2500,
+      );
+    } catch (err) {
+      setExportPdfStatus("error");
+      setExportPdfError(err?.message || "Export failed");
+    }
+  }, [npc?.id, npc?.name, name]);
+
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
@@ -1868,6 +1894,40 @@ const NPCSheet = ({
           )}
         </div>
         <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+          {npc?.id && (
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              disabled={saveStatus === "saving" || exportPdfStatus === "exporting"}
+              style={{
+                background: "#374151",
+                border: "1px solid #4b5563",
+                borderRadius: "6px",
+                padding: "6px 10px",
+                cursor:
+                  saveStatus === "saving" || exportPdfStatus === "exporting"
+                    ? "not-allowed"
+                    : "pointer",
+                color: "#d1d5db",
+                fontFamily: "monospace",
+                fontSize: "12px",
+              }}
+              title="Download fillable PDF of this NPC sheet"
+            >
+              {exportPdfStatus === "exporting" ? "Exporting…" : "Export PDF"}
+            </button>
+          )}
+          {exportPdfStatus === "error" && (
+            <span
+              style={{ fontSize: "11px", color: "#f87171", maxWidth: "180px" }}
+              title={exportPdfError || "Export failed"}
+            >
+              Export failed
+              {exportPdfError
+                ? `: ${exportPdfError.slice(0, 40)}${exportPdfError.length > 40 ? "…" : ""}`
+                : ""}
+            </span>
+          )}
           <button
             type="button"
             onClick={() => setShowNpcTrackingPanel((v) => !v)}

@@ -4,6 +4,7 @@ from rest_framework.parsers import JSONParser, FormParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import Q
+from django.http import HttpResponse
 
 from ..models import NPC
 from ..parsers import MultipartJsonParser
@@ -87,4 +88,26 @@ class NPCViewSet(viewsets.ModelViewSet):
         })
 
     def perform_create(self, serializer):
-        serializer.save(creator=self.request.user) 
+        serializer.save(creator=self.request.user)
+
+    @action(detail=True, methods=["get"], url_path="export-pdf")
+    def export_pdf(self, request, pk=None):
+        """Download a fillable PDF snapshot of this NPC sheet."""
+        try:
+            from ..services.sheet_export import export_npc_pdf
+        except ImportError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        npc = self.get_object()
+        try:
+            pdf_bytes, filename = export_npc_pdf(npc)
+        except ImportError as exc:
+            return Response(
+                {"error": str(exc)},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        response = HttpResponse(pdf_bytes, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
