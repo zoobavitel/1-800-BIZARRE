@@ -2984,12 +2984,6 @@ const CharacterSheetWrapper = ({
     setActionRatings((p) => ({ ...p, [action]: newVal }));
   };
 
-  // Advancement path can go beyond 2, up to 4
-  const advanceActionDot = (action) => {
-    if (actionRatings[action] >= 4) return;
-    setActionRatings((p) => ({ ...p, [action]: p[action] + 1 }));
-  };
-
   // FIX 2: Hard cap at A by default; S only when gm_can_have_s_rank_stand_stats
   const incrementStat = useCallback(
     (stat) => {
