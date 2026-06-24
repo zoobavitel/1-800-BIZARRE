@@ -2,6 +2,9 @@ import {
   transformFrontendToBackend,
   transformBackendToFrontend,
   playbookToBackend,
+  secondaryPlaybookToBackend,
+  hasPlaybook,
+  formatPlaybookPair,
   normalizeListResponse,
   normalizeCharacterInventory,
   normalizeCoinBoxes,
@@ -136,6 +139,44 @@ describe("transformFrontendToBackend playbook and playbook abilities", () => {
     expect(playbookToBackend("Hamon")).toBe("HAMON");
     expect(playbookToBackend("Spin")).toBe("SPIN");
     expect(playbookToBackend("SPIN")).toBe("SPIN");
+  });
+
+  test("secondaryPlaybookToBackend maps optional second slot", () => {
+    expect(secondaryPlaybookToBackend("")).toBe(null);
+    expect(secondaryPlaybookToBackend("Stand")).toBe("STAND");
+    expect(secondaryPlaybookToBackend(null)).toBe(null);
+  });
+
+  test("hasPlaybook checks primary or secondary slot", () => {
+    expect(hasPlaybook("Hamon", "Stand", "Stand")).toBe(true);
+    expect(hasPlaybook("Hamon", "", "Stand")).toBe(false);
+    expect(hasPlaybook("Hamon", "Spin", "Spin")).toBe(true);
+  });
+
+  test("formatPlaybookPair renders dual labels", () => {
+    expect(formatPlaybookPair("Hamon", "")).toBe("Hamon");
+    expect(formatPlaybookPair("Hamon", "Stand")).toBe("Hamon + Stand");
+  });
+
+  test("transform round-trips secondary_playbook", () => {
+    const fe = transformBackendToFrontend({
+      playbook: "HAMON",
+      secondary_playbook: "STAND",
+    });
+    expect(fe.playbook).toBe("Hamon");
+    expect(fe.secondaryPlaybook).toBe("Stand");
+    const be = transformFrontendToBackend(
+      makeSheet({ playbook: "Hamon", secondaryPlaybook: "Stand" }),
+    );
+    expect(be.playbook).toBe("HAMON");
+    expect(be.secondary_playbook).toBe("STAND");
+  });
+
+  test("transform clears empty secondary_playbook on save", () => {
+    const be = transformFrontendToBackend(
+      makeSheet({ playbook: "Spin", secondaryPlaybook: "" }),
+    );
+    expect(be.secondary_playbook).toBe(null);
   });
 
   test("coerces heritage to integer PK or null (never passes display name strings)", () => {
