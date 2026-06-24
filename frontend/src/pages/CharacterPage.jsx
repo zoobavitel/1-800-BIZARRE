@@ -825,6 +825,13 @@ export default function CharacterPage({
             saved && Object.prototype.hasOwnProperty.call(saved, "trauma_details")
               ? savedFrontend.trauma
               : (traumaFromPayload ?? savedFrontend.trauma),
+          playbookXpArchetypes:
+            saved &&
+            Object.prototype.hasOwnProperty.call(saved, "playbook_xp_archetypes")
+              ? savedFrontend.playbookXpArchetypes
+              : (frontend.playbookXpArchetypes ??
+                payload.playbookXpArchetypes ??
+                savedFrontend.playbookXpArchetypes),
           stash:
             stashMerged !== null
               ? stashMerged
