@@ -2150,19 +2150,38 @@ const CharacterSheetWrapper = ({
       character?.playbookXpArchetypes,
     ),
   );
+  /** After first seed or any non-empty server archetypes, do not re-infer from stand type. */
+  const archetypeSeedAppliedRef = useRef(false);
 
   useEffect(() => {
     setStandType(String(character?.standType || "").trim());
   }, [character?.id, character?.standType]);
 
   useEffect(() => {
+    archetypeSeedAppliedRef.current = false;
+    const fromServer = normalizePlaybookXpArchetypeKeys(
+      character?.playbook,
+      character?.playbookXpArchetypes,
+    );
+    if (fromServer.length > 0) {
+      archetypeSeedAppliedRef.current = true;
+    }
+  }, [character?.id, character?.playbook, character?.playbookXpArchetypes]);
+
+  useEffect(() => {
+    if (sheetDraftIsDirty) return;
     setPlaybookXpArchetypes(
       normalizePlaybookXpArchetypeKeys(
         character?.playbook,
         character?.playbookXpArchetypes,
       ),
     );
-  }, [character?.id, character?.playbook, character?.playbookXpArchetypes]);
+  }, [
+    character?.id,
+    character?.playbook,
+    character?.playbookXpArchetypes,
+    sheetDraftIsDirty,
+  ]);
 
   useEffect(() => {
     setPlaybookXpArchetypes((prev) =>
@@ -2173,13 +2192,18 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     if (sheetDraftIsDirty) return;
     if (!characterId) return;
+    if (archetypeSeedAppliedRef.current) return;
     const fromServer = normalizePlaybookXpArchetypeKeys(
       character?.playbook,
       character?.playbookXpArchetypes,
     );
-    if (fromServer.length > 0) return;
+    if (fromServer.length > 0) {
+      archetypeSeedAppliedRef.current = true;
+      return;
+    }
     const seed = inferSeedArchetypeKeys(playbook, { standType, abilities });
     if (!seed.length) return;
+    archetypeSeedAppliedRef.current = true;
     setPlaybookXpArchetypes(seed);
   }, [
     sheetDraftIsDirty,
