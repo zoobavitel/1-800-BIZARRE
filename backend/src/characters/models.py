@@ -1037,6 +1037,7 @@ class Character(models.Model):
 
     # Type of Custom Ability
     CUSTOM_ABILITY_CHOICES = [
+        ("single_with_2_uses", "Single Ability with 2 Uses"),
         ("single_with_3_uses", "Single Ability with 3 Uses"),
         ("three_separate_uses", "Three Separate Abilities"),
     ]
@@ -1057,6 +1058,14 @@ class Character(models.Model):
         blank=True,
         help_text="Temporary ability gained from A-rank Development Potential until the end of the session",
     )
+    advancement_ability_grants = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "Custom abilities granted via XP advancement (each entry may include "
+            "allocation_id for undo)."
+        ),
+    )
 
     # Faction reputation tracking - list of {name: str, rep: int} objects
     faction_reputation = models.JSONField(default=list, blank=True, null=True)
@@ -1070,6 +1079,49 @@ class Character(models.Model):
         blank=True,
         help_text="List of fields locked by the GM (e.g., ['level', 'action_dots'])",
     )
+
+
+class CharacterXPAllocation(models.Model):
+    """Reversible XP spend log (level-up, minor advance, etc.)."""
+
+    ALLOCATION_TYPE_CHOICES = [
+        ("LEVEL_UP_STAT", "Level up — Stand Coin stat"),
+        ("LEVEL_UP_DOTS", "Level up — action dots"),
+        ("MINOR_ADVANCE", "Minor advance — action dot"),
+    ]
+
+    XP_TRACK_CHOICES = [
+        ("insight", "Insight"),
+        ("prowess", "Prowess"),
+        ("resolve", "Resolve"),
+        ("heritage", "Heritage"),
+        ("playbook", "Playbook"),
+    ]
+
+    character = models.ForeignKey(
+        Character, on_delete=models.CASCADE, related_name="xp_allocations"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    allocation_type = models.CharField(max_length=32, choices=ALLOCATION_TYPE_CHOICES)
+    xp_track = models.CharField(max_length=16, choices=XP_TRACK_CHOICES)
+    xp_cost = models.PositiveIntegerField()
+    payload_before = models.JSONField(default=dict, blank=True)
+    payload_after = models.JSONField(default=dict, blank=True)
+    metadata = models.JSONField(default=dict, blank=True)
+    undone_at = models.DateTimeField(null=True, blank=True)
+    undone_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="undone_xp_allocations",
+    )
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.allocation_type} ({self.xp_track}, -{self.xp_cost} XP)"
 
 
 class CharacterHistory(models.Model):

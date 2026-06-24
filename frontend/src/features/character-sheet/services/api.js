@@ -333,6 +333,37 @@ export const characterAPI = {
       body: JSON.stringify(body),
     }),
 
+  getXpAllocations: (id, { includeUndone = false } = {}) =>
+    apiRequest(
+      `/characters/${id}/xp-allocations/${
+        includeUndone ? "?include_undone=true" : ""
+      }`,
+    ),
+
+  applyLevelUp: (id, body) =>
+    apiRequest(`/characters/${id}/apply-level-up/`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  applyMinorAdvance: (id, body) =>
+    apiRequest(`/characters/${id}/apply-minor-advance/`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  undoLatestAllocation: (id) =>
+    apiRequest(`/characters/${id}/undo-latest-allocation/`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  removeAllocationResult: (id, allocationId) =>
+    apiRequest(`/characters/${id}/remove-allocation-result/`, {
+      method: "POST",
+      body: JSON.stringify({ allocation_id: allocationId }),
+    }),
+
   // Take harm
   takeHarm: (id, harmData) =>
     apiRequest(`/characters/${id}/take-harm/`, {
@@ -1172,6 +1203,26 @@ export const transformBackendToFrontend = (backendCharacter) => {
             type: "custom",
           }));
         }
+        if (type === "single_with_2_uses" && (desc || extra.length > 0)) {
+          const name =
+            (desc || extra[0]?.name || "Custom Ability").trim() ||
+            "Custom Ability";
+          const uses =
+            extra.length >= 2
+              ? extra.map((u) => u.description || u)
+              : desc
+                ? [desc, ""]
+                : ["", ""];
+          return [
+            {
+              id: "custom-single-2",
+              name,
+              type: "custom",
+              _uses: uses.slice(0, 2),
+              _description: desc,
+            },
+          ];
+        }
         if (type === "single_with_3_uses" && (desc || extra.length > 0)) {
           const name =
             (desc || extra[0]?.name || "Custom Ability").trim() ||
@@ -1194,6 +1245,17 @@ export const transformBackendToFrontend = (backendCharacter) => {
         }
         return [];
       })(),
+      ...(backendCharacter.advancement_ability_grants || []).map((g, i) => {
+        const uses = Array.isArray(g.uses) ? g.uses : [];
+        return {
+          id: `advancement-${g.allocation_id ?? i}`,
+          name: g.name || `Advancement Ability ${i + 1}`,
+          type: "custom",
+          _uses: uses.slice(0, 2),
+          _fromAdvancement: true,
+          _allocationId: g.allocation_id,
+        };
+      }),
     ],
 
     // Progress clocks
