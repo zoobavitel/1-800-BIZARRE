@@ -46,6 +46,7 @@ import {
   resolveMediaUrl,
   normalizeCharacterInventory,
   PLAYBOOK_SHEET_OPTIONS,
+  transformBackendToFrontend,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -1913,6 +1914,23 @@ const CharacterSheetWrapper = ({
   const [levelUpSpendTrack, setLevelUpSpendTrack] = useState("insight");
   const [minorAdvanceSpendTrack, setMinorAdvanceSpendTrack] =
     useState("insight");
+  const [levelUpBusy, setLevelUpBusy] = useState(false);
+  const [levelUpError, setLevelUpError] = useState(null);
+  const [minorAdvanceBusy, setMinorAdvanceBusy] = useState(false);
+  const [minorAdvanceError, setMinorAdvanceError] = useState(null);
+  const [levelUpBtoARewardBranch, setLevelUpBtoARewardBranch] = useState(
+    "custom2plus1standard",
+  );
+  const [levelUpRewardCustomName, setLevelUpRewardCustomName] = useState("");
+  const [levelUpRewardUses, setLevelUpRewardUses] = useState(["", ""]);
+  const [levelUpRewardStandardId, setLevelUpRewardStandardId] = useState("");
+  const [levelUpRewardStandardIds, setLevelUpRewardStandardIds] = useState([
+    "",
+    "",
+  ]);
+  const [xpAllocationRows, setXpAllocationRows] = useState([]);
+  const [xpAllocationUndoBusy, setXpAllocationUndoBusy] = useState(false);
+  const [xpAllocationActionError, setXpAllocationActionError] = useState(null);
 
   // FIX 7: Minor advance action selector
   const [minorAdvanceAction, setMinorAdvanceAction] = useState("HUNT");
@@ -2890,18 +2908,104 @@ const CharacterSheetWrapper = ({
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
 
+  const applyBackendCharacter = useCallback((backendChar) => {
+    if (!backendChar) return;
+    const fe = transformBackendToFrontend(backendChar);
+    if (fe.xp) setXp(fe.xp);
+    if (fe.standStats) setStandStats(fe.standStats);
+    if (fe.actionRatings) setActionRatings(fe.actionRatings);
+    if (fe.abilities) setAbilities(fe.abilities);
+    setCharData((prev) => ({
+      ...prev,
+      xp: fe.xp,
+      standStats: fe.standStats,
+      actionRatings: fe.actionRatings,
+      abilities: fe.abilities,
+      standCoinPointsGained: fe.standCoinPointsGained,
+      actionDiceGained: fe.actionDiceGained,
+    }));
+  }, []);
+
+  const refreshXpAllocations = useCallback(async () => {
+    if (!characterId) {
+      setXpAllocationRows([]);
+      return;
+    }
+    try {
+      const res = await characterAPI.getXpAllocations(characterId, {
+        includeUndone: true,
+      });
+      const rows = Array.isArray(res) ? res : res?.results || [];
+      setXpAllocationRows(rows);
+    } catch {
+      setXpAllocationRows([]);
+    }
+  }, [characterId]);
+
+  const handleUndoLatestAllocation = useCallback(
+    async (e) => {
+      e?.stopPropagation?.();
+      if (!characterId || xpAllocationUndoBusy) return;
+      setXpAllocationUndoBusy(true);
+      setXpAllocationActionError(null);
+      try {
+        const res = await characterAPI.undoLatestAllocation(characterId);
+        if (res?.character) applyBackendCharacter(res.character);
+        if (Array.isArray(res?.allocations)) {
+          setXpAllocationRows(res.allocations);
+        } else {
+          await refreshXpAllocations();
+        }
+      } catch (err) {
+        setXpAllocationActionError(err?.message || "Failed to undo allocation");
+      } finally {
+        setXpAllocationUndoBusy(false);
+      }
+    },
+    [
+      characterId,
+      xpAllocationUndoBusy,
+      applyBackendCharacter,
+      refreshXpAllocations,
+    ],
+  );
+
+  const handleUndoAllocationById = useCallback(
+    async (allocationId) => {
+      if (!characterId || xpAllocationUndoBusy) return;
+      setXpAllocationUndoBusy(true);
+      setXpAllocationActionError(null);
+      try {
+        const res = await characterAPI.removeAllocationResult(
+          characterId,
+          allocationId,
+        );
+        if (res?.character) applyBackendCharacter(res.character);
+        if (Array.isArray(res?.allocations)) {
+          setXpAllocationRows(res.allocations);
+        } else {
+          await refreshXpAllocations();
+        }
+      } catch (err) {
+        setXpAllocationActionError(err?.message || "Failed to undo allocation");
+      } finally {
+        setXpAllocationUndoBusy(false);
+      }
+    },
+    [
+      characterId,
+      xpAllocationUndoBusy,
+      applyBackendCharacter,
+      refreshXpAllocations,
+    ],
+  );
+
   // FIX 1: Creation-mode dot clicks — hard cap 7 total / max 2 per action
   const updateActionRating = (action, newVal) => {
     if (newVal < 0 || newVal > MAX_DOTS_PER_ACTION_CREATION) return;
     const delta = newVal - actionRatings[action];
     if (delta > 0 && totalActionDots + delta > maxActionDotsBudget) return;
     setActionRatings((p) => ({ ...p, [action]: newVal }));
-  };
-
-  // Advancement path can go beyond 2, up to 4
-  const advanceActionDot = (action) => {
-    if (actionRatings[action] >= 4) return;
-    setActionRatings((p) => ({ ...p, [action]: p[action] + 1 }));
   };
 
   // FIX 2: Hard cap at A by default; S only when gm_can_have_s_rank_stand_stats
@@ -2979,34 +3083,108 @@ const CharacterSheetWrapper = ({
     }));
   };
 
-  // FIX 6: Confirm level-up — spend 10 XP from the selected track only (matches backend xp_type).
-  const confirmLevelUp = () => {
+  const levelUpIsBtoA = useMemo(
+    () =>
+      levelUpChoice === "stat" &&
+      standStats[levelUpStat] === GRADE.indexOf("B"),
+    [levelUpChoice, levelUpStat, standStats],
+  );
+
+  // FIX 6: Confirm level-up — server-side spend with reversible allocation log.
+  const confirmLevelUp = async () => {
     const track = levelUpSpendTrack;
     const cur = Number(xp[track]) || 0;
-    if (cur < 10) return;
-    setXp((p) => ({ ...p, [track]: cur - 10 }));
-    if (levelUpChoice === "stat") {
-      incrementStat(levelUpStat);
-    } else {
-      advanceActionDot(levelUpDot1);
-      advanceActionDot(levelUpDot2);
+    if (cur < 10 || !characterId) return;
+
+    if (levelUpIsBtoA) {
+      if (levelUpBtoARewardBranch === "custom2plus1standard") {
+        if (
+          !levelUpRewardCustomName.trim() ||
+          !levelUpRewardUses.every((u) => String(u || "").trim()) ||
+          !levelUpRewardStandardId
+        ) {
+          setLevelUpError(
+            "B→A reward: fill custom name, both uses, and pick a standard ability.",
+          );
+          return;
+        }
+      } else if (
+        !levelUpRewardStandardIds[0] ||
+        !levelUpRewardStandardIds[1]
+      ) {
+        setLevelUpError("B→A reward: pick two standard abilities.");
+        return;
+      }
     }
-    setShowLevelUp(false);
+
+    setLevelUpBusy(true);
+    setLevelUpError(null);
+    const body = {
+      xp_track: track,
+      choice: levelUpChoice,
+    };
+    if (levelUpChoice === "stat") {
+      body.stand_stat = levelUpStat;
+      if (levelUpIsBtoA) {
+        if (levelUpBtoARewardBranch === "custom2plus1standard") {
+          body.reward = {
+            branch: "custom2plus1standard",
+            custom_name: levelUpRewardCustomName.trim(),
+            custom_uses: levelUpRewardUses.map((u) => String(u || "").trim()),
+            standard_ability_id: Number(levelUpRewardStandardId),
+          };
+        } else {
+          body.reward = {
+            branch: "two_standard",
+            standard_ability_ids: levelUpRewardStandardIds.map((id) =>
+              Number(id),
+            ),
+          };
+        }
+      }
+    } else {
+      body.actions = [levelUpDot1, levelUpDot2];
+    }
+
+    try {
+      const res = await characterAPI.applyLevelUp(characterId, body);
+      if (res?.character) applyBackendCharacter(res.character);
+      if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
+      setShowLevelUp(false);
+    } catch (err) {
+      setLevelUpError(err?.message || "Level up failed");
+    } finally {
+      setLevelUpBusy(false);
+    }
   };
 
-  // FIX 7: Minor advance — 5 XP from selected track only
-  const spendXPForDot = () => {
+  // FIX 7: Minor advance — 5 XP from selected track (server-side allocation).
+  const spendXPForDot = async () => {
     const track = minorAdvanceSpendTrack;
     const cur = Number(xp[track]) || 0;
     const action = minorAdvanceAction;
     if (
       cur < 5 ||
       !minorAdvanceActions.includes(action) ||
-      actionRatings[action] >= 4
+      actionRatings[action] >= 4 ||
+      !characterId
     )
       return;
-    setXp((p) => ({ ...p, [track]: cur - 5 }));
-    advanceActionDot(action);
+
+    setMinorAdvanceBusy(true);
+    setMinorAdvanceError(null);
+    try {
+      const res = await characterAPI.applyMinorAdvance(characterId, {
+        xp_track: track,
+        action,
+      });
+      if (res?.character) applyBackendCharacter(res.character);
+      if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
+    } catch (err) {
+      setMinorAdvanceError(err?.message || "Minor advance failed");
+    } finally {
+      setMinorAdvanceBusy(false);
+    }
   };
 
   // Roll modal for campaign/session context (position, effect, push)
@@ -3797,29 +3975,47 @@ const CharacterSheetWrapper = ({
   }, [showHistoryPanel, setShowHistoryPanelPersist]);
 
   useEffect(() => {
+    refreshXpAllocations();
+  }, [characterId, refreshXpAllocations]);
+
+  useEffect(() => {
     if (!showXpHistoryModal || !characterId) return;
     setXpTimelineLoading(true);
     setXpTimelineError(null);
+    setXpAllocationActionError(null);
     const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
     Promise.all([
       experienceTrackerAPI.list({ character: characterId }).catch(() => []),
       xpHistoryAPI.list({ character: characterId }).catch(() => []),
+      characterAPI
+        .getXpAllocations(characterId, { includeUndone: true })
+        .catch(() => []),
     ])
-      .then(([et, xh]) => {
+      .then(([et, xh, allocations]) => {
         const rows = [
           ...asArray(et).map((e) => ({
             key: `t-${e.id}`,
+            kind: "earn",
             when: e.session_date,
             text: `${e.trigger_display || e.trigger || "XP"}: ${e.description || ""} (+${e.xp_gained ?? 0} XP)`,
           })),
           ...asArray(xh).map((x) => ({
             key: `h-${x.id}`,
+            kind: "earn",
             when: x.timestamp,
             text: `${x.reason || "XP"} (+${x.amount ?? 0})`,
+          })),
+          ...asArray(allocations).map((a) => ({
+            key: `a-${a.id}`,
+            kind: "spend",
+            when: a.created_at,
+            text: a.summary || a.allocation_type_display || "XP spend",
+            allocation: a,
           })),
         ];
         rows.sort((a, b) => new Date(b.when) - new Date(a.when));
         setXpTimelineRows(rows);
+        setXpAllocationRows(asArray(allocations));
       })
       .catch((e) => setXpTimelineError(e.message))
       .finally(() => setXpTimelineLoading(false));
@@ -7163,6 +7359,35 @@ const CharacterSheetWrapper = ({
                         }}
                       >
                         <HistoryBranchIcon />
+                      </button>
+                    )}
+                    {characterId && (
+                      <button
+                        type="button"
+                        onClick={handleUndoLatestAllocation}
+                        disabled={
+                          xpAllocationUndoBusy ||
+                          !xpAllocationRows.some((a) => !a.undone_at && a.can_undo)
+                        }
+                        title="Undo most recent XP allocation"
+                        style={{
+                          background: "#312e81",
+                          border: "1px solid #6366f1",
+                          borderRadius: 6,
+                          padding: "4px 8px",
+                          cursor: xpAllocationUndoBusy ? "wait" : "pointer",
+                          color: "#c7d2fe",
+                          fontSize: 14,
+                          lineHeight: 1,
+                          opacity:
+                            xpAllocationRows.some(
+                              (a) => !a.undone_at && a.can_undo,
+                            )
+                              ? 1
+                              : 0.45,
+                        }}
+                      >
+                        ↩
                       </button>
                     )}
                     <div
@@ -10692,6 +10917,8 @@ const CharacterSheetWrapper = ({
                           type="button"
                           onClick={spendXPForDot}
                           disabled={
+                            minorAdvanceBusy ||
+                            !characterId ||
                             (Number(xp[minorAdvanceSpendTrack]) || 0) < 5 ||
                             !minorAdvanceActions.includes(minorAdvanceAction) ||
                             actionRatings[minorAdvanceAction] >= 4
@@ -10715,9 +10942,14 @@ const CharacterSheetWrapper = ({
                                 : "#6b7280",
                           }}
                         >
-                          −5 XP
+                          {minorAdvanceBusy ? "…" : "−5 XP"}
                         </button>
                       </div>
+                      {minorAdvanceError && (
+                        <div style={{ ...S.warn, marginTop: "4px", fontSize: "11px" }}>
+                          {minorAdvanceError}
+                        </div>
+                      )}
                       {maxXpOnAnyTrack < 5 ? (
                         <div style={{ ...S.warn, marginTop: "4px" }}>
                           Need 5 XP on one track (highest track:{" "}
@@ -16134,6 +16366,13 @@ const CharacterSheetWrapper = ({
                             {xpTimelineError}
                           </div>
                         )}
+                        {xpAllocationActionError && (
+                          <div
+                            style={{ color: "#f87171", fontSize: "12px", marginBottom: 8 }}
+                          >
+                            {xpAllocationActionError}
+                          </div>
+                        )}
                         {!xpTimelineLoading &&
                           !xpTimelineError &&
                           xpTimelineRows.length === 0 && (
@@ -16141,6 +16380,25 @@ const CharacterSheetWrapper = ({
                               No XP entries yet.
                             </div>
                           )}
+                        {xpAllocationRows.some((a) => !a.undone_at && a.can_undo) && (
+                          <button
+                            type="button"
+                            disabled={xpAllocationUndoBusy}
+                            onClick={handleUndoLatestAllocation}
+                            style={{
+                              ...S.btn,
+                              width: "100%",
+                              marginBottom: 10,
+                              background: "#4338ca",
+                              color: "#fff",
+                              fontSize: "11px",
+                            }}
+                          >
+                            {xpAllocationUndoBusy
+                              ? "Undoing…"
+                              : "↩ Undo most recent XP allocation"}
+                          </button>
+                        )}
                         <ul
                           style={{
                             margin: 0,
@@ -16159,6 +16417,39 @@ const CharacterSheetWrapper = ({
                                   : "—"}
                               </span>
                               <div>{row.text}</div>
+                              {row.kind === "spend" &&
+                                row.allocation &&
+                                !row.allocation.undone_at &&
+                                row.allocation.can_undo && (
+                                  <button
+                                    type="button"
+                                    disabled={xpAllocationUndoBusy}
+                                    onClick={() =>
+                                      handleUndoAllocationById(row.allocation.id)
+                                    }
+                                    style={{
+                                      ...S.btn,
+                                      marginTop: 4,
+                                      fontSize: "10px",
+                                      padding: "2px 8px",
+                                      background: "#374151",
+                                      color: "#e5e7eb",
+                                    }}
+                                  >
+                                    Undo this spend
+                                  </button>
+                                )}
+                              {row.kind === "spend" && row.allocation?.undone_at && (
+                                <div
+                                  style={{
+                                    fontSize: "10px",
+                                    color: "#6b7280",
+                                    marginTop: 2,
+                                  }}
+                                >
+                                  Undone
+                                </div>
+                              )}
                             </li>
                           ))}
                         </ul>
@@ -19418,13 +19709,17 @@ const CharacterSheetWrapper = ({
                 marginBottom: "16px",
               }}
             >
-              Choose ONE path. A new Stand ability is automatically included
-              either way.
+              Choose ONE path.
+              {levelUpIsBtoA && (
+                <div style={{ ...S.green, marginTop: "6px" }}>
+                  ★ B→A on {levelUpStat.toUpperCase()} — pick your reward below.
+                </div>
+              )}
               {levelUpChoice === "stat" &&
+                !levelUpIsBtoA &&
                 standStats[levelUpStat] === maxStandGradeIndex - 1 && (
                   <div style={{ ...S.green, marginTop: "6px" }}>
-                    ★ This stat will hit {GRADE[maxStandGradeIndex]}-rank —
-                    ability auto-unlocked!
+                    ★ This stat will hit {GRADE[maxStandGradeIndex]}-rank.
                   </div>
                 )}
             </div>
@@ -19507,6 +19802,99 @@ const CharacterSheetWrapper = ({
               </div>
             )}
 
+            {levelUpIsBtoA && (
+              <div
+                style={{
+                  marginBottom: 16,
+                  padding: 10,
+                  background: "#1f2937",
+                  borderRadius: 6,
+                  border: "1px solid #4b5563",
+                }}
+              >
+                <span style={S.lbl}>B→A reward (required)</span>
+                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                  {[
+                    ["custom2plus1standard", "Custom (2 uses) + Standard"],
+                    ["two_standard", "2 Standard abilities"],
+                  ].map(([val, label]) => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => setLevelUpBtoARewardBranch(val)}
+                      style={{
+                        ...S.btn,
+                        flex: 1,
+                        fontSize: "10px",
+                        color: "#fff",
+                        background:
+                          levelUpBtoARewardBranch === val
+                            ? "#7c3aed"
+                            : "#374151",
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {levelUpBtoARewardBranch === "custom2plus1standard" ? (
+                  <>
+                    <input
+                      style={{ ...S.inp, marginBottom: 6 }}
+                      value={levelUpRewardCustomName}
+                      onChange={(e) => setLevelUpRewardCustomName(e.target.value)}
+                      placeholder="Custom ability name"
+                    />
+                    {[0, 1].map((i) => (
+                      <input
+                        key={i}
+                        style={{ ...S.inp, marginBottom: 6 }}
+                        value={levelUpRewardUses[i] || ""}
+                        onChange={(e) => {
+                          const next = [...levelUpRewardUses];
+                          next[i] = e.target.value;
+                          setLevelUpRewardUses(next);
+                        }}
+                        placeholder={`Use ${i + 1} description`}
+                      />
+                    ))}
+                    <select
+                      style={{ ...S.sel, width: "100%" }}
+                      value={levelUpRewardStandardId}
+                      onChange={(e) => setLevelUpRewardStandardId(e.target.value)}
+                    >
+                      <option value="">Pick standard ability…</option>
+                      {standardAbilitiesList.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                ) : (
+                  [0, 1].map((i) => (
+                    <select
+                      key={i}
+                      style={{ ...S.sel, width: "100%", marginBottom: 6 }}
+                      value={levelUpRewardStandardIds[i] || ""}
+                      onChange={(e) => {
+                        const next = [...levelUpRewardStandardIds];
+                        next[i] = e.target.value;
+                        setLevelUpRewardStandardIds(next);
+                      }}
+                    >
+                      <option value="">Standard ability {i + 1}…</option>
+                      {standardAbilitiesList.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name}
+                        </option>
+                      ))}
+                    </select>
+                  ))
+                )}
+              </div>
+            )}
+
             <div style={{ marginBottom: "16px" }}>
               <span style={S.lbl}>Spend 10 XP from</span>
               <select
@@ -19532,26 +19920,40 @@ const CharacterSheetWrapper = ({
               )}
             </div>
 
+            {levelUpError && (
+              <div style={{ ...S.warn, marginBottom: 10, fontSize: "11px" }}>
+                {levelUpError}
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: "8px" }}>
               <button
                 type="button"
                 onClick={confirmLevelUp}
-                disabled={(Number(xp[levelUpSpendTrack]) || 0) < 10}
+                disabled={
+                  levelUpBusy ||
+                  (Number(xp[levelUpSpendTrack]) || 0) < 10 ||
+                  !characterId
+                }
                 style={{
                   ...S.btn,
                   background:
-                    (Number(xp[levelUpSpendTrack]) || 0) >= 10
+                    !levelUpBusy &&
+                    (Number(xp[levelUpSpendTrack]) || 0) >= 10 &&
+                    characterId
                       ? "#7c3aed"
                       : "#374151",
                   color:
-                    (Number(xp[levelUpSpendTrack]) || 0) >= 10
+                    !levelUpBusy &&
+                    (Number(xp[levelUpSpendTrack]) || 0) >= 10 &&
+                    characterId
                       ? "#fff"
                       : "#6b7280",
                   flex: 1,
                   fontWeight: "bold",
                 }}
               >
-                Confirm (−10 XP)
+                {levelUpBusy ? "Applying…" : "Confirm (−10 XP)"}
               </button>
               <button
                 type="button"

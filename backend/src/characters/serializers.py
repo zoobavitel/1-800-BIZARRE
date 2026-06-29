@@ -13,6 +13,7 @@ from .models import (
     Vice,
     Ability,
     Character,
+    CharacterXPAllocation,
     Stand,
     Campaign,
     CampaignInvitation,
@@ -2064,6 +2065,47 @@ class CharacterSerializer(serializers.ModelSerializer):
 
         traumas = Trauma.objects.filter(id__in=pks).order_by("id")
         return TraumaSerializer(traumas, many=True).data
+
+
+class CharacterXPAllocationSerializer(serializers.ModelSerializer):
+    summary = serializers.SerializerMethodField()
+    allocation_type_display = serializers.CharField(
+        source="get_allocation_type_display", read_only=True
+    )
+    xp_track_display = serializers.CharField(
+        source="get_xp_track_display", read_only=True
+    )
+    can_undo = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CharacterXPAllocation
+        fields = [
+            "id",
+            "created_at",
+            "allocation_type",
+            "allocation_type_display",
+            "xp_track",
+            "xp_track_display",
+            "xp_cost",
+            "metadata",
+            "summary",
+            "undone_at",
+            "can_undo",
+        ]
+        read_only_fields = fields
+
+    def get_summary(self, obj):
+        from .services.xp_allocation import allocation_summary
+
+        return allocation_summary(obj)
+
+    def get_can_undo(self, obj):
+        if obj.undone_at:
+            return False
+        latest_id = self.context.get("latest_undoable_allocation_id")
+        if latest_id is None:
+            return True
+        return obj.id == latest_id
 
 
 class RegisterSerializer(serializers.ModelSerializer):

@@ -17,6 +17,7 @@ from ..models import (
     Campaign,
     Character,
     CharacterHamonAbility,
+    CharacterXPAllocation,
     ExperienceTracker,
     GroupAction,
     NPC,
@@ -42,8 +43,15 @@ from ..roll_helpers import (
     tier_die_from_action_pool,
     award_struggle_for_new_traumas,
 )
-from ..serializers import CharacterSerializer
+from ..serializers import CharacterSerializer, CharacterXPAllocationSerializer
 from ..history_context import bind_character_history_editor, reset_character_history_editor
+from ..services.xp_allocation import (
+    XPAllocationError,
+    apply_level_up,
+    apply_minor_advance,
+    list_allocations,
+    undo_allocation,
+)
 
 
 def _character_queryset_for_user(user):
@@ -70,6 +78,31 @@ def _max_stress_for_character(character):
         if isinstance(coin_stats, dict):
             grade = coin_stats.get("durability") or coin_stats.get("DURABILITY")
     return {"S": 13, "A": 12, "B": 11, "C": 10, "D": 9, "F": 8}.get(grade, 9)
+
+
+def _user_may_edit_character(user, character):
+    if user.is_staff:
+        return True
+    if character.user_id == user.id:
+        return True
+    if character.campaign_id and character.campaign.gm_id == user.id:
+        return True
+    return False
+
+
+def _allocation_list_response(character):
+    qs = list_allocations(character)
+    latest = qs.first()
+    serializer = CharacterXPAllocationSerializer(
+        qs,
+        many=True,
+        context={"latest_undoable_allocation_id": latest.id if latest else None},
+    )
+    return serializer.data
+
+
+def _character_response(character):
+    return CharacterSerializer(character).data
 
 
 class CharacterViewSet(viewsets.ModelViewSet):
@@ -1611,6 +1644,157 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "message": f"Used {armor_type} armor to reduce harm by {harm_reduced}",
                 "armor_type": armor_type,
                 "harm_reduced": harm_reduced,
+            }
+        )
+
+    @action(detail=True, methods=["get"], url_path="xp-allocations")
+    def xp_allocations(self, request, pk=None):
+        """List reversible XP spend allocations for this character."""
+        character = self.get_object()
+        include_undone = request.query_params.get("include_undone") == "true"
+        qs = list_allocations(character, include_undone=include_undone)
+        latest = (
+            list_allocations(character).first()
+            if not include_undone
+            else None
+        )
+        serializer = CharacterXPAllocationSerializer(
+            qs,
+            many=True,
+            context={"latest_undoable_allocation_id": latest.id if latest else None},
+        )
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"], url_path="apply-level-up")
+    def apply_level_up_action(self, request, pk=None):
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot advance this character.")
+
+        try:
+            allocation = apply_level_up(
+                character,
+                xp_track=request.data.get("xp_track"),
+                choice=request.data.get("choice"),
+                stand_stat=request.data.get("stand_stat"),
+                actions=request.data.get("actions"),
+                reward=request.data.get("reward"),
+            )
+        except XPAllocationError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "allocation": CharacterXPAllocationSerializer(
+                    allocation,
+                    context={
+                        "latest_undoable_allocation_id": allocation.id,
+                    },
+                ).data,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="apply-minor-advance")
+    def apply_minor_advance_action(self, request, pk=None):
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot advance this character.")
+
+        try:
+            allocation = apply_minor_advance(
+                character,
+                xp_track=request.data.get("xp_track"),
+                action=request.data.get("action"),
+            )
+        except XPAllocationError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "allocation": CharacterXPAllocationSerializer(
+                    allocation,
+                    context={
+                        "latest_undoable_allocation_id": allocation.id,
+                    },
+                ).data,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="undo-latest-allocation")
+    def undo_latest_allocation_action(self, request, pk=None):
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot undo allocations for this character.")
+
+        allocation = (
+            list_allocations(character).order_by("-created_at", "-id").first()
+        )
+        if not allocation:
+            return Response(
+                {"error": "No XP allocation to undo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            undo_allocation(character, allocation, user=request.user)
+        except XPAllocationError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "undone_allocation_id": allocation.id,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="remove-allocation-result")
+    def remove_allocation_result(self, request, pk=None):
+        """Undo a specific allocation (must be the latest non-undone spend)."""
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot undo allocations for this character.")
+
+        raw_id = request.data.get("allocation_id")
+        try:
+            allocation_id = int(raw_id)
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "allocation_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        allocation = CharacterXPAllocation.objects.filter(
+            pk=allocation_id, character=character
+        ).first()
+        if not allocation:
+            return Response(
+                {"error": "Allocation not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            undo_allocation(character, allocation, user=request.user)
+        except XPAllocationError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "undone_allocation_id": allocation.id,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
             }
         )
 
