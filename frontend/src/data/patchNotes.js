@@ -4,6 +4,85 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-06-28",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #92 from zoobavitel/feature/leveldownfix"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-06-24",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Remove unused advanceActionDot after server-side XP apply",
+          "Merge pull request #91 from zoobavitel/cursor/fix-xp-archetype-snap-back-19da",
+          "Add reversible XP allocations and Stand B→A level-up rewards",
+          "Fix XP archetype checkbox snap-back on character sheet",
+          "Merge pull request #88 from zoobavitel/cursor/character-sheet-pdf-export-e0a7",
+          "Bump greenlet floor for Python 3.14 venv installs",
+          "Merge pull request #89 from zoobavitel/feature/dual-playbook"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-06-15",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Export PC stress track as 9 boxes per SRD (not durability-based)",
+          "Export healing clock with 4 segments on PC PDF sheet",
+          "Fix playbook XP export (10 marks) and lazy PDF dependency loading",
+          "Add optional secondary playbook on character sheet",
+          "Add fillable PDF export for PC and NPC character sheets"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-05-28",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #87 from zoobavitel/fix/ci-playwright-install-hang",
+          "ci(e2e): revert workflow to commit 7449823",
+          "revert: restore files to 963a70d state",
+          "ci(e2e): set Playwright install timeout to 5m",
+          "ci(e2e): lower Playwright install step timeout to 5m",
+          "ci(e2e): remove man-db before Playwright install-deps",
+          "ci(e2e): use with-deps on miss, deps-only on hit",
+          "ci(e2e): fix Playwright install hang on partial cache",
+          "ci(e2e): fix Playwright cache key and install gating",
+          "ci(e2e): serve prod build and fix Playwright base path",
+          "Enhance CI workflow by adding Playwright browser caching and OS dependencies installation. Updated Playwright installation command to avoid unnecessary dependencies. Increased timeout for UI smoke tests.",
+          "Remove SECURITY.md and temp_xp_script.py files; update README and frontend documentation for clarity and alignment with SRD UI touchpoints.",
+          "Remove MVP.md file and reorganize patch notes sections for clarity. Swapped \"Added\" and \"Other\" titles in patch notes to better reflect content. Consolidated merge requests under appropriate sections."
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "align smoke test navigation with playwright baseURL",
+          "navigate smoke test via PLAYWRIGHT_BASE_URL",
+          "resolve smoke URL relative to baseURL path",
+          "bump @playwright/test to 1.60.0 for Node 24.16+"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-05-14",
     "version": null,
     "sections": [
@@ -611,59 +690,13 @@ export const PATCH_NOTES = [
           "Allow NPC sheet to render at full page width",
           "Remove sticky header bar from search page",
           "Keep new character name field blank by default",
-          "Guard unsaved new character drafts before navigation",
-          "Set home hamburger bars to yellow red purple",
-          "Use shared home-style navbar on all pages",
-          "Define app shell surface tokens to prevent header bleed",
-          "Reorder stripe palette to yellow-orange-red-purple",
-          "Apply global HFTF palette across app shell",
-          "Widen hero stats panel and remove session/crew rows",
-          "Add divider between hero and lower sections",
-          "Allow 127.0.0.1 frontend origin in CORS",
-          "Fix auth API default for remote frontend hosts",
-          "Fix formatting in contributing guidelines"
+          "Guard unsaved new character drafts before navigation"
         ]
       },
       {
         "title": "Fixed",
         "items": [
           "define unsaved-character navigation guards"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-13",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #53 from zoobavitel/copilot/fix-character-center-alignment",
-          "Update hero subtext on Home page",
-          "Merge pull request #52 from zoobavitel/copilot/fix-game-rules-scroll-behavior",
-          "Expand scroll-reset effect to cover all route params",
-          "Reset window scroll position on page navigation",
-          "Merge pull request #50 from zoobavitel/copilot/fix-character-sheet-ownership",
-          "Merge pull request #51 from zoobavitel/copilot/add-edit-delete-buttons-home-faction-cards",
-          "Add Edit & Delete buttons to Home page faction cards",
-          "Merge pull request #49 from zoobavitel/copilot/remove-second-striped-bar-homepage",
-          "Initial plan",
-          "Restore footer top stripe; remove stripe-bar div after footer",
-          "Remove striped border-image from site-footer top edge",
-          "Remove top stripe-bar from homepage, keep the one below the footer",
-          "Merge pull request #48 from zoobavitel/copilot/fix-persist-trauma-checkboxes"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "move scroll-to-top into currentPage effect to cover all navigation paths",
-          "scroll to top on page nav; prompt before discarding unsaved character/NPC tabs",
-          "sync perform_update ownership guard; strengthen ownership test",
-          "address code review comments - strict null check, clearer guard comment",
-          "prevent GM from claiming ownership of player character sheets",
-          "restore patchNotes.js accidentally truncated by build in shallow clone"
         ]
       }
     ]

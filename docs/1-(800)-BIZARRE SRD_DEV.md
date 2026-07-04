@@ -1956,7 +1956,7 @@ Your stats fall into two categories:
 | D | 1d |
 | F | 0d (gated out) |
 
-For each A-grade, you gain two abilities (1 function each). You may choose from standard abilities or create unique ones. Standard Abilities are universal to all players regardless of playbook type.
+For each A-grade, you may have two standard abilities or one custom ability with 2 individual features and a standard ability. Standard Abilities are universal to all players regardless of playbook type.
 
 You may mix custom and foundation abilities freely, but you cannot mix Hamon and Spin playbooks unless granted by a relic, advancement, or GM permission.
 
