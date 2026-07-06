@@ -10331,29 +10331,38 @@ const CharacterSheetWrapper = ({
                               flexWrap: "wrap",
                             }}
                           >
-                            {Array.from({ length: standArmorMax }, (_, i) => (
-                              <div
-                                key={`st-${i}`}
-                                onClick={() =>
-                                  setStandArmorUsed(
-                                    i < standArmorUsed ? i : i + 1,
-                                  )
-                                }
-                                title={
-                                  i < standArmorUsed
-                                    ? "Used — click to restore"
-                                    : "Click to spend (Stand takes the hit)"
-                                }
-                                style={{
-                                  width: "20px",
-                                  height: "20px",
-                                  border: "1px solid #0369a1",
-                                  cursor: "pointer",
-                                  background:
-                                    i < standArmorUsed ? "#0284c7" : "#0c4a6e",
-                                }}
-                              />
-                            ))}
+                            {Array.from({ length: standArmorMax }, (_, i) => {
+                              const spent = i < standArmorUsed;
+                              return (
+                                <div
+                                  key={`st-${i}`}
+                                  onClick={() =>
+                                    setStandArmorUsed(spent ? i : i + 1)
+                                  }
+                                  title={
+                                    spent
+                                      ? "Used — click to restore"
+                                      : "Click to spend (Stand takes the hit)"
+                                  }
+                                  style={{
+                                    width: "20px",
+                                    height: "20px",
+                                    border: "1px solid #4b5563",
+                                    cursor: "pointer",
+                                    background: "#1f2937",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    fontSize: "13px",
+                                    lineHeight: 1,
+                                    color: spent ? "#e5e7eb" : "transparent",
+                                    userSelect: "none",
+                                  }}
+                                >
+                                  {spent ? "✓" : null}
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
