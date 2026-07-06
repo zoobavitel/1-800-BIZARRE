@@ -2830,6 +2830,20 @@ const CharacterSheetWrapper = ({
       Math.max(0, Number(character?.standCoinPointsGained) || 0),
     totalStandPoints,
   );
+  /** First-level redistribution only (all-D default, swap by lowering one stat to F). After that, +1 grade costs 10 XP via Level Up. */
+  const isStandCoinChargenEditable = useMemo(() => {
+    if (!canEditSheet || !hasStandPlaybook) return false;
+    if (Math.max(0, Number(character?.standCoinPointsGained) || 0) > 0) {
+      return false;
+    }
+    if (totalActionDots > 0) return false;
+    return true;
+  }, [
+    canEditSheet,
+    hasStandPlaybook,
+    character?.standCoinPointsGained,
+    totalActionDots,
+  ]);
   const aRankCount = Object.values(standStats).reduce(
     (n, idx) => n + (INDEX_TO_GRADE(idx) === "A" ? 1 : 0),
     0,
@@ -3013,10 +3027,12 @@ const CharacterSheetWrapper = ({
     (stat) => {
       setStandStats((p) => {
         if (p[stat] >= maxStandGradeIndex) return p;
+        const currentTotal = Object.values(p).reduce((s, v) => s + v, 0);
+        if (currentTotal >= standCoinIndexBudget) return p;
         return { ...p, [stat]: p[stat] + 1 };
       });
     },
-    [maxStandGradeIndex],
+    [maxStandGradeIndex, standCoinIndexBudget],
   );
 
   // FIX 3: Prevent all-F — at least one stat must stay D or higher
@@ -7361,35 +7377,6 @@ const CharacterSheetWrapper = ({
                         <HistoryBranchIcon />
                       </button>
                     )}
-                    {characterId && (
-                      <button
-                        type="button"
-                        onClick={handleUndoLatestAllocation}
-                        disabled={
-                          xpAllocationUndoBusy ||
-                          !xpAllocationRows.some((a) => !a.undone_at && a.can_undo)
-                        }
-                        title="Undo most recent XP allocation"
-                        style={{
-                          background: "#312e81",
-                          border: "1px solid #6366f1",
-                          borderRadius: 6,
-                          padding: "4px 8px",
-                          cursor: xpAllocationUndoBusy ? "wait" : "pointer",
-                          color: "#c7d2fe",
-                          fontSize: 14,
-                          lineHeight: 1,
-                          opacity:
-                            xpAllocationRows.some(
-                              (a) => !a.undone_at && a.can_undo,
-                            )
-                              ? 1
-                              : 0.45,
-                        }}
-                      >
-                        ↩
-                      </button>
-                    )}
                     <div
                       role="button"
                       tabIndex={0}
@@ -7433,6 +7420,39 @@ const CharacterSheetWrapper = ({
                       >
                         {pcLevel}
                       </div>
+                      {characterId && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleUndoLatestAllocation();
+                          }}
+                          disabled={
+                            xpAllocationUndoBusy ||
+                            !xpAllocationRows.some((a) => !a.undone_at && a.can_undo)
+                          }
+                          title="Undo most recent XP allocation"
+                          style={{
+                            background: "#312e81",
+                            border: "1px solid #6366f1",
+                            borderRadius: 6,
+                            padding: "2px 6px",
+                            marginTop: "2px",
+                            cursor: xpAllocationUndoBusy ? "wait" : "pointer",
+                            color: "#c7d2fe",
+                            fontSize: 12,
+                            lineHeight: 1,
+                            opacity:
+                              xpAllocationRows.some(
+                                (a) => !a.undone_at && a.can_undo,
+                              )
+                                ? 1
+                                : 0.45,
+                          }}
+                        >
+                          ↩
+                        </button>
+                      )}
                       <div
                         style={{
                           fontSize: "9px",
@@ -12070,6 +12090,7 @@ const CharacterSheetWrapper = ({
                         grades={standCoinGrades}
                         readouts={pcStandCoinReadouts}
                         onStep={bumpStandCoinGrade}
+                        readOnly={!isStandCoinChargenEditable}
                       />
 
                       <div
@@ -12080,9 +12101,17 @@ const CharacterSheetWrapper = ({
                           lineHeight: 1.45,
                         }}
                       >
+                        {isStandCoinChargenEditable
+                          ? "Chargen: every stat starts at D. Right-click a wedge to lower one stat to F, then raise another — point total stays at 6."
+                          : canAffordLevelUp
+                            ? "Stand coin is locked here. Spend 10 XP from any track in Level Up (+1 Stand Coin Grade) to advance a stat."
+                            : "Stand coin is locked after chargen. Mark 10 XP on a track, then use Level Up (+1 Stand Coin Grade)."}
+                        {" "}
                         {maxStandGradeIndex >= 5
-                          ? "S-rank is enabled for this character by the GM. Hover or focus a wedge to see grade rules."
-                          : "Player max is A unless the GM enables S-rank for this character. Hover or focus a wedge to see grade rules."}
+                          ? "S-rank is enabled for this character by the GM."
+                          : "Player max is A unless the GM enables S-rank for this character."}
+                        {" "}
+                        Hover or focus a wedge to see grade rules.
                       </div>
                     </div>
                     <div
