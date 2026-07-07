@@ -29,6 +29,8 @@ import {
   isImageUploadPayload,
   normalizeHarmObject,
   EMPTY_HARM_SHAPE,
+  resolveCharacterCampaignContext,
+  isUserCampaignGmForCharacter,
 } from "../features/character-sheet";
 import { subscribeCampaignEvents } from "../features/character-sheet/services/campaignEvents";
 import { useAuth } from "../features/auth";
@@ -1087,13 +1089,21 @@ export default function CharacterPage({
     return base;
   }, [activeCharTab]);
 
-  const campaignIdForRealtime = useMemo(() => {
-    const c = sheetCharacter?.campaign;
-    const id = typeof c === "object" ? c?.id : c;
-    if (id == null || id === "") return null;
-    const n = typeof id === "number" ? id : parseInt(String(id), 10);
-    return Number.isFinite(n) ? n : null;
-  }, [sheetCharacter?.campaign]);
+  const sheetCampaignContext = useMemo(
+    () => resolveCharacterCampaignContext(sheetCharacter, campaigns),
+    [sheetCharacter, campaigns],
+  );
+
+  const campaignIdForRealtime = sheetCampaignContext.campaignId;
+
+  const sheetCharacterIsGM = useMemo(
+    () =>
+      isUserCampaignGmForCharacter(user, {
+        campaignRecord: sheetCampaignContext.campaignRecord,
+        campaignId: sheetCampaignContext.campaignId,
+      }),
+    [user, sheetCampaignContext],
+  );
 
   useEffect(() => {
     if (mode !== MODES.CHARACTER || !campaignIdForRealtime) return undefined;
@@ -1701,10 +1711,7 @@ export default function CharacterPage({
             onRetryHeritages={loadReferenceData}
             allCharacters={characters}
             campaigns={campaigns}
-            isGM={
-              campaigns?.find((c) => c.id === sheetCharacter?.campaign)?.gm
-                ?.id === user?.id
-            }
+            isGM={sheetCharacterIsGM}
             onSave={handleSaveCharacter}
             onCreateNew={handleCreateNewCharacterTab}
             onSwitchCharacter={handleSwitchCharacter}

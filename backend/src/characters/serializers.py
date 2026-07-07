@@ -964,6 +964,8 @@ class ExperienceTrackerSerializer(serializers.ModelSerializer):
     awarded_by_username = serializers.CharField(
         source="awarded_by.username", read_only=True, default=None
     )
+    can_undo_from_sheet = serializers.SerializerMethodField()
+    undo_block_reason = serializers.SerializerMethodField()
 
     class Meta:
         model = ExperienceTracker
@@ -982,17 +984,40 @@ class ExperienceTrackerSerializer(serializers.ModelSerializer):
             "awarded_by",
             "awarded_by_username",
             "clock_key",
+            "can_undo_from_sheet",
+            "undo_block_reason",
         ]
         read_only_fields = [
             "session_date",
             "session",
             "session_name",
+            "trigger_display",
             "award_source",
             "award_source_display",
             "awarded_by",
             "awarded_by_username",
             "clock_key",
+            "can_undo_from_sheet",
+            "undo_block_reason",
         ]
+
+    def get_can_undo_from_sheet(self, obj):
+        from .services.character_history_undo import experience_tracker_undoable_from_sheet
+
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        allowed, _reason = experience_tracker_undoable_from_sheet(obj, request.user)
+        return allowed
+
+    def get_undo_block_reason(self, obj):
+        from .services.character_history_undo import experience_tracker_undoable_from_sheet
+
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return None
+        allowed, reason = experience_tracker_undoable_from_sheet(obj, request.user)
+        return None if allowed else reason
 
 
 class GroupActionSerializer(serializers.ModelSerializer):
@@ -1266,6 +1291,8 @@ class CharacterHistorySerializer(serializers.ModelSerializer):
         source="character.true_name", read_only=True
     )
     editor_username = serializers.SerializerMethodField()
+    can_undo = serializers.SerializerMethodField()
+    undo_block_reason = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterHistory
@@ -1277,10 +1304,31 @@ class CharacterHistorySerializer(serializers.ModelSerializer):
             "editor_username",
             "timestamp",
             "changed_fields",
+            "reverted_at",
+            "can_undo",
+            "undo_block_reason",
         ]
 
     def get_editor_username(self, obj):
         return obj.editor.username if obj.editor_id else None
+
+    def get_can_undo(self, obj):
+        from .services.character_history_undo import can_undo_character_history
+
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        allowed, _reason = can_undo_character_history(obj, request.user)
+        return allowed
+
+    def get_undo_block_reason(self, obj):
+        from .services.character_history_undo import can_undo_character_history
+
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return None
+        allowed, reason = can_undo_character_history(obj, request.user)
+        return None if allowed else reason
 
 
 class CrewHistorySerializer(serializers.ModelSerializer):
@@ -2166,6 +2214,7 @@ class CharacterXPAllocationSerializer(serializers.ModelSerializer):
         source="get_xp_track_display", read_only=True
     )
     can_undo = serializers.SerializerMethodField()
+    can_redo = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterXPAllocation
@@ -2181,6 +2230,7 @@ class CharacterXPAllocationSerializer(serializers.ModelSerializer):
             "summary",
             "undone_at",
             "can_undo",
+            "can_redo",
         ]
         read_only_fields = fields
 
@@ -2195,6 +2245,14 @@ class CharacterXPAllocationSerializer(serializers.ModelSerializer):
         latest_id = self.context.get("latest_undoable_allocation_id")
         if latest_id is None:
             return True
+        return obj.id == latest_id
+
+    def get_can_redo(self, obj):
+        if not obj.undone_at:
+            return False
+        latest_id = self.context.get("latest_redoable_allocation_id")
+        if latest_id is None:
+            return False
         return obj.id == latest_id
 
 

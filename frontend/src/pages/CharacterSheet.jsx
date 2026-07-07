@@ -47,6 +47,9 @@ import {
   normalizeCharacterInventory,
   PLAYBOOK_SHEET_OPTIONS,
   transformBackendToFrontend,
+  resolveCharacterCampaignContext,
+  isUserCampaignGmForCharacter,
+  isGmViewingPlayerCharacterSheet,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -1212,14 +1215,50 @@ const CharacterSheetWrapper = ({
       : "Created by unknown";
   const canEditSheet = !character?.id || isGM || character?.user_id === user?.id;
   const canCreateManualHistoryRecord = isGM || character?.user_id === user?.id;
-  const [activeMode, setActiveMode] = useState("CHARACTER MODE");
-  const campaignIdFromCharacter = (() => {
-    const c = character?.campaign;
-    return (typeof c === "object" ? c?.id : c) ?? "";
-  })();
-  const charCampaign = (campaigns || []).find(
-    (c) => String(c?.id ?? "") === String(campaignIdFromCharacter),
+  const characterCampaignContext = useMemo(
+    () => resolveCharacterCampaignContext(character, campaigns),
+    [character, campaigns],
   );
+  const campaignIdFromCharacter = characterCampaignContext.campaignId;
+  const charCampaignFromContext = characterCampaignContext.campaignRecord;
+  const [campaignLookup, setCampaignLookup] = useState(null);
+  useEffect(() => {
+    if (charCampaignFromContext || campaignIdFromCharacter == null) {
+      setCampaignLookup(null);
+      return undefined;
+    }
+    let cancelled = false;
+    campaignAPI
+      .getCampaign(campaignIdFromCharacter)
+      .then((c) => {
+        if (!cancelled) setCampaignLookup(c);
+      })
+      .catch(() => {
+        if (!cancelled) setCampaignLookup(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [charCampaignFromContext, campaignIdFromCharacter]);
+  const charCampaign = charCampaignFromContext || campaignLookup;
+  const isCampaignGm = useMemo(
+    () =>
+      isUserCampaignGmForCharacter(user, {
+        isGMProp: isGM,
+        campaignRecord: charCampaign,
+        campaignId: campaignIdFromCharacter,
+      }),
+    [user, isGM, charCampaign, campaignIdFromCharacter],
+  );
+  const isGmViewingPc = useMemo(
+    () =>
+      isGmViewingPlayerCharacterSheet(user, character, {
+        isCampaignGm,
+        campaignId: campaignIdFromCharacter,
+      }),
+    [user, character, isCampaignGm, campaignIdFromCharacter],
+  );
+  const [activeMode, setActiveMode] = useState("CHARACTER MODE");
   const activeSessionId =
     charCampaign?.active_session ??
     (typeof charCampaign?.active_session === "object"
@@ -1983,6 +2022,18 @@ const CharacterSheetWrapper = ({
   const [xpAllocationRows, setXpAllocationRows] = useState([]);
   const [xpAllocationUndoBusy, setXpAllocationUndoBusy] = useState(false);
   const [xpAllocationActionError, setXpAllocationActionError] = useState(null);
+  const [gmUndoStatus, setGmUndoStatus] = useState({
+    available: false,
+    summary: null,
+  });
+  const [gmUndoBusy, setGmUndoBusy] = useState(false);
+  const [gmUndoError, setGmUndoError] = useState(null);
+  const [gmRedoStatus, setGmRedoStatus] = useState({
+    available: false,
+    summary: null,
+  });
+  const [gmRedoBusy, setGmRedoBusy] = useState(false);
+  const [gmRedoError, setGmRedoError] = useState(null);
 
   // FIX 7: Minor advance action selector
   const [minorAdvanceAction, setMinorAdvanceAction] = useState("HUNT");
@@ -3136,6 +3187,40 @@ const CharacterSheetWrapper = ({
     }
   }, [characterId]);
 
+  const refreshGmUndoStatus = useCallback(async () => {
+    if (!characterId || !isGmViewingPc) {
+      setGmUndoStatus({ available: false, summary: null });
+      return;
+    }
+    try {
+      const res = await characterAPI.getGmUndoStatus(characterId);
+      setGmUndoStatus(
+        res?.available
+          ? { available: true, summary: res.summary || null }
+          : { available: false, summary: null },
+      );
+    } catch {
+      setGmUndoStatus({ available: false, summary: null });
+    }
+  }, [characterId, isGmViewingPc]);
+
+  const refreshGmRedoStatus = useCallback(async () => {
+    if (!characterId || !isGmViewingPc) {
+      setGmRedoStatus({ available: false, summary: null });
+      return;
+    }
+    try {
+      const res = await characterAPI.getGmRedoStatus(characterId);
+      setGmRedoStatus(
+        res?.available
+          ? { available: true, summary: res.summary || null }
+          : { available: false, summary: null },
+      );
+    } catch {
+      setGmRedoStatus({ available: false, summary: null });
+    }
+  }, [characterId, isGmViewingPc]);
+
   const handleUndoLatestAllocation = useCallback(
     async (e) => {
       e?.stopPropagation?.();
@@ -3432,6 +3517,8 @@ const CharacterSheetWrapper = ({
   const [historySessionId, setHistorySessionId] = useState(null);
   const [historyCharacterFilter, setHistoryCharacterFilter] = useState("all");
   const [historyRefreshTick, setHistoryRefreshTick] = useState(0);
+  const [historyUndoBusy, setHistoryUndoBusy] = useState(null);
+  const [historyUndoError, setHistoryUndoError] = useState(null);
   const [showHistoryManualModal, setShowHistoryManualModal] = useState(false);
   const [historyManualSaving, setHistoryManualSaving] = useState(false);
   /** Manual history ACTION row: same shape as roll modal `rollAbilityBoost` (+1d / +1 effect toggles). */
@@ -4134,6 +4221,161 @@ const CharacterSheetWrapper = ({
     [refetchXpReqTracker],
   );
 
+  const handleHistoryRowUndo = useCallback(
+    async (row) => {
+      if (!row || historyUndoBusy) return;
+      const busyKey = row.key;
+      setHistoryUndoBusy(busyKey);
+      setHistoryUndoError(null);
+      try {
+        if (row.type === "sheet_edit" && row.entryId) {
+          const res = await characterHistoryAPI.undo(row.entryId);
+          if (res?.character) applyBackendCharacter(res.character);
+        } else if (row.type === "xp_tracker" && row.entryId) {
+          const amount = Number(row.xpGained) || 0;
+          const clockKey = (row.clockKey || "").trim();
+          await experienceTrackerAPI.remove(row.entryId);
+          if (amount > 0 && clockKey) {
+            setXp((prev) => {
+              const cur = Number(prev?.[clockKey]) || 0;
+              return { ...prev, [clockKey]: Math.max(0, cur - amount) };
+            });
+          }
+          await refetchXpReqTracker();
+        } else {
+          return;
+        }
+        setHistoryRefreshTick((x) => x + 1);
+        await refreshXpAllocations();
+      } catch (err) {
+        setHistoryUndoError(err?.message || "Failed to undo change");
+      } finally {
+        setHistoryUndoBusy(null);
+      }
+    },
+    [
+      historyUndoBusy,
+      applyBackendCharacter,
+      refetchXpReqTracker,
+      refreshXpAllocations,
+    ],
+  );
+
+  const handleUndoLatestGmChange = useCallback(
+    async (e) => {
+      e?.stopPropagation?.();
+      if (!characterId || gmUndoBusy || !gmUndoStatus?.available) return;
+      setGmUndoBusy(true);
+      setGmUndoError(null);
+      try {
+        const res = await characterAPI.undoLatestGmChange(characterId);
+        if (res?.character) applyBackendCharacter(res.character);
+        if (Array.isArray(res?.allocations)) {
+          setXpAllocationRows(res.allocations);
+        } else {
+          await refreshXpAllocations();
+        }
+        if (res?.status) {
+          setGmUndoStatus(
+            res.status.available
+              ? { available: true, summary: res.status.summary || null }
+              : { available: false, summary: null },
+          );
+        } else {
+          await refreshGmUndoStatus();
+        }
+        await refreshGmRedoStatus();
+        setHistoryRefreshTick((x) => x + 1);
+        await refetchXpReqTracker();
+      } catch (err) {
+        setGmUndoError(err?.message || "Failed to undo GM change");
+      } finally {
+        setGmUndoBusy(false);
+      }
+    },
+    [
+      characterId,
+      gmUndoBusy,
+      gmUndoStatus?.available,
+      applyBackendCharacter,
+      refreshXpAllocations,
+      refreshGmUndoStatus,
+      refetchXpReqTracker,
+    ],
+  );
+
+  const handleRedoLatestAllocation = useCallback(
+    async (e) => {
+      e?.stopPropagation?.();
+      if (!characterId || xpAllocationUndoBusy) return;
+      setXpAllocationUndoBusy(true);
+      setXpAllocationActionError(null);
+      try {
+        const res = await characterAPI.redoLatestAllocation(characterId);
+        if (res?.character) applyBackendCharacter(res.character);
+        if (Array.isArray(res?.allocations)) {
+          setXpAllocationRows(res.allocations);
+        } else {
+          await refreshXpAllocations();
+        }
+      } catch (err) {
+        setXpAllocationActionError(err?.message || "Failed to redo allocation");
+      } finally {
+        setXpAllocationUndoBusy(false);
+      }
+    },
+    [
+      characterId,
+      xpAllocationUndoBusy,
+      applyBackendCharacter,
+      refreshXpAllocations,
+    ],
+  );
+
+  const handleRedoLatestGmChange = useCallback(
+    async (e) => {
+      e?.stopPropagation?.();
+      if (!characterId || gmRedoBusy || !gmRedoStatus?.available) return;
+      setGmRedoBusy(true);
+      setGmRedoError(null);
+      try {
+        const res = await characterAPI.redoLatestGmChange(characterId);
+        if (res?.character) applyBackendCharacter(res.character);
+        if (Array.isArray(res?.allocations)) {
+          setXpAllocationRows(res.allocations);
+        } else {
+          await refreshXpAllocations();
+        }
+        if (res?.status) {
+          setGmRedoStatus(
+            res.status.available
+              ? { available: true, summary: res.status.summary || null }
+              : { available: false, summary: null },
+          );
+        } else {
+          await refreshGmRedoStatus();
+        }
+        await refreshGmUndoStatus();
+        setHistoryRefreshTick((x) => x + 1);
+        await refetchXpReqTracker();
+      } catch (err) {
+        setGmRedoError(err?.message || "Failed to redo GM change");
+      } finally {
+        setGmRedoBusy(false);
+      }
+    },
+    [
+      characterId,
+      gmRedoBusy,
+      gmRedoStatus?.available,
+      applyBackendCharacter,
+      refreshXpAllocations,
+      refreshGmRedoStatus,
+      refreshGmUndoStatus,
+      refetchXpReqTracker,
+    ],
+  );
+
   useEffect(() => {
     if (!characterId) {
       setXpReqTracker([]);
@@ -4185,6 +4427,11 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     refreshXpAllocations();
   }, [characterId, refreshXpAllocations]);
+
+  useEffect(() => {
+    refreshGmUndoStatus();
+    refreshGmRedoStatus();
+  }, [refreshGmUndoStatus, refreshGmRedoStatus, sessionDataPollTick, historyRefreshTick]);
 
   useEffect(() => {
     if (!showXpHistoryModal || !characterId) return;
@@ -4256,16 +4503,21 @@ const CharacterSheetWrapper = ({
             }));
             rows.push({
               key: `sheet-${entry.id}`,
+              entryId: entry.id,
               timestamp: entry.timestamp,
               actor: entry.editor_username || "system",
               type: "sheet_edit",
               sessionTag: "Out of session",
               details,
+              revertedAt: entry.reverted_at || null,
+              canUndo: Boolean(entry.can_undo),
+              undoBlockReason: entry.undo_block_reason || null,
             });
           });
           asArray(etRes).forEach((e) => {
             rows.push({
               key: `et-all-${e.id}`,
+              entryId: e.id,
               timestamp: e.session_date,
               actor: "xp (tracker)",
               characterId: e.character ?? characterId,
@@ -4274,6 +4526,10 @@ const CharacterSheetWrapper = ({
               modifiers: e.session
                 ? [`Session #${e.session}`]
                 : ["No session link"],
+              xpGained: e.xp_gained,
+              clockKey: e.clock_key,
+              canUndo: Boolean(e.can_undo_from_sheet),
+              undoBlockReason: e.undo_block_reason || null,
             });
           });
           asArray(xhRes).forEach((x) => {
@@ -7622,37 +7878,189 @@ const CharacterSheetWrapper = ({
                         {pcLevel}
                       </div>
                       {characterId && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleUndoLatestAllocation();
-                          }}
-                          disabled={
-                            xpAllocationUndoBusy ||
-                            !xpAllocationRows.some((a) => !a.undone_at && a.can_undo)
-                          }
-                          title="Undo most recent XP allocation"
+                        <div
                           style={{
-                            background: "#312e81",
-                            border: "1px solid #6366f1",
-                            borderRadius: 6,
-                            padding: "2px 6px",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: 3,
                             marginTop: "2px",
-                            cursor: xpAllocationUndoBusy ? "wait" : "pointer",
-                            color: "#c7d2fe",
-                            fontSize: 12,
-                            lineHeight: 1,
-                            opacity:
-                              xpAllocationRows.some(
-                                (a) => !a.undone_at && a.can_undo,
-                              )
-                                ? 1
-                                : 0.45,
                           }}
                         >
-                          ↩
-                        </button>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 4,
+                              justifyContent: "center",
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUndoLatestAllocation();
+                              }}
+                              disabled={
+                                xpAllocationUndoBusy ||
+                                !xpAllocationRows.some(
+                                  (a) => !a.undone_at && a.can_undo,
+                                )
+                              }
+                              title="Undo your most recent XP spend (stand coin / dots). Refunds only that spend; does not remove GM session XP."
+                              style={{
+                                background: "#312e81",
+                                border: "1px solid #6366f1",
+                                borderRadius: 6,
+                                padding: "2px 6px",
+                                cursor: xpAllocationUndoBusy
+                                  ? "wait"
+                                  : "pointer",
+                                color: "#c7d2fe",
+                                fontSize: 12,
+                                lineHeight: 1,
+                                opacity: xpAllocationRows.some(
+                                  (a) => !a.undone_at && a.can_undo,
+                                )
+                                  ? 1
+                                  : 0.45,
+                              }}
+                            >
+                              ↩
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRedoLatestAllocation();
+                              }}
+                              disabled={
+                                xpAllocationUndoBusy ||
+                                !xpAllocationRows.some(
+                                  (a) => a.undone_at && a.can_redo,
+                                )
+                              }
+                              title="Redo your most recently undone XP spend"
+                              style={{
+                                background: "#312e81",
+                                border: "1px solid #6366f1",
+                                borderRadius: 6,
+                                padding: "2px 6px",
+                                cursor: xpAllocationUndoBusy
+                                  ? "wait"
+                                  : "pointer",
+                                color: "#c7d2fe",
+                                fontSize: 12,
+                                lineHeight: 1,
+                                opacity: xpAllocationRows.some(
+                                  (a) => a.undone_at && a.can_redo,
+                                )
+                                  ? 1
+                                  : 0.45,
+                              }}
+                            >
+                              ↪
+                            </button>
+                          </div>
+                          {isGmViewingPc && (
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                gap: 1,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: 8,
+                                  color: "#fdba74",
+                                  fontWeight: 700,
+                                  letterSpacing: "0.04em",
+                                  lineHeight: 1,
+                                }}
+                              >
+                                GM
+                              </span>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 4,
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUndoLatestGmChange(e);
+                                  }}
+                                  disabled={
+                                    gmUndoBusy || !gmUndoStatus?.available
+                                  }
+                                  title={
+                                    gmUndoStatus?.available
+                                      ? `Undo your last GM edit on this PC${gmUndoStatus.summary ? `: ${gmUndoStatus.summary}` : ""}`
+                                      : "No GM edits to undo on this character"
+                                  }
+                                  style={{
+                                    background: "#431407",
+                                    border: "1px solid #ea580c",
+                                    borderRadius: 6,
+                                    padding: "2px 6px",
+                                    cursor: gmUndoBusy ? "wait" : "pointer",
+                                    color: "#fed7aa",
+                                    fontSize: 12,
+                                    lineHeight: 1,
+                                    opacity: gmUndoStatus?.available ? 1 : 0.45,
+                                  }}
+                                >
+                                  {gmUndoBusy ? "…" : "↩"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRedoLatestGmChange(e);
+                                  }}
+                                  disabled={
+                                    gmRedoBusy || !gmRedoStatus?.available
+                                  }
+                                  title={
+                                    gmRedoStatus?.available
+                                      ? `Redo your last undone GM edit${gmRedoStatus.summary ? `: ${gmRedoStatus.summary}` : ""}`
+                                      : "No GM edits to redo"
+                                  }
+                                  style={{
+                                    background: "#431407",
+                                    border: "1px solid #ea580c",
+                                    borderRadius: 6,
+                                    padding: "2px 6px",
+                                    cursor: gmRedoBusy ? "wait" : "pointer",
+                                    color: "#fed7aa",
+                                    fontSize: 12,
+                                    lineHeight: 1,
+                                    opacity: gmRedoStatus?.available ? 1 : 0.45,
+                                  }}
+                                >
+                                  {gmRedoBusy ? "…" : "↪"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {isGmViewingPc && (gmUndoError || gmRedoError) && (
+                        <div
+                          style={{
+                            fontSize: 9,
+                            color: "#fca5a5",
+                            marginTop: 2,
+                            maxWidth: 120,
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          {gmUndoError || gmRedoError}
+                        </div>
                       )}
                       <div
                         style={{
@@ -9309,19 +9717,49 @@ const CharacterSheetWrapper = ({
                                 : "No history entries."}
                             </div>
                           ) : (
-                            historyRows.slice(0, 200).map((row) => (
+                            <>
+                              {historyUndoError && (
+                                <div
+                                  style={{
+                                    color: "#fca5a5",
+                                    fontSize: 10,
+                                    marginBottom: 8,
+                                  }}
+                                >
+                                  {historyUndoError}
+                                </div>
+                              )}
+                              {historyRows.slice(0, 200).map((row) => {
+                                const undoBusy = historyUndoBusy === row.key;
+                                const showUndo =
+                                  historyMode === "sheet" &&
+                                  (row.type === "sheet_edit" ||
+                                    row.type === "xp_tracker") &&
+                                  !row.revertedAt;
+                                return (
                               <div
                                 key={row.key}
                                 style={{
                                   padding: "6px 0",
                                   borderBottom: "1px solid #1f2937",
+                                  opacity: row.revertedAt ? 0.55 : 1,
                                 }}
                               >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    gap: 8,
+                                    alignItems: "flex-start",
+                                  }}
+                                >
+                                  <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ color: "#9ca3af", fontSize: 10 }}>
                                   {row.timestamp
                                     ? new Date(row.timestamp).toLocaleString()
                                     : "No timestamp"}{" "}
                                   · {row.actor || "unknown"}
+                                  {row.revertedAt ? " · undone" : ""}
                                 </div>
                                 {row.text ? (
                                   <div style={{ color: "#d1d5db" }}>{row.text}</div>
@@ -9347,8 +9785,45 @@ const CharacterSheetWrapper = ({
                                     {row.modifiers.join(" · ")}
                                   </div>
                                 ) : null}
+                                  </div>
+                                  {showUndo && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleHistoryRowUndo(row)}
+                                      disabled={
+                                        undoBusy || row.canUndo === false
+                                      }
+                                      title={
+                                        row.canUndo === false
+                                          ? row.undoBlockReason ||
+                                            "Cannot undo this entry"
+                                          : "Undo this change"
+                                      }
+                                      style={{
+                                        flexShrink: 0,
+                                        background: "#312e81",
+                                        border: "1px solid #6366f1",
+                                        borderRadius: 6,
+                                        padding: "2px 6px",
+                                        cursor:
+                                          undoBusy || row.canUndo === false
+                                            ? "not-allowed"
+                                            : "pointer",
+                                        color: "#c7d2fe",
+                                        fontSize: 12,
+                                        lineHeight: 1,
+                                        opacity:
+                                          row.canUndo === false ? 0.45 : 1,
+                                      }}
+                                    >
+                                      {undoBusy ? "…" : "↩"}
+                                    </button>
+                                  )}
+                                </div>
                               </div>
-                            ))
+                                );
+                              })}
+                            </>
                           )}
                         </>
                     </div>
@@ -11493,7 +11968,8 @@ const CharacterSheetWrapper = ({
                                         </div>
                                       )}
                                     </div>
-                                    {canEditSheet && (
+                                    {canEditSheet &&
+                                      entry.can_undo_from_sheet !== false && (
                                       <button
                                         type="button"
                                         onClick={() =>
@@ -11501,7 +11977,10 @@ const CharacterSheetWrapper = ({
                                         }
                                         disabled={busy}
                                         aria-label="Delete XP entry"
-                                        title="Delete this XP record"
+                                        title={
+                                          entry.undo_block_reason ||
+                                          "Delete this XP record"
+                                        }
                                         style={{
                                           flexShrink: 0,
                                           width: 22,
@@ -16722,7 +17201,7 @@ const CharacterSheetWrapper = ({
                           >
                             {xpAllocationUndoBusy
                               ? "Undoing…"
-                              : "↩ Undo most recent XP allocation"}
+                              : "↩ Undo your most recent XP spend"}
                           </button>
                         )}
                         <ul
