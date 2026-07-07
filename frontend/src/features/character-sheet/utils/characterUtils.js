@@ -292,3 +292,96 @@ export function rosterHasLinkedCrewForCrewSheetFactionUi(charactersOrRoster) {
     return Number.isFinite(n) && n > 0;
   });
 }
+
+/** Owner user PK from sheet character (API `user` or transformed `user_id`). */
+export function resolveCharacterOwnerUserId(character) {
+  if (character == null) return null;
+  const ownerId =
+    character.user_id ??
+    (typeof character.user === "object"
+      ? character.user?.id
+      : character.user);
+  if (ownerId == null || ownerId === "") return null;
+  const n = Number(ownerId);
+  return Number.isFinite(n) ? n : null;
+}
+
+export function resolveCharacterCampaignIdFromField(character) {
+  if (character == null) return null;
+  const raw = character.campaign;
+  const id = typeof raw === "object" && raw !== null ? raw.id : raw;
+  if (id == null || id === "") return null;
+  const n = typeof id === "number" ? id : parseInt(String(id), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Campaign whose roster lists this character (no active session required). */
+export function findCampaignHostingCharacter(characterId, campaigns = []) {
+  if (characterId == null) return null;
+  const cid = Number(characterId);
+  if (!Number.isFinite(cid)) return null;
+  return (
+    (campaigns || []).find((camp) =>
+      (camp?.campaign_characters || []).some(
+        (ch) => Number(ch?.id) === cid,
+      ),
+    ) ?? null
+  );
+}
+
+export function resolveCharacterCampaignContext(
+  character,
+  campaigns = [],
+  extraCampaignId = null,
+) {
+  const fromField = resolveCharacterCampaignIdFromField(character);
+  const hosting = findCampaignHostingCharacter(character?.id, campaigns);
+  let campaignId = fromField ?? hosting?.id ?? null;
+  if (
+    campaignId == null &&
+    extraCampaignId != null &&
+    extraCampaignId !== ""
+  ) {
+    const n = Number(extraCampaignId);
+    if (Number.isFinite(n)) campaignId = n;
+  }
+  const campaignRecord =
+    (campaigns || []).find((c) => Number(c?.id) === Number(campaignId)) ||
+    hosting ||
+    null;
+  return { campaignId, campaignRecord, hostingCampaign: hosting };
+}
+
+export function isUserCampaignGmForCharacter(
+  user,
+  { isGMProp = false, campaignRecord, campaignId } = {},
+) {
+  if (user?.id == null) return false;
+  if (campaignId == null) return false;
+  if (Boolean(isGMProp)) return true;
+  if (user.is_staff) return true;
+  const gmId = campaignRecord?.gm?.id ?? campaignRecord?.gm;
+  return gmId != null && Number(gmId) === Number(user.id);
+}
+
+export function isGmViewingPlayerCharacterSheet(
+  user,
+  character,
+  { isCampaignGm, campaignId } = {},
+) {
+  if (!isCampaignGm || character?.id == null || user?.id == null) return false;
+  if (campaignId == null) return false;
+  const ownerId = resolveCharacterOwnerUserId(character);
+  if (ownerId == null) return true;
+  return ownerId !== Number(user.id);
+}
+
+export function isUserGmOfCharacterCampaign(user, character, campaigns = []) {
+  if (user?.id == null || character?.id == null) return false;
+  const { campaignId, campaignRecord } = resolveCharacterCampaignContext(
+    character,
+    campaigns,
+  );
+  if (campaignId == null) return false;
+  return isUserCampaignGmForCharacter(user, { campaignRecord, campaignId });
+}

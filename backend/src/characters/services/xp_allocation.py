@@ -156,8 +156,9 @@ def _snapshot(character):
     }
 
 
-def _restore_snapshot(character, snap):
-    character.xp_clocks = dict(snap.get("xp_clocks") or {})
+def _restore_snapshot(character, snap, *, restore_xp_clocks=True):
+    if restore_xp_clocks:
+        character.xp_clocks = dict(snap.get("xp_clocks") or {})
     for field, grade in (snap.get("coin_stats") or {}).items():
         if field in STAND_STAT_FIELDS:
             _set_stand_grade(character, field, grade)
@@ -195,6 +196,21 @@ def _refund_xp(character, track, cost):
             f"Cannot refund {cost} XP to {track}: would exceed cap ({cap})."
         )
     clocks[track] = new_val
+    character.xp_clocks = clocks
+
+
+def _refund_xp_for_undo(character, track, cost):
+    """Refund a spend on undo without clobbering GM grants on other tracks.
+
+    Adds ``cost`` back to the spent track only (clamped at track cap). Does not
+    restore the full ``payload_before`` clocks snapshot, so XP granted by the GM
+    after the spend is preserved.
+    """
+    track = _normalize_track(track)
+    cap = TRACK_CAPS[track]
+    clocks = dict(character.xp_clocks or {})
+    current = int(clocks.get(track, 0) or 0)
+    clocks[track] = min(cap, current + int(cost or 0))
     character.xp_clocks = clocks
 
 
@@ -424,10 +440,42 @@ def undo_allocation(character, allocation, *, user=None):
             "Undo the most recent allocation first (newest spend first)."
         )
 
-    _restore_snapshot(character, allocation.payload_before)
+    _restore_snapshot(character, allocation.payload_before, restore_xp_clocks=False)
+    _refund_xp_for_undo(character, allocation.xp_track, allocation.xp_cost)
     character.save()
     allocation.undone_at = timezone.now()
     allocation.undone_by = user
+    allocation.save(update_fields=["undone_at", "undone_by"])
+    return allocation
+
+
+@transaction.atomic
+def redo_allocation(character, allocation, *, user=None):
+    if not allocation.undone_at:
+        raise XPAllocationError("This allocation is active (not undone).")
+    if allocation.character_id != character.id:
+        raise XPAllocationError("Allocation does not belong to this character.")
+
+    latest_undone = (
+        CharacterXPAllocation.objects.filter(
+            character=character, undone_at__isnull=False
+        )
+        .order_by("-undone_at", "-id")
+        .first()
+    )
+    if not latest_undone or latest_undone.id != allocation.id:
+        raise XPAllocationError(
+            "Redo the most recently undone allocation first."
+        )
+
+    after = allocation.payload_after or {}
+    if not after:
+        raise XPAllocationError("Cannot redo: missing post-spend snapshot.")
+
+    _restore_snapshot(character, after)
+    character.save()
+    allocation.undone_at = None
+    allocation.undone_by = None
     allocation.save(update_fields=["undone_at", "undone_by"])
     return allocation
 

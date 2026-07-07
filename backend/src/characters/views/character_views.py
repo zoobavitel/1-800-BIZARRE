@@ -50,7 +50,15 @@ from ..services.xp_allocation import (
     apply_level_up,
     apply_minor_advance,
     list_allocations,
+    redo_allocation,
     undo_allocation,
+)
+from ..services.character_history_undo import (
+    CharacterHistoryUndoError,
+    gm_redo_status,
+    gm_undo_status,
+    redo_latest_gm_change,
+    undo_latest_gm_change,
 )
 
 
@@ -91,12 +99,24 @@ def _user_may_edit_character(user, character):
 
 
 def _allocation_list_response(character):
-    qs = list_allocations(character)
-    latest = qs.first()
+    qs = list_allocations(character, include_undone=True)
+    latest = list_allocations(character).first()
+    latest_undone = (
+        CharacterXPAllocation.objects.filter(
+            character=character, undone_at__isnull=False
+        )
+        .order_by("-undone_at", "-id")
+        .first()
+    )
     serializer = CharacterXPAllocationSerializer(
         qs,
         many=True,
-        context={"latest_undoable_allocation_id": latest.id if latest else None},
+        context={
+            "latest_undoable_allocation_id": latest.id if latest else None,
+            "latest_redoable_allocation_id": (
+                latest_undone.id if latest_undone else None
+            ),
+        },
     )
     return serializer.data
 
@@ -1653,15 +1673,25 @@ class CharacterViewSet(viewsets.ModelViewSet):
         character = self.get_object()
         include_undone = request.query_params.get("include_undone") == "true"
         qs = list_allocations(character, include_undone=include_undone)
-        latest = (
-            list_allocations(character).first()
-            if not include_undone
+        latest = list_allocations(character).first()
+        latest_undone = (
+            CharacterXPAllocation.objects.filter(
+                character=character, undone_at__isnull=False
+            )
+            .order_by("-undone_at", "-id")
+            .first()
+            if include_undone
             else None
         )
         serializer = CharacterXPAllocationSerializer(
             qs,
             many=True,
-            context={"latest_undoable_allocation_id": latest.id if latest else None},
+            context={
+                "latest_undoable_allocation_id": latest.id if latest else None,
+                "latest_redoable_allocation_id": (
+                    latest_undone.id if latest_undone else None
+                ),
+            },
         )
         return Response(serializer.data)
 
@@ -1672,14 +1702,18 @@ class CharacterViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You cannot advance this character.")
 
         try:
-            allocation = apply_level_up(
-                character,
-                xp_track=request.data.get("xp_track"),
-                choice=request.data.get("choice"),
-                stand_stat=request.data.get("stand_stat"),
-                actions=request.data.get("actions"),
-                reward=request.data.get("reward"),
-            )
+            token = bind_character_history_editor(request.user)
+            try:
+                allocation = apply_level_up(
+                    character,
+                    xp_track=request.data.get("xp_track"),
+                    choice=request.data.get("choice"),
+                    stand_stat=request.data.get("stand_stat"),
+                    actions=request.data.get("actions"),
+                    reward=request.data.get("reward"),
+                )
+            finally:
+                reset_character_history_editor(token)
         except XPAllocationError as exc:
             return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1705,11 +1739,15 @@ class CharacterViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You cannot advance this character.")
 
         try:
-            allocation = apply_minor_advance(
-                character,
-                xp_track=request.data.get("xp_track"),
-                action=request.data.get("action"),
-            )
+            token = bind_character_history_editor(request.user)
+            try:
+                allocation = apply_minor_advance(
+                    character,
+                    xp_track=request.data.get("xp_track"),
+                    action=request.data.get("action"),
+                )
+            finally:
+                reset_character_history_editor(token)
         except XPAllocationError as exc:
             return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1753,6 +1791,89 @@ class CharacterViewSet(viewsets.ModelViewSet):
             {
                 "success": True,
                 "undone_allocation_id": allocation.id,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+            }
+        )
+
+    @action(detail=True, methods=["get"], url_path="gm-undo-status")
+    def gm_undo_status_action(self, request, pk=None):
+        """Whether this GM can undo their most recent edit on a player's PC."""
+        character = self.get_object()
+        status_payload = gm_undo_status(character, request.user)
+        return Response(status_payload)
+
+    @action(detail=True, methods=["post"], url_path="undo-latest-gm-change")
+    def undo_latest_gm_change_action(self, request, pk=None):
+        """Revert the campaign GM's most recent change to this player's character."""
+        character = self.get_object()
+        try:
+            result = undo_latest_gm_change(character, gm_user=request.user)
+        except CharacterHistoryUndoError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+                **result,
+            }
+        )
+
+    @action(detail=True, methods=["get"], url_path="gm-redo-status")
+    def gm_redo_status_action(self, request, pk=None):
+        character = self.get_object()
+        return Response(gm_redo_status(character, request.user))
+
+    @action(detail=True, methods=["post"], url_path="redo-latest-gm-change")
+    def redo_latest_gm_change_action(self, request, pk=None):
+        character = self.get_object()
+        try:
+            result = redo_latest_gm_change(character, gm_user=request.user)
+        except CharacterHistoryUndoError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+                **result,
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="redo-latest-allocation")
+    def redo_latest_allocation_action(self, request, pk=None):
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot redo allocations for this character.")
+
+        allocation = (
+            CharacterXPAllocation.objects.filter(
+                character=character, undone_at__isnull=False
+            )
+            .order_by("-undone_at", "-id")
+            .first()
+        )
+        if not allocation:
+            return Response(
+                {"error": "No undone allocation to redo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            redo_allocation(character, allocation, user=request.user)
+        except XPAllocationError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "redone_allocation_id": allocation.id,
                 "character": _character_response(character),
                 "allocations": _allocation_list_response(character),
             }
@@ -1894,15 +2015,19 @@ class CharacterViewSet(viewsets.ModelViewSet):
         xp_clocks[track] = new_xp
 
         with transaction.atomic():
-            serializer = CharacterSerializer(
-                character, data={"xp_clocks": xp_clocks}, partial=True
-            )
-            if not serializer.is_valid():
-                return Response(
-                    {"error": "Failed to add XP", "errors": serializer.errors},
-                    status=status.HTTP_400_BAD_REQUEST,
+            token = bind_character_history_editor(user)
+            try:
+                serializer = CharacterSerializer(
+                    character, data={"xp_clocks": xp_clocks}, partial=True
                 )
-            serializer.save()
+                if not serializer.is_valid():
+                    return Response(
+                        {"error": "Failed to add XP", "errors": serializer.errors},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                serializer.save()
+            finally:
+                reset_character_history_editor(token)
             tracker = ExperienceTracker.objects.create(
                 character=character,
                 session=session_obj,

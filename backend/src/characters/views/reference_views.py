@@ -86,6 +86,11 @@ class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = CharacterHistorySerializer
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["request"] = self.request
+        return context
+
     def get_queryset(self):
         user = self.request.user
         campaign_id = self.request.query_params.get("campaign")
@@ -151,6 +156,29 @@ class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
             .order_by("-timestamp")
         )
 
+    @action(detail=True, methods=["post"], url_path="undo")
+    def undo_entry(self, request, pk=None):
+        entry = self.get_object()
+        from ..services.character_history_undo import (
+            CharacterHistoryUndoError,
+            undo_character_history_entry,
+        )
+        from ..views.character_views import _character_response
+
+        try:
+            undo_character_history_entry(entry, user=request.user)
+        except CharacterHistoryUndoError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character = Character.objects.get(pk=entry.character_id)
+        return Response(
+            {
+                "success": True,
+                "history_id": entry.id,
+                "character": _character_response(character),
+            }
+        )
+
 
 class CrewHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     """Audit of crew sheet scalar changes; filter with ?crew=<id>."""
@@ -196,6 +224,11 @@ class ExperienceTrackerViewSet(
     permission_classes = [IsAuthenticated]
     queryset = ExperienceTracker.objects.all()
     serializer_class = ExperienceTrackerSerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["request"] = self.request
+        return context
 
     def get_queryset(self):
         # #region agent log
@@ -263,7 +296,9 @@ class ExperienceTrackerViewSet(
 
         _dbg_experience_tracker_log()
         # #endregion
-        qs = ExperienceTracker.objects.all().select_related('character', 'session', 'character__campaign')
+        qs = ExperienceTracker.objects.filter(
+            revoked_at__isnull=True
+        ).select_related('character', 'session', 'character__campaign')
         user = self.request.user
         if user.is_staff:
             return qs
@@ -415,12 +450,12 @@ class ExperienceTrackerViewSet(
     def destroy(self, request, *args, **kwargs):
         """Delete an XP entry and roll back its ``clock_key`` track.
 
-        Allowed for the character owner or the campaign GM. The matching
-        ``xp_clocks[clock_key]`` value is decremented by ``xp_gained``
-        (clamped at zero); pool entries created by the development XP
-        settlement also decrement ``unallocated_xp`` so deleting them keeps
-        the session pool consistent.
+        Allowed for the character owner or the campaign GM. Players cannot
+        delete GM or automatic session XP from the character sheet — use the
+        campaign scorecard instead.
         """
+        from ..services.character_history_undo import experience_tracker_undoable_from_sheet
+
         entry = self.get_object()
         character = entry.character
         user = request.user
@@ -433,6 +468,9 @@ class ExperienceTrackerViewSet(
             raise PermissionDenied(
                 "Only the character owner or campaign GM can delete XP entries."
             )
+        allowed, reason = experience_tracker_undoable_from_sheet(entry, user)
+        if not allowed:
+            return Response({"error": reason}, status=status.HTTP_403_FORBIDDEN)
 
         with transaction.atomic():
             locked_entry = ExperienceTracker.objects.select_for_update().get(

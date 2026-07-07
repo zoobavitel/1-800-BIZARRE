@@ -358,6 +358,30 @@ export const characterAPI = {
       body: JSON.stringify({}),
     }),
 
+  redoLatestAllocation: (id) =>
+    apiRequest(`/characters/${id}/redo-latest-allocation/`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  getGmUndoStatus: (id) =>
+    apiRequest(`/characters/${id}/gm-undo-status/`),
+
+  undoLatestGmChange: (id) =>
+    apiRequest(`/characters/${id}/undo-latest-gm-change/`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  getGmRedoStatus: (id) =>
+    apiRequest(`/characters/${id}/gm-redo-status/`),
+
+  redoLatestGmChange: (id) =>
+    apiRequest(`/characters/${id}/redo-latest-gm-change/`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
   removeAllocationResult: (id, allocationId) =>
     apiRequest(`/characters/${id}/remove-allocation-result/`, {
       method: "POST",
@@ -839,6 +863,11 @@ export const characterHistoryAPI = {
     const qs = new URLSearchParams(params).toString();
     return apiRequest(`/character-history/${qs ? "?" + qs : ""}`);
   },
+  undo: (id) =>
+    apiRequest(`/character-history/${id}/undo/`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
 };
 
 export const gmHistoryAPI = {

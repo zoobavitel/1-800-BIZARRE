@@ -7,6 +7,7 @@ from characters.services.xp_allocation import (
     apply_level_up,
     apply_minor_advance,
     list_allocations,
+    redo_allocation,
     undo_allocation,
 )
 
@@ -103,9 +104,24 @@ class XPAllocationServiceTests(TestCase):
 
         undo_allocation(self.character, alloc, user=self.user)
         self.character.refresh_from_db()
-        self.assertEqual(self.character.xp_clocks["heritage"], 10)
+        self.assertEqual(self.character.xp_clocks["heritage"], 5)
         self.assertEqual(self.character.action_dots["hunt"], 2)
         self.assertIsNotNone(alloc.undone_at)
+
+    def test_redo_allocation_after_undo(self):
+        alloc = apply_minor_advance(
+            self.character, xp_track="heritage", action="HUNT"
+        )
+        self.character.refresh_from_db()
+        undo_allocation(self.character, alloc, user=self.user)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.action_dots["hunt"], 2)
+
+        redo_allocation(self.character, alloc, user=self.user)
+        self.character.refresh_from_db()
+        alloc.refresh_from_db()
+        self.assertEqual(self.character.action_dots["hunt"], 3)
+        self.assertIsNone(alloc.undone_at)
 
     def test_b_to_a_two_standard_reward(self):
         self.character.xp_clocks = {
@@ -165,6 +181,32 @@ class XPAllocationServiceTests(TestCase):
             self.std_c.id,
             list(self.character.standard_abilities.values_list("id", flat=True)),
         )
+
+    def test_undo_preserves_gm_xp_granted_after_spend(self):
+        """LEVEL ↩ must not wipe GM scorecard ticks added after a spend."""
+        self.character.xp_clocks = {
+            **self.character.xp_clocks,
+            "playbook": 5,
+        }
+        self.character.save()
+        alloc = apply_minor_advance(
+            self.character, xp_track="playbook", action="HUNT"
+        )
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.xp_clocks["playbook"], 0)
+
+        # GM end-of-session grant lands after the spend.
+        clocks = dict(self.character.xp_clocks or {})
+        clocks["playbook"] = int(clocks.get("playbook", 0) or 0) + 3
+        self.character.xp_clocks = clocks
+        self.character.save(update_fields=["xp_clocks"])
+        self.assertEqual(self.character.xp_clocks["playbook"], 3)
+
+        undo_allocation(self.character, alloc, user=self.user)
+        self.character.refresh_from_db()
+        # Refund +5 on top of GM's 3 (not snapshot restore to 5, which would drop GM ticks).
+        self.assertEqual(self.character.xp_clocks["playbook"], 8)
+        self.assertEqual(self.character.action_dots.get("hunt"), 2)
 
 
 class XPAllocationAPITests(TestCase):
@@ -241,4 +283,24 @@ class XPAllocationAPITests(TestCase):
         )
         self.assertEqual(res.status_code, 200)
         self.character.refresh_from_db()
-        self.assertEqual(self.character.xp_clocks["heritage"], 10)
+        self.assertEqual(self.character.xp_clocks["heritage"], 5)
+
+    def test_redo_latest_allocation_api(self):
+        self.client.post(
+            f"/api/characters/{self.character.id}/apply-minor-advance/",
+            {"xp_track": "heritage", "action": "HUNT"},
+            format="json",
+        )
+        self.client.post(
+            f"/api/characters/{self.character.id}/undo-latest-allocation/",
+            {},
+            format="json",
+        )
+        res = self.client.post(
+            f"/api/characters/{self.character.id}/redo-latest-allocation/",
+            {},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.action_dots["hunt"], 3)

@@ -1131,6 +1131,14 @@ class CharacterHistory(models.Model):
     editor = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
     changed_fields = models.JSONField()
+    reverted_at = models.DateTimeField(null=True, blank=True)
+    reverted_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reverted_character_history_entries",
+    )
 
     def __str__(self):
         return f"Changes for {self.character.true_name} at {self.timestamp}"
@@ -1217,7 +1225,15 @@ def log_character_changes(sender, instance, created, **kwargs):
     if created:
         return
 
-    from .history_context import get_character_history_editor
+    from .history_context import (
+        get_character_history_editor,
+        is_character_history_suppressed,
+    )
+
+    if is_character_history_suppressed():
+        if hasattr(instance, "_history_prev_snapshot"):
+            del instance._history_prev_snapshot
+        return
 
     prev = getattr(instance, "_history_prev_snapshot", None)
     if prev is None:
@@ -1658,6 +1674,14 @@ class ExperienceTracker(models.Model):
             "for entries that did not directly tick a single clock. Used to roll "
             "back the matching clock when the entry is deleted."
         ),
+    )
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoked_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="revoked_xp_entries",
     )
 
     def __str__(self):

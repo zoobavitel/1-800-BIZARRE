@@ -4,6 +4,9 @@ import {
   getCharacterCrewId,
   resolveHeritagePkForSave,
   rosterHasLinkedCrewForCrewSheetFactionUi,
+  resolveCharacterCampaignContext,
+  isUserCampaignGmForCharacter,
+  isGmViewingPlayerCharacterSheet,
 } from "./characterUtils";
 
 const list = [
@@ -121,5 +124,55 @@ describe("computeActionDotBudget", () => {
     expect(budget.actionDotsFromXp).toBe(3);
     expect(budget.maxActionDotsBudget).toBe(10);
     expect(budget.dotsRemaining).toBe(0);
+  });
+});
+
+describe("resolveCharacterCampaignContext / GM undo row visibility", () => {
+  const campaigns = [
+    {
+      id: 10,
+      gm: { id: 99 },
+      active_session: null,
+      campaign_characters: [{ id: 42, user_id: 7 }],
+    },
+  ];
+
+  test("finds campaign via roster when character.campaign FK unset", () => {
+    const ctx = resolveCharacterCampaignContext({ id: 42, campaign: null }, campaigns);
+    expect(ctx.campaignId).toBe(10);
+    expect(ctx.campaignRecord?.id).toBe(10);
+  });
+
+  test("GM on player PC with no active session", () => {
+    const character = { id: 42, campaign: null, user_id: 7 };
+    const ctx = resolveCharacterCampaignContext(character, campaigns);
+    const isCampaignGm = isUserCampaignGmForCharacter(
+      { id: 99 },
+      { campaignRecord: ctx.campaignRecord, campaignId: ctx.campaignId },
+    );
+    expect(isCampaignGm).toBe(true);
+    expect(
+      isGmViewingPlayerCharacterSheet(
+        { id: 99 },
+        character,
+        { isCampaignGm, campaignId: ctx.campaignId },
+      ),
+    ).toBe(true);
+  });
+
+  test("hidden on GM own PC", () => {
+    const character = { id: 42, campaign: null, user_id: 99 };
+    const ctx = resolveCharacterCampaignContext(character, campaigns);
+    const isCampaignGm = isUserCampaignGmForCharacter(
+      { id: 99 },
+      { campaignRecord: ctx.campaignRecord, campaignId: ctx.campaignId },
+    );
+    expect(
+      isGmViewingPlayerCharacterSheet(
+        { id: 99 },
+        character,
+        { isCampaignGm, campaignId: ctx.campaignId },
+      ),
+    ).toBe(false);
   });
 });
