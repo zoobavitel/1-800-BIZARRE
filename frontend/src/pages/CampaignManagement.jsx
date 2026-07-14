@@ -18,6 +18,8 @@ import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 import SessionXpAllocationTable from "../features/campaign-management/SessionXpAllocationTable";
 import {
   buildSessionEndLivePreview,
+  mergeEndLiveRowsWithScorecard,
+  scorecardStatsByCharFromXpEntries,
   sumManualTrackXpForSession,
 } from "../features/campaign-management/sessionEndLiveXpPreview";
 
@@ -2950,6 +2952,26 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
     });
   }, [clearActiveEndLivePreview.perPcRows, clearActiveManualXpByChar]);
 
+  const clearActiveScorecardStatsByChar = useMemo(
+    () =>
+      scorecardStatsByCharFromXpEntries(clearActiveSessionDetail?.xp_entries),
+    [clearActiveSessionDetail?.xp_entries],
+  );
+
+  const clearActiveRowsWithScorecard = useMemo(
+    () =>
+      mergeEndLiveRowsWithScorecard(
+        clearActiveRowsWithManual,
+        clearActiveScorecardStatsByChar,
+        clearActiveSessionDetail?.auto_encoded_xp_settled,
+      ),
+    [
+      clearActiveRowsWithManual,
+      clearActiveScorecardStatsByChar,
+      clearActiveSessionDetail?.auto_encoded_xp_settled,
+    ],
+  );
+
   const clearActivePreviewReady =
     !clearActiveDataLoading && clearActiveManualReady;
 
@@ -3220,14 +3242,14 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                 >
                   Per-PC XP preview (if you apply encoded pass)
                 </div>
-                {clearActiveRowsWithManual.length === 0 ? (
+                {clearActiveRowsWithScorecard.length === 0 ? (
                   <div
                     style={{ color: "#9ca3af", marginBottom: "12px", fontSize: "12px" }}
                   >
                     No PCs in this campaign roster — nothing to preview.
                   </div>
                 ) : (
-                  <SessionXpAllocationTable rows={clearActiveRowsWithManual} />
+                  <SessionXpAllocationTable rows={clearActiveRowsWithScorecard} />
                 )}
                 <p style={{ margin: "0 0 16px", fontSize: "11px", color: "#9ca3af" }}>
                   <strong>Total</strong> column = auto session XP (STRUGGLE from
@@ -3746,108 +3768,26 @@ function SessionDetail({
 
   /**
    * Per-PC scorecard stats derived from `ExperienceTracker` rows recorded
-   * for this session:
-   *   - `triggerCount[BELIEFS|STRUGGLE|PLAYBOOK]`: capped tracker totals
-   *     for each end-of-session trigger family (player/GM toggles + any
-   *     auto-grants that have already been written, e.g. heritage on
-   *     rolls or settled vice/trauma passes). SRD cap: 2/trigger.
-   *   - `xpSum`: sum of every `xp_gained` recorded against this session
-   *     for that PC (toggles + auto + manual track grants + dev-pool row
-   *     + desperate-roll attribute XP). This is the authoritative
-   *     "session XP earned" for read-only / settled sessions.
-   *
-   * Used to (a) populate the BELIEFS / STRUGGLE / PLAYBOOK columns from
-   * the live tracker rather than only roll-signal heuristics, and (b)
-   * make the Total column reflect the actual records that drive the
-   * "By PC — requirements logged" audit list below — so toggling a pip
-   * never silently disagrees with the totals.
+   * for this session (see scorecardStatsByCharFromXpEntries).
    */
-  const sessionScorecardStatsByChar = useMemo(() => {
-    const m = new Map();
-    for (const row of sessionXpEntriesSortedForScorecard) {
-      const cid = Number(row.character);
-      if (!Number.isFinite(cid)) continue;
-      const amt = Math.max(0, Number(row.xp_gained) || 0);
-      const entry =
-        m.get(cid) ||
-        {
-          triggerCount: { BELIEFS: 0, STRUGGLE: 0, PLAYBOOK: 0 },
-          xpSum: 0,
-        };
-      entry.xpSum += amt;
-      const trig = String(row.trigger || "").toUpperCase();
-      if (
-        trig === "BELIEFS" ||
-        trig === "STRUGGLE" ||
-        trig === "STANDOUT" ||
-        trig === "PLAYBOOK_SPECIFIC"
-      ) {
-        const bucket =
-          trig === "PLAYBOOK_SPECIFIC" || trig === "STANDOUT"
-            ? "PLAYBOOK"
-            : trig;
-        entry.triggerCount[bucket] = Math.min(
-          2,
-          entry.triggerCount[bucket] + amt,
-        );
-      }
-      m.set(cid, entry);
-    }
-    return m;
-  }, [sessionXpEntriesSortedForScorecard]);
+  const sessionScorecardStatsByChar = useMemo(
+    () => scorecardStatsByCharFromXpEntries(sessionData?.xp_entries),
+    [sessionData?.xp_entries],
+  );
 
-  const endLiveRowsWithBeliefs = useMemo(() => {
-    const settled = !!sessionData?.auto_encoded_xp_settled;
-    return endLiveRowsWithManual.map((row) => {
-      const stats =
-        sessionScorecardStatsByChar.get(row.characterId) ||
-        {
-          triggerCount: { BELIEFS: 0, STRUGGLE: 0, PLAYBOOK: 0 },
-          xpSum: 0,
-        };
-      const beliefsToggleCount = stats.triggerCount.BELIEFS;
-      const playbookToggleCount = stats.triggerCount.PLAYBOOK;
-      const struggleToggleCount = stats.triggerCount.STRUGGLE;
-      // Unsettled preview portions only add what the encoded settle would
-      // still grant on top of what's already in tracker — caps each trigger
-      // at the SRD 2 and never re-counts toggled XP.
-      const unsettledPlaybookAdd = settled
-        ? 0
-        : Math.max(
-            0,
-            (row.playbookWouldGrant ??
-              row.standoutWouldGrant ??
-              0) - playbookToggleCount,
-          );
-      const unsettledStruggleAdd = settled
-        ? 0
-        : Math.max(
-            0,
-            (row.struggleWouldGrant || 0) - struggleToggleCount,
-          );
-      const unsettledDevPool = settled ? 0 : row.developmentPoolXp || 0;
-      const totalSessionXpPreview =
-        stats.xpSum +
-        unsettledPlaybookAdd +
-        unsettledStruggleAdd +
-        unsettledDevPool;
-      return {
-        ...row,
-        beliefsToggleCount,
-        playbookToggleCount,
-        standoutToggleCount: playbookToggleCount,
-        struggleToggleCount,
-        sessionXpRecorded: stats.xpSum,
-        unsettledPreviewAdd:
-          unsettledPlaybookAdd + unsettledStruggleAdd + unsettledDevPool,
-        totalSessionXpPreview,
-      };
-    });
-  }, [
-    endLiveRowsWithManual,
-    sessionScorecardStatsByChar,
-    sessionData?.auto_encoded_xp_settled,
-  ]);
+  const endLiveRowsWithBeliefs = useMemo(
+    () =>
+      mergeEndLiveRowsWithScorecard(
+        endLiveRowsWithManual,
+        sessionScorecardStatsByChar,
+        sessionData?.auto_encoded_xp_settled,
+      ),
+    [
+      endLiveRowsWithManual,
+      sessionScorecardStatsByChar,
+      sessionData?.auto_encoded_xp_settled,
+    ],
+  );
 
   const pcXpRequirementsByCharacterForScorecard = useMemo(() => {
     const m = new Map();
