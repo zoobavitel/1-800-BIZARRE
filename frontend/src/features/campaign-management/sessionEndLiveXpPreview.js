@@ -124,6 +124,114 @@ export function sumManualTrackXpForSession(entries, sessionId) {
   }, 0);
 }
 
+/**
+ * Normalize session `xp_entries` (array or `{ results }`) into a list.
+ * @param {unknown} xpEntries
+ * @returns {object[]}
+ */
+export function normalizeXpEntriesList(xpEntries) {
+  if (Array.isArray(xpEntries)) return xpEntries;
+  if (xpEntries != null && Array.isArray(xpEntries.results)) {
+    return xpEntries.results;
+  }
+  return [];
+}
+
+/**
+ * Per-PC scorecard stats from ExperienceTracker rows for a session.
+ * - triggerCount[BELIEFS|STRUGGLE|PLAYBOOK]: capped (max 2) tracker totals
+ * - xpSum: sum of every xp_gained for that PC on this session
+ *
+ * @param {unknown} xpEntries
+ * @returns {Map<number, { triggerCount: { BELIEFS: number, STRUGGLE: number, PLAYBOOK: number }, xpSum: number }>}
+ */
+export function scorecardStatsByCharFromXpEntries(xpEntries) {
+  const m = new Map();
+  for (const row of normalizeXpEntriesList(xpEntries)) {
+    const cid = Number(row.character);
+    if (!Number.isFinite(cid)) continue;
+    const amt = Math.max(0, Number(row.xp_gained) || 0);
+    const entry =
+      m.get(cid) ||
+      {
+        triggerCount: { BELIEFS: 0, STRUGGLE: 0, PLAYBOOK: 0 },
+        xpSum: 0,
+      };
+    entry.xpSum += amt;
+    const trig = String(row.trigger || "").toUpperCase();
+    if (
+      trig === "BELIEFS" ||
+      trig === "STRUGGLE" ||
+      trig === "STANDOUT" ||
+      trig === "PLAYBOOK_SPECIFIC"
+    ) {
+      const bucket =
+        trig === "PLAYBOOK_SPECIFIC" || trig === "STANDOUT"
+          ? "PLAYBOOK"
+          : trig;
+      entry.triggerCount[bucket] = Math.min(
+        SESSION_ENCODED_XP_CAP,
+        entry.triggerCount[bucket] + amt,
+      );
+    }
+    m.set(cid, entry);
+  }
+  return m;
+}
+
+/**
+ * Merge roll/Dev/manual preview rows with tracker toggle counts + session Total.
+ * Unsettled preview only adds what encoded settle would still grant on top of
+ * tracker (never re-counts toggled XP).
+ *
+ * @param {object[]} rows - per-PC rows (manual already attached)
+ * @param {Map<number, { triggerCount: object, xpSum: number }>} statsByChar
+ * @param {boolean} settled - session.auto_encoded_xp_settled
+ * @returns {object[]}
+ */
+export function mergeEndLiveRowsWithScorecard(rows, statsByChar, settled) {
+  const settledFlag = !!settled;
+  const statsMap = statsByChar instanceof Map ? statsByChar : new Map();
+  return (Array.isArray(rows) ? rows : []).map((row) => {
+    const stats =
+      statsMap.get(row.characterId) ||
+      {
+        triggerCount: { BELIEFS: 0, STRUGGLE: 0, PLAYBOOK: 0 },
+        xpSum: 0,
+      };
+    const beliefsToggleCount = stats.triggerCount.BELIEFS;
+    const playbookToggleCount = stats.triggerCount.PLAYBOOK;
+    const struggleToggleCount = stats.triggerCount.STRUGGLE;
+    const unsettledPlaybookAdd = settledFlag
+      ? 0
+      : Math.max(
+          0,
+          (row.playbookWouldGrant ?? row.standoutWouldGrant ?? 0) -
+            playbookToggleCount,
+        );
+    const unsettledStruggleAdd = settledFlag
+      ? 0
+      : Math.max(0, (row.struggleWouldGrant || 0) - struggleToggleCount);
+    const unsettledDevPool = settledFlag ? 0 : row.developmentPoolXp || 0;
+    const totalSessionXpPreview =
+      stats.xpSum +
+      unsettledPlaybookAdd +
+      unsettledStruggleAdd +
+      unsettledDevPool;
+    return {
+      ...row,
+      beliefsToggleCount,
+      playbookToggleCount,
+      standoutToggleCount: playbookToggleCount,
+      struggleToggleCount,
+      sessionXpRecorded: stats.xpSum,
+      unsettledPreviewAdd:
+        unsettledPlaybookAdd + unsettledStruggleAdd + unsettledDevPool,
+      totalSessionXpPreview,
+    };
+  });
+}
+
 /** Roll snapshot + per-PC pending auto-settle preview (STRUGGLE only) + Development→pool preview. */
 export function buildSessionEndLivePreview(rolls, campaignChars, clocks, characters) {
   const inner = buildSessionEndLiveSummary(rolls, campaignChars, clocks);
