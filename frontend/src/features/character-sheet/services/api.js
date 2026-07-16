@@ -228,10 +228,23 @@ const apiRequest = async (endpoint, options = {}) => {
     ...options,
   };
 
+  // #region agent log
+  if (String(path).includes("/npcs")) {
+    const hdrs = config.headers || {};
+    fetch('http://127.0.0.1:7843/ingest/5eb863e4-c9f7-4631-937d-09a5b8b89785',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'80d307'},body:JSON.stringify({sessionId:'80d307',runId:'pre-fix',hypothesisId:'A',location:'api.js:apiRequest',message:'npc apiRequest before fetch',data:{path,method:config.method||'GET',hasToken:!!token,tokenLen:token?String(token).length:0,hasAuthHeader:!!(hdrs.Authorization||hdrs.authorization),headersWipedByOptions:!!(options.headers&&Object.keys(options.headers).length>=0&&!options.headers.Authorization)},timestamp:Date.now()})}).catch(()=>{});
+  }
+  // #endregion
+
   try {
     const response = await fetch(url, config);
     const { parsed, invalidJson, textPreview } =
       await readFetchResponseBody(response);
+
+    // #region agent log
+    if (String(path).includes("/npcs")) {
+      fetch('http://127.0.0.1:7843/ingest/5eb863e4-c9f7-4631-937d-09a5b8b89785',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'80d307'},body:JSON.stringify({sessionId:'80d307',runId:'pre-fix',hypothesisId:'A',location:'api.js:apiRequest:response',message:'npc apiRequest response',data:{path,method:config.method||'GET',status:response.status,ok:response.ok,detail:parsed&&parsed.detail,message:parsed&&parsed.message},timestamp:Date.now()})}).catch(()=>{});
+    }
+    // #endregion
 
     if (!response.ok) {
       const errorData =
@@ -629,9 +642,19 @@ const apiRequestMultipart = async (endpoint, formData, method = "POST") => {
   const headers = {};
   if (token) headers["Authorization"] = `Token ${token}`;
   if (url.includes("ngrok")) headers["ngrok-skip-browser-warning"] = "1";
+  // #region agent log
+  if (String(path).includes("/npcs")) {
+    fetch('http://127.0.0.1:7843/ingest/5eb863e4-c9f7-4631-937d-09a5b8b89785',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'80d307'},body:JSON.stringify({sessionId:'80d307',runId:'pre-fix',hypothesisId:'D',location:'api.js:apiRequestMultipart',message:'npc multipart before fetch',data:{path,method,hasToken:!!token,hasAuthHeader:!!headers.Authorization},timestamp:Date.now()})}).catch(()=>{});
+  }
+  // #endregion
   const response = await fetch(url, { method, headers, body: formData });
   const { parsed, invalidJson, textPreview } =
     await readFetchResponseBody(response);
+  // #region agent log
+  if (String(path).includes("/npcs")) {
+    fetch('http://127.0.0.1:7843/ingest/5eb863e4-c9f7-4631-937d-09a5b8b89785',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'80d307'},body:JSON.stringify({sessionId:'80d307',runId:'pre-fix',hypothesisId:'D',location:'api.js:apiRequestMultipart:response',message:'npc multipart response',data:{path,method,status:response.status,ok:response.ok,detail:parsed&&parsed.detail},timestamp:Date.now()})}).catch(()=>{});
+  }
+  // #endregion
   if (!response.ok) {
     const errorData =
       parsed && typeof parsed === "object" && !Array.isArray(parsed)
@@ -707,6 +730,9 @@ export const npcAPI = {
   },
   updateNPC: (id, data) => {
     const { multipart, body } = buildMultipartOrJson(data);
+    // #region agent log
+    fetch('http://127.0.0.1:7843/ingest/5eb863e4-c9f7-4631-937d-09a5b8b89785',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'80d307'},body:JSON.stringify({sessionId:'80d307',runId:'pre-fix',hypothesisId:'C',location:'api.js:updateNPC',message:'updateNPC called',data:{id,multipart,abilityCount:Array.isArray(data?.abilities)?data.abilities.length:null,hasImageFile:!!data?.imageFile},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (multipart) return apiRequestMultipart(`/npcs/${id}/`, body, "PUT");
     return apiRequest(`/npcs/${id}/`, { method: "PUT", body });
   },

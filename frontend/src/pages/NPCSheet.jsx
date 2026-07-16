@@ -1672,7 +1672,12 @@ const NPCSheet = ({
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
-      if (savingRef.current || !onSave) return;
+      if (savingRef.current || !onSave) {
+        // #region agent log
+        fetch('http://127.0.0.1:7843/ingest/5eb863e4-c9f7-4631-937d-09a5b8b89785',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'80d307'},body:JSON.stringify({sessionId:'80d307',runId:'pre-fix',hypothesisId:'G',location:'NPCSheet.jsx:autosave',message:'autosave skipped',data:{savingRef:!!savingRef.current,hasOnSave:!!onSave},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        return;
+      }
       // Don't auto-save a brand-new NPC that has never been persisted and
       // still has no name — this prevents spurious creates when a blank tab
       // mounts and init effects fire state changes before the user types.
@@ -1681,7 +1686,13 @@ const NPCSheet = ({
       setSaveStatus("saving");
       setSaveErrorDetail(null);
       try {
-        const result = await onSave(buildPayload());
+        const payload = buildPayload();
+        const descs = (payload.abilities || []).map((a) => String(a?.description || ""));
+        const joined = descs.join("\n");
+        // #region agent log
+        fetch('http://127.0.0.1:7843/ingest/5eb863e4-c9f7-4631-937d-09a5b8b89785',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'80d307'},body:JSON.stringify({sessionId:'80d307',runId:'pre-fix',hypothesisId:'F',location:'NPCSheet.jsx:autosave:before',message:'autosave firing',data:{npcId:npcIdRef.current||null,abilityCount:(payload.abilities||[]).length,descLens:descs.map((d)=>d.length),hasCurlyQuotes:/[\u201c\u201d]/.test(joined),hasEmDash:/\u2014/.test(joined),nonAscii:[...joined].filter((c)=>c.charCodeAt(0)>127).slice(0,12).map((c)=>c.charCodeAt(0).toString(16)),preview:joined.slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        const result = await onSave(payload);
         if (result?.id && !npcIdRef.current) npcIdRef.current = result.id;
         if (Array.isArray(result?.conflict_clocks)) {
           const next = normalizeClockList(result.conflict_clocks);
@@ -1710,6 +1721,9 @@ const NPCSheet = ({
               ? err
               : "Save failed";
         setSaveErrorDetail(msg);
+        // #region agent log
+        fetch('http://127.0.0.1:7843/ingest/5eb863e4-c9f7-4631-937d-09a5b8b89785',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'80d307'},body:JSON.stringify({sessionId:'80d307',runId:'pre-fix',hypothesisId:'A',location:'NPCSheet.jsx:autosave',message:'NPC autosave failed',data:{errMsg:msg,npcId:npcIdRef.current||null,hasAuthToken:!!localStorage.getItem('authToken')},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         console.error("NPC autosave failed:", err);
       } finally {
         savingRef.current = false;
