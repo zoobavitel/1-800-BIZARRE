@@ -2741,6 +2741,12 @@ class NPCSerializer(serializers.ModelSerializer):
         queryset=Heritage.objects.all(), allow_null=True, required=False
     )
     heritage_details = HeritageSerializer(source="heritage", read_only=True)
+    selected_benefits = serializers.PrimaryKeyRelatedField(
+        queryset=Benefit.objects.all(), many=True, required=False
+    )
+    selected_detriments = serializers.PrimaryKeyRelatedField(
+        queryset=Detriment.objects.all(), many=True, required=False
+    )
     regular_armor_charges = serializers.IntegerField(read_only=True)
     special_armor_charges = serializers.IntegerField(read_only=True)
     stand_armor_charges = serializers.IntegerField(read_only=True)
@@ -2785,6 +2791,8 @@ class NPCSerializer(serializers.ModelSerializer):
             "stand_name",
             "heritage",
             "heritage_details",
+            "selected_benefits",
+            "selected_detriments",
             "playbook",
             "custom_abilities",
             "abilities",

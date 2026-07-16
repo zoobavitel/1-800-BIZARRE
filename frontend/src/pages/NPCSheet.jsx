@@ -1184,6 +1184,16 @@ const NPCSheet = ({
   const [heritage, setHeritage] = useState(
     npc?.heritage ?? npc?.heritage_id ?? null,
   );
+  const [selectedBenefitIds, setSelectedBenefitIds] = useState(() =>
+    Array.isArray(npc?.selected_benefits)
+      ? npc.selected_benefits.map((x) => Number(x)).filter((n) => Number.isFinite(n))
+      : [],
+  );
+  const [selectedDetrimentIds, setSelectedDetrimentIds] = useState(() =>
+    Array.isArray(npc?.selected_detriments)
+      ? npc.selected_detriments.map((x) => Number(x)).filter((n) => Number.isFinite(n))
+      : [],
+  );
   const [heritagesList, setHeritagesList] = useState([]);
   const [playbook, setPlaybook] = useState(npc?.playbook ?? "STAND");
 
@@ -1211,6 +1221,16 @@ const NPCSheet = ({
   // Sync heritage/playbook when NPC identity changes
   useEffect(() => {
     setHeritage(npc?.heritage ?? npc?.heritage_id ?? null);
+    setSelectedBenefitIds(
+      Array.isArray(npc?.selected_benefits)
+        ? npc.selected_benefits.map((x) => Number(x)).filter((n) => Number.isFinite(n))
+        : [],
+    );
+    setSelectedDetrimentIds(
+      Array.isArray(npc?.selected_detriments)
+        ? npc.selected_detriments.map((x) => Number(x)).filter((n) => Number.isFinite(n))
+        : [],
+    );
     setPlaybook(npc?.playbook ?? "STAND");
     setSelectedHamonIds(npc?.selected_hamon_abilities ?? []);
     setSelectedSpinIds(npc?.selected_spin_abilities ?? []);
@@ -1237,6 +1257,28 @@ const NPCSheet = ({
     setClockDraftCard(null);
     setClockDraftError("");
   }, [npc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Drop heritage picks that do not belong to the current heritage catalog.
+  useEffect(() => {
+    if (heritage == null || heritage === "") {
+      setSelectedBenefitIds([]);
+      setSelectedDetrimentIds([]);
+      return;
+    }
+    if (!resolvedHeritageDetails) return;
+    const allowedB = new Set(
+      (resolvedHeritageDetails.benefits || []).map((b) => Number(b.id)),
+    );
+    const allowedD = new Set(
+      (resolvedHeritageDetails.detriments || []).map((d) => Number(d.id)),
+    );
+    setSelectedBenefitIds((prev) =>
+      prev.filter((id) => allowedB.has(Number(id))),
+    );
+    setSelectedDetrimentIds((prev) =>
+      prev.filter((id) => allowedD.has(Number(id))),
+    );
+  }, [heritage, resolvedHeritageDetails]);
 
   // Hamon / Spin playbook abilities
   const [hamonAbilitiesList, setHamonAbilitiesList] = useState([]);
@@ -1632,6 +1674,8 @@ const NPCSheet = ({
       abilities: normalizeNpcSheetAbilitiesNoStandard(abilities),
       hamon_ability_ids: selectedHamonIds,
       spin_ability_ids: selectedSpinIds,
+      selected_benefits: selectedBenefitIds,
+      selected_detriments: selectedDetrimentIds,
       campaign: campaign || null,
       faction: faction || null,
       image_url: imageUrl,
@@ -1663,6 +1707,8 @@ const NPCSheet = ({
       abilities,
       selectedHamonIds,
       selectedSpinIds,
+      selectedBenefitIds,
+      selectedDetrimentIds,
       campaign,
       faction,
       imageUrl,
@@ -1770,6 +1816,8 @@ const NPCSheet = ({
     abilities,
     selectedHamonIds,
     selectedSpinIds,
+    selectedBenefitIds,
+    selectedDetrimentIds,
     campaign,
     faction,
     imageUrl,
@@ -2845,27 +2893,75 @@ const NPCSheet = ({
                           >
                             Benefits
                           </div>
-                          <ul
+                          <div
                             style={{
-                              margin: 0,
-                              paddingLeft: "18px",
-                              fontSize: "10px",
-                              color: "#a7f3d0",
-                              lineHeight: 1.5,
+                              fontSize: "9px",
+                              color: "#6b7280",
+                              marginBottom: "6px",
+                              lineHeight: 1.4,
                             }}
                           >
-                            {resolvedHeritageDetails.benefits.map((b) => (
-                              <li key={b.id}>
-                                {b.name}
-                                {b.description ? (
-                                  <span style={{ color: "#6b7280" }}>
-                                    {" "}
-                                    — {b.description}
+                            Check what is in play for this NPC (GM notes — no HP
+                            budget).
+                          </div>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "6px",
+                            }}
+                          >
+                            {resolvedHeritageDetails.benefits.map((b) => {
+                              const checked = selectedBenefitIds.includes(
+                                Number(b.id),
+                              );
+                              return (
+                                <label
+                                  key={b.id}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "flex-start",
+                                    gap: "8px",
+                                    fontSize: "10px",
+                                    color: checked ? "#a7f3d0" : "#6b7280",
+                                    cursor: "pointer",
+                                    lineHeight: 1.45,
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => {
+                                      const id = Number(b.id);
+                                      setSelectedBenefitIds((prev) =>
+                                        prev.includes(id)
+                                          ? prev.filter((x) => x !== id)
+                                          : [...prev, id],
+                                      );
+                                    }}
+                                    style={{ marginTop: "2px" }}
+                                  />
+                                  <span>
+                                    <span
+                                      style={{
+                                        fontWeight: 600,
+                                        color: checked ? "#a7f3d0" : "#9ca3af",
+                                      }}
+                                    >
+                                      {b.name}
+                                      {b.required ? " (required)" : ""}
+                                    </span>
+                                    {b.description ? (
+                                      <span style={{ color: "#6b7280" }}>
+                                        {" "}
+                                        — {b.description}
+                                      </span>
+                                    ) : null}
                                   </span>
-                                ) : null}
-                              </li>
-                            ))}
-                          </ul>
+                                </label>
+                              );
+                            })}
+                          </div>
                         </div>
                       ) : null}
                       {Array.isArray(resolvedHeritageDetails.detriments) &&
@@ -2881,27 +2977,64 @@ const NPCSheet = ({
                           >
                             Detriments
                           </div>
-                          <ul
+                          <div
                             style={{
-                              margin: 0,
-                              paddingLeft: "18px",
-                              fontSize: "10px",
-                              color: "#fecaca",
-                              lineHeight: 1.5,
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "6px",
                             }}
                           >
-                            {resolvedHeritageDetails.detriments.map((d) => (
-                              <li key={d.id}>
-                                {d.name}
-                                {d.description ? (
-                                  <span style={{ color: "#6b7280" }}>
-                                    {" "}
-                                    — {d.description}
+                            {resolvedHeritageDetails.detriments.map((d) => {
+                              const checked = selectedDetrimentIds.includes(
+                                Number(d.id),
+                              );
+                              return (
+                                <label
+                                  key={d.id}
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "flex-start",
+                                    gap: "8px",
+                                    fontSize: "10px",
+                                    color: checked ? "#fecaca" : "#6b7280",
+                                    cursor: "pointer",
+                                    lineHeight: 1.45,
+                                  }}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => {
+                                      const id = Number(d.id);
+                                      setSelectedDetrimentIds((prev) =>
+                                        prev.includes(id)
+                                          ? prev.filter((x) => x !== id)
+                                          : [...prev, id],
+                                      );
+                                    }}
+                                    style={{ marginTop: "2px" }}
+                                  />
+                                  <span>
+                                    <span
+                                      style={{
+                                        fontWeight: 600,
+                                        color: checked ? "#fecaca" : "#9ca3af",
+                                      }}
+                                    >
+                                      {d.name}
+                                      {d.required ? " (required)" : ""}
+                                    </span>
+                                    {d.description ? (
+                                      <span style={{ color: "#6b7280" }}>
+                                        {" "}
+                                        — {d.description}
+                                      </span>
+                                    ) : null}
                                   </span>
-                                ) : null}
-                              </li>
-                            ))}
-                          </ul>
+                                </label>
+                              );
+                            })}
+                          </div>
                         </div>
                       ) : null}
                     </>
