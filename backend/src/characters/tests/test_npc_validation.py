@@ -709,6 +709,51 @@ class NPCPutAbilitiesRegressionTest(TestCase):
         saved_desc = self.npc.abilities[0]["description"]
         self.assertEqual(saved_desc, em_dash_description)
 
+    def test_put_npc_ability_with_curly_quote_slice_paste_returns_200(self):
+        """Regression: exact user paste with curly quotes around slice must persist."""
+        # \u201c/\u201d = LEFT/RIGHT DOUBLE QUOTATION MARK around "slice"
+        paste_description = (
+            "The needles build up stacks of \u201cslice,\u201d which allow the enemy "
+            "to steal flesh and stand user abilities from others"
+        )
+        payload = {
+            "name": "Lucy Brown",
+            "stand_coin_stats": {
+                "POWER": "D",
+                "SPEED": "F",
+                "DURABILITY": "B",
+                "PRECISION": "B",
+                "RANGE": "C",
+                "DEVELOPMENT": "C",
+            },
+            "abilities": [
+                {
+                    "id": 1775836770999,
+                    "name": "Needle Stacks",
+                    "type": "unique",
+                    "description": paste_description,
+                }
+            ],
+            "regular_armor_used": 0,
+            "special_armor_used": 0,
+            "vulnerability_clock_current": 0,
+            "faction_status": {},
+            "inventory": [],
+            "contacts": [],
+        }
+        resp = self._auth_client().put(
+            f"/api/npcs/{self.npc.id}/",
+            payload,
+            format="json",
+        )
+        self.assertIn(
+            resp.status_code,
+            (200, 204),
+            f'Curly-quote paste caused {resp.status_code}: {getattr(resp, "data", resp.content)}',
+        )
+        self.npc.refresh_from_db()
+        self.assertEqual(self.npc.abilities[0]["description"], paste_description)
+
     def test_put_npc_with_null_campaign_returns_200(self):
         """PUT /api/npcs/{id}/ with campaign=null must not raise AttributeError in __str__."""
         self.npc.campaign = None

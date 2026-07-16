@@ -9,6 +9,10 @@ import {
   xpHistoryAPI,
   npcAPI,
 } from "../features/character-sheet";
+import {
+  markNpcAutosaveBusyCollision,
+  takeNpcAutosavePending,
+} from "../features/character-sheet/utils/npcAutosaveGate";
 import { HistoryBranchIcon } from "../components/position-effect/PositionEffectIndicators";
 import NpcsStandCoin from "../components/NpcsStandCoin";
 
@@ -1283,6 +1287,11 @@ const NPCSheet = ({
   const mountedRef = useRef(false);
   const npcIdRef = useRef(npc?.id || null);
   const savingRef = useRef(false);
+  /** When a debounced save fires mid-flight, queue a follow-up with latest payload. */
+  const pendingSaveRef = useRef(false);
+  const buildPayloadRef = useRef(null);
+  const nameRef = useRef(name);
+  const onSaveRef = useRef(onSave);
 
   const [showNpcTrackingPanel, setShowNpcTrackingPanel] = useState(false);
   const [npcTrackingTab, setNpcTrackingTab] = useState("sheet");
@@ -1664,6 +1673,66 @@ const NPCSheet = ({
     ],
   );
 
+  buildPayloadRef.current = buildPayload;
+  nameRef.current = name;
+  onSaveRef.current = onSave;
+
+  const runNpcAutosave = useCallback(async () => {
+    const saveFn = onSaveRef.current;
+    if (!saveFn) return;
+    if (markNpcAutosaveBusyCollision(savingRef.current, pendingSaveRef)) {
+      return;
+    }
+    // Don't auto-save a brand-new NPC that has never been persisted and
+    // still has no name — this prevents spurious creates when a blank tab
+    // mounts and init effects fire state changes before the user types.
+    if (!npcIdRef.current && !String(nameRef.current || "").trim()) return;
+
+    savingRef.current = true;
+    setSaveStatus("saving");
+    setSaveErrorDetail(null);
+    try {
+      const result = await saveFn(buildPayloadRef.current());
+      if (result?.id && !npcIdRef.current) npcIdRef.current = result.id;
+      if (Array.isArray(result?.conflict_clocks)) {
+        const next = normalizeClockList(result.conflict_clocks);
+        setConflictClocks((prev) =>
+          npcClockListsSemanticallyEqual(prev, next) ? prev : next,
+        );
+      }
+      if (Array.isArray(result?.alt_clocks)) {
+        const next = normalizeClockList(result.alt_clocks);
+        setAltClocks((prev) =>
+          npcClockListsSemanticallyEqual(prev, next) ? prev : next,
+        );
+      }
+      setSaveStatus("saved");
+      setSaveErrorDetail(null);
+      setTimeout(
+        () => setSaveStatus((s) => (s === "saved" ? null : s)),
+        2000,
+      );
+    } catch (err) {
+      setSaveStatus("error");
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === "string"
+            ? err
+            : "Save failed";
+      setSaveErrorDetail(msg);
+      console.error("NPC autosave failed:", err);
+    } finally {
+      savingRef.current = false;
+      if (takeNpcAutosavePending(pendingSaveRef)) {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+          void runNpcAutosave();
+        }, 0);
+      }
+    }
+  }, []);
+
   // Debounced auto-save
   useEffect(() => {
     if (!mountedRef.current) {
@@ -1671,63 +1740,8 @@ const NPCSheet = ({
       return;
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      if (savingRef.current || !onSave) {
-        // #region agent log
-        fetch('http://127.0.0.1:7843/ingest/5eb863e4-c9f7-4631-937d-09a5b8b89785',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'80d307'},body:JSON.stringify({sessionId:'80d307',runId:'pre-fix',hypothesisId:'G',location:'NPCSheet.jsx:autosave',message:'autosave skipped',data:{savingRef:!!savingRef.current,hasOnSave:!!onSave},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        return;
-      }
-      // Don't auto-save a brand-new NPC that has never been persisted and
-      // still has no name — this prevents spurious creates when a blank tab
-      // mounts and init effects fire state changes before the user types.
-      if (!npcIdRef.current && !name.trim()) return;
-      savingRef.current = true;
-      setSaveStatus("saving");
-      setSaveErrorDetail(null);
-      try {
-        const payload = buildPayload();
-        const descs = (payload.abilities || []).map((a) => String(a?.description || ""));
-        const joined = descs.join("\n");
-        // #region agent log
-        fetch('http://127.0.0.1:7843/ingest/5eb863e4-c9f7-4631-937d-09a5b8b89785',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'80d307'},body:JSON.stringify({sessionId:'80d307',runId:'pre-fix',hypothesisId:'F',location:'NPCSheet.jsx:autosave:before',message:'autosave firing',data:{npcId:npcIdRef.current||null,abilityCount:(payload.abilities||[]).length,descLens:descs.map((d)=>d.length),hasCurlyQuotes:/[\u201c\u201d]/.test(joined),hasEmDash:/\u2014/.test(joined),nonAscii:[...joined].filter((c)=>c.charCodeAt(0)>127).slice(0,12).map((c)=>c.charCodeAt(0).toString(16)),preview:joined.slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        const result = await onSave(payload);
-        if (result?.id && !npcIdRef.current) npcIdRef.current = result.id;
-        if (Array.isArray(result?.conflict_clocks)) {
-          const next = normalizeClockList(result.conflict_clocks);
-          setConflictClocks((prev) =>
-            npcClockListsSemanticallyEqual(prev, next) ? prev : next,
-          );
-        }
-        if (Array.isArray(result?.alt_clocks)) {
-          const next = normalizeClockList(result.alt_clocks);
-          setAltClocks((prev) =>
-            npcClockListsSemanticallyEqual(prev, next) ? prev : next,
-          );
-        }
-        setSaveStatus("saved");
-        setSaveErrorDetail(null);
-        setTimeout(
-          () => setSaveStatus((s) => (s === "saved" ? null : s)),
-          2000,
-        );
-      } catch (err) {
-        setSaveStatus("error");
-        const msg =
-          err instanceof Error
-            ? err.message
-            : typeof err === "string"
-              ? err
-              : "Save failed";
-        setSaveErrorDetail(msg);
-        // #region agent log
-        fetch('http://127.0.0.1:7843/ingest/5eb863e4-c9f7-4631-937d-09a5b8b89785',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'80d307'},body:JSON.stringify({sessionId:'80d307',runId:'pre-fix',hypothesisId:'A',location:'NPCSheet.jsx:autosave',message:'NPC autosave failed',data:{errMsg:msg,npcId:npcIdRef.current||null,hasAuthToken:!!localStorage.getItem('authToken')},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        console.error("NPC autosave failed:", err);
-      } finally {
-        savingRef.current = false;
-      }
+    debounceRef.current = setTimeout(() => {
+      void runNpcAutosave();
     }, 1500);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -1763,6 +1777,7 @@ const NPCSheet = ({
     contacts,
     factionStatus,
     inventory,
+    runNpcAutosave,
   ]);
 
   // ── Styles ────────────────────────────────────────────────────────────────────

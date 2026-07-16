@@ -970,9 +970,6 @@ export default function CharacterPage({
       try {
         const nameTrim = String(npcData.name ?? "").trim();
         const payload = { ...npcData, name: nameTrim || "New NPC" };
-        // #region agent log
-        fetch('http://127.0.0.1:7843/ingest/5eb863e4-c9f7-4631-937d-09a5b8b89785',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'80d307'},body:JSON.stringify({sessionId:'80d307',runId:'pre-fix',hypothesisId:'C',location:'CharacterPage.jsx:handleSaveNpc',message:'handleSaveNpc branch',data:{payloadId:payload.id??null,willUpdate:!!payload.id,abilityCount:Array.isArray(payload.abilities)?payload.abilities.length:null,hasAuthToken:!!localStorage.getItem('authToken')},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         let result;
         if (payload.id) {
           result = await npcAPI.updateNPC(payload.id, payload);
