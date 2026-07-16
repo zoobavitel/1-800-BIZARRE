@@ -1918,7 +1918,7 @@ const NPCSheet = ({
           {name && (
             <span style={{ color: "#fff", fontWeight: "bold" }}>{name}</span>
           )}
-          {standName && (
+          {playbook === "STAND" && standName && (
             <span style={{ color: "#a78bfa" }}>「{standName}」</span>
           )}
         </div>
@@ -2425,22 +2425,17 @@ const NPCSheet = ({
                       placeholder="e.g. Yoshikage Kira"
                     />
                   </div>
-                  <div>
-                    <span style={S.lbl}>Stand Name</span>
-                    <input
-                      style={{
-                        ...S.inp,
-                        opacity: playbook === "NON_BIZARRE" ? 0.4 : 1,
-                      }}
-                      value={standName}
-                      onChange={(e) => setStandName(e.target.value)}
-                      placeholder={
-                        playbook === "NON_BIZARRE"
-                          ? "No stand (unless narrative beat)"
-                          : "e.g. 「Killer Queen」"
-                      }
-                    />
-                  </div>
+                  {playbook === "STAND" && (
+                    <div>
+                      <span style={S.lbl}>Stand Name</span>
+                      <input
+                        style={S.inp}
+                        value={standName}
+                        onChange={(e) => setStandName(e.target.value)}
+                        placeholder="e.g. 「Killer Queen」"
+                      />
+                    </div>
+                  )}
                   <div>
                     <span style={S.lbl}>Role / Type</span>
                     <input
@@ -2645,30 +2640,33 @@ const NPCSheet = ({
             <div style={S.g2}>
               {/* ════ LEFT — Stats + Reference ════ */}
               <div>
-                {/* Stand Coin Stats */}
-                <div style={S.card}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "baseline",
-                      marginBottom: "10px",
-                    }}
-                  >
-                    <span style={S.lbl}>Stand Coin Stats</span>
-                    <span style={{ fontSize: "11px", color: "#6b7280" }}>
-                      {totalPoints} pts → Level {level}
-                    </span>
+                {/* Stand Coin Stats — Stand-playbook NPCs only */}
+                {playbook === "STAND" && (
+                  <div style={S.card}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "baseline",
+                        marginBottom: "10px",
+                      }}
+                    >
+                      <span style={S.lbl}>Stand Coin Stats</span>
+                      <span style={{ fontSize: "11px", color: "#6b7280" }}>
+                        {totalPoints} pts → Level {level}
+                      </span>
+                    </div>
+
+                    <NpcsStandCoin
+                      grades={stats}
+                      readouts={standCoinReadouts}
+                      onStep={bumpStandCoinGrade}
+                    />
                   </div>
+                )}
 
-                  <NpcsStandCoin
-                    grades={stats}
-                    readouts={standCoinReadouts}
-                    onStep={bumpStandCoinGrade}
-                  />
-                </div>
-
-                {/* Stat Reference Cards */}
+                {/* Stat Reference Cards — Stand-playbook NPCs only */}
+                {playbook === "STAND" && (
                 <div style={S.card}>
                   <span style={S.lbl}>Combat Reference</span>
 
@@ -2805,6 +2803,7 @@ const NPCSheet = ({
                     </div>
                   </div>
                 </div>
+                )}
 
                 {/* Heritage reference (recover-in-play defaults live under Heal ally → Recover in play) */}
                 <div style={S.card}>
@@ -2921,7 +2920,8 @@ const NPCSheet = ({
                   )}
                 </div>
 
-                {/* Abilities */}
+                {/* Abilities — Stand-playbook NPCs only */}
+                {playbook === "STAND" && (
                 <div style={S.card}>
                   <span style={S.lbl}>Stand Abilities</span>
                   <div
@@ -3080,6 +3080,7 @@ const NPCSheet = ({
                     + Add Ability
                   </button>
                 </div>
+                )}
 
                 {/* Playbook Abilities — Hamon / Spin / Non-Bizarre */}
                 {playbook !== "STAND" && (
@@ -3330,8 +3331,8 @@ const NPCSheet = ({
 
               {/* ════ RIGHT — Clocks + Armor ════ */}
               <div>
-                {/* Durability / Vulnerability Section */}
-                {isDurS ? (
+                {/* Durability / Vulnerability (Stand) + Armor (all playbooks) */}
+                {playbook === "STAND" && isDurS && (
                   /* S-DURABILITY — No vulnerability clock */
                   <div style={{ ...S.card, border: "2px solid #16a34a" }}>
                     <div style={S.sdur}>
@@ -3577,7 +3578,9 @@ const NPCSheet = ({
                       </div>
                     </div>
                   </div>
-                ) : (
+                )}
+
+                {playbook === "STAND" && !isDurS && (
                   /* NORMAL DURABILITY — Vulnerability Clock + Armor */
                   <div style={S.card}>
                     <div
@@ -3776,6 +3779,86 @@ const NPCSheet = ({
                           Reset Armor
                         </button>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {playbook !== "STAND" && (
+                  /* Hamon / Spin / Non-Bizarre — physical + special armor only */
+                  <div style={S.card}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "baseline",
+                        marginBottom: "10px",
+                      }}
+                    >
+                      <span style={S.lbl}>Armor</span>
+                      <span style={{ fontSize: "10px", color: "#6b7280" }}>
+                        No vulnerability clock (non-Stand)
+                      </span>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "12px",
+                      }}
+                    >
+                      <div style={{ fontSize: "10px", color: "#9ca3af" }}>
+                        Spend armor charges <strong>before</strong> applying harm.
+                        Physical and special armor come from playbook / standard
+                        abilities — Stand armor is Stand-user only.
+                      </div>
+                      <NpcPhysicalArmorBlock
+                        shortLabel={false}
+                        hasItem={hasPhysicalArmorItem}
+                        onHasItemChange={(v) => {
+                          setHasPhysicalArmorItem(v);
+                          if (!v) setRegularUsed(0);
+                        }}
+                        bonusCharges={physicalArmorBonusCharges}
+                        onBonusChargesChange={setPhysicalArmorBonusCharges}
+                        regArmorMax={regArmorMax}
+                        regularUsed={regularUsed}
+                        onRegularUsed={setRegularUsed}
+                      />
+                      <ArmorTracker
+                        label="SPECIAL ARMOR"
+                        max={specArmorMax}
+                        used={specialUsed}
+                        onChange={setSpecialUsed}
+                        color="#7c3aed"
+                      />
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#4b5563",
+                          lineHeight: "1.5",
+                        }}
+                      >
+                        Physical: −1 harm charges when a physical armor item is
+                        checked
+                        <br />
+                        Special: completely negate harm
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRegularUsed(0);
+                          setSpecialUsed(0);
+                        }}
+                        style={{
+                          ...S.btn,
+                          background: "#1f2937",
+                          color: "#9ca3af",
+                          fontSize: "10px",
+                          alignSelf: "flex-start",
+                        }}
+                      >
+                        Reset Armor
+                      </button>
                     </div>
                   </div>
                 )}
