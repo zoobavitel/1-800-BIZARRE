@@ -68,6 +68,7 @@ class NPCAdmin(admin.ModelAdmin):
     list_display = ('name', 'campaign', 'creator', 'playbook', 'level', 'vulnerability_clock_current', 'armor_charges')
     list_filter = ('playbook', 'campaign', 'creator', 'level')
     search_fields = ('name', 'description', 'stand_description')
+    filter_horizontal = ('selected_benefits', 'selected_detriments')
     fieldsets = (
         (None, {
             'fields': ('name', 'level', 'creator', 'campaign')
@@ -79,7 +80,15 @@ class NPCAdmin(admin.ModelAdmin):
             'fields': ('weakness', 'need', 'desire', 'rumour', 'secret', 'passion')
         }),
         ('Game Mechanics', {
-            'fields': ('heritage', 'playbook', 'stand_coin_stats', 'custom_abilities', 'relationships')
+            'fields': (
+                'heritage',
+                'selected_benefits',
+                'selected_detriments',
+                'playbook',
+                'stand_coin_stats',
+                'custom_abilities',
+                'relationships',
+            )
         }),
         ('Clocks & Armor', {
             'fields': ('vulnerability_clock_current', 'armor_charges')

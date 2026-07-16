@@ -348,6 +348,13 @@ class NPC(models.Model):
     heritage = models.ForeignKey(
         Heritage, on_delete=models.SET_NULL, null=True, blank=True
     )
+    # GM "in play" picks for this NPC (no PC HP budget). related_name avoids clash with Character.
+    selected_benefits = models.ManyToManyField(
+        Benefit, blank=True, related_name="npcs"
+    )
+    selected_detriments = models.ManyToManyField(
+        Detriment, blank=True, related_name="npcs"
+    )
     playbook = models.CharField(
         max_length=20, choices=PLAYBOOK_CHOICES, default="STAND"
     )

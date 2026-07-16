@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from rest_framework.test import APIClient
 from rest_framework import status
-from characters.models import Campaign, NPC, Heritage
+from characters.models import Campaign, NPC, Heritage, Benefit, Detriment
 
 
 class NPCModelTest(TestCase):
@@ -794,3 +794,101 @@ class NPCPutAbilitiesRegressionTest(TestCase):
         except AttributeError as exc:
             self.fail(f"NPC.__str__ raised AttributeError with null campaign: {exc}")
         self.assertIn("no campaign", s)
+
+
+class NPCHeritageSelectionTest(TestCase):
+    """NPC selected_benefits / selected_detriments persist without PC HP budget rules."""
+
+    def setUp(self):
+        self.gm_user = User.objects.create_user(
+            username="gm_herit", email="gm_herit@test.com", password="testpass"
+        )
+        self.campaign = Campaign.objects.create(name="Heritage Camp", gm=self.gm_user)
+        self.heritage = Heritage.objects.create(
+            name="Pillar Man Test", base_hp=2, description="Test heritage"
+        )
+        self.benefit = Benefit.objects.create(
+            heritage=self.heritage,
+            name="Hyper-Intelligence",
+            description="Test benefit",
+            required=False,
+            hp_cost=1,
+        )
+        self.detriment = Detriment.objects.create(
+            heritage=self.heritage,
+            name="Sunlight Turns You to Stone",
+            description="Test detriment",
+            required=True,
+            hp_value=1,
+        )
+        self.npc = NPC.objects.create(
+            name="Kars",
+            creator=self.gm_user,
+            campaign=self.campaign,
+            heritage=self.heritage,
+            playbook="NON_BIZARRE",
+            stand_coin_stats={},
+        )
+
+    def _auth_client(self):
+        c = APIClient()
+        c.force_authenticate(user=self.gm_user)
+        return c
+
+    def test_put_npc_selected_heritage_picks_persist(self):
+        payload = {
+            "name": "Kars",
+            "heritage": self.heritage.id,
+            "playbook": "NON_BIZARRE",
+            "stand_coin_stats": {},
+            "selected_benefits": [self.benefit.id],
+            "selected_detriments": [self.detriment.id],
+            "faction_status": {},
+            "inventory": [],
+            "contacts": [],
+        }
+        resp = self._auth_client().put(
+            f"/api/npcs/{self.npc.id}/",
+            payload,
+            format="json",
+        )
+        self.assertIn(
+            resp.status_code,
+            (200, 204),
+            f"Expected 200/204 but got {resp.status_code}: {getattr(resp, 'data', resp.content)}",
+        )
+        self.npc.refresh_from_db()
+        self.assertEqual(
+            list(self.npc.selected_benefits.values_list("id", flat=True)),
+            [self.benefit.id],
+        )
+        self.assertEqual(
+            list(self.npc.selected_detriments.values_list("id", flat=True)),
+            [self.detriment.id],
+        )
+        self.assertEqual(resp.data.get("selected_benefits"), [self.benefit.id])
+        self.assertEqual(resp.data.get("selected_detriments"), [self.detriment.id])
+
+    def test_put_npc_can_clear_heritage_picks(self):
+        self.npc.selected_benefits.set([self.benefit])
+        self.npc.selected_detriments.set([self.detriment])
+        payload = {
+            "name": "Kars",
+            "heritage": self.heritage.id,
+            "playbook": "NON_BIZARRE",
+            "stand_coin_stats": {},
+            "selected_benefits": [],
+            "selected_detriments": [],
+            "faction_status": {},
+            "inventory": [],
+            "contacts": [],
+        }
+        resp = self._auth_client().put(
+            f"/api/npcs/{self.npc.id}/",
+            payload,
+            format="json",
+        )
+        self.assertIn(resp.status_code, (200, 204), getattr(resp, "data", resp.content))
+        self.npc.refresh_from_db()
+        self.assertEqual(self.npc.selected_benefits.count(), 0)
+        self.assertEqual(self.npc.selected_detriments.count(), 0)
