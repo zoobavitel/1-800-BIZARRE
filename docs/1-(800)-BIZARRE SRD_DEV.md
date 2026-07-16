@@ -1335,7 +1335,7 @@ When you create your crew, you assign some positive and negative status ratings 
 **ADVANCEMENT**
 
 **PC Advancement:**  
-Each player keeps track of the experience points (xp) that their character earns.
+Each player keeps track of the experience points (xp) that their character earns. A player character sheet has 5 XP tracks: heritage, insight, prowess, resolve, and playbook. Heritage, insight, prowess, and resolve require 5 boxes in order to advance, while the playbook track requires filling 10 boxes in order to advance. If you wish to have abilities from more than 1 playbook, you fill in 10 boxes in your playbook track to advance; you do not add an additional playbook track to your character sheet. 
 
 During the game session, mark xp:
 
@@ -1351,7 +1351,13 @@ At the end of the session, review the xp triggers on your character sheet. For e
 
 - You may mark end-of-session xp on any xp tracks you want (any attribute or your playbook xp track).
 
-When you fill an xp track, clear all the marks and take an advance. When you take an advance from your playbook track, you may choose an additional special ability. When you take an advance from an attribute, you may add an additional skill dot to one of the skills under that attribute.
+**When you fill an xp track, clear all the marks and take an advance.** 
+
+Filling an attribute track (5XP/boxes) gives you \+1d to an action of your choosing within that attribute type. For example: filling the insight track and advancing gives the player a choice to add \+1d to any action rating in the insight attribute.
+
+If you are a stand user: Filling the **playbook track** (10XP/boxes) lets you choose a stand coin stat to increase by 1 grade (F to D, D to C, etc.). When you gain an A in any stat, choose 2 standard abilities OR 1 custom ability with 2 features AND 1 standard ability.
+
+If you are not a stand user: Filling the **playbook track** (10XP/boxes) gives an advance that lets you take a **special ability from your playbook**.
 
 **Any desperate roll** marks 1 XP in the relevant attribute (Insight, Prowess, or Resolve), regardless of how many dots you have in the action.
 
@@ -1362,11 +1368,10 @@ When you fill an xp track, clear all the marks and take an advance. When you tak
 
 *That's **7 XP total** at the end of the session.*
 
-*Johnny decides to put **5 XP into his Insight XP track** (filling it) and **2 XP into his Stand Coin advancement track**. He takes an advance and adds **\+1 action dot to Hunt**, bringing him from Hunt 2 to Hunt 3\. The remaining 2 XP in his Stand Coin track will carry over to the next session. He needs **8 more XP** to increase a Stand Coin stat.*
+*Johnny decides to put **5 XP into his Insight XP track** (filling it) and **2 XP into his playbook advancement track**. He takes an advance and adds **\+1 action dot to Hunt**, bringing him from Hunt 2 to Hunt 3\. The remaining 2 XP in his Stand Coin track will carry over to the next session. He needs **8 more XP** to increase a Stand Coin stat.*
 
-You can also earn xp by training during downtime. When you train, mark XP in one of your attributes or in your playbook. A given xp track can be trained only once per downtime phase.
-
-It is 5 xp to gain a \+1d in a skill rating. It is 10xp to gain a \+1 stand coin stat, heritage ability, or \+2d in a skill rating. 
+You can also earn xp by training during downtime. When you train, mark XP in one of your attributes or in your playbook. A given xp track can be trained only once per downtime phase.  
+ 
 
 **STAND USERS**
 
@@ -2253,23 +2258,43 @@ These templates demonstrate how Coin stats limit *what you can get away with* an
 
 # **🌀 Spin Mastery: The Playbooks of the Perfect Spin**
 
-Spin users manipulate rotational energy, precision motion, and harmonic feedback to perform feats of science, sabotage, and surrealism. Spin abilities scale with your Coin stats. At the start of the game, choose 3 abilities. Each A-rank in Coin stats unlocks two more abilities (from custom, playbook, or standard ability list). Some abilities require a certain amount of A's before being allocated.
+Spin users manipulate rotational energy to perform feats of science, sabotage, and surrealism. At the start of the game, choose:
 
-You may mix and match across Spin playbooks. S-rank Coin stats may unlock exceptional upgrades at GM discretion. They're not classes or restrictions. They're example builds: launch pads for your imagination.
+- 1 Standard Ability  
+- 1 Ability from a Spin playbook(s)  
+- 1 set of equipment from the Spin Foundations. 
+
+When you take a playbook advancement, you may select a special ability from the various spin playbooks. Advancing to higher tiers within those playbooks will unlock greater abilities. 
+
+Spend 30XP to gain a Stand. Your stand coin starts with D in each category (6 points starting total) \- you may reallocate your stand coin stats similar to a new stand user, where F \= 0, D \= 1, C \= 2, B \= 3, A \= 4\. You gain the stand dice action ratings as well as a number of stand armor uses according to your durability. The stand does not have to be related to your character's hamon or spin abilities. Your stand gains 2 unique abilities (see stand playbook section for examples), and each A grade gives you 1 standard and 1 unique ability. To advance a stand coin stat, fill in the 10 boxes of your playbook track to advance a grade. 
+
+You may take a playbook advancement (10xp) to gain a Hamon ability. Mark 10 boxes in your playbook to learn a feature from a Hamon playbook. Learn more features to gain higher quality features.
 
 ---
 
 ## **🌀 Spin Foundations (Universal to all Spin users)**
 
-These are the core techniques known to every Spin practitioner. Players begin with access to these.
+These are the core techniques and valuable equipment known to every Spin practitioner. Players begin with access to these.
 
-**Golden Arc** Once per scene, a thrown Spin projectile returns. On a 6, it may hit a second target. On a crit, \+1 effect or \+1d to the return strike.
+Techniques:
 
-**Vibrational Scan** Use a spinning object to perform a Study or Survey roll. \+1 effect when detecting structure, weak points, or lifeforms.
+**Golden Arc** Your Spin projectiles return to you. On a 6, it may hit a second target. With two 6’s, \+1 effect or \+1d to the follow-up strike.
+
+**Vibrational Scan** Use a spinning object to perform a Study or Survey roll up to 25m (80ft). \+1 effect when detecting structures, weak points, or lifeforms.
 
 **Kinetic Tether** Spin threads can connect two objects. Once per score, create a tether that allows movement, redirection, or restraint. \+1d when using it for repositioning or rescue.
 
-**Reflective Barrier** Spin two objects at high frequency to bend light or sound. Once per score, redirect a single ranged attack or sound-based effect. Must be declared before the GM reveals the consequence.
+***Throw Voice*** \- Use your spin tool to throw your voice up to 60ft. Push yourself to extend the range. 
+
+***Centripetal Force*** \- While moving, you gain a special armor charge. You must be in motion when you declare this. Use this armor to push yourself. 
+
+***Detour*** \- Redirect an incoming AoE attack to a nearby area. Roll Finesse or Tinker; on a 6, full redirection with no residual consequence.
+
+***Tendon Manipulation*** \- Before making an attack with a spin tool, name an opponent’s limb. On a full success, you control that enemy’s limb and make 1 action as long as the spin weapon is embedded in that limb. Enemies can use their armor to lower or avoid the consequence of tendon manipulation.
+
+Starting Equipment:
+
+*Steel Ball* \- a polished, steel ball used by beginners and experts. Can be used for spin related actions in or out of combat. 
 
 ---
 
@@ -2277,67 +2302,68 @@ These are the core techniques known to every Spin practitioner. Players begin wi
 
 Masters of mounted motion, vehicle manipulation, and movement disruption.
 
-**With 1 A:**
+*Gyroscopic Mount* \- \+1d to actions related to maneuvering or Spin related rolls when mounted or piloting.
 
-*Gyroscopic Mount* \+1 effect to movement or melee Spin rolls when mounted or piloting.
+*Remote Connection* \- You are able to remotely control/pilot your mount or vehicle without line of sight or vocal commands.  
 
-*Magnetic Pulse* Push or pull a metal object within your operational Range. Break line of sight or create an opening. Costs 1 stress.
+**After 1 Advance:**
 
-**With 2 A:**
+*Privileged Pilot* \- Your mount gains an armor charge while moving. Losing momentum loses your armor charge. 
 
-*Stirrup Surge* \+1d on Skirmish while charging. On a 6, gain a knockback effect. On a crit, increase the potency.
+*Kinetic Knockdown* \- Spin-imbued Skirmish actions gain \+1d while charging (aka speeding towards the opponent) on your mount. On a full success (6), the victim is forced back. On a crit, the victim is forced prone.
 
-*Rotational Grapple* Fire a tethered grappling hook. \+1d on mobility, chase, or extraction actions. Costs 1 stress if used to redirect a falling ally or large object.
+*Wheel of Warding* \- Your vehicle/mount makes you prepared for any engagement, adding \+1d to the engagement roll. 
 
-*Wheel of Warding* Once per conflict, use your vehicle to block a projectile. Mark 1 vehicle armor or pay 2 stress.
+**With 2 Advances:**
 
-**With 3 A:**
+*Spiral Drift* \- \+1d on Finesse or Prowl while in motion. Hunt actions gain \+1 effect. 
 
-*Spiral Drift* \+1d on Finesse or Prowl while in motion. Chases use \+1 effect. Gain "split momentum" (move and act in the same tick) once per score.
+*Gravitic Leap* \- While mounted/piloting, You may use a special armor charge to float or launch midair with Spin-warped gravity. 
 
-*Centripetal Shield* While moving, expend your Stand armor to reduce a ranged attack's harm by 1 level. You must be in motion when you declare this.
+*Stirrup Surge* \- Your mount is innately imbued with spin energy, doubling their movement speed. 
 
-*Echo Hoof* Ride at speed to reveal terrain features. Acts as a Survey roll with \+1 effect for environmental clues. The motion itself is the instrument — no separate action required.
+**With 3 Advances:**
 
-**With 4 A:**
+*Spiral Stampede* \- In a group action with all allies converging on one or more opponents/goals, add \+1d to each player’s roll, enabling their actions with spin. 
 
-*Gravity Path* You may float, pin enemies, or launch into buildings with Spin-warped gravity. 1 stress per use, 2 stress for effects beyond your immediate presence.
+*Stagnant Space* \- You may use a spin tool to suspend an opponent up to 10 ft midair.
 
-*Drift Through Dimensions* Once per campaign, you and your mount may exit the current scene through a dimensional fold. Avoid all consequences and reposition narratively.
 
-*Golden Track* At full speed, your next thrown Spin attack gains \+2 effect and ignores 1 level of armor.
+Equipment:
 
-*Spiral Stampede* Nearby mounts within your operational Range follow your trajectory. Create a 6-clock "Chaos Charge." On completion: mass knockdown, enemy confusion, or opening.
+*Rider’s Bolas* \- 
+
+*Cavalier’s Spurs* \- These spurs track your spin tool’s use. Each usage of spin fills 1 segment of a 4 segment clock called “Displacement Charge.” With a full clock, you gain access to a new feature. “Displacement Charge” grants the user and their mount to use a special armor to disappear and reappear into another physical space within reason. The clock resets after using this feature. You take no fall damage when reappearing into a physical space.
 
 ---
 
 ## **⚔ Executioner**
 
-Precision killers, focused on high-speed takedowns, ricochets, and disablement.
+Precision killers, focused on high-speed takedowns, ricochets, and suppressing fire.
 
-**With 1 A:**
+*Miracle Shot* \- On a partial success, curve your spin tool around ¾’s cover. Grants \+1 position. On a crit, hit through supernatural barriers.
 
-*Lethal Parabola* Name an enemy's body part before a throw. On a 6, that body part is weakened, and the GM opens a 4-segment clock dictating how long before it can be used again.
+**After 1 Advance:**
 
-**With 2 A:**
+*Line Cutter* \- A straight-line throw hits up to 3 foes in your operational Range. Costs 1 stress if used mid-fight rather than in setup.
 
-*Arc Toss* Curve your throw around cover. Grants \+1 position. On a crit, hit through supernatural barriers.
+*Overload Hit* \- Take \-1d to deal damage with increased potency (+1 effect).
 
-*Line Cutter* A straight-line throw hits up to 3 foes in your operational Range. Costs 1 stress if used mid-fight rather than in setup.
+*Civil Engineer* \- On a partial success, your spin tool can change the integrity of a nearby structure within 40ft. You can cause this structure to collapse and hinder opponents. On a full success, modify the integrity of the structure to turn it into a new structure (change and mold the form and function of walls, roads, objects/entities, etc.)
 
-**With 3 A:**
+**2 Advances:** 
 
-*Spin Snipe* Treat your Range stat as one grade higher for thrown Spin attacks. At A-rank Range or above, thrown attacks suffer no range penalties regardless of distance.
+*Devastation Chain* \- Taking out an enemy grants a free follow-up throw at \-1d. On a crit, the follow up continues, again.
 
-*Devastation Chain* Taking out an enemy grants a free follow-up throw at \-1d. On a crit, the chain continues again (once per score).
+*Shotgun Scatter* \- Use a special armor charge to split a projectile mid-air using a spin tool. Then, target a number of opponents within range of the original attack. The projectile cannot be reformed into its original form. 
 
-*Overload Hit* Take \-1d to deal damage beyond your immediate presence. Open a "Residual Harm" clock in the zone.
+**3 Advances:**
 
-**With 4 A:**
+Equipment:
 
-*Shotgun Scatter* Split a Spin projectile mid-air. Hits all foes within your immediate presence.
+Fibonacci Belt \- 
 
-*Spinal Collapse* Inflict a severe debilitation unless resisted. Fill a 12-clock "Nerve Damage." Until that clock is cleared, the target cannot use the affected body system without pushing themselves.
+Spin-Driver \- This weapon imbues sharp, metal discs with overpowering spin energy; victims hit by the Spin-Driver lose their momentum.
 
 ---
 
@@ -2345,33 +2371,35 @@ Precision killers, focused on high-speed takedowns, ricochets, and disablement.
 
 Practitioners of rotational surgery, field restoration, and biochemical Spin rituals.
 
-**With 1 A:**
+*Cosmetic Reconstruction* \- You are able to use a spin tool to reconstruct the physical appearance of an ally or foe. You can make them look younger, older, or reconstruct their face for as long as your spin tool is embedded in them. 
 
-*Precision Incision* When healing with a Spin-charged tool, heal \+1 segment.
+**With 1 Advance:**
 
-*Improvised Tools* No penalties for makeshift surgery or treatment items.
+*Improvised Tools* \- No penalties for makeshift surgery or improvised treatment items.
 
-**With 2 A:**
-
-*Spin Suture* Stabilize an ally mid-combat. Stop bleeding or reduce Harm by 1 level. Costs 1 stress if under fire or in motion.
-
-*Triage Sphere* Deploy a floating orb within your operational Range. Allies near the orb gain \+1d to resistance or recovery rolls for one scene.
-
-*Remote Restoration* Throw a Spin-imbued ball to heal 1 segment or remove "bleeding" from an ally within your operational Range.
-
-**With 3 A:**
-
-*Rotary Armor Patch* Apply spinning shielding to an ally. 1 temporary armor for one conflict.
-
-*Spin Shunt* Redirect one status or environmental hazard (electricity, poison, etc.) into the terrain or machinery.
-
-*Emergency Fusion* Once per score, two PCs may act as one: share clocks, action ratings, and armor for 1 scene. Costs 2 stress per user.
+*Precision Incision* \- When healing with a Spin-charged tool, heal \+1 segment.
 
 *Spin Scanner* \+1 effect on Study for diagnosing trauma, injuries, or internal sabotage (tech or bio).
 
-**With 4 A:**
+**2 Advances:**
 
-*Spinfield Stabilizer* Create a field where allies may reduce their Harm by 1 level per scene. Requires a fixed location; lasts until the location is compromised or the scene ends.
+*Spin Suture* \- You may use your spin tool from afar to aid an ally mid-combat (if an ally has level 3 harm, they may act as if you aided them). Costs 1 special armor to end a status effect (like bleeding or poison) or protect an ally from a consequence.  
+
+*Triage Sphere* \- Deploy a floating orb. Allies within 20ft of the orb gain \+1d to resistance rolls for one scene.
+
+*Rotary Armor Patch* \- Commit a spin tool to apply a spinning shield to an ally. May grant at max 1 armor charge. Regain your spin tool after the armor charge is used.
+
+**3 Advances:**
+
+*Spinfield Stabilizer* \- Create a field where allies may reduce incoming Harm by 1 level. Requires a fixed location; lasts until the location is compromised or the scene ends.
+
+*Emergency Fusion* Once per score, two PCs may act as one: share clocks, action ratings, and armor for 1 scene. Costs 2 stress per user.
+
+Equipment
+
+20 Finger Harness
+
+- This old duster coat contains a harness with 4 mechanical arms attached to the back of the wielder. Gain a special armor charge \- use it to redirect multiple projectiles at the same time. Regain this armor charge at the start of downtime.  
 
 ---
 
@@ -2379,19 +2407,19 @@ Practitioners of rotational surgery, field restoration, and biochemical Spin rit
 
 Advanced users of destructive rotational harmonics and disruptive psychic echo.
 
+*Dismantle Strike* \- Hit a weapon or body part with Spin. On a partial success, the weapon/limb is unusable. On a full success, the weapon/limb is completely destroyed. An opponent must use armor to avoid the consequence. 
+
+*Spin Fakeout* \- Create a visual or auditory decoy. \+1d to Prowl or to spring traps. Once per scene, an enemy acts on false information — the GM determines how this plays out.
+
 **With 1 A:**
 
-*Dismantle Strike* Hit a weapon or body part with Spin. Jam or disable it — the target must push themselves or clear a 4-clock to restore function.
+*Magnetic Pulse* Push or pull a metal object within your operational Range. Break line of sight or create an opening. Costs 1 stress.
 
-*Spin Fakeout* Create a visual or auditory decoy. \+1d to Prowl or to spring traps. Once per scene, an enemy acts on false information — the GM determines how this plays out.
-
-**With 2 A:**
-
-*Fracture Intent* On a 4+, the enemy misreads your intent. They target the wrong person or act at the wrong time.
+*Fracture Intent* On a 6, the enemy misreads your intent. They target the wrong person or act at the wrong time.
 
 *Jammer Spiral* Once per score, nullify one relic, power, or tech device within F-rank Range (10ft) until its user pushes themselves to reactivate it. Costs 2 stress.
 
-**With 3 A:**
+**With 2 A:**
 
 *Stand Stagger* Hit a Stand user with Spin. Their Stand loses its next reaction or triggered effect.
 
@@ -2399,13 +2427,19 @@ Advanced users of destructive rotational harmonics and disruptive psychic echo.
 
 *Spin Muzzle* Suppress sound-based abilities or commands within F-rank Range (10ft) until the situation shifts or a target pushes themselves to break through.
 
-**With 4 A:**
+**With 3 A:**
 
 *Field Denial* Create a zone within F-rank Range (10ft) where no powers activate until the GM advances the fiction or a target pushes themselves to resist. Costs 3 stress. On a crit, the suppression blocks an ongoing ritual entirely.
 
 *Cascading Spin* Debuffs spread on contact. Pick two targets; enemies that physically interact with them inherit the effect, and so on. Costs 2 stress.
 
-*Aura Reroute* Redirect an incoming AoE attack to a nearby area. Roll Finesse or Tinker; on a 6, full redirection with no residual consequence.
+Equipment:
+
+Wrecking Ball
+
+- Wrecking Balls are covered regularly by large dimples housing smaller balls, called satellites, which can separate in-flight to strike targets on their own (this is all one roll). Even if these satellites do not quite meet their target, they produce airborne shockwaves which will induce an effect. Wrecking Balls induce “left half ataxia” (temporary [hemispatial neglect](https://en.wikipedia.org/wiki/hemispatial_neglect)); the victim ignores any spatial awareness or sensations in the left side of their body. Opponents must use an armor charge in order to regain the sensation in the left half of their body.
+
+*Ballbreaker Handwraps* \- These handwraps track your spin tool’s use. Each usage of spin builds a 4 segment clock called “kinetic tremor.” With a full clock, your next thrown Spin attack ignores 1 level of armor. The clock resets after using this feature.
 
 # ☀️ Hamon Playbook
 
@@ -2773,17 +2807,14 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 
 * **Ambush:** When you attack from hiding or spring a trap, you get **\+1d.**  
 * **Cascade Effect:** If you roll a 6 from your resistance roll to resist a physical or bizarre consequence, the attacker suffers a mirrored backlash.  
-* **Final Barrage:** When reduced to 0 HP or Level 4 harm, make a **potent Stand attack** before going down.  
+* **Final Barrage:** When you take Level 4 harm, use your special armor/stand armor to make a **potent attack** before going down.  
 * **Phantom Pain:** Spend 1 stress to make your stand attack through cover, walls, or barriers that would otherwise block it. Works within your stand range.   
-* **Savage:** When you unleash physical violence, it's especially frightening. **When you command a frightened target, take \+1d**.  
-* **Spin-Boosted Blow:** Add Spin to your next Stand attack to supercharge a single strike (adds \+1 effect and \+1d).  
-* **Steady Barrage:** You can barrage targets up to your Stand's range. Add \+1d when making multiple rapid-fire attacks.
+* **Savage:** When you unleash physical violence, it's especially frightening. **When you command a frightened target, take \+1d**.
 
 **Endurance**
 
 * **Invigorated:** you recover from harm faster. Permanently fill in one of your healing clock segments. Take **\+1d** to healing treatment rolls.  
 * **Legendary Guard:** Once per score, you may completely negate one instance of incoming harm.  
-* **Swan Song:** When you'd be taken out (Level 4 harm), spend remaining Stand armor charges to stay standing for one heroic action.  
 * **Iron Will:** You're immune to the terror that some bizarre entities inflict on sight. Take **\+1d** to resistance rolls with **Resolve**.  
 * **Tough as Nails:** Penalties from harm are one level less severe (though level 4 harm is still fatal)  
 * **Overdrive:** While wearing non-Stand armor, gain an extra **\+1 armor**.  
@@ -2796,13 +2827,13 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 * **Cloak & Dagger:** When you use a disguise or other form of covert misdirection, you get **\+1d** to rolls to confuse or deflect suspicion. When you throw off your disguise, the resulting surprise gives you the initiative in the situation.   
 * **Mesmeriser:** When you **Sway** someone, you may cause them to forget that it’s happened until they next interact with you.   
 * **Saboteur:** When you **wreck**, the work is much quieter than it should be and the damage is hidden from casual inspection.  
-* **Shadow:** Expend your Stand armor to resist a consequence from detection, surveillance, or security measures, or to push yourself for a feat of athletics or stealth.  
-* **Subterfuge:** You may expend your **stand armor** to resist a consequence from suspicion or persuasion, or to **push yourself** for subterfuge.
+* **Shadow:** Expend your stand/special armor to resist a consequence from detection, surveillance, or security measures, or to push yourself for a feat of athletics or stealth.  
+* **Subterfuge:** You may expend your **stand armor/special armor** to resist a consequence from suspicion or persuasion, or to **push yourself** for subterfuge.
 
 **Awareness**
 
 * **Bizarre Intuition:** You have a bizarre sense for danger. You cannot be surprised.  
-* **Focused:** You may expend your **stand armor** to resist a consequence of surprise or mental harm (fear, confusion, losing track of someone).  
+* **Focused:** You may expend your **stand armor/special armor** to resist a consequence of surprise or mental harm (fear, confusion, losing track of someone).  
 * **Like looking into a Mirror:** You can always tell when someone is lying.  
 * **Mastermind:** You’re always aware of supernatural entities in your presence. Take **\+1d** when you **gather info** about the bizarre.  
 * **Neural Lace:** By touching your Stand, you may read surface thoughts of nearby targets.  
@@ -2832,7 +2863,7 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 * **The Devil’s Footsteps:** When you **push yourself**, choose one of the following additional benefits:  
   * Perform a feat of athletics that verges past superhuman for 1 scene.  
   * Maneuver to confuse your enemies so they mistakenly attack each other.  
-* **Superhero Landing:** Expend **Stand armor** to reduce fall/collision harm by 1\. Gain **\+1d** for stylish aerial actions.  
+* **Superhero Landing:** Expend **Stand armor/special armor** to reduce fall/collision harm by 1\. Gain **\+1d** for stylish aerial actions.  
 * **Daredevil:** When you roll a desperate action, you get **\+1d** to your roll if you also take **\-1d** to any resistance roll(s) against consequences from your action(s).   
 * **Bizarre Improvisation:** Take **2 stress** to roll your best action rating while performing a different action. Say how you adapt your skill to this use. 
 
