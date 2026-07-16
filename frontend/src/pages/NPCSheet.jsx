@@ -9,6 +9,10 @@ import {
   xpHistoryAPI,
   npcAPI,
 } from "../features/character-sheet";
+import {
+  markNpcAutosaveBusyCollision,
+  takeNpcAutosavePending,
+} from "../features/character-sheet/utils/npcAutosaveGate";
 import { HistoryBranchIcon } from "../components/position-effect/PositionEffectIndicators";
 import NpcsStandCoin from "../components/NpcsStandCoin";
 
@@ -1283,6 +1287,11 @@ const NPCSheet = ({
   const mountedRef = useRef(false);
   const npcIdRef = useRef(npc?.id || null);
   const savingRef = useRef(false);
+  /** When a debounced save fires mid-flight, queue a follow-up with latest payload. */
+  const pendingSaveRef = useRef(false);
+  const buildPayloadRef = useRef(null);
+  const nameRef = useRef(name);
+  const onSaveRef = useRef(onSave);
 
   const [showNpcTrackingPanel, setShowNpcTrackingPanel] = useState(false);
   const [npcTrackingTab, setNpcTrackingTab] = useState("sheet");
@@ -1664,6 +1673,66 @@ const NPCSheet = ({
     ],
   );
 
+  buildPayloadRef.current = buildPayload;
+  nameRef.current = name;
+  onSaveRef.current = onSave;
+
+  const runNpcAutosave = useCallback(async () => {
+    const saveFn = onSaveRef.current;
+    if (!saveFn) return;
+    if (markNpcAutosaveBusyCollision(savingRef.current, pendingSaveRef)) {
+      return;
+    }
+    // Don't auto-save a brand-new NPC that has never been persisted and
+    // still has no name — this prevents spurious creates when a blank tab
+    // mounts and init effects fire state changes before the user types.
+    if (!npcIdRef.current && !String(nameRef.current || "").trim()) return;
+
+    savingRef.current = true;
+    setSaveStatus("saving");
+    setSaveErrorDetail(null);
+    try {
+      const result = await saveFn(buildPayloadRef.current());
+      if (result?.id && !npcIdRef.current) npcIdRef.current = result.id;
+      if (Array.isArray(result?.conflict_clocks)) {
+        const next = normalizeClockList(result.conflict_clocks);
+        setConflictClocks((prev) =>
+          npcClockListsSemanticallyEqual(prev, next) ? prev : next,
+        );
+      }
+      if (Array.isArray(result?.alt_clocks)) {
+        const next = normalizeClockList(result.alt_clocks);
+        setAltClocks((prev) =>
+          npcClockListsSemanticallyEqual(prev, next) ? prev : next,
+        );
+      }
+      setSaveStatus("saved");
+      setSaveErrorDetail(null);
+      setTimeout(
+        () => setSaveStatus((s) => (s === "saved" ? null : s)),
+        2000,
+      );
+    } catch (err) {
+      setSaveStatus("error");
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === "string"
+            ? err
+            : "Save failed";
+      setSaveErrorDetail(msg);
+      console.error("NPC autosave failed:", err);
+    } finally {
+      savingRef.current = false;
+      if (takeNpcAutosavePending(pendingSaveRef)) {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+          void runNpcAutosave();
+        }, 0);
+      }
+    }
+  }, []);
+
   // Debounced auto-save
   useEffect(() => {
     if (!mountedRef.current) {
@@ -1671,49 +1740,8 @@ const NPCSheet = ({
       return;
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      if (savingRef.current || !onSave) return;
-      // Don't auto-save a brand-new NPC that has never been persisted and
-      // still has no name — this prevents spurious creates when a blank tab
-      // mounts and init effects fire state changes before the user types.
-      if (!npcIdRef.current && !name.trim()) return;
-      savingRef.current = true;
-      setSaveStatus("saving");
-      setSaveErrorDetail(null);
-      try {
-        const result = await onSave(buildPayload());
-        if (result?.id && !npcIdRef.current) npcIdRef.current = result.id;
-        if (Array.isArray(result?.conflict_clocks)) {
-          const next = normalizeClockList(result.conflict_clocks);
-          setConflictClocks((prev) =>
-            npcClockListsSemanticallyEqual(prev, next) ? prev : next,
-          );
-        }
-        if (Array.isArray(result?.alt_clocks)) {
-          const next = normalizeClockList(result.alt_clocks);
-          setAltClocks((prev) =>
-            npcClockListsSemanticallyEqual(prev, next) ? prev : next,
-          );
-        }
-        setSaveStatus("saved");
-        setSaveErrorDetail(null);
-        setTimeout(
-          () => setSaveStatus((s) => (s === "saved" ? null : s)),
-          2000,
-        );
-      } catch (err) {
-        setSaveStatus("error");
-        const msg =
-          err instanceof Error
-            ? err.message
-            : typeof err === "string"
-              ? err
-              : "Save failed";
-        setSaveErrorDetail(msg);
-        console.error("NPC autosave failed:", err);
-      } finally {
-        savingRef.current = false;
-      }
+    debounceRef.current = setTimeout(() => {
+      void runNpcAutosave();
     }, 1500);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -1749,6 +1777,7 @@ const NPCSheet = ({
     contacts,
     factionStatus,
     inventory,
+    runNpcAutosave,
   ]);
 
   // ── Styles ────────────────────────────────────────────────────────────────────
