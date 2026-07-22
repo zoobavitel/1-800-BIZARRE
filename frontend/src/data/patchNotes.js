@@ -4,6 +4,102 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-07-16",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Clean up README by removing duplicate links",
+          "Revise README for project overview and CI/CD info",
+          "Merge pull request #97 from zoobavitel/feature/npc-heritage-benefit-toggles",
+          "Merge pull request #96 from zoobavitel/fix/npc-hide-stand-coin-non-stand",
+          "made it so the stand coin stats and other stand related items to disappear on non-stand user NPC sheets",
+          "Merge pull request #95 from zoobavitel/fix/npc-ability-description-save"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "toggle heritage benefits and detriments in play"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "queue autosave when save already in flight"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "remove NPCViewSet debug instrumentation",
+          "add debug probes for NPC ability autosave"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-07-15",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #94 from zoobavitel/fix/list-modal-end-session-xp-scorecard"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-07-14",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "merge tracker toggles into list end-live XP scorecard"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-07-06",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #93 from zoobavitel/feature/stand-coin-chargen-lock"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "checkmark for spent stand armor charges"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "lock stand coin after chargen"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-07-04",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Update ability selection rules in SRD documents and enhance patch notes with recent changes. Clarified A-grade ability options to allow for two standard abilities or one custom ability with additional features. Added multiple entries to patch notes for recent merges and fixes, improving documentation clarity."
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-06-28",
     "version": null,
     "sections": [
@@ -675,28 +771,7 @@ export const PATCH_NOTES = [
           "Fix permission test setup to exercise 403 path",
           "Enforce character ownership permissions and creator visibility",
           "Merge pull request #54 from zoobavitel/cursor/fix-postcss-startup-271c",
-          "Add caveman always-on snippet to Cursor rules",
-          "Sort patch notes newest-first in preview and full page",
-          "Make standalone home stats panel span section width",
-          "Remove duplicate sticky header from patch notes page",
-          "Make home bar chart tooltip emphasize numeric counts",
-          "Remove duplicate sticky header from licenses page",
-          "Move home stats panel out of hero section",
-          "Update home hero subtitle roundabout path copy",
-          "Exclude blank New Character entries from PC stats",
-          "Use home-style hamburger icon across all pages",
-          "Show delete character action in NPC mode toolbar",
-          "Add open character dropdown to NPC mode toolbar",
-          "Allow NPC sheet to render at full page width",
-          "Remove sticky header bar from search page",
-          "Keep new character name field blank by default",
-          "Guard unsaved new character drafts before navigation"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "define unsaved-character navigation guards"
+          "Add caveman always-on snippet to Cursor rules"
         ]
       }
     ]

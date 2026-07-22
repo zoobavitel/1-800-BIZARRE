@@ -18,6 +18,8 @@ import {
   characterHistoryAPI,
   progressClockAPI,
   normalizeCharacterInventory,
+  hasPlaybook,
+  playbookToDisplay,
 } from "../../features/character-sheet/services/api";
 import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import {
@@ -991,6 +993,8 @@ export default function SessionGMManagementPanels({
   onManualXpGrant,
   /** Refetch session-scoped `characters` after sheet PATCH (campaign refresh alone does not). */
   onSessionCharactersRefresh = null,
+  /** Refetch session detail (xp_entries, rolls, clocks) — needed after XP award/revoke. */
+  onSessionPanelRefresh = null,
   user = null,
 }) {
   const [showAddNpc, setShowAddNpc] = useState(false);
@@ -1009,6 +1013,9 @@ export default function SessionGMManagementPanels({
   const [quickNpcCreateBusy, setQuickNpcCreateBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [localNpcPatch, setLocalNpcPatch] = useState({});
+  /** Optimistic NPC stand grades after GM wedge clicks (until campaign NPC refetch). */
+  const [localNpcStandById, setLocalNpcStandById] = useState({});
+  const [pcStandForceBusyId, setPcStandForceBusyId] = useState(null);
   const [harmDraftByChar, setHarmDraftByChar] = useState({});
   const [goalAssignCharId, setGoalAssignCharId] = useState("");
   const [goalAssignDraft, setGoalAssignDraft] = useState("");
@@ -1037,6 +1044,7 @@ export default function SessionGMManagementPanels({
     },
     [],
   );
+
   const [npcFactionSavingId, setNpcFactionSavingId] = useState(null);
   /** `vuln:<npcId>` or `clk:<progressClockId>` while a roster NPC clock save runs */
   const [npcUiBusyKey, setNpcUiBusyKey] = useState(null);
@@ -1480,14 +1488,16 @@ export default function SessionGMManagementPanels({
       setXpEntryDeleteBusy(entryId);
       try {
         await experienceTrackerAPI.remove(entryId);
-        if (typeof onRefresh === "function") onRefresh();
+        await onSessionPanelRefresh?.();
+        await onSessionCharactersRefresh?.();
+        await onRefresh?.();
       } catch (err) {
         setXpEntryDeleteError(err?.message || "Could not delete XP entry.");
       } finally {
         setXpEntryDeleteBusy(null);
       }
     },
-    [onRefresh],
+    [onRefresh, onSessionCharactersRefresh, onSessionPanelRefresh],
   );
 
   /**
@@ -1532,6 +1542,9 @@ export default function SessionGMManagementPanels({
             trigger,
           });
         }
+        // Campaign-only onRefresh leaves sessionData.xp_entries stale; refetch session panel.
+        await onSessionPanelRefresh?.();
+        await onSessionCharactersRefresh?.();
         await onRefresh?.();
       } catch (err) {
         setXpToggleError(err?.message || "Could not toggle XP trigger.");
@@ -1539,7 +1552,7 @@ export default function SessionGMManagementPanels({
         setXpToggleBusy({ cid: null, trigger: null });
       }
     },
-    [onRefresh],
+    [onRefresh, onSessionCharactersRefresh, onSessionPanelRefresh],
   );
 
   useEffect(() => {
@@ -2224,16 +2237,42 @@ export default function SessionGMManagementPanels({
 
   const handleNpcStandStep = (npc, key, delta) => {
     if (!canEditNpcStandCoin(user, campaign, npc)) return;
-    const g = rawStandToGrades(npc.stand_coin_stats);
-    const nextLetter = stepGrade(g[key], delta);
-    const next = { ...(npc.stand_coin_stats || {}), [key.toUpperCase()]: nextLetter };
+    const base = localNpcStandById[npc.id]
+      ? rawStandToGrades(localNpcStandById[npc.id])
+      : rawStandToGrades(npc.stand_coin_stats);
+    const nextLetter = stepGrade(base[key], delta);
+    const next = {
+      ...(npc.stand_coin_stats || {}),
+      ...(localNpcStandById[npc.id] || {}),
+      [key.toUpperCase()]: nextLetter,
+      [key]: nextLetter,
+    };
+    // Normalize to uppercase keys for API.
+    const payload = {
+      POWER: next.POWER ?? next.power ?? base.power,
+      SPEED: next.SPEED ?? next.speed ?? base.speed,
+      RANGE: next.RANGE ?? next.range ?? base.range,
+      DURABILITY: next.DURABILITY ?? next.durability ?? base.durability,
+      PRECISION: next.PRECISION ?? next.precision ?? base.precision,
+      DEVELOPMENT: next.DEVELOPMENT ?? next.development ?? base.development,
+    };
+    payload[key.toUpperCase()] = nextLetter;
+    setLocalNpcStandById((p) => ({ ...p, [npc.id]: payload }));
     setLocalNpcPatch((p) => ({ ...p, [npc.id]: true }));
     npcAPI
-      .patchNPC(npc.id, { stand_coin_stats: next })
-      .then(() => {
-        onRefresh();
+      .patchNPC(npc.id, { stand_coin_stats: payload })
+      .then(async () => {
+        await onSessionPanelRefresh?.();
+        await onRefresh?.();
       })
-      .catch((e) => setError(e.message))
+      .catch((e) => {
+        setLocalNpcStandById((p) => {
+          const n = { ...p };
+          delete n[npc.id];
+          return n;
+        });
+        setError(e.message);
+      })
       .finally(() =>
         setLocalNpcPatch((p) => {
           const n = { ...p };
@@ -2242,6 +2281,93 @@ export default function SessionGMManagementPanels({
         }),
       );
   };
+
+  const refreshAfterPcSheetChange = useCallback(async () => {
+    await onSessionCharactersRefresh?.();
+    await onRefresh?.();
+  }, [onSessionCharactersRefresh, onRefresh]);
+
+  const applyPcGmStandUpgrade = useCallback(
+    async (characterId, standStat) => {
+      setPcStandForceBusyId(characterId);
+      setError(null);
+      try {
+        const res = await characterAPI.gmForceStandStat(characterId, {
+          stand_stat: standStat,
+          xp_track: "playbook",
+        });
+        await refreshAfterPcSheetChange();
+        if (res?.pending_stand_a_reward) {
+          const stat = String(
+            res.pending_stand_a_reward.stand_stat || standStat,
+          ).toUpperCase();
+          setError(
+            `Stand Coin ${stat} is now A. Player must pick B→A abilities on their character sheet.`,
+          );
+        }
+      } catch (e) {
+        setError(e?.message || "Could not force Stand Coin advance.");
+        throw e;
+      } finally {
+        setPcStandForceBusyId(null);
+      }
+    },
+    [refreshAfterPcSheetChange, setError],
+  );
+
+  const handlePcStandStep = useCallback(
+    async (full, key, delta) => {
+      if (!full?.id) return;
+      const stand = full.stand || {};
+      const grades = rawStandToGrades({
+        power: stand.power,
+        speed: stand.speed,
+        range: stand.range,
+        durability: stand.durability,
+        precision: stand.precision,
+        development: stand.development,
+      });
+      const canSRank = full.gm_can_have_s_rank_stand_stats === true;
+      const nextLetter = stepGrade(grades[key], delta);
+      if (nextLetter === grades[key]) return;
+      if (delta < 0) {
+        setSaving(true);
+        setError(null);
+        const next = { ...grades, [key]: nextLetter };
+        try {
+          await characterAPI.patchCharacter(full.id, {
+            stand: {
+              ...stand,
+              power: next.power,
+              speed: next.speed,
+              range: next.range,
+              durability: next.durability,
+              precision: next.precision,
+              development: next.development,
+            },
+          });
+          await refreshAfterPcSheetChange();
+        } catch (e) {
+          setError(e?.message || "Could not lower Stand Coin grade.");
+        } finally {
+          setSaving(false);
+        }
+        return;
+      }
+      // Upgrade: treat as playbook advance (tops up XP if short).
+      // B→A reward is deferred to the player character sheet.
+      if (!canSRank && grades[key] === "A") return;
+      setSaving(true);
+      try {
+        await applyPcGmStandUpgrade(full.id, key);
+      } catch {
+        /* error already surfaced */
+      } finally {
+        setSaving(false);
+      }
+    },
+    [applyPcGmStandUpgrade, refreshAfterPcSheetChange, setError],
+  );
 
   const bumpNpcVulnerability = useCallback(
     async (npc, delta) => {
@@ -2308,7 +2434,9 @@ export default function SessionGMManagementPanels({
 
   const renderNpcSessionCard = (npc) => {
     const inv = invByNpc[npc.id] || {};
-    const grades = rawStandToGrades(npc.stand_coin_stats);
+    const grades = rawStandToGrades(
+      localNpcStandById[npc.id] || npc.stand_coin_stats,
+    );
     const busy = !!localNpcPatch[npc.id];
     const canEditStand = canEditNpcStandCoin(user, campaign, npc);
     const npcClks = npcSessionClocksByNpcId.get(npc.id) || [];
@@ -3993,8 +4121,15 @@ export default function SessionGMManagementPanels({
                 Number(c.session) === Number(session.id),
             );
             const canSRank = full.gm_can_have_s_rank_stand_stats === true;
+            const isStandUser = hasPlaybook(
+              full.playbook,
+              full.secondary_playbook ?? full.secondaryPlaybook,
+              "Stand",
+            );
             const pcCollapseKey = `quick-${full.id}`;
             const pcCollapsed = !!collapsedPcCards[pcCollapseKey];
+            const pcStandBusy =
+              saving || pcStandForceBusyId === full.id;
             return (
               <div key={full.id} style={{ ...card, width: 300 }}>
                 <div
@@ -4054,34 +4189,33 @@ export default function SessionGMManagementPanels({
                         </a>
                       </div>
                     </div>
-                    <div style={{ display: "flex", justifyContent: "center" }}>
-                      <NpcsStandCoin
-                        grades={grades}
-                        readouts={readoutsFromGrades(grades)}
-                        onStep={(k, d) => {
-                          const st = full.stand || {};
-                          const next = { ...grades, [k]: stepGrade(grades[k], d) };
-                          setSaving(true);
-                          characterAPI
-                            .patchCharacter(full.id, {
-                              stand: {
-                                ...st,
-                                power: next.power,
-                                speed: next.speed,
-                                range: next.range,
-                                durability: next.durability,
-                                precision: next.precision,
-                                development: next.development,
-                              },
-                            })
-                            .then(() => onRefresh())
-                            .catch((e) => setError(e.message))
-                            .finally(() => setSaving(false));
+                    {isStandUser ? (
+                      <div style={{ display: "flex", justifyContent: "center" }}>
+                        <NpcsStandCoin
+                          grades={grades}
+                          readouts={readoutsFromGrades(grades)}
+                          onStep={(k, d) => {
+                            if (pcStandBusy) return;
+                            void handlePcStandStep(full, k, d);
+                          }}
+                          variant="pc"
+                          pcMaxGrade={canSRank ? "S" : "A"}
+                          readOnly={pcStandBusy}
+                        />
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          fontSize: 10,
+                          color: "#6b7280",
+                          marginTop: 6,
+                          lineHeight: 1.35,
                         }}
-                        variant="pc"
-                        pcMaxGrade={canSRank ? "S" : "A"}
-                      />
-                    </div>
+                      >
+                        Stand Coin hidden — {playbookToDisplay(full.playbook)}{" "}
+                        playbook (not a Stand user).
+                      </div>
+                    )}
                     <div style={lbl}>Actions (dot ratings)</div>
                     <div style={{ fontSize: 10, color: "#9ca3af", maxHeight: 56, overflow: "auto" }}>
                       {flatActionDots(ad)

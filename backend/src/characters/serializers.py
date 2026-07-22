@@ -1512,6 +1512,9 @@ class CharacterSerializer(serializers.ModelSerializer):
             }
             for c in clocks
         ]
+        from .services.xp_allocation import get_pending_stand_a_reward
+
+        data["pending_stand_a_reward"] = get_pending_stand_a_reward(instance)
         return data
 
     def validate_coin_boxes(self, value):
