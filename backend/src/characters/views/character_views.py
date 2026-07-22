@@ -47,8 +47,11 @@ from ..serializers import CharacterSerializer, CharacterXPAllocationSerializer
 from ..history_context import bind_character_history_editor, reset_character_history_editor
 from ..services.xp_allocation import (
     XPAllocationError,
+    apply_gm_forced_stand_stat,
     apply_level_up,
     apply_minor_advance,
+    complete_pending_stand_a_reward,
+    get_pending_stand_a_reward,
     list_allocations,
     undo_allocation,
 )
@@ -1695,6 +1698,83 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 ).data,
                 "character": _character_response(character),
                 "allocations": _allocation_list_response(character),
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="gm-force-stand-stat")
+    def gm_force_stand_stat_action(self, request, pk=None):
+        """
+        GM-only: +1 Stand Coin grade as a playbook advance.
+
+        Tops up playbook XP when short, then spends 10 XP / bumps
+        stand_coin_points_gained. B→A without a reward payload defers
+        ability picks to the player sheet (pending_stand_a_reward).
+        """
+        character = self.get_object()
+        user = request.user
+        is_gm = bool(
+            character.campaign_id and character.campaign.gm_id == user.id
+        )
+        if not (user.is_staff or is_gm):
+            raise PermissionDenied(
+                "Only the campaign GM can force a Stand Coin advance."
+            )
+
+        try:
+            allocation = apply_gm_forced_stand_stat(
+                character,
+                stand_stat=request.data.get("stand_stat"),
+                reward=request.data.get("reward"),
+                xp_track=request.data.get("xp_track") or "playbook",
+            )
+        except XPAllocationError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "allocation": CharacterXPAllocationSerializer(
+                    allocation,
+                    context={
+                        "latest_undoable_allocation_id": allocation.id,
+                    },
+                ).data,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+                "pending_stand_a_reward": get_pending_stand_a_reward(character),
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="claim-stand-a-reward")
+    def claim_stand_a_reward_action(self, request, pk=None):
+        """Player/GM claims a deferred B→A Stand Coin ability reward."""
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot claim rewards for this character.")
+
+        try:
+            allocation = complete_pending_stand_a_reward(
+                character,
+                allocation_id=request.data.get("allocation_id"),
+                reward=request.data.get("reward"),
+            )
+        except XPAllocationError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "allocation": CharacterXPAllocationSerializer(
+                    allocation,
+                    context={
+                        "latest_undoable_allocation_id": allocation.id,
+                    },
+                ).data,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+                "pending_stand_a_reward": get_pending_stand_a_reward(character),
             }
         )
 

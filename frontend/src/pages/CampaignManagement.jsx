@@ -3572,32 +3572,46 @@ function SessionDetail({
   // Used both for the initial mount/session-switch effect and for the realtime
   // campaign-events stream so any teammate's roll, clock tick, sheet save, or
   // XP toggle reflects here without a manual refresh.
-  const refetchSessionPanel = useCallback(() => {
+  const refetchSessionPanel = useCallback(async () => {
     if (!session?.id) return;
-    sessionAPI
-      .getSession(session.id)
-      .then(setSessionData)
-      .catch(() => setSessionData(session));
-    rollAPI
-      .getRolls({ session: session.id })
-      .then(setRolls)
-      .catch(() => setRolls([]));
-    progressClockAPI
-      .getProgressClocks({ campaign: campaign.id, session: session.id })
-      .then(setClocks)
-      .catch(() => setClocks([]));
-    crewAPI
-      .getCrews()
-      .then((list) =>
-        setCrews(list?.filter((c) => c.campaign === campaign.id) || []),
-      )
-      .catch(() => setCrews([]));
-    characterAPI
-      .getCharacters()
-      .then((list) =>
-        setCharacters(list?.filter((c) => c.campaign === campaign.id) || []),
-      )
-      .catch(() => setCharacters([]));
+    const sid = session.id;
+    const cid = campaign?.id;
+    await Promise.all([
+      sessionAPI
+        .getSession(sid)
+        .then(setSessionData)
+        .catch(() => setSessionData(session)),
+      rollAPI
+        .getRolls({ session: sid })
+        .then(setRolls)
+        .catch(() => setRolls([])),
+      cid != null
+        ? progressClockAPI
+            .getProgressClocks({ campaign: cid, session: sid })
+            .then(setClocks)
+            .catch(() => setClocks([]))
+        : Promise.resolve(),
+      crewAPI
+        .getCrews()
+        .then((list) =>
+          setCrews(
+            cid != null
+              ? list?.filter((c) => c.campaign === cid) || []
+              : [],
+          ),
+        )
+        .catch(() => setCrews([])),
+      characterAPI
+        .getCharacters()
+        .then((list) =>
+          setCharacters(
+            cid != null
+              ? list?.filter((c) => c.campaign === cid) || []
+              : [],
+          ),
+        )
+        .catch(() => setCharacters([])),
+    ]);
   }, [session, campaign?.id]);
 
   useEffect(() => {
@@ -5028,6 +5042,7 @@ function SessionDetail({
         manualXpSaving={manualXpSaving}
         onManualXpGrant={handleManualXpGrant}
         onSessionCharactersRefresh={refreshSessionCharacters}
+        onSessionPanelRefresh={refetchSessionPanel}
         user={user}
       />
 

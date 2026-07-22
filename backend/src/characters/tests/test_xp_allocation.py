@@ -4,8 +4,12 @@ from rest_framework.test import APIClient
 
 from characters.models import Ability, Character, Heritage, Stand
 from characters.services.xp_allocation import (
+    XPAllocationError,
+    apply_gm_forced_stand_stat,
     apply_level_up,
     apply_minor_advance,
+    complete_pending_stand_a_reward,
+    get_pending_stand_a_reward,
     list_allocations,
     undo_allocation,
 )
@@ -165,6 +169,54 @@ class XPAllocationServiceTests(TestCase):
             self.std_c.id,
             list(self.character.standard_abilities.values_list("id", flat=True)),
         )
+
+    def test_gm_forced_stand_stat_tops_up_playbook_xp(self):
+        self.character.xp_clocks["playbook"] = 2
+        self.character.save()
+        alloc = apply_gm_forced_stand_stat(
+            self.character,
+            stand_stat="speed",
+            xp_track="playbook",
+        )
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.stand.speed, "C")
+        self.assertEqual(self.character.xp_clocks["playbook"], 0)
+        self.assertEqual(self.character.stand_coin_points_gained, 1)
+        self.assertEqual(self.character.total_xp_spent, 10)
+        self.assertTrue(alloc.metadata.get("gm_forced"))
+        self.assertEqual(alloc.metadata.get("gm_forced_xp_granted"), 8)
+
+    def test_gm_forced_b_to_a_defers_reward_for_player(self):
+        self.character.xp_clocks["playbook"] = 0
+        self.character.save()
+        alloc = apply_gm_forced_stand_stat(
+            self.character,
+            stand_stat="power",
+            xp_track="playbook",
+        )
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.stand.power, "A")
+        self.assertTrue(alloc.metadata.get("gm_forced"))
+        self.assertTrue(alloc.metadata.get("reward_pending"))
+        pending = get_pending_stand_a_reward(self.character)
+        self.assertIsNotNone(pending)
+        self.assertEqual(pending["allocation_id"], alloc.id)
+        self.assertEqual(pending["stand_stat"], "power")
+
+        completed = complete_pending_stand_a_reward(
+            self.character,
+            allocation_id=alloc.id,
+            reward={
+                "branch": "two_standard",
+                "standard_ability_ids": [self.std_a.id, self.std_b.id],
+            },
+        )
+        self.character.refresh_from_db()
+        self.assertFalse(completed.metadata.get("reward_pending"))
+        self.assertIsNone(get_pending_stand_a_reward(self.character))
+        ids = set(self.character.standard_abilities.values_list("id", flat=True))
+        self.assertIn(self.std_a.id, ids)
+        self.assertIn(self.std_b.id, ids)
 
 
 class XPAllocationAPITests(TestCase):

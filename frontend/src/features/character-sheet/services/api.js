@@ -346,6 +346,20 @@ export const characterAPI = {
       body: JSON.stringify(body),
     }),
 
+  /** GM-only: force +1 Stand Coin grade as a playbook advance (tops up XP if short). */
+  gmForceStandStat: (id, body) =>
+    apiRequest(`/characters/${id}/gm-force-stand-stat/`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** Claim deferred B→A Stand Coin ability reward (player sheet). */
+  claimStandAReward: (id, body) =>
+    apiRequest(`/characters/${id}/claim-stand-a-reward/`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   applyMinorAdvance: (id, body) =>
     apiRequest(`/characters/${id}/apply-minor-advance/`, {
       method: "POST",
@@ -1264,6 +1278,8 @@ export const transformBackendToFrontend = (backendCharacter) => {
     gm_can_have_s_rank_stand_stats: Boolean(
       backendCharacter.gm_can_have_s_rank_stand_stats,
     ),
+
+    pendingStandAReward: backendCharacter.pending_stand_a_reward || null,
 
     // Additional backend fields
     campaign: backendCharacter.campaign,

@@ -285,7 +285,16 @@ def allocation_summary(allocation):
 
 
 @transaction.atomic
-def apply_level_up(character, *, xp_track, choice, stand_stat=None, actions=None, reward=None):
+def apply_level_up(
+    character,
+    *,
+    xp_track,
+    choice,
+    stand_stat=None,
+    actions=None,
+    reward=None,
+    defer_b_to_a_reward=False,
+):
     track = _normalize_track(xp_track)
     choice = str(choice or "").strip().lower()
     if choice not in ("stat", "dots"):
@@ -313,7 +322,7 @@ def apply_level_up(character, *, xp_track, choice, stand_stat=None, actions=None
             raise XPAllocationError("S-rank requires GM permission.")
 
         b_to_a = old_grade == "B" and new_grade == "A"
-        if b_to_a and not reward:
+        if b_to_a and not reward and not defer_b_to_a_reward:
             raise XPAllocationError(
                 "Raising a stat from B to A requires a reward choice."
             )
@@ -342,10 +351,15 @@ def apply_level_up(character, *, xp_track, choice, stand_stat=None, actions=None
             metadata=metadata,
         )
 
-        if b_to_a:
+        if b_to_a and reward:
             added = _apply_b_to_a_reward(character, allocation.id, reward)
             metadata["reward_branch"] = reward.get("branch")
             metadata["added_standard_ability_ids"] = added
+            metadata["reward_pending"] = False
+            allocation.metadata = metadata
+            allocation.save(update_fields=["metadata"])
+        elif b_to_a and defer_b_to_a_reward:
+            metadata["reward_pending"] = True
             allocation.metadata = metadata
             allocation.save(update_fields=["metadata"])
 
@@ -373,6 +387,115 @@ def apply_level_up(character, *, xp_track, choice, stand_stat=None, actions=None
     allocation.payload_after = after
     allocation.save(update_fields=["payload_after"])
     character.save()
+    allocation.refresh_from_db()
+    return allocation
+
+
+def get_pending_stand_a_reward(character):
+    """Newest non-undone LEVEL_UP_STAT with B→A reward still unpaid."""
+    for allocation in list_allocations(character):
+        meta = allocation.metadata or {}
+        if (
+            allocation.allocation_type == "LEVEL_UP_STAT"
+            and meta.get("b_to_a_reward")
+            and meta.get("reward_pending")
+        ):
+            return {
+                "allocation_id": allocation.id,
+                "stand_stat": meta.get("stand_stat"),
+                "old_grade": meta.get("old_grade"),
+                "new_grade": meta.get("new_grade"),
+                "gm_forced": bool(meta.get("gm_forced")),
+                "xp_track": allocation.xp_track,
+            }
+    return None
+
+
+@transaction.atomic
+def complete_pending_stand_a_reward(character, *, allocation_id, reward):
+    """Player (or GM) claims deferred B→A ability reward for an allocation."""
+    try:
+        allocation_id = int(allocation_id)
+    except (TypeError, ValueError):
+        raise XPAllocationError("allocation_id is required.")
+
+    try:
+        allocation = CharacterXPAllocation.objects.select_for_update().get(
+            pk=allocation_id,
+            character=character,
+            undone_at__isnull=True,
+        )
+    except CharacterXPAllocation.DoesNotExist:
+        raise XPAllocationError("Pending Stand A reward allocation not found.")
+
+    meta = dict(allocation.metadata or {})
+    if not meta.get("b_to_a_reward") or not meta.get("reward_pending"):
+        raise XPAllocationError("This allocation has no pending B→A reward.")
+
+    added = _apply_b_to_a_reward(character, allocation.id, reward)
+    meta["reward_branch"] = reward.get("branch")
+    meta["added_standard_ability_ids"] = added
+    meta["reward_pending"] = False
+    allocation.metadata = meta
+    allocation.payload_after = _snapshot(character)
+    allocation.save(update_fields=["metadata", "payload_after"])
+    character.save()
+    allocation.refresh_from_db()
+    return allocation
+
+
+@transaction.atomic
+def apply_gm_forced_stand_stat(
+    character,
+    *,
+    stand_stat,
+    reward=None,
+    xp_track="playbook",
+):
+    """
+    GM force +1 Stand Coin grade as a full playbook advance.
+
+    If the chosen track lacks LEVEL_UP_COST XP, top it up to the cost first
+    (capped at the track maximum) so the spend matches a normal advance.
+
+    B→A: when reward is omitted, defer ability picks to the player sheet
+    (reward_pending on the allocation). Passing reward still applies immediately.
+    """
+    track = _normalize_track(xp_track)
+    stat = _normalize_stand_stat(stand_stat)
+    grades = _get_stand_grades(character)
+    old_grade = grades.get(stat, "D")
+    defer_b_to_a = old_grade == "B" and not reward
+
+    clocks = dict(character.xp_clocks or {})
+    current = int(clocks.get(track, 0) or 0)
+    granted = 0
+    if current < LEVEL_UP_COST:
+        cap = TRACK_CAPS[track]
+        target = min(cap, LEVEL_UP_COST)
+        if target < LEVEL_UP_COST:
+            raise XPAllocationError(
+                f"Cannot GM-force stand advance: {track} track cap is {cap}."
+            )
+        granted = target - current
+        clocks[track] = target
+        character.xp_clocks = clocks
+        character.save(update_fields=["xp_clocks"])
+
+    allocation = apply_level_up(
+        character,
+        xp_track=track,
+        choice="stat",
+        stand_stat=stat,
+        reward=reward,
+        defer_b_to_a_reward=defer_b_to_a,
+    )
+    meta = dict(allocation.metadata or {})
+    meta["gm_forced"] = True
+    if granted:
+        meta["gm_forced_xp_granted"] = granted
+    allocation.metadata = meta
+    allocation.save(update_fields=["metadata"])
     allocation.refresh_from_db()
     return allocation
 

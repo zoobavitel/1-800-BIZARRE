@@ -1928,6 +1928,18 @@ const CharacterSheetWrapper = ({
     "",
     "",
   ]);
+  const [pendingStandAReward, setPendingStandAReward] = useState(
+    () => character?.pendingStandAReward || null,
+  );
+  const [pendingStandABranch, setPendingStandABranch] = useState(
+    "two_standard",
+  );
+  const [pendingStandAStdIds, setPendingStandAStdIds] = useState(["", ""]);
+  const [pendingStandACustomName, setPendingStandACustomName] = useState("");
+  const [pendingStandAUses, setPendingStandAUses] = useState(["", ""]);
+  const [pendingStandAStdId, setPendingStandAStdId] = useState("");
+  const [pendingStandABusy, setPendingStandABusy] = useState(false);
+  const [pendingStandAError, setPendingStandAError] = useState(null);
   const [xpAllocationRows, setXpAllocationRows] = useState([]);
   const [xpAllocationUndoBusy, setXpAllocationUndoBusy] = useState(false);
   const [xpAllocationActionError, setXpAllocationActionError] = useState(null);
@@ -1950,6 +1962,20 @@ const CharacterSheetWrapper = ({
       );
     });
   }, [showLevelUp, xp]);
+
+  useEffect(() => {
+    const next = character?.pendingStandAReward || null;
+    setPendingStandAReward((prev) => {
+      const prevId = prev?.allocation_id ?? null;
+      const nextId = next?.allocation_id ?? null;
+      if (prevId === nextId) {
+        if (!nextId) return null;
+        // Keep open; refresh metadata if server sent a newer object.
+        return next;
+      }
+      return next;
+    });
+  }, [character?.id, character?.pendingStandAReward]);
 
   useEffect(() => {
     setMinorAdvanceSpendTrack((prev) => {
@@ -2929,6 +2955,15 @@ const CharacterSheetWrapper = ({
     if (fe.standStats) setStandStats(fe.standStats);
     if (fe.actionRatings) setActionRatings(fe.actionRatings);
     if (fe.abilities) setAbilities(fe.abilities);
+    if (
+      Object.prototype.hasOwnProperty.call(
+        backendChar,
+        "pending_stand_a_reward",
+      ) ||
+      Object.prototype.hasOwnProperty.call(fe, "pendingStandAReward")
+    ) {
+      setPendingStandAReward(fe.pendingStandAReward || null);
+    }
     setCharData((prev) => ({
       ...prev,
       xp: fe.xp,
@@ -2939,6 +2974,67 @@ const CharacterSheetWrapper = ({
       actionDiceGained: fe.actionDiceGained,
     }));
   }, []);
+
+  const claimPendingStandAReward = useCallback(async () => {
+    if (!characterId || !pendingStandAReward?.allocation_id) return;
+    let reward;
+    if (pendingStandABranch === "custom2plus1standard") {
+      if (
+        !pendingStandACustomName.trim() ||
+        !pendingStandAUses.every((u) => String(u || "").trim()) ||
+        !pendingStandAStdId
+      ) {
+        setPendingStandAError(
+          "Fill custom name, both uses, and pick a standard ability.",
+        );
+        return;
+      }
+      reward = {
+        branch: "custom2plus1standard",
+        custom_name: pendingStandACustomName.trim(),
+        custom_uses: pendingStandAUses.map((u) => String(u || "").trim()),
+        standard_ability_id: Number(pendingStandAStdId),
+      };
+    } else {
+      if (!pendingStandAStdIds[0] || !pendingStandAStdIds[1]) {
+        setPendingStandAError("Pick two standard abilities.");
+        return;
+      }
+      reward = {
+        branch: "two_standard",
+        standard_ability_ids: pendingStandAStdIds.map((id) => Number(id)),
+      };
+    }
+    setPendingStandABusy(true);
+    setPendingStandAError(null);
+    try {
+      const res = await characterAPI.claimStandAReward(characterId, {
+        allocation_id: pendingStandAReward.allocation_id,
+        reward,
+      });
+      if (res?.character) applyBackendCharacter(res.character);
+      else setPendingStandAReward(res?.pending_stand_a_reward || null);
+      if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
+      setPendingStandABranch("two_standard");
+      setPendingStandAStdIds(["", ""]);
+      setPendingStandACustomName("");
+      setPendingStandAUses(["", ""]);
+      setPendingStandAStdId("");
+    } catch (err) {
+      setPendingStandAError(err?.message || "Could not claim B→A reward.");
+    } finally {
+      setPendingStandABusy(false);
+    }
+  }, [
+    characterId,
+    pendingStandAReward,
+    pendingStandABranch,
+    pendingStandACustomName,
+    pendingStandAUses,
+    pendingStandAStdId,
+    pendingStandAStdIds,
+    applyBackendCharacter,
+  ]);
 
   const refreshXpAllocations = useCallback(async () => {
     if (!characterId) {
@@ -20004,6 +20100,153 @@ const CharacterSheetWrapper = ({
           </div>
         </div>
       )}
+
+      {pendingStandAReward && canEditSheet ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.72)",
+            zIndex: 1200,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              background: "#111827",
+              border: "1px solid #7c3aed",
+              borderRadius: 4,
+              padding: 16,
+              maxWidth: 460,
+              width: "100%",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: "bold",
+                color: "#fff",
+                marginBottom: 8,
+              }}
+            >
+              B→A Stand Coin reward
+              {pendingStandAReward.stand_stat
+                ? ` — ${String(pendingStandAReward.stand_stat).toUpperCase()}`
+                : ""}
+            </div>
+            <p style={{ fontSize: 12, color: "#d1d5db", marginBottom: 12 }}>
+              Raising a Stand Coin stat to A applies a playbook advance (10 XP).
+              Choose 2 standard abilities or 1 unique ability (2 features) + 1
+              standard.
+            </p>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              {[
+                ["two_standard", "2 standards"],
+                ["custom2plus1standard", "Unique + 1 standard"],
+              ].map(([val, label]) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setPendingStandABranch(val)}
+                  style={{
+                    ...S.btn,
+                    flex: 1,
+                    fontSize: 11,
+                    color: "#fff",
+                    background:
+                      pendingStandABranch === val ? "#7c3aed" : "#374151",
+                    border:
+                      pendingStandABranch === val
+                        ? "1px solid #a78bfa"
+                        : "1px solid transparent",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {pendingStandABranch === "custom2plus1standard" ? (
+              <>
+                <input
+                  style={{ ...S.inp, marginBottom: 6 }}
+                  value={pendingStandACustomName}
+                  onChange={(e) => setPendingStandACustomName(e.target.value)}
+                  placeholder="Unique ability name"
+                />
+                {[0, 1].map((i) => (
+                  <input
+                    key={i}
+                    style={{ ...S.inp, marginBottom: 6 }}
+                    value={pendingStandAUses[i] || ""}
+                    onChange={(e) => {
+                      const next = [...pendingStandAUses];
+                      next[i] = e.target.value;
+                      setPendingStandAUses(next);
+                    }}
+                    placeholder={`Feature ${i + 1}`}
+                  />
+                ))}
+                <select
+                  style={{ ...S.sel, width: "100%", marginBottom: 8 }}
+                  value={pendingStandAStdId}
+                  onChange={(e) => setPendingStandAStdId(e.target.value)}
+                >
+                  <option value="">- pick standard -</option>
+                  {standardAbilitiesList.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : (
+              [0, 1].map((i) => (
+                <select
+                  key={i}
+                  style={{ ...S.sel, width: "100%", marginBottom: 6 }}
+                  value={pendingStandAStdIds[i] || ""}
+                  onChange={(e) => {
+                    const next = [...pendingStandAStdIds];
+                    next[i] = e.target.value;
+                    setPendingStandAStdIds(next);
+                  }}
+                >
+                  <option value="">{`- pick standard ${i + 1} -`}</option>
+                  {standardAbilitiesList.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              ))
+            )}
+            {pendingStandAError ? (
+              <div style={{ color: "#f87171", fontSize: 11, marginBottom: 8 }}>
+                {pendingStandAError}
+              </div>
+            ) : null}
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                disabled={pendingStandABusy || !characterId}
+                onClick={() => void claimPendingStandAReward()}
+                style={{
+                  ...S.btn,
+                  background:
+                    pendingStandABusy || !characterId ? "#4b5563" : "#7c3aed",
+                  color: "#fff",
+                  fontWeight: "bold",
+                }}
+              >
+                {pendingStandABusy ? "Applying…" : "Apply advance"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 };

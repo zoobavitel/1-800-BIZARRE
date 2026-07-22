@@ -96,6 +96,17 @@ function npcClockIdsMatch(a, b) {
   return a === b || (a != null && b != null && Number(a) === Number(b));
 }
 
+/** Stable JSON fingerprint for NPC autosave dedupe (skip imageFile). */
+function npcAutosavePayloadFingerprint(payload) {
+  try {
+    const clone = { ...(payload || {}) };
+    delete clone.imageFile;
+    return JSON.stringify(clone);
+  } catch {
+    return `err-${Date.now()}`;
+  }
+}
+
 /** Session rolls where a PC spent coin on NPC heal fortune — match healer to this NPC by display name. */
 function rollIsNpcHealFortuneForThisNpc(roll, npcDisplayName) {
   const ctx = String(
@@ -1261,8 +1272,8 @@ const NPCSheet = ({
   // Drop heritage picks that do not belong to the current heritage catalog.
   useEffect(() => {
     if (heritage == null || heritage === "") {
-      setSelectedBenefitIds([]);
-      setSelectedDetrimentIds([]);
+      setSelectedBenefitIds((prev) => (prev.length === 0 ? prev : []));
+      setSelectedDetrimentIds((prev) => (prev.length === 0 ? prev : []));
       return;
     }
     if (!resolvedHeritageDetails) return;
@@ -1272,12 +1283,20 @@ const NPCSheet = ({
     const allowedD = new Set(
       (resolvedHeritageDetails.detriments || []).map((d) => Number(d.id)),
     );
-    setSelectedBenefitIds((prev) =>
-      prev.filter((id) => allowedB.has(Number(id))),
-    );
-    setSelectedDetrimentIds((prev) =>
-      prev.filter((id) => allowedD.has(Number(id))),
-    );
+    setSelectedBenefitIds((prev) => {
+      const next = prev.filter((id) => allowedB.has(Number(id)));
+      const contentChanged =
+        prev.length !== next.length ||
+        prev.some((id, i) => Number(id) !== Number(next[i]));
+      return contentChanged ? next : prev;
+    });
+    setSelectedDetrimentIds((prev) => {
+      const next = prev.filter((id) => allowedD.has(Number(id)));
+      const contentChanged =
+        prev.length !== next.length ||
+        prev.some((id, i) => Number(id) !== Number(next[i]));
+      return contentChanged ? next : prev;
+    });
   }, [heritage, resolvedHeritageDetails]);
 
   // Hamon / Spin playbook abilities
@@ -1331,6 +1350,8 @@ const NPCSheet = ({
   const savingRef = useRef(false);
   /** When a debounced save fires mid-flight, queue a follow-up with latest payload. */
   const pendingSaveRef = useRef(false);
+  /** Skip autosave when payload matches last successful save (avoids prop-churn loops). */
+  const lastSavedPayloadHashRef = useRef(null);
   const buildPayloadRef = useRef(null);
   const nameRef = useRef(name);
   const onSaveRef = useRef(onSave);
@@ -1729,6 +1750,15 @@ const NPCSheet = ({
     if (markNpcAutosaveBusyCollision(savingRef.current, pendingSaveRef)) {
       return;
     }
+    const payload = buildPayloadRef.current();
+    const payloadHash = npcAutosavePayloadFingerprint(payload);
+    // Skip no-op PUTs (save→parent prop churn→heritage filter refs used to loop).
+    if (
+      lastSavedPayloadHashRef.current != null &&
+      lastSavedPayloadHashRef.current === payloadHash
+    ) {
+      return;
+    }
     // Don't auto-save a brand-new NPC that has never been persisted and
     // still has no name — this prevents spurious creates when a blank tab
     // mounts and init effects fire state changes before the user types.
@@ -1738,7 +1768,7 @@ const NPCSheet = ({
     setSaveStatus("saving");
     setSaveErrorDetail(null);
     try {
-      const result = await saveFn(buildPayloadRef.current());
+      const result = await saveFn(payload);
       if (result?.id && !npcIdRef.current) npcIdRef.current = result.id;
       if (Array.isArray(result?.conflict_clocks)) {
         const next = normalizeClockList(result.conflict_clocks);
@@ -1752,6 +1782,7 @@ const NPCSheet = ({
           npcClockListsSemanticallyEqual(prev, next) ? prev : next,
         );
       }
+      lastSavedPayloadHashRef.current = payloadHash;
       setSaveStatus("saved");
       setSaveErrorDetail(null);
       setTimeout(
