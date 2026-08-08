@@ -71,12 +71,15 @@ class PlaybookXpArchetypePersistTests(TestCase):
             "true_name": self.char.true_name,
             "heritage": self.heritage.id,
             "playbook": "STAND",
-            "playbook_xp_archetypes": ["PHENOMENA"],
+            "playbook_xp_archetypes": ["PHENOMENA", "SHARED"],
             "action_dots": self.char.action_dots,
             "coin_stats": self.char.coin_stats,
             "stand": {
                 "name": "Test Stand",
                 "type": "PHENOMENA",
+                "type_custom": "Weather Stand",
+                "forms": ["Phenomenon", "Mist-form"],
+                "consciousness_level": "A",
                 "power": "D",
                 "speed": "D",
                 "range": "D",
@@ -87,8 +90,18 @@ class PlaybookXpArchetypePersistTests(TestCase):
         }
         r = self.client.put(url, payload, format="json")
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
-        self.assertEqual(r.data.get("playbook_xp_archetypes"), ["PHENOMENA"])
+        self.assertEqual(
+            r.data.get("playbook_xp_archetypes"), ["PHENOMENA", "SHARED"]
+        )
         self.char.refresh_from_db()
-        self.assertEqual(self.char.playbook_xp_archetypes, ["PHENOMENA"])
+        self.assertEqual(self.char.playbook_xp_archetypes, ["PHENOMENA", "SHARED"])
         stand = Stand.objects.get(character=self.char)
         self.assertEqual(stand.type, "PHENOMENA")
+        self.assertEqual(stand.type_custom, "Weather Stand")
+        self.assertEqual(stand.forms, ["Phenomenon", "Mist-form"])
+        self.assertEqual(stand.form, "Phenomenon")
+        self.assertEqual(stand.consciousness_level, "A")
+        stand_payload = r.data.get("stand") or {}
+        self.assertEqual(stand_payload.get("forms"), ["Phenomenon", "Mist-form"])
+        self.assertEqual(stand_payload.get("type_custom"), "Weather Stand")
+        self.assertEqual(stand_payload.get("consciousness_level"), "A")

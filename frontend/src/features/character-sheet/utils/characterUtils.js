@@ -89,6 +89,9 @@ export const createDefaultCharacter = () => ({
   selected_benefits: [],
   selected_detriments: [],
   standType: "",
+  standTypeCustom: "",
+  standForms: [],
+  standConsciousness: "",
   playbookXpArchetypes: [],
 });
 
