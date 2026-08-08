@@ -83,6 +83,7 @@ import {
   archetypeRowsForCharacterPlaybook,
   inferSeedArchetypeKeys,
   mergedTriggerSentencesForKeys,
+  normalizePlaybookPathKey,
   normalizePlaybookXpArchetypeKeys,
 } from "../features/character-sheet/utils/playbookXpTriggerSrd";
 import {
@@ -100,6 +101,14 @@ import {
 } from "../features/character-sheet/utils/heritageRollBonusMeta";
 import { derivePartyFacingSessionNpc } from "../features/character-sheet/utils/sessionNpcPartyFace";
 import { getResistanceResultSheetAbilityReminders } from "../features/character-sheet/utils/sheetAbilityResistanceReminders";
+
+function archetypesEqual(a, b) {
+  if (a === b) return true;
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length)
+    return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
 
 /** Same ordering as Insight / Prowess / Resolve columns on the sheet. */
 const SHEET_STANDARD_ACTION_COLUMNS = [
@@ -2202,6 +2211,8 @@ const CharacterSheetWrapper = ({
   }, [character?.id, character?.standType]);
 
   useEffect(() => {
+    // Reset seed gate only when switching characters — empty server list after
+    // clear must not re-infer Fighting Spirit from Stand.type.
     archetypeSeedAppliedRef.current = false;
     const fromServer = normalizePlaybookXpArchetypeKeys(
       character?.playbook,
@@ -2210,15 +2221,22 @@ const CharacterSheetWrapper = ({
     if (fromServer.length > 0) {
       archetypeSeedAppliedRef.current = true;
     }
-  }, [character?.id, character?.playbook, character?.playbookXpArchetypes]);
+    // Intentionally only on character id — empty archetypes must not re-open seed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed once per character
+  }, [character?.id]);
 
   useEffect(() => {
     if (sheetDraftIsDirty) return;
-    setPlaybookXpArchetypes(
-      normalizePlaybookXpArchetypeKeys(
-        character?.playbook,
-        character?.playbookXpArchetypes,
-      ),
+    const fromServer = normalizePlaybookXpArchetypeKeys(
+      character?.playbook,
+      character?.playbookXpArchetypes,
+    );
+    if (fromServer.length > 0) {
+      archetypeSeedAppliedRef.current = true;
+    }
+    const next = fromServer;
+    setPlaybookXpArchetypes((prev) =>
+      archetypesEqual(prev, next) ? prev : next,
     );
   }, [
     character?.id,
@@ -2228,9 +2246,10 @@ const CharacterSheetWrapper = ({
   ]);
 
   useEffect(() => {
-    setPlaybookXpArchetypes((prev) =>
-      normalizePlaybookXpArchetypeKeys(playbook, prev),
-    );
+    setPlaybookXpArchetypes((prev) => {
+      const next = normalizePlaybookXpArchetypeKeys(playbook, prev);
+      return archetypesEqual(prev, next) ? prev : next;
+    });
   }, [playbook]);
 
   useEffect(() => {
@@ -2248,7 +2267,9 @@ const CharacterSheetWrapper = ({
     const seed = inferSeedArchetypeKeys(playbook, { standType, abilities });
     if (!seed.length) return;
     archetypeSeedAppliedRef.current = true;
-    setPlaybookXpArchetypes(seed);
+    setPlaybookXpArchetypes((prev) =>
+      archetypesEqual(prev, seed) ? prev : seed,
+    );
   }, [
     sheetDraftIsDirty,
     characterId,
@@ -3944,7 +3965,14 @@ const CharacterSheetWrapper = ({
       const order = archetypeRowsForCharacterPlaybook(playbook).map(
         (r) => r.key,
       );
-      return order.filter((k) => nextSet.has(k));
+      const next = order.filter((k) => nextSet.has(k));
+      if (
+        normalizePlaybookPathKey(playbook) === "STAND" &&
+        next.length > 0
+      ) {
+        setStandType(next[0]);
+      }
+      return next;
     });
   }, [playbook]);
 

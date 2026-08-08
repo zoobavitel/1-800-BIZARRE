@@ -255,6 +255,10 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
     campaign: payload.campaign ?? null,
     playbook: payload.playbook ?? "Stand",
     secondaryPlaybook: payload.secondaryPlaybook ?? "",
+    playbookXpArchetypes: Array.isArray(payload.playbookXpArchetypes)
+      ? payload.playbookXpArchetypes
+      : [],
+    standType: payload.standType ?? "",
     id: payload.id,
     inventory: payload.inventory ?? [],
     reputation_status: payload.reputation_status ?? {},
@@ -322,6 +326,7 @@ export default function CharacterPage({
   const [charTabUnsavedMeta, setCharTabUnsavedMeta] = useState({});
   const charTabsInitialized = useRef(false);
   const charTabsRef = useRef(charTabs);
+  const charTabUnsavedMetaRef = useRef(charTabUnsavedMeta);
   /** Bumps when remote sync completes so CharacterSheet refetches session rolls. */
   const [sheetPollTick, setSheetPollTick] = useState(0);
 
@@ -398,6 +403,10 @@ export default function CharacterPage({
     charTabsRef.current = charTabs;
   }, [charTabs]);
 
+  useEffect(() => {
+    charTabUnsavedMetaRef.current = charTabUnsavedMeta;
+  }, [charTabUnsavedMeta]);
+
   /**
    * Refresh campaigns list and merge full character detail into every open tab (GM edits, session P/E, etc.).
    * Always GET /characters/:id/ per open PC so stats stay aligned with the server.
@@ -413,12 +422,18 @@ export default function CharacterPage({
     const byId = new Map(front.map((x) => [x.id, x]));
     setCharTabs((prev) => {
       void (async () => {
+        const metaSnap = charTabUnsavedMetaRef.current || {};
         const next = await Promise.all(
           prev.map(async (t) => {
             if (!t.characterId) return t;
+            const dirty = Boolean(metaSnap[t.tabId]?.isDirty);
+            if (dirty) {
+              return t;
+            }
             try {
               const raw = await characterAPI.getCharacter(t.characterId);
-              return { ...t, character: transformBackendToFrontend(raw) };
+              const transformed = transformBackendToFrontend(raw);
+              return { ...t, character: transformed };
             } catch {
               const updated = byId.get(t.characterId);
               if (updated) return { ...t, character: updated };

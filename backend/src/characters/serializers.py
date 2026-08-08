@@ -1425,6 +1425,17 @@ class StandSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+_STAND_TYPE_KEYS = frozenset(k for k, _ in Stand.TYPE_CHOICES)
+
+
+def _stand_type_from_payload(stand_data, default="FIGHTING"):
+    """Accept nested stand.type when it matches TYPE_CHOICES; else default."""
+    if not isinstance(stand_data, dict):
+        return default
+    raw = str(stand_data.get("type") or "").strip().upper()
+    return raw if raw in _STAND_TYPE_KEYS else default
+
+
 class CharacterSerializer(serializers.ModelSerializer):
     image = serializers.FileField(required=False)
     heritage = FlexibleHeritagePrimaryKeyField(
@@ -1811,11 +1822,14 @@ class CharacterSerializer(serializers.ModelSerializer):
         # Create Stand if we have coin_stats or stand data (required for validation)
         stats = stand_data or coin_stats
         if stats and isinstance(stats, dict):
+            stand_type = _stand_type_from_payload(
+                stand_data if isinstance(stand_data, dict) else None
+            )
             Stand.objects.get_or_create(
                 character=character,
                 defaults={
                     "name": character.stand_name or "Unnamed Stand",
-                    "type": "FIGHTING",
+                    "type": stand_type,
                     "form": "Humanoid",
                     "consciousness_level": "C",
                     "power": str(stats.get("power", "D")).upper()[:1],
@@ -1962,11 +1976,14 @@ class CharacterSerializer(serializers.ModelSerializer):
 
         # Sync Stand stats when coin_stats or stand data is provided
         if coin_stats and isinstance(coin_stats, dict):
+            stand_type_default = _stand_type_from_payload(
+                stand_data if isinstance(stand_data, dict) else None
+            )
             stand, created = Stand.objects.get_or_create(
                 character=character,
                 defaults={
                     "name": character.stand_name or "Unnamed Stand",
-                    "type": "FIGHTING",
+                    "type": stand_type_default,
                     "form": "Humanoid",
                     "consciousness_level": "C",
                     "power": "D",
@@ -1989,8 +2006,12 @@ class CharacterSerializer(serializers.ModelSerializer):
                 grade = str(coin_stats.get(field, "D")).upper()[:1]
                 if grade in ("S", "A", "B", "C", "D", "F"):
                     setattr(stand, field, grade)
-            if stand_data and isinstance(stand_data, dict) and stand_data.get("name"):
-                stand.name = stand_data["name"]
+            if stand_data and isinstance(stand_data, dict):
+                if stand_data.get("name"):
+                    stand.name = stand_data["name"]
+                resolved = _stand_type_from_payload(stand_data, default="")
+                if resolved:
+                    stand.type = resolved
             stand.save()
 
         if std_ids is not None:
