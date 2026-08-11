@@ -4288,7 +4288,9 @@ const CharacterSheetWrapper = ({
           const amount = Number(row.xpGained) || 0;
           const clockKey = (row.clockKey || "").trim();
           await experienceTrackerAPI.remove(row.entryId);
-          if (amount > 0 && clockKey) {
+          if (amount > 0 && clockKey === "pool") {
+            setUnallocatedXp((p) => Math.max(0, (Number(p) || 0) - amount));
+          } else if (amount > 0 && clockKey) {
             setXp((prev) => {
               const cur = Number(prev?.[clockKey]) || 0;
               return { ...prev, [clockKey]: Math.max(0, cur - amount) };
@@ -4353,6 +4355,7 @@ const CharacterSheetWrapper = ({
       applyBackendCharacter,
       refreshXpAllocations,
       refreshGmUndoStatus,
+      refreshGmRedoStatus,
       refetchXpReqTracker,
     ],
   );
@@ -8631,6 +8634,9 @@ const CharacterSheetWrapper = ({
                                             <option value="prowess">Prowess</option>
                                             <option value="resolve">Resolve</option>
                                             <option value="heritage">Heritage</option>
+                                            <option value="pool">
+                                              Free pool
+                                            </option>
                                           </select>
                                           <input
                                             type="number"
@@ -9498,7 +9504,16 @@ const CharacterSheetWrapper = ({
                                               const sidStr = String(
                                                 historyManual.sessionId || "",
                                               ).trim();
-                                              if (sessions.length > 0 && !sidStr) {
+                                              const trackPreview =
+                                                String(
+                                                  historyManual.xpTrack ||
+                                                    "playbook",
+                                                ).toLowerCase();
+                                              if (
+                                                sessions.length > 0 &&
+                                                trackPreview !== "pool" &&
+                                                !sidStr
+                                              ) {
                                                 setHistoryWriteError(
                                                   "Select a session for this XP award.",
                                                 );
@@ -9541,9 +9556,7 @@ const CharacterSheetWrapper = ({
                                                 );
                                                 return;
                                               }
-                                              const track = String(
-                                                historyManual.xpTrack || "playbook",
-                                              ).toLowerCase();
+                                              const track = trackPreview;
                                               setHistoryManualSaving(true);
                                               const res = await characterAPI.addXP(
                                                 characterId,
@@ -9575,6 +9588,18 @@ const CharacterSheetWrapper = ({
                                                   ...p,
                                                   [track]: res.new_total,
                                                 }));
+                                              }
+                                              if (
+                                                track === "pool" &&
+                                                typeof res?.unallocated_xp ===
+                                                  "number"
+                                              ) {
+                                                setUnallocatedXp(
+                                                  Math.max(
+                                                    0,
+                                                    Math.floor(res.unallocated_xp),
+                                                  ),
+                                                );
                                               }
                                               setHistoryRefreshTick((v) => v + 1);
                                               setHistoryOutcomeBandGmUnlock(false);

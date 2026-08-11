@@ -314,6 +314,30 @@ class GmUndoLatestChangeTests(TestCase):
             1,
         )
 
+    def test_gm_add_manual_xp_to_free_pool(self):
+        self.character.unallocated_xp = 0
+        self.character.save(update_fields=["unallocated_xp"])
+        self.client.force_authenticate(user=self.gm)
+        add_res = self.client.post(
+            f"/api/characters/{self.character.id}/add-xp/",
+            {
+                "track": "pool",
+                "amount": 2,
+                "reason": "GM manual pool test award",
+            },
+            format="json",
+        )
+        self.assertEqual(add_res.status_code, 200, add_res.content)
+
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.unallocated_xp, 2)
+
+        pool_tracker = ExperienceTracker.objects.filter(
+            character=self.character, clock_key="pool", revoked_at__isnull=True
+        ).first()
+        self.assertIsNotNone(pool_tracker)
+        self.assertEqual(pool_tracker.xp_gained, 2)
+
     def test_gm_redo_after_undo_manual_xp(self):
         self.character.xp_clocks = {
             "playbook": 1,
