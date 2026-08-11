@@ -635,7 +635,19 @@ const HomePage = ({
             <p className="home-muted">No NPCs yet.</p>
           ) : (
             npcs.slice(0, 8).map((npc) => (
-              <div key={npc.id} className="npc-card" role="presentation">
+              <div
+                key={npc.id}
+                className="npc-card"
+                role="button"
+                tabIndex={0}
+                onClick={() => handleEditNpc(npc.id)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleEditNpc(npc.id);
+                  }
+                }}
+              >
                 <div className="npc-card-stripe" />
                 <div className="npc-card-body">
                   <div className="npc-card-info">
@@ -653,14 +665,20 @@ const HomePage = ({
                     <a
                       href={buildRouteHref("npcs", { npcId: npc.id })}
                       className="p-card-btn p-card-btn-primary p-card-btn-npc"
-                      onClick={(e) => handleSpaNavClick(e, () => handleEditNpc(npc.id))}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSpaNavClick(e, () => handleEditNpc(npc.id));
+                      }}
                     >
                       Edit
                     </a>
                     <button
                       type="button"
                       className="p-card-btn p-card-btn-delete"
-                      onClick={() => handleDeleteNpc(npc.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteNpc(npc.id);
+                      }}
                       aria-label="Delete NPC"
                     >
                       ×
