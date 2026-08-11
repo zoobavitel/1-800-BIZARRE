@@ -69,7 +69,8 @@ class XpTriggerToggleTests(TestCase):
             )
         )
         self.assertEqual(granted_total, 2)
-        self.assertEqual(self.character.xp_clocks.get("playbook"), 2)
+        self.assertEqual(self.character.unallocated_xp, 2)
+        self.assertEqual(self.character.xp_clocks.get("playbook"), 0)
 
     def test_revoke_removes_latest_manual_entry(self):
         self._auth(self.player)
@@ -86,7 +87,7 @@ class XpTriggerToggleTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data["revoked"], 1)
         self.character.refresh_from_db()
-        self.assertEqual(self.character.xp_clocks.get("playbook"), 0)
+        self.assertEqual(self.character.unallocated_xp, 0)
         self.assertFalse(
             ExperienceTracker.objects.filter(
                 character=self.character,
@@ -103,9 +104,10 @@ class XpTriggerToggleTests(TestCase):
             trigger="STRUGGLE",
             description="Auto: vice overindulgence",
             xp_gained=1,
+            clock_key="pool",
         )
-        self.character.xp_clocks = {"playbook": 1}
-        self.character.save(update_fields=["xp_clocks"])
+        self.character.unallocated_xp = 1
+        self.character.save(update_fields=["unallocated_xp"])
 
         self._auth(self.player)
         res = self.client.post(
@@ -116,7 +118,7 @@ class XpTriggerToggleTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.data["revoked"], 1)
         self.character.refresh_from_db()
-        self.assertEqual(self.character.xp_clocks.get("playbook"), 0)
+        self.assertEqual(self.character.unallocated_xp, 0)
 
     def test_revoke_noop_when_nothing_to_remove(self):
         self._auth(self.player)
@@ -179,7 +181,7 @@ class XpTriggerToggleTests(TestCase):
         ).latest("id")
         self.assertEqual(entry.award_source, "PLAYER")
         self.assertEqual(entry.awarded_by_id, self.player.id)
-        self.assertEqual(entry.clock_key, "playbook")
+        self.assertEqual(entry.clock_key, "pool")
 
     def test_award_records_gm_attribution_when_gm_awards(self):
         self._auth(self.gm)
@@ -195,7 +197,7 @@ class XpTriggerToggleTests(TestCase):
         self.assertEqual(entry.award_source, "GM")
         self.assertEqual(entry.awarded_by_id, self.gm.id)
 
-    def test_delete_endpoint_removes_entry_and_rolls_back_clock(self):
+    def test_delete_endpoint_removes_entry_and_rolls_back_pool(self):
         entry = ExperienceTracker.objects.create(
             character=self.character,
             session=self.session,
@@ -203,15 +205,15 @@ class XpTriggerToggleTests(TestCase):
             description="Auto: trauma",
             xp_gained=1,
             award_source="AUTO",
-            clock_key="playbook",
+            clock_key="pool",
         )
-        self.character.xp_clocks = {"playbook": 3}
-        self.character.save(update_fields=["xp_clocks"])
+        self.character.unallocated_xp = 3
+        self.character.save(update_fields=["unallocated_xp"])
         self._auth(self.gm)
         res = self.client.delete(f"/api/experience-tracker/{entry.id}/")
         self.assertEqual(res.status_code, 204)
         self.character.refresh_from_db()
-        self.assertEqual(self.character.xp_clocks.get("playbook"), 2)
+        self.assertEqual(self.character.unallocated_xp, 2)
         self.assertFalse(
             ExperienceTracker.objects.filter(pk=entry.id).exists()
         )

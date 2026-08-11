@@ -319,11 +319,9 @@ class ExperienceTrackerViewSet(
     def manual_award(self, request):
         """Award +1 XP for an end-of-session trigger (BELIEFS/STRUGGLE/PLAYBOOK_SPECIFIC).
 
-        Respects the SRD 2-cap per session per trigger and writes to the
-        character's playbook XP clock; idempotent at the cap (returns the
-        current totals without creating a new entry). Records the caller
-        as ``awarded_by`` and tags ``award_source`` as ``PLAYER`` or ``GM``
-        so the XP record UI can show who toggled it.
+        Respects the SRD 2-cap per session per trigger and banks XP to the
+        character's free pool (``unallocated_xp``); idempotent at the cap.
+        Records the caller as ``awarded_by`` and tags ``award_source``.
         """
         character, session, trigger = self._resolve_toggle_context(request)
         user = request.user
@@ -343,8 +341,8 @@ class ExperienceTrackerViewSet(
                 character,
                 session,
                 trigger=trigger,
-                clock_key="playbook",
-                clock_max=10,
+                clock_key="pool",
+                clock_max=0,
                 want=1,
                 description=desc,
                 awarded_by=user,
@@ -368,8 +366,8 @@ class ExperienceTrackerViewSet(
         first; falls back to the most recent auto-grant (e.g. heritage,
         vice overindulgence, trauma) for the same trigger so that GMs and
         players can also delete those records from the scorecard. Rolls back
-        ``xp_gained`` on the entry's stored ``clock_key`` (defaulting to
-        ``playbook`` for legacy rows that predate the field).
+        ``xp_gained`` on the entry's stored ``clock_key`` (``pool`` → free
+        pool; otherwise a track; legacy empty defaults to pool).
         No-op if no entry exists for this trigger in the active session.
         """
         character, session, trigger = self._resolve_toggle_context(request)
@@ -398,10 +396,10 @@ class ExperienceTrackerViewSet(
                     status=status.HTTP_200_OK,
                 )
             amount = int(entry.xp_gained or 0)
-            clock_key = entry.clock_key or "playbook"
+            clock_key = (entry.clock_key or "").strip() or "pool"
             entry.delete()
             if amount > 0:
-                _rollback_clock(character, clock_key, amount)
+                _rollback_xp_destination(character, clock_key, amount)
         return Response(
             {
                 "character": character.id,
@@ -413,13 +411,9 @@ class ExperienceTrackerViewSet(
         )
 
     def destroy(self, request, *args, **kwargs):
-        """Delete an XP entry and roll back its ``clock_key`` track.
+        """Delete an XP entry and roll back its destination (track or free pool).
 
-        Allowed for the character owner or the campaign GM. The matching
-        ``xp_clocks[clock_key]`` value is decremented by ``xp_gained``
-        (clamped at zero); pool entries created by the development XP
-        settlement also decrement ``unallocated_xp`` so deleting them keeps
-        the session pool consistent.
+        Allowed for the character owner or the campaign GM.
         """
         entry = self.get_object()
         character = entry.character
@@ -445,19 +439,29 @@ class ExperienceTrackerViewSet(
             clock_key = (locked_entry.clock_key or "").strip()
             desc = locked_entry.description or ""
             locked_entry.delete()
-            if amount > 0 and clock_key:
-                _rollback_clock(locked_char, clock_key, amount)
-            elif amount > 0 and "Session end (pool)" in desc:
-                cur = int(getattr(locked_char, "unallocated_xp", 0) or 0)
-                locked_char.unallocated_xp = max(0, cur - amount)
-                locked_char.save(update_fields=["unallocated_xp"])
+            if amount > 0:
+                if clock_key:
+                    _rollback_xp_destination(locked_char, clock_key, amount)
+                elif "Session end (pool)" in desc:
+                    _rollback_xp_destination(locked_char, "pool", amount)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-def _rollback_clock(character, clock_key: str, amount: int) -> None:
-    """Decrement ``character.xp_clocks[clock_key]`` by ``amount`` (clamped)."""
+def _rollback_xp_destination(character, clock_key: str, amount: int) -> None:
+    """Decrement free pool or ``xp_clocks[clock_key]`` by ``amount`` (clamped)."""
+    key = (clock_key or "").strip()
+    if not key or key == "pool":
+        cur = int(getattr(character, "unallocated_xp", 0) or 0)
+        character.unallocated_xp = max(0, cur - int(amount))
+        character.save(update_fields=["unallocated_xp"])
+        return
     clocks = dict(character.xp_clocks or {})
-    cur = int(clocks.get(clock_key, 0) or 0)
-    clocks[clock_key] = max(0, cur - int(amount))
+    cur = int(clocks.get(key, 0) or 0)
+    clocks[key] = max(0, cur - int(amount))
     character.xp_clocks = clocks
     character.save(update_fields=["xp_clocks"])
+
+
+def _rollback_clock(character, clock_key: str, amount: int) -> None:
+    """Deprecated alias — prefer ``_rollback_xp_destination``."""
+    _rollback_xp_destination(character, clock_key, amount)

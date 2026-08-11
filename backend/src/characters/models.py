@@ -969,7 +969,8 @@ class Character(models.Model):
 
         # Calculate expected total XP from advancements
         expected_xp_from_advancements = (
-            self.heritage_points_gained * 5  # 5 XP per heritage point
+            self.heritage_points_gained * 10  # 10 XP per heritage ability
+            + self.bonus_hp_from_xp * 5  # 5 XP per bonus HP
             + self.stand_coin_points_gained * 10  # 10 XP per stand coin point
             + self.action_dice_gained * 5  # 5 XP per action die
         )
@@ -1028,10 +1029,10 @@ class Character(models.Model):
         self.save()
 
     def spend_xp_for_heritage_point(self, xp_type, num_points):
-        xp_cost = num_points * 5
+        xp_cost = num_points * 10
         if self.xp_clocks.get(xp_type, 0) < xp_cost:
             raise ValidationError(
-                f"Not enough XP in {xp_type} to gain {num_points} Heritage points."
+                f"Not enough XP in {xp_type} to gain {num_points} Heritage abilities."
             )
 
         self.xp_clocks[xp_type] -= xp_cost
@@ -1094,7 +1095,9 @@ class CharacterXPAllocation(models.Model):
     ALLOCATION_TYPE_CHOICES = [
         ("LEVEL_UP_STAT", "Level up — Stand Coin stat"),
         ("LEVEL_UP_DOTS", "Level up — action dots"),
+        ("LEVEL_UP_HERITAGE", "Level up — heritage ability"),
         ("MINOR_ADVANCE", "Minor advance — action dot"),
+        ("BUY_HP", "Buy +1 HP with XP"),
     ]
 
     XP_TRACK_CHOICES = [

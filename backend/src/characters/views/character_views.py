@@ -47,6 +47,7 @@ from ..serializers import CharacterSerializer, CharacterXPAllocationSerializer
 from ..history_context import bind_character_history_editor, reset_character_history_editor
 from ..services.xp_allocation import (
     XPAllocationError,
+    apply_buy_hp,
     apply_gm_forced_stand_stat,
     apply_level_up,
     apply_minor_advance,
@@ -1682,6 +1683,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 stand_stat=request.data.get("stand_stat"),
                 actions=request.data.get("actions"),
                 reward=request.data.get("reward"),
+                from_pool=bool(request.data.get("from_pool")),
             )
         except XPAllocationError as exc:
             return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
@@ -1789,6 +1791,38 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 character,
                 xp_track=request.data.get("xp_track"),
                 action=request.data.get("action"),
+                from_pool=bool(request.data.get("from_pool")),
+            )
+        except XPAllocationError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "allocation": CharacterXPAllocationSerializer(
+                    allocation,
+                    context={
+                        "latest_undoable_allocation_id": allocation.id,
+                    },
+                ).data,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="buy-hp-with-xp")
+    def buy_hp_with_xp_action(self, request, pk=None):
+        """Spend 5 XP (track or free pool) for +1 bonus HP."""
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot advance this character.")
+
+        try:
+            allocation = apply_buy_hp(
+                character,
+                xp_track=request.data.get("xp_track"),
+                from_pool=bool(request.data.get("from_pool")),
             )
         except XPAllocationError as exc:
             return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
