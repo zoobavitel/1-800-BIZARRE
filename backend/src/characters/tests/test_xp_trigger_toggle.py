@@ -219,6 +219,7 @@ class XpTriggerToggleTests(TestCase):
         )
 
     def test_delete_endpoint_uses_entry_clock_key_for_attribute_track(self):
+        """AUTO awards: GM (or scorecard) may delete; players cannot from sheet."""
         entry = ExperienceTracker.objects.create(
             character=self.character,
             session=self.session,
@@ -231,6 +232,9 @@ class XpTriggerToggleTests(TestCase):
         self.character.xp_clocks = {"playbook": 1, "insight": 2}
         self.character.save(update_fields=["xp_clocks"])
         self._auth(self.player)
+        denied = self.client.delete(f"/api/experience-tracker/{entry.id}/")
+        self.assertEqual(denied.status_code, 403)
+        self._auth(self.gm)
         res = self.client.delete(f"/api/experience-tracker/{entry.id}/")
         self.assertEqual(res.status_code, 204)
         self.character.refresh_from_db()
