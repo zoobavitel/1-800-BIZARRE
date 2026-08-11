@@ -47,6 +47,9 @@ import {
   normalizeCharacterInventory,
   PLAYBOOK_SHEET_OPTIONS,
   transformBackendToFrontend,
+  resolveCharacterCampaignContext,
+  isUserCampaignGmForCharacter,
+  isGmViewingPlayerCharacterSheet,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -64,6 +67,10 @@ import {
 } from "../features/character-sheet/utils/actionDicePool";
 import { computeAbilityHeritageRollBonuses } from "../features/character-sheet/utils/rollAbilityHeritageModifiers";
 import { defaultPositionEffectFromSessionDetail } from "../features/character-sheet/utils/sessionPositionEffectDefaults";
+import {
+  markPcAutosaveBusyCollision,
+  schedulePcPendingResaveDrain,
+} from "../features/character-sheet/utils/pcAutosaveQueue";
 import {
   tierDieFromActionPool,
   outcomeFromActionRoll,
@@ -1197,12 +1204,75 @@ const CharacterSheetWrapper = ({
   isGM = false,
   onCampaignRefresh,
   onDraftMetaChange,
+  /** Merge XP clocks / free pool from allocate|deallocate|undo into the open tab so poll hydrate cannot stale-overwrite. */
+  onCharacterXpSync,
+  /** Merge stress/trauma (and related) into the open tab after local trauma-clear so poll cannot restore max stress. */
+  onCharacterStressTraumaSync,
   /** Incremented when CharacterPage finishes a remote sync (poll, SSE, visibility) so session rolls refetch. */
   sessionDataPollTick = 0,
   /** When true, skip merging server character snapshots into XP / stand / action state (avoids poll overwriting local spends before autosave). */
   sheetDraftIsDirty = false,
 }) => {
   const { user } = useAuth();
+  /** Last XP clocks/pool applied from a dedicated XP API; blocks stale parent hydrate until tab catches up. */
+  const xpClocksTruthRef = useRef(null);
+  /** Local stress+trauma after marking trauma at max stress; blocks stale poll/hydrate restore. */
+  const stressTraumaTruthRef = useRef(null);
+  /** Bumped when draft deps change; stale in-flight autosaves must not win lastSaved. */
+  const draftGenRef = useRef(0);
+  const pendingResaveRef = useRef(false);
+  /**
+   * Same-tick protect before meta effect computes isDirty.
+   * Set sync in edit handlers; cleared unconditionally after meta pass (or 500ms fallback).
+   */
+  const dirtyIntentRef = useRef(false);
+  const dirtyIntentFallbackTimerRef = useRef(null);
+  const lastDraftMetaRef = useRef({
+    payload: null,
+    isNewCharacter: true,
+    isDirty: false,
+    isSaving: false,
+    dirtyIntent: false,
+  });
+  /** User touched server-owned field controls this draft; gates hydrate omit + PATCH include. */
+  const fieldTouchRef = useRef({
+    stress: false,
+    trauma: false,
+    xp: false,
+    healingClock: false,
+  });
+  const markDirtyIntent = useCallback(() => {
+    dirtyIntentRef.current = true;
+    const nextMeta = {
+      ...lastDraftMetaRef.current,
+      dirtyIntent: true,
+    };
+    lastDraftMetaRef.current = nextMeta;
+    onDraftMetaChange?.(nextMeta);
+    if (dirtyIntentFallbackTimerRef.current) {
+      clearTimeout(dirtyIntentFallbackTimerRef.current);
+    }
+    dirtyIntentFallbackTimerRef.current = setTimeout(() => {
+      if (!dirtyIntentRef.current) return;
+      dirtyIntentRef.current = false;
+      const cleared = {
+        ...lastDraftMetaRef.current,
+        dirtyIntent: false,
+      };
+      lastDraftMetaRef.current = cleared;
+      onDraftMetaChange?.(cleared);
+    }, 500);
+  }, [onDraftMetaChange]);
+  const markFieldTouch = useCallback(
+    (field) => {
+      if (!field || !Object.prototype.hasOwnProperty.call(fieldTouchRef.current, field)) {
+        return;
+      }
+      fieldTouchRef.current = { ...fieldTouchRef.current, [field]: true };
+      markDirtyIntent();
+    },
+    [markDirtyIntent],
+  );
   const ownerUsername =
     character?.creator_username || character?.user_username || character?.username || "";
   const ownerLabel = ownerUsername
@@ -1212,14 +1282,50 @@ const CharacterSheetWrapper = ({
       : "Created by unknown";
   const canEditSheet = !character?.id || isGM || character?.user_id === user?.id;
   const canCreateManualHistoryRecord = isGM || character?.user_id === user?.id;
-  const [activeMode, setActiveMode] = useState("CHARACTER MODE");
-  const campaignIdFromCharacter = (() => {
-    const c = character?.campaign;
-    return (typeof c === "object" ? c?.id : c) ?? "";
-  })();
-  const charCampaign = (campaigns || []).find(
-    (c) => String(c?.id ?? "") === String(campaignIdFromCharacter),
+  const characterCampaignContext = useMemo(
+    () => resolveCharacterCampaignContext(character, campaigns),
+    [character, campaigns],
   );
+  const campaignIdFromCharacter = characterCampaignContext.campaignId;
+  const charCampaignFromContext = characterCampaignContext.campaignRecord;
+  const [campaignLookup, setCampaignLookup] = useState(null);
+  useEffect(() => {
+    if (charCampaignFromContext || campaignIdFromCharacter == null) {
+      setCampaignLookup(null);
+      return undefined;
+    }
+    let cancelled = false;
+    campaignAPI
+      .getCampaign(campaignIdFromCharacter)
+      .then((c) => {
+        if (!cancelled) setCampaignLookup(c);
+      })
+      .catch(() => {
+        if (!cancelled) setCampaignLookup(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [charCampaignFromContext, campaignIdFromCharacter]);
+  const charCampaign = charCampaignFromContext || campaignLookup;
+  const isCampaignGm = useMemo(
+    () =>
+      isUserCampaignGmForCharacter(user, {
+        isGMProp: isGM,
+        campaignRecord: charCampaign,
+        campaignId: campaignIdFromCharacter,
+      }),
+    [user, isGM, charCampaign, campaignIdFromCharacter],
+  );
+  const isGmViewingPc = useMemo(
+    () =>
+      isGmViewingPlayerCharacterSheet(user, character, {
+        isCampaignGm,
+        campaignId: campaignIdFromCharacter,
+      }),
+    [user, character, isCampaignGm, campaignIdFromCharacter],
+  );
+  const [activeMode, setActiveMode] = useState("CHARACTER MODE");
   const activeSessionId =
     charCampaign?.active_session ??
     (typeof charCampaign?.active_session === "object"
@@ -1556,8 +1662,9 @@ const CharacterSheetWrapper = ({
     );
   }, [character?.id, character?.disguised_as_human]);
 
-  // When parent merges id before full GET/list row arrives, fill empty identity from server (avoid PUT wiping true_name, etc.)
+  // When parent merges id before full GET/list row arrives, fill empty identity from server (avoid PATCH wiping true_name, etc.)
   useEffect(() => {
+    if (sheetDraftIsDirty) return;
     setCharData((prev) => {
       const patch = {};
       const n = character?.id ? (character?.name ?? "") : "";
@@ -1576,6 +1683,7 @@ const CharacterSheetWrapper = ({
     character?.standName,
     character?.background,
     character?.look,
+    sheetDraftIsDirty,
   ]);
 
   // Portrait: sync from server/merged character; do not clobber while a file upload is pending
@@ -1801,31 +1909,72 @@ const CharacterSheetWrapper = ({
     Math.max(0, Math.floor(Number(character?.unallocatedXp) || 0)),
   );
   const [poolAllocateBusy, setPoolAllocateBusy] = useState(false);
+  const [poolTickError, setPoolTickError] = useState(null);
 
   // Hydrate sheet from server when character payload arrives after first paint (same class of bug as actionRatings).
-  // Each of these gates on `sheetDraftIsDirty` because a teammate-triggered
-  // poll/SSE refresh can land *between* the player's toggle and the debounced
-  // autosave commit; without the gate, the server snapshot (which still has
-  // the pre-toggle value) clobbers local state and the toggle visually
-  // reverts. The autosave's own onSave -> server fetch lifecycle clears the
-  // dirty flag, so the next poll after that can safely re-sync.
+  // Stress/trauma/XP are server-owned: merge unless the user touched that field's control this draft
+  // (broad sheetDraftIsDirty must NOT block stress while e.g. inventory is dirty).
   useEffect(() => {
-    if (sheetDraftIsDirty) return;
+    const truth = stressTraumaTruthRef.current;
+    if (truth) {
+      const parentStress = Number(character?.stressFilled);
+      if (
+        Number.isFinite(parentStress) &&
+        parentStress === truth.stressFilled
+      ) {
+        // Parent caught up on stress; trauma lock may still be active via trauma effect.
+      } else if (
+        typeof truth.stressFilled === "number" &&
+        Number.isFinite(parentStress) &&
+        parentStress !== truth.stressFilled
+      ) {
+        return;
+      }
+    }
+    if (fieldTouchRef.current.stress) return;
     const v = character?.stressFilled;
     if (typeof v === "number") setStressFilled((p) => (p !== v ? v : p));
   }, [character?.id, character?.stressFilled, sheetDraftIsDirty]);
 
   useEffect(() => {
-    if (sheetDraftIsDirty) return;
+    const truth = stressTraumaTruthRef.current;
+    if (truth?.trauma) {
+      const parentT = character?.trauma;
+      const keys = Object.keys(truth.trauma);
+      const matches =
+        parentT &&
+        typeof parentT === "object" &&
+        !Array.isArray(parentT) &&
+        keys.every((k) => !!parentT[k] === !!truth.trauma[k]);
+      if (matches) {
+        // Keep stress half of the lock if stress still diverges.
+        if (
+          typeof truth.stressFilled === "number" &&
+          Number(character?.stressFilled) !== truth.stressFilled
+        ) {
+          stressTraumaTruthRef.current = {
+            stressFilled: truth.stressFilled,
+            trauma: null,
+          };
+        } else {
+          stressTraumaTruthRef.current = null;
+        }
+      } else {
+        return;
+      }
+    }
+    if (fieldTouchRef.current.trauma) return;
     const t = character?.trauma;
     if (!t || typeof t !== "object" || Array.isArray(t)) return;
+    // Trauma: server object wins wholesale (no element-level merge).
     setTrauma((prev) => {
-      const merged = { ...DEFAULT_TRAUMA, ...t };
-      return Object.keys(merged).every((k) => merged[k] === prev[k])
+      const next = { ...DEFAULT_TRAUMA, ...t };
+      return Object.keys(DEFAULT_TRAUMA).every((k) => !!next[k] === !!prev[k])
         ? prev
-        : merged;
+        : next;
     });
-  }, [character?.id, character?.trauma, sheetDraftIsDirty]);
+    // character?.stressFilled: used when splitting stress/trauma truth lock after trauma catches up
+  }, [character?.id, character?.stressFilled, character?.trauma, sheetDraftIsDirty]);
 
   useEffect(() => {
     if (sheetDraftIsDirty) return;
@@ -1847,17 +1996,29 @@ const CharacterSheetWrapper = ({
   ]);
 
   useEffect(() => {
+    if (sheetDraftIsDirty || fieldTouchRef.current.healingClock) return;
     const h = character?.healingClock;
     if (typeof h !== "number") return;
     setHealingClock((p) => (p !== h ? h : p));
-  }, [character?.id, character?.healingClock]);
+  }, [character?.id, character?.healingClock, sheetDraftIsDirty]);
 
   useEffect(() => {
+    // Same dirty/truth gate as xp clocks: poll can deliver a stale snapshot while a
+    // just-completed allocate/deallocate is still the source of truth locally.
+    const truth = xpClocksTruthRef.current;
+    if (truth) {
+      const parentPool = Math.max(
+        0,
+        Math.floor(Number(character?.unallocatedXp) || 0),
+      );
+      if (parentPool !== truth.unallocatedXp) return;
+    }
+    if (fieldTouchRef.current.xp) return;
     const v = character?.unallocatedXp;
     if (typeof v !== "number") return;
     const n = Math.max(0, Math.floor(v));
     setUnallocatedXp((p) => (p !== n ? n : p));
-  }, [character?.id, character?.unallocatedXp]);
+  }, [character?.id, character?.unallocatedXp, sheetDraftIsDirty]);
 
   useEffect(() => {
     if (sheetDraftIsDirty) return;
@@ -1882,7 +2043,28 @@ const CharacterSheetWrapper = ({
   ]);
 
   useEffect(() => {
-    if (sheetDraftIsDirty) return;
+    const truth = xpClocksTruthRef.current;
+    if (truth) {
+      const parentPool = Math.max(
+        0,
+        Math.floor(Number(character?.unallocatedXp) || 0),
+      );
+      const parentXp = character?.xp;
+      const xpMatches =
+        parentXp &&
+        typeof parentXp === "object" &&
+        ["insight", "prowess", "resolve", "heritage", "playbook"].every(
+          (k) => (Number(parentXp[k]) || 0) === (Number(truth.xp?.[k]) || 0),
+        );
+      if (xpMatches && parentPool === truth.unallocatedXp) {
+        xpClocksTruthRef.current = null;
+      } else {
+        return;
+      }
+    }
+    if (fieldTouchRef.current.xp) {
+      return;
+    }
     const nx = character?.xp;
     if (!nx || typeof nx !== "object") return;
     setXp((prev) => {
@@ -1890,7 +2072,7 @@ const CharacterSheetWrapper = ({
       const changed = keys.some((k) => (prev[k] ?? 0) !== (nx[k] ?? 0));
       return changed ? { ...prev, ...nx } : prev;
     });
-  }, [character?.id, character?.xp, sheetDraftIsDirty]);
+  }, [character?.id, character?.xp, character?.unallocatedXp, sheetDraftIsDirty]);
 
   // Hydrate coin/stash only when switching characters (id change). Parent refresh (campaign list refetch,
   // getCharacters) reuses the same id with a new object; syncing on character.coin/stash then wiped
@@ -1983,6 +2165,37 @@ const CharacterSheetWrapper = ({
   const [xpAllocationRows, setXpAllocationRows] = useState([]);
   const [xpAllocationUndoBusy, setXpAllocationUndoBusy] = useState(false);
   const [xpAllocationActionError, setXpAllocationActionError] = useState(null);
+  /** Top-of-page notice after XP spend undo/redo (what specifically changed). */
+  const [xpActionToast, setXpActionToast] = useState(null);
+  useEffect(() => {
+    if (!xpActionToast) return undefined;
+    const t = window.setTimeout(() => setXpActionToast(null), 5000);
+    return () => window.clearTimeout(t);
+  }, [xpActionToast]);
+  const [gmUndoStatus, setGmUndoStatus] = useState({
+    available: false,
+    summary: null,
+  });
+  const [gmUndoBusy, setGmUndoBusy] = useState(false);
+  const [gmUndoError, setGmUndoError] = useState(null);
+  const [gmRedoStatus, setGmRedoStatus] = useState({
+    available: false,
+    summary: null,
+  });
+  const [gmRedoBusy, setGmRedoBusy] = useState(false);
+  const [gmRedoError, setGmRedoError] = useState(null);
+  const [sheetUndoStatus, setSheetUndoStatus] = useState({
+    available: false,
+    summary: null,
+  });
+  const [sheetUndoBusy, setSheetUndoBusy] = useState(false);
+  const [sheetUndoError, setSheetUndoError] = useState(null);
+  const [sheetRedoStatus, setSheetRedoStatus] = useState({
+    available: false,
+    summary: null,
+  });
+  const [sheetRedoBusy, setSheetRedoBusy] = useState(false);
+  const [sheetRedoError, setSheetRedoError] = useState(null);
 
   // FIX 7: Minor advance action selector
   const [minorAdvanceAction, setMinorAdvanceAction] = useState("HUNT");
@@ -2884,22 +3097,45 @@ const CharacterSheetWrapper = ({
     (cost) => {
       const spend = Number(cost) || 0;
       if (spend <= 0) return;
+      // Server/roll-applied stress: truth-lock only — do NOT mark field touch
+      // (autosave must omit stress so concurrent PATCH cannot clobber).
       setStressFilled((prev) => {
         const current = Number(prev) || 0;
         const afterSpend = current + spend;
-        if (afterSpend <= maxStress) return afterSpend;
-        const overflow = afterSpend - maxStress;
-        setTrauma((prevTrauma) => {
-          const firstOpen = Object.entries(prevTrauma || {}).find(
-            ([, checked]) => !checked,
-          )?.[0];
-          if (!firstOpen) return prevTrauma;
-          return { ...prevTrauma, [firstOpen]: true };
+        let next;
+        let nextTrauma = null;
+        if (afterSpend <= maxStress) {
+          next = afterSpend;
+        } else {
+          const overflow = afterSpend - maxStress;
+          setTrauma((prevTrauma) => {
+            const firstOpen = Object.entries(prevTrauma || {}).find(
+              ([, checked]) => !checked,
+            )?.[0];
+            if (!firstOpen) {
+              nextTrauma = prevTrauma;
+              return prevTrauma;
+            }
+            nextTrauma = { ...prevTrauma, [firstOpen]: true };
+            return nextTrauma;
+          });
+          next = Math.max(0, overflow);
+        }
+        const truth = {
+          stressFilled: next,
+          trauma: nextTrauma
+            ? { ...DEFAULT_TRAUMA, ...nextTrauma }
+            : stressTraumaTruthRef.current?.trauma || null,
+        };
+        stressTraumaTruthRef.current = truth;
+        onCharacterStressTraumaSync?.({
+          stressFilled: next,
+          ...(truth.trauma ? { trauma: truth.trauma } : {}),
         });
-        return Math.max(0, overflow);
+        return next;
       });
     },
-    [maxStress],
+    [maxStress, onCharacterStressTraumaSync],
   );
   const standArmorMax = standPathArmorMaxFromDurabilityIndex(durVal);
   const sessionDevXP = DEV_SESSION_XP[devVal] ?? 0;
@@ -3009,25 +3245,43 @@ const CharacterSheetWrapper = ({
     [trauma],
   );
 
-  /** At max stress, cannot manually clear marked boxes until player records a trauma (table rule). */
-  const traumaRequiredBeforeStressClear = useMemo(
-    () =>
-      (Number(stressFilled) || 0) >= maxStress && traumaMarkedCount < 1,
-    [stressFilled, maxStress, traumaMarkedCount],
+  /** At max stress, block manual clear until player marks a trauma (first or another). */
+  const stressMaxNeedsTraumaClear = useMemo(
+    () => (Number(stressFilled) || 0) >= maxStress,
+    [stressFilled, maxStress],
   );
 
   const toggleTraumaMark = useCallback(
     (traumaKey) => {
+      markFieldTouch("trauma");
+      // Trauma clear at max also writes stress — include stress in this draft PATCH.
       const gaining = !(trauma[traumaKey] ?? false);
-      if (
-        gaining &&
-        (Number(stressFilled) || 0) >= maxStress
-      ) {
+      const atMax = (Number(stressFilled) || 0) >= maxStress;
+      if (gaining && atMax) {
+        markFieldTouch("stress");
+      }
+      const nextStress = gaining && atMax ? 0 : stressFilled;
+      const nextTrauma = { ...trauma, [traumaKey]: gaining };
+      if (gaining && atMax) {
         setStressFilled(0);
       }
       setTrauma((p) => ({ ...p, [traumaKey]: gaining }));
+      stressTraumaTruthRef.current = {
+        stressFilled: Number(nextStress) || 0,
+        trauma: { ...DEFAULT_TRAUMA, ...nextTrauma },
+      };
+      onCharacterStressTraumaSync?.({
+        stressFilled: Number(nextStress) || 0,
+        trauma: { ...DEFAULT_TRAUMA, ...nextTrauma },
+      });
     },
-    [trauma, stressFilled, maxStress],
+    [
+      trauma,
+      stressFilled,
+      maxStress,
+      onCharacterStressTraumaSync,
+      markFieldTouch,
+    ],
   );
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
@@ -3036,6 +3290,24 @@ const CharacterSheetWrapper = ({
     if (!backendChar) return;
     const fe = transformBackendToFrontend(backendChar);
     if (fe.xp) setXp(fe.xp);
+    if (typeof fe.unallocatedXp === "number") {
+      setUnallocatedXp(Math.max(0, Math.floor(fe.unallocatedXp)));
+    }
+    if (fe.xp || typeof fe.unallocatedXp === "number") {
+      const truth = {
+        xp: fe.xp ? { ...fe.xp } : null,
+        unallocatedXp:
+          typeof fe.unallocatedXp === "number"
+            ? Math.max(0, Math.floor(fe.unallocatedXp))
+            : null,
+      };
+      if (truth.xp && typeof truth.unallocatedXp === "number") {
+        xpClocksTruthRef.current = truth;
+        onCharacterXpSync?.(truth);
+      }
+      // Allocate/deallocate included XP — clear xp field touch.
+      fieldTouchRef.current = { ...fieldTouchRef.current, xp: false };
+    }
     if (fe.standStats) setStandStats(fe.standStats);
     if (fe.actionRatings) setActionRatings(fe.actionRatings);
     if (fe.abilities) setAbilities(fe.abilities);
@@ -3056,8 +3328,12 @@ const CharacterSheetWrapper = ({
       abilities: fe.abilities,
       standCoinPointsGained: fe.standCoinPointsGained,
       actionDiceGained: fe.actionDiceGained,
+      unallocatedXp:
+        typeof fe.unallocatedXp === "number"
+          ? Math.max(0, Math.floor(fe.unallocatedXp))
+          : prev.unallocatedXp,
     }));
-  }, []);
+  }, [onCharacterXpSync]);
 
   const claimPendingStandAReward = useCallback(async () => {
     if (!characterId || !pendingStandAReward?.allocation_id) return;
@@ -3136,6 +3412,74 @@ const CharacterSheetWrapper = ({
     }
   }, [characterId]);
 
+  const refreshGmUndoStatus = useCallback(async () => {
+    if (!characterId || !isGmViewingPc) {
+      setGmUndoStatus({ available: false, summary: null });
+      return;
+    }
+    try {
+      const res = await characterAPI.getGmUndoStatus(characterId);
+      setGmUndoStatus(
+        res?.available
+          ? { available: true, summary: res.summary || null }
+          : { available: false, summary: null },
+      );
+    } catch {
+      setGmUndoStatus({ available: false, summary: null });
+    }
+  }, [characterId, isGmViewingPc]);
+
+  const refreshGmRedoStatus = useCallback(async () => {
+    if (!characterId || !isGmViewingPc) {
+      setGmRedoStatus({ available: false, summary: null });
+      return;
+    }
+    try {
+      const res = await characterAPI.getGmRedoStatus(characterId);
+      setGmRedoStatus(
+        res?.available
+          ? { available: true, summary: res.summary || null }
+          : { available: false, summary: null },
+      );
+    } catch {
+      setGmRedoStatus({ available: false, summary: null });
+    }
+  }, [characterId, isGmViewingPc]);
+
+  const refreshSheetUndoStatus = useCallback(async () => {
+    if (!characterId || !canEditSheet) {
+      setSheetUndoStatus({ available: false, summary: null });
+      return;
+    }
+    try {
+      const res = await characterAPI.getSheetUndoStatus(characterId);
+      setSheetUndoStatus(
+        res?.available
+          ? { available: true, summary: res.summary || null }
+          : { available: false, summary: null },
+      );
+    } catch {
+      setSheetUndoStatus({ available: false, summary: null });
+    }
+  }, [characterId, canEditSheet]);
+
+  const refreshSheetRedoStatus = useCallback(async () => {
+    if (!characterId || !canEditSheet) {
+      setSheetRedoStatus({ available: false, summary: null });
+      return;
+    }
+    try {
+      const res = await characterAPI.getSheetRedoStatus(characterId);
+      setSheetRedoStatus(
+        res?.available
+          ? { available: true, summary: res.summary || null }
+          : { available: false, summary: null },
+      );
+    } catch {
+      setSheetRedoStatus({ available: false, summary: null });
+    }
+  }, [characterId, canEditSheet]);
+
   const handleUndoLatestAllocation = useCallback(
     async (e) => {
       e?.stopPropagation?.();
@@ -3150,8 +3494,15 @@ const CharacterSheetWrapper = ({
         } else {
           await refreshXpAllocations();
         }
+        const detail =
+          (typeof res?.summary === "string" && res.summary.trim()) ||
+          "XP spend";
+        const toastMsg = `Undone: ${detail}`;
+        setXpActionToast({ kind: "ok", message: toastMsg });
       } catch (err) {
-        setXpAllocationActionError(err?.message || "Failed to undo allocation");
+        const msg = err?.message || "Failed to undo allocation";
+        setXpAllocationActionError(msg);
+        setXpActionToast({ kind: "err", message: msg });
       } finally {
         setXpAllocationUndoBusy(false);
       }
@@ -3180,8 +3531,14 @@ const CharacterSheetWrapper = ({
         } else {
           await refreshXpAllocations();
         }
+        const detail =
+          (typeof res?.summary === "string" && res.summary.trim()) ||
+          "XP spend";
+        setXpActionToast({ kind: "ok", message: `Undone: ${detail}` });
       } catch (err) {
-        setXpAllocationActionError(err?.message || "Failed to undo allocation");
+        const msg = err?.message || "Failed to undo allocation";
+        setXpAllocationActionError(msg);
+        setXpActionToast({ kind: "err", message: msg });
       } finally {
         setXpAllocationUndoBusy(false);
       }
@@ -3265,7 +3622,8 @@ const CharacterSheetWrapper = ({
     [incrementStat, decrementStat],
   );
 
-  const toggleXP = (track, idx) => {
+  const toggleXP = async (track, idx) => {
+    markFieldTouch("xp");
     const maxVals = {
       insight: 5,
       prowess: 5,
@@ -3273,10 +3631,82 @@ const CharacterSheetWrapper = ({
       heritage: 5,
       playbook: 10,
     };
-    setXp((p) => ({
-      ...p,
-      [track]: Math.min(idx < p[track] ? idx : idx + 1, maxVals[track]),
-    }));
+
+    const cur = Number(xp?.[track]) || 0;
+    // Click filled box → clear from that index up; click empty → fill through it.
+    const desired = Math.min(idx < cur ? idx : idx + 1, maxVals[track]);
+    if (!characterId) {
+      return;
+    }
+    if (!canEditSheet) {
+      return;
+    }
+    if (desired === cur) {
+      return;
+    }
+    if (poolAllocateBusy) {
+      return;
+    }
+
+    const delta = desired - cur;
+    if (delta === 0) return;
+
+    if (delta > 0 && unallocatedXp < delta) {
+      const msg = `Not enough XP in free pool (need ${delta}).`;
+      setSaveErrorMessage(msg);
+      setPoolTickError(msg);
+      return;
+    }
+
+    setPoolAllocateBusy(true);
+    setSaveErrorMessage(null);
+    setPoolTickError(null);
+    try {
+      const res =
+        delta > 0
+          ? await characterAPI.allocatePoolXp(characterId, {
+              track,
+              amount: delta,
+            })
+          : await characterAPI.deallocatePoolXp(characterId, {
+              track,
+              amount: -delta,
+            });
+      // Prefer full character echo so clocks + free pool stay in sync with parent
+      // hydrate / autosave (partial setXp alone races with poll).
+      if (res?.character) {
+        applyBackendCharacter(res.character);
+      } else {
+        const nextPool = Number(res?.unallocated_xp);
+        const nextXp =
+          res?.xp_clocks && typeof res.xp_clocks === "object"
+            ? { ...xp, ...res.xp_clocks }
+            : null;
+        if (Number.isFinite(nextPool)) {
+          setUnallocatedXp(Math.max(0, nextPool));
+        }
+        if (nextXp) {
+          setXp(nextXp);
+        }
+        setCharData((prev) => ({
+          ...prev,
+          ...(nextXp ? { xp: nextXp } : {}),
+          ...(Number.isFinite(nextPool)
+            ? { unallocatedXp: Math.max(0, nextPool) }
+            : {}),
+        }));
+      }
+    } catch (e) {
+      const msg =
+        e?.message ||
+        (delta > 0
+          ? "Could not allocate pool XP"
+          : "Could not return XP to free pool");
+      setSaveErrorMessage(msg);
+      setPoolTickError(msg);
+    } finally {
+      setPoolAllocateBusy(false);
+    }
   };
 
   const levelUpIsBtoA = useMemo(
@@ -3432,6 +3862,8 @@ const CharacterSheetWrapper = ({
   const [historySessionId, setHistorySessionId] = useState(null);
   const [historyCharacterFilter, setHistoryCharacterFilter] = useState("all");
   const [historyRefreshTick, setHistoryRefreshTick] = useState(0);
+  const [historyUndoBusy, setHistoryUndoBusy] = useState(null);
+  const [historyUndoError, setHistoryUndoError] = useState(null);
   const [showHistoryManualModal, setShowHistoryManualModal] = useState(false);
   const [historyManualSaving, setHistoryManualSaving] = useState(false);
   /** Manual history ACTION row: same shape as roll modal `rollAbilityBoost` (+1d / +1 effect toggles). */
@@ -3720,6 +4152,7 @@ const CharacterSheetWrapper = ({
 
   const handleHealingClockAdjust = useCallback(
     (nextFilled) => {
+      markFieldTouch("healingClock");
       const cap = 4;
       setHealingClock((prev) => {
         const cur = Math.max(0, Math.min(cap, Number(prev) || 0));
@@ -3739,7 +4172,7 @@ const CharacterSheetWrapper = ({
         return remainder;
       });
     },
-    [downgradeAllHarmByOneLevel],
+    [downgradeAllHarmByOneLevel, markFieldTouch],
   );
 
   const advanceHealingClockBySegments = useCallback(
@@ -4134,6 +4567,270 @@ const CharacterSheetWrapper = ({
     [refetchXpReqTracker],
   );
 
+  const handleHistoryRowUndo = useCallback(
+    async (row) => {
+      if (!row || historyUndoBusy) return;
+      const busyKey = row.key;
+      setHistoryUndoBusy(busyKey);
+      setHistoryUndoError(null);
+      try {
+        if (row.type === "sheet_edit" && row.entryId) {
+          const res = await characterHistoryAPI.undo(row.entryId);
+          if (res?.character) applyBackendCharacter(res.character);
+        } else if (row.type === "xp_tracker" && row.entryId) {
+          const amount = Number(row.xpGained) || 0;
+          const clockKey = (row.clockKey || "").trim();
+          await experienceTrackerAPI.remove(row.entryId);
+          if (amount > 0 && clockKey === "pool") {
+            setUnallocatedXp((p) => Math.max(0, (Number(p) || 0) - amount));
+          } else if (amount > 0 && clockKey) {
+            setXp((prev) => {
+              const cur = Number(prev?.[clockKey]) || 0;
+              return { ...prev, [clockKey]: Math.max(0, cur - amount) };
+            });
+          }
+          await refetchXpReqTracker();
+        } else {
+          return;
+        }
+        setHistoryRefreshTick((x) => x + 1);
+        await refreshXpAllocations();
+      } catch (err) {
+        setHistoryUndoError(err?.message || "Failed to undo change");
+      } finally {
+        setHistoryUndoBusy(null);
+      }
+    },
+    [
+      historyUndoBusy,
+      applyBackendCharacter,
+      refetchXpReqTracker,
+      refreshXpAllocations,
+    ],
+  );
+
+  const handleUndoLatestGmChange = useCallback(
+    async (e) => {
+      e?.stopPropagation?.();
+      if (!characterId || gmUndoBusy || !gmUndoStatus?.available) return;
+      setGmUndoBusy(true);
+      setGmUndoError(null);
+      try {
+        const res = await characterAPI.undoLatestGmChange(characterId);
+        if (res?.character) applyBackendCharacter(res.character);
+        if (Array.isArray(res?.allocations)) {
+          setXpAllocationRows(res.allocations);
+        } else {
+          await refreshXpAllocations();
+        }
+        if (res?.status) {
+          setGmUndoStatus(
+            res.status.available
+              ? { available: true, summary: res.status.summary || null }
+              : { available: false, summary: null },
+          );
+        } else {
+          await refreshGmUndoStatus();
+        }
+        await refreshGmRedoStatus();
+        setHistoryRefreshTick((x) => x + 1);
+        await refetchXpReqTracker();
+      } catch (err) {
+        setGmUndoError(err?.message || "Failed to undo GM XP award");
+      } finally {
+        setGmUndoBusy(false);
+      }
+    },
+    [
+      characterId,
+      gmUndoBusy,
+      gmUndoStatus?.available,
+      applyBackendCharacter,
+      refreshXpAllocations,
+      refreshGmUndoStatus,
+      refreshGmRedoStatus,
+      refetchXpReqTracker,
+    ],
+  );
+
+  const handleRedoLatestAllocation = useCallback(
+    async (e) => {
+      e?.stopPropagation?.();
+      if (!characterId || xpAllocationUndoBusy) return;
+      setXpAllocationUndoBusy(true);
+      setXpAllocationActionError(null);
+      try {
+        const res = await characterAPI.redoLatestAllocation(characterId);
+        if (res?.character) applyBackendCharacter(res.character);
+        if (Array.isArray(res?.allocations)) {
+          setXpAllocationRows(res.allocations);
+        } else {
+          await refreshXpAllocations();
+        }
+        const detail =
+          (typeof res?.summary === "string" && res.summary.trim()) ||
+          "XP spend";
+        setXpActionToast({ kind: "ok", message: `Redone: ${detail}` });
+      } catch (err) {
+        const msg = err?.message || "Failed to redo allocation";
+        setXpAllocationActionError(msg);
+        setXpActionToast({ kind: "err", message: msg });
+      } finally {
+        setXpAllocationUndoBusy(false);
+      }
+    },
+    [
+      characterId,
+      xpAllocationUndoBusy,
+      applyBackendCharacter,
+      refreshXpAllocations,
+    ],
+  );
+
+  const handleRedoLatestGmChange = useCallback(
+    async (e) => {
+      e?.stopPropagation?.();
+      if (!characterId || gmRedoBusy || !gmRedoStatus?.available) return;
+      setGmRedoBusy(true);
+      setGmRedoError(null);
+      try {
+        const res = await characterAPI.redoLatestGmChange(characterId);
+        if (res?.character) applyBackendCharacter(res.character);
+        if (Array.isArray(res?.allocations)) {
+          setXpAllocationRows(res.allocations);
+        } else {
+          await refreshXpAllocations();
+        }
+        if (res?.status) {
+          setGmRedoStatus(
+            res.status.available
+              ? { available: true, summary: res.status.summary || null }
+              : { available: false, summary: null },
+          );
+        } else {
+          await refreshGmRedoStatus();
+        }
+        await refreshGmUndoStatus();
+        setHistoryRefreshTick((x) => x + 1);
+        await refetchXpReqTracker();
+      } catch (err) {
+        setGmRedoError(err?.message || "Failed to redo GM XP award");
+      } finally {
+        setGmRedoBusy(false);
+      }
+    },
+    [
+      characterId,
+      gmRedoBusy,
+      gmRedoStatus?.available,
+      applyBackendCharacter,
+      refreshXpAllocations,
+      refreshGmRedoStatus,
+      refreshGmUndoStatus,
+      refetchXpReqTracker,
+    ],
+  );
+
+  const handleUndoLatestSheetEdit = useCallback(
+    async (e) => {
+      e?.stopPropagation?.();
+      if (!characterId || sheetUndoBusy || !sheetUndoStatus?.available) return;
+      setSheetUndoBusy(true);
+      setSheetUndoError(null);
+      try {
+        const res = await characterAPI.undoLatestSheetEdit(characterId);
+        if (res?.character) applyBackendCharacter(res.character);
+        if (Array.isArray(res?.allocations)) {
+          setXpAllocationRows(res.allocations);
+        } else {
+          await refreshXpAllocations();
+        }
+        if (res?.status) {
+          setSheetUndoStatus(
+            res.status.available
+              ? { available: true, summary: res.status.summary || null }
+              : { available: false, summary: null },
+          );
+        } else {
+          await refreshSheetUndoStatus();
+        }
+        if (res?.redo_status) {
+          setSheetRedoStatus(
+            res.redo_status.available
+              ? { available: true, summary: res.redo_status.summary || null }
+              : { available: false, summary: null },
+          );
+        } else {
+          await refreshSheetRedoStatus();
+        }
+        setHistoryRefreshTick((x) => x + 1);
+      } catch (err) {
+        setSheetUndoError(err?.message || "Failed to undo sheet edit");
+      } finally {
+        setSheetUndoBusy(false);
+      }
+    },
+    [
+      characterId,
+      sheetUndoBusy,
+      sheetUndoStatus?.available,
+      applyBackendCharacter,
+      refreshXpAllocations,
+      refreshSheetUndoStatus,
+      refreshSheetRedoStatus,
+    ],
+  );
+
+  const handleRedoLatestSheetEdit = useCallback(
+    async (e) => {
+      e?.stopPropagation?.();
+      if (!characterId || sheetRedoBusy || !sheetRedoStatus?.available) return;
+      setSheetRedoBusy(true);
+      setSheetRedoError(null);
+      try {
+        const res = await characterAPI.redoLatestSheetEdit(characterId);
+        if (res?.character) applyBackendCharacter(res.character);
+        if (Array.isArray(res?.allocations)) {
+          setXpAllocationRows(res.allocations);
+        } else {
+          await refreshXpAllocations();
+        }
+        if (res?.status) {
+          setSheetRedoStatus(
+            res.status.available
+              ? { available: true, summary: res.status.summary || null }
+              : { available: false, summary: null },
+          );
+        } else {
+          await refreshSheetRedoStatus();
+        }
+        if (res?.undo_status) {
+          setSheetUndoStatus(
+            res.undo_status.available
+              ? { available: true, summary: res.undo_status.summary || null }
+              : { available: false, summary: null },
+          );
+        } else {
+          await refreshSheetUndoStatus();
+        }
+        setHistoryRefreshTick((x) => x + 1);
+      } catch (err) {
+        setSheetRedoError(err?.message || "Failed to redo sheet edit");
+      } finally {
+        setSheetRedoBusy(false);
+      }
+    },
+    [
+      characterId,
+      sheetRedoBusy,
+      sheetRedoStatus?.available,
+      applyBackendCharacter,
+      refreshXpAllocations,
+      refreshSheetRedoStatus,
+      refreshSheetUndoStatus,
+    ],
+  );
+
   useEffect(() => {
     if (!characterId) {
       setXpReqTracker([]);
@@ -4185,6 +4882,21 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     refreshXpAllocations();
   }, [characterId, refreshXpAllocations]);
+
+  useEffect(() => {
+    refreshGmUndoStatus();
+    refreshGmRedoStatus();
+  }, [refreshGmUndoStatus, refreshGmRedoStatus, sessionDataPollTick, historyRefreshTick]);
+
+  useEffect(() => {
+    refreshSheetUndoStatus();
+    refreshSheetRedoStatus();
+  }, [
+    refreshSheetUndoStatus,
+    refreshSheetRedoStatus,
+    sessionDataPollTick,
+    historyRefreshTick,
+  ]);
 
   useEffect(() => {
     if (!showXpHistoryModal || !characterId) return;
@@ -4256,16 +4968,21 @@ const CharacterSheetWrapper = ({
             }));
             rows.push({
               key: `sheet-${entry.id}`,
+              entryId: entry.id,
               timestamp: entry.timestamp,
               actor: entry.editor_username || "system",
               type: "sheet_edit",
               sessionTag: "Out of session",
               details,
+              revertedAt: entry.reverted_at || null,
+              canUndo: Boolean(entry.can_undo),
+              undoBlockReason: entry.undo_block_reason || null,
             });
           });
           asArray(etRes).forEach((e) => {
             rows.push({
               key: `et-all-${e.id}`,
+              entryId: e.id,
               timestamp: e.session_date,
               actor: "xp (tracker)",
               characterId: e.character ?? characterId,
@@ -4274,6 +4991,10 @@ const CharacterSheetWrapper = ({
               modifiers: e.session
                 ? [`Session #${e.session}`]
                 : ["No session link"],
+              xpGained: e.xp_gained,
+              clockKey: e.clock_key,
+              canUndo: Boolean(e.can_undo_from_sheet),
+              undoBlockReason: e.undo_block_reason || null,
             });
           });
           asArray(xhRes).forEach((x) => {
@@ -6871,7 +7592,10 @@ const CharacterSheetWrapper = ({
             (sum, opt) => sum + Math.max(0, Number(opt.bonusDice) || 0),
             0,
           ),
-          roller_stress_spent: Math.max(0, Number(stressCost) || 0),
+          roller_stress_spent: Math.max(
+            0,
+            Number(resistanceTotalStressCost) || 0,
+          ),
           modifier_sources: resistanceSourceRows,
           stress_sources: [
             ...(stressCost > 0
@@ -6898,9 +7622,27 @@ const CharacterSheetWrapper = ({
           ],
           position_effect_sources: [],
         });
+        // Server applies resistance stress on create — mirror locally with truth
+        // lock, no field touch (autosave must omit stress).
+        const spent = Math.max(0, Number(resistanceTotalStressCost) || 0);
+        if (spent > 0) {
+          setStressFilled((prev) => {
+            const next = Math.min(maxStress, (Number(prev) || 0) + spent);
+            stressTraumaTruthRef.current = {
+              stressFilled: next,
+              trauma: stressTraumaTruthRef.current?.trauma || null,
+            };
+            onCharacterStressTraumaSync?.({ stressFilled: next });
+            return next;
+          });
+        }
         onCampaignRefresh?.();
       } catch (_) {
-        // Keep local resistance flow even if history save fails.
+        // History save failed — still apply stress locally with truth lock (no touch).
+        const spent = Math.max(0, Number(resistanceTotalStressCost) || 0);
+        if (spent > 0) {
+          applyStressCost(spent);
+        }
       }
     }
   };
@@ -7037,6 +7779,7 @@ const CharacterSheetWrapper = ({
       coinFilled,
       stash: stashBoxes,
       xp,
+      unallocatedXp,
       abilities,
       clocks,
       playbook,
@@ -7053,6 +7796,7 @@ const CharacterSheetWrapper = ({
       lastModified: new Date().toISOString(),
       selected_benefits: selectedBenefits,
       selected_detriments: selectedDetriments,
+      _fieldTouches: { ...fieldTouchRef.current },
     };
   }, [
     charData,
@@ -7069,6 +7813,7 @@ const CharacterSheetWrapper = ({
     coinFilled,
     stashBoxes,
     xp,
+    unallocatedXp,
     abilities,
     clocks,
     playbook,
@@ -7086,10 +7831,13 @@ const CharacterSheetWrapper = ({
     selectedDetriments,
   ]);
 
+  const buildPayloadRef = useRef(buildPayload);
+  buildPayloadRef.current = buildPayload;
+
   useEffect(() => {
     if (!onDraftMetaChange) return;
     const payload = buildPayload();
-    const { lastModified, ...rest } = payload;
+    const { lastModified, _fieldTouches, ...rest } = payload;
     const payloadKey = JSON.stringify(rest);
     if (payload.id && lastSavedPayloadRef.current == null) {
       lastSavedPayloadRef.current = payloadKey;
@@ -7097,68 +7845,118 @@ const CharacterSheetWrapper = ({
     const isDirty = !payload.id
       ? hasMeaningfulDraftChanges(payload)
       : payloadKey !== (lastSavedPayloadRef.current ?? "");
-    onDraftMetaChange({
+    // dirtyIntent only covers edit→meta gap (set sync in handlers). After this
+    // pass evaluates isDirty, clear unconditionally — protect continues via isDirty.
+    dirtyIntentRef.current = false;
+    if (dirtyIntentFallbackTimerRef.current) {
+      clearTimeout(dirtyIntentFallbackTimerRef.current);
+      dirtyIntentFallbackTimerRef.current = null;
+    }
+    const meta = {
       payload,
       isNewCharacter: !payload.id,
       isDirty,
       isSaving: saveStatus === "saving",
-    });
+      dirtyIntent: false,
+    };
+    lastDraftMetaRef.current = meta;
+    onDraftMetaChange(meta);
   }, [onDraftMetaChange, buildPayload, saveStatus]);
 
-  // Debounced auto-save
+  // Debounced auto-save (busy-collision queues via pendingResaveRef; drain rebuilds payload fresh)
   useEffect(() => {
     if (!mountedRef.current) {
       mountedRef.current = true;
       return;
     }
+    draftGenRef.current += 1;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
-      if (savingRef.current || !onSave || !canEditSheet) return;
+      if (!onSave || !canEditSheet) return;
+      if (markPcAutosaveBusyCollision(savingRef.current, pendingResaveRef)) {
+        return;
+      }
       if (heritagesLoading || heritages.length === 0) return;
       if (
         typeof charData.heritage !== "number" ||
         !Number.isFinite(charData.heritage)
       )
         return;
-      const payload = buildPayload();
-      // Never create a new character via autosave when viewing a character that
-      // belongs to another user. A null id with a known owner means the character
-      // data came from someone else's sheet — creating it would assign ownership
-      // to the currently logged-in user (e.g. a GM claiming a player's character).
-      if (
-        !payload.id &&
-        character?.user_id !== null &&
-        character?.user_id !== undefined &&
-        character.user_id !== user?.id
-      )
-        return;
-      if (!payload.id && !hasMeaningfulDraftChanges(payload)) {
-        return;
-      }
-      // Skip save if payload matches last saved (prevents loop from server response overwriting fields)
-      const { lastModified, ...rest } = payload;
-      const payloadKey = JSON.stringify(rest);
-      if (lastSavedPayloadRef.current === payloadKey) {
-        return;
-      }
-      savingRef.current = true;
-      setSaveStatus("saving");
-      try {
-        await onSave(payload);
-        lastSavedPayloadRef.current = payloadKey;
-        if (removeImageRequested) setRemoveImageRequested(false);
-        setSaveStatus("saved");
-        setSaveErrorMessage(null);
-        setTimeout(
-          () => setSaveStatus((s) => (s === "saved" ? null : s)),
-          2000,
-        );
-      } catch (err) {
-        setSaveStatus("error");
-        setSaveErrorMessage(err?.message || "Save failed");
-      } finally {
-        savingRef.current = false;
-      }
+
+      const runSave = async (payloadOverride) => {
+        const myGen = draftGenRef.current;
+        // Always prefer live builder (drain must not reuse busy-time snapshot).
+        const payload =
+          payloadOverride ?? buildPayloadRef.current();
+        // Never create a new character via autosave when viewing a character that
+        // belongs to another user. A null id with a known owner means the character
+        // data came from someone else's sheet — creating it would assign ownership
+        // to the currently logged-in user (e.g. a GM claiming a player's character).
+        if (
+          !payload.id &&
+          character?.user_id !== null &&
+          character?.user_id !== undefined &&
+          character.user_id !== user?.id
+        )
+          return;
+        if (!payload.id && !hasMeaningfulDraftChanges(payload)) {
+          return;
+        }
+        // Skip save if payload matches last saved (prevents loop from server response overwriting fields)
+        const { lastModified, _fieldTouches, ...rest } = payload;
+        const payloadKey = JSON.stringify(rest);
+        if (lastSavedPayloadRef.current === payloadKey) {
+          return;
+        }
+        savingRef.current = true;
+        setSaveStatus("saving");
+        try {
+          await onSave(payload);
+          // Clear touch flags only for fields this save included.
+          const touches = payload._fieldTouches || {};
+          if (touches.stress) fieldTouchRef.current.stress = false;
+          if (touches.trauma) fieldTouchRef.current.trauma = false;
+          if (touches.xp) fieldTouchRef.current.xp = false;
+          if (touches.healingClock) fieldTouchRef.current.healingClock = false;
+          // Re-assert trauma-clear truth after save merges server echo into the tab
+          // (a stale in-flight max-stress PUT must not leave parent at 9).
+          if (stressTraumaTruthRef.current) {
+            onCharacterStressTraumaSync?.(stressTraumaTruthRef.current);
+          }
+          // Ignore stale in-flight saves that finished after newer local edits
+          // (e.g. trauma-clear while a max-stress PUT was still running).
+          if (myGen === draftGenRef.current) {
+            lastSavedPayloadRef.current = payloadKey;
+          } else {
+            pendingResaveRef.current = true;
+          }
+          if (removeImageRequested) setRemoveImageRequested(false);
+          setSaveStatus("saved");
+          setSaveErrorMessage(null);
+          setTimeout(
+            () => setSaveStatus((s) => (s === "saved" ? null : s)),
+            2000,
+          );
+        } catch (err) {
+          setSaveStatus("error");
+          setSaveErrorMessage(err?.message || "Save failed");
+        } finally {
+          savingRef.current = false;
+          schedulePcPendingResaveDrain({
+            pendingResaveRef,
+            savingRef,
+            buildPayload: () => buildPayloadRef.current(),
+            runSaveWithPayload: (freshPayload) => {
+              void runSave(freshPayload);
+            },
+            onPendingTaken: () => {
+              draftGenRef.current += 1;
+            },
+          });
+        }
+      };
+
+      await runSave();
     }, 1500);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -7179,6 +7977,7 @@ const CharacterSheetWrapper = ({
     coinFilled,
     stashBoxes,
     xp,
+    unallocatedXp,
     abilities,
     clocks,
     playbook,
@@ -7348,6 +8147,34 @@ const CharacterSheetWrapper = ({
 
   return (
     <div style={S.page}>
+      {xpActionToast?.message ? (
+        <div
+          role="status"
+          style={{
+            position: "fixed",
+            top: 12,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 400,
+            maxWidth: "min(560px, 92vw)",
+            padding: "10px 14px",
+            borderRadius: 8,
+            fontFamily: "monospace",
+            fontSize: 12,
+            lineHeight: 1.35,
+            boxShadow: "0 10px 28px rgba(0,0,0,0.55)",
+            border:
+              xpActionToast.kind === "err"
+                ? "1px solid #f87171"
+                : "1px solid #818cf8",
+            background:
+              xpActionToast.kind === "err" ? "#450a0a" : "#1e1b4b",
+            color: xpActionToast.kind === "err" ? "#fecaca" : "#e0e7ff",
+          }}
+        >
+          {xpActionToast.message}
+        </div>
+      ) : null}
       {/* ── Header ── */}
       <div style={S.hdr}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -7622,37 +8449,304 @@ const CharacterSheetWrapper = ({
                         {pcLevel}
                       </div>
                       {characterId && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleUndoLatestAllocation();
-                          }}
-                          disabled={
-                            xpAllocationUndoBusy ||
-                            !xpAllocationRows.some((a) => !a.undone_at && a.can_undo)
-                          }
-                          title="Undo most recent XP allocation"
+                        <div
                           style={{
-                            background: "#312e81",
-                            border: "1px solid #6366f1",
-                            borderRadius: 6,
-                            padding: "2px 6px",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: 3,
                             marginTop: "2px",
-                            cursor: xpAllocationUndoBusy ? "wait" : "pointer",
-                            color: "#c7d2fe",
-                            fontSize: 12,
-                            lineHeight: 1,
-                            opacity:
-                              xpAllocationRows.some(
-                                (a) => !a.undone_at && a.can_undo,
-                              )
-                                ? 1
-                                : 0.45,
                           }}
                         >
-                          ↩
-                        </button>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "center",
+                              gap: 1,
+                            }}
+                          >
+                            <span
+                              style={{
+                                fontSize: 8,
+                                color: "#a5b4fc",
+                                fontWeight: 700,
+                                letterSpacing: "0.04em",
+                                lineHeight: 1,
+                              }}
+                            >
+                              XP
+                            </span>
+                            <div
+                              style={{
+                                display: "flex",
+                                gap: 4,
+                                justifyContent: "center",
+                              }}
+                            >
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleUndoLatestAllocation();
+                                }}
+                                disabled={
+                                  xpAllocationUndoBusy ||
+                                  !xpAllocationRows.some(
+                                    (a) => !a.undone_at && a.can_undo,
+                                  )
+                                }
+                                title="Undo your most recent XP spend (stand coin / dots). Refunds only that spend; does not remove GM session XP."
+                                style={{
+                                  background: "#312e81",
+                                  border: "1px solid #6366f1",
+                                  borderRadius: 6,
+                                  padding: "2px 6px",
+                                  cursor: xpAllocationUndoBusy
+                                    ? "wait"
+                                    : "pointer",
+                                  color: "#c7d2fe",
+                                  fontSize: 12,
+                                  lineHeight: 1,
+                                  opacity: xpAllocationRows.some(
+                                    (a) => !a.undone_at && a.can_undo,
+                                  )
+                                    ? 1
+                                    : 0.45,
+                                }}
+                              >
+                                ↩
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRedoLatestAllocation();
+                                }}
+                                disabled={
+                                  xpAllocationUndoBusy ||
+                                  !xpAllocationRows.some(
+                                    (a) => a.undone_at && a.can_redo,
+                                  )
+                                }
+                                title="Redo your most recently undone XP spend"
+                                style={{
+                                  background: "#312e81",
+                                  border: "1px solid #6366f1",
+                                  borderRadius: 6,
+                                  padding: "2px 6px",
+                                  cursor: xpAllocationUndoBusy
+                                    ? "wait"
+                                    : "pointer",
+                                  color: "#c7d2fe",
+                                  fontSize: 12,
+                                  lineHeight: 1,
+                                  opacity: xpAllocationRows.some(
+                                    (a) => a.undone_at && a.can_redo,
+                                  )
+                                    ? 1
+                                    : 0.45,
+                                }}
+                              >
+                                ↪
+                              </button>
+                            </div>
+                          </div>
+                          {canEditSheet && (
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                gap: 1,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: 8,
+                                  color: "#86efac",
+                                  fontWeight: 700,
+                                  letterSpacing: "0.04em",
+                                  lineHeight: 1,
+                                }}
+                              >
+                                EDIT
+                              </span>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 4,
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUndoLatestSheetEdit(e);
+                                  }}
+                                  disabled={
+                                    sheetUndoBusy || !sheetUndoStatus?.available
+                                  }
+                                  title={
+                                    sheetUndoStatus?.available
+                                      ? `Undo last sheet edit${sheetUndoStatus.summary ? `: ${sheetUndoStatus.summary}` : ""}`
+                                      : "No sheet edits to undo"
+                                  }
+                                  style={{
+                                    background: "#14532d",
+                                    border: "1px solid #22c55e",
+                                    borderRadius: 6,
+                                    padding: "2px 6px",
+                                    cursor: sheetUndoBusy ? "wait" : "pointer",
+                                    color: "#bbf7d0",
+                                    fontSize: 12,
+                                    lineHeight: 1,
+                                    opacity: sheetUndoStatus?.available
+                                      ? 1
+                                      : 0.45,
+                                  }}
+                                >
+                                  {sheetUndoBusy ? "…" : "↩"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRedoLatestSheetEdit(e);
+                                  }}
+                                  disabled={
+                                    sheetRedoBusy || !sheetRedoStatus?.available
+                                  }
+                                  title={
+                                    sheetRedoStatus?.available
+                                      ? `Redo last undone sheet edit${sheetRedoStatus.summary ? `: ${sheetRedoStatus.summary}` : ""}`
+                                      : "No sheet edits to redo"
+                                  }
+                                  style={{
+                                    background: "#14532d",
+                                    border: "1px solid #22c55e",
+                                    borderRadius: 6,
+                                    padding: "2px 6px",
+                                    cursor: sheetRedoBusy ? "wait" : "pointer",
+                                    color: "#bbf7d0",
+                                    fontSize: 12,
+                                    lineHeight: 1,
+                                    opacity: sheetRedoStatus?.available
+                                      ? 1
+                                      : 0.45,
+                                  }}
+                                >
+                                  {sheetRedoBusy ? "…" : "↪"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          {isGmViewingPc && (
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "center",
+                                gap: 1,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  fontSize: 8,
+                                  color: "#fdba74",
+                                  fontWeight: 700,
+                                  letterSpacing: "0.04em",
+                                  lineHeight: 1,
+                                }}
+                              >
+                                GM XP
+                              </span>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 4,
+                                  justifyContent: "center",
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleUndoLatestGmChange(e);
+                                  }}
+                                  disabled={
+                                    gmUndoBusy || !gmUndoStatus?.available
+                                  }
+                                  title={
+                                    gmUndoStatus?.available
+                                      ? `Undo your last GM XP award on this PC${gmUndoStatus.summary ? `: ${gmUndoStatus.summary}` : ""}`
+                                      : "No GM XP awards to undo on this character"
+                                  }
+                                  style={{
+                                    background: "#431407",
+                                    border: "1px solid #ea580c",
+                                    borderRadius: 6,
+                                    padding: "2px 6px",
+                                    cursor: gmUndoBusy ? "wait" : "pointer",
+                                    color: "#fed7aa",
+                                    fontSize: 12,
+                                    lineHeight: 1,
+                                    opacity: gmUndoStatus?.available ? 1 : 0.45,
+                                  }}
+                                >
+                                  {gmUndoBusy ? "…" : "↩"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRedoLatestGmChange(e);
+                                  }}
+                                  disabled={
+                                    gmRedoBusy || !gmRedoStatus?.available
+                                  }
+                                  title={
+                                    gmRedoStatus?.available
+                                      ? `Redo your last undone GM XP award${gmRedoStatus.summary ? `: ${gmRedoStatus.summary}` : ""}`
+                                      : "No GM XP awards to redo"
+                                  }
+                                  style={{
+                                    background: "#431407",
+                                    border: "1px solid #ea580c",
+                                    borderRadius: 6,
+                                    padding: "2px 6px",
+                                    cursor: gmRedoBusy ? "wait" : "pointer",
+                                    color: "#fed7aa",
+                                    fontSize: 12,
+                                    lineHeight: 1,
+                                    opacity: gmRedoStatus?.available ? 1 : 0.45,
+                                  }}
+                                >
+                                  {gmRedoBusy ? "…" : "↪"}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {(sheetUndoError ||
+                        sheetRedoError ||
+                        (isGmViewingPc && (gmUndoError || gmRedoError))) && (
+                        <div
+                          style={{
+                            fontSize: 9,
+                            color: "#fca5a5",
+                            marginTop: 2,
+                            maxWidth: 140,
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          {sheetUndoError ||
+                            sheetRedoError ||
+                            gmUndoError ||
+                            gmRedoError}
+                        </div>
                       )}
                       <div
                         style={{
@@ -7945,6 +9039,9 @@ const CharacterSheetWrapper = ({
                                             <option value="prowess">Prowess</option>
                                             <option value="resolve">Resolve</option>
                                             <option value="heritage">Heritage</option>
+                                            <option value="pool">
+                                              Free pool
+                                            </option>
                                           </select>
                                           <input
                                             type="number"
@@ -8812,7 +9909,16 @@ const CharacterSheetWrapper = ({
                                               const sidStr = String(
                                                 historyManual.sessionId || "",
                                               ).trim();
-                                              if (sessions.length > 0 && !sidStr) {
+                                              const trackPreview =
+                                                String(
+                                                  historyManual.xpTrack ||
+                                                    "playbook",
+                                                ).toLowerCase();
+                                              if (
+                                                sessions.length > 0 &&
+                                                trackPreview !== "pool" &&
+                                                !sidStr
+                                              ) {
                                                 setHistoryWriteError(
                                                   "Select a session for this XP award.",
                                                 );
@@ -8855,9 +9961,7 @@ const CharacterSheetWrapper = ({
                                                 );
                                                 return;
                                               }
-                                              const track = String(
-                                                historyManual.xpTrack || "playbook",
-                                              ).toLowerCase();
+                                              const track = trackPreview;
                                               setHistoryManualSaving(true);
                                               const res = await characterAPI.addXP(
                                                 characterId,
@@ -8889,6 +9993,18 @@ const CharacterSheetWrapper = ({
                                                   ...p,
                                                   [track]: res.new_total,
                                                 }));
+                                              }
+                                              if (
+                                                track === "pool" &&
+                                                typeof res?.unallocated_xp ===
+                                                  "number"
+                                              ) {
+                                                setUnallocatedXp(
+                                                  Math.max(
+                                                    0,
+                                                    Math.floor(res.unallocated_xp),
+                                                  ),
+                                                );
                                               }
                                               setHistoryRefreshTick((v) => v + 1);
                                               setHistoryOutcomeBandGmUnlock(false);
@@ -9309,19 +10425,49 @@ const CharacterSheetWrapper = ({
                                 : "No history entries."}
                             </div>
                           ) : (
-                            historyRows.slice(0, 200).map((row) => (
+                            <>
+                              {historyUndoError && (
+                                <div
+                                  style={{
+                                    color: "#fca5a5",
+                                    fontSize: 10,
+                                    marginBottom: 8,
+                                  }}
+                                >
+                                  {historyUndoError}
+                                </div>
+                              )}
+                              {historyRows.slice(0, 200).map((row) => {
+                                const undoBusy = historyUndoBusy === row.key;
+                                const showUndo =
+                                  historyMode === "sheet" &&
+                                  (row.type === "sheet_edit" ||
+                                    row.type === "xp_tracker") &&
+                                  !row.revertedAt;
+                                return (
                               <div
                                 key={row.key}
                                 style={{
                                   padding: "6px 0",
                                   borderBottom: "1px solid #1f2937",
+                                  opacity: row.revertedAt ? 0.55 : 1,
                                 }}
                               >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    gap: 8,
+                                    alignItems: "flex-start",
+                                  }}
+                                >
+                                  <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ color: "#9ca3af", fontSize: 10 }}>
                                   {row.timestamp
                                     ? new Date(row.timestamp).toLocaleString()
                                     : "No timestamp"}{" "}
                                   · {row.actor || "unknown"}
+                                  {row.revertedAt ? " · undone" : ""}
                                 </div>
                                 {row.text ? (
                                   <div style={{ color: "#d1d5db" }}>{row.text}</div>
@@ -9347,8 +10493,45 @@ const CharacterSheetWrapper = ({
                                     {row.modifiers.join(" · ")}
                                   </div>
                                 ) : null}
+                                  </div>
+                                  {showUndo && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleHistoryRowUndo(row)}
+                                      disabled={
+                                        undoBusy || row.canUndo === false
+                                      }
+                                      title={
+                                        row.canUndo === false
+                                          ? row.undoBlockReason ||
+                                            "Cannot undo this entry"
+                                          : "Undo this change"
+                                      }
+                                      style={{
+                                        flexShrink: 0,
+                                        background: "#312e81",
+                                        border: "1px solid #6366f1",
+                                        borderRadius: 6,
+                                        padding: "2px 6px",
+                                        cursor:
+                                          undoBusy || row.canUndo === false
+                                            ? "not-allowed"
+                                            : "pointer",
+                                        color: "#c7d2fe",
+                                        fontSize: 12,
+                                        lineHeight: 1,
+                                        opacity:
+                                          row.canUndo === false ? 0.45 : 1,
+                                      }}
+                                    >
+                                      {undoBusy ? "…" : "↩"}
+                                    </button>
+                                  )}
+                                </div>
                               </div>
-                            ))
+                                );
+                              })}
+                            </>
                           )}
                         </>
                     </div>
@@ -9453,12 +10636,13 @@ const CharacterSheetWrapper = ({
                           <input
                             style={S.inp}
                             value={charData.name}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              markDirtyIntent();
                               setCharData((p) => ({
                                 ...p,
                                 name: e.target.value,
-                              }))
-                            }
+                              }));
+                            }}
                             placeholder="Character Name"
                           />
                         </div>
@@ -9734,7 +10918,7 @@ const CharacterSheetWrapper = ({
                       {stressFilled}/{maxStress}
                     </span>
                   </div>
-                  {traumaRequiredBeforeStressClear ? (
+                  {stressMaxNeedsTraumaClear ? (
                     <div
                       style={{
                         fontSize: "10px",
@@ -9743,9 +10927,9 @@ const CharacterSheetWrapper = ({
                         lineHeight: 1.35,
                       }}
                     >
-                      Stress track is full — mark a trauma below to clear all
-                      stress (or manually clear boxes after you have marked at
-                      least one trauma).
+                      {traumaMarkedCount < 1
+                        ? "Stress track is full — mark a trauma below to clear all stress."
+                        : "Stress track is full again — mark another trauma below to clear all stress."}
                     </div>
                   ) : null}
                   <div
@@ -9756,7 +10940,7 @@ const CharacterSheetWrapper = ({
                       marginBottom: "12px",
                     }}
                     title={
-                      traumaRequiredBeforeStressClear
+                      stressMaxNeedsTraumaClear
                         ? "Clearing stress blocked until you mark a trauma."
                         : undefined
                     }
@@ -9770,10 +10954,11 @@ const CharacterSheetWrapper = ({
                           const decreases = next < stressFilled;
                           if (
                             decreases &&
-                            traumaRequiredBeforeStressClear
+                            stressMaxNeedsTraumaClear
                           ) {
                             return;
                           }
+                          markFieldTouch("stress");
                           setStressFilled(next);
                         }}
                         style={{
@@ -10132,6 +11317,7 @@ const CharacterSheetWrapper = ({
                                   );
                                   onCampaignRefresh?.();
                                 }
+                                markFieldTouch("stress");
                                 setStressFilled((prev) =>
                                   Math.max(0, (Number(prev) || 0) - hi),
                                 );
@@ -10885,100 +12071,54 @@ const CharacterSheetWrapper = ({
                     >
                       Free pool (not tied to a live session). Earned from
                       scorecard and Stand Development; spend anytime — during
-                      play or between sessions — even when no campaign session is
-                      active. Allocate +1 onto a track, or spend 10 on a
+                      play or between sessions. Tick boxes on the tracks below to
+                      move XP from this pool onto a track. Spend 10 for a
                       playbook-style level-up. Desperate-roll XP marks attribute
                       tracks automatically and never sits here.
                     </div>
-                    {unallocatedXp > 0 ? (
-                      <div
+                    {unallocatedXp >= 10 && canEditSheet && character?.id ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLevelUpLockTrack(null);
+                          setLevelUpFromPool(true);
+                          setLevelUpSpendTrack("playbook");
+                          setLevelUpError(null);
+                          setShowLevelUp(true);
+                        }}
                         style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: "6px",
+                          ...S.btn,
+                          fontSize: "10px",
+                          padding: "4px 8px",
+                          background: "#7c3aed",
+                          color: "#fff",
                         }}
                       >
-                        {XP_SPEND_TRACK_ORDER.map((t) => (
-                          <button
-                            key={t}
-                            type="button"
-                            disabled={
-                              !canEditSheet ||
-                              !character?.id ||
-                              poolAllocateBusy ||
-                              unallocatedXp < 1
-                            }
-                            onClick={async () => {
-                              if (!character?.id) return;
-                              setPoolAllocateBusy(true);
-                              setSaveErrorMessage(null);
-                              try {
-                                const res = await characterAPI.allocatePoolXp(
-                                  character.id,
-                                  { track: t, amount: 1 },
-                                );
-                                const nextPool = Number(res?.unallocated_xp);
-                                if (Number.isFinite(nextPool))
-                                  setUnallocatedXp(Math.max(0, nextPool));
-                                if (
-                                  res?.xp_clocks &&
-                                  typeof res.xp_clocks === "object"
-                                ) {
-                                  setXp((prev) => ({
-                                    ...prev,
-                                    ...res.xp_clocks,
-                                  }));
-                                }
-                              } catch (e) {
-                                setSaveErrorMessage(
-                                  e?.message || "Could not allocate pool XP",
-                                );
-                              } finally {
-                                setPoolAllocateBusy(false);
-                              }
-                            }}
-                            style={{
-                              ...S.btn,
-                              fontSize: "10px",
-                              padding: "4px 8px",
-                              background: "#6d28d9",
-                              color: "#fff",
-                              opacity:
-                                !canEditSheet || unallocatedXp < 1 ? 0.5 : 1,
-                            }}
-                          >
-                            +1 {XP_TRACK_SPEND_LABELS[t] || t}
-                          </button>
-                        ))}
-                        {unallocatedXp >= 10 && canEditSheet && character?.id ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setLevelUpLockTrack(null);
-                              setLevelUpFromPool(true);
-                              setLevelUpSpendTrack("playbook");
-                              setLevelUpError(null);
-                              setShowLevelUp(true);
-                            }}
-                            style={{
-                              ...S.btn,
-                              fontSize: "10px",
-                              padding: "4px 8px",
-                              background: "#7c3aed",
-                              color: "#fff",
-                            }}
-                          >
-                            Level up from pool (−10)
-                          </button>
-                        ) : null}
+                        Level up from pool (−10)
+                      </button>
+                    ) : unallocatedXp <= 0 ? (
+                      <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                        No free-pool XP right now. Scorecard / Dev awards land
+                        here after sessions; tick track boxes when you have pool
+                        XP to spend.
                       </div>
                     ) : (
                       <div style={{ fontSize: "10px", color: "#6b7280" }}>
-                        No free-pool XP right now. Scorecard / Dev awards land
-                        here after sessions; you can spend them later without an
-                        active session.
+                        Click empty boxes on Insight / Prowess / Resolve /
+                        Heritage / Playbook below to spend from this pool.
                       </div>
                     )}
+                    {poolTickError ? (
+                      <div
+                        style={{
+                          marginTop: 6,
+                          fontSize: "10px",
+                          color: "#f87171",
+                        }}
+                      >
+                        {poolTickError}
+                      </div>
+                    ) : null}
                   </div>
                   {[
                     { name: "INSIGHT", key: "insight", max: 5 },
@@ -11010,19 +12150,53 @@ const CharacterSheetWrapper = ({
                         {name}
                       </span>
                       <div style={{ display: "flex", gap: "2px" }}>
-                        {Array.from({ length: max }, (_, i) => (
-                          <div
-                            key={i}
-                            onClick={() => toggleXP(key, i)}
-                            style={{
-                              width: "13px",
-                              height: "13px",
-                              border: "1px solid #4b5563",
-                              cursor: "pointer",
-                              background: i < filled ? "#7c3aed" : "#111827",
-                            }}
-                          />
-                        ))}
+                        {Array.from({ length: max }, (_, i) => {
+                          const isFilled = i < filled;
+                          const canSpendHere =
+                            canEditSheet &&
+                            !poolAllocateBusy &&
+                            !isFilled &&
+                            unallocatedXp >= i + 1 - filled;
+                          return (
+                            <div
+                              key={i}
+                              role="button"
+                              tabIndex={0}
+                              title={
+                                isFilled
+                                  ? canEditSheet
+                                    ? `Return ${filled - i} to Available XP`
+                                    : "Filled"
+                                  : canSpendHere
+                                    ? `Spend ${i + 1 - filled} from Available XP`
+                                    : unallocatedXp < 1
+                                      ? "Need Available XP in the free pool first"
+                                      : "Not enough Available XP for this tick"
+                              }
+                              onClick={() => toggleXP(key, i)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  toggleXP(key, i);
+                                }
+                              }}
+                              style={{
+                                width: "13px",
+                                height: "13px",
+                                border: "1px solid #4b5563",
+                                cursor:
+                                  canSpendHere || isFilled
+                                    ? poolAllocateBusy
+                                      ? "wait"
+                                      : "pointer"
+                                    : "not-allowed",
+                                background: isFilled ? "#7c3aed" : "#111827",
+                                opacity:
+                                  !isFilled && !canSpendHere ? 0.45 : 1,
+                              }}
+                            />
+                          );
+                        })}
                       </div>
                       <span style={{ fontSize: "10px", color: "#6b7280" }}>
                         ({filled}/{max})
@@ -11076,10 +12250,10 @@ const CharacterSheetWrapper = ({
                       lineHeight: 1.4,
                     }}
                   >
+                    Tick empty boxes to spend Available XP onto that track.
                     When a track is full, Take advance clears it for a reward
                     (attribute → +1 action dot; heritage → +1 HP; playbook →
-                    level-up choices). Free-pool XP is Available XP above —
-                    usable with or without an active session.
+                    level-up choices).
                   </div>
 
                   <div
@@ -11493,7 +12667,8 @@ const CharacterSheetWrapper = ({
                                         </div>
                                       )}
                                     </div>
-                                    {canEditSheet && (
+                                    {canEditSheet &&
+                                      entry.can_undo_from_sheet !== false && (
                                       <button
                                         type="button"
                                         onClick={() =>
@@ -11501,7 +12676,10 @@ const CharacterSheetWrapper = ({
                                         }
                                         disabled={busy}
                                         aria-label="Delete XP entry"
-                                        title="Delete this XP record"
+                                        title={
+                                          entry.undo_block_reason ||
+                                          "Delete this XP record"
+                                        }
                                         style={{
                                           flexShrink: 0,
                                           width: 22,
@@ -15431,15 +16609,29 @@ const CharacterSheetWrapper = ({
                                       return;
                                     }
                                     if (!diceResult.resistanceApplied) {
+                                      // Critical: clear 1 stress via server PATCH.
+                                      // Push (if any) already applied on createRoll — do not re-add.
+                                      // Do NOT mark field touch — omit+merge contract.
                                       setStressFilled((prev) => {
-                                        let next = Math.max(
+                                        const next = Math.max(
                                           0,
                                           (Number(prev) || 0) - 1,
                                         );
-                                        const extra =
-                                          Number(diceResult.resistanceExtraStress) || 0;
-                                        if (extra > 0) {
-                                          next = Math.min(maxStress, next + extra);
+                                        stressTraumaTruthRef.current = {
+                                          stressFilled: next,
+                                          trauma:
+                                            stressTraumaTruthRef.current?.trauma ||
+                                            null,
+                                        };
+                                        onCharacterStressTraumaSync?.({
+                                          stressFilled: next,
+                                        });
+                                        if (characterId) {
+                                          void characterAPI
+                                            .patchCharacter(characterId, {
+                                              stress: next,
+                                            })
+                                            .catch(() => {});
                                         }
                                         return next;
                                       });
@@ -15547,11 +16739,15 @@ const CharacterSheetWrapper = ({
                                       return;
                                     }
                                     if (!diceResult.resistanceApplied) {
-                                      const cost =
-                                        diceResult.resistanceTotalStressCost ??
-                                        diceResult.stressCost ??
-                                        0;
-                                      applyStressCost(cost);
+                                      // Stress applied server-side on createRoll when session
+                                      // present. Offline (no session): apply via truth lock, no touch.
+                                      if (!activeSessionId) {
+                                        const cost =
+                                          diceResult.resistanceTotalStressCost ??
+                                          diceResult.stressCost ??
+                                          0;
+                                        applyStressCost(cost);
+                                      }
                                     }
                                     setDiceResult((prev) =>
                                       prev
@@ -16722,7 +17918,7 @@ const CharacterSheetWrapper = ({
                           >
                             {xpAllocationUndoBusy
                               ? "Undoing…"
-                              : "↩ Undo most recent XP allocation"}
+                              : "↩ Undo your most recent XP spend"}
                           </button>
                         )}
                         <ul
@@ -18872,12 +20068,13 @@ const CharacterSheetWrapper = ({
                         id="character-sheet-notes-panel"
                         placeholder="Notes…"
                         value={charData.sheetNotes ?? ""}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          markDirtyIntent();
                           setCharData((p) => ({
                             ...p,
                             sheetNotes: e.target.value,
-                          }))
-                        }
+                          }));
+                        }}
                         style={{
                           width: "100%",
                           height: "80px",
@@ -18946,9 +20143,10 @@ const CharacterSheetWrapper = ({
                         panelId="character-sheet-inventory-panel"
                         inventory={charData.inventory}
                         readOnly={!canEditSheet}
-                        onChange={(next) =>
-                          setCharData((p) => ({ ...p, inventory: next }))
-                        }
+                        onChange={(next) => {
+                          markDirtyIntent();
+                          setCharData((p) => ({ ...p, inventory: next }));
+                        }}
                       />
                     ) : null}
                   </div>

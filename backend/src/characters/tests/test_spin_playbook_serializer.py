@@ -166,6 +166,56 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         self.assertIn('non_field_errors', serializer.errors)
         self.assertIn('Hamon abilities require playbook HAMON.', str(serializer.errors['non_field_errors'][0]))
 
+    def test_partial_hamon_ids_without_playbook_uses_instance_playbook(self):
+        """Omit playbook, send hamon_ability_ids — validate against instance.playbook."""
+        hamon_char = Character.objects.create(
+            user=self.user,
+            true_name='HamonOmitPb',
+            heritage=self.heritage,
+            playbook='HAMON',
+            coin_stats={
+                'power': 'A',
+                'speed': 'A',
+                'range': 'F',
+                'durability': 'F',
+                'precision': 'F',
+                'development': 'F',
+            },
+            action_dots={},
+            trauma=[],
+            xp_clocks={},
+            stress=0,
+        )
+        data = {
+            'hamon_ability_ids': [self.hamon_gated.id],
+            # playbook intentionally omitted
+        }
+        serializer = CharacterSerializer(
+            instance=hamon_char,
+            data=data,
+            partial=True,
+            context={'request': self._request()},
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_partial_hamon_ids_without_playbook_rejects_stand_instance(self):
+        """Omit playbook on STAND instance + hamon_ids → reject via instance playbook."""
+        data = {
+            'hamon_ability_ids': [self.hamon_foundation.id],
+        }
+        serializer = CharacterSerializer(
+            instance=self.char,  # playbook SPIN in setUp; still not HAMON
+            data=data,
+            partial=True,
+            context={'request': self._request()},
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('non_field_errors', serializer.errors)
+        self.assertIn(
+            'Hamon abilities require playbook HAMON.',
+            str(serializer.errors['non_field_errors'][0]),
+        )
+
     def test_heritage_accepts_display_name_string(self):
         """PATCH may send heritage as display name (matches frontend before /heritages/ resolves)."""
         other = Heritage.objects.create(name='Rock Human', base_hp=2)

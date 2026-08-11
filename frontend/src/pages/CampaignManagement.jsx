@@ -3506,6 +3506,9 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
 // ---------------------------------------------------------------------------
 // Session Detail View (GM-only)
 // ---------------------------------------------------------------------------
+/** Poll session panel while tab visible (backup if SSE disconnects). Mirrors CharacterPage. */
+const SESSION_PANEL_SYNC_INTERVAL_MS = 12000;
+
 function SessionDetail({
   campaign,
   session,
@@ -3639,6 +3642,27 @@ function SessionDetail({
       unsubscribe();
     };
   }, [campaign?.id, session?.id, refetchSessionPanel]);
+
+  // Visibility backup: when tab becomes visible again, pull session panel state.
+  useEffect(() => {
+    if (!session?.id) return undefined;
+    const onVis = () => {
+      if (document.visibilityState !== "visible") return;
+      void refetchSessionPanel();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [session?.id, refetchSessionPanel]);
+
+  // Interval backup while SessionDetail mounted and document visible (complements SSE).
+  useEffect(() => {
+    if (!session?.id) return undefined;
+    const id = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      void refetchSessionPanel();
+    }, SESSION_PANEL_SYNC_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [session?.id, refetchSessionPanel]);
 
   // Refetch NPCs when the campaign payload is refreshed (e.g. new factions) or session
   // changes, so session faction dropdowns stay in sync with server `faction` fields.

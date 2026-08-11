@@ -47,6 +47,7 @@ from ..serializers import CharacterSerializer, CharacterXPAllocationSerializer
 from ..history_context import bind_character_history_editor, reset_character_history_editor
 from ..services.xp_allocation import (
     XPAllocationError,
+    allocation_summary,
     apply_buy_hp,
     apply_gm_forced_stand_stat,
     apply_level_up,
@@ -54,9 +55,20 @@ from ..services.xp_allocation import (
     complete_pending_stand_a_reward,
     get_pending_stand_a_reward,
     list_allocations,
+    redo_allocation,
     undo_allocation,
 )
-
+from ..services.character_history_undo import (
+    CharacterHistoryUndoError,
+    gm_redo_status,
+    gm_undo_status,
+    redo_latest_gm_change,
+    redo_latest_sheet_edit,
+    sheet_redo_status,
+    sheet_undo_status,
+    undo_latest_gm_change,
+    undo_latest_sheet_edit,
+)
 
 def _character_queryset_for_user(user):
     """Own PCs plus campaign-visible PCs for this user (staff sees all)."""
@@ -66,10 +78,8 @@ def _character_queryset_for_user(user):
         Q(user=user) | Q(campaign__gm=user) | Q(campaign__players=user)
     ).distinct()
 
-
 # Backward-compatible name for code that imported the old detail-only helper.
 _character_queryset_detail = _character_queryset_for_user
-
 
 def _max_stress_for_character(character):
     """Stress capacity from durability grade (SRD baseline: 9, modified by DUR)."""
@@ -83,7 +93,6 @@ def _max_stress_for_character(character):
             grade = coin_stats.get("durability") or coin_stats.get("DURABILITY")
     return {"S": 13, "A": 12, "B": 11, "C": 10, "D": 9, "F": 8}.get(grade, 9)
 
-
 def _user_may_edit_character(user, character):
     if user.is_staff:
         return True
@@ -93,21 +102,30 @@ def _user_may_edit_character(user, character):
         return True
     return False
 
-
 def _allocation_list_response(character):
-    qs = list_allocations(character)
-    latest = qs.first()
+    qs = list_allocations(character, include_undone=True)
+    latest = list_allocations(character).first()
+    latest_undone = (
+        CharacterXPAllocation.objects.filter(
+            character=character, undone_at__isnull=False
+        )
+        .order_by("-undone_at", "-id")
+        .first()
+    )
     serializer = CharacterXPAllocationSerializer(
         qs,
         many=True,
-        context={"latest_undoable_allocation_id": latest.id if latest else None},
+        context={
+            "latest_undoable_allocation_id": latest.id if latest else None,
+            "latest_redoable_allocation_id": (
+                latest_undone.id if latest_undone else None
+            ),
+        },
     )
     return serializer.data
 
-
 def _character_response(character):
     return CharacterSerializer(character).data
-
 
 class CharacterViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -1657,15 +1675,25 @@ class CharacterViewSet(viewsets.ModelViewSet):
         character = self.get_object()
         include_undone = request.query_params.get("include_undone") == "true"
         qs = list_allocations(character, include_undone=include_undone)
-        latest = (
-            list_allocations(character).first()
-            if not include_undone
+        latest = list_allocations(character).first()
+        latest_undone = (
+            CharacterXPAllocation.objects.filter(
+                character=character, undone_at__isnull=False
+            )
+            .order_by("-undone_at", "-id")
+            .first()
+            if include_undone
             else None
         )
         serializer = CharacterXPAllocationSerializer(
             qs,
             many=True,
-            context={"latest_undoable_allocation_id": latest.id if latest else None},
+            context={
+                "latest_undoable_allocation_id": latest.id if latest else None,
+                "latest_redoable_allocation_id": (
+                    latest_undone.id if latest_undone else None
+                ),
+            },
         )
         return Response(serializer.data)
 
@@ -1676,15 +1704,19 @@ class CharacterViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You cannot advance this character.")
 
         try:
-            allocation = apply_level_up(
-                character,
-                xp_track=request.data.get("xp_track"),
-                choice=request.data.get("choice"),
-                stand_stat=request.data.get("stand_stat"),
-                actions=request.data.get("actions"),
-                reward=request.data.get("reward"),
-                from_pool=bool(request.data.get("from_pool")),
-            )
+            token = bind_character_history_editor(request.user)
+            try:
+                allocation = apply_level_up(
+                    character,
+                    xp_track=request.data.get("xp_track"),
+                    choice=request.data.get("choice"),
+                    stand_stat=request.data.get("stand_stat"),
+                    actions=request.data.get("actions"),
+                    reward=request.data.get("reward"),
+                    from_pool=bool(request.data.get("from_pool")),
+                )
+            finally:
+                reset_character_history_editor(token)
         except XPAllocationError as exc:
             return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1787,12 +1819,16 @@ class CharacterViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You cannot advance this character.")
 
         try:
-            allocation = apply_minor_advance(
-                character,
-                xp_track=request.data.get("xp_track"),
-                action=request.data.get("action"),
-                from_pool=bool(request.data.get("from_pool")),
-            )
+            token = bind_character_history_editor(request.user)
+            try:
+                allocation = apply_minor_advance(
+                    character,
+                    xp_track=request.data.get("xp_track"),
+                    action=request.data.get("action"),
+                    from_pool=bool(request.data.get("from_pool")),
+                )
+            finally:
+                reset_character_history_editor(token)
         except XPAllocationError as exc:
             return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1819,11 +1855,15 @@ class CharacterViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You cannot advance this character.")
 
         try:
-            allocation = apply_buy_hp(
-                character,
-                xp_track=request.data.get("xp_track"),
-                from_pool=bool(request.data.get("from_pool")),
-            )
+            token = bind_character_history_editor(request.user)
+            try:
+                allocation = apply_buy_hp(
+                    character,
+                    xp_track=request.data.get("xp_track"),
+                    from_pool=bool(request.data.get("from_pool")),
+                )
+            finally:
+                reset_character_history_editor(token)
         except XPAllocationError as exc:
             return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -1858,6 +1898,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
             )
 
         try:
+            summary = allocation_summary(allocation)
             undo_allocation(character, allocation, user=request.user)
         except XPAllocationError as exc:
             return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
@@ -1867,6 +1908,141 @@ class CharacterViewSet(viewsets.ModelViewSet):
             {
                 "success": True,
                 "undone_allocation_id": allocation.id,
+                "summary": summary,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+            }
+        )
+
+    @action(detail=True, methods=["get"], url_path="gm-undo-status")
+    def gm_undo_status_action(self, request, pk=None):
+        """Whether this GM can undo their most recent XP award on a player's PC."""
+        character = self.get_object()
+        status_payload = gm_undo_status(character, request.user)
+        return Response(status_payload)
+
+    @action(detail=True, methods=["post"], url_path="undo-latest-gm-change")
+    def undo_latest_gm_change_action(self, request, pk=None):
+        """Revert the campaign GM's most recent XP award on this player's character."""
+        character = self.get_object()
+        try:
+            result = undo_latest_gm_change(character, gm_user=request.user)
+        except CharacterHistoryUndoError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+                **result,
+            }
+        )
+
+    @action(detail=True, methods=["get"], url_path="gm-redo-status")
+    def gm_redo_status_action(self, request, pk=None):
+        character = self.get_object()
+        return Response(gm_redo_status(character, request.user))
+
+    @action(detail=True, methods=["post"], url_path="redo-latest-gm-change")
+    def redo_latest_gm_change_action(self, request, pk=None):
+        character = self.get_object()
+        try:
+            result = redo_latest_gm_change(character, gm_user=request.user)
+        except CharacterHistoryUndoError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+                **result,
+            }
+        )
+
+    @action(detail=True, methods=["get"], url_path="sheet-undo-status")
+    def sheet_undo_status_action(self, request, pk=None):
+        """Whether owner/GM can undo the most recent sheet field edit."""
+        character = self.get_object()
+        return Response(sheet_undo_status(character, request.user))
+
+    @action(detail=True, methods=["post"], url_path="undo-latest-sheet-edit")
+    def undo_latest_sheet_edit_action(self, request, pk=None):
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot undo edits on this character.")
+        try:
+            result = undo_latest_sheet_edit(character, user=request.user)
+        except CharacterHistoryUndoError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+                **result,
+            }
+        )
+
+    @action(detail=True, methods=["get"], url_path="sheet-redo-status")
+    def sheet_redo_status_action(self, request, pk=None):
+        character = self.get_object()
+        return Response(sheet_redo_status(character, request.user))
+
+    @action(detail=True, methods=["post"], url_path="redo-latest-sheet-edit")
+    def redo_latest_sheet_edit_action(self, request, pk=None):
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot redo edits on this character.")
+        try:
+            result = redo_latest_sheet_edit(character, user=request.user)
+        except CharacterHistoryUndoError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+                **result,
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="redo-latest-allocation")
+    def redo_latest_allocation_action(self, request, pk=None):
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot redo allocations for this character.")
+
+        allocation = (
+            CharacterXPAllocation.objects.filter(
+                character=character, undone_at__isnull=False
+            )
+            .order_by("-undone_at", "-id")
+            .first()
+        )
+        if not allocation:
+            return Response(
+                {"error": "No undone allocation to redo."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            summary = allocation_summary(allocation)
+            redo_allocation(character, allocation, user=request.user)
+        except XPAllocationError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "redone_allocation_id": allocation.id,
+                "summary": summary,
                 "character": _character_response(character),
                 "allocations": _allocation_list_response(character),
             }
@@ -1898,6 +2074,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
             )
 
         try:
+            summary = allocation_summary(allocation)
             undo_allocation(character, allocation, user=request.user)
         except XPAllocationError as exc:
             return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
@@ -1907,8 +2084,235 @@ class CharacterViewSet(viewsets.ModelViewSet):
             {
                 "success": True,
                 "undone_allocation_id": allocation.id,
+                "summary": summary,
                 "character": _character_response(character),
                 "allocations": _allocation_list_response(character),
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="allocate-pool-xp")
+    def allocate_pool_xp(self, request, pk=None):
+        """Move XP from ``unallocated_xp`` onto an xp_clocks track."""
+        character = self.get_object()
+        user = request.user
+        is_owner = character.user_id == user.id
+        is_gm = bool(
+            character.campaign_id and character.campaign.gm_id == user.id
+        )
+        if not (user.is_staff or is_owner or is_gm):
+            raise PermissionDenied(
+                "You may only allocate pool XP for your own character or as the campaign GM."
+            )
+
+        track = (
+            request.data.get("track") or request.data.get("xp_type") or ""
+        )
+        if not isinstance(track, str):
+            return Response(
+                {"error": "track is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        track = track.strip().lower()
+        valid_tracks = ["insight", "prowess", "resolve", "heritage", "playbook"]
+        if track not in valid_tracks:
+            return Response(
+                {"error": f"Invalid track. Must be one of: {valid_tracks}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            amount = int(request.data.get("amount", 1))
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "amount must be an integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if amount < 1 or amount > 20:
+            return Response(
+                {"error": "amount must be 1–20 per request"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            locked = Character.objects.select_for_update().get(pk=character.pk)
+            pool = int(getattr(locked, "unallocated_xp", 0) or 0)
+            if amount > pool:
+                return Response(
+                    {"error": f"Only {pool} XP available in free pool."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            raw_xp_clocks = getattr(locked, "xp_clocks", None)
+            if isinstance(raw_xp_clocks, str):
+                try:
+                    raw_xp_clocks = json.loads(raw_xp_clocks)
+                except Exception:
+                    raw_xp_clocks = {}
+            if not isinstance(raw_xp_clocks, dict):
+                raw_xp_clocks = {}
+            xp_clocks = dict(raw_xp_clocks or {})
+            cur = int(xp_clocks.get(track, 0) or 0)
+            new_xp = cur + amount
+            cap = 10 if track == "playbook" else 5
+            if new_xp > cap:
+                return Response(
+                    {"error": f"{track} track cannot exceed {cap} XP."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            xp_clocks[track] = new_xp
+            locked.unallocated_xp = pool - amount
+            locked.xp_clocks = xp_clocks
+            token = bind_character_history_editor(user)
+            try:
+                locked.save(update_fields=["unallocated_xp", "xp_clocks"])
+            finally:
+                reset_character_history_editor(token)
+            ExperienceTracker.objects.create(
+                character=locked,
+                session=None,
+                roll=None,
+                trigger="MANUAL",
+                description=(
+                    f"[{track}] Allocated {amount} XP from free pool "
+                    f"({pool} in pool before)."
+                ),
+                xp_gained=amount,
+                awarded_by=user if getattr(user, "is_authenticated", False) else None,
+                award_source=(
+                    "GM"
+                    if (is_gm and not is_owner)
+                    else ("PLAYER" if is_owner else "GM")
+                ),
+                clock_key=track,
+            )
+
+        locked.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "track": track,
+                "amount": amount,
+                "new_track_total": new_xp,
+                "unallocated_xp": locked.unallocated_xp,
+                "xp_clocks": locked.xp_clocks,
+                "character": _character_response(locked),
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="deallocate-pool-xp")
+    def deallocate_pool_xp(self, request, pk=None):
+        """Move XP from an xp_clocks track back into ``unallocated_xp``."""
+        character = self.get_object()
+        user = request.user
+        is_owner = character.user_id == user.id
+        is_gm = bool(
+            character.campaign_id and character.campaign.gm_id == user.id
+        )
+        if not (user.is_staff or is_owner or is_gm):
+            raise PermissionDenied(
+                "You may only deallocate pool XP for your own character or as the campaign GM."
+            )
+
+        track = (
+            request.data.get("track") or request.data.get("xp_type") or ""
+        )
+        if not isinstance(track, str):
+            return Response(
+                {"error": "track is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        track = track.strip().lower()
+        valid_tracks = ["insight", "prowess", "resolve", "heritage", "playbook"]
+        if track not in valid_tracks:
+            return Response(
+                {"error": f"Invalid track. Must be one of: {valid_tracks}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            amount = int(request.data.get("amount", 1))
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "amount must be an integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if amount < 1 or amount > 20:
+            return Response(
+                {"error": "amount must be 1–20 per request"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            locked = Character.objects.select_for_update().get(pk=character.pk)
+            raw_xp_clocks = getattr(locked, "xp_clocks", None)
+            if isinstance(raw_xp_clocks, str):
+                try:
+                    raw_xp_clocks = json.loads(raw_xp_clocks)
+                except Exception:
+                    raw_xp_clocks = {}
+            if not isinstance(raw_xp_clocks, dict):
+                raw_xp_clocks = {}
+            xp_clocks = dict(raw_xp_clocks or {})
+            cur = int(xp_clocks.get(track, 0) or 0)
+            if amount > cur:
+                return Response(
+                    {
+                        "error": (
+                            f"Only {cur} XP on {track} track; cannot return {amount}."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            new_xp = cur - amount
+            pool = int(getattr(locked, "unallocated_xp", 0) or 0)
+            xp_clocks[track] = new_xp
+            locked.unallocated_xp = pool + amount
+            locked.xp_clocks = xp_clocks
+            token = bind_character_history_editor(user)
+            try:
+                locked.save(update_fields=["unallocated_xp", "xp_clocks"])
+            finally:
+                reset_character_history_editor(token)
+
+            # Drop matching free-pool allocation tracker rows so history matches
+            # clocks (delete without destroy-rollback; clocks already updated).
+            remaining = amount
+            alloc_rows = (
+                ExperienceTracker.objects.select_for_update()
+                .filter(
+                    character=locked,
+                    clock_key=track,
+                    trigger="MANUAL",
+                    revoked_at__isnull=True,
+                    description__contains="from free pool",
+                )
+                .order_by("-session_date", "-id")
+            )
+            for entry in alloc_rows:
+                if remaining <= 0:
+                    break
+                gained = int(entry.xp_gained or 0)
+                if gained <= 0:
+                    continue
+                if gained <= remaining:
+                    remaining -= gained
+                    entry.delete()
+                else:
+                    entry.xp_gained = gained - remaining
+                    entry.description = (
+                        f"[{track}] Allocated {entry.xp_gained} XP from free pool "
+                        f"(partial after return)."
+                    )
+                    entry.save(update_fields=["xp_gained", "description"])
+                    remaining = 0
+
+        locked.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "track": track,
+                "amount": amount,
+                "new_track_total": new_xp,
+                "unallocated_xp": locked.unallocated_xp,
+                "xp_clocks": locked.xp_clocks,
+                "character": _character_response(locked),
             }
         )
 
@@ -1933,7 +2337,14 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         track = track.strip().lower()
-        valid_tracks = ["insight", "prowess", "resolve", "heritage", "playbook"]
+        valid_tracks = [
+            "insight",
+            "prowess",
+            "resolve",
+            "heritage",
+            "playbook",
+            "pool",
+        ]
         if track not in valid_tracks:
             return Response(
                 {
@@ -1997,7 +2408,69 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        xp_clocks = dict(character.xp_clocks or {})
+        if track == "pool":
+            cur_pool = int(getattr(character, "unallocated_xp", 0) or 0)
+            new_pool = cur_pool + amount
+
+            with transaction.atomic():
+                token = bind_character_history_editor(user)
+                try:
+                    serializer = CharacterSerializer(
+                        character, data={"unallocated_xp": new_pool}, partial=True
+                    )
+                    if not serializer.is_valid():
+                        return Response(
+                            {
+                                "error": "Failed to add free-pool XP",
+                                "errors": serializer.errors,
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    serializer.save()
+                finally:
+                    reset_character_history_editor(token)
+
+                tracker = ExperienceTracker.objects.create(
+                    character=character,
+                    session=session_obj,
+                    roll=None,
+                    trigger="MANUAL",
+                    description=f"[pool] {description}",
+                    xp_gained=amount,
+                    awarded_by=user,
+                    award_source=(
+                        "GM"
+                        if (is_gm and not is_owner)
+                        else ("PLAYER" if is_owner else "GM")
+                    ),
+                    clock_key="pool",
+                )
+
+            character.refresh_from_db()
+            return Response(
+                {
+                    "success": True,
+                    "track": "pool",
+                    "amount": amount,
+                    "new_total": new_pool,
+                    "unallocated_xp": character.unallocated_xp,
+                    "xp_clocks": character.xp_clocks,
+                    "experience_tracker_id": tracker.id,
+                    "message": f"Added {amount} XP to free pool",
+                }
+            )
+
+        # `xp_clocks` is a JSONField, but legacy rows may have it as a string or
+        # another unexpected type. Coerce to dict to avoid 500s from serializer.
+        raw_xp_clocks = getattr(character, "xp_clocks", None)
+        if isinstance(raw_xp_clocks, str):
+            try:
+                raw_xp_clocks = json.loads(raw_xp_clocks)
+            except Exception:
+                raw_xp_clocks = {}
+        if not isinstance(raw_xp_clocks, dict):
+            raw_xp_clocks = {}
+        xp_clocks = dict(raw_xp_clocks or {})
         current = int(xp_clocks.get(track, 0) or 0)
         new_xp = current + amount
         if track == "playbook" and new_xp > 10:
@@ -2008,15 +2481,19 @@ class CharacterViewSet(viewsets.ModelViewSet):
         xp_clocks[track] = new_xp
 
         with transaction.atomic():
-            serializer = CharacterSerializer(
-                character, data={"xp_clocks": xp_clocks}, partial=True
-            )
-            if not serializer.is_valid():
-                return Response(
-                    {"error": "Failed to add XP", "errors": serializer.errors},
-                    status=status.HTTP_400_BAD_REQUEST,
+            token = bind_character_history_editor(user)
+            try:
+                serializer = CharacterSerializer(
+                    character, data={"xp_clocks": xp_clocks}, partial=True
                 )
-            serializer.save()
+                if not serializer.is_valid():
+                    return Response(
+                        {"error": "Failed to add XP", "errors": serializer.errors},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                serializer.save()
+            finally:
+                reset_character_history_editor(token)
             tracker = ExperienceTracker.objects.create(
                 character=character,
                 session=session_obj,

@@ -284,12 +284,13 @@ export const characterAPI = {
     return apiRequest(`/characters/${id}/`, { method: "PUT", body });
   },
 
-  // Partial update character
-  patchCharacter: (id, characterData) =>
-    apiRequest(`/characters/${id}/`, {
-      method: "PATCH",
-      body: JSON.stringify(characterData),
-    }),
+  // Partial update character (JSON or multipart when imageFile present)
+  patchCharacter: (id, data) => {
+    const { multipart, body } = buildMultipartOrJson(data);
+    if (multipart)
+      return apiRequestMultipart(`/characters/${id}/`, body, "PATCH");
+    return apiRequest(`/characters/${id}/`, { method: "PATCH", body });
+  },
 
   // Delete character
   deleteCharacter: (id) =>
@@ -329,6 +330,13 @@ export const characterAPI = {
 
   allocatePoolXp: (id, body) =>
     apiRequest(`/characters/${id}/allocate-pool-xp/`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** Move XP from a track back into the free pool (untick). */
+  deallocatePoolXp: (id, body) =>
+    apiRequest(`/characters/${id}/deallocate-pool-xp/`, {
       method: "POST",
       body: JSON.stringify(body),
     }),
@@ -374,6 +382,48 @@ export const characterAPI = {
 
   undoLatestAllocation: (id) =>
     apiRequest(`/characters/${id}/undo-latest-allocation/`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  redoLatestAllocation: (id) =>
+    apiRequest(`/characters/${id}/redo-latest-allocation/`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  getGmUndoStatus: (id) =>
+    apiRequest(`/characters/${id}/gm-undo-status/`),
+
+  undoLatestGmChange: (id) =>
+    apiRequest(`/characters/${id}/undo-latest-gm-change/`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  getGmRedoStatus: (id) =>
+    apiRequest(`/characters/${id}/gm-redo-status/`),
+
+  redoLatestGmChange: (id) =>
+    apiRequest(`/characters/${id}/redo-latest-gm-change/`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  getSheetUndoStatus: (id) =>
+    apiRequest(`/characters/${id}/sheet-undo-status/`),
+
+  undoLatestSheetEdit: (id) =>
+    apiRequest(`/characters/${id}/undo-latest-sheet-edit/`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  getSheetRedoStatus: (id) =>
+    apiRequest(`/characters/${id}/sheet-redo-status/`),
+
+  redoLatestSheetEdit: (id) =>
+    apiRequest(`/characters/${id}/redo-latest-sheet-edit/`, {
       method: "POST",
       body: JSON.stringify({}),
     }),
@@ -859,6 +909,11 @@ export const characterHistoryAPI = {
     const qs = new URLSearchParams(params).toString();
     return apiRequest(`/character-history/${qs ? "?" + qs : ""}`);
   },
+  undo: (id) =>
+    apiRequest(`/character-history/${id}/undo/`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
 };
 
 export const gmHistoryAPI = {
@@ -1540,8 +1595,9 @@ export const transformFrontendToBackend = (frontendCharacter) => {
       };
     })(),
 
-    // XP clocks
-    xp_clocks: frontendCharacter.xp,
+    // XP clocks + free pool: owned by allocate/deallocate/add-xp APIs only.
+    // Never round-trip via sheet autosave PUT — stale local clocks were wiping
+    // server tracks (and dropping XP that never returned to the free pool).
 
     // Progress clocks
     progress_clocks: frontendCharacter.clocks,

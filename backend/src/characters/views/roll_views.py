@@ -10,6 +10,7 @@ from ..models import Character, ExperienceTracker, Roll, RollHistory, Session
 from ..roll_helpers import (
     award_desperate_action_xp,
     award_heritage_expression_xp,
+    max_stress_slots_for_character,
     normalize_effect,
     outcome_from_dice_results,
 )
@@ -219,3 +220,16 @@ class RollViewSet(viewsets.ModelViewSet):
             award_desperate_action_xp(
                 roll.character, roll.session, roll, roll.action_name, self.request.user
             )
+        # Resistance: apply roller_stress_spent on the character so concurrent
+        # sheet PATCHes that omit stress cannot wipe server-applied cost.
+        if (roll.roll_type or "").upper() == "RESISTANCE":
+            spent = int(getattr(roll, "roller_stress_spent", 0) or 0)
+            if spent > 0:
+                character = roll.character
+                max_slots = max_stress_slots_for_character(character)
+                cur = max(
+                    0,
+                    min(max_slots, int(getattr(character, "stress", 0) or 0)),
+                )
+                character.stress = min(max_slots, cur + spent)
+                character.save(update_fields=["stress"])

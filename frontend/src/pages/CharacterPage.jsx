@@ -29,6 +29,9 @@ import {
   isImageUploadPayload,
   normalizeHarmObject,
   EMPTY_HARM_SHAPE,
+  normalizeCharacterInventory,
+  resolveCharacterCampaignContext,
+  isUserCampaignGmForCharacter,
 } from "../features/character-sheet";
 import { subscribeCampaignEvents } from "../features/character-sheet/services/campaignEvents";
 import { useAuth } from "../features/auth";
@@ -39,6 +42,11 @@ import { NPCSheet } from "./NPCSheet";
 const MODES = { CHARACTER: "character", NPC: "npc" };
 /** Poll open character sheets + campaigns while the tab is visible (backup if SSE disconnects). */
 const SHEET_SYNC_INTERVAL_MS = 12000;
+
+/** Skip poll/SSE character merge while editing, saving, or in dirtyIntent window. */
+function sheetTabIsProtected(meta) {
+  return Boolean(meta?.dirtyIntent || meta?.isDirty || meta?.isSaving);
+}
 
 const PAGE_STYLES = {
   page: {
@@ -429,15 +437,28 @@ export default function CharacterPage({
         const next = await Promise.all(
           prev.map(async (t) => {
             if (!t.characterId) return t;
-            const dirty = Boolean(metaSnap[t.tabId]?.isDirty);
-            if (dirty) {
+            // Protect local sheet while editing, saving, or in the same-tick
+            // dirtyIntent window before the meta effect flushes isDirty.
+            const protect = sheetTabIsProtected(metaSnap[t.tabId]);
+            if (protect) {
               return t;
             }
             try {
               const raw = await characterAPI.getCharacter(t.characterId);
+              // Re-check after await: allocate/deallocate or edits may have
+              // marked dirty while the GET was in flight; applying a stale
+              // snapshot would wipe free-pool XP / track ticks via hydrate.
+              const protectAfter = sheetTabIsProtected(
+                (charTabUnsavedMetaRef.current || {})[t.tabId],
+              );
+              if (protectAfter) return t;
               const transformed = transformBackendToFrontend(raw);
               return { ...t, character: transformed };
             } catch {
+              const protectAfter = sheetTabIsProtected(
+                (charTabUnsavedMetaRef.current || {})[t.tabId],
+              );
+              if (protectAfter) return t;
               const updated = byId.get(t.characterId);
               if (updated) return { ...t, character: updated };
               return t;
@@ -697,7 +718,17 @@ export default function CharacterPage({
         traumaList = normalizeListResponse(raw);
         if (traumaList.length) setTraumas(traumaList);
       }
+      const markedTraumaKeys = Object.entries(payload.trauma || {})
+        .filter(([, checked]) => checked)
+        .map(([k]) => k);
+      const traumaIds = traumaObjectToIds(payload.trauma || {}, traumaList);
+      if (markedTraumaKeys.length > 0 && traumaIds.length === 0) {
+        throw new Error(
+          "Could not resolve trauma conditions for save. Refresh the page and try again.",
+        );
+      }
       const frontend = normalizeSheetPayloadToFrontend(payload, traumaList);
+      frontend.trauma = traumaIds;
       let heritageList = normalizeListResponse(heritages);
       if (!heritageList.length) {
         const raw = await referenceAPI.getHeritages().catch(() => null);
@@ -729,6 +760,15 @@ export default function CharacterPage({
         heritage: heritageValue,
         campaign: payload.campaign ?? frontend.campaign,
       });
+      // Server-owned fields: only include when the sheet marked them touched this draft.
+      // Untouched omit lets concurrent roll/GM stress survive the PATCH.
+      const touches = payload._fieldTouches || {};
+      if (!touches.stress) {
+        delete toSend.stress;
+      }
+      if (!touches.trauma) {
+        delete toSend.trauma;
+      }
       const withFile = {
         ...toSend,
         ...(isImageUploadPayload(frontend.imageFile)
@@ -736,7 +776,8 @@ export default function CharacterPage({
           : {}),
       };
       const saveOnce = async (savePayload) => {
-        if (payload.id) return characterAPI.updateCharacter(payload.id, savePayload);
+        // Existing characters must PATCH (partial). PUT was wiping omitted server-owned fields.
+        if (payload.id) return characterAPI.patchCharacter(payload.id, savePayload);
         return characterAPI.createCharacter(savePayload);
       };
       try {
@@ -760,6 +801,12 @@ export default function CharacterPage({
             heritage: heritageValue,
             campaign: payload.campaign ?? frontend.campaign,
           });
+          if (!touches.stress) {
+            delete repairedBackend.stress;
+          }
+          if (!touches.trauma) {
+            delete repairedBackend.trauma;
+          }
           const repairedWithFile = {
             ...repairedBackend,
             ...(isImageUploadPayload(frontend.imageFile)
@@ -843,6 +890,12 @@ export default function CharacterPage({
             saved && Object.prototype.hasOwnProperty.call(saved, "trauma_details")
               ? savedFrontend.trauma
               : (traumaFromPayload ?? savedFrontend.trauma),
+          // Prefer the stress we just attempted to save — stale overlapping PUTs can echo
+          // an older max-stress value and re-fill the track after a trauma clear.
+          stressFilled:
+            typeof payload.stressFilled === "number"
+              ? Math.max(0, Math.floor(payload.stressFilled))
+              : savedFrontend.stressFilled,
           playbookXpArchetypes:
             saved &&
             Object.prototype.hasOwnProperty.call(saved, "playbook_xp_archetypes")
@@ -856,6 +909,40 @@ export default function CharacterPage({
               : normalizeStashSlots(
                   saved?.stash_slots ?? savedFrontend.stash ?? frontend.stash,
                 ),
+          // Prefer payload ∪ echo so a weak/partial PATCH response cannot blank local rows.
+          inventory: (() => {
+            const fromPayload = normalizeCharacterInventory(
+              frontend.inventory ?? payload.inventory,
+            );
+            const fromServer = normalizeCharacterInventory(
+              savedFrontend.inventory,
+            );
+            if (
+              saved &&
+              Object.prototype.hasOwnProperty.call(saved, "inventory") &&
+              fromServer.length > 0
+            ) {
+              return fromServer;
+            }
+            if (fromPayload.length > 0) return fromPayload;
+            return fromServer.length > 0 ? fromServer : fromPayload;
+          })(),
+          sheetNotes: (() => {
+            const fromPayload =
+              payload.sheetNotes ?? frontend.sheetNotes ?? "";
+            if (
+              saved &&
+              Object.prototype.hasOwnProperty.call(saved, "background_note2")
+            ) {
+              const echoed = savedFrontend.sheetNotes ?? "";
+              // Empty echo with non-empty payload → keep payload (weak echo).
+              if (!String(echoed).trim() && String(fromPayload).trim()) {
+                return fromPayload;
+              }
+              return echoed;
+            }
+            return fromPayload || savedFrontend.sheetNotes || "";
+          })(),
         };
         updateActiveCharTab(merged.id, merged);
         await loadCharacters();
@@ -1087,13 +1174,21 @@ export default function CharacterPage({
     return base;
   }, [activeCharTab]);
 
-  const campaignIdForRealtime = useMemo(() => {
-    const c = sheetCharacter?.campaign;
-    const id = typeof c === "object" ? c?.id : c;
-    if (id == null || id === "") return null;
-    const n = typeof id === "number" ? id : parseInt(String(id), 10);
-    return Number.isFinite(n) ? n : null;
-  }, [sheetCharacter?.campaign]);
+  const sheetCampaignContext = useMemo(
+    () => resolveCharacterCampaignContext(sheetCharacter, campaigns),
+    [sheetCharacter, campaigns],
+  );
+
+  const campaignIdForRealtime = sheetCampaignContext.campaignId;
+
+  const sheetCharacterIsGM = useMemo(
+    () =>
+      isUserCampaignGmForCharacter(user, {
+        campaignRecord: sheetCampaignContext.campaignRecord,
+        campaignId: sheetCampaignContext.campaignId,
+      }),
+    [user, sheetCampaignContext],
+  );
 
   useEffect(() => {
     if (mode !== MODES.CHARACTER || !campaignIdForRealtime) return undefined;
@@ -1693,7 +1788,7 @@ export default function CharacterPage({
             character={sheetCharacter}
             sheetDraftIsDirty={
               activeCharTabId != null &&
-              Boolean(charTabUnsavedMeta[activeCharTabId]?.isDirty)
+              sheetTabIsProtected(charTabUnsavedMeta[activeCharTabId])
             }
             heritages={heritages}
             heritagesLoading={heritagesLoading}
@@ -1701,10 +1796,7 @@ export default function CharacterPage({
             onRetryHeritages={loadReferenceData}
             allCharacters={characters}
             campaigns={campaigns}
-            isGM={
-              campaigns?.find((c) => c.id === sheetCharacter?.campaign)?.gm
-                ?.id === user?.id
-            }
+            isGM={sheetCharacterIsGM}
             onSave={handleSaveCharacter}
             onCreateNew={handleCreateNewCharacterTab}
             onSwitchCharacter={handleSwitchCharacter}
@@ -1714,10 +1806,54 @@ export default function CharacterPage({
             onDraftMetaChange={(meta) => {
               const tabId = activeCharTab?.tabId;
               if (tabId == null) return;
+              // Sync ref immediately so poll/SSE protect sees dirtyIntent
+              // before React re-renders (edit→meta same-tick race).
+              charTabUnsavedMetaRef.current = {
+                ...(charTabUnsavedMetaRef.current || {}),
+                [tabId]: meta,
+              };
               setCharTabUnsavedMeta((prev) => ({
                 ...prev,
                 [tabId]: meta,
               }));
+            }}
+            onCharacterXpSync={(patch) => {
+              const tabId = activeCharTabId;
+              if (tabId == null || !patch) return;
+              setCharTabs((prev) =>
+                prev.map((t) => {
+                  if (t.tabId !== tabId || !t.character) return t;
+                  return {
+                    ...t,
+                    character: {
+                      ...t.character,
+                      ...(patch.xp ? { xp: patch.xp } : {}),
+                      ...(typeof patch.unallocatedXp === "number"
+                        ? { unallocatedXp: patch.unallocatedXp }
+                        : {}),
+                    },
+                  };
+                }),
+              );
+            }}
+            onCharacterStressTraumaSync={(patch) => {
+              const tabId = activeCharTabId;
+              if (tabId == null || !patch) return;
+              setCharTabs((prev) =>
+                prev.map((t) => {
+                  if (t.tabId !== tabId || !t.character) return t;
+                  return {
+                    ...t,
+                    character: {
+                      ...t.character,
+                      ...(typeof patch.stressFilled === "number"
+                        ? { stressFilled: patch.stressFilled }
+                        : {}),
+                      ...(patch.trauma ? { trauma: patch.trauma } : {}),
+                    },
+                  };
+                }),
+              );
             }}
           />
         ))}

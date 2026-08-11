@@ -20,7 +20,6 @@ from ..serializers import (
 from ..services.session_xp_settlement import grant_encoded_trigger_xp
 from ..services.playbook_xp_archetype import resolve_playbook_xp_archetype_labels
 
-
 MANUAL_TOGGLE_TRIGGERS = {"BELIEFS", "STRUGGLE", "PLAYBOOK_SPECIFIC"}
 # Trigger toggles are SRD end-of-session trigger records confirmed by a human
 # (player or GM) rather than auto-detected from a roll. They are not the same
@@ -32,48 +31,40 @@ SESSION_TRIGGER_DESCRIPTION_PREFIX = "Session XP trigger"
 # the rename data migration applied. New rows are written with the new prefix.
 LEGACY_MANUAL_TOGGLE_DESCRIPTION_PREFIX = "Manual session XP toggle"
 
-
 class HeritageViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Heritage.objects.all()
     serializer_class = HeritageSerializer
-
 
 class ViceViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Vice.objects.all()
     serializer_class = ViceSerializer
 
-
 class AbilityViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Ability.objects.all()
     serializer_class = AbilitySerializer
-
 
 class StandViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Stand.objects.all()
     serializer_class = StandSerializer
 
-
 class StandAbilityViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = StandAbility.objects.all()
     serializer_class = StandAbilitySerializer
-
 
 class HamonAbilityViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = HamonAbility.objects.all()
     serializer_class = HamonAbilitySerializer
 
-
 class SpinAbilityViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = SpinAbility.objects.all()
     serializer_class = SpinAbilitySerializer
-
 
 class TraumaViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only endpoint for trauma conditions."""
@@ -81,10 +72,14 @@ class TraumaViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Trauma.objects.all()
     serializer_class = TraumaSerializer
 
-
 class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     serializer_class = CharacterHistorySerializer
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["request"] = self.request
+        return context
 
     def get_queryset(self):
         user = self.request.user
@@ -151,6 +146,28 @@ class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
             .order_by("-timestamp")
         )
 
+    @action(detail=True, methods=["post"], url_path="undo")
+    def undo_entry(self, request, pk=None):
+        entry = self.get_object()
+        from ..services.character_history_undo import (
+            CharacterHistoryUndoError,
+            undo_character_history_entry,
+        )
+        from ..views.character_views import _character_response
+
+        try:
+            undo_character_history_entry(entry, user=request.user)
+        except CharacterHistoryUndoError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character = Character.objects.get(pk=entry.character_id)
+        return Response(
+            {
+                "success": True,
+                "history_id": entry.id,
+                "character": _character_response(character),
+            }
+        )
 
 class CrewHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     """Audit of crew sheet scalar changes; filter with ?crew=<id>."""
@@ -181,7 +198,6 @@ class CrewHistoryViewSet(viewsets.ReadOnlyModelViewSet):
             base = base.filter(crew_id=crew_id)
         return base.order_by("-timestamp")
 
-
 class ExperienceTrackerViewSet(
     mixins.DestroyModelMixin,
     viewsets.ReadOnlyModelViewSet,
@@ -197,73 +213,15 @@ class ExperienceTrackerViewSet(
     queryset = ExperienceTracker.objects.all()
     serializer_class = ExperienceTrackerSerializer
 
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["request"] = self.request
+        return context
+
     def get_queryset(self):
-        # #region agent log
-        import json
-        import time as _dbg_time_ref
-
-        def _dbg_experience_tracker_log():
-            try:
-                from django.db import connection
-                from django.db.migrations.recorder import MigrationRecorder
-
-                mig_0065 = MigrationRecorder.Migration.objects.filter(
-                    app="characters",
-                    name="0065_session_ripple_breathing_free_push",
-                ).exists()
-                col_present = None
-                if connection.vendor == "sqlite":
-                    with connection.cursor() as cur:
-                        cur.execute("PRAGMA table_info(characters_session)")
-                        names = {row[1] for row in cur.fetchall()}
-                    col_present = (
-                        "ripple_breathing_free_push_claimed_by_character" in names
-                    )
-                db_name = connection.settings_dict.get("NAME")
-                payload = {
-                    "sessionId": "068d9a",
-                    "runId": "pre-fix",
-                    "hypothesisId": "H1",
-                    "location": "reference_views.ExperienceTrackerViewSet.get_queryset",
-                    "message": "migrate 0065 vs sqlite column characters_session",
-                    "data": {
-                        "mig_0065_applied": mig_0065,
-                        "ripple_col_in_db": col_present,
-                        "db_vendor": connection.vendor,
-                        "db_name_repr": repr(db_name),
-                    },
-                    "timestamp": int(_dbg_time_ref.time() * 1000),
-                }
-                path = "$HOME/git/jojo-ttrpg-platform/.cursor/debug-068d9a.log"
-                with open(path, "a", encoding="utf-8") as df:
-                    df.write(json.dumps(payload) + "\n")
-            except Exception as ex:
-                try:
-                    with open(
-                        "$HOME/git/jojo-ttrpg-platform/.cursor/debug-068d9a.log",
-                        "a",
-                        encoding="utf-8",
-                    ) as df:
-                        df.write(
-                            json.dumps(
-                                {
-                                    "sessionId": "068d9a",
-                                    "runId": "pre-fix",
-                                    "hypothesisId": "H1",
-                                    "location": "reference_views.ExperienceTrackerViewSet.get_queryset",
-                                    "message": "debug log exception",
-                                    "data": {"error": repr(ex)},
-                                    "timestamp": int(_dbg_time_ref.time() * 1000),
-                                }
-                            )
-                            + "\n"
-                        )
-                except Exception:
-                    pass
-
-        _dbg_experience_tracker_log()
-        # #endregion
-        qs = ExperienceTracker.objects.all().select_related('character', 'session', 'character__campaign')
+        qs = ExperienceTracker.objects.filter(
+            revoked_at__isnull=True
+        ).select_related('character', 'session', 'character__campaign')
         user = self.request.user
         if user.is_staff:
             return qs
@@ -413,8 +371,12 @@ class ExperienceTrackerViewSet(
     def destroy(self, request, *args, **kwargs):
         """Delete an XP entry and roll back its destination (track or free pool).
 
-        Allowed for the character owner or the campaign GM.
+        Allowed for the character owner or the campaign GM. Players cannot
+        delete GM or automatic session XP from the character sheet — use the
+        campaign scorecard instead.
         """
+        from ..services.character_history_undo import experience_tracker_undoable_from_sheet
+
         entry = self.get_object()
         character = entry.character
         user = request.user
@@ -427,6 +389,9 @@ class ExperienceTrackerViewSet(
             raise PermissionDenied(
                 "Only the character owner or campaign GM can delete XP entries."
             )
+        allowed, reason = experience_tracker_undoable_from_sheet(entry, user)
+        if not allowed:
+            return Response({"error": reason}, status=status.HTTP_403_FORBIDDEN)
 
         with transaction.atomic():
             locked_entry = ExperienceTracker.objects.select_for_update().get(
@@ -446,7 +411,6 @@ class ExperienceTrackerViewSet(
                     _rollback_xp_destination(locked_char, "pool", amount)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-
 def _rollback_xp_destination(character, clock_key: str, amount: int) -> None:
     """Decrement free pool or ``xp_clocks[clock_key]`` by ``amount`` (clamped)."""
     key = (clock_key or "").strip()
@@ -460,7 +424,6 @@ def _rollback_xp_destination(character, clock_key: str, amount: int) -> None:
     clocks[key] = max(0, cur - int(amount))
     character.xp_clocks = clocks
     character.save(update_fields=["xp_clocks"])
-
 
 def _rollback_clock(character, clock_key: str, amount: int) -> None:
     """Deprecated alias — prefer ``_rollback_xp_destination``."""

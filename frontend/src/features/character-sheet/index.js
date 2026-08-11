@@ -11,5 +11,9 @@ export {
   standardAbilities,
   traumaObjectToIds,
   resolveHeritagePkForSave,
+  resolveCharacterCampaignContext,
+  isUserCampaignGmForCharacter,
+  isGmViewingPlayerCharacterSheet,
+  isUserGmOfCharacterCampaign,
 } from "./utils/characterUtils";
 export * from "./services/api";

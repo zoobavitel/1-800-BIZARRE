@@ -1,6 +1,3 @@
-import json
-import time
-
 from django.db.models import Q
 from django.db.models.functions import Lower
 from rest_framework import serializers
@@ -68,7 +65,6 @@ _NPC_LEVEL_OFFSET = 9
 
 _PC_CLOCK_TYPES = {c[0] for c in ProgressClock.CLOCK_TYPE_CHOICES}
 
-
 def _attach_or_create_party_crew_from_personal_name(character):
     """Realize the personal_crew_name text field into the campaign's party Crew.
 
@@ -106,7 +102,6 @@ def _attach_or_create_party_crew_from_personal_name(character):
     )
     character.crew_id = crew.id
     character.personal_crew_name = ""
-
 
 def _sync_character_progress_clocks(character, raw_clocks, user):
     """Replace character-scoped progress clocks from sheet JSON (PUT/PATCH/POST body).
@@ -209,7 +204,6 @@ def _sync_character_progress_clocks(character, raw_clocks, user):
         else:
             qs.delete()
 
-
 def _compute_npc_level(stand_coin_stats):
     """Derive NPC level from stand_coin_stats, defaulting missing stats to 'D'."""
     scs = stand_coin_stats or {}
@@ -219,18 +213,15 @@ def _compute_npc_level(stand_coin_stats):
     )
     return max(1, total - _NPC_LEVEL_OFFSET)
 
-
 class ClaimSerializer(serializers.ModelSerializer):
     class Meta:
         model = Claim
         fields = "__all__"
 
-
 class CrewSpecialAbilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = CrewSpecialAbility
         fields = "__all__"
-
 
 class CrewPlaybookSerializer(serializers.ModelSerializer):
     claims = ClaimSerializer(many=True, read_only=True)
@@ -240,12 +231,10 @@ class CrewPlaybookSerializer(serializers.ModelSerializer):
         model = CrewPlaybook
         fields = "__all__"
 
-
 class CrewUpgradeSerializer(serializers.ModelSerializer):
     class Meta:
         model = CrewUpgrade
         fields = "__all__"
-
 
 class CrewSerializer(serializers.ModelSerializer):
     playbook = CrewPlaybookSerializer(read_only=True)
@@ -509,7 +498,6 @@ class CrewSerializer(serializers.ModelSerializer):
                 )
         return value
 
-
 class UserProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
 
@@ -538,14 +526,12 @@ class UserProfileSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Use an HTTPS image URL.")
         return s
 
-
 class InvitableUserSerializer(serializers.ModelSerializer):
     """Lightweight serializer for invitable users list (id, username only)."""
 
     class Meta:
         model = User
         fields = ["id", "username"]
-
 
 class UserSerializer(serializers.ModelSerializer):
     profile = UserProfileSerializer()
@@ -580,11 +566,9 @@ class UserSerializer(serializers.ModelSerializer):
 
         return instance
 
-
 class ChangePasswordSerializer(serializers.Serializer):
     old_password = serializers.CharField(required=True)
     new_password = serializers.CharField(required=True)
-
 
 class SessionNPCInvolvementWriteSerializer(serializers.Serializer):
     """For PATCH: {npc: id, show_clocks_to_players: bool, show_vulnerability_clock_to_players: bool}"""
@@ -610,7 +594,6 @@ class SessionNPCInvolvementWriteSerializer(serializers.Serializer):
         child=serializers.CharField(), required=False, default=list
     )
 
-
 def _normalize_npc_involvement_clock_flags(show_all, raw_show_vuln_from_client):
     """Persist the same rule as player read-side: full clocks ⇒ vuln visible.
 
@@ -618,7 +601,6 @@ def _normalize_npc_involvement_clock_flags(show_all, raw_show_vuln_from_client):
     show_all); this applies the invariant exactly once: show_all ∨ raw.
     """
     return show_all, show_all or raw_show_vuln_from_client
-
 
 def _normalized_list(raw, cast=None):
     if not isinstance(raw, list):
@@ -636,7 +618,6 @@ def _normalized_list(raw, cast=None):
                 out.append(s)
     return out
 
-
 def _ensure_npc_belongs_to_session_campaign(npc, session_campaign_id):
     """Session NPCs must belong to the same campaign as the session."""
     if session_campaign_id is None:
@@ -645,7 +626,6 @@ def _ensure_npc_belongs_to_session_campaign(npc, session_campaign_id):
         raise serializers.ValidationError(
             "Each NPC in session npc_involvements must belong to this session's campaign."
         )
-
 
 class SessionSerializer(serializers.ModelSerializer):
     npcs_involved = serializers.SerializerMethodField()
@@ -920,31 +900,26 @@ class SessionSerializer(serializers.ModelSerializer):
                 )
         return instance
 
-
 class XPHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = XPHistory
         fields = "__all__"
-
 
 class StressHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = StressHistory
         fields = "__all__"
 
-
 class ChatMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChatMessage
         fields = "__all__"
-
 
 class SessionEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = SessionEvent
         fields = "__all__"
         read_only_fields = ["timestamp"]
-
 
 class ExperienceTrackerSerializer(serializers.ModelSerializer):
     character = serializers.PrimaryKeyRelatedField(queryset=Character.objects.all())
@@ -964,6 +939,8 @@ class ExperienceTrackerSerializer(serializers.ModelSerializer):
     awarded_by_username = serializers.CharField(
         source="awarded_by.username", read_only=True, default=None
     )
+    can_undo_from_sheet = serializers.SerializerMethodField()
+    undo_block_reason = serializers.SerializerMethodField()
 
     class Meta:
         model = ExperienceTracker
@@ -982,18 +959,40 @@ class ExperienceTrackerSerializer(serializers.ModelSerializer):
             "awarded_by",
             "awarded_by_username",
             "clock_key",
+            "can_undo_from_sheet",
+            "undo_block_reason",
         ]
         read_only_fields = [
             "session_date",
             "session",
             "session_name",
+            "trigger_display",
             "award_source",
             "award_source_display",
             "awarded_by",
             "awarded_by_username",
             "clock_key",
+            "can_undo_from_sheet",
+            "undo_block_reason",
         ]
 
+    def get_can_undo_from_sheet(self, obj):
+        from .services.character_history_undo import experience_tracker_undoable_from_sheet
+
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        allowed, _reason = experience_tracker_undoable_from_sheet(obj, request.user)
+        return allowed
+
+    def get_undo_block_reason(self, obj):
+        from .services.character_history_undo import experience_tracker_undoable_from_sheet
+
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return None
+        allowed, reason = experience_tracker_undoable_from_sheet(obj, request.user)
+        return None if allowed else reason
 
 class GroupActionSerializer(serializers.ModelSerializer):
     class Meta:
@@ -1008,7 +1007,6 @@ class GroupActionSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["status", "created_at"]
-
 
 class RollSerializer(serializers.ModelSerializer):
     character_name = serializers.CharField(source="character.true_name", read_only=True)
@@ -1192,7 +1190,6 @@ class RollSerializer(serializers.ModelSerializer):
             data["description"] = public_label or "GM fortune roll"
         return data
 
-
 class SessionRecordsSerializer(serializers.ModelSerializer):
     """Extended session serializer with events, xp_history, stress_history, rolls for session records view."""
 
@@ -1260,12 +1257,13 @@ class SessionRecordsSerializer(serializers.ModelSerializer):
             for inv in obj.npc_involvements.select_related("npc").order_by("npc__name")
         ]
 
-
 class CharacterHistorySerializer(serializers.ModelSerializer):
     character_true_name = serializers.CharField(
         source="character.true_name", read_only=True
     )
     editor_username = serializers.SerializerMethodField()
+    can_undo = serializers.SerializerMethodField()
+    undo_block_reason = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterHistory
@@ -1277,11 +1275,31 @@ class CharacterHistorySerializer(serializers.ModelSerializer):
             "editor_username",
             "timestamp",
             "changed_fields",
+            "reverted_at",
+            "can_undo",
+            "undo_block_reason",
         ]
 
     def get_editor_username(self, obj):
         return obj.editor.username if obj.editor_id else None
 
+    def get_can_undo(self, obj):
+        from .services.character_history_undo import can_undo_character_history
+
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+        allowed, _reason = can_undo_character_history(obj, request.user)
+        return allowed
+
+    def get_undo_block_reason(self, obj):
+        from .services.character_history_undo import can_undo_character_history
+
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return None
+        allowed, reason = can_undo_character_history(obj, request.user)
+        return None if allowed else reason
 
 class CrewHistorySerializer(serializers.ModelSerializer):
     crew_name = serializers.CharField(source="crew.name", read_only=True)
@@ -1302,7 +1320,6 @@ class CrewHistorySerializer(serializers.ModelSerializer):
     def get_editor_username(self, obj):
         return obj.editor.username if obj.editor_id else None
 
-
 class CampaignAuditLogSerializer(serializers.ModelSerializer):
     actor_username = serializers.SerializerMethodField()
 
@@ -1321,18 +1338,15 @@ class CampaignAuditLogSerializer(serializers.ModelSerializer):
     def get_actor_username(self, obj):
         return obj.actor.username if obj.actor_id else None
 
-
 class BenefitSerializer(serializers.ModelSerializer):
     class Meta:
         model = Benefit
         fields = ["id", "name", "hp_cost", "required", "description"]
 
-
 class DetrimentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Detriment
         fields = ["id", "name", "hp_value", "required", "description"]
-
 
 class HeritageSerializer(serializers.ModelSerializer):
     benefits = BenefitSerializer(many=True, read_only=True)
@@ -1341,7 +1355,6 @@ class HeritageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Heritage
         fields = ["id", "name", "base_hp", "description", "benefits", "detriments"]
-
 
 class FlexibleHeritagePrimaryKeyField(serializers.PrimaryKeyRelatedField):
     """Accepts heritage id (int or numeric string) or heritage display name (e.g. Human)."""
@@ -1372,24 +1385,20 @@ class FlexibleHeritagePrimaryKeyField(serializers.PrimaryKeyRelatedField):
             self.fail("does_not_exist", pk_name=s)
         return super().to_internal_value(data)
 
-
 class ViceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Vice
         fields = "__all__"
-
 
 class AbilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = Ability
         fields = ["id", "name", "description", "type", "category"]
 
-
 class StandAbilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = StandAbility
         fields = ["id", "stand", "name", "description"]
-
 
 class HamonAbilitySerializer(serializers.ModelSerializer):
     class Meta:
@@ -1404,7 +1413,6 @@ class HamonAbilitySerializer(serializers.ModelSerializer):
             "frequency",
         ]
 
-
 class SpinAbilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = SpinAbility
@@ -1418,17 +1426,14 @@ class SpinAbilitySerializer(serializers.ModelSerializer):
             "frequency",
         ]
 
-
 class StandSerializer(serializers.ModelSerializer):
     class Meta:
         model = Stand
         fields = "__all__"
 
-
 _STAND_TYPE_KEYS = frozenset(k for k, _ in Stand.TYPE_CHOICES)
 _STAND_FORM_PRESETS = frozenset(k for k, _ in Stand.FORM_CHOICES)
 _STAND_CONSCIOUSNESS = frozenset("ABCDEF")
-
 
 def _stand_type_from_payload(stand_data, default="FIGHTING"):
     """Accept nested stand.type when it matches TYPE_CHOICES; else default."""
@@ -1436,7 +1441,6 @@ def _stand_type_from_payload(stand_data, default="FIGHTING"):
         return default
     raw = str(stand_data.get("type") or "").strip().upper()
     return raw if raw in _STAND_TYPE_KEYS else default
-
 
 def _normalize_stand_forms(raw) -> list[str]:
     """Dedupe preserving order; allow FORM_CHOICES presets and custom strings."""
@@ -1452,13 +1456,11 @@ def _normalize_stand_forms(raw) -> list[str]:
         out.append(s[:100])
     return out
 
-
 def _legacy_form_from_forms(forms: list[str]) -> str:
     for f in forms:
         if f in _STAND_FORM_PRESETS:
             return f
     return "Humanoid"
-
 
 def _apply_stand_identity_fields(stand, stand_data: dict) -> None:
     """Apply flavor identity fields from nested stand payload onto a Stand row."""
@@ -1482,7 +1484,6 @@ def _apply_stand_identity_fields(stand, stand_data: dict) -> None:
             stand.consciousness_level = c
     if "type_custom" in stand_data:
         stand.type_custom = str(stand_data.get("type_custom") or "").strip()[:100]
-
 
 class CharacterSerializer(serializers.ModelSerializer):
     image = serializers.FileField(required=False)
@@ -1608,8 +1609,23 @@ class CharacterSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         # Validate stress/trauma system
-        stress = data.get("stress", 0) or getattr(self.instance, "stress", 0)
-        trauma_list = data.get("trauma", []) or getattr(self.instance, "trauma", [])
+        if "stress" in data:
+            stress = data.get("stress")
+            if stress is None:
+                stress = 0
+        else:
+            stress = getattr(self.instance, "stress", 0) if self.instance else 0
+
+        if "trauma" in data:
+            trauma_list = data.get("trauma")
+            if trauma_list is None:
+                trauma_list = []
+        else:
+            trauma_list = (
+                list(getattr(self.instance, "trauma", []) or [])
+                if self.instance
+                else []
+            )
 
         # Check if character should take trauma at 11+ stress
         if stress >= 11:
@@ -1623,8 +1639,24 @@ class CharacterSerializer(serializers.ModelSerializer):
         # enforce playbook ability prerequisites based on coin_stats (A-rank only; S does not count)
         coin_stats = data.get("coin_stats") or getattr(self.instance, "coin_stats", {})
         count_A = sum(1 for v in coin_stats.values() if v == "A")
-        hamon_ids = data.get("hamon_ability_ids", [])
-        spin_ids = data.get("spin_ability_ids", [])
+        # Partial PATCH: omitted ability id lists must fall back to instance M2M,
+        # else playbook-gated checks skip or false-reject when only abilities are sent.
+        if "hamon_ability_ids" in data:
+            hamon_ids = data.get("hamon_ability_ids") or []
+        elif self.instance is not None:
+            hamon_ids = [
+                link.hamon_ability for link in self.instance.hamon_abilities.all()
+            ]
+        else:
+            hamon_ids = []
+        if "spin_ability_ids" in data:
+            spin_ids = data.get("spin_ability_ids") or []
+        elif self.instance is not None:
+            spin_ids = [
+                link.spin_ability for link in self.instance.spin_abilities.all()
+            ]
+        else:
+            spin_ids = []
         playbook_val = data.get("playbook")
         if playbook_val is None and self.instance:
             playbook_val = self.instance.playbook
@@ -1920,44 +1952,6 @@ class CharacterSerializer(serializers.ModelSerializer):
         return character
 
     def update(self, instance, validated_data):
-        # #region agent log
-        try:
-            _req = self.context.get("request")
-            _files = list(getattr(_req, "FILES", {}).keys()) if _req else []
-            with open("$HOME/git/1-800-BIZARRE/.cursor/debug-af48c2.log", "a") as _f:
-                _f.write(
-                    json.dumps(
-                        {
-                            "sessionId": "af48c2",
-                            "hypothesisId": "H1-H4",
-                            "location": "serializers.py:CharacterSerializer.update:entry",
-                            "message": "character update entry",
-                            "data": {
-                                "initial_custom_vice": self.initial_data.get(
-                                    "custom_vice"
-                                ),
-                                "initial_vice": self.initial_data.get("vice"),
-                                "initial_vice_details_len": len(
-                                    str(self.initial_data.get("vice_details") or "")
-                                ),
-                                "validated_custom_vice": validated_data.get(
-                                    "custom_vice"
-                                ),
-                                "validated_has_vice_key": "vice" in validated_data,
-                                "validated_has_image_key": "image" in validated_data,
-                                "instance_vice_id_before": getattr(
-                                    instance, "vice_id", None
-                                ),
-                                "files_keys": _files,
-                            },
-                            "timestamp": int(time.time() * 1000),
-                        }
-                    )
-                    + "\n"
-                )
-        except Exception:
-            pass
-        # #endregion
         custom_vice = validated_data.pop("custom_vice", None)
         vice_details = validated_data.pop("vice_details", None)
         hamon_ids = validated_data.pop("hamon_ability_ids", None)
@@ -1977,65 +1971,9 @@ class CharacterSerializer(serializers.ModelSerializer):
         if vice_details is not None:
             validated_data["vice_details"] = vice_details
 
-        # #region agent log
-        try:
-            with open("$HOME/git/1-800-BIZARRE/.cursor/debug-af48c2.log", "a") as _f:
-                _f.write(
-                    json.dumps(
-                        {
-                            "sessionId": "af48c2",
-                            "hypothesisId": "H2-H3",
-                            "location": "serializers.py:CharacterSerializer.update:before_super",
-                            "message": "after vice branch, before super().update",
-                            "data": {
-                                "custom_vice_popped": custom_vice,
-                                "validated_vice_fk": (
-                                    str(validated_data.get("vice"))
-                                    if validated_data.get("vice") is not None
-                                    else None
-                                ),
-                                "will_set_vice_from_custom": bool(custom_vice),
-                            },
-                            "timestamp": int(time.time() * 1000),
-                        }
-                    )
-                    + "\n"
-                )
-        except Exception:
-            pass
-        # #endregion
-
         character = super().update(instance, validated_data)
 
         _attach_or_create_party_crew_from_personal_name(character)
-
-        # #region agent log
-        try:
-            with open("$HOME/git/1-800-BIZARRE/.cursor/debug-af48c2.log", "a") as _f:
-                _f.write(
-                    json.dumps(
-                        {
-                            "sessionId": "af48c2",
-                            "hypothesisId": "H3-H4",
-                            "location": "serializers.py:CharacterSerializer.update:after_super",
-                            "message": "after super().update",
-                            "data": {
-                                "character_vice_id": character.vice_id,
-                                "character_image": bool(character.image),
-                                "image_name": (
-                                    getattr(character.image, "name", "")[:120]
-                                    if character.image
-                                    else ""
-                                ),
-                            },
-                            "timestamp": int(time.time() * 1000),
-                        }
-                    )
-                    + "\n"
-                )
-        except Exception:
-            pass
-        # #endregion
 
         # Sync Stand stats when coin_stats or stand data is provided
         if coin_stats and isinstance(coin_stats, dict):
@@ -2156,7 +2094,6 @@ class CharacterSerializer(serializers.ModelSerializer):
         traumas = Trauma.objects.filter(id__in=pks).order_by("id")
         return TraumaSerializer(traumas, many=True).data
 
-
 class CharacterXPAllocationSerializer(serializers.ModelSerializer):
     summary = serializers.SerializerMethodField()
     allocation_type_display = serializers.CharField(
@@ -2166,6 +2103,7 @@ class CharacterXPAllocationSerializer(serializers.ModelSerializer):
         source="get_xp_track_display", read_only=True
     )
     can_undo = serializers.SerializerMethodField()
+    can_redo = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterXPAllocation
@@ -2181,6 +2119,7 @@ class CharacterXPAllocationSerializer(serializers.ModelSerializer):
             "summary",
             "undone_at",
             "can_undo",
+            "can_redo",
         ]
         read_only_fields = fields
 
@@ -2197,6 +2136,13 @@ class CharacterXPAllocationSerializer(serializers.ModelSerializer):
             return True
         return obj.id == latest_id
 
+    def get_can_redo(self, obj):
+        if not obj.undone_at:
+            return False
+        latest_id = self.context.get("latest_redoable_allocation_id")
+        if latest_id is None:
+            return False
+        return obj.id == latest_id
 
 class RegisterSerializer(serializers.ModelSerializer):
     username = serializers.CharField(
@@ -2217,7 +2163,6 @@ class RegisterSerializer(serializers.ModelSerializer):
         user = User.objects.create_user(**validated_data)
         UserProfile.objects.create(user=user)
         return user
-
 
 class CharacterSummarySerializer(serializers.ModelSerializer):
     heritage_name = serializers.CharField(
@@ -2273,7 +2218,6 @@ class CharacterSummarySerializer(serializers.ModelSerializer):
             "assist_help_pending",
         ]
 
-
 class NPCSummarySerializer(serializers.ModelSerializer):
     heritage_name = serializers.CharField(
         source="heritage.name", read_only=True, default=None
@@ -2296,7 +2240,6 @@ class NPCSummarySerializer(serializers.ModelSerializer):
             "image_url",
         ]
 
-
 class CrewCampaignSerializer(serializers.ModelSerializer):
     """Lightweight Crew serializer used inside CampaignSerializer."""
 
@@ -2318,7 +2261,6 @@ class CrewCampaignSerializer(serializers.ModelSerializer):
             "members",
             "proposed_name",
         ]
-
 
 class FactionSerializer(serializers.ModelSerializer):
     npcs = NPCSummarySerializer(many=True, read_only=True)
@@ -2343,7 +2285,6 @@ class FactionSerializer(serializers.ModelSerializer):
             "image",
             "npcs",
         ]
-
 
 class ShowcasedNPCSerializer(serializers.ModelSerializer):
     npc = serializers.SerializerMethodField()
@@ -2391,7 +2332,6 @@ class ShowcasedNPCSerializer(serializers.ModelSerializer):
             )
             data["progress_clocks"] = clocks
         return data
-
 
 class ProgressClockSerializer(serializers.ModelSerializer):
     clock_type_display = serializers.CharField(
@@ -2441,7 +2381,6 @@ class ProgressClockSerializer(serializers.ModelSerializer):
         )
         return ch.true_name if ch else None
 
-
 class CampaignInvitationSerializer(serializers.ModelSerializer):
     invited_user = UserSerializer(read_only=True)
     invited_by = UserSerializer(read_only=True)
@@ -2468,7 +2407,6 @@ class CampaignInvitationSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["id", "created_at"]
-
 
 class CampaignSerializer(serializers.ModelSerializer):
     gm = UserSerializer(read_only=True)
@@ -2822,7 +2760,6 @@ class CampaignSerializer(serializers.ModelSerializer):
         )
         return ProgressClockSerializer(clocks, many=True).data
 
-
 class NPCSerializer(serializers.ModelSerializer):
     creator = serializers.PrimaryKeyRelatedField(
         read_only=True, default=serializers.CurrentUserDefault()
@@ -2960,7 +2897,6 @@ class NPCSerializer(serializers.ModelSerializer):
                 ]
             )
         return instance
-
 
 class TraumaSerializer(serializers.ModelSerializer):
     class Meta:

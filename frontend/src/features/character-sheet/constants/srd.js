@@ -126,6 +126,11 @@ export const TRAUMA_PK_TO_KEY = Object.fromEntries(
   TRAUMA_KEYS.map((k, i) => [i + 1, k]),
 );
 
+/** Sheet keys → fixture PKs (when /traumas/ list empty or missing a name). */
+export const TRAUMA_KEY_TO_PK = Object.fromEntries(
+  TRAUMA_KEYS.map((k, i) => [k, i + 1]),
+);
+
 // Durability → Stand armor charges (+ resist tiers). SRD_DEV: durability does **not** change stress track length (baseline 9).
 // SRD `docs/1-(800)-BIZARRE SRD.md` Stand Armor table: F:0, D:1, C:2, B:3, A:4 (S not in table — use 5 charges for S-grade).
 export const DUR_TABLE = [
