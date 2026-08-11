@@ -422,6 +422,46 @@ const npcClockAddCardInputStyle = {
   fontSize: "12px",
 };
 
+const NPC_CLOCK_SEGMENT_OPTIONS = [4, 6, 8, 12];
+
+/** Edit segments on an existing conflict/alt clock (clamps filled in parent setter). */
+function NpcClockSegmentsSelect({ value, onChange, color = "#9ca3af" }) {
+  return (
+    <label
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "6px",
+        marginTop: "4px",
+        fontSize: "10px",
+        color,
+        cursor: "pointer",
+        userSelect: "none",
+      }}
+    >
+      Segments
+      <select
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        style={{
+          ...npcClockAddCardInputStyle,
+          width: "auto",
+          padding: "2px 4px",
+          fontSize: "10px",
+          cursor: "pointer",
+        }}
+      >
+        {NPC_CLOCK_SEGMENT_OPTIONS.map((n) => (
+          <option key={n} value={n}>
+            {n}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 /** Inline add-clock form (avoids browser prompt / modal feel). */
 function NpcClockAddCard({
   draft,
@@ -487,7 +527,7 @@ function NpcClockAddCard({
               cursor: "pointer",
             }}
           >
-            {[4, 6, 8, 12].map((n) => (
+            {NPC_CLOCK_SEGMENT_OPTIONS.map((n) => (
               <option key={n} value={n}>
                 {n}
               </option>
@@ -1621,7 +1661,7 @@ const NPCSheet = ({
     }
     setClockDraftError("");
     let segs = Number(clockDraftCard.segments);
-    if (![4, 6, 8, 12].includes(segs)) segs = 8;
+    if (!NPC_CLOCK_SEGMENT_OPTIONS.includes(segs)) segs = 8;
     const row = {
       id: Date.now(),
       name,
@@ -1641,11 +1681,31 @@ const NPCSheet = ({
     setConflictClocks((p) =>
       p.map((c) => (npcClockIdsMatch(c.id, id) ? { ...c, filled } : c)),
     );
+  const setConflictClockSegments = (id, segments) =>
+    setConflictClocks((p) =>
+      p.map((c) => {
+        if (!npcClockIdsMatch(c.id, id)) return c;
+        const segs = NPC_CLOCK_SEGMENT_OPTIONS.includes(segments)
+          ? segments
+          : c.segments;
+        return { ...c, segments: segs, filled: Math.min(c.filled ?? 0, segs) };
+      }),
+    );
   const deleteConflictClock = (id) =>
     setConflictClocks((p) => p.filter((c) => !npcClockIdsMatch(c.id, id)));
   const updateAltClock = (id, filled) =>
     setAltClocks((p) =>
       p.map((c) => (npcClockIdsMatch(c.id, id) ? { ...c, filled } : c)),
+    );
+  const setAltClockSegments = (id, segments) =>
+    setAltClocks((p) =>
+      p.map((c) => {
+        if (!npcClockIdsMatch(c.id, id)) return c;
+        const segs = NPC_CLOCK_SEGMENT_OPTIONS.includes(segments)
+          ? segments
+          : c.segments;
+        return { ...c, segments: segs, filled: Math.min(c.filled ?? 0, segs) };
+      }),
     );
   const deleteAltClock = (id) =>
     setAltClocks((p) => p.filter((c) => !npcClockIdsMatch(c.id, id)));
@@ -3678,6 +3738,13 @@ const NPCSheet = ({
                             >
                               ×
                             </button>
+                            <NpcClockSegmentsSelect
+                              value={clk.segments}
+                              onChange={(segs) =>
+                                setAltClockSegments(clk.id, segs)
+                              }
+                              color="#86efac"
+                            />
                             <label
                               style={{
                                 display: "flex",
@@ -4158,6 +4225,13 @@ const NPCSheet = ({
                               gap: "4px",
                             }}
                           >
+                            <NpcClockSegmentsSelect
+                              value={clk.segments}
+                              onChange={(segs) =>
+                                setConflictClockSegments(clk.id, segs)
+                              }
+                              color="#a78bfa"
+                            />
                             <label
                               style={{
                                 display: "flex",
