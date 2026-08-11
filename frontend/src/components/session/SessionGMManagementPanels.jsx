@@ -21,6 +21,7 @@ import {
   hasPlaybook,
   playbookToDisplay,
 } from "../../features/character-sheet/services/api";
+import { progressClockShowsPlayersBadge } from "../../features/character-sheet/utils/progressClockVisibility";
 import { buildRouteHref, handleSpaNavClick } from "../../utils/spaNavigation";
 import {
   ACTION_RATING_KEYS,
@@ -997,6 +998,16 @@ export default function SessionGMManagementPanels({
   onSessionPanelRefresh = null,
   user = null,
 }) {
+  /** Prefer session panel refetch (includes clocks). Parent `onRefresh` is often
+   * only `getCampaign` — waiting on that (or SSE/poll) is why create felt slow. */
+  const refreshSessionClocks = useCallback(async () => {
+    if (typeof onSessionPanelRefresh === "function") {
+      await onSessionPanelRefresh();
+      return;
+    }
+    await onRefresh?.();
+  }, [onSessionPanelRefresh, onRefresh]);
+
   const [showAddNpc, setShowAddNpc] = useState(false);
   /** Quick-create NPC when every campaign NPC is already in this session */
   const [quickNpcName, setQuickNpcName] = useState("");
@@ -2409,14 +2420,14 @@ export default function SessionGMManagementPanels({
         await progressClockAPI.updateProgressClock(clock.id, {
           filled_segments: next,
         });
-        await onRefresh();
+        await refreshSessionClocks();
       } catch (e) {
         setError(e.message || "Could not update clock.");
       } finally {
         setNpcUiBusyKey((k) => (k === key ? null : k));
       }
     },
-    [user, campaign, onRefresh, setError],
+    [user, campaign, refreshSessionClocks, setError],
   );
 
   const factionGroupWrap = {
@@ -2835,7 +2846,7 @@ export default function SessionGMManagementPanels({
                         clock_type: "CUSTOM",
                         visible_to_players: false,
                       });
-                      await onRefresh();
+                      await refreshSessionClocks();
                     } catch (e) {
                       setError(
                         e?.message || "Could not create progress clock.",
@@ -2889,7 +2900,7 @@ export default function SessionGMManagementPanels({
                 >
                   <span style={{ flex: "1 1 120px" }}>
                     {c.name} ({c.filled_segments}/{c.max_segments})
-                    {c.visible_to_players ? (
+                    {progressClockShowsPlayersBadge(c, campaign?.gm) ? (
                       <span style={{ color: "#6ee7b7", fontSize: 9 }}>
                         {" "}
                         · players
@@ -4740,7 +4751,7 @@ export default function SessionGMManagementPanels({
                                   clock_type: "CUSTOM",
                                   visible_to_players: false,
                                 });
-                                await onRefresh();
+                                await refreshSessionClocks();
                               } catch (e) {
                                 setError(
                                   e?.message ||
@@ -4795,7 +4806,7 @@ export default function SessionGMManagementPanels({
                         >
                           <span style={{ flex: "1 1 120px" }}>
                             {c.name} ({c.filled_segments}/{c.max_segments})
-                            {c.visible_to_players ? (
+                            {progressClockShowsPlayersBadge(c, campaign?.gm) ? (
                               <span style={{ color: "#6ee7b7", fontSize: 9 }}>
                                 {" "}
                                 · players
@@ -4823,7 +4834,7 @@ export default function SessionGMManagementPanels({
                                     c.id,
                                     { filled_segments: next },
                                   );
-                                  await onRefresh();
+                                  await refreshSessionClocks();
                                 } catch (e) {
                                   setError(
                                     e?.message || "Could not update clock.",
@@ -4856,7 +4867,7 @@ export default function SessionGMManagementPanels({
                                     c.id,
                                     { filled_segments: next },
                                   );
-                                  await onRefresh();
+                                  await refreshSessionClocks();
                                 } catch (e) {
                                   setError(
                                     e?.message || "Could not update clock.",
@@ -4889,7 +4900,7 @@ export default function SessionGMManagementPanels({
                                   await progressClockAPI.deleteProgressClock(
                                     c.id,
                                   );
-                                  await onRefresh();
+                                  await refreshSessionClocks();
                                 } catch (e) {
                                   setError(
                                     e?.message || "Could not delete clock.",
