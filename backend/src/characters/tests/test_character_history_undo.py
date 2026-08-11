@@ -183,6 +183,12 @@ class GmUndoLatestChangeTests(TestCase):
             physical_armor_bonus_charges=2,
         )
 
+        self.session = Session.objects.create(
+            campaign=self.campaign,
+            name="S1",
+            status="ACTIVE",
+        )
+
     def test_gm_sheet_edit_uses_sheet_undo_not_gm_xp(self):
         """GM sheet field edits go through sheet-undo; GM XP row stays empty."""
         entry = CharacterHistory.objects.create(
@@ -337,6 +343,30 @@ class GmUndoLatestChangeTests(TestCase):
         ).first()
         self.assertIsNotNone(pool_tracker)
         self.assertEqual(pool_tracker.xp_gained, 2)
+
+    def test_add_xp_with_session_id_does_not_500_for_playbook(self):
+        self.character.xp_clocks = {
+            "playbook": 0,
+            "insight": 0,
+            "prowess": 0,
+            "resolve": 0,
+            "heritage": 0,
+        }
+        self.character.save(update_fields=["xp_clocks"])
+        self.client.force_authenticate(user=self.player)
+        res = self.client.post(
+            f"/api/characters/{self.character.id}/add-xp/",
+            {
+                "track": "playbook",
+                "amount": 1,
+                "reason": "Owner session test",
+                "session_id": self.session.id,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.xp_clocks.get("playbook"), 1)
 
     def test_gm_redo_after_undo_manual_xp(self):
         self.character.xp_clocks = {

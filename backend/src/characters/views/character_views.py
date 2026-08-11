@@ -2234,7 +2234,17 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 }
             )
 
-        xp_clocks = dict(character.xp_clocks or {})
+        # `xp_clocks` is a JSONField, but legacy rows may have it as a string or
+        # another unexpected type. Coerce to dict to avoid 500s from serializer.
+        raw_xp_clocks = getattr(character, "xp_clocks", None)
+        if isinstance(raw_xp_clocks, str):
+            try:
+                raw_xp_clocks = json.loads(raw_xp_clocks)
+            except Exception:
+                raw_xp_clocks = {}
+        if not isinstance(raw_xp_clocks, dict):
+            raw_xp_clocks = {}
+        xp_clocks = dict(raw_xp_clocks or {})
         current = int(xp_clocks.get(track, 0) or 0)
         new_xp = current + amount
         if track == "playbook" and new_xp > 10:
