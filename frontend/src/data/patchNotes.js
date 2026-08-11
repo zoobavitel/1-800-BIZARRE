@@ -4,6 +4,106 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-08-11",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "stop poll/autosave wiping XP ticks",
+          "ticks spend free pool; drop +1 buttons",
+          "tick marks allocate pool xp",
+          "coerce xp_clocks in add-xp",
+          "ticks allocate from free pool",
+          "expect heritage undo clamp at track cap",
+          "keep Available XP usable without active session",
+          "show free-pool Available XP, not track sum",
+          "add migration for LEVEL_UP_HERITAGE / BUY_HP choices",
+          "lock Character only when settling session XP"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "untick XP tracks refunds free pool",
+          "add manual XP to free pool",
+          "add sheet edit undo/redo + XP/GM separation",
+          "Take advance on full XP tracks",
+          "open NPC edit on card click",
+          "allow editing clock segments after create",
+          "hybrid free-pool scorecard and spend options"
+        ]
+      },
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #106 from zoobavitel/feature/xp-available-pool-label",
+          "Merge pull request #105 from zoobavitel/feature/xp-available-pool-label",
+          "Merge pull request #101 from zoobavitel/fix/session-xp-settle-for-update-stand",
+          "Merge pull request #104 from zoobavitel/feature/npc-card-click-edit",
+          "Merge origin/master into fix/session-xp-settle-for-update-stand",
+          "Merge pull request #102 from zoobavitel/feature/xp-hybrid-rules-align",
+          "Merge pull request #103 from zoobavitel/feature/npc-clock-edit-segments",
+          "Merge pull request #100 from zoobavitel/feature/stand-playbook-identity"
+        ]
+      },
+      {
+        "title": "Tests",
+        "items": [
+          "expect STRUGGLE settle to free pool"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-08-08",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #99 from zoobavitel/fix/stand-archetype-revert"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-08-07",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "stand identity under PLAYBOOK"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "persist stand playbook XP archetypes"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-07-22",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #98 from zoobavitel/fix/xp-trigger-live-refresh"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "live XP/stand refresh; player B→A"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-07-16",
     "version": null,
     "sections": [
@@ -68,6 +168,13 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Added",
+        "items": [
+          "XP undo/redo and GM history revert",
+          "lock stand coin after chargen"
+        ]
+      },
+      {
         "title": "Other",
         "items": [
           "Merge pull request #93 from zoobavitel/feature/stand-coin-chargen-lock"
@@ -77,12 +184,6 @@ export const PATCH_NOTES = [
         "title": "Fixed",
         "items": [
           "checkmark for spent stand armor charges"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "lock stand coin after chargen"
         ]
       }
     ]
@@ -686,92 +787,6 @@ export const PATCH_NOTES = [
         "title": "Refactored",
         "items": [
           "replace line chart with scatter chart for session data visualization"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "update session date handling and UI"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-18",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #63 from zoobavitel/feature/campaign-delete-session-qol-npc-clock-scope",
-          "Merge pull request #62 from zoobavitel/feature/campaign-delete-session-qol-npc-clock-scope",
-          "Merge pull request #61 from zoobavitel/feature/sheet-updates",
-          "Enhance campaign views and NPC sheet functionality",
-          "Refactor character view creation process",
-          "Update NPC involvement clock flags handling",
-          "Add normalization function for NPC involvement clock flags"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "GM remove players and withdraw invites",
-          "delete, session scheduling, NPC clock scope"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-17",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Enhance NPC and Character models with inventory notes and campaign audit logging",
-          "Merge pull request #60 from zoobavitel/release/1.0.1",
-          "Fix review-thread issues for session NPC visibility toggles",
-          "Release 1.0.1: NPC vulnerability visibility on PC sheets and account settings",
-          "Enhance HomePage UI with user display name and avatar features",
-          "Merge pull request #59 from zoobavitel/feature/npc-stand-coin-avatar-migration",
-          "Address PR review accessibility feedback for NPC coin and user menu",
-          "Fix auth service test import order for lint.",
-          "Add avatar_url migration and NPC stand coin UI.",
-          "uh"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-16",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Refactor HP budgeting logic in CharacterSerializer and related components to exclude required benefits and detriments. Update UI to reflect optional status for HP costs and values in AbilityBrowser, CharacterOptionsPage, and CharacterSheet.",
-          "Update SRD documentation to clarify that every heritage starts with a base Heritage Point Value instead of a base HP value.",
-          "Refactor FactionMode component to clarify GM campaign factions UI, rename to GmFactionsTool, and remove unused active mode state. Update UI text for better clarity on player character and faction distinctions.",
-          "Refactor mode selection in CharacterSheet component to use buttons instead of a dropdown for improved accessibility and UI consistency. Update SRD documentation for clarity on mandatory detriments and their impact on HP.",
-          "Update CharacterSheet component styles and header layout for improved UI",
-          "Remove delete character button from CharacterPage component in MODES.NPC"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-15",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Track characters merge migrations (0040–0044) for deploy parity",
-          "Merge pull request #57 from zoobavitel/cursor/ownership-visibility-perms-3143",
-          "Fix permission test setup to exercise 403 path",
-          "Enforce character ownership permissions and creator visibility",
-          "Merge pull request #54 from zoobavitel/cursor/fix-postcss-startup-271c",
-          "Add caveman always-on snippet to Cursor rules"
         ]
       }
     ]
