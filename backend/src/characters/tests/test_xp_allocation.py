@@ -335,7 +335,9 @@ class XPAllocationAPITests(TestCase):
         )
         self.assertEqual(res.status_code, 200)
         self.character.refresh_from_db()
-        self.assertEqual(self.character.xp_clocks["heritage"], 10)
+        # Heritage track cap is 5; undo refunds with clamp (setUp starts at 10).
+        self.assertEqual(self.character.xp_clocks["heritage"], 5)
+        self.assertEqual(self.character.action_dots["hunt"], 2)
 
     def test_redo_latest_allocation_api(self):
         self.client.post(
