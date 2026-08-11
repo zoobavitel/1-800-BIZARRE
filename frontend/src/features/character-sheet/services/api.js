@@ -284,12 +284,13 @@ export const characterAPI = {
     return apiRequest(`/characters/${id}/`, { method: "PUT", body });
   },
 
-  // Partial update character
-  patchCharacter: (id, characterData) =>
-    apiRequest(`/characters/${id}/`, {
-      method: "PATCH",
-      body: JSON.stringify(characterData),
-    }),
+  // Partial update character (JSON or multipart when imageFile present)
+  patchCharacter: (id, data) => {
+    const { multipart, body } = buildMultipartOrJson(data);
+    if (multipart)
+      return apiRequestMultipart(`/characters/${id}/`, body, "PATCH");
+    return apiRequest(`/characters/${id}/`, { method: "PATCH", body });
+  },
 
   // Delete character
   deleteCharacter: (id) =>
@@ -1594,17 +1595,9 @@ export const transformFrontendToBackend = (frontendCharacter) => {
       };
     })(),
 
-    // XP clocks + free pool (must round-trip or autosave can wipe allocate/deallocate)
-    xp_clocks: frontendCharacter.xp,
-    ...(typeof frontendCharacter.unallocatedXp === "number" &&
-    Number.isFinite(frontendCharacter.unallocatedXp)
-      ? {
-          unallocated_xp: Math.max(
-            0,
-            Math.floor(frontendCharacter.unallocatedXp),
-          ),
-        }
-      : {}),
+    // XP clocks + free pool: owned by allocate/deallocate/add-xp APIs only.
+    // Never round-trip via sheet autosave PUT — stale local clocks were wiping
+    // server tracks (and dropping XP that never returned to the free pool).
 
     // Progress clocks
     progress_clocks: frontendCharacter.clocks,

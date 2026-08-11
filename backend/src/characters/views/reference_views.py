@@ -20,7 +20,6 @@ from ..serializers import (
 from ..services.session_xp_settlement import grant_encoded_trigger_xp
 from ..services.playbook_xp_archetype import resolve_playbook_xp_archetype_labels
 
-
 MANUAL_TOGGLE_TRIGGERS = {"BELIEFS", "STRUGGLE", "PLAYBOOK_SPECIFIC"}
 # Trigger toggles are SRD end-of-session trigger records confirmed by a human
 # (player or GM) rather than auto-detected from a roll. They are not the same
@@ -32,55 +31,46 @@ SESSION_TRIGGER_DESCRIPTION_PREFIX = "Session XP trigger"
 # the rename data migration applied. New rows are written with the new prefix.
 LEGACY_MANUAL_TOGGLE_DESCRIPTION_PREFIX = "Manual session XP toggle"
 
-
 class HeritageViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Heritage.objects.all()
     serializer_class = HeritageSerializer
-
 
 class ViceViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Vice.objects.all()
     serializer_class = ViceSerializer
 
-
 class AbilityViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Ability.objects.all()
     serializer_class = AbilitySerializer
-
 
 class StandViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Stand.objects.all()
     serializer_class = StandSerializer
 
-
 class StandAbilityViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = StandAbility.objects.all()
     serializer_class = StandAbilitySerializer
-
 
 class HamonAbilityViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = HamonAbility.objects.all()
     serializer_class = HamonAbilitySerializer
 
-
 class SpinAbilityViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = SpinAbility.objects.all()
     serializer_class = SpinAbilitySerializer
-
 
 class TraumaViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only endpoint for trauma conditions."""
     permission_classes = [IsAuthenticated]
     queryset = Trauma.objects.all()
     serializer_class = TraumaSerializer
-
 
 class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -179,7 +169,6 @@ class CharacterHistoryViewSet(viewsets.ReadOnlyModelViewSet):
             }
         )
 
-
 class CrewHistoryViewSet(viewsets.ReadOnlyModelViewSet):
     """Audit of crew sheet scalar changes; filter with ?crew=<id>."""
 
@@ -209,7 +198,6 @@ class CrewHistoryViewSet(viewsets.ReadOnlyModelViewSet):
             base = base.filter(crew_id=crew_id)
         return base.order_by("-timestamp")
 
-
 class ExperienceTrackerViewSet(
     mixins.DestroyModelMixin,
     viewsets.ReadOnlyModelViewSet,
@@ -231,71 +219,6 @@ class ExperienceTrackerViewSet(
         return context
 
     def get_queryset(self):
-        # #region agent log
-        import json
-        import time as _dbg_time_ref
-
-        def _dbg_experience_tracker_log():
-            try:
-                from django.db import connection
-                from django.db.migrations.recorder import MigrationRecorder
-
-                mig_0065 = MigrationRecorder.Migration.objects.filter(
-                    app="characters",
-                    name="0065_session_ripple_breathing_free_push",
-                ).exists()
-                col_present = None
-                if connection.vendor == "sqlite":
-                    with connection.cursor() as cur:
-                        cur.execute("PRAGMA table_info(characters_session)")
-                        names = {row[1] for row in cur.fetchall()}
-                    col_present = (
-                        "ripple_breathing_free_push_claimed_by_character" in names
-                    )
-                db_name = connection.settings_dict.get("NAME")
-                payload = {
-                    "sessionId": "068d9a",
-                    "runId": "pre-fix",
-                    "hypothesisId": "H1",
-                    "location": "reference_views.ExperienceTrackerViewSet.get_queryset",
-                    "message": "migrate 0065 vs sqlite column characters_session",
-                    "data": {
-                        "mig_0065_applied": mig_0065,
-                        "ripple_col_in_db": col_present,
-                        "db_vendor": connection.vendor,
-                        "db_name_repr": repr(db_name),
-                    },
-                    "timestamp": int(_dbg_time_ref.time() * 1000),
-                }
-                path = "$HOME/git/jojo-ttrpg-platform/.cursor/debug-068d9a.log"
-                with open(path, "a", encoding="utf-8") as df:
-                    df.write(json.dumps(payload) + "\n")
-            except Exception as ex:
-                try:
-                    with open(
-                        "$HOME/git/jojo-ttrpg-platform/.cursor/debug-068d9a.log",
-                        "a",
-                        encoding="utf-8",
-                    ) as df:
-                        df.write(
-                            json.dumps(
-                                {
-                                    "sessionId": "068d9a",
-                                    "runId": "pre-fix",
-                                    "hypothesisId": "H1",
-                                    "location": "reference_views.ExperienceTrackerViewSet.get_queryset",
-                                    "message": "debug log exception",
-                                    "data": {"error": repr(ex)},
-                                    "timestamp": int(_dbg_time_ref.time() * 1000),
-                                }
-                            )
-                            + "\n"
-                        )
-                except Exception:
-                    pass
-
-        _dbg_experience_tracker_log()
-        # #endregion
         qs = ExperienceTracker.objects.filter(
             revoked_at__isnull=True
         ).select_related('character', 'session', 'character__campaign')
@@ -488,7 +411,6 @@ class ExperienceTrackerViewSet(
                     _rollback_xp_destination(locked_char, "pool", amount)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
-
 def _rollback_xp_destination(character, clock_key: str, amount: int) -> None:
     """Decrement free pool or ``xp_clocks[clock_key]`` by ``amount`` (clamped)."""
     key = (clock_key or "").strip()
@@ -502,7 +424,6 @@ def _rollback_xp_destination(character, clock_key: str, amount: int) -> None:
     clocks[key] = max(0, cur - int(amount))
     character.xp_clocks = clocks
     character.save(update_fields=["xp_clocks"])
-
 
 def _rollback_clock(character, clock_key: str, amount: int) -> None:
     """Deprecated alias — prefer ``_rollback_xp_destination``."""

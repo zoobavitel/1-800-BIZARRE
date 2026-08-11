@@ -68,6 +68,10 @@ import {
 import { computeAbilityHeritageRollBonuses } from "../features/character-sheet/utils/rollAbilityHeritageModifiers";
 import { defaultPositionEffectFromSessionDetail } from "../features/character-sheet/utils/sessionPositionEffectDefaults";
 import {
+  markPcAutosaveBusyCollision,
+  schedulePcPendingResaveDrain,
+} from "../features/character-sheet/utils/pcAutosaveQueue";
+import {
   tierDieFromActionPool,
   outcomeFromActionRoll,
   outcomeFromFortuneDiceResults,
@@ -1200,12 +1204,75 @@ const CharacterSheetWrapper = ({
   isGM = false,
   onCampaignRefresh,
   onDraftMetaChange,
+  /** Merge XP clocks / free pool from allocate|deallocate|undo into the open tab so poll hydrate cannot stale-overwrite. */
+  onCharacterXpSync,
+  /** Merge stress/trauma (and related) into the open tab after local trauma-clear so poll cannot restore max stress. */
+  onCharacterStressTraumaSync,
   /** Incremented when CharacterPage finishes a remote sync (poll, SSE, visibility) so session rolls refetch. */
   sessionDataPollTick = 0,
   /** When true, skip merging server character snapshots into XP / stand / action state (avoids poll overwriting local spends before autosave). */
   sheetDraftIsDirty = false,
 }) => {
   const { user } = useAuth();
+  /** Last XP clocks/pool applied from a dedicated XP API; blocks stale parent hydrate until tab catches up. */
+  const xpClocksTruthRef = useRef(null);
+  /** Local stress+trauma after marking trauma at max stress; blocks stale poll/hydrate restore. */
+  const stressTraumaTruthRef = useRef(null);
+  /** Bumped when draft deps change; stale in-flight autosaves must not win lastSaved. */
+  const draftGenRef = useRef(0);
+  const pendingResaveRef = useRef(false);
+  /**
+   * Same-tick protect before meta effect computes isDirty.
+   * Set sync in edit handlers; cleared unconditionally after meta pass (or 500ms fallback).
+   */
+  const dirtyIntentRef = useRef(false);
+  const dirtyIntentFallbackTimerRef = useRef(null);
+  const lastDraftMetaRef = useRef({
+    payload: null,
+    isNewCharacter: true,
+    isDirty: false,
+    isSaving: false,
+    dirtyIntent: false,
+  });
+  /** User touched server-owned field controls this draft; gates hydrate omit + PATCH include. */
+  const fieldTouchRef = useRef({
+    stress: false,
+    trauma: false,
+    xp: false,
+    healingClock: false,
+  });
+  const markDirtyIntent = useCallback(() => {
+    dirtyIntentRef.current = true;
+    const nextMeta = {
+      ...lastDraftMetaRef.current,
+      dirtyIntent: true,
+    };
+    lastDraftMetaRef.current = nextMeta;
+    onDraftMetaChange?.(nextMeta);
+    if (dirtyIntentFallbackTimerRef.current) {
+      clearTimeout(dirtyIntentFallbackTimerRef.current);
+    }
+    dirtyIntentFallbackTimerRef.current = setTimeout(() => {
+      if (!dirtyIntentRef.current) return;
+      dirtyIntentRef.current = false;
+      const cleared = {
+        ...lastDraftMetaRef.current,
+        dirtyIntent: false,
+      };
+      lastDraftMetaRef.current = cleared;
+      onDraftMetaChange?.(cleared);
+    }, 500);
+  }, [onDraftMetaChange]);
+  const markFieldTouch = useCallback(
+    (field) => {
+      if (!field || !Object.prototype.hasOwnProperty.call(fieldTouchRef.current, field)) {
+        return;
+      }
+      fieldTouchRef.current = { ...fieldTouchRef.current, [field]: true };
+      markDirtyIntent();
+    },
+    [markDirtyIntent],
+  );
   const ownerUsername =
     character?.creator_username || character?.user_username || character?.username || "";
   const ownerLabel = ownerUsername
@@ -1595,8 +1662,9 @@ const CharacterSheetWrapper = ({
     );
   }, [character?.id, character?.disguised_as_human]);
 
-  // When parent merges id before full GET/list row arrives, fill empty identity from server (avoid PUT wiping true_name, etc.)
+  // When parent merges id before full GET/list row arrives, fill empty identity from server (avoid PATCH wiping true_name, etc.)
   useEffect(() => {
+    if (sheetDraftIsDirty) return;
     setCharData((prev) => {
       const patch = {};
       const n = character?.id ? (character?.name ?? "") : "";
@@ -1615,6 +1683,7 @@ const CharacterSheetWrapper = ({
     character?.standName,
     character?.background,
     character?.look,
+    sheetDraftIsDirty,
   ]);
 
   // Portrait: sync from server/merged character; do not clobber while a file upload is pending
@@ -1843,27 +1912,66 @@ const CharacterSheetWrapper = ({
   const [poolTickError, setPoolTickError] = useState(null);
 
   // Hydrate sheet from server when character payload arrives after first paint (same class of bug as actionRatings).
-  // Each of these gates on `sheetDraftIsDirty` because a teammate-triggered
-  // poll/SSE refresh can land *between* the player's toggle and the debounced
-  // autosave commit; without the gate, the server snapshot (which still has
-  // the pre-toggle value) clobbers local state and the toggle visually
-  // reverts. The autosave's own onSave -> server fetch lifecycle clears the
-  // dirty flag, so the next poll after that can safely re-sync.
+  // Stress/trauma/XP are server-owned: merge unless the user touched that field's control this draft
+  // (broad sheetDraftIsDirty must NOT block stress while e.g. inventory is dirty).
   useEffect(() => {
-    if (sheetDraftIsDirty) return;
+    const truth = stressTraumaTruthRef.current;
+    if (truth) {
+      const parentStress = Number(character?.stressFilled);
+      if (
+        Number.isFinite(parentStress) &&
+        parentStress === truth.stressFilled
+      ) {
+        // Parent caught up on stress; trauma lock may still be active via trauma effect.
+      } else if (
+        typeof truth.stressFilled === "number" &&
+        Number.isFinite(parentStress) &&
+        parentStress !== truth.stressFilled
+      ) {
+        return;
+      }
+    }
+    if (fieldTouchRef.current.stress) return;
     const v = character?.stressFilled;
     if (typeof v === "number") setStressFilled((p) => (p !== v ? v : p));
   }, [character?.id, character?.stressFilled, sheetDraftIsDirty]);
 
   useEffect(() => {
-    if (sheetDraftIsDirty) return;
+    const truth = stressTraumaTruthRef.current;
+    if (truth?.trauma) {
+      const parentT = character?.trauma;
+      const keys = Object.keys(truth.trauma);
+      const matches =
+        parentT &&
+        typeof parentT === "object" &&
+        !Array.isArray(parentT) &&
+        keys.every((k) => !!parentT[k] === !!truth.trauma[k]);
+      if (matches) {
+        // Keep stress half of the lock if stress still diverges.
+        if (
+          typeof truth.stressFilled === "number" &&
+          Number(character?.stressFilled) !== truth.stressFilled
+        ) {
+          stressTraumaTruthRef.current = {
+            stressFilled: truth.stressFilled,
+            trauma: null,
+          };
+        } else {
+          stressTraumaTruthRef.current = null;
+        }
+      } else {
+        return;
+      }
+    }
+    if (fieldTouchRef.current.trauma) return;
     const t = character?.trauma;
     if (!t || typeof t !== "object" || Array.isArray(t)) return;
+    // Trauma: server object wins wholesale (no element-level merge).
     setTrauma((prev) => {
-      const merged = { ...DEFAULT_TRAUMA, ...t };
-      return Object.keys(merged).every((k) => merged[k] === prev[k])
+      const next = { ...DEFAULT_TRAUMA, ...t };
+      return Object.keys(DEFAULT_TRAUMA).every((k) => !!next[k] === !!prev[k])
         ? prev
-        : merged;
+        : next;
     });
   }, [character?.id, character?.trauma, sheetDraftIsDirty]);
 
@@ -1887,15 +1995,24 @@ const CharacterSheetWrapper = ({
   ]);
 
   useEffect(() => {
+    if (sheetDraftIsDirty || fieldTouchRef.current.healingClock) return;
     const h = character?.healingClock;
     if (typeof h !== "number") return;
     setHealingClock((p) => (p !== h ? h : p));
-  }, [character?.id, character?.healingClock]);
+  }, [character?.id, character?.healingClock, sheetDraftIsDirty]);
 
   useEffect(() => {
-    // Same dirty gate as xp/stress: poll can deliver a stale snapshot while a
+    // Same dirty/truth gate as xp clocks: poll can deliver a stale snapshot while a
     // just-completed allocate/deallocate is still the source of truth locally.
-    if (sheetDraftIsDirty) return;
+    const truth = xpClocksTruthRef.current;
+    if (truth) {
+      const parentPool = Math.max(
+        0,
+        Math.floor(Number(character?.unallocatedXp) || 0),
+      );
+      if (parentPool !== truth.unallocatedXp) return;
+    }
+    if (fieldTouchRef.current.xp) return;
     const v = character?.unallocatedXp;
     if (typeof v !== "number") return;
     const n = Math.max(0, Math.floor(v));
@@ -1925,7 +2042,28 @@ const CharacterSheetWrapper = ({
   ]);
 
   useEffect(() => {
-    if (sheetDraftIsDirty) return;
+    const truth = xpClocksTruthRef.current;
+    if (truth) {
+      const parentPool = Math.max(
+        0,
+        Math.floor(Number(character?.unallocatedXp) || 0),
+      );
+      const parentXp = character?.xp;
+      const xpMatches =
+        parentXp &&
+        typeof parentXp === "object" &&
+        ["insight", "prowess", "resolve", "heritage", "playbook"].every(
+          (k) => (Number(parentXp[k]) || 0) === (Number(truth.xp?.[k]) || 0),
+        );
+      if (xpMatches && parentPool === truth.unallocatedXp) {
+        xpClocksTruthRef.current = null;
+      } else {
+        return;
+      }
+    }
+    if (fieldTouchRef.current.xp) {
+      return;
+    }
     const nx = character?.xp;
     if (!nx || typeof nx !== "object") return;
     setXp((prev) => {
@@ -1933,7 +2071,7 @@ const CharacterSheetWrapper = ({
       const changed = keys.some((k) => (prev[k] ?? 0) !== (nx[k] ?? 0));
       return changed ? { ...prev, ...nx } : prev;
     });
-  }, [character?.id, character?.xp, sheetDraftIsDirty]);
+  }, [character?.id, character?.xp, character?.unallocatedXp, sheetDraftIsDirty]);
 
   // Hydrate coin/stash only when switching characters (id change). Parent refresh (campaign list refetch,
   // getCharacters) reuses the same id with a new object; syncing on character.coin/stash then wiped
@@ -2026,6 +2164,13 @@ const CharacterSheetWrapper = ({
   const [xpAllocationRows, setXpAllocationRows] = useState([]);
   const [xpAllocationUndoBusy, setXpAllocationUndoBusy] = useState(false);
   const [xpAllocationActionError, setXpAllocationActionError] = useState(null);
+  /** Top-of-page notice after XP spend undo/redo (what specifically changed). */
+  const [xpActionToast, setXpActionToast] = useState(null);
+  useEffect(() => {
+    if (!xpActionToast) return undefined;
+    const t = window.setTimeout(() => setXpActionToast(null), 5000);
+    return () => window.clearTimeout(t);
+  }, [xpActionToast]);
   const [gmUndoStatus, setGmUndoStatus] = useState({
     available: false,
     summary: null,
@@ -2951,22 +3096,45 @@ const CharacterSheetWrapper = ({
     (cost) => {
       const spend = Number(cost) || 0;
       if (spend <= 0) return;
+      // Server/roll-applied stress: truth-lock only — do NOT mark field touch
+      // (autosave must omit stress so concurrent PATCH cannot clobber).
       setStressFilled((prev) => {
         const current = Number(prev) || 0;
         const afterSpend = current + spend;
-        if (afterSpend <= maxStress) return afterSpend;
-        const overflow = afterSpend - maxStress;
-        setTrauma((prevTrauma) => {
-          const firstOpen = Object.entries(prevTrauma || {}).find(
-            ([, checked]) => !checked,
-          )?.[0];
-          if (!firstOpen) return prevTrauma;
-          return { ...prevTrauma, [firstOpen]: true };
+        let next;
+        let nextTrauma = null;
+        if (afterSpend <= maxStress) {
+          next = afterSpend;
+        } else {
+          const overflow = afterSpend - maxStress;
+          setTrauma((prevTrauma) => {
+            const firstOpen = Object.entries(prevTrauma || {}).find(
+              ([, checked]) => !checked,
+            )?.[0];
+            if (!firstOpen) {
+              nextTrauma = prevTrauma;
+              return prevTrauma;
+            }
+            nextTrauma = { ...prevTrauma, [firstOpen]: true };
+            return nextTrauma;
+          });
+          next = Math.max(0, overflow);
+        }
+        const truth = {
+          stressFilled: next,
+          trauma: nextTrauma
+            ? { ...DEFAULT_TRAUMA, ...nextTrauma }
+            : stressTraumaTruthRef.current?.trauma || null,
+        };
+        stressTraumaTruthRef.current = truth;
+        onCharacterStressTraumaSync?.({
+          stressFilled: next,
+          ...(truth.trauma ? { trauma: truth.trauma } : {}),
         });
-        return Math.max(0, overflow);
+        return next;
       });
     },
-    [maxStress],
+    [maxStress, onCharacterStressTraumaSync],
   );
   const standArmorMax = standPathArmorMaxFromDurabilityIndex(durVal);
   const sessionDevXP = DEV_SESSION_XP[devVal] ?? 0;
@@ -3076,25 +3244,43 @@ const CharacterSheetWrapper = ({
     [trauma],
   );
 
-  /** At max stress, cannot manually clear marked boxes until player records a trauma (table rule). */
-  const traumaRequiredBeforeStressClear = useMemo(
-    () =>
-      (Number(stressFilled) || 0) >= maxStress && traumaMarkedCount < 1,
-    [stressFilled, maxStress, traumaMarkedCount],
+  /** At max stress, block manual clear until player marks a trauma (first or another). */
+  const stressMaxNeedsTraumaClear = useMemo(
+    () => (Number(stressFilled) || 0) >= maxStress,
+    [stressFilled, maxStress],
   );
 
   const toggleTraumaMark = useCallback(
     (traumaKey) => {
+      markFieldTouch("trauma");
+      // Trauma clear at max also writes stress — include stress in this draft PATCH.
       const gaining = !(trauma[traumaKey] ?? false);
-      if (
-        gaining &&
-        (Number(stressFilled) || 0) >= maxStress
-      ) {
+      const atMax = (Number(stressFilled) || 0) >= maxStress;
+      if (gaining && atMax) {
+        markFieldTouch("stress");
+      }
+      const nextStress = gaining && atMax ? 0 : stressFilled;
+      const nextTrauma = { ...trauma, [traumaKey]: gaining };
+      if (gaining && atMax) {
         setStressFilled(0);
       }
       setTrauma((p) => ({ ...p, [traumaKey]: gaining }));
+      stressTraumaTruthRef.current = {
+        stressFilled: Number(nextStress) || 0,
+        trauma: { ...DEFAULT_TRAUMA, ...nextTrauma },
+      };
+      onCharacterStressTraumaSync?.({
+        stressFilled: Number(nextStress) || 0,
+        trauma: { ...DEFAULT_TRAUMA, ...nextTrauma },
+      });
     },
-    [trauma, stressFilled, maxStress],
+    [
+      trauma,
+      stressFilled,
+      maxStress,
+      onCharacterStressTraumaSync,
+      markFieldTouch,
+    ],
   );
 
   // ─── Handlers ────────────────────────────────────────────────────────────────
@@ -3105,6 +3291,21 @@ const CharacterSheetWrapper = ({
     if (fe.xp) setXp(fe.xp);
     if (typeof fe.unallocatedXp === "number") {
       setUnallocatedXp(Math.max(0, Math.floor(fe.unallocatedXp)));
+    }
+    if (fe.xp || typeof fe.unallocatedXp === "number") {
+      const truth = {
+        xp: fe.xp ? { ...fe.xp } : null,
+        unallocatedXp:
+          typeof fe.unallocatedXp === "number"
+            ? Math.max(0, Math.floor(fe.unallocatedXp))
+            : null,
+      };
+      if (truth.xp && typeof truth.unallocatedXp === "number") {
+        xpClocksTruthRef.current = truth;
+        onCharacterXpSync?.(truth);
+      }
+      // Allocate/deallocate included XP — clear xp field touch.
+      fieldTouchRef.current = { ...fieldTouchRef.current, xp: false };
     }
     if (fe.standStats) setStandStats(fe.standStats);
     if (fe.actionRatings) setActionRatings(fe.actionRatings);
@@ -3131,7 +3332,7 @@ const CharacterSheetWrapper = ({
           ? Math.max(0, Math.floor(fe.unallocatedXp))
           : prev.unallocatedXp,
     }));
-  }, []);
+  }, [onCharacterXpSync]);
 
   const claimPendingStandAReward = useCallback(async () => {
     if (!characterId || !pendingStandAReward?.allocation_id) return;
@@ -3292,8 +3493,15 @@ const CharacterSheetWrapper = ({
         } else {
           await refreshXpAllocations();
         }
+        const detail =
+          (typeof res?.summary === "string" && res.summary.trim()) ||
+          "XP spend";
+        const toastMsg = `Undone: ${detail}`;
+        setXpActionToast({ kind: "ok", message: toastMsg });
       } catch (err) {
-        setXpAllocationActionError(err?.message || "Failed to undo allocation");
+        const msg = err?.message || "Failed to undo allocation";
+        setXpAllocationActionError(msg);
+        setXpActionToast({ kind: "err", message: msg });
       } finally {
         setXpAllocationUndoBusy(false);
       }
@@ -3322,8 +3530,14 @@ const CharacterSheetWrapper = ({
         } else {
           await refreshXpAllocations();
         }
+        const detail =
+          (typeof res?.summary === "string" && res.summary.trim()) ||
+          "XP spend";
+        setXpActionToast({ kind: "ok", message: `Undone: ${detail}` });
       } catch (err) {
-        setXpAllocationActionError(err?.message || "Failed to undo allocation");
+        const msg = err?.message || "Failed to undo allocation";
+        setXpAllocationActionError(msg);
+        setXpActionToast({ kind: "err", message: msg });
       } finally {
         setXpAllocationUndoBusy(false);
       }
@@ -3408,6 +3622,7 @@ const CharacterSheetWrapper = ({
   );
 
   const toggleXP = async (track, idx) => {
+    markFieldTouch("xp");
     const maxVals = {
       insight: 5,
       prowess: 5,
@@ -3419,10 +3634,18 @@ const CharacterSheetWrapper = ({
     const cur = Number(xp?.[track]) || 0;
     // Click filled box → clear from that index up; click empty → fill through it.
     const desired = Math.min(idx < cur ? idx : idx + 1, maxVals[track]);
-    if (!characterId) return;
-    if (!canEditSheet) return;
-    if (desired === cur) return;
-    if (poolAllocateBusy) return;
+    if (!characterId) {
+      return;
+    }
+    if (!canEditSheet) {
+      return;
+    }
+    if (desired === cur) {
+      return;
+    }
+    if (poolAllocateBusy) {
+      return;
+    }
 
     const delta = desired - cur;
     if (delta === 0) return;
@@ -3928,6 +4151,7 @@ const CharacterSheetWrapper = ({
 
   const handleHealingClockAdjust = useCallback(
     (nextFilled) => {
+      markFieldTouch("healingClock");
       const cap = 4;
       setHealingClock((prev) => {
         const cur = Math.max(0, Math.min(cap, Number(prev) || 0));
@@ -3947,7 +4171,7 @@ const CharacterSheetWrapper = ({
         return remainder;
       });
     },
-    [downgradeAllHarmByOneLevel],
+    [downgradeAllHarmByOneLevel, markFieldTouch],
   );
 
   const advanceHealingClockBySegments = useCallback(
@@ -4442,8 +4666,14 @@ const CharacterSheetWrapper = ({
         } else {
           await refreshXpAllocations();
         }
+        const detail =
+          (typeof res?.summary === "string" && res.summary.trim()) ||
+          "XP spend";
+        setXpActionToast({ kind: "ok", message: `Redone: ${detail}` });
       } catch (err) {
-        setXpAllocationActionError(err?.message || "Failed to redo allocation");
+        const msg = err?.message || "Failed to redo allocation";
+        setXpAllocationActionError(msg);
+        setXpActionToast({ kind: "err", message: msg });
       } finally {
         setXpAllocationUndoBusy(false);
       }
@@ -7361,7 +7591,10 @@ const CharacterSheetWrapper = ({
             (sum, opt) => sum + Math.max(0, Number(opt.bonusDice) || 0),
             0,
           ),
-          roller_stress_spent: Math.max(0, Number(stressCost) || 0),
+          roller_stress_spent: Math.max(
+            0,
+            Number(resistanceTotalStressCost) || 0,
+          ),
           modifier_sources: resistanceSourceRows,
           stress_sources: [
             ...(stressCost > 0
@@ -7388,9 +7621,27 @@ const CharacterSheetWrapper = ({
           ],
           position_effect_sources: [],
         });
+        // Server applies resistance stress on create — mirror locally with truth
+        // lock, no field touch (autosave must omit stress).
+        const spent = Math.max(0, Number(resistanceTotalStressCost) || 0);
+        if (spent > 0) {
+          setStressFilled((prev) => {
+            const next = Math.min(maxStress, (Number(prev) || 0) + spent);
+            stressTraumaTruthRef.current = {
+              stressFilled: next,
+              trauma: stressTraumaTruthRef.current?.trauma || null,
+            };
+            onCharacterStressTraumaSync?.({ stressFilled: next });
+            return next;
+          });
+        }
         onCampaignRefresh?.();
       } catch (_) {
-        // Keep local resistance flow even if history save fails.
+        // History save failed — still apply stress locally with truth lock (no touch).
+        const spent = Math.max(0, Number(resistanceTotalStressCost) || 0);
+        if (spent > 0) {
+          applyStressCost(spent);
+        }
       }
     }
   };
@@ -7544,6 +7795,7 @@ const CharacterSheetWrapper = ({
       lastModified: new Date().toISOString(),
       selected_benefits: selectedBenefits,
       selected_detriments: selectedDetriments,
+      _fieldTouches: { ...fieldTouchRef.current },
     };
   }, [
     charData,
@@ -7578,10 +7830,13 @@ const CharacterSheetWrapper = ({
     selectedDetriments,
   ]);
 
+  const buildPayloadRef = useRef(buildPayload);
+  buildPayloadRef.current = buildPayload;
+
   useEffect(() => {
     if (!onDraftMetaChange) return;
     const payload = buildPayload();
-    const { lastModified, ...rest } = payload;
+    const { lastModified, _fieldTouches, ...rest } = payload;
     const payloadKey = JSON.stringify(rest);
     if (payload.id && lastSavedPayloadRef.current == null) {
       lastSavedPayloadRef.current = payloadKey;
@@ -7589,68 +7844,118 @@ const CharacterSheetWrapper = ({
     const isDirty = !payload.id
       ? hasMeaningfulDraftChanges(payload)
       : payloadKey !== (lastSavedPayloadRef.current ?? "");
-    onDraftMetaChange({
+    // dirtyIntent only covers edit→meta gap (set sync in handlers). After this
+    // pass evaluates isDirty, clear unconditionally — protect continues via isDirty.
+    dirtyIntentRef.current = false;
+    if (dirtyIntentFallbackTimerRef.current) {
+      clearTimeout(dirtyIntentFallbackTimerRef.current);
+      dirtyIntentFallbackTimerRef.current = null;
+    }
+    const meta = {
       payload,
       isNewCharacter: !payload.id,
       isDirty,
       isSaving: saveStatus === "saving",
-    });
+      dirtyIntent: false,
+    };
+    lastDraftMetaRef.current = meta;
+    onDraftMetaChange(meta);
   }, [onDraftMetaChange, buildPayload, saveStatus]);
 
-  // Debounced auto-save
+  // Debounced auto-save (busy-collision queues via pendingResaveRef; drain rebuilds payload fresh)
   useEffect(() => {
     if (!mountedRef.current) {
       mountedRef.current = true;
       return;
     }
+    draftGenRef.current += 1;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
-      if (savingRef.current || !onSave || !canEditSheet) return;
+      if (!onSave || !canEditSheet) return;
+      if (markPcAutosaveBusyCollision(savingRef.current, pendingResaveRef)) {
+        return;
+      }
       if (heritagesLoading || heritages.length === 0) return;
       if (
         typeof charData.heritage !== "number" ||
         !Number.isFinite(charData.heritage)
       )
         return;
-      const payload = buildPayload();
-      // Never create a new character via autosave when viewing a character that
-      // belongs to another user. A null id with a known owner means the character
-      // data came from someone else's sheet — creating it would assign ownership
-      // to the currently logged-in user (e.g. a GM claiming a player's character).
-      if (
-        !payload.id &&
-        character?.user_id !== null &&
-        character?.user_id !== undefined &&
-        character.user_id !== user?.id
-      )
-        return;
-      if (!payload.id && !hasMeaningfulDraftChanges(payload)) {
-        return;
-      }
-      // Skip save if payload matches last saved (prevents loop from server response overwriting fields)
-      const { lastModified, ...rest } = payload;
-      const payloadKey = JSON.stringify(rest);
-      if (lastSavedPayloadRef.current === payloadKey) {
-        return;
-      }
-      savingRef.current = true;
-      setSaveStatus("saving");
-      try {
-        await onSave(payload);
-        lastSavedPayloadRef.current = payloadKey;
-        if (removeImageRequested) setRemoveImageRequested(false);
-        setSaveStatus("saved");
-        setSaveErrorMessage(null);
-        setTimeout(
-          () => setSaveStatus((s) => (s === "saved" ? null : s)),
-          2000,
-        );
-      } catch (err) {
-        setSaveStatus("error");
-        setSaveErrorMessage(err?.message || "Save failed");
-      } finally {
-        savingRef.current = false;
-      }
+
+      const runSave = async (payloadOverride) => {
+        const myGen = draftGenRef.current;
+        // Always prefer live builder (drain must not reuse busy-time snapshot).
+        const payload =
+          payloadOverride ?? buildPayloadRef.current();
+        // Never create a new character via autosave when viewing a character that
+        // belongs to another user. A null id with a known owner means the character
+        // data came from someone else's sheet — creating it would assign ownership
+        // to the currently logged-in user (e.g. a GM claiming a player's character).
+        if (
+          !payload.id &&
+          character?.user_id !== null &&
+          character?.user_id !== undefined &&
+          character.user_id !== user?.id
+        )
+          return;
+        if (!payload.id && !hasMeaningfulDraftChanges(payload)) {
+          return;
+        }
+        // Skip save if payload matches last saved (prevents loop from server response overwriting fields)
+        const { lastModified, _fieldTouches, ...rest } = payload;
+        const payloadKey = JSON.stringify(rest);
+        if (lastSavedPayloadRef.current === payloadKey) {
+          return;
+        }
+        savingRef.current = true;
+        setSaveStatus("saving");
+        try {
+          await onSave(payload);
+          // Clear touch flags only for fields this save included.
+          const touches = payload._fieldTouches || {};
+          if (touches.stress) fieldTouchRef.current.stress = false;
+          if (touches.trauma) fieldTouchRef.current.trauma = false;
+          if (touches.xp) fieldTouchRef.current.xp = false;
+          if (touches.healingClock) fieldTouchRef.current.healingClock = false;
+          // Re-assert trauma-clear truth after save merges server echo into the tab
+          // (a stale in-flight max-stress PUT must not leave parent at 9).
+          if (stressTraumaTruthRef.current) {
+            onCharacterStressTraumaSync?.(stressTraumaTruthRef.current);
+          }
+          // Ignore stale in-flight saves that finished after newer local edits
+          // (e.g. trauma-clear while a max-stress PUT was still running).
+          if (myGen === draftGenRef.current) {
+            lastSavedPayloadRef.current = payloadKey;
+          } else {
+            pendingResaveRef.current = true;
+          }
+          if (removeImageRequested) setRemoveImageRequested(false);
+          setSaveStatus("saved");
+          setSaveErrorMessage(null);
+          setTimeout(
+            () => setSaveStatus((s) => (s === "saved" ? null : s)),
+            2000,
+          );
+        } catch (err) {
+          setSaveStatus("error");
+          setSaveErrorMessage(err?.message || "Save failed");
+        } finally {
+          savingRef.current = false;
+          schedulePcPendingResaveDrain({
+            pendingResaveRef,
+            savingRef,
+            buildPayload: () => buildPayloadRef.current(),
+            runSaveWithPayload: (freshPayload) => {
+              void runSave(freshPayload);
+            },
+            onPendingTaken: () => {
+              draftGenRef.current += 1;
+            },
+          });
+        }
+      };
+
+      await runSave();
     }, 1500);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -7841,6 +8146,34 @@ const CharacterSheetWrapper = ({
 
   return (
     <div style={S.page}>
+      {xpActionToast?.message ? (
+        <div
+          role="status"
+          style={{
+            position: "fixed",
+            top: 12,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 400,
+            maxWidth: "min(560px, 92vw)",
+            padding: "10px 14px",
+            borderRadius: 8,
+            fontFamily: "monospace",
+            fontSize: 12,
+            lineHeight: 1.35,
+            boxShadow: "0 10px 28px rgba(0,0,0,0.55)",
+            border:
+              xpActionToast.kind === "err"
+                ? "1px solid #f87171"
+                : "1px solid #818cf8",
+            background:
+              xpActionToast.kind === "err" ? "#450a0a" : "#1e1b4b",
+            color: xpActionToast.kind === "err" ? "#fecaca" : "#e0e7ff",
+          }}
+        >
+          {xpActionToast.message}
+        </div>
+      ) : null}
       {/* ── Header ── */}
       <div style={S.hdr}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -10302,12 +10635,13 @@ const CharacterSheetWrapper = ({
                           <input
                             style={S.inp}
                             value={charData.name}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              markDirtyIntent();
                               setCharData((p) => ({
                                 ...p,
                                 name: e.target.value,
-                              }))
-                            }
+                              }));
+                            }}
                             placeholder="Character Name"
                           />
                         </div>
@@ -10583,7 +10917,7 @@ const CharacterSheetWrapper = ({
                       {stressFilled}/{maxStress}
                     </span>
                   </div>
-                  {traumaRequiredBeforeStressClear ? (
+                  {stressMaxNeedsTraumaClear ? (
                     <div
                       style={{
                         fontSize: "10px",
@@ -10592,9 +10926,9 @@ const CharacterSheetWrapper = ({
                         lineHeight: 1.35,
                       }}
                     >
-                      Stress track is full — mark a trauma below to clear all
-                      stress (or manually clear boxes after you have marked at
-                      least one trauma).
+                      {traumaMarkedCount < 1
+                        ? "Stress track is full — mark a trauma below to clear all stress."
+                        : "Stress track is full again — mark another trauma below to clear all stress."}
                     </div>
                   ) : null}
                   <div
@@ -10605,7 +10939,7 @@ const CharacterSheetWrapper = ({
                       marginBottom: "12px",
                     }}
                     title={
-                      traumaRequiredBeforeStressClear
+                      stressMaxNeedsTraumaClear
                         ? "Clearing stress blocked until you mark a trauma."
                         : undefined
                     }
@@ -10619,10 +10953,11 @@ const CharacterSheetWrapper = ({
                           const decreases = next < stressFilled;
                           if (
                             decreases &&
-                            traumaRequiredBeforeStressClear
+                            stressMaxNeedsTraumaClear
                           ) {
                             return;
                           }
+                          markFieldTouch("stress");
                           setStressFilled(next);
                         }}
                         style={{
@@ -10981,6 +11316,7 @@ const CharacterSheetWrapper = ({
                                   );
                                   onCampaignRefresh?.();
                                 }
+                                markFieldTouch("stress");
                                 setStressFilled((prev) =>
                                   Math.max(0, (Number(prev) || 0) - hi),
                                 );
@@ -16272,15 +16608,29 @@ const CharacterSheetWrapper = ({
                                       return;
                                     }
                                     if (!diceResult.resistanceApplied) {
+                                      // Critical: clear 1 stress via server PATCH.
+                                      // Push (if any) already applied on createRoll — do not re-add.
+                                      // Do NOT mark field touch — omit+merge contract.
                                       setStressFilled((prev) => {
-                                        let next = Math.max(
+                                        const next = Math.max(
                                           0,
                                           (Number(prev) || 0) - 1,
                                         );
-                                        const extra =
-                                          Number(diceResult.resistanceExtraStress) || 0;
-                                        if (extra > 0) {
-                                          next = Math.min(maxStress, next + extra);
+                                        stressTraumaTruthRef.current = {
+                                          stressFilled: next,
+                                          trauma:
+                                            stressTraumaTruthRef.current?.trauma ||
+                                            null,
+                                        };
+                                        onCharacterStressTraumaSync?.({
+                                          stressFilled: next,
+                                        });
+                                        if (characterId) {
+                                          void characterAPI
+                                            .patchCharacter(characterId, {
+                                              stress: next,
+                                            })
+                                            .catch(() => {});
                                         }
                                         return next;
                                       });
@@ -16388,11 +16738,15 @@ const CharacterSheetWrapper = ({
                                       return;
                                     }
                                     if (!diceResult.resistanceApplied) {
-                                      const cost =
-                                        diceResult.resistanceTotalStressCost ??
-                                        diceResult.stressCost ??
-                                        0;
-                                      applyStressCost(cost);
+                                      // Stress applied server-side on createRoll when session
+                                      // present. Offline (no session): apply via truth lock, no touch.
+                                      if (!activeSessionId) {
+                                        const cost =
+                                          diceResult.resistanceTotalStressCost ??
+                                          diceResult.stressCost ??
+                                          0;
+                                        applyStressCost(cost);
+                                      }
                                     }
                                     setDiceResult((prev) =>
                                       prev
@@ -19713,12 +20067,13 @@ const CharacterSheetWrapper = ({
                         id="character-sheet-notes-panel"
                         placeholder="Notes…"
                         value={charData.sheetNotes ?? ""}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          markDirtyIntent();
                           setCharData((p) => ({
                             ...p,
                             sheetNotes: e.target.value,
-                          }))
-                        }
+                          }));
+                        }}
                         style={{
                           width: "100%",
                           height: "80px",
@@ -19787,9 +20142,10 @@ const CharacterSheetWrapper = ({
                         panelId="character-sheet-inventory-panel"
                         inventory={charData.inventory}
                         readOnly={!canEditSheet}
-                        onChange={(next) =>
-                          setCharData((p) => ({ ...p, inventory: next }))
-                        }
+                        onChange={(next) => {
+                          markDirtyIntent();
+                          setCharData((p) => ({ ...p, inventory: next }));
+                        }}
                       />
                     ) : null}
                   </div>

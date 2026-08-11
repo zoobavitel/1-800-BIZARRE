@@ -1,6 +1,6 @@
 // Utility functions for character sheet operations
 
-import { MAX_CREATION_DOTS } from "../constants/srd";
+import { MAX_CREATION_DOTS, TRAUMA_KEY_TO_PK } from "../constants/srd";
 
 export const getAttributeDice = (actions, actionRatings) => {
   return actions.filter((action) => actionRatings[action] > 0).length;
@@ -207,7 +207,14 @@ export function traumaObjectToIds(traumaObj, traumasList = []) {
   );
   return Object.entries(traumaObj)
     .filter(([, checked]) => checked)
-    .map(([name]) => nameToId[name.toUpperCase()])
+    .map(([name]) => {
+      const key = String(name || "").toUpperCase();
+      const fromList = nameToId[key];
+      if (fromList != null) return fromList;
+      // /traumas/ empty or stale: still map SRD keys to fixture PKs so autosave
+      // cannot wipe checked boxes by sending trauma: [].
+      return TRAUMA_KEY_TO_PK[key] ?? null;
+    })
     .filter((id) => id != null);
 }
 

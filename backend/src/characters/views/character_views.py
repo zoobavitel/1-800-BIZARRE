@@ -47,6 +47,7 @@ from ..serializers import CharacterSerializer, CharacterXPAllocationSerializer
 from ..history_context import bind_character_history_editor, reset_character_history_editor
 from ..services.xp_allocation import (
     XPAllocationError,
+    allocation_summary,
     apply_buy_hp,
     apply_gm_forced_stand_stat,
     apply_level_up,
@@ -69,7 +70,6 @@ from ..services.character_history_undo import (
     undo_latest_sheet_edit,
 )
 
-
 def _character_queryset_for_user(user):
     """Own PCs plus campaign-visible PCs for this user (staff sees all)."""
     if user.is_staff:
@@ -78,10 +78,8 @@ def _character_queryset_for_user(user):
         Q(user=user) | Q(campaign__gm=user) | Q(campaign__players=user)
     ).distinct()
 
-
 # Backward-compatible name for code that imported the old detail-only helper.
 _character_queryset_detail = _character_queryset_for_user
-
 
 def _max_stress_for_character(character):
     """Stress capacity from durability grade (SRD baseline: 9, modified by DUR)."""
@@ -95,7 +93,6 @@ def _max_stress_for_character(character):
             grade = coin_stats.get("durability") or coin_stats.get("DURABILITY")
     return {"S": 13, "A": 12, "B": 11, "C": 10, "D": 9, "F": 8}.get(grade, 9)
 
-
 def _user_may_edit_character(user, character):
     if user.is_staff:
         return True
@@ -104,7 +101,6 @@ def _user_may_edit_character(user, character):
     if character.campaign_id and character.campaign.gm_id == user.id:
         return True
     return False
-
 
 def _allocation_list_response(character):
     qs = list_allocations(character, include_undone=True)
@@ -128,10 +124,8 @@ def _allocation_list_response(character):
     )
     return serializer.data
 
-
 def _character_response(character):
     return CharacterSerializer(character).data
-
 
 class CharacterViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -1904,6 +1898,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
             )
 
         try:
+            summary = allocation_summary(allocation)
             undo_allocation(character, allocation, user=request.user)
         except XPAllocationError as exc:
             return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
@@ -1913,6 +1908,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
             {
                 "success": True,
                 "undone_allocation_id": allocation.id,
+                "summary": summary,
                 "character": _character_response(character),
                 "allocations": _allocation_list_response(character),
             }
@@ -2036,6 +2032,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
             )
 
         try:
+            summary = allocation_summary(allocation)
             redo_allocation(character, allocation, user=request.user)
         except XPAllocationError as exc:
             return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
@@ -2045,6 +2042,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
             {
                 "success": True,
                 "redone_allocation_id": allocation.id,
+                "summary": summary,
                 "character": _character_response(character),
                 "allocations": _allocation_list_response(character),
             }
@@ -2076,6 +2074,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
             )
 
         try:
+            summary = allocation_summary(allocation)
             undo_allocation(character, allocation, user=request.user)
         except XPAllocationError as exc:
             return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
@@ -2085,6 +2084,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
             {
                 "success": True,
                 "undone_allocation_id": allocation.id,
+                "summary": summary,
                 "character": _character_response(character),
                 "allocations": _allocation_list_response(character),
             }
