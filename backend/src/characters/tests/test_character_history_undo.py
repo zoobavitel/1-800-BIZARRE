@@ -183,7 +183,8 @@ class GmUndoLatestChangeTests(TestCase):
             physical_armor_bonus_charges=2,
         )
 
-    def test_gm_undo_status_and_revert_sheet_edit(self):
+    def test_gm_sheet_edit_uses_sheet_undo_not_gm_xp(self):
+        """GM sheet field edits go through sheet-undo; GM XP row stays empty."""
         entry = CharacterHistory.objects.create(
             character=self.character,
             editor=self.gm,
@@ -193,14 +194,20 @@ class GmUndoLatestChangeTests(TestCase):
             },
         )
         self.client.force_authenticate(user=self.gm)
-        status_res = self.client.get(
+        gm_status = self.client.get(
             f"/api/characters/{self.character.id}/gm-undo-status/"
         )
-        self.assertEqual(status_res.status_code, 200)
-        self.assertTrue(status_res.json()["available"])
+        self.assertEqual(gm_status.status_code, 200)
+        self.assertFalse(gm_status.json()["available"])
+
+        sheet_status = self.client.get(
+            f"/api/characters/{self.character.id}/sheet-undo-status/"
+        )
+        self.assertEqual(sheet_status.status_code, 200)
+        self.assertTrue(sheet_status.json()["available"])
 
         undo_res = self.client.post(
-            f"/api/characters/{self.character.id}/undo-latest-gm-change/",
+            f"/api/characters/{self.character.id}/undo-latest-sheet-edit/",
             {},
             format="json",
         )
@@ -210,6 +217,57 @@ class GmUndoLatestChangeTests(TestCase):
         self.assertFalse(self.character.has_physical_armor_item)
         self.assertEqual(self.character.physical_armor_bonus_charges, 0)
         self.assertIsNotNone(entry.reverted_at)
+
+        redo_status = self.client.get(
+            f"/api/characters/{self.character.id}/sheet-redo-status/"
+        )
+        self.assertTrue(redo_status.json()["available"])
+        redo_res = self.client.post(
+            f"/api/characters/{self.character.id}/redo-latest-sheet-edit/",
+            {},
+            format="json",
+        )
+        self.assertEqual(redo_res.status_code, 200)
+        self.character.refresh_from_db()
+        entry.refresh_from_db()
+        self.assertTrue(self.character.has_physical_armor_item)
+        self.assertEqual(self.character.physical_armor_bonus_charges, 2)
+        self.assertIsNone(entry.reverted_at)
+
+    def test_player_sheet_edit_latest_undo_redo(self):
+        self.character.stress = 1
+        self.character.save(update_fields=["stress"])
+        entry = CharacterHistory.objects.create(
+            character=self.character,
+            editor=self.player,
+            changed_fields={"stress": {"old": "0", "new": "1"}},
+        )
+        self.client.force_authenticate(user=self.player)
+        status_res = self.client.get(
+            f"/api/characters/{self.character.id}/sheet-undo-status/"
+        )
+        self.assertEqual(status_res.status_code, 200)
+        self.assertTrue(status_res.json()["available"])
+
+        undo_res = self.client.post(
+            f"/api/characters/{self.character.id}/undo-latest-sheet-edit/",
+            {},
+            format="json",
+        )
+        self.assertEqual(undo_res.status_code, 200)
+        self.character.refresh_from_db()
+        entry.refresh_from_db()
+        self.assertEqual(self.character.stress, 0)
+        self.assertIsNotNone(entry.reverted_at)
+
+        redo_res = self.client.post(
+            f"/api/characters/{self.character.id}/redo-latest-sheet-edit/",
+            {},
+            format="json",
+        )
+        self.assertEqual(redo_res.status_code, 200)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.stress, 1)
 
     def test_player_cannot_call_gm_undo(self):
         CharacterHistory.objects.create(

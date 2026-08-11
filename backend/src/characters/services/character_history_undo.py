@@ -341,6 +341,14 @@ def _find_mirror_history_for_tracker(
     )
 
 
+def _summarize_history_fields(entry: CharacterHistory, *, prefix: str) -> str:
+    changed = entry.changed_fields or {}
+    keys = list(changed.keys())[:3]
+    labels = ", ".join(k.replace("_", " ") for k in keys) or "fields"
+    extra = f" (+{len(changed) - 3} more)" if len(changed) > 3 else ""
+    return f"{prefix} ({labels}{extra})"
+
+
 def _summarize_gm_undo(kind: str, obj) -> str:
     if kind == "tracker":
         trig = (
@@ -350,49 +358,142 @@ def _summarize_gm_undo(kind: str, obj) -> str:
         )
         return f"GM XP +{obj.xp_gained} ({trig})"
     if kind == "history":
-        changed = obj.changed_fields or {}
-        keys = list(changed.keys())[:3]
-        labels = ", ".join(k.replace("_", " ") for k in keys)
-        extra = f" (+{len(changed) - 3} more)" if len(changed) > 3 else ""
-        return f"GM sheet edit ({labels}{extra})"
+        return _summarize_history_fields(obj, prefix="GM sheet edit")
     return "GM change"
 
 
+def _is_pure_sheet_field_edit(entry: CharacterHistory) -> bool:
+    """Field edits only — not XP allocation spends or ExperienceTracker mirrors."""
+    character = entry.character
+    if _find_linked_tracker_entry(character, entry) is not None:
+        return False
+    if _find_linked_allocation(character, entry) is not None:
+        return False
+    if _find_linked_undone_allocation(character, entry) is not None:
+        return False
+    return True
+
+
+def latest_sheet_undo_target(character: Character, user):
+    """Newest undoable pure sheet-field CharacterHistory row, or None."""
+    if not _user_may_edit_character(user, character):
+        return None
+    qs = (
+        CharacterHistory.objects.filter(
+            character=character,
+            reverted_at__isnull=True,
+        )
+        .order_by("-timestamp", "-id")[:80]
+    )
+    for entry in qs:
+        if not _is_pure_sheet_field_edit(entry):
+            continue
+        allowed, _reason = can_undo_character_history(entry, user)
+        if allowed:
+            return entry
+    return None
+
+
+def sheet_undo_status(character: Character, user) -> dict:
+    entry = latest_sheet_undo_target(character, user)
+    if not entry:
+        return {"available": False, "summary": None, "kind": None, "target_id": None}
+    return {
+        "available": True,
+        "summary": _summarize_history_fields(entry, prefix="Sheet edit"),
+        "kind": "history",
+        "target_id": entry.id,
+    }
+
+
+def latest_sheet_redo_target(character: Character, user):
+    """Most recently reverted pure sheet-field history row, or None.
+
+    Redo is LIFO across all history undos: only available when the newest
+    reverted row is a pure sheet field edit.
+    """
+    if not _user_may_edit_character(user, character):
+        return None
+    latest_reverted = (
+        CharacterHistory.objects.filter(
+            character=character,
+            reverted_at__isnull=False,
+        )
+        .order_by("-reverted_at", "-id")
+        .first()
+    )
+    if not latest_reverted or not _is_pure_sheet_field_edit(latest_reverted):
+        return None
+    return latest_reverted
+
+
+def sheet_redo_status(character: Character, user) -> dict:
+    entry = latest_sheet_redo_target(character, user)
+    if not entry:
+        return {"available": False, "summary": None, "kind": None, "target_id": None}
+    return {
+        "available": True,
+        "summary": _summarize_history_fields(entry, prefix="Sheet edit"),
+        "kind": "history",
+        "target_id": entry.id,
+    }
+
+
+@transaction.atomic
+def undo_latest_sheet_edit(character: Character, *, user) -> dict:
+    if not _user_may_edit_character(user, character):
+        raise CharacterHistoryUndoError("You cannot edit this character.")
+    entry = latest_sheet_undo_target(character, user)
+    if not entry:
+        raise CharacterHistoryUndoError("No sheet edit to undo on this character.")
+    undo_character_history_entry(entry, user=user)
+    character.refresh_from_db()
+    return {
+        "kind": "history",
+        "target_id": entry.id,
+        "status": sheet_undo_status(character, user),
+        "redo_status": sheet_redo_status(character, user),
+    }
+
+
+@transaction.atomic
+def redo_latest_sheet_edit(character: Character, *, user) -> dict:
+    if not _user_may_edit_character(user, character):
+        raise CharacterHistoryUndoError("You cannot edit this character.")
+    entry = latest_sheet_redo_target(character, user)
+    if not entry:
+        raise CharacterHistoryUndoError("No sheet edit to redo on this character.")
+    redo_character_history_entry(entry, user=user)
+    character.refresh_from_db()
+    return {
+        "kind": "history",
+        "target_id": entry.id,
+        "status": sheet_redo_status(character, user),
+        "undo_status": sheet_undo_status(character, user),
+    }
+
+
 def latest_gm_undo_target(character: Character, gm_user):
-    """Return (kind, obj) for the newest undoable GM action, or (None, None)."""
+    """Return (kind, obj) for newest undoable GM XP award only, or (None, None).
+
+    Sheet field edits use ``undo_latest_sheet_edit`` instead.
+    """
     if not _gm_may_undo_pc(gm_user, character):
         return None, None
 
-    gm_id = gm_user.id
-    hist = (
-        CharacterHistory.objects.filter(
-            character=character,
-            editor_id=gm_id,
-            reverted_at__isnull=True,
-        )
-        .order_by("-timestamp", "-id")
-        .first()
-    )
     tracker = (
         ExperienceTracker.objects.filter(
             character=character,
-            awarded_by_id=gm_id,
+            awarded_by_id=gm_user.id,
             award_source="GM",
             revoked_at__isnull=True,
         )
         .order_by("-session_date", "-id")
         .first()
     )
-
-    if not hist and not tracker:
+    if not tracker:
         return None, None
-
-    hist_ts = hist.timestamp if hist else None
-    tracker_ts = tracker.session_date if tracker else None
-
-    if tracker and (not hist_ts or tracker_ts >= hist_ts):
-        return "tracker", tracker
-    return "history", hist
+    return "tracker", tracker
 
 
 def gm_undo_status(character: Character, gm_user) -> dict:
@@ -496,39 +597,23 @@ def redo_gm_tracker_entry(tracker: ExperienceTracker, *, gm_user) -> None:
 
 
 def latest_gm_redo_target(character: Character, gm_user):
-    """Newest reverted GM history row or revoked GM tracker row."""
+    """Newest revoked GM tracker award only (sheet edits use sheet redo)."""
     if not _gm_may_undo_pc(gm_user, character):
         return None, None
 
-    gm_id = gm_user.id
-    hist = (
-        CharacterHistory.objects.filter(
-            character=character,
-            editor_id=gm_id,
-            reverted_at__isnull=False,
-        )
-        .order_by("-reverted_at", "-id")
-        .first()
-    )
     tracker = (
         ExperienceTracker.objects.filter(
             character=character,
-            awarded_by_id=gm_id,
+            awarded_by_id=gm_user.id,
             award_source="GM",
             revoked_at__isnull=False,
         )
         .order_by("-revoked_at", "-id")
         .first()
     )
-    if not hist and not tracker:
+    if not tracker:
         return None, None
-
-    hist_ts = hist.reverted_at if hist else None
-    tracker_ts = tracker.revoked_at if tracker else None
-
-    if tracker and (not hist_ts or tracker_ts >= hist_ts):
-        return "tracker", tracker
-    return "history", hist
+    return "tracker", tracker
 
 
 def gm_redo_status(character: Character, gm_user) -> dict:
@@ -547,21 +632,16 @@ def gm_redo_status(character: Character, gm_user) -> dict:
 def redo_latest_gm_change(character: Character, *, gm_user) -> dict:
     if not _gm_may_undo_pc(gm_user, character):
         raise CharacterHistoryUndoError(
-            "Only the campaign GM can redo their changes on a player's character."
+            "Only the campaign GM can redo their XP awards on a player's character."
         )
 
     kind, target = latest_gm_redo_target(character, gm_user)
     if not target:
-        raise CharacterHistoryUndoError("No GM change to redo on this character.")
+        raise CharacterHistoryUndoError("No GM XP award to redo on this character.")
 
-    if kind == "tracker":
-        redo_gm_tracker_entry(target, gm_user=gm_user)
-    else:
-        if target.editor_id != gm_user.id:
-            raise CharacterHistoryUndoError("Not your GM edit.")
-        redo_character_history_entry(
-            target, user=gm_user, require_editor_id=gm_user.id
-        )
+    if kind != "tracker":
+        raise CharacterHistoryUndoError("No GM XP award to redo on this character.")
+    redo_gm_tracker_entry(target, gm_user=gm_user)
 
     character.refresh_from_db()
     return {
@@ -575,17 +655,16 @@ def redo_latest_gm_change(character: Character, *, gm_user) -> dict:
 def undo_latest_gm_change(character: Character, *, gm_user) -> dict:
     if not _gm_may_undo_pc(gm_user, character):
         raise CharacterHistoryUndoError(
-            "Only the campaign GM can undo their changes on a player's character."
+            "Only the campaign GM can undo their XP awards on a player's character."
         )
 
     kind, target = latest_gm_undo_target(character, gm_user)
     if not target:
-        raise CharacterHistoryUndoError("No GM change to undo on this character.")
+        raise CharacterHistoryUndoError("No GM XP award to undo on this character.")
 
-    if kind == "tracker":
-        undo_gm_tracker_entry(target, gm_user=gm_user)
-    else:
-        undo_character_history_entry(target, user=gm_user)
+    if kind != "tracker":
+        raise CharacterHistoryUndoError("No GM XP award to undo on this character.")
+    undo_gm_tracker_entry(target, gm_user=gm_user)
 
     character.refresh_from_db()
     return {

@@ -402,6 +402,24 @@ export const characterAPI = {
       body: JSON.stringify({}),
     }),
 
+  getSheetUndoStatus: (id) =>
+    apiRequest(`/characters/${id}/sheet-undo-status/`),
+
+  undoLatestSheetEdit: (id) =>
+    apiRequest(`/characters/${id}/undo-latest-sheet-edit/`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  getSheetRedoStatus: (id) =>
+    apiRequest(`/characters/${id}/sheet-redo-status/`),
+
+  redoLatestSheetEdit: (id) =>
+    apiRequest(`/characters/${id}/redo-latest-sheet-edit/`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
   removeAllocationResult: (id, allocationId) =>
     apiRequest(`/characters/${id}/remove-allocation-result/`, {
       method: "POST",

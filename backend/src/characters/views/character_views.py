@@ -62,7 +62,11 @@ from ..services.character_history_undo import (
     gm_redo_status,
     gm_undo_status,
     redo_latest_gm_change,
+    redo_latest_sheet_edit,
+    sheet_redo_status,
+    sheet_undo_status,
     undo_latest_gm_change,
+    undo_latest_sheet_edit,
 )
 
 
@@ -1916,14 +1920,14 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"], url_path="gm-undo-status")
     def gm_undo_status_action(self, request, pk=None):
-        """Whether this GM can undo their most recent edit on a player's PC."""
+        """Whether this GM can undo their most recent XP award on a player's PC."""
         character = self.get_object()
         status_payload = gm_undo_status(character, request.user)
         return Response(status_payload)
 
     @action(detail=True, methods=["post"], url_path="undo-latest-gm-change")
     def undo_latest_gm_change_action(self, request, pk=None):
-        """Revert the campaign GM's most recent change to this player's character."""
+        """Revert the campaign GM's most recent XP award on this player's character."""
         character = self.get_object()
         try:
             result = undo_latest_gm_change(character, gm_user=request.user)
@@ -1953,6 +1957,55 @@ class CharacterViewSet(viewsets.ModelViewSet):
         except CharacterHistoryUndoError as exc:
             return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
 
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+                **result,
+            }
+        )
+
+    @action(detail=True, methods=["get"], url_path="sheet-undo-status")
+    def sheet_undo_status_action(self, request, pk=None):
+        """Whether owner/GM can undo the most recent sheet field edit."""
+        character = self.get_object()
+        return Response(sheet_undo_status(character, request.user))
+
+    @action(detail=True, methods=["post"], url_path="undo-latest-sheet-edit")
+    def undo_latest_sheet_edit_action(self, request, pk=None):
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot undo edits on this character.")
+        try:
+            result = undo_latest_sheet_edit(character, user=request.user)
+        except CharacterHistoryUndoError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+                **result,
+            }
+        )
+
+    @action(detail=True, methods=["get"], url_path="sheet-redo-status")
+    def sheet_redo_status_action(self, request, pk=None):
+        character = self.get_object()
+        return Response(sheet_redo_status(character, request.user))
+
+    @action(detail=True, methods=["post"], url_path="redo-latest-sheet-edit")
+    def redo_latest_sheet_edit_action(self, request, pk=None):
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot redo edits on this character.")
+        try:
+            result = redo_latest_sheet_edit(character, user=request.user)
+        except CharacterHistoryUndoError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
         character.refresh_from_db()
         return Response(
             {
