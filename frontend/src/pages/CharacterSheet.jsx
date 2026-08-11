@@ -1840,6 +1840,8 @@ const CharacterSheetWrapper = ({
     Math.max(0, Math.floor(Number(character?.unallocatedXp) || 0)),
   );
   const [poolAllocateBusy, setPoolAllocateBusy] = useState(false);
+  // eslint-disable-next-line no-unused-vars
+  const [poolTickError, setPoolTickError] = useState(null);
 
   // Hydrate sheet from server when character payload arrives after first paint (same class of bug as actionRatings).
   // Each of these gates on `sheetDraftIsDirty` because a teammate-triggered
@@ -3413,7 +3415,7 @@ const CharacterSheetWrapper = ({
     };
 
     const cur = Number(xp?.[track]) || 0;
-    const desired = Math.min(idx < cur ? idx : idx + 1, maxVals[track]);
+    const desired = Math.min(idx + 1, maxVals[track]);
     if (!characterId) return;
     if (!canEditSheet) return;
     if (desired === cur) return;
@@ -3422,19 +3424,24 @@ const CharacterSheetWrapper = ({
     // For now, ticks only support allocating from free pool (increasing).
     // Undoing/taking XP back from ticks requires the separate undo flows.
     if (desired < cur) {
-      setSaveErrorMessage("Taking XP off tracks via ticks is not supported. Use undo.");
+      const msg = "Taking XP off tracks via ticks is not supported. Use undo.";
+      setSaveErrorMessage(msg);
+      setPoolTickError(msg);
       return;
     }
 
     const delta = desired - cur;
     if (delta <= 0) return;
     if (unallocatedXp < delta) {
-      setSaveErrorMessage(`Not enough XP in free pool (need ${delta}).`);
+      const msg = `Not enough XP in free pool (need ${delta}).`;
+      setSaveErrorMessage(msg);
+      setPoolTickError(msg);
       return;
     }
 
     setPoolAllocateBusy(true);
     setSaveErrorMessage(null);
+    setPoolTickError(null);
     try {
       const res = await characterAPI.allocatePoolXp(characterId, {
         track,
@@ -3451,7 +3458,9 @@ const CharacterSheetWrapper = ({
         }));
       }
     } catch (e) {
-      setSaveErrorMessage(e?.message || "Could not allocate pool XP");
+      const msg = e?.message || "Could not allocate pool XP";
+      setSaveErrorMessage(msg);
+      setPoolTickError(msg);
     } finally {
       setPoolAllocateBusy(false);
     }
@@ -11797,6 +11806,11 @@ const CharacterSheetWrapper = ({
                         active session.
                       </div>
                     )}
+                    {poolTickError ? (
+                      <div style={{ marginTop: 6, fontSize: "10px", color: "#f87171" }}>
+                        {poolTickError}
+                      </div>
+                    ) : null}
                   </div>
                   {[
                     { name: "INSIGHT", key: "insight", max: 5 },
