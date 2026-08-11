@@ -2955,7 +2955,6 @@ const CharacterSheetWrapper = ({
     (n, idx) => n + (INDEX_TO_GRADE(idx) === "A" ? 1 : 0),
     0,
   );
-  const totalXP = Object.values(xp).reduce((s, v) => s + v, 0);
   const maxXpOnAnyTrack = useMemo(
     () =>
       XP_SPEND_TRACK_ORDER.reduce(
@@ -10849,7 +10848,7 @@ const CharacterSheetWrapper = ({
                           marginBottom: "4px",
                         }}
                       >
-                        Total XP (session pool): {unallocatedXp}
+                        Available XP: {unallocatedXp}
                       </div>
                       <div
                         style={{
@@ -10859,10 +10858,13 @@ const CharacterSheetWrapper = ({
                           marginBottom: "8px",
                         }}
                       >
-                        From scorecard (BELIEFS / PLAYBOOK / STRUGGLE) and Stand
-                        Development end-session bonus. Allocate +1 to any track,
-                        then spend 5/10 from tracks (or spend pool directly on
-                        level-up / HP).
+                        Free pool only — scorecard (BELIEFS / PLAYBOOK /
+                        STRUGGLE) and Stand Development end-session bonus,
+                        banked across sessions. Spend anytime (in or out of
+                        session): allocate +1 onto a track, or spend the pool
+                        on level-up / HP. Desperate-roll XP already marks the
+                        matching attribute track above automatically — it never
+                        sits here.
                       </div>
                       <div
                         style={{
@@ -10968,6 +10970,18 @@ const CharacterSheetWrapper = ({
                       </span>
                     </div>
                   ))}
+                  <div
+                    style={{
+                      fontSize: "10px",
+                      color: "#6b7280",
+                      marginBottom: "6px",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    Tracks fill automatically from desperate rolls (and other
+                    track-bound awards). Free-pool XP is separate — see Available
+                    XP below.
+                  </div>
 
                   {/* Advancement panel */}
                   <div
@@ -10987,8 +11001,11 @@ const CharacterSheetWrapper = ({
                         marginBottom: "8px",
                       }}
                     >
-                      <span style={{ color: "#a78bfa", fontWeight: "bold" }}>
-                        On tracks: {totalXP}
+                      <span
+                        style={{ color: "#a78bfa", fontWeight: "bold" }}
+                        title="Free pool only (scorecard + Development), earned across sessions. Desperate XP marks attribute tracks automatically and is not counted here."
+                      >
+                        Available XP: {unallocatedXp}
                       </span>
                       {sessionDevXP > 0 ? (
                         <span
