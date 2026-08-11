@@ -226,8 +226,8 @@ def settle_encoded_session_xp(session: Session, acting_user: Any) -> dict:
         char_ids |= set(
             locked.characters_involved.values_list("id", flat=True)
         )
-        # Also include PCs with mid-session tracker rows (toggles) even if they
-        # never rolled — so Dev pool still banks for them.
+        # Mid-session tracker/scorecard rows (toggles) even if PC never rolled /
+        # characters_involved empty — still grant Dev→pool at settle.
         char_ids |= set(
             ExperienceTracker.objects.filter(session=locked).values_list(
                 "character_id", flat=True
@@ -241,8 +241,9 @@ def settle_encoded_session_xp(session: Session, acting_user: Any) -> dict:
             return out
         for cid in sorted(char_ids):
             try:
-                # of=("self",): Postgres rejects FOR UPDATE on nullable OUTER JOIN
-                # sides (Stand OneToOne can be missing).
+                # Postgres: FOR UPDATE + select_related("stand") uses a LEFT OUTER JOIN
+                # (nullable reverse OneToOne) and raises NotSupportedError. Lock only
+                # characters_character via of=("self",).
                 char = (
                     Character.objects.select_for_update(of=("self",))
                     .select_related("stand")

@@ -263,6 +263,46 @@ class SessionEncodedXpSettlementTests(TestCase):
             ).exists()
         )
 
+    def test_settle_character_without_stand_does_not_crash(self):
+        """Postgres rejects FOR UPDATE on nullable stand join; must lock Character only."""
+        self.session.characters_involved.add(self.character)
+        # No Stand row → LEFT OUTER JOIN if select_related("stand") without of=("self",).
+        settle_encoded_session_xp(self.session, self.gm)
+        self.session.refresh_from_db()
+        self.assertTrue(self.session.auto_encoded_xp_settled)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.unallocated_xp, 0)
+
+    def test_dev_pool_includes_tracker_only_pc_when_involved_empty(self):
+        """Scorecard toggles without characters_involved / rolls still get Dev→pool."""
+        Stand.objects.create(
+            character=self.character,
+            name="Tracker Stand",
+            type="FIGHTING",
+            form="Humanoid",
+            consciousness_level="C",
+            power="D",
+            speed="D",
+            range="D",
+            durability="D",
+            precision="D",
+            development="C",
+        )
+        ExperienceTracker.objects.create(
+            character=self.character,
+            session=self.session,
+            trigger="BELIEFS",
+            description="Session XP trigger: BELIEFS",
+            xp_gained=1,
+            award_source="PLAYER",
+            clock_key="playbook",
+        )
+        settle_encoded_session_xp(self.session, self.gm)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.unallocated_xp, 2)
+        self.session.refresh_from_db()
+        self.assertTrue(self.session.auto_encoded_xp_settled)
+
     def test_patch_clear_active_applies_encoded_xp_end_live_ui_path(self):
         """
         Same HTTP path as SessionDetail "End & apply encoded XP":
