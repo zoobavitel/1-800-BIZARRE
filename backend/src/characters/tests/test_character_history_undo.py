@@ -368,6 +368,44 @@ class GmUndoLatestChangeTests(TestCase):
         self.assertEqual(self.character.unallocated_xp, 1)
         self.assertEqual(self.character.xp_clocks["prowess"], 3)
 
+    def test_deallocate_pool_xp_returns_to_free_pool(self):
+        self.character.unallocated_xp = 1
+        self.character.xp_clocks = {
+            "playbook": 0,
+            "insight": 5,
+            "prowess": 1,
+            "resolve": 0,
+            "heritage": 0,
+        }
+        self.character.save(update_fields=["unallocated_xp", "xp_clocks"])
+        ExperienceTracker.objects.create(
+            character=self.character,
+            trigger="MANUAL",
+            description="[insight] Allocated 5 XP from free pool (7 in pool before).",
+            xp_gained=5,
+            award_source="PLAYER",
+            awarded_by=self.player,
+            clock_key="insight",
+        )
+        self.client.force_authenticate(user=self.player)
+        res = self.client.post(
+            f"/api/characters/{self.character.id}/deallocate-pool-xp/",
+            {"track": "insight", "amount": 2},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        data = res.json()
+        self.assertEqual(data["unallocated_xp"], 3)
+        self.assertEqual(data["xp_clocks"]["insight"], 3)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.unallocated_xp, 3)
+        self.assertEqual(self.character.xp_clocks["insight"], 3)
+        remaining = ExperienceTracker.objects.filter(
+            character=self.character, clock_key="insight", revoked_at__isnull=True
+        ).first()
+        self.assertIsNotNone(remaining)
+        self.assertEqual(remaining.xp_gained, 3)
+
     def test_add_xp_with_session_id_does_not_500_for_playbook(self):
         self.character.xp_clocks = {
             "playbook": 0,

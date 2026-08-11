@@ -3414,24 +3414,17 @@ const CharacterSheetWrapper = ({
     };
 
     const cur = Number(xp?.[track]) || 0;
-    const desired = Math.min(idx + 1, maxVals[track]);
+    // Click filled box → clear from that index up; click empty → fill through it.
+    const desired = Math.min(idx < cur ? idx : idx + 1, maxVals[track]);
     if (!characterId) return;
     if (!canEditSheet) return;
     if (desired === cur) return;
     if (poolAllocateBusy) return;
 
-    // For now, ticks only support allocating from free pool (increasing).
-    // Undoing/taking XP back from ticks requires the separate undo flows.
-    if (desired < cur) {
-      const msg = "Taking XP off tracks via ticks is not supported. Use undo.";
-      setSaveErrorMessage(msg);
-      setPoolTickError(msg);
-      return;
-    }
-
     const delta = desired - cur;
-    if (delta <= 0) return;
-    if (unallocatedXp < delta) {
+    if (delta === 0) return;
+
+    if (delta > 0 && unallocatedXp < delta) {
       const msg = `Not enough XP in free pool (need ${delta}).`;
       setSaveErrorMessage(msg);
       setPoolTickError(msg);
@@ -3442,10 +3435,16 @@ const CharacterSheetWrapper = ({
     setSaveErrorMessage(null);
     setPoolTickError(null);
     try {
-      const res = await characterAPI.allocatePoolXp(characterId, {
-        track,
-        amount: delta,
-      });
+      const res =
+        delta > 0
+          ? await characterAPI.allocatePoolXp(characterId, {
+              track,
+              amount: delta,
+            })
+          : await characterAPI.deallocatePoolXp(characterId, {
+              track,
+              amount: -delta,
+            });
       const nextPool = Number(res?.unallocated_xp);
       if (Number.isFinite(nextPool)) {
         setUnallocatedXp(Math.max(0, nextPool));
@@ -3457,7 +3456,11 @@ const CharacterSheetWrapper = ({
         }));
       }
     } catch (e) {
-      const msg = e?.message || "Could not allocate pool XP";
+      const msg =
+        e?.message ||
+        (delta > 0
+          ? "Could not allocate pool XP"
+          : "Could not return XP to free pool");
       setSaveErrorMessage(msg);
       setPoolTickError(msg);
     } finally {
@@ -11804,7 +11807,9 @@ const CharacterSheetWrapper = ({
                               tabIndex={0}
                               title={
                                 isFilled
-                                  ? "Filled from Available XP (use undo to refund)"
+                                  ? canEditSheet
+                                    ? `Return ${filled - i} to Available XP`
+                                    : "Filled"
                                   : canSpendHere
                                     ? `Spend ${i + 1 - filled} from Available XP`
                                     : unallocatedXp < 1

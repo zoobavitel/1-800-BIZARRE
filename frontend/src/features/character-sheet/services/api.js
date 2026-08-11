@@ -333,6 +333,13 @@ export const characterAPI = {
       body: JSON.stringify(body),
     }),
 
+  /** Move XP from a track back into the free pool (untick). */
+  deallocatePoolXp: (id, body) =>
+    apiRequest(`/characters/${id}/deallocate-pool-xp/`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   getXpAllocations: (id, { includeUndone = false } = {}) =>
     apiRequest(
       `/characters/${id}/xp-allocations/${

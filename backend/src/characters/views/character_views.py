@@ -2195,6 +2195,123 @@ class CharacterViewSet(viewsets.ModelViewSet):
             }
         )
 
+    @action(detail=True, methods=["post"], url_path="deallocate-pool-xp")
+    def deallocate_pool_xp(self, request, pk=None):
+        """Move XP from an xp_clocks track back into ``unallocated_xp``."""
+        character = self.get_object()
+        user = request.user
+        is_owner = character.user_id == user.id
+        is_gm = bool(
+            character.campaign_id and character.campaign.gm_id == user.id
+        )
+        if not (user.is_staff or is_owner or is_gm):
+            raise PermissionDenied(
+                "You may only deallocate pool XP for your own character or as the campaign GM."
+            )
+
+        track = (
+            request.data.get("track") or request.data.get("xp_type") or ""
+        )
+        if not isinstance(track, str):
+            return Response(
+                {"error": "track is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        track = track.strip().lower()
+        valid_tracks = ["insight", "prowess", "resolve", "heritage", "playbook"]
+        if track not in valid_tracks:
+            return Response(
+                {"error": f"Invalid track. Must be one of: {valid_tracks}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            amount = int(request.data.get("amount", 1))
+        except (TypeError, ValueError):
+            return Response(
+                {"error": "amount must be an integer"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if amount < 1 or amount > 20:
+            return Response(
+                {"error": "amount must be 1–20 per request"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            locked = Character.objects.select_for_update().get(pk=character.pk)
+            raw_xp_clocks = getattr(locked, "xp_clocks", None)
+            if isinstance(raw_xp_clocks, str):
+                try:
+                    raw_xp_clocks = json.loads(raw_xp_clocks)
+                except Exception:
+                    raw_xp_clocks = {}
+            if not isinstance(raw_xp_clocks, dict):
+                raw_xp_clocks = {}
+            xp_clocks = dict(raw_xp_clocks or {})
+            cur = int(xp_clocks.get(track, 0) or 0)
+            if amount > cur:
+                return Response(
+                    {
+                        "error": (
+                            f"Only {cur} XP on {track} track; cannot return {amount}."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            new_xp = cur - amount
+            pool = int(getattr(locked, "unallocated_xp", 0) or 0)
+            xp_clocks[track] = new_xp
+            locked.unallocated_xp = pool + amount
+            locked.xp_clocks = xp_clocks
+            token = bind_character_history_editor(user)
+            try:
+                locked.save(update_fields=["unallocated_xp", "xp_clocks"])
+            finally:
+                reset_character_history_editor(token)
+
+            # Drop matching free-pool allocation tracker rows so history matches
+            # clocks (delete without destroy-rollback; clocks already updated).
+            remaining = amount
+            alloc_rows = (
+                ExperienceTracker.objects.select_for_update()
+                .filter(
+                    character=locked,
+                    clock_key=track,
+                    trigger="MANUAL",
+                    revoked_at__isnull=True,
+                    description__contains="from free pool",
+                )
+                .order_by("-session_date", "-id")
+            )
+            for entry in alloc_rows:
+                if remaining <= 0:
+                    break
+                gained = int(entry.xp_gained or 0)
+                if gained <= 0:
+                    continue
+                if gained <= remaining:
+                    remaining -= gained
+                    entry.delete()
+                else:
+                    entry.xp_gained = gained - remaining
+                    entry.description = (
+                        f"[{track}] Allocated {entry.xp_gained} XP from free pool "
+                        f"(partial after return)."
+                    )
+                    entry.save(update_fields=["xp_gained", "description"])
+                    remaining = 0
+
+        return Response(
+            {
+                "success": True,
+                "track": track,
+                "amount": amount,
+                "new_track_total": new_xp,
+                "unallocated_xp": locked.unallocated_xp,
+                "xp_clocks": locked.xp_clocks,
+            }
+        )
+
     @action(detail=True, methods=["post"], url_path="add-xp")
     def add_xp(self, request, pk=None):
         """Add XP to a character's BitD-style tracks (xp_clocks) and log an ExperienceTracker row."""
