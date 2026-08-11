@@ -1942,6 +1942,8 @@ const CharacterSheetWrapper = ({
 
   // FIX 6: Level-up modal state
   const [showLevelUp, setShowLevelUp] = useState(false);
+  /** When set, level-up modal spends this track only (e.g. playbook Take advance). */
+  const [levelUpLockTrack, setLevelUpLockTrack] = useState(null);
   const [levelUpChoice, setLevelUpChoice] = useState("stat");
   const [levelUpFromPool, setLevelUpFromPool] = useState(false);
   const [levelUpStat, setLevelUpStat] = useState("power");
@@ -1950,6 +1952,8 @@ const CharacterSheetWrapper = ({
   const [levelUpSpendTrack, setLevelUpSpendTrack] = useState("insight");
   const [minorAdvanceSpendTrack, setMinorAdvanceSpendTrack] =
     useState("insight");
+  /** Attribute/heritage track advance picker (full track → clear for advance). */
+  const [showTrackAdvance, setShowTrackAdvance] = useState(null);
   const [levelUpBusy, setLevelUpBusy] = useState(false);
   const [levelUpError, setLevelUpError] = useState(null);
   const [minorAdvanceBusy, setMinorAdvanceBusy] = useState(false);
@@ -3284,9 +3288,10 @@ const CharacterSheetWrapper = ({
 
   // FIX 6: Confirm level-up — server-side spend with reversible allocation log.
   const confirmLevelUp = async () => {
-    const track = levelUpSpendTrack;
+    const track = levelUpLockTrack || levelUpSpendTrack;
     const cur = Number(xp[track]) || 0;
-    const usePool = Boolean(levelUpFromPool) && unallocatedXp >= 10;
+    const usePool =
+      !levelUpLockTrack && Boolean(levelUpFromPool) && unallocatedXp >= 10;
     if ((!usePool && cur < 10) || !characterId) return;
 
     if (levelUpChoice === "stat" && levelUpIsBtoA) {
@@ -3345,6 +3350,7 @@ const CharacterSheetWrapper = ({
       if (res?.character) applyBackendCharacter(res.character);
       if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
       setShowLevelUp(false);
+      setLevelUpLockTrack(null);
     } catch (err) {
       setLevelUpError(err?.message || "Level up failed");
     } finally {
@@ -3374,6 +3380,7 @@ const CharacterSheetWrapper = ({
       });
       if (res?.character) applyBackendCharacter(res.character);
       if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
+      setShowTrackAdvance(null);
     } catch (err) {
       setMinorAdvanceError(err?.message || "Minor advance failed");
     } finally {
@@ -10861,9 +10868,9 @@ const CharacterSheetWrapper = ({
                         Free pool only — scorecard (BELIEFS / PLAYBOOK /
                         STRUGGLE) and Stand Development end-session bonus,
                         banked across sessions. Spend anytime (in or out of
-                        session): allocate +1 onto a track, or spend the pool
-                        on level-up / HP. Desperate-roll XP already marks the
-                        matching attribute track above automatically — it never
+                        session): allocate +1 onto a track, or spend 10 from
+                        the pool on a playbook-style level-up. Desperate-roll
+                        XP marks attribute tracks automatically — it never
                         sits here.
                       </div>
                       <div
@@ -10922,16 +10929,76 @@ const CharacterSheetWrapper = ({
                             +1 {XP_TRACK_SPEND_LABELS[t] || t}
                           </button>
                         ))}
+                        {unallocatedXp >= 10 && canEditSheet && character?.id ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLevelUpLockTrack(null);
+                              setLevelUpFromPool(true);
+                              setLevelUpSpendTrack("playbook");
+                              setLevelUpError(null);
+                              setShowLevelUp(true);
+                            }}
+                            style={{
+                              ...S.btn,
+                              fontSize: "10px",
+                              padding: "4px 8px",
+                              background: "#7c3aed",
+                              color: "#fff",
+                            }}
+                          >
+                            Level up from pool (−10)
+                          </button>
+                        ) : null}
                       </div>
+                      {sessionDevXP > 0 ? (
+                        <div
+                          style={{
+                            marginTop: "8px",
+                            fontSize: "10px",
+                            color: "#9ca3af",
+                          }}
+                          title="Stand Development grade → free-pool XP at next session end."
+                        >
+                          Next end-session bank +{sessionDevXP} (DEV{" "}
+                          {GRADE[devVal]})
+                        </div>
+                      ) : null}
                     </div>
-                  ) : null}
+                  ) : (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        marginBottom: "8px",
+                        fontSize: "11px",
+                      }}
+                    >
+                      <span
+                        style={{ color: "#a78bfa", fontWeight: "bold" }}
+                        title="Free pool only (scorecard + Development)."
+                      >
+                        Available XP: {unallocatedXp}
+                      </span>
+                      {sessionDevXP > 0 ? (
+                        <span style={{ color: "#6b7280", fontSize: "10px" }}>
+                          Next end-session bank +{sessionDevXP} (DEV{" "}
+                          {GRADE[devVal]})
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
                   {[
                     { name: "INSIGHT", key: "insight", max: 5 },
                     { name: "PROWESS", key: "prowess", max: 5 },
                     { name: "RESOLVE", key: "resolve", max: 5 },
                     { name: "HERITAGE", key: "heritage", max: 5 },
                     { name: "PLAYBOOK", key: "playbook", max: 10 },
-                  ].map(({ name, key, max }) => (
+                  ].map(({ name, key, max }) => {
+                    const filled = Number(xp[key]) || 0;
+                    const trackFull = filled >= max;
+                    return (
                     <div
                       key={key}
                       style={{
@@ -10939,6 +11006,7 @@ const CharacterSheetWrapper = ({
                         alignItems: "center",
                         gap: "8px",
                         marginBottom: "4px",
+                        flexWrap: "wrap",
                       }}
                     >
                       <span
@@ -10960,16 +11028,55 @@ const CharacterSheetWrapper = ({
                               height: "13px",
                               border: "1px solid #4b5563",
                               cursor: "pointer",
-                              background: i < xp[key] ? "#7c3aed" : "#111827",
+                              background: i < filled ? "#7c3aed" : "#111827",
                             }}
                           />
                         ))}
                       </div>
                       <span style={{ fontSize: "10px", color: "#6b7280" }}>
-                        ({xp[key]}/{max})
+                        ({filled}/{max})
                       </span>
+                      {trackFull && canEditSheet && character?.id ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMinorAdvanceError(null);
+                            setLevelUpError(null);
+                            if (key === "playbook") {
+                              setLevelUpLockTrack("playbook");
+                              setLevelUpSpendTrack("playbook");
+                              setLevelUpFromPool(false);
+                              setShowLevelUp(true);
+                              return;
+                            }
+                            if (key === "heritage") {
+                              setShowTrackAdvance({ key, kind: "heritage" });
+                              return;
+                            }
+                            setMinorAdvanceSpendTrack(key);
+                            const opts = actionOptionsForXpSpendTrack(
+                              actionRatings,
+                              key,
+                            );
+                            if (opts.length)
+                              setMinorAdvanceAction(opts[0]);
+                            setShowTrackAdvance({ key, kind: "attribute" });
+                          }}
+                          style={{
+                            ...S.btn,
+                            fontSize: "10px",
+                            padding: "2px 8px",
+                            background: "#7c3aed",
+                            color: "#fff",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          Take advance
+                        </button>
+                      ) : null}
                     </div>
-                  ))}
+                    );
+                  })}
                   <div
                     style={{
                       fontSize: "10px",
@@ -10978,323 +11085,9 @@ const CharacterSheetWrapper = ({
                       lineHeight: 1.4,
                     }}
                   >
-                    Tracks fill automatically from desperate rolls (and other
-                    track-bound awards). Free-pool XP is separate — see Available
-                    XP below.
-                  </div>
-
-                  {/* Advancement panel */}
-                  <div
-                    style={{
-                      marginTop: "10px",
-                      padding: "10px",
-                      background: "#0d1117",
-                      borderRadius: "4px",
-                      border: "1px solid #30363d",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      <span
-                        style={{ color: "#a78bfa", fontWeight: "bold" }}
-                        title="Free pool only (scorecard + Development), earned across sessions. Desperate XP marks attribute tracks automatically and is not counted here."
-                      >
-                        Available XP: {unallocatedXp}
-                      </span>
-                      {sessionDevXP > 0 ? (
-                        <span
-                          style={{ ...S.info, padding: "2px 6px" }}
-                          title="Stand Development grade → free-pool XP at next session end."
-                        >
-                          Next end-session bank +{sessionDevXP} (DEV{" "}
-                          {GRADE[devVal]})
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: "10px", color: "#4b5563" }}>
-                          DEV F — no Development bonus
-                        </span>
-                      )}
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: "11px",
-                        padding: "8px",
-                        background: "#111827",
-                        borderRadius: "4px",
-                        border: "1px solid #374151",
-                        marginBottom: "8px",
-                      }}
-                    >
-                      <div
-                        style={{
-                          color: "#d1d5db",
-                          fontWeight: "bold",
-                          marginBottom: "3px",
-                        }}
-                      >
-                        LEVEL UP — 10 XP
-                      </div>
-                      <div style={{ color: "#9ca3af", marginBottom: "2px" }}>
-                        Choose ONE option (from a track or free pool):
-                      </div>
-                      <div style={{ color: "#c4b5fd" }}>
-                        A — +1 Stand Coin grade
-                      </div>
-                      <div style={{ color: "#c4b5fd" }}>
-                        B — +2 action dots
-                      </div>
-                      <div style={{ color: "#c4b5fd", marginBottom: "4px" }}>
-                        C — +1 heritage ability
-                      </div>
-                      <div style={{ color: "#6b7280", fontSize: "10px" }}>
-                        Raising a Coin stat B→A still unlocks ability picks for
-                        that grade-up. Spin / Hamon playbooks are WIP.
-                      </div>
-                    </div>
-
-                    {canAffordLevelUp ? (
-                      <button
-                        onClick={() => {
-                          setLevelUpFromPool(
-                            unallocatedXp >= 10 && maxXpOnAnyTrack < 10,
-                          );
-                          setShowLevelUp(true);
-                        }}
-                        style={{
-                          ...S.btn,
-                          background: "#7c3aed",
-                          color: "#fff",
-                          width: "100%",
-                          marginBottom: "10px",
-                          fontWeight: "bold",
-                        }}
-                      >
-                        ⬆ LEVEL UP AVAILABLE
-                      </button>
-                    ) : (
-                      <div
-                        style={{
-                          ...S.warn,
-                          marginBottom: "10px",
-                          textAlign: "center",
-                        }}
-                      >
-                        Need 10 XP on one track or in free pool (tracks:{" "}
-                        {maxXpOnAnyTrack}, pool: {unallocatedXp})
-                      </div>
-                    )}
-
-                    <div
-                      style={{
-                        borderTop: "1px solid #1f2937",
-                        paddingTop: "8px",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: "#d1d5db",
-                          fontWeight: "bold",
-                          marginBottom: "2px",
-                        }}
-                      >
-                        MINOR ADVANCE — 5 XP
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: "#6b7280",
-                          marginBottom: "6px",
-                        }}
-                      >
-                        +1 action dot (max 4 per action)
-                      </div>
-                      <div style={{ marginBottom: "6px" }}>
-                        <span
-                          style={{
-                            ...S.lbl,
-                            display: "block",
-                            marginBottom: "4px",
-                          }}
-                        >
-                          Spend from track
-                        </span>
-                        <select
-                          value={minorAdvanceSpendTrack}
-                          onChange={(e) =>
-                            setMinorAdvanceSpendTrack(e.target.value)
-                          }
-                          style={{ ...S.sel, width: "100%", fontSize: "11px" }}
-                        >
-                          {XP_SPEND_TRACK_ORDER.map((t) => {
-                            const n = Number(xp[t]) || 0;
-                            const cap = XP_TRACK_SPEND_MAX[t];
-                            return (
-                              <option key={t} value={t} disabled={n < 5}>
-                                {XP_TRACK_SPEND_LABELS[t] || t}: {n}/{cap}
-                                {n < 5 ? " (need 5)" : ""}
-                              </option>
-                            );
-                          })}
-                        </select>
-                      </div>
-                      <div style={{ display: "flex", gap: "6px" }}>
-                        <select
-                          value={minorAdvanceAction}
-                          onChange={(e) =>
-                            setMinorAdvanceAction(e.target.value)
-                          }
-                          style={{ ...S.sel, flex: 1, fontSize: "11px" }}
-                        >
-                          {minorAdvanceActions.map((a) => (
-                            <option
-                              key={a}
-                              value={a}
-                              disabled={actionRatings[a] >= 4}
-                            >
-                              {a} ({actionRatings[a]}/4)
-                              {actionRatings[a] >= 4 ? " — MAX" : ""}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          onClick={spendXPForDot}
-                          disabled={
-                            minorAdvanceBusy ||
-                            !characterId ||
-                            (Number(xp[minorAdvanceSpendTrack]) || 0) < 5 ||
-                            !minorAdvanceActions.includes(minorAdvanceAction) ||
-                            actionRatings[minorAdvanceAction] >= 4
-                          }
-                          style={{
-                            ...S.btn,
-                            fontSize: "11px",
-                            background:
-                              (Number(xp[minorAdvanceSpendTrack]) || 0) >=
-                                5 &&
-                              minorAdvanceActions.includes(minorAdvanceAction) &&
-                              actionRatings[minorAdvanceAction] < 4
-                                ? "#4338ca"
-                                : "#374151",
-                            color:
-                              (Number(xp[minorAdvanceSpendTrack]) || 0) >=
-                                5 &&
-                              minorAdvanceActions.includes(minorAdvanceAction) &&
-                              actionRatings[minorAdvanceAction] < 4
-                                ? "#fff"
-                                : "#6b7280",
-                          }}
-                        >
-                          {minorAdvanceBusy ? "…" : "−5 XP"}
-                        </button>
-                      </div>
-                      {minorAdvanceError && (
-                        <div style={{ ...S.warn, marginTop: "4px", fontSize: "11px" }}>
-                          {minorAdvanceError}
-                        </div>
-                      )}
-                      {maxXpOnAnyTrack < 5 && unallocatedXp < 5 ? (
-                        <div style={{ ...S.warn, marginTop: "4px" }}>
-                          Need 5 XP on one track or in free pool (tracks:{" "}
-                          {maxXpOnAnyTrack}, pool: {unallocatedXp})
-                        </div>
-                      ) : (Number(xp[minorAdvanceSpendTrack]) || 0) < 5 ? (
-                        <div style={{ ...S.warn, marginTop: "4px" }}>
-                          Pick a track with at least 5 XP (or allocate from pool)
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div
-                      style={{
-                        borderTop: "1px solid #1f2937",
-                        paddingTop: "8px",
-                        marginTop: "8px",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: "#d1d5db",
-                          fontWeight: "bold",
-                          marginBottom: "2px",
-                        }}
-                      >
-                        HERITAGE HP — 5 XP
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: "#6b7280",
-                          marginBottom: "6px",
-                        }}
-                      >
-                        Buy +1 HP without extra detriments (heritage option).
-                      </div>
-                      <button
-                        type="button"
-                        disabled={
-                          !canEditSheet ||
-                          !characterId ||
-                          (unallocatedXp < 5 &&
-                            (Number(xp.heritage) || 0) < 5 &&
-                            maxXpOnAnyTrack < 5)
-                        }
-                        onClick={async () => {
-                          if (!characterId) return;
-                          const fromPool = unallocatedXp >= 5;
-                          const track =
-                            (Number(xp.heritage) || 0) >= 5
-                              ? "heritage"
-                              : XP_SPEND_TRACK_ORDER.find(
-                                  (t) => (Number(xp[t]) || 0) >= 5,
-                                ) || "heritage";
-                          setMinorAdvanceBusy(true);
-                          setMinorAdvanceError(null);
-                          try {
-                            const res = await characterAPI.buyHpWithXp(
-                              characterId,
-                              fromPool
-                                ? { from_pool: true }
-                                : { xp_track: track, from_pool: false },
-                            );
-                            if (res?.character)
-                              applyBackendCharacter(res.character);
-                            if (Array.isArray(res?.allocations))
-                              setXpAllocationRows(res.allocations);
-                          } catch (err) {
-                            setMinorAdvanceError(
-                              err?.message || "Could not buy HP",
-                            );
-                          } finally {
-                            setMinorAdvanceBusy(false);
-                          }
-                        }}
-                        style={{
-                          ...S.btn,
-                          fontSize: "11px",
-                          width: "100%",
-                          background:
-                            unallocatedXp >= 5 || maxXpOnAnyTrack >= 5
-                              ? "#0e7490"
-                              : "#374151",
-                          color:
-                            unallocatedXp >= 5 || maxXpOnAnyTrack >= 5
-                              ? "#fff"
-                              : "#6b7280",
-                        }}
-                      >
-                        {minorAdvanceBusy ? "…" : "−5 XP → +1 HP"}
-                      </button>
-                    </div>
+                    When a track is full, Take advance clears it for a reward
+                    (attribute → +1 action dot; heritage → +1 HP; playbook →
+                    level-up choices). Free-pool XP is Available XP above.
                   </div>
 
                   <div
@@ -12616,8 +12409,8 @@ const CharacterSheetWrapper = ({
                         {isStandCoinChargenEditable
                           ? "Chargen: every stat starts at D. Right-click a wedge to lower one stat to F, then raise another — point total stays at 6."
                           : canAffordLevelUp
-                            ? "Stand coin is locked here. Spend 10 XP from any track in Level Up (+1 Stand Coin Grade) to advance a stat."
-                            : "Stand coin is locked after chargen. Mark 10 XP on a track, then use Level Up (+1 Stand Coin Grade)."}
+                            ? "Stand coin is locked here. Fill the playbook track (10) and Take advance, or Level up from pool (−10), for +1 Stand Coin grade."
+                            : "Stand coin is locked after chargen. Fill playbook (10) or bank 10 in Available XP, then Take advance / level up from pool."}
                         {" "}
                         {maxStandGradeIndex >= 5
                           ? "S-rank is enabled for this character by the GM."
@@ -20287,7 +20080,7 @@ const CharacterSheetWrapper = ({
                 </button>
               ))}
             </div>
-            {unallocatedXp >= 10 ? (
+            {unallocatedXp >= 10 && !levelUpLockTrack ? (
               <label
                 style={{
                   display: "flex",
@@ -20472,27 +20265,45 @@ const CharacterSheetWrapper = ({
 
             <div style={{ marginBottom: "16px" }}>
               <span style={S.lbl}>Spend 10 XP from</span>
-              <select
-                value={levelUpSpendTrack}
-                onChange={(e) => setLevelUpSpendTrack(e.target.value)}
-                style={{ ...S.sel, width: "100%", marginTop: "6px" }}
-              >
-                {XP_SPEND_TRACK_ORDER.map((t) => {
-                  const n = Number(xp[t]) || 0;
-                  const cap = XP_TRACK_SPEND_MAX[t];
-                  return (
-                    <option key={t} value={t} disabled={n < 10}>
-                      {XP_TRACK_SPEND_LABELS[t] || t}: {n}/{cap}
-                      {n < 10 ? " (need 10)" : ""}
-                    </option>
-                  );
-                })}
-              </select>
-              {(Number(xp[levelUpSpendTrack]) || 0) < 10 && (
-                <div style={{ ...S.warn, marginTop: "6px", fontSize: "10px" }}>
-                  Choose a track that has at least 10 XP
+              {levelUpLockTrack ? (
+                <div
+                  style={{
+                    marginTop: "6px",
+                    fontSize: "12px",
+                    color: "#c4b5fd",
+                  }}
+                >
+                  {XP_TRACK_SPEND_LABELS[levelUpLockTrack] || levelUpLockTrack}{" "}
+                  track ({Number(xp[levelUpLockTrack]) || 0}/
+                  {XP_TRACK_SPEND_MAX[levelUpLockTrack] || 10}) — full track
+                  advance
                 </div>
+              ) : (
+                <select
+                  value={levelUpSpendTrack}
+                  onChange={(e) => setLevelUpSpendTrack(e.target.value)}
+                  disabled={levelUpFromPool}
+                  style={{ ...S.sel, width: "100%", marginTop: "6px" }}
+                >
+                  {XP_SPEND_TRACK_ORDER.map((t) => {
+                    const n = Number(xp[t]) || 0;
+                    const cap = XP_TRACK_SPEND_MAX[t];
+                    return (
+                      <option key={t} value={t} disabled={n < 10}>
+                        {XP_TRACK_SPEND_LABELS[t] || t}: {n}/{cap}
+                        {n < 10 ? " (need 10)" : ""}
+                      </option>
+                    );
+                  })}
+                </select>
               )}
+              {!levelUpFromPool &&
+                !levelUpLockTrack &&
+                (Number(xp[levelUpSpendTrack]) || 0) < 10 && (
+                  <div style={{ ...S.warn, marginTop: "6px", fontSize: "10px" }}>
+                    Choose a track that has at least 10 XP
+                  </div>
+                )}
             </div>
 
             {levelUpError && (
@@ -20507,21 +20318,35 @@ const CharacterSheetWrapper = ({
                 onClick={confirmLevelUp}
                 disabled={
                   levelUpBusy ||
-                  (Number(xp[levelUpSpendTrack]) || 0) < 10 ||
-                  !characterId
+                  !characterId ||
+                  !(
+                    (levelUpLockTrack
+                      ? (Number(xp[levelUpLockTrack]) || 0) >= 10
+                      : levelUpFromPool
+                        ? unallocatedXp >= 10
+                        : (Number(xp[levelUpSpendTrack]) || 0) >= 10)
+                  )
                 }
                 style={{
                   ...S.btn,
                   background:
                     !levelUpBusy &&
-                    (Number(xp[levelUpSpendTrack]) || 0) >= 10 &&
-                    characterId
+                    characterId &&
+                    (levelUpLockTrack
+                      ? (Number(xp[levelUpLockTrack]) || 0) >= 10
+                      : levelUpFromPool
+                        ? unallocatedXp >= 10
+                        : (Number(xp[levelUpSpendTrack]) || 0) >= 10)
                       ? "#7c3aed"
                       : "#374151",
                   color:
                     !levelUpBusy &&
-                    (Number(xp[levelUpSpendTrack]) || 0) >= 10 &&
-                    characterId
+                    characterId &&
+                    (levelUpLockTrack
+                      ? (Number(xp[levelUpLockTrack]) || 0) >= 10
+                      : levelUpFromPool
+                        ? unallocatedXp >= 10
+                        : (Number(xp[levelUpSpendTrack]) || 0) >= 10)
                       ? "#fff"
                       : "#6b7280",
                   flex: 1,
@@ -20532,12 +20357,168 @@ const CharacterSheetWrapper = ({
               </button>
               <button
                 type="button"
-                onClick={() => setShowLevelUp(false)}
+                onClick={() => {
+                  setShowLevelUp(false);
+                  setLevelUpLockTrack(null);
+                }}
                 style={{ ...S.btn, background: "#374151", color: "#fff" }}
               >
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showTrackAdvance && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.88)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 200,
+          }}
+        >
+          <div
+            style={{
+              background: "#111827",
+              border: "2px solid #7c3aed",
+              borderRadius: "8px",
+              padding: "24px",
+              width: "400px",
+              maxWidth: "90vw",
+            }}
+          >
+            <div
+              style={{
+                fontSize: "16px",
+                fontWeight: "bold",
+                color: "#a78bfa",
+                marginBottom: "8px",
+              }}
+            >
+              Take advance —{" "}
+              {(XP_TRACK_SPEND_LABELS[showTrackAdvance.key] ||
+                showTrackAdvance.key
+              ).toUpperCase()}
+            </div>
+            {showTrackAdvance.kind === "heritage" ? (
+              <>
+                <p style={{ fontSize: 12, color: "#d1d5db", marginBottom: 16 }}>
+                  Clear the full heritage track (5 XP) for +1 HP (heritage option,
+                  no extra detriments).
+                </p>
+                {minorAdvanceError && (
+                  <div style={{ ...S.warn, marginBottom: 10, fontSize: 11 }}>
+                    {minorAdvanceError}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    disabled={minorAdvanceBusy || !characterId}
+                    onClick={async () => {
+                      if (!characterId) return;
+                      setMinorAdvanceBusy(true);
+                      setMinorAdvanceError(null);
+                      try {
+                        const res = await characterAPI.buyHpWithXp(characterId, {
+                          xp_track: "heritage",
+                          from_pool: false,
+                        });
+                        if (res?.character)
+                          applyBackendCharacter(res.character);
+                        if (Array.isArray(res?.allocations))
+                          setXpAllocationRows(res.allocations);
+                        setShowTrackAdvance(null);
+                      } catch (err) {
+                        setMinorAdvanceError(
+                          err?.message || "Could not buy HP",
+                        );
+                      } finally {
+                        setMinorAdvanceBusy(false);
+                      }
+                    }}
+                    style={{
+                      ...S.btn,
+                      flex: 1,
+                      background: "#0e7490",
+                      color: "#fff",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {minorAdvanceBusy ? "…" : "Confirm (−5 XP → +1 HP)"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowTrackAdvance(null)}
+                    style={{ ...S.btn, background: "#374151", color: "#fff" }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p style={{ fontSize: 12, color: "#d1d5db", marginBottom: 12 }}>
+                  Clear this full attribute track (5 XP) for +1 action dot under
+                  that attribute.
+                </p>
+                <span style={S.lbl}>Action</span>
+                <select
+                  value={minorAdvanceAction}
+                  onChange={(e) => setMinorAdvanceAction(e.target.value)}
+                  style={{ ...S.sel, width: "100%", marginBottom: 12 }}
+                >
+                  {minorAdvanceActions.map((a) => (
+                    <option
+                      key={a}
+                      value={a}
+                      disabled={actionRatings[a] >= 4}
+                    >
+                      {a} ({actionRatings[a]}/4)
+                      {actionRatings[a] >= 4 ? " — MAX" : ""}
+                    </option>
+                  ))}
+                </select>
+                {minorAdvanceError && (
+                  <div style={{ ...S.warn, marginBottom: 10, fontSize: 11 }}>
+                    {minorAdvanceError}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={spendXPForDot}
+                    disabled={
+                      minorAdvanceBusy ||
+                      !characterId ||
+                      !minorAdvanceActions.includes(minorAdvanceAction) ||
+                      actionRatings[minorAdvanceAction] >= 4
+                    }
+                    style={{
+                      ...S.btn,
+                      flex: 1,
+                      background: "#7c3aed",
+                      color: "#fff",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    {minorAdvanceBusy ? "…" : "Confirm (−5 XP)"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowTrackAdvance(null)}
+                    style={{ ...S.btn, background: "#374151", color: "#fff" }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
