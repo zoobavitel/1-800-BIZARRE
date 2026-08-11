@@ -1893,11 +1893,14 @@ const CharacterSheetWrapper = ({
   }, [character?.id, character?.healingClock]);
 
   useEffect(() => {
+    // Same dirty gate as xp/stress: poll can deliver a stale snapshot while a
+    // just-completed allocate/deallocate is still the source of truth locally.
+    if (sheetDraftIsDirty) return;
     const v = character?.unallocatedXp;
     if (typeof v !== "number") return;
     const n = Math.max(0, Math.floor(v));
     setUnallocatedXp((p) => (p !== n ? n : p));
-  }, [character?.id, character?.unallocatedXp]);
+  }, [character?.id, character?.unallocatedXp, sheetDraftIsDirty]);
 
   useEffect(() => {
     if (sheetDraftIsDirty) return;
@@ -3445,14 +3448,28 @@ const CharacterSheetWrapper = ({
               track,
               amount: -delta,
             });
-      const nextPool = Number(res?.unallocated_xp);
-      if (Number.isFinite(nextPool)) {
-        setUnallocatedXp(Math.max(0, nextPool));
-      }
-      if (res?.xp_clocks && typeof res.xp_clocks === "object") {
-        setXp((prev) => ({
+      // Prefer full character echo so clocks + free pool stay in sync with parent
+      // hydrate / autosave (partial setXp alone races with poll).
+      if (res?.character) {
+        applyBackendCharacter(res.character);
+      } else {
+        const nextPool = Number(res?.unallocated_xp);
+        const nextXp =
+          res?.xp_clocks && typeof res.xp_clocks === "object"
+            ? { ...xp, ...res.xp_clocks }
+            : null;
+        if (Number.isFinite(nextPool)) {
+          setUnallocatedXp(Math.max(0, nextPool));
+        }
+        if (nextXp) {
+          setXp(nextXp);
+        }
+        setCharData((prev) => ({
           ...prev,
-          ...res.xp_clocks,
+          ...(nextXp ? { xp: nextXp } : {}),
+          ...(Number.isFinite(nextPool)
+            ? { unallocatedXp: Math.max(0, nextPool) }
+            : {}),
         }));
       }
     } catch (e) {
@@ -7510,6 +7527,7 @@ const CharacterSheetWrapper = ({
       coinFilled,
       stash: stashBoxes,
       xp,
+      unallocatedXp,
       abilities,
       clocks,
       playbook,
@@ -7542,6 +7560,7 @@ const CharacterSheetWrapper = ({
     coinFilled,
     stashBoxes,
     xp,
+    unallocatedXp,
     abilities,
     clocks,
     playbook,
@@ -7652,6 +7671,7 @@ const CharacterSheetWrapper = ({
     coinFilled,
     stashBoxes,
     xp,
+    unallocatedXp,
     abilities,
     clocks,
     playbook,

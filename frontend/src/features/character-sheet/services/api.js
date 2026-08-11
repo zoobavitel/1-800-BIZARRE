@@ -1594,8 +1594,17 @@ export const transformFrontendToBackend = (frontendCharacter) => {
       };
     })(),
 
-    // XP clocks
+    // XP clocks + free pool (must round-trip or autosave can wipe allocate/deallocate)
     xp_clocks: frontendCharacter.xp,
+    ...(typeof frontendCharacter.unallocatedXp === "number" &&
+    Number.isFinite(frontendCharacter.unallocatedXp)
+      ? {
+          unallocated_xp: Math.max(
+            0,
+            Math.floor(frontendCharacter.unallocatedXp),
+          ),
+        }
+      : {}),
 
     // Progress clocks
     progress_clocks: frontendCharacter.clocks,

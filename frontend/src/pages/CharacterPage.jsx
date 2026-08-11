@@ -437,9 +437,20 @@ export default function CharacterPage({
             }
             try {
               const raw = await characterAPI.getCharacter(t.characterId);
+              // Re-check after await: allocate/deallocate or edits may have
+              // marked dirty while the GET was in flight; applying a stale
+              // snapshot would wipe free-pool XP / track ticks via hydrate.
+              const dirtyAfter = Boolean(
+                (charTabUnsavedMetaRef.current || {})[t.tabId]?.isDirty,
+              );
+              if (dirtyAfter) return t;
               const transformed = transformBackendToFrontend(raw);
               return { ...t, character: transformed };
             } catch {
+              const dirtyAfter = Boolean(
+                (charTabUnsavedMetaRef.current || {})[t.tabId]?.isDirty,
+              );
+              if (dirtyAfter) return t;
               const updated = byId.get(t.characterId);
               if (updated) return { ...t, character: updated };
               return t;

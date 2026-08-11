@@ -2184,6 +2184,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 clock_key=track,
             )
 
+        locked.refresh_from_db()
         return Response(
             {
                 "success": True,
@@ -2192,6 +2193,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "new_track_total": new_xp,
                 "unallocated_xp": locked.unallocated_xp,
                 "xp_clocks": locked.xp_clocks,
+                "character": _character_response(locked),
             }
         )
 
@@ -2301,6 +2303,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     entry.save(update_fields=["xp_gained", "description"])
                     remaining = 0
 
+        locked.refresh_from_db()
         return Response(
             {
                 "success": True,
@@ -2309,6 +2312,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "new_track_total": new_xp,
                 "unallocated_xp": locked.unallocated_xp,
                 "xp_clocks": locked.xp_clocks,
+                "character": _character_response(locked),
             }
         )
 
