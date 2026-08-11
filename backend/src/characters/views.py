@@ -919,7 +919,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='allocate-pool-xp')
     def allocate_pool_xp(self, request, pk=None):
         """
-        Move XP from `unallocated_xp` (session bank) onto a normal xp_clocks track.
+        Move XP from `unallocated_xp` (free pool) onto a normal xp_clocks track.
+        Works with or without an active campaign session.
         """
         try:
             character = self.get_object()
@@ -963,7 +964,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
             pool = int(getattr(locked, 'unallocated_xp', 0) or 0)
             if amount > pool:
                 return Response(
-                    {'error': f'Only {pool} XP available in session pool.'},
+                    {'error': f'Only {pool} XP available in free pool.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             xp_clocks = dict(locked.xp_clocks or {})
@@ -985,7 +986,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 roll=None,
                 trigger='MANUAL',
                 description=(
-                    f'[{track}] Allocated {amount} XP from session pool '
+                    f'[{track}] Allocated {amount} XP from free pool '
                     f'({pool} in pool before).'
                 ),
                 xp_gained=amount,
