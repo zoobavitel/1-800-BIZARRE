@@ -3403,7 +3403,7 @@ const CharacterSheetWrapper = ({
     [incrementStat, decrementStat],
   );
 
-  const toggleXP = (track, idx) => {
+  const toggleXP = async (track, idx) => {
     const maxVals = {
       insight: 5,
       prowess: 5,
@@ -3411,10 +3411,50 @@ const CharacterSheetWrapper = ({
       heritage: 5,
       playbook: 10,
     };
-    setXp((p) => ({
-      ...p,
-      [track]: Math.min(idx < p[track] ? idx : idx + 1, maxVals[track]),
-    }));
+
+    const cur = Number(xp?.[track]) || 0;
+    const desired = Math.min(idx < cur ? idx : idx + 1, maxVals[track]);
+    if (!characterId) return;
+    if (!canEditSheet) return;
+    if (desired === cur) return;
+    if (poolAllocateBusy) return;
+
+    // For now, ticks only support allocating from free pool (increasing).
+    // Undoing/taking XP back from ticks requires the separate undo flows.
+    if (desired < cur) {
+      setSaveErrorMessage("Taking XP off tracks via ticks is not supported. Use undo.");
+      return;
+    }
+
+    const delta = desired - cur;
+    if (delta <= 0) return;
+    if (unallocatedXp < delta) {
+      setSaveErrorMessage(`Not enough XP in free pool (need ${delta}).`);
+      return;
+    }
+
+    setPoolAllocateBusy(true);
+    setSaveErrorMessage(null);
+    try {
+      const res = await characterAPI.allocatePoolXp(characterId, {
+        track,
+        amount: delta,
+      });
+      const nextPool = Number(res?.unallocated_xp);
+      if (Number.isFinite(nextPool)) {
+        setUnallocatedXp(Math.max(0, nextPool));
+      }
+      if (res?.xp_clocks && typeof res.xp_clocks === "object") {
+        setXp((prev) => ({
+          ...prev,
+          ...res.xp_clocks,
+        }));
+      }
+    } catch (e) {
+      setSaveErrorMessage(e?.message || "Could not allocate pool XP");
+    } finally {
+      setPoolAllocateBusy(false);
+    }
   };
 
   const levelUpIsBtoA = useMemo(
