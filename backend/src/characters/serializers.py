@@ -1426,6 +1426,8 @@ class StandSerializer(serializers.ModelSerializer):
 
 
 _STAND_TYPE_KEYS = frozenset(k for k, _ in Stand.TYPE_CHOICES)
+_STAND_FORM_PRESETS = frozenset(k for k, _ in Stand.FORM_CHOICES)
+_STAND_CONSCIOUSNESS = frozenset("ABCDEF")
 
 
 def _stand_type_from_payload(stand_data, default="FIGHTING"):
@@ -1434,6 +1436,52 @@ def _stand_type_from_payload(stand_data, default="FIGHTING"):
         return default
     raw = str(stand_data.get("type") or "").strip().upper()
     return raw if raw in _STAND_TYPE_KEYS else default
+
+
+def _normalize_stand_forms(raw) -> list[str]:
+    """Dedupe preserving order; allow FORM_CHOICES presets and custom strings."""
+    if not isinstance(raw, list):
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for x in raw:
+        s = str(x or "").strip()
+        if not s or s in seen:
+            continue
+        seen.add(s)
+        out.append(s[:100])
+    return out
+
+
+def _legacy_form_from_forms(forms: list[str]) -> str:
+    for f in forms:
+        if f in _STAND_FORM_PRESETS:
+            return f
+    return "Humanoid"
+
+
+def _apply_stand_identity_fields(stand, stand_data: dict) -> None:
+    """Apply flavor identity fields from nested stand payload onto a Stand row."""
+    if not isinstance(stand_data, dict):
+        return
+    if "forms" in stand_data:
+        forms = _normalize_stand_forms(stand_data.get("forms"))
+        stand.forms = forms
+        stand.form = _legacy_form_from_forms(forms)
+    elif stand_data.get("form"):
+        form = str(stand_data.get("form") or "").strip()
+        if form:
+            stand.form = form if form in _STAND_FORM_PRESETS else stand.form
+            forms = list(stand.forms or [])
+            if form not in forms:
+                forms = [form] + [x for x in forms if x != form]
+            stand.forms = forms
+    if "consciousness_level" in stand_data:
+        c = str(stand_data.get("consciousness_level") or "").strip().upper()[:1]
+        if c in _STAND_CONSCIOUSNESS:
+            stand.consciousness_level = c
+    if "type_custom" in stand_data:
+        stand.type_custom = str(stand_data.get("type_custom") or "").strip()[:100]
 
 
 class CharacterSerializer(serializers.ModelSerializer):
@@ -1825,13 +1873,28 @@ class CharacterSerializer(serializers.ModelSerializer):
             stand_type = _stand_type_from_payload(
                 stand_data if isinstance(stand_data, dict) else None
             )
+            forms_default = ["Humanoid"]
+            if isinstance(stand_data, dict) and "forms" in stand_data:
+                forms_default = _normalize_stand_forms(stand_data.get("forms")) or [
+                    "Humanoid"
+                ]
+            consciousness = "C"
+            if isinstance(stand_data, dict):
+                c = str(stand_data.get("consciousness_level") or "").strip().upper()[:1]
+                if c in _STAND_CONSCIOUSNESS:
+                    consciousness = c
+            type_custom = ""
+            if isinstance(stand_data, dict):
+                type_custom = str(stand_data.get("type_custom") or "").strip()[:100]
             Stand.objects.get_or_create(
                 character=character,
                 defaults={
                     "name": character.stand_name or "Unnamed Stand",
                     "type": stand_type,
-                    "form": "Humanoid",
-                    "consciousness_level": "C",
+                    "type_custom": type_custom,
+                    "form": _legacy_form_from_forms(forms_default),
+                    "forms": forms_default,
+                    "consciousness_level": consciousness,
                     "power": str(stats.get("power", "D")).upper()[:1],
                     "speed": str(stats.get("speed", "D")).upper()[:1],
                     "range": str(stats.get("range", "D")).upper()[:1],
@@ -1984,7 +2047,9 @@ class CharacterSerializer(serializers.ModelSerializer):
                 defaults={
                     "name": character.stand_name or "Unnamed Stand",
                     "type": stand_type_default,
+                    "type_custom": "",
                     "form": "Humanoid",
+                    "forms": ["Humanoid"],
                     "consciousness_level": "C",
                     "power": "D",
                     "speed": "D",
@@ -2012,6 +2077,7 @@ class CharacterSerializer(serializers.ModelSerializer):
                 resolved = _stand_type_from_payload(stand_data, default="")
                 if resolved:
                     stand.type = resolved
+                _apply_stand_identity_fields(stand, stand_data)
             stand.save()
 
         if std_ids is not None:

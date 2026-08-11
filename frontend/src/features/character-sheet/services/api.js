@@ -1039,6 +1039,21 @@ export const transformBackendToFrontend = (backendCharacter) => {
       development: gradeToIndex(backendCharacter.stand?.development),
     },
     standType: String(backendCharacter.stand?.type || "").trim(),
+    standTypeCustom: String(backendCharacter.stand?.type_custom || "").trim(),
+    standForms: (() => {
+      const raw = backendCharacter.stand?.forms;
+      if (Array.isArray(raw) && raw.length) {
+        return raw.map((x) => String(x || "").trim()).filter(Boolean);
+      }
+      const legacy = String(backendCharacter.stand?.form || "").trim();
+      return legacy ? [legacy] : [];
+    })(),
+    standConsciousness: String(
+      backendCharacter.stand?.consciousness_level || "",
+    )
+      .trim()
+      .toUpperCase()
+      .slice(0, 1),
 
     // Stress: backend integer; frontend uses filled count + array for compatibility
     stressFilled: Math.max(0, backendCharacter.stress ?? 0),
@@ -1418,6 +1433,26 @@ export const transformFrontendToBackend = (frontendCharacter) => {
             type: String(frontendCharacter.standType).trim().toUpperCase(),
           }
         : {}),
+      forms: Array.isArray(frontendCharacter.standForms)
+        ? frontendCharacter.standForms
+            .map((x) => String(x || "").trim())
+            .filter(Boolean)
+        : [],
+      ...(String(frontendCharacter.standForms?.[0] || "").trim()
+        ? { form: String(frontendCharacter.standForms[0]).trim() }
+        : {}),
+      ...(String(frontendCharacter.standConsciousness || "")
+        .trim()
+        .toUpperCase()
+        .match(/^[A-F]$/)
+        ? {
+            consciousness_level: String(frontendCharacter.standConsciousness)
+              .trim()
+              .toUpperCase()
+              .slice(0, 1),
+          }
+        : {}),
+      type_custom: String(frontendCharacter.standTypeCustom || "").trim(),
     },
 
     // Stress: backend integer; accept stressFilled or array length

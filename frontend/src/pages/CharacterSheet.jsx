@@ -85,6 +85,7 @@ import {
   mergedTriggerSentencesForKeys,
   normalizePlaybookPathKey,
   normalizePlaybookXpArchetypeKeys,
+  STAND_ARCHETYPE_ROWS,
 } from "../features/character-sheet/utils/playbookXpTriggerSrd";
 import {
   adjustActionRollBonusSupports,
@@ -108,6 +109,22 @@ function archetypesEqual(a, b) {
     return false;
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
   return true;
+}
+
+const STAND_FORM_PRESETS = ["Humanoid", "Non-Humanoid", "Phenomenon"];
+const STAND_CONSCIOUSNESS_GRADES = ["A", "B", "C", "D", "E", "F"];
+
+function normalizeStandFormsList(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  const seen = new Set();
+  for (const x of raw) {
+    const s = String(x || "").trim();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
 }
 
 /** Same ordering as Insight / Prowess / Resolve columns on the sheet. */
@@ -768,6 +785,15 @@ function hasMeaningfulDraftChanges(payload) {
   if (String(payload.sheetNotes ?? "").trim() !== "") return true;
   if (Array.isArray(payload.inventory) && payload.inventory.length > 0)
     return true;
+  if (
+    Array.isArray(payload.playbookXpArchetypes) &&
+    payload.playbookXpArchetypes.length > 0
+  )
+    return true;
+  if (String(payload.standTypeCustom || "").trim() !== "") return true;
+  if (Array.isArray(payload.standForms) && payload.standForms.length > 0)
+    return true;
+  if (String(payload.standConsciousness || "").trim() !== "") return true;
   return false;
 }
 
@@ -2197,6 +2223,20 @@ const CharacterSheetWrapper = ({
   }, [character?.id, character?.playbook, character?.secondaryPlaybook]);
 
   const [standType, setStandType] = useState(character?.standType || "");
+  const [standTypeCustom, setStandTypeCustom] = useState(
+    () => String(character?.standTypeCustom || "").trim(),
+  );
+  const [standForms, setStandForms] = useState(() =>
+    normalizeStandFormsList(character?.standForms),
+  );
+  const [standConsciousness, setStandConsciousness] = useState(() => {
+    const c = String(character?.standConsciousness || "")
+      .trim()
+      .toUpperCase()
+      .slice(0, 1);
+    return STAND_CONSCIOUSNESS_GRADES.includes(c) ? c : "";
+  });
+  const [standFormCustomDraft, setStandFormCustomDraft] = useState("");
   const [playbookXpArchetypes, setPlaybookXpArchetypes] = useState(() =>
     normalizePlaybookXpArchetypeKeys(
       character?.playbook || "Stand",
@@ -2209,6 +2249,25 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     setStandType(String(character?.standType || "").trim());
   }, [character?.id, character?.standType]);
+
+  useEffect(() => {
+    if (sheetDraftIsDirty) return;
+    setStandTypeCustom(String(character?.standTypeCustom || "").trim());
+  }, [character?.id, character?.standTypeCustom, sheetDraftIsDirty]);
+
+  useEffect(() => {
+    if (sheetDraftIsDirty) return;
+    setStandForms(normalizeStandFormsList(character?.standForms));
+  }, [character?.id, character?.standForms, sheetDraftIsDirty]);
+
+  useEffect(() => {
+    if (sheetDraftIsDirty) return;
+    const c = String(character?.standConsciousness || "")
+      .trim()
+      .toUpperCase()
+      .slice(0, 1);
+    setStandConsciousness(STAND_CONSCIOUSNESS_GRADES.includes(c) ? c : "");
+  }, [character?.id, character?.standConsciousness, sheetDraftIsDirty]);
 
   useEffect(() => {
     // Reset seed gate only when switching characters — empty server list after
@@ -6975,6 +7034,9 @@ const CharacterSheetWrapper = ({
       secondaryPlaybook,
       playbookXpArchetypes,
       standType,
+      standTypeCustom,
+      standForms,
+      standConsciousness,
       campaign: campaignId || null,
       image_url: imageUrl,
       ...(removeImageRequested ? { image: null } : {}),
@@ -7004,6 +7066,9 @@ const CharacterSheetWrapper = ({
     secondaryPlaybook,
     playbookXpArchetypes,
     standType,
+    standTypeCustom,
+    standForms,
+    standConsciousness,
     campaignId,
     imageUrl,
     removeImageRequested,
@@ -7111,6 +7176,9 @@ const CharacterSheetWrapper = ({
     secondaryPlaybook,
     playbookXpArchetypes,
     standType,
+    standTypeCustom,
+    standForms,
+    standConsciousness,
     campaignId,
     imageUrl,
     removeImageRequested,
@@ -11308,7 +11376,11 @@ const CharacterSheetWrapper = ({
                                     Stand, Hamon, or Spin). Max 2 XP total for this
                                     category; multiple archetype lines below only choose
                                     which trigger text you are showing—they do not add
-                                    extra pools.
+                                    extra pools.{" "}
+                                    <span style={{ color: "#9ca3af" }}>
+                                      Stand types here are the same list as under
+                                      PLAYBOOK.
+                                    </span>
                                   </div>
                                   <div
                                     style={{
@@ -11370,90 +11442,6 @@ const CharacterSheetWrapper = ({
                                       </label>
                                     ))}
                                   </div>
-                                  <details
-                                    style={{
-                                      marginTop: "8px",
-                                      fontSize: "10px",
-                                      color: "#9ca3af",
-                                    }}
-                                  >
-                                    <summary
-                                      style={{
-                                        cursor: "pointer",
-                                        userSelect: "none",
-                                      }}
-                                    >
-                                      Full archetype table (SRD)
-                                    </summary>
-                                    <div
-                                      style={{
-                                        marginTop: "6px",
-                                        border: "1px solid #374151",
-                                        borderRadius: "4px",
-                                        overflow: "hidden",
-                                      }}
-                                    >
-                                      <table
-                                        style={{
-                                          width: "100%",
-                                          borderCollapse: "collapse",
-                                          fontSize: "10px",
-                                        }}
-                                      >
-                                        <thead>
-                                          <tr style={{ background: "#111827" }}>
-                                            <th
-                                              style={{
-                                                textAlign: "left",
-                                                padding: "4px 6px",
-                                                color: "#9ca3af",
-                                              }}
-                                            >
-                                              Archetype
-                                            </th>
-                                            <th
-                                              style={{
-                                                textAlign: "left",
-                                                padding: "4px 6px",
-                                                color: "#9ca3af",
-                                              }}
-                                            >
-                                              XP trigger
-                                            </th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {archetypeOpts.map((opt) => (
-                                            <tr
-                                              key={`tbl-${opt.key}`}
-                                              style={{
-                                                borderTop: "1px solid #1f2937",
-                                              }}
-                                            >
-                                              <td
-                                                style={{
-                                                  padding: "4px 6px",
-                                                  color: "#e5e7eb",
-                                                  verticalAlign: "top",
-                                                }}
-                                              >
-                                                {opt.label}
-                                              </td>
-                                              <td
-                                                style={{
-                                                  padding: "4px 6px",
-                                                  color: "#d1d5db",
-                                                  verticalAlign: "top",
-                                                }}
-                                              >
-                                                {opt.trigger}
-                                              </td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </details>
                                 </div>
                                 {renderPips(playbookRow)}
                               </div>
@@ -11750,6 +11738,271 @@ const CharacterSheetWrapper = ({
                       </select>
                     </div>
                   </div>
+                  {hasStandPlaybook && (
+                    <div
+                      style={{
+                        marginTop: "10px",
+                        marginBottom: "12px",
+                        padding: "10px",
+                        background: "#111827",
+                        borderRadius: "6px",
+                        border: "1px solid #374151",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          color: "#9ca3af",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        Stand identity (flavor)
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#6b7280",
+                          marginBottom: "8px",
+                          lineHeight: 1.4,
+                        }}
+                      >
+                        Types also drive Playbook-specific end-of-session XP
+                        archetypes. Forms and consciousness are personal flavor
+                        only (not advancement).
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#9ca3af",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        Stand type(s)
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "8px 12px",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        {STAND_ARCHETYPE_ROWS.map((opt) => (
+                          <label
+                            key={opt.key}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "5px",
+                              fontSize: "10px",
+                              color: "#d1d5db",
+                              cursor: canEditSheet ? "pointer" : "default",
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={playbookXpArchetypes.includes(opt.key)}
+                              disabled={!canEditSheet || !characterId}
+                              onChange={() =>
+                                togglePlaybookXpArchetypeKey(opt.key)
+                              }
+                            />
+                            {opt.label}
+                          </label>
+                        ))}
+                      </div>
+                      <label
+                        style={{
+                          display: "block",
+                          fontSize: "10px",
+                          color: "#9ca3af",
+                          marginBottom: "8px",
+                        }}
+                      >
+                        Custom type label (optional)
+                        <input
+                          type="text"
+                          value={standTypeCustom}
+                          disabled={!canEditSheet}
+                          onChange={(e) => setStandTypeCustom(e.target.value)}
+                          placeholder="Fiction subtype name"
+                          style={{
+                            ...S.inp,
+                            display: "block",
+                            width: "100%",
+                            marginTop: "4px",
+                            fontSize: "11px",
+                          }}
+                        />
+                      </label>
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#9ca3af",
+                          marginBottom: "4px",
+                        }}
+                      >
+                        Form(s)
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "8px 12px",
+                          marginBottom: "6px",
+                        }}
+                      >
+                        {STAND_FORM_PRESETS.map((formLabel) => {
+                          const checked = standForms.includes(formLabel);
+                          return (
+                            <label
+                              key={formLabel}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "5px",
+                                fontSize: "10px",
+                                color: "#d1d5db",
+                                cursor: canEditSheet ? "pointer" : "default",
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                disabled={!canEditSheet}
+                                onChange={() => {
+                                  setStandForms((prev) => {
+                                    const next = new Set(prev);
+                                    if (next.has(formLabel)) next.delete(formLabel);
+                                    else next.add(formLabel);
+                                    return STAND_FORM_PRESETS.filter((f) =>
+                                      next.has(f),
+                                    ).concat(
+                                      prev.filter(
+                                        (f) => !STAND_FORM_PRESETS.includes(f),
+                                      ),
+                                    );
+                                  });
+                                }}
+                              />
+                              {formLabel}
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: "6px",
+                          alignItems: "center",
+                          marginBottom: "8px",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <input
+                          type="text"
+                          value={standFormCustomDraft}
+                          disabled={!canEditSheet}
+                          onChange={(e) =>
+                            setStandFormCustomDraft(e.target.value)
+                          }
+                          placeholder="Custom form…"
+                          style={{
+                            ...S.inp,
+                            flex: "1 1 120px",
+                            fontSize: "11px",
+                          }}
+                        />
+                        <button
+                          type="button"
+                          disabled={!canEditSheet || !standFormCustomDraft.trim()}
+                          onClick={() => {
+                            const custom = standFormCustomDraft.trim();
+                            if (!custom) return;
+                            setStandForms((prev) =>
+                              normalizeStandFormsList([...prev, custom]),
+                            );
+                            setStandFormCustomDraft("");
+                          }}
+                          style={{
+                            ...S.btn,
+                            fontSize: "10px",
+                            padding: "4px 8px",
+                          }}
+                        >
+                          Add
+                        </button>
+                      </div>
+                      {standForms.some((f) => !STAND_FORM_PRESETS.includes(f)) && (
+                        <div
+                          style={{
+                            display: "flex",
+                            flexWrap: "wrap",
+                            gap: "6px",
+                            marginBottom: "8px",
+                          }}
+                        >
+                          {standForms
+                            .filter((f) => !STAND_FORM_PRESETS.includes(f))
+                            .map((f) => (
+                              <button
+                                key={f}
+                                type="button"
+                                disabled={!canEditSheet}
+                                onClick={() =>
+                                  setStandForms((prev) =>
+                                    prev.filter((x) => x !== f),
+                                  )
+                                }
+                                title="Remove custom form"
+                                style={{
+                                  fontSize: "10px",
+                                  padding: "2px 8px",
+                                  borderRadius: 4,
+                                  border: "1px solid #4b5563",
+                                  background: "#1f2937",
+                                  color: "#d1d5db",
+                                  cursor: canEditSheet ? "pointer" : "default",
+                                }}
+                              >
+                                {f} ×
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                      <label
+                        style={{
+                          display: "block",
+                          fontSize: "10px",
+                          color: "#9ca3af",
+                        }}
+                      >
+                        Consciousness (flavor grade)
+                        <select
+                          value={standConsciousness}
+                          disabled={!canEditSheet}
+                          onChange={(e) =>
+                            setStandConsciousness(e.target.value)
+                          }
+                          style={{
+                            ...S.sel,
+                            display: "block",
+                            marginTop: "4px",
+                            width: "100%",
+                            maxWidth: 120,
+                          }}
+                        >
+                          <option value="">—</option>
+                          {STAND_CONSCIOUSNESS_GRADES.map((g) => (
+                            <option key={g} value={g}>
+                              {g}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  )}
                   {((hasStandPlaybook &&
                     standardAbilitiesList.length === 0) ||
                     (isHamonPlaybook && hamonAbilitiesList.length === 0) ||

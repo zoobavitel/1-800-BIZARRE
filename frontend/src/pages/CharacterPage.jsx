@@ -259,6 +259,9 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
       ? payload.playbookXpArchetypes
       : [],
     standType: payload.standType ?? "",
+    standTypeCustom: payload.standTypeCustom ?? "",
+    standForms: Array.isArray(payload.standForms) ? payload.standForms : [],
+    standConsciousness: payload.standConsciousness ?? "",
     id: payload.id,
     inventory: payload.inventory ?? [],
     reputation_status: payload.reputation_status ?? {},

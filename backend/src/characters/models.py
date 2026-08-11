@@ -1346,7 +1346,18 @@ class Stand(models.Model):
 
     name = models.CharField(max_length=100)
     type = models.CharField(max_length=30, choices=TYPE_CHOICES)
+    type_custom = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="Optional fiction-only subtype label; does not replace TYPE_CHOICES / XP keys.",
+    )
     form = models.CharField(max_length=30, choices=FORM_CHOICES)
+    forms = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="One or more form labels (FORM_CHOICES presets and/or custom strings).",
+    )
     consciousness_level = models.CharField(
         max_length=1, choices=[(x, x) for x in "ABCDEF"]
     )
