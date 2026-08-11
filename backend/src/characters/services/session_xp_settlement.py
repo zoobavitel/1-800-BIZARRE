@@ -198,6 +198,13 @@ def settle_encoded_session_xp(session: Session, acting_user: Any) -> dict:
         char_ids |= set(
             locked.characters_involved.values_list("id", flat=True)
         )
+        # Mid-session scorecard awards (BELIEFS / PLAYBOOK_SPECIFIC / etc.) even when
+        # characters_involved was never filled — still grant Dev→pool at settle.
+        char_ids |= set(
+            ExperienceTracker.objects.filter(session=locked).values_list(
+                "character_id", flat=True
+            )
+        )
         if not char_ids:
             Session.objects.filter(pk=session.pk).update(
                 auto_encoded_xp_settled=True
@@ -206,8 +213,13 @@ def settle_encoded_session_xp(session: Session, acting_user: Any) -> dict:
             return out
         for cid in sorted(char_ids):
             try:
-                char = Character.objects.select_for_update().select_related("stand").get(
-                    pk=cid
+                # Postgres: FOR UPDATE + select_related("stand") uses a LEFT OUTER JOIN
+                # (nullable reverse OneToOne) and raises NotSupportedError. Lock only
+                # characters_character via of=("self",).
+                char = (
+                    Character.objects.select_for_update(of=("self",))
+                    .select_related("stand")
+                    .get(pk=cid)
                 )
             except Character.DoesNotExist:
                 continue
