@@ -10835,44 +10835,62 @@ const CharacterSheetWrapper = ({
                   </div>
                 </div>
 
-                {/* XP & Advancement */}
+                {/* XP & Advancement — free pool spendable with or without active session */}
                 <div style={S.card}>
                   <span style={S.lbl}>EXPERIENCE TRACKS</span>
-                  {unallocatedXp > 0 ? (
+                  <div
+                    style={{
+                      marginBottom: "12px",
+                      padding: "10px",
+                      background: "#1a1025",
+                      border: "1px solid rgb(109, 40, 217)",
+                      borderRadius: "6px",
+                    }}
+                  >
                     <div
                       style={{
-                        marginBottom: "12px",
-                        padding: "10px",
-                        background: "#1a1025",
-                        border: "1px solid rgb(109, 40, 217)",
-                        borderRadius: "6px",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: "8px",
+                        flexWrap: "wrap",
+                        marginBottom: "4px",
                       }}
                     >
                       <div
                         style={{
                           color: "rgb(167, 139, 250)",
                           fontWeight: "bold",
-                          marginBottom: "4px",
                         }}
                       >
                         Available XP: {unallocatedXp}
                       </div>
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          color: "#9ca3af",
-                          lineHeight: 1.45,
-                          marginBottom: "8px",
-                        }}
-                      >
-                        Free pool only — scorecard (BELIEFS / PLAYBOOK /
-                        STRUGGLE) and Stand Development end-session bonus,
-                        banked across sessions. Spend anytime (in or out of
-                        session): allocate +1 onto a track, or spend 10 from
-                        the pool on a playbook-style level-up. Desperate-roll
-                        XP marks attribute tracks automatically — it never
-                        sits here.
-                      </div>
+                      {sessionDevXP > 0 ? (
+                        <span
+                          style={{ fontSize: "10px", color: "#9ca3af" }}
+                          title="Stand Development grade → free-pool XP at next session end."
+                        >
+                          Next end-session bank +{sessionDevXP} (DEV{" "}
+                          {GRADE[devVal]})
+                        </span>
+                      ) : null}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: "10px",
+                        color: "#9ca3af",
+                        lineHeight: 1.45,
+                        marginBottom: "8px",
+                      }}
+                    >
+                      Free pool (not tied to a live session). Earned from
+                      scorecard and Stand Development; spend anytime — during
+                      play or between sessions — even when no campaign session is
+                      active. Allocate +1 onto a track, or spend 10 on a
+                      playbook-style level-up. Desperate-roll XP marks attribute
+                      tracks automatically and never sits here.
+                    </div>
+                    {unallocatedXp > 0 ? (
                       <div
                         style={{
                           display: "flex",
@@ -10906,7 +10924,10 @@ const CharacterSheetWrapper = ({
                                   res?.xp_clocks &&
                                   typeof res.xp_clocks === "object"
                                 ) {
-                                  setXp((prev) => ({ ...prev, ...res.xp_clocks }));
+                                  setXp((prev) => ({
+                                    ...prev,
+                                    ...res.xp_clocks,
+                                  }));
                                 }
                               } catch (e) {
                                 setSaveErrorMessage(
@@ -10951,44 +10972,14 @@ const CharacterSheetWrapper = ({
                           </button>
                         ) : null}
                       </div>
-                      {sessionDevXP > 0 ? (
-                        <div
-                          style={{
-                            marginTop: "8px",
-                            fontSize: "10px",
-                            color: "#9ca3af",
-                          }}
-                          title="Stand Development grade → free-pool XP at next session end."
-                        >
-                          Next end-session bank +{sessionDevXP} (DEV{" "}
-                          {GRADE[devVal]})
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        marginBottom: "8px",
-                        fontSize: "11px",
-                      }}
-                    >
-                      <span
-                        style={{ color: "#a78bfa", fontWeight: "bold" }}
-                        title="Free pool only (scorecard + Development)."
-                      >
-                        Available XP: {unallocatedXp}
-                      </span>
-                      {sessionDevXP > 0 ? (
-                        <span style={{ color: "#6b7280", fontSize: "10px" }}>
-                          Next end-session bank +{sessionDevXP} (DEV{" "}
-                          {GRADE[devVal]})
-                        </span>
-                      ) : null}
-                    </div>
-                  )}
+                    ) : (
+                      <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                        No free-pool XP right now. Scorecard / Dev awards land
+                        here after sessions; you can spend them later without an
+                        active session.
+                      </div>
+                    )}
+                  </div>
                   {[
                     { name: "INSIGHT", key: "insight", max: 5 },
                     { name: "PROWESS", key: "prowess", max: 5 },
@@ -11087,7 +11078,8 @@ const CharacterSheetWrapper = ({
                   >
                     When a track is full, Take advance clears it for a reward
                     (attribute → +1 action dot; heritage → +1 HP; playbook →
-                    level-up choices). Free-pool XP is Available XP above.
+                    level-up choices). Free-pool XP is Available XP above —
+                    usable with or without an active session.
                   </div>
 
                   <div
