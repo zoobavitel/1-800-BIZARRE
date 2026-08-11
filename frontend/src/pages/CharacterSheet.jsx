@@ -1973,7 +1973,8 @@ const CharacterSheetWrapper = ({
         ? prev
         : next;
     });
-  }, [character?.id, character?.trauma, sheetDraftIsDirty]);
+    // character?.stressFilled: used when splitting stress/trauma truth lock after trauma catches up
+  }, [character?.id, character?.stressFilled, character?.trauma, sheetDraftIsDirty]);
 
   useEffect(() => {
     if (sheetDraftIsDirty) return;
