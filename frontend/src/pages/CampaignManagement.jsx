@@ -3252,11 +3252,10 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                   <SessionXpAllocationTable rows={clearActiveRowsWithScorecard} />
                 )}
                 <p style={{ margin: "0 0 16px", fontSize: "11px", color: "#9ca3af" }}>
-                  <strong>Total</strong> column = auto session XP (STRUGGLE from
-                  vice / trauma signals on the playbook clock) + Development session
-                  XP (banked to the <strong>session XP pool</strong>) + manual awards
-                  logged this session (already on tracks). Pool XP is spent on the
-                  character sheet.
+                  <strong>Total</strong> column = scorecard XP (BELIEFS / PLAYBOOK /
+                  STRUGGLE → free pool) + Development end-session bonus (→ free
+                  pool) + manual awards already on tracks. Allocate pool XP on
+                  the character sheet.
                 </p>
               </>
             )}
@@ -4290,10 +4289,10 @@ function SessionDetail({
               <SessionXpAllocationTable rows={endLiveRowsWithBeliefs} />
             )}
             <p style={{ margin: "0 0 16px", fontSize: "11px", color: "#9ca3af" }}>
-              <strong>Total</strong> column = auto session XP (STRUGGLE from vice /
-              trauma signals on the playbook clock) + Development session XP (banked
-              to the <strong>session XP pool</strong>) + manual awards logged this
-              session (already on tracks). Pool XP is spent on the character sheet.
+              <strong>Total</strong> column = scorecard XP (BELIEFS / PLAYBOOK /
+              STRUGGLE → free pool) + Development end-session bonus (→ free pool) +
+              manual awards logged this session (already on tracks). Allocate pool
+              XP on the character sheet.
             </p>
             {endLiveRowsWithManual.length > 0 ? (
               <div

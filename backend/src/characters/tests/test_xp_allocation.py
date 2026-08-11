@@ -294,3 +294,32 @@ class XPAllocationAPITests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.character.refresh_from_db()
         self.assertEqual(self.character.xp_clocks["heritage"], 10)
+
+    def test_apply_level_up_heritage_api(self):
+        self.character.xp_clocks = {
+            **self.character.xp_clocks,
+            "playbook": 10,
+        }
+        self.character.save(update_fields=["xp_clocks"])
+        res = self.client.post(
+            f"/api/characters/{self.character.id}/apply-level-up/",
+            {"xp_track": "playbook", "choice": "heritage"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.xp_clocks["playbook"], 0)
+        self.assertEqual(self.character.heritage_points_gained, 1)
+
+    def test_buy_hp_from_pool_api(self):
+        self.character.unallocated_xp = 5
+        self.character.save(update_fields=["unallocated_xp"])
+        res = self.client.post(
+            f"/api/characters/{self.character.id}/buy-hp-with-xp/",
+            {"from_pool": True},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.unallocated_xp, 0)
+        self.assertEqual(self.character.bonus_hp_from_xp, 1)

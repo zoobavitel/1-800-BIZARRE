@@ -1,10 +1,6 @@
-"""award_desperate_action_xp: +1 default, +2 for 0-dot per SRD lines 1356–1358.
+"""award_desperate_action_xp: always +1 XP on the attribute track (cap 5).
 
-SRD `docs/1-(800)-BIZARRE SRD.md`:
-  - 1342: desperate skill check → +1 XP on the relevant attribute.
-  - 1356–1358: rolling with **zero dots** at desperate position → +2 XP.
-
-Each attribute track caps at 5; 0-dot bonus is clipped when near the cap.
+Zero-dot desperate rolls do not grant a +2 bonus.
 """
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -87,34 +83,20 @@ class DesperateActionXpTests(TestCase):
         self.assertEqual(self.character.xp_clocks.get("insight"), 1)
         et = ExperienceTracker.objects.get(roll=roll, trigger="DESPERATE_ROLL")
         self.assertEqual(et.xp_gained, 1)
-        self.assertNotIn("0-dot", et.description)
+        self.assertEqual(et.description, "Desperate roll: hunt")
 
-    def test_zero_dot_bonus_grants_two_xp(self):
+    def test_zero_dot_still_grants_one_xp(self):
         roll = self._roll(pool_action_rating=0)
         xp, track = award_desperate_action_xp(
             self.character, self.session, roll, "hunt", self.gm
         )
-        self.assertEqual(xp, 2)
+        self.assertEqual(xp, 1)
         self.assertEqual(track, "insight")
         self.character.refresh_from_db()
-        self.assertEqual(self.character.xp_clocks.get("insight"), 2)
-        et = ExperienceTracker.objects.get(roll=roll, trigger="DESPERATE_ROLL")
-        self.assertEqual(et.xp_gained, 2)
-        self.assertIn("0-dot bonus", et.description)
-
-    def test_zero_dot_bonus_clipped_to_one_when_track_at_four(self):
-        self.character.xp_clocks = {**self.character.xp_clocks, "insight": 4}
-        self.character.save(update_fields=["xp_clocks"])
-        roll = self._roll(pool_action_rating=0)
-        xp, _ = award_desperate_action_xp(
-            self.character, self.session, roll, "hunt", self.gm
-        )
-        self.assertEqual(xp, 1)
-        self.character.refresh_from_db()
-        self.assertEqual(self.character.xp_clocks.get("insight"), 5)
+        self.assertEqual(self.character.xp_clocks.get("insight"), 1)
         et = ExperienceTracker.objects.get(roll=roll, trigger="DESPERATE_ROLL")
         self.assertEqual(et.xp_gained, 1)
-        self.assertIn("clipped by cap", et.description)
+        self.assertNotIn("0-dot", et.description)
 
     def test_track_already_at_cap_no_grant(self):
         self.character.xp_clocks = {**self.character.xp_clocks, "insight": 5}

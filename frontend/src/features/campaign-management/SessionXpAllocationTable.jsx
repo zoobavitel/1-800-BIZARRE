@@ -40,37 +40,37 @@ export default function SessionXpAllocationTable({ rows }) {
             <th style={{ textAlign: "left", padding: "6px 8px" }}>Character</th>
             <th
               style={{ textAlign: "right", padding: "6px 8px" }}
-              title="BELIEFS — expressed beliefs, drives, heritage, or background (player/GM toggles + heritage auto-grants). SRD cap: 2/session. Headline = XP recorded in the experience tracker for this session."
+              title="BELIEFS — expressed beliefs, drives, heritage, or background. Banks to free pool (allocate on sheet). Cap 2/session."
             >
               BELIEFS
             </th>
             <th
               style={{ textAlign: "right", padding: "6px 8px" }}
-              title="PLAYBOOK — end-of-session playbook-specific XP (SRD). Mark when you used abilities from your playbook in the fiction—including to resist, add dice, or shift position/effect with Stand, Hamon, or Spin. Headline = tracker XP from experience toggles (max 2/session for this category). No automatic count from the roll log for this column."
+              title="PLAYBOOK — end-of-session playbook-specific XP (SRD). Banks to free pool (max 2/session). Mark when you used abilities from your playbook in the fiction."
             >
               PLAYBOOK
             </th>
             <th
               style={{ textAlign: "right", padding: "6px 8px" }}
-              title="STRUGGLE — struggled with issues from vice, trauma, or entanglements. Headline = tracker XP (toggles + settled auto). Parens = pre-settle auto roll signals: vice overindulgence + vice failures + new trauma marks. SRD cap: 2/session."
+              title="STRUGGLE — vice, trauma, or entanglements. Banks to free pool. Parens = pre-settle auto roll signals. Cap 2/session."
             >
               STRUGGLE
             </th>
             <th
               style={{ textAlign: "right", padding: "6px 8px" }}
-              title="Stand Development XP that will be banked to the session pool at end-live. 0 once settled."
+              title="Stand Development end-of-session bonus banked to free pool at end-live. 0 once settled / if already in tracker."
             >
               Dev→pool
             </th>
             <th
               style={{ textAlign: "right", padding: "6px 8px" }}
-              title="Manual GM/player XP grants logged this session via the character sheet's track-add (these are MANUAL trigger rows tagged [insight]/[prowess]/[resolve]/[heritage]/[playbook]). Separate ledger from the trigger toggles — never double-counted with Beliefs/Playbook/Struggle."
+              title="Manual GM/player XP grants logged to a specific track ([insight]/[prowess]/…). Separate from scorecard free-pool toggles."
             >
               Manual→tracks
             </th>
             <th
               style={{ textAlign: "right", padding: "6px 8px" }}
-              title="Sum of every XP record for this PC in this session (toggles + auto + manual tracks + dev pool + desperate-roll attribute XP) plus any encoded XP the auto settle would still add on top (only while not yet settled)."
+              title="Sum of session XP records (scorecard→pool + Dev→pool + manual tracks + desperate attribute XP) plus any encoded XP settle would still add."
             >
               Total
             </th>
