@@ -1840,7 +1840,6 @@ const CharacterSheetWrapper = ({
     Math.max(0, Math.floor(Number(character?.unallocatedXp) || 0)),
   );
   const [poolAllocateBusy, setPoolAllocateBusy] = useState(false);
-  // eslint-disable-next-line no-unused-vars
   const [poolTickError, setPoolTickError] = useState(null);
 
   // Hydrate sheet from server when character payload arrives after first paint (same class of bug as actionRatings).
@@ -11712,102 +11711,51 @@ const CharacterSheetWrapper = ({
                     >
                       Free pool (not tied to a live session). Earned from
                       scorecard and Stand Development; spend anytime — during
-                      play or between sessions — even when no campaign session is
-                      active. Allocate +1 onto a track, or spend 10 on a
+                      play or between sessions. Tick boxes on the tracks below to
+                      move XP from this pool onto a track. Spend 10 for a
                       playbook-style level-up. Desperate-roll XP marks attribute
                       tracks automatically and never sits here.
                     </div>
-                    {unallocatedXp > 0 ? (
-                      <div
+                    {unallocatedXp >= 10 && canEditSheet && character?.id ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLevelUpLockTrack(null);
+                          setLevelUpFromPool(true);
+                          setLevelUpSpendTrack("playbook");
+                          setLevelUpError(null);
+                          setShowLevelUp(true);
+                        }}
                         style={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: "6px",
+                          ...S.btn,
+                          fontSize: "10px",
+                          padding: "4px 8px",
+                          background: "#7c3aed",
+                          color: "#fff",
                         }}
                       >
-                        {XP_SPEND_TRACK_ORDER.map((t) => (
-                          <button
-                            key={t}
-                            type="button"
-                            disabled={
-                              !canEditSheet ||
-                              !character?.id ||
-                              poolAllocateBusy ||
-                              unallocatedXp < 1
-                            }
-                            onClick={async () => {
-                              if (!character?.id) return;
-                              setPoolAllocateBusy(true);
-                              setSaveErrorMessage(null);
-                              try {
-                                const res = await characterAPI.allocatePoolXp(
-                                  character.id,
-                                  { track: t, amount: 1 },
-                                );
-                                const nextPool = Number(res?.unallocated_xp);
-                                if (Number.isFinite(nextPool))
-                                  setUnallocatedXp(Math.max(0, nextPool));
-                                if (
-                                  res?.xp_clocks &&
-                                  typeof res.xp_clocks === "object"
-                                ) {
-                                  setXp((prev) => ({
-                                    ...prev,
-                                    ...res.xp_clocks,
-                                  }));
-                                }
-                              } catch (e) {
-                                setSaveErrorMessage(
-                                  e?.message || "Could not allocate pool XP",
-                                );
-                              } finally {
-                                setPoolAllocateBusy(false);
-                              }
-                            }}
-                            style={{
-                              ...S.btn,
-                              fontSize: "10px",
-                              padding: "4px 8px",
-                              background: "#6d28d9",
-                              color: "#fff",
-                              opacity:
-                                !canEditSheet || unallocatedXp < 1 ? 0.5 : 1,
-                            }}
-                          >
-                            +1 {XP_TRACK_SPEND_LABELS[t] || t}
-                          </button>
-                        ))}
-                        {unallocatedXp >= 10 && canEditSheet && character?.id ? (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setLevelUpLockTrack(null);
-                              setLevelUpFromPool(true);
-                              setLevelUpSpendTrack("playbook");
-                              setLevelUpError(null);
-                              setShowLevelUp(true);
-                            }}
-                            style={{
-                              ...S.btn,
-                              fontSize: "10px",
-                              padding: "4px 8px",
-                              background: "#7c3aed",
-                              color: "#fff",
-                            }}
-                          >
-                            Level up from pool (−10)
-                          </button>
-                        ) : null}
+                        Level up from pool (−10)
+                      </button>
+                    ) : unallocatedXp <= 0 ? (
+                      <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                        No free-pool XP right now. Scorecard / Dev awards land
+                        here after sessions; tick track boxes when you have pool
+                        XP to spend.
                       </div>
                     ) : (
                       <div style={{ fontSize: "10px", color: "#6b7280" }}>
-                        No free-pool XP right now. Scorecard / Dev awards land
-                        here after sessions; you can spend them later without an
-                        active session.
+                        Click empty boxes on Insight / Prowess / Resolve /
+                        Heritage / Playbook below to spend from this pool.
                       </div>
                     )}
                     {poolTickError ? (
-                      <div style={{ marginTop: 6, fontSize: "10px", color: "#f87171" }}>
+                      <div
+                        style={{
+                          marginTop: 6,
+                          fontSize: "10px",
+                          color: "#f87171",
+                        }}
+                      >
                         {poolTickError}
                       </div>
                     ) : null}
@@ -11842,19 +11790,51 @@ const CharacterSheetWrapper = ({
                         {name}
                       </span>
                       <div style={{ display: "flex", gap: "2px" }}>
-                        {Array.from({ length: max }, (_, i) => (
-                          <div
-                            key={i}
-                            onClick={() => toggleXP(key, i)}
-                            style={{
-                              width: "13px",
-                              height: "13px",
-                              border: "1px solid #4b5563",
-                              cursor: "pointer",
-                              background: i < filled ? "#7c3aed" : "#111827",
-                            }}
-                          />
-                        ))}
+                        {Array.from({ length: max }, (_, i) => {
+                          const isFilled = i < filled;
+                          const canSpendHere =
+                            canEditSheet &&
+                            !poolAllocateBusy &&
+                            !isFilled &&
+                            unallocatedXp >= i + 1 - filled;
+                          return (
+                            <div
+                              key={i}
+                              role="button"
+                              tabIndex={0}
+                              title={
+                                isFilled
+                                  ? "Filled from Available XP (use undo to refund)"
+                                  : canSpendHere
+                                    ? `Spend ${i + 1 - filled} from Available XP`
+                                    : unallocatedXp < 1
+                                      ? "Need Available XP in the free pool first"
+                                      : "Not enough Available XP for this tick"
+                              }
+                              onClick={() => toggleXP(key, i)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  toggleXP(key, i);
+                                }
+                              }}
+                              style={{
+                                width: "13px",
+                                height: "13px",
+                                border: "1px solid #4b5563",
+                                cursor:
+                                  canSpendHere || isFilled
+                                    ? poolAllocateBusy
+                                      ? "wait"
+                                      : "pointer"
+                                    : "not-allowed",
+                                background: isFilled ? "#7c3aed" : "#111827",
+                                opacity:
+                                  !isFilled && !canSpendHere ? 0.45 : 1,
+                              }}
+                            />
+                          );
+                        })}
                       </div>
                       <span style={{ fontSize: "10px", color: "#6b7280" }}>
                         ({filled}/{max})
@@ -11908,10 +11888,10 @@ const CharacterSheetWrapper = ({
                       lineHeight: 1.4,
                     }}
                   >
+                    Tick empty boxes to spend Available XP onto that track.
                     When a track is full, Take advance clears it for a reward
                     (attribute → +1 action dot; heritage → +1 HP; playbook →
-                    level-up choices). Free-pool XP is Available XP above —
-                    usable with or without an active session.
+                    level-up choices).
                   </div>
 
                   <div
