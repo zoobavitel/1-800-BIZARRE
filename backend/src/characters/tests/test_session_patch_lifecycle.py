@@ -93,7 +93,9 @@ class SessionPatchLifecycleTests(TestCase):
         self.assertEqual(self.session.status, "COMPLETED")
         self.assertTrue(self.session.auto_encoded_xp_settled)
         self.character.refresh_from_db()
-        self.assertGreater(self.character.xp_clocks.get("playbook", 0), 4)
+        # STRUGGLE banks to free pool (not playbook clock).
+        self.assertEqual(self.character.xp_clocks.get("playbook", 0), 4)
+        self.assertGreater(self.character.unallocated_xp, 0)
 
     def test_patch_reopen_completed_to_planned(self):
         self.session.status = "COMPLETED"

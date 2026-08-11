@@ -155,7 +155,8 @@ class SessionEncodedXpSettlementTests(TestCase):
         )
         settle_encoded_session_xp(self.session, self.gm)
         self.character.refresh_from_db()
-        self.assertEqual(self.character.xp_clocks.get("playbook", 0), 6)
+        self.assertEqual(self.character.xp_clocks.get("playbook", 0), 5)
+        self.assertEqual(self.character.unallocated_xp, 1)
 
     def test_struggle_cap_two_per_session(self):
         self._roll(
@@ -175,8 +176,8 @@ class SessionEncodedXpSettlementTests(TestCase):
         )
         settle_encoded_session_xp(self.session, self.gm)
         self.character.refresh_from_db()
-        # 5 + 2 cap
-        self.assertEqual(self.character.xp_clocks.get("playbook", 0), 7)
+        self.assertEqual(self.character.xp_clocks.get("playbook", 0), 5)
+        self.assertEqual(self.character.unallocated_xp, 2)
         total_struggle_xp = (
             ExperienceTracker.objects.filter(
                 character=self.character,
@@ -206,7 +207,8 @@ class SessionEncodedXpSettlementTests(TestCase):
         self.campaign.refresh_from_db()
         self.assertIsNone(self.campaign.active_session_id)
         self.character.refresh_from_db()
-        self.assertEqual(self.character.xp_clocks.get("playbook", 0), 6)
+        self.assertEqual(self.character.xp_clocks.get("playbook", 0), 5)
+        self.assertEqual(self.character.unallocated_xp, 1)
 
     def test_patch_clear_active_skip_encoded_xp(self):
         """PATCH campaign with skip flag ends live without granting encoded XP."""
@@ -306,8 +308,7 @@ class SessionEncodedXpSettlementTests(TestCase):
         Same HTTP path as SessionDetail "End & apply encoded XP":
         PATCH /api/campaigns/:id/ with active_session=null (no skip flag).
 
-        Asserts DB state: STRUGGLE/Enc. playbook (playbook clock + tracker rows),
- Dev→pool, Manual→tracks, Total.
+        Asserts DB state: STRUGGLE → free pool, Dev→pool, Manual→tracks, Total.
         """
         user_b = User.objects.create_user(username="pl_sxp_b", password="pw")
         dots = self.character.action_dots
@@ -378,6 +379,8 @@ class SessionEncodedXpSettlementTests(TestCase):
             development="D",
         )
 
+        prev_pool_a = int(self.character.unallocated_xp or 0)
+        prev_pool_b = int(char_b.unallocated_xp or 0)
         prev_play_a = int(self.character.xp_clocks.get("playbook", 0) or 0)
         prev_play_b = int(char_b.xp_clocks.get("playbook", 0) or 0)
         st_a, sg_a, enc_a = _encoded_playbook_preview_from_rolls(
@@ -410,13 +413,14 @@ class SessionEncodedXpSettlementTests(TestCase):
         self.character.refresh_from_db()
         char_b.refresh_from_db()
 
+        # Scorecard STRUGGLE + Dev bank to free pool; playbook clocks unchanged.
         self.assertEqual(
             int(self.character.xp_clocks.get("playbook", 0) or 0),
-            prev_play_a + enc_a,
+            prev_play_a,
         )
         self.assertEqual(
             int(char_b.xp_clocks.get("playbook", 0) or 0),
-            prev_play_b + enc_b,
+            prev_play_b,
         )
         self.assertEqual(
             ExperienceTracker.objects.filter(
@@ -447,8 +451,8 @@ class SessionEncodedXpSettlementTests(TestCase):
             ).exists()
         )
 
-        self.assertEqual(self.character.unallocated_xp, dev_a)
-        self.assertEqual(char_b.unallocated_xp, dev_b)
+        self.assertEqual(self.character.unallocated_xp, prev_pool_a + enc_a + dev_a)
+        self.assertEqual(char_b.unallocated_xp, prev_pool_b + enc_b + dev_b)
         pool_row_a = ExperienceTracker.objects.filter(
             character=self.character,
             session=self.session,
@@ -477,9 +481,9 @@ class SessionEncodedXpSettlementTests(TestCase):
             manual_b,
         )
 
-        gained_play_a = (
-            int(self.character.xp_clocks.get("playbook", 0) or 0) - prev_play_a
-        )
-        gained_play_b = int(char_b.xp_clocks.get("playbook", 0) or 0) - prev_play_b
-        self.assertEqual(gained_play_a + dev_a + manual_a, total_preview_a)
-        self.assertEqual(gained_play_b + dev_b + manual_b, total_preview_b)
+        gained_pool_a = int(self.character.unallocated_xp or 0) - prev_pool_a
+        gained_pool_b = int(char_b.unallocated_xp or 0) - prev_pool_b
+        self.assertEqual(gained_pool_a, enc_a + dev_a)
+        self.assertEqual(gained_pool_b, enc_b + dev_b)
+        self.assertEqual(gained_pool_a + manual_a, total_preview_a)
+        self.assertEqual(gained_pool_b + manual_b, total_preview_b)

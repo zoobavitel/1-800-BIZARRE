@@ -1355,8 +1355,6 @@ When you fill an xp track, clear all the marks and take an advance. When you tak
 
 **Any desperate roll** marks 1 XP in the relevant attribute (Insight, Prowess, or Resolve), regardless of how many dots you have in the action.
 
-**Rolling with zero dots** at desperate position marks **2 XP** instead of 1\. That's the bonus for taking on serious risk with no training at all.
-
 ***Example Session:***  
 *Johnny Joestar is tracking his XP at the end of a session. He rolled two desperate **Hunt** action checks during the session (tracking enemy Stand users through the desert), so he marks **2 XP on his Insight XP track**. He addressed several challenges using **Tusk ACT 2's** spinning nail bullets, so he marks **2 XP** for his Stand-specific trigger. He expressed his drive to walk again and his connection to his jockey heritage multiple times during a flashback scene, so he takes **2 XP** for that. He also showcased his character's determination, but **2 XP is the maximum** for that category, so he doesn't get any more. He struggled with his **Trauma: Obsessed** (fixating on the Corpse Parts), which caused him to make a reckless decision. He marks **1 XP** for struggling with trauma.*
 
@@ -1366,7 +1364,13 @@ When you fill an xp track, clear all the marks and take an advance. When you tak
 
 You can also earn xp by training during downtime. When you train, mark XP in one of your attributes or in your playbook. A given xp track can be trained only once per downtime phase.
 
-It is 5 xp to gain a \+1d in a skill rating. It is 10xp to gain a \+1 stand coin stat, heritage ability, or \+2d in a skill rating. 
+**Free expenditure (site hybrid):** XP may bank on tracks (desperate) or in a **scorecard free pool** (end-of-session triggers and Stand **Development** grade bonus). Spend freely:
+
+* **5 XP** → \+1d in a skill rating (minor advance)  
+* **10 XP** → \+1 Stand Coin grade, **or** a heritage ability, **or** \+2d in skill ratings  
+* **5 XP** → \+1 HP (heritage option, without taking more detriments)
+
+**Development** end-of-session bonus (by Stand Development grade) banks to the free pool for the player to allocate later. 
 
 **STAND USERS**
 

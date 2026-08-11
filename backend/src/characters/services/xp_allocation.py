@@ -153,6 +153,9 @@ def _snapshot(character):
         "total_xp_spent": int(character.total_xp_spent or 0),
         "stand_coin_points_gained": int(character.stand_coin_points_gained or 0),
         "action_dice_gained": int(character.action_dice_gained or 0),
+        "heritage_points_gained": int(character.heritage_points_gained or 0),
+        "bonus_hp_from_xp": int(character.bonus_hp_from_xp or 0),
+        "unallocated_xp": int(character.unallocated_xp or 0),
     }
 
 
@@ -165,6 +168,10 @@ def _restore_snapshot(character, snap):
     character.total_xp_spent = int(snap.get("total_xp_spent") or 0)
     character.stand_coin_points_gained = int(snap.get("stand_coin_points_gained") or 0)
     character.action_dice_gained = int(snap.get("action_dice_gained") or 0)
+    character.heritage_points_gained = int(snap.get("heritage_points_gained") or 0)
+    character.bonus_hp_from_xp = int(snap.get("bonus_hp_from_xp") or 0)
+    if "unallocated_xp" in snap:
+        character.unallocated_xp = int(snap.get("unallocated_xp") or 0)
     character.advancement_ability_grants = list(
         snap.get("advancement_ability_grants") or []
     )
@@ -182,6 +189,21 @@ def _spend_xp(character, track, cost):
         )
     clocks[track] = current - cost
     character.xp_clocks = clocks
+
+
+def _spend_xp_source(character, *, xp_track=None, from_pool=False, cost):
+    """Spend ``cost`` from free pool or from a named track. Returns source label."""
+    if from_pool:
+        pool = int(character.unallocated_xp or 0)
+        if pool < cost:
+            raise XPAllocationError(
+                f"Not enough XP in free pool (have {pool}, need {cost})."
+            )
+        character.unallocated_xp = pool - cost
+        return "pool"
+    track = _normalize_track(xp_track)
+    _spend_xp(character, track, cost)
+    return track
 
 
 def _refund_xp(character, track, cost):
@@ -265,8 +287,11 @@ def _apply_b_to_a_reward(character, allocation_id, reward):
 def allocation_summary(allocation):
     """Human-readable summary for API/UI."""
     meta = allocation.metadata or {}
-    track_label = allocation.get_xp_track_display()
-    base = f"−{allocation.xp_cost} XP from {track_label}"
+    if meta.get("from_pool"):
+        base = f"−{allocation.xp_cost} XP from free pool"
+    else:
+        track_label = allocation.get_xp_track_display()
+        base = f"−{allocation.xp_cost} XP from {track_label}"
     if allocation.allocation_type == "LEVEL_UP_STAT":
         stat = meta.get("stand_stat", "")
         old_g = meta.get("old_grade", "")
@@ -278,6 +303,10 @@ def allocation_summary(allocation):
     if allocation.allocation_type == "LEVEL_UP_DOTS":
         actions = meta.get("actions") or []
         return f"{base} · +2 dots ({', '.join(actions)})"
+    if allocation.allocation_type == "LEVEL_UP_HERITAGE":
+        return f"{base} · +1 heritage ability"
+    if allocation.allocation_type == "BUY_HP":
+        return f"{base} · +1 HP"
     if allocation.allocation_type == "MINOR_ADVANCE":
         action = meta.get("action", "")
         return f"{base} · +1 {action.upper()} dot"
@@ -294,17 +323,25 @@ def apply_level_up(
     actions=None,
     reward=None,
     defer_b_to_a_reward=False,
+    from_pool=False,
 ):
-    track = _normalize_track(xp_track)
     choice = str(choice or "").strip().lower()
-    if choice not in ("stat", "dots"):
-        raise XPAllocationError("choice must be 'stat' or 'dots'.")
+    if choice not in ("stat", "dots", "heritage"):
+        raise XPAllocationError("choice must be 'stat', 'dots', or 'heritage'.")
 
     before = _snapshot(character)
-    _spend_xp(character, track, LEVEL_UP_COST)
+    source = _spend_xp_source(
+        character, xp_track=xp_track, from_pool=from_pool, cost=LEVEL_UP_COST
+    )
+    # Model xp_track field requires a track key; pool spends store heritage as ledger tag.
+    track = "heritage" if source == "pool" else _normalize_track(xp_track)
     character.total_xp_spent = int(character.total_xp_spent or 0) + LEVEL_UP_COST
 
-    metadata = {"xp_track": track, "choice": choice}
+    metadata = {
+        "xp_track": track,
+        "choice": choice,
+        "from_pool": source == "pool",
+    }
     allocation_type = None
 
     if choice == "stat":
@@ -362,6 +399,21 @@ def apply_level_up(
             metadata["reward_pending"] = True
             allocation.metadata = metadata
             allocation.save(update_fields=["metadata"])
+
+    elif choice == "heritage":
+        character.heritage_points_gained = (
+            int(character.heritage_points_gained or 0) + 1
+        )
+        allocation_type = "LEVEL_UP_HERITAGE"
+        allocation = CharacterXPAllocation.objects.create(
+            character=character,
+            allocation_type=allocation_type,
+            xp_track=track,
+            xp_cost=LEVEL_UP_COST,
+            payload_before=before,
+            payload_after={},
+            metadata=metadata,
+        )
 
     else:
         raw_actions = actions or []
@@ -501,12 +553,17 @@ def apply_gm_forced_stand_stat(
 
 
 @transaction.atomic
-def apply_minor_advance(character, *, xp_track, action):
-    track = _normalize_track(xp_track)
+def apply_minor_advance(character, *, xp_track, action, from_pool=False):
     action_key = _normalize_action(action)
 
     before = _snapshot(character)
-    _spend_xp(character, track, MINOR_ADVANCE_COST)
+    source = _spend_xp_source(
+        character,
+        xp_track=xp_track,
+        from_pool=from_pool,
+        cost=MINOR_ADVANCE_COST,
+    )
+    track = "heritage" if source == "pool" else _normalize_track(xp_track)
     character.total_xp_spent = int(character.total_xp_spent or 0) + MINOR_ADVANCE_COST
     _bump_action_dot(character, action_key, 1)
     character.action_dice_gained = int(character.action_dice_gained or 0) + 1
@@ -518,7 +575,42 @@ def apply_minor_advance(character, *, xp_track, action):
         xp_cost=MINOR_ADVANCE_COST,
         payload_before=before,
         payload_after={},
-        metadata={"action": action_key, "xp_track": track},
+        metadata={
+            "action": action_key,
+            "xp_track": track,
+            "from_pool": source == "pool",
+        },
+    )
+    after = _snapshot(character)
+    allocation.payload_after = after
+    allocation.save(update_fields=["payload_after"])
+    character.save()
+    allocation.refresh_from_db()
+    return allocation
+
+
+@transaction.atomic
+def apply_buy_hp(character, *, xp_track=None, from_pool=False):
+    """Spend 5 XP (track or free pool) for +1 bonus HP (heritage option)."""
+    before = _snapshot(character)
+    source = _spend_xp_source(
+        character,
+        xp_track=xp_track or "heritage",
+        from_pool=from_pool,
+        cost=MINOR_ADVANCE_COST,
+    )
+    track = "heritage" if source == "pool" else _normalize_track(xp_track or "heritage")
+    character.total_xp_spent = int(character.total_xp_spent or 0) + MINOR_ADVANCE_COST
+    character.bonus_hp_from_xp = int(character.bonus_hp_from_xp or 0) + 1
+
+    allocation = CharacterXPAllocation.objects.create(
+        character=character,
+        allocation_type="BUY_HP",
+        xp_track=track,
+        xp_cost=MINOR_ADVANCE_COST,
+        payload_before=before,
+        payload_after={},
+        metadata={"from_pool": source == "pool", "xp_track": track},
     )
     after = _snapshot(character)
     allocation.payload_after = after

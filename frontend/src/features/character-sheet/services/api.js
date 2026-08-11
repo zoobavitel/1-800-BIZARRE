@@ -366,6 +366,12 @@ export const characterAPI = {
       body: JSON.stringify(body),
     }),
 
+  buyHpWithXp: (id, body) =>
+    apiRequest(`/characters/${id}/buy-hp-with-xp/`, {
+      method: "POST",
+      body: JSON.stringify(body || {}),
+    }),
+
   undoLatestAllocation: (id) =>
     apiRequest(`/characters/${id}/undo-latest-allocation/`, {
       method: "POST",

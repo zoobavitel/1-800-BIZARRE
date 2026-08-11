@@ -176,11 +176,8 @@ def award_desperate_action_xp(character, session, roll, action_name, request_use
     """
     Desperate ACTION roll → 1 XP on the relevant attribute track (cap 5).
 
-    SRD bonus (`docs/1-(800)-BIZARRE SRD.md` lines 1356–1358): if the roller had
-    **0 dots** in the rolled action, mark **2 XP** instead of 1. We use
-    `roll.pool_action_rating` as the dot-count signal (same field the tier-die
-    logic already trusts for "0 dots in that action"). The grant is still capped
-    by the per-track ceiling, so a 0-dot bonus near the cap may be clipped to 1.
+    Group-action desperate ACTION rolls use the same path. Zero dots do not
+    grant a bonus (always +1, clipped only by the track cap).
 
     Returns (xp_awarded: int, xp_track: str|None).
     """
@@ -198,28 +195,16 @@ def award_desperate_action_xp(character, session, roll, action_name, request_use
     if current >= 5:
         return 0, None
 
-    par = getattr(roll, 'pool_action_rating', None)
-    zero_dot_bonus = par is not None and int(par) == 0
-    want = 2 if zero_dot_bonus else 1
-    grant = min(want, 5 - current)
-    if grant <= 0:
-        return 0, None
-
+    grant = 1
     xp_clocks[track] = current + grant
     character.xp_clocks = xp_clocks
     character.save(update_fields=['xp_clocks'])
-    if zero_dot_bonus and grant == 2:
-        description = f'Desperate roll (0-dot bonus): {action_name}'
-    elif zero_dot_bonus and grant == 1:
-        description = f'Desperate roll (0-dot bonus clipped by cap): {action_name}'
-    else:
-        description = f'Desperate roll: {action_name}'
     ExperienceTracker.objects.create(
         character=character,
         session=session,
         roll=roll,
         trigger='DESPERATE_ROLL',
-        description=description,
+        description=f'Desperate roll: {action_name}',
         xp_gained=grant,
         award_source='AUTO',
         clock_key=track,
@@ -256,8 +241,8 @@ def normalized_trauma_pks(raw):
 
 def award_struggle_for_new_traumas(character, session, gained_pks):
     """
-    Grant STRUGGLE (playbook) XP when new trauma IDs appear on save, same session bucket
-    as vice-based STRUGGLE and session settlement caps.
+    Grant STRUGGLE XP to the free pool when new trauma IDs appear on save,
+    same session bucket as vice-based STRUGGLE and session settlement caps.
     """
     if not gained_pks or session is None or character is None:
         return 0
@@ -270,8 +255,8 @@ def award_struggle_for_new_traumas(character, session, gained_pks):
         character,
         session,
         trigger="STRUGGLE",
-        clock_key="playbook",
-        clock_max=10,
+        clock_key="pool",
+        clock_max=0,
         want=n,
         description=desc,
         roll=None,
@@ -288,8 +273,8 @@ def heritage_bonus_labels(raw):
 
 def award_heritage_expression_xp(character, session, roll, heritage_bonuses_raw):
     """
-    BELIEFS XP on heritage track when a roll applies optional heritage bonuses.
-    Separate session bucket from playbook STRUGGLE/PLAYBOOK_SPECIFIC; track max 5 (sheet).
+    BELIEFS XP to the free pool when a roll applies optional heritage bonuses.
+    Separate session bucket from playbook STRUGGLE/PLAYBOOK_SPECIFIC.
     """
     labels = heritage_bonus_labels(heritage_bonuses_raw)
     if not labels or session is None or roll is None or character is None:
@@ -302,8 +287,8 @@ def award_heritage_expression_xp(character, session, roll, heritage_bonuses_raw)
         character,
         session,
         trigger="BELIEFS",
-        clock_key="heritage",
-        clock_max=5,
+        clock_key="pool",
+        clock_max=0,
         want=1,
         description=desc,
         roll=roll,

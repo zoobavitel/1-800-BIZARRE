@@ -1943,6 +1943,7 @@ const CharacterSheetWrapper = ({
   // FIX 6: Level-up modal state
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [levelUpChoice, setLevelUpChoice] = useState("stat");
+  const [levelUpFromPool, setLevelUpFromPool] = useState(false);
   const [levelUpStat, setLevelUpStat] = useState("power");
   const [levelUpDot1, setLevelUpDot1] = useState("HUNT");
   const [levelUpDot2, setLevelUpDot2] = useState("HUNT");
@@ -2963,7 +2964,7 @@ const CharacterSheetWrapper = ({
       ),
     [xp],
   );
-  const canAffordLevelUp = maxXpOnAnyTrack >= 10;
+  const canAffordLevelUp = maxXpOnAnyTrack >= 10 || unallocatedXp >= 10;
   // XP expenditure accounting
   // Each stand coin grade = 10 XP (cost of one level-up stat advance)
   // Each action dot = 5 XP (cost of one minor advance)
@@ -3286,9 +3287,10 @@ const CharacterSheetWrapper = ({
   const confirmLevelUp = async () => {
     const track = levelUpSpendTrack;
     const cur = Number(xp[track]) || 0;
-    if (cur < 10 || !characterId) return;
+    const usePool = Boolean(levelUpFromPool) && unallocatedXp >= 10;
+    if ((!usePool && cur < 10) || !characterId) return;
 
-    if (levelUpIsBtoA) {
+    if (levelUpChoice === "stat" && levelUpIsBtoA) {
       if (levelUpBtoARewardBranch === "custom2plus1standard") {
         if (
           !levelUpRewardCustomName.trim() ||
@@ -3312,8 +3314,9 @@ const CharacterSheetWrapper = ({
     setLevelUpBusy(true);
     setLevelUpError(null);
     const body = {
-      xp_track: track,
+      xp_track: usePool ? "playbook" : track,
       choice: levelUpChoice,
+      from_pool: usePool,
     };
     if (levelUpChoice === "stat") {
       body.stand_stat = levelUpStat;
@@ -3334,7 +3337,7 @@ const CharacterSheetWrapper = ({
           };
         }
       }
-    } else {
+    } else if (levelUpChoice === "dots") {
       body.actions = [levelUpDot1, levelUpDot2];
     }
 
@@ -10856,8 +10859,10 @@ const CharacterSheetWrapper = ({
                           marginBottom: "8px",
                         }}
                       >
-                        From session end (Stand Development session XP, banked
-                        when the GM applied encoded XP). Allocate +1 to a track.
+                        From scorecard (BELIEFS / PLAYBOOK / STRUGGLE) and Stand
+                        Development end-session bonus. Allocate +1 to any track,
+                        then spend 5/10 from tracks (or spend pool directly on
+                        level-up / HP).
                       </div>
                       <div
                         style={{
@@ -10983,21 +10988,23 @@ const CharacterSheetWrapper = ({
                       }}
                     >
                       <span style={{ color: "#a78bfa", fontWeight: "bold" }}>
-                        Total XP: {totalXP}
+                        On tracks: {totalXP}
                       </span>
-                      {/* FIX 5: Development session XP display */}
                       {sessionDevXP > 0 ? (
-                        <span style={{ ...S.info, padding: "2px 6px" }}>
-                          +{sessionDevXP} XP/session (DEV {GRADE[devVal]})
+                        <span
+                          style={{ ...S.info, padding: "2px 6px" }}
+                          title="Stand Development grade → free-pool XP at next session end."
+                        >
+                          Next end-session bank +{sessionDevXP} (DEV{" "}
+                          {GRADE[devVal]})
                         </span>
                       ) : (
                         <span style={{ fontSize: "10px", color: "#4b5563" }}>
-                          DEV F — standard XP only
+                          DEV F — no Development bonus
                         </span>
                       )}
                     </div>
 
-                    {/* FIX 6: Corrected level-up description */}
                     <div
                       style={{
                         fontSize: "11px",
@@ -11018,24 +11025,31 @@ const CharacterSheetWrapper = ({
                         LEVEL UP — 10 XP
                       </div>
                       <div style={{ color: "#9ca3af", marginBottom: "2px" }}>
-                        Choose ONE option:
+                        Choose ONE option (from a track or free pool):
                       </div>
                       <div style={{ color: "#c4b5fd" }}>
-                        A — +1 Stand Coin grade (any stat)
+                        A — +1 Stand Coin grade
+                      </div>
+                      <div style={{ color: "#c4b5fd" }}>
+                        B — +2 action dots
                       </div>
                       <div style={{ color: "#c4b5fd", marginBottom: "4px" }}>
-                        B — +2 Action dots (any 2 actions; can exceed 2)
+                        C — +1 heritage ability
                       </div>
                       <div style={{ color: "#6b7280", fontSize: "10px" }}>
-                        ★ A new ability is always included free. If the stat
-                        just reached A-rank, your ability is automatically
-                        unlocked.
+                        Raising a Coin stat B→A still unlocks ability picks for
+                        that grade-up. Spin / Hamon playbooks are WIP.
                       </div>
                     </div>
 
                     {canAffordLevelUp ? (
                       <button
-                        onClick={() => setShowLevelUp(true)}
+                        onClick={() => {
+                          setLevelUpFromPool(
+                            unallocatedXp >= 10 && maxXpOnAnyTrack < 10,
+                          );
+                          setShowLevelUp(true);
+                        }}
                         style={{
                           ...S.btn,
                           background: "#7c3aed",
@@ -11055,12 +11069,11 @@ const CharacterSheetWrapper = ({
                           textAlign: "center",
                         }}
                       >
-                        Need 10 XP on one track to level (highest track now:{" "}
-                        {maxXpOnAnyTrack})
+                        Need 10 XP on one track or in free pool (tracks:{" "}
+                        {maxXpOnAnyTrack}, pool: {unallocatedXp})
                       </div>
                     )}
 
-                    {/* FIX 7: Minor advance — 5 XP → +1 action dot */}
                     <div
                       style={{
                         borderTop: "1px solid #1f2937",
@@ -11084,7 +11097,7 @@ const CharacterSheetWrapper = ({
                           marginBottom: "6px",
                         }}
                       >
-                        +1 Action dot, outside level-up (max 4 per action)
+                        +1 action dot (max 4 per action)
                       </div>
                       <div style={{ marginBottom: "6px" }}>
                         <span
@@ -11171,16 +11184,99 @@ const CharacterSheetWrapper = ({
                           {minorAdvanceError}
                         </div>
                       )}
-                      {maxXpOnAnyTrack < 5 ? (
+                      {maxXpOnAnyTrack < 5 && unallocatedXp < 5 ? (
                         <div style={{ ...S.warn, marginTop: "4px" }}>
-                          Need 5 XP on one track (highest track:{" "}
-                          {maxXpOnAnyTrack})
+                          Need 5 XP on one track or in free pool (tracks:{" "}
+                          {maxXpOnAnyTrack}, pool: {unallocatedXp})
                         </div>
                       ) : (Number(xp[minorAdvanceSpendTrack]) || 0) < 5 ? (
                         <div style={{ ...S.warn, marginTop: "4px" }}>
-                          Pick a track with at least 5 XP
+                          Pick a track with at least 5 XP (or allocate from pool)
                         </div>
                       ) : null}
+                    </div>
+
+                    <div
+                      style={{
+                        borderTop: "1px solid #1f2937",
+                        paddingTop: "8px",
+                        marginTop: "8px",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          color: "#d1d5db",
+                          fontWeight: "bold",
+                          marginBottom: "2px",
+                        }}
+                      >
+                        HERITAGE HP — 5 XP
+                      </div>
+                      <div
+                        style={{
+                          fontSize: "11px",
+                          color: "#6b7280",
+                          marginBottom: "6px",
+                        }}
+                      >
+                        Buy +1 HP without extra detriments (heritage option).
+                      </div>
+                      <button
+                        type="button"
+                        disabled={
+                          !canEditSheet ||
+                          !characterId ||
+                          (unallocatedXp < 5 &&
+                            (Number(xp.heritage) || 0) < 5 &&
+                            maxXpOnAnyTrack < 5)
+                        }
+                        onClick={async () => {
+                          if (!characterId) return;
+                          const fromPool = unallocatedXp >= 5;
+                          const track =
+                            (Number(xp.heritage) || 0) >= 5
+                              ? "heritage"
+                              : XP_SPEND_TRACK_ORDER.find(
+                                  (t) => (Number(xp[t]) || 0) >= 5,
+                                ) || "heritage";
+                          setMinorAdvanceBusy(true);
+                          setMinorAdvanceError(null);
+                          try {
+                            const res = await characterAPI.buyHpWithXp(
+                              characterId,
+                              fromPool
+                                ? { from_pool: true }
+                                : { xp_track: track, from_pool: false },
+                            );
+                            if (res?.character)
+                              applyBackendCharacter(res.character);
+                            if (Array.isArray(res?.allocations))
+                              setXpAllocationRows(res.allocations);
+                          } catch (err) {
+                            setMinorAdvanceError(
+                              err?.message || "Could not buy HP",
+                            );
+                          } finally {
+                            setMinorAdvanceBusy(false);
+                          }
+                        }}
+                        style={{
+                          ...S.btn,
+                          fontSize: "11px",
+                          width: "100%",
+                          background:
+                            unallocatedXp >= 5 || maxXpOnAnyTrack >= 5
+                              ? "#0e7490"
+                              : "#374151",
+                          color:
+                            unallocatedXp >= 5 || maxXpOnAnyTrack >= 5
+                              ? "#fff"
+                              : "#6b7280",
+                        }}
+                      >
+                        {minorAdvanceBusy ? "…" : "−5 XP → +1 HP"}
+                      </button>
                     </div>
                   </div>
 
@@ -11198,6 +11294,19 @@ const CharacterSheetWrapper = ({
                   >
                     <div style={{ marginBottom: "8px" }}>
                       <span style={S.lbl}>XP REQUIREMENTS (SRD)</span>
+                      <div
+                        style={{
+                          fontSize: "10px",
+                          color: "#6b7280",
+                          marginTop: "4px",
+                          lineHeight: 1.45,
+                        }}
+                      >
+                        Desperate ACTION → +1 on that attribute (group desperate
+                        too). End-session toggles + Dev bonus → free pool
+                        (allocate later). Downtime training not automated yet.
+                        Crew XP: use crew scorecard triggers.
+                      </div>
                     </div>
                     {!xpReqSnapshot.hasActiveSession && (
                       <div
@@ -11250,7 +11359,7 @@ const CharacterSheetWrapper = ({
                                 style={{ fontSize: "10px", color: "#a78bfa", marginTop: "2px" }}
                               >
                                 Logged in tracker: up to +{xpReqSnapshot.desperateTrackerNote}{" "}
-                                (desperate / rating-0; max 2 shown)
+                                (desperate rolls; display capped)
                               </div>
                             )}
                           </div>
@@ -20139,10 +20248,11 @@ const CharacterSheetWrapper = ({
                 )}
             </div>
 
-            <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
+            <div style={{ display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
               {[
-                ["stat", "+1 Stand Coin Grade"],
+                ["stat", "+1 Stand Coin"],
                 ["dots", "+2 Action Dots"],
+                ["heritage", "+1 Heritage"],
               ].map(([val, label]) => (
                 <button
                   key={val}
@@ -20150,6 +20260,7 @@ const CharacterSheetWrapper = ({
                   style={{
                     ...S.btn,
                     flex: 1,
+                    minWidth: "110px",
                     color: "#fff",
                     background: levelUpChoice === val ? "#7c3aed" : "#374151",
                     border: `2px solid ${levelUpChoice === val ? "#a78bfa" : "transparent"}`,
@@ -20159,6 +20270,25 @@ const CharacterSheetWrapper = ({
                 </button>
               ))}
             </div>
+            {unallocatedXp >= 10 ? (
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  marginBottom: 12,
+                  fontSize: 12,
+                  color: "#d1d5db",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={levelUpFromPool}
+                  onChange={(e) => setLevelUpFromPool(e.target.checked)}
+                />
+                Spend from free pool ({unallocatedXp}) instead of a track
+              </label>
+            ) : null}
 
             {levelUpChoice === "stat" && (
               <div style={{ marginBottom: "16px" }}>
@@ -20181,6 +20311,19 @@ const CharacterSheetWrapper = ({
                     </option>
                   ))}
                 </select>
+              </div>
+            )}
+
+            {levelUpChoice === "heritage" && (
+              <div
+                style={{
+                  marginBottom: "16px",
+                  fontSize: "12px",
+                  color: "#9ca3af",
+                }}
+              >
+                Spend 10 XP for +1 heritage ability pick (record the ability on
+                your sheet after confirming).
               </div>
             )}
 
