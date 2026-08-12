@@ -113,7 +113,7 @@ The `Crew` model includes specific fields to support the consensus mechanism:
 *   **`proposed_by`**: A `ForeignKey` to the `User` model, indicating which user initiated the name proposal. This is set to `null=True` when the proposal is resolved (either approved or rejected).
 *   **`approved_by`**: A `ManyToManyField` to the `User` model, tracking which crew members have approved the `proposed_name`. This field is cleared when a new proposal is made or when a proposal is successfully adopted.
 
-### 3.2. CrewViewSet (`backend/src/characters/views.py`)
+### 3.2. CrewViewSet (`backend/src/characters/views/crew_views.py`)
 
 The `CrewViewSet` provides the API endpoints for managing crews, including the custom actions for the consensus mechanism:
 
@@ -186,7 +186,7 @@ The `NPCSerializer` handles the serialization and deserialization of NPC data:
 *   The `creator` field is automatically set to the current authenticated user during creation (`read_only=True, default=serializers.CurrentUserDefault()`).
 *   The calculated properties (`regular_armor_charges`, `stand_armor_charges`, `special_armor_charges`, `vulnerability_clock_max`) are included as `read_only` fields.
 
-### 4.3. NPCViewSet (`backend/src/characters/views.py`)
+### 4.3. NPCViewSet (`backend/src/characters/views/npc_views.py`)
 
 The `NPCViewSet` provides the API endpoints for NPCs:
 
