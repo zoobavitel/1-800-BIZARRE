@@ -68,6 +68,10 @@ import {
 import { computeAbilityHeritageRollBonuses } from "../features/character-sheet/utils/rollAbilityHeritageModifiers";
 import { defaultPositionEffectFromSessionDetail } from "../features/character-sheet/utils/sessionPositionEffectDefaults";
 import {
+  isGmManagedProgressClock,
+  normalizeCampaignGmId,
+} from "../features/character-sheet/utils/progressClockVisibility";
+import {
   markPcAutosaveBusyCollision,
   schedulePcPendingResaveDrain,
 } from "../features/character-sheet/utils/pcAutosaveQueue";
@@ -694,7 +698,7 @@ function buildHealRollBoostPresetFromSelections(
 
 /** SESSION card: GM-shared progress clocks (creator GM, or legacy null+visible on active session). */
 function isSessionGmSharedProgressClock(clk, gmId, activeSessionId) {
-  const gmid = Number(gmId);
+  const gmid = normalizeCampaignGmId(gmId);
   const creatorRaw = clk?.created_by;
   const creator =
     creatorRaw != null && creatorRaw !== ""
@@ -710,7 +714,7 @@ function isSessionGmSharedProgressClock(clk, gmId, activeSessionId) {
       : NaN;
   const sessionMatches =
     Number.isFinite(sid) && Number.isFinite(cs) && cs === sid;
-  if (Number.isFinite(creator) && creator === gmid) return true;
+  if (gmid != null && Number.isFinite(creator) && creator === gmid) return true;
   if (
     (creator == null || !Number.isFinite(creator)) &&
     !!clk?.visible_to_players &&
@@ -19584,7 +19588,15 @@ const CharacterSheetWrapper = ({
                         marginBottom: "8px",
                       }}
                     >
-                      {clocks.map((clk) => (
+                      {clocks.map((clk) => {
+                        const gmManaged = isGmManagedProgressClock(
+                          clk,
+                          charCampaign?.gm,
+                        );
+                        const gmShared =
+                          gmManaged &&
+                          (!!clk.visible_to_players || !!clk.visible_to_party);
+                        return (
                         <div
                           key={clk.id}
                           style={{
@@ -19636,6 +19648,25 @@ const CharacterSheetWrapper = ({
                           <div style={{ fontSize: "10px", color: "#6b7280" }}>
                             {clk.filled}/{clk.segments}
                           </div>
+                          {gmManaged ? (
+                            <div
+                              title={
+                                gmShared
+                                  ? "The GM shared this clock with everyone at the table."
+                                  : "GM clock — not shown to players until the GM marks it visible."
+                              }
+                              style={{
+                                fontSize: "10px",
+                                color: gmShared ? "#6ee7b7" : "#9ca3af",
+                                marginTop: "2px",
+                                lineHeight: 1.3,
+                              }}
+                            >
+                              {gmShared
+                                ? "Shared by the GM"
+                                : "GM clock (private)"}
+                            </div>
+                          ) : (
                           <label
                             style={{
                               display: "flex",
@@ -19665,6 +19696,7 @@ const CharacterSheetWrapper = ({
                             />
                             Shared party
                           </label>
+                          )}
                           <button
                             onClick={() =>
                               setClocks((p) => p.filter((c) => c.id !== clk.id))
@@ -19680,7 +19712,8 @@ const CharacterSheetWrapper = ({
                             ✕
                           </button>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     {!clockEditorOpen ? (
                       <button
@@ -19781,21 +19814,30 @@ const CharacterSheetWrapper = ({
                       </div>
                     )}
 
-                  {/* Shared party clocks (player/crew-authored clocks; GM-created clocks live in SESSION > Clocks). */}
+                  {/* Shared party clocks: other players' shared clocks only.
+                      Own clocks stay in the list above; GM/session clocks live under SESSION. */}
                   {charCampaign?.progress_clocks?.length > 0 &&
                     (() => {
-                      const gmId = Number(charCampaign?.gm);
+                      const gmId = normalizeCampaignGmId(charCampaign?.gm);
+                      const ownIds = new Set(
+                        (clocks || [])
+                          .map((c) => Number(c?.id))
+                          .filter((n) => Number.isFinite(n)),
+                      );
                       const partyClocks = (charCampaign.progress_clocks || [])
+                        .filter(
+                          (clk) => !isGmManagedProgressClock(clk, gmId),
+                        )
                         .filter((clk) => {
-                          const creator = Number(clk.created_by);
-                          return creator && creator !== gmId;
-                        })
-                        .filter((clk) => {
-                          if (isGM) return true;
-                          return (
-                            Number(clk.created_by) === Number(user?.id) ||
-                            !!clk.visible_to_party
-                          );
+                          const id = Number(clk?.id);
+                          if (Number.isFinite(id) && ownIds.has(id)) {
+                            return false;
+                          }
+                          // Own clocks (with Shared party checkbox) live above.
+                          if (Number(clk.created_by) === Number(user?.id)) {
+                            return false;
+                          }
+                          return !!clk.visible_to_party;
                         });
                       if (partyClocks.length === 0) return null;
                       return (
