@@ -11,6 +11,7 @@ import {
   crewAPI,
   resolveMediaUrl,
 } from "../features/character-sheet";
+import { isGmManagedProgressClock } from "../features/character-sheet/utils/progressClockVisibility";
 import { useAuth } from "../features/auth";
 import { subscribeCampaignEvents } from "../features/character-sheet/services/campaignEvents";
 import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
@@ -2244,7 +2245,14 @@ const CLOCK_TYPE_OPTIONS = [
   { value: "COUNTDOWN", label: "Countdown" },
 ];
 
-function ClockManager({ clocks, setClocks, campaignId, sessionId, setError }) {
+function ClockManager({
+  clocks,
+  setClocks,
+  campaignId,
+  sessionId,
+  setError,
+  campaignGmId = null,
+}) {
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState("");
   const [createSegments, setCreateSegments] = useState(4);
@@ -2383,7 +2391,9 @@ function ClockManager({ clocks, setClocks, campaignId, sessionId, setError }) {
         )}
       </div>
       {clocks.map((clk) => {
-        const isGMClock = clk.created_by == null;
+        // Backend always sets created_by (including GM). Treat GM-created / NPC
+        // clocks as GM-managed → visible_to_players (not visible_to_party).
+        const isGMClock = isGmManagedProgressClock(clk, campaignGmId);
         const updateClock = (patch) =>
           progressClockAPI
             .updateProgressClock(clk.id, patch)
@@ -2445,9 +2455,16 @@ function ClockManager({ clocks, setClocks, campaignId, sessionId, setError }) {
                 <label style={{ fontSize: "11px" }}>
                   <input
                     type="checkbox"
-                    checked={clk.visible_to_players}
+                    checked={
+                      !!clk.visible_to_players || !!clk.visible_to_party
+                    }
                     onChange={(e) =>
-                      updateClock({ visible_to_players: e.target.checked })
+                      updateClock({
+                        visible_to_players: e.target.checked,
+                        // Party-share is for player-owned clocks; clear so GM
+                        // mistoggles that only set visible_to_party get repaired.
+                        visible_to_party: false,
+                      })
                     }
                   />
                   Visible to players
@@ -5223,6 +5240,7 @@ function SessionDetail({
         campaignId={campaign.id}
         sessionId={session.id}
         setError={setError}
+        campaignGmId={campaign?.gm?.id ?? campaign?.gm ?? null}
       />
     </div>
   );
