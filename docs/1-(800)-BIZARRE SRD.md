@@ -5,10 +5,10 @@
 The Basics 
 
 - The Core System  
-- Skills & Attributes  
+- Actions & Attributes  
 - Stand Coin Stats  
 - Stress & Trauma  
-- Skill Checks  
+- action rolls  
 - Position & Effect  
 - Consequences & Harm  
 - Resistance & Armor  
@@ -84,9 +84,9 @@ After that? They dive back in—pushing forward, spiraling out, chasing destiny,
 **JUDGEMENT CALLS:**  
 When you play, you’ll make several key judgment calls. Everyone contributes, but it’s either the players or the GM gets final say for each:
 
-- Which skills are reasonable as a solution to a problem? Can this person be ***Swayed***? Must we get out the tools and ***Tinker*** with this old rusty lock, or could it also be quietly ***Finessed***? The players have final say.
+- Which actions are reasonable as a solution to a problem? Can this person be ***Swayed***? Must we get out the tools and ***Tinker*** with this old rusty lock, or could it also be quietly ***Finessed***? The players have final say.
 
-- How dangerous and how effective is a given skill in this circumstance? How risky is this? Can this person be ***Swayed*** very little or a whole lot? The GM has final say.
+- How dangerous and how effective is a given action in this circumstance? How risky is this? Can this person be ***Swayed*** very little or a whole lot? The GM has final say.
 
 - Which consequences are inflicted to manifest the dangers in a given circumstance? Does this fall from the roof break your leg? Do the mercenaries merely become suspicious or do they already have you trapped? The GM has final say.
 
@@ -107,11 +107,11 @@ When you play, you’ll make several key judgment calls. Everyone contributes, b
 
 All the dice systems in the game are expressions of this basic format. When you’re first learning the game, you can always go back to a simple roll to judge how things go and look up the exact rule later when you have time.
 
-To create a dice pool for a roll, you’ll use a skill or attribute (like your ***Finesse*** or your ***Prowess***) and take dice equal to its rating. You’ll usually end up with one to four dice. Even one die is pretty good in this game—a 50% chance of success. The most common traits you’ll use are the **skill ratings** of the player characters. A player might roll dice for their Skirmish skill rating when they fight an enemy, for example.
+To create a dice pool for a roll, you’ll use a action or attribute (like your ***Finesse*** or your ***Prowess***) and take dice equal to its rating. You’ll usually end up with one to four dice. Even one die is pretty good in this game—a 50% chance of success. The most common traits you’ll use are the **action ratings** of the player characters. A player might roll dice for their Skirmish action rating when they fight an enemy, for example.
 
 There are four types of rolls that you’ll use most often in the game:
 
-- **Skill check.** When a PC attempts a skill that’s dangerous or troublesome, you make a skill check to find out how it goes. Skill checks and their effects and consequences drive most of the game.
+- **Action roll.** When a PC attempts an action that’s dangerous or troublesome, you make an action roll to find out how it goes. action rolls and their effects and consequences drive most of the game.
 
 - **Downtime roll.** When the PCs are at their leisure after a job, they can perform downtime activities in relative safety. You make downtime rolls to see how much they get done.
 
@@ -122,7 +122,7 @@ There are four types of rolls that you’ll use most often in the game:
 **THE GAME STRUCTURE:**  
 1(800)Bizarre has a structure to play, with four parts. By default, the game is in **free play**—characters talk to each other, they go places, they do things, they make rolls as needed.
 
-When tension erupts—be it combat, an argument, a chase, or a surreal mental confrontation, players describe their approach using their skills, stats, and Id abilities and make rolls to overcome obstacles, call for flashbacks, and complete the **mission** (successfully or not). 
+When tension erupts—be it combat, an argument, a chase, or a surreal mental confrontation, players describe their approach using their actions and abilities to make rolls and overcome obstacles, call for flashbacks, and complete the **mission** (successfully or not). 
 
 The GM frames the opposition, the consequences, and the narrative pressures at play, and the conflict ends when narrative goals are met, someone yields, or the stakes shift dramatically. When the **mission** is finished, the game shifts into the **downtime** phase.
 
@@ -132,29 +132,29 @@ The phases are a conceptual model to help you organize the game. They’re not m
 
 # 🎬 Skills & Attributes
 
-**SKILLS & ATTRIBUTES**
+**ACTIONS & ATTRIBUTES**
 
-**SKILLS:**  
-There are 12 **skills** in the game that the player characters use to overcome obstacles.
+**ACTIONS:**  
+There are 12 **actions** in the game that the player characters use to overcome obstacles.
 
 - Bizarre       \-  Hunt          \-  Survey  
 - Command       \-  Prowl         \-  Sway  
 - Consort       \-  Skirmish      \-  Tinker  
 - Finesse       \-  Study         \-  Wreck
 
-Each skill has a rating (from zero to 4\) that tells you how many dice to roll when you perform that skill. Skills don’t just represent expertise or training—you’re free to describe how your character performs that skill based on the type of person they are. Maybe your character is good at ***Command*** because they have a scary stillness to them, while another character barks orders and intimidates people with their military bearing.
+Each action has a rating (from zero to 4\) that tells you how many dice to roll when you perform that action. Actions don’t just represent expertise or training—you’re free to describe how your character performs that action based on the type of person they are. Maybe your character is good at ***Command*** because they have a scary stillness to them, while another character barks orders and intimidates people with their military bearing.
 
-You choose which skill to perform to overcome an obstacle by describing what your character does. Skills that are poorly suited to the situation may be less effective and may put the character in more danger, but they can still be attempted. Usually, when you perform a skill, you’ll make a **skill check** to see how it turns out.
+You choose which action to perform to overcome an obstacle by describing what your character does. Actions that are poorly suited to the situation may be less effective and may put the character in more danger, but they can still be attempted. Usually, when you perform an action, you’ll make an action **roll** to see how it turns out.
 
-**SKILL CHECKS:**  
-You make a skill check when your character does something potentially dangerous or troublesome. The possible results of the skill check depend on your character’s **position**. There are three positions: **controlled**, **risky**, and **desperate**. If you’re in a **controlled** position, the possible consequences are less serious. If you’re in a **desperate** position, the consequences can be severe. If you’re somewhere in between, it’s **risky**—usually considered the “default” position for most skills.
+**ACTION ROLLS:**  
+You make an action roll when your character does something potentially dangerous or troublesome. The possible results of the action roll depend on your character’s **position**. There are three positions: **controlled**, **risky**, and **desperate**. If you’re in a **controlled** position, the possible consequences are less serious. If you’re in a **desperate** position, the consequences can be severe. If you’re somewhere in between, it’s **risky**—usually considered the “default” position for most action rolls.
 
-If there’s no danger or trouble at hand, you don’t make a skill check. You might make a **fortune** check or a **downtime** check or the GM will simply say yes—and you accomplish your goal.
+If there’s no danger or trouble at hand, you don’t make an action roll. You might make a **fortune** check or a **downtime** check or the GM will simply say yes—and you accomplish your goal.
 
 **ATTRIBUTE RATINGS:**  
 There are three **attributes** in the game system that the player characters use to resist bad consequences: ***Insight***, ***Prowess***, and ***Resolve***. Each attribute has a rating (from zero to 4\) that tells you how many dice to roll when you use that attribute.
 
-The rating for each attribute is equal to the number of dots in the **first column** under that attribute (see the examples below (need images from playbook)). The more well-rounded your character is with a particular set of skills, the better their attribute rating.
+The rating for each attribute is equal to the number of dots in the **first column** under that attribute (see the examples below (need images from playbook)). The more well-rounded your character is with a particular set of action ratings, the better their attribute rating.
 
 If you have 0 dice in an action rating, you must roll 2d and take the lower result\!
 
@@ -169,7 +169,7 @@ You cannot fail a resistance check.
 
 Find out more about [Resistance Checks]().
 
-**SKILLS:**  
+**ACTIONS:**  
 When you roll ***Bizarre***, you open your mind to paranormal power.
 
 *You might communicate or manipulate bizarre entities. You could try to perceive beyond sight in order to better understand your situation (but Surveying might be better).*
@@ -218,7 +218,7 @@ When you roll ***Wreck***, you unleash savage force.
 
 *You might smash down a door or wall with a single punch, or use an explosive to do the same. You might employ chaos or sabotage to create a distraction or overcome an obstacle. You could try to overwhelm an enemy with sheer force in battle (but Skirmishing might be better).*
 
-As you can see, many skills overlap with others. This is by design. As a player, you get to choose which skill you roll, by saying what your character does. Can you try to ***Wreck*** someone during a fight? Sure\! The GM tells you the position and effect level of your skill in this circumstance. As it says, ***Skirmish*** *might* be better (less risky or more effective), depending on the situation at hand (sometimes it won’t be better). Skill checks use ONLY your skil rating.
+As you can see, many actions overlap with others. This is by design. As a player, you get to choose which action you roll, by saying what your character does. Can you try to ***Wreck*** someone during a fight? Sure\! The GM tells you the position and effect level of your action in this circumstance. As it says, ***Skirmish*** *might* be better (less risky or more effective), depending on the situation at hand (sometimes it won’t be better). Action rolls use ONLY your action rating.
 
 # 🧓 Heritage
 
@@ -263,7 +263,7 @@ Players can **buy extra HP with XP** instead of taking more detriments.
 
 ⭐ **Benefit Costs (Use HP to Unlock These):**
 
-* **Skilled From Birth (1 HP):** Can start with **3 dots in a single skill** instead of the usual cap of 2\.  
+* **Skilled From Birth (1 HP):** Can start with **3 dots in a single action rating** instead of the usual cap of 2\.  
 * **Sheer Grit (2 HP):** Once per session, reroll any failed roll.  
 * **Tactical Awareness (1 HP):** Use an extra \+1d for any roll once per combat.  
 * **Resourceful (2 HP):** Gain \+1 downtime action for training, healing, or crafting.
@@ -486,7 +486,7 @@ Players can **buy extra HP with XP** instead of taking more detriments.
 
 **The Stand Coin is made of 6 properties, rated F to S, that describe a Stand's capabilities and limits. These properties fall into two categories: Stand Coin Rolls and Stand Coin Passives.**
 
-**Stand Coin Rolls — Power, Speed, Precision, and Durability — are active dice pools. When the fiction calls for something only a Stand can do, or when you want to push beyond what your user could accomplish alone, you roll these instead of your user skills. These are parallel rolls, not additions to your user dice.**
+**Stand Coin Rolls — Power, Speed, Precision, and Durability — are active dice pools. When the fiction calls for something only a Stand can do, or when you want to push beyond what your user could accomplish alone, you roll these instead of your user action ratings. These are parallel rolls, not additions to your user dice.**
 
 **Stand Coin Passives — Range and Development — define your Stand's parameters. They don't generate dice rolls; the GM reads them to determine what's possible.**
 
@@ -517,9 +517,9 @@ Players can **buy extra HP with XP** instead of taking more detriments.
 
 **Grade Gates: Some actions require a minimum grade to attempt at all. The GM calls this. A D-Power Stand cannot punch through a skyscraper — that action is simply unavailable. A B-Power Stand can attempt it, but starts at reduced position or effect.**
 
-**Stand Roll Benefit: When you use a Stand Coin Roll for something your user *could* have attempted with a skill roll, you gain either \+position or \+effect — GM's call based on what the fiction supports. Not both.**
+**Stand Roll Benefit: When you use a Stand Coin Roll for something your user *could* have attempted with an action roll, you gain either \+position or \+effect — GM's call based on what the fiction supports. Not both.**
 
-**Stand-on-Stand Combat: Only Stand abilities, bizarre powers, or similarly supernatural forces can damage a Stand directly. User skills don't apply against a Stand — you need your Coin Rolls. This creates a tactical choice: target the Stand (requires your dice pool) or find and expose the user (opens up all your user skills).**
+**Stand-on-Stand Combat: Only Stand abilities, bizarre powers, or similarly supernatural forces can damage a Stand directly. User actions don't apply against a Stand — you need your Coin Rolls. This creates a tactical choice: target the Stand (requires your dice pool) or find and expose the user (opens up all your user actions).**
 
 ---
 
@@ -571,7 +571,7 @@ At D or F, the GM may rule that precision-dependent Stand actions carry automati
 
 *Used when your Stand absorbs damage before it mirrors through to you.*
 
-When your Stand takes a hit from another Stand, roll your Durability dice. Spend stress equal to 6 minus the highest result — the same structure as a standard resistance roll, but using your Stand's Coin dice instead of a user attribute. High Durability means the Stand eats the hit. Low Durability means it passes through hard. Rolling a 6 still means you mark 1 stress, but if you roll two 6’s, you resist for free.
+When your Stand takes a hit from another Stand, roll your Durability dice. Spend stress equal to 6 minus the highest result — the same structure as a standard resistance roll, but using your Stand's Coin dice instead of a user attribute. High Durability means the Stand eats the hit. Low Durability means it passes through hard. Rolling a 6 still means you mark 1 stress, but if you roll two 6’s, you resist for free. Your stand can roll to resist incoming damage within its range. 
 
 *If you have 0 Durability dice (F-rank), roll 2d and take the lowest result.*
 
@@ -585,9 +585,7 @@ Stand Armor: Durability also determines your Stand's armor charges. When you che
 | **D** | **1** |
 | **F** | **0** |
 
-Stands without a physical form share their Stand Armor with their user — there is no separate body to take the hit.
-
-User Armor is physical armor worn by the user. It is acquired through abilities or heritage and can be checked to reduce a consequence against the user by 1 level. It is entirely separate from Stand Armor.
+User Armor is physical armor worn by the user. It is acquired through buying it via coin or crafting it or from a heritage ability and can be checked to reduce a consequence against the user by 1 level. It is entirely separate from Stand Armor.
 
 ---
 
@@ -669,7 +667,7 @@ NPC stats are GM-facing parameters. NPCs don't roll Stand Coin dice — the GM r
 **STRESS & TRAUMA**
 
 **STRESS:**  
-Player characters in 1(800)Bizarre have a special reserve of 9 tokens called **stress**. When they suffer a consequence that they don’t want to accept, they can take stress instead. The result of a **resistance check** determines how much stress it costs to avoid a bad outcome.
+Player characters in 1(800)Bizarre have a special reserve of 9 tokens called **stress**. If you are a stand user, your durability dictates the number of stress tokens you’d have. When they suffer a consequence that they don’t want to accept, they can take stress instead. The result of a **resistance check** determines how much stress it costs to avoid a bad outcome.
 
 *During an All-Out-Brawl, Daniel’s character, Cross, gets stabbed in the chest. Daniel rolls his **Prowess** rating to resist, and gets a **2**. It costs 6 stress, minus 2 (the result of the resistance check) to resist the consequences. Daniel marks off 4 stress and describes how Cross survives.*
 
@@ -678,7 +676,7 @@ Player characters in 1(800)Bizarre have a special reserve of 9 tokens called **s
 **PUSHING YOURSELF:**  
 You can use stress to push yourself for greater performance. For each bonus you choose below, take **2 stress** (each can be chosen once for a given action):
 
-- Add **\+1d** to your roll. (This may be used for an skill check or downtime roll or any other kind of roll where extra effort would help you)
+- Add **\+1d** to your roll. (This may be used for an action roll or downtime roll or any other kind of roll where extra effort would help you)
 
 - Add **\+1 level** to your effect.
 
@@ -709,38 +707,42 @@ When you suffer **trauma**, you’re taken out of action. You’re “left for d
 
 - **Vicious**: You seek out opportunities to hurt people, even for no good reason.
 
-# 🎬 Skill Checks
+# 🎬 Action Roll
 
-**SKILL CHECKS**
+**ACTION ROLL**
 
-When a player character does something challenging, we make a skill check to see how it turns out. A skill is challenging if there’s an obstacle to the PC’s goal that’s dangerous or troublesome in some way. We don’t make a skill check unless the PC is put to the test. If their skill is something that we’d expect them to simply accomplish, then we don’t make a skill check.
+When a player character does something challenging, we make an action roll to see how it turns out. An action is challenging if there's an obstacle to the PC's goal that's dangerous or troublesome in some way. We don't make an action roll unless the PC is put to the test. If their action is something we'd expect them to simply accomplish, then we don't make an action roll.
 
-*Each game group will have their own ideas about what “challenging” means. This is good\! It’s something that establishes the tone and style of your Id series.*
+*Each game group will have their own ideas about what “challenging” means. This is good\! It’s something that establishes the tone and style of the game.*
 
-To make a skill check, we go through six steps. In play, they flow together somewhat, but let’s break each one down here for clarity.
+To take an action, we go through six steps. In play, they flow together somewhat, but let’s break each one down here for clarity.
 
-1. The player states their **goal** for the skill.  
-2. The player chooses the **skill rating**.  
+1. The player states their **goal** for the action.  
+2. The player chooses the **action rating**.  
 3. The GM sets the **position** for the roll.  
-4. The GM sets the **effect level** for the skill.  
+4. The GM sets the **effect level** for the action.  
 5. Add **bonus dice**.  
 6. The player rolls the dice and we judge the result.
 
 **THE PLAYER STATES THEIR GOAL:**  
 Your goal is the concrete outcome your character will achieve when they overcome the obstacle at hand. Usually the character’s goal is pretty obvious in context, but it’s the GM’s job to ask and clarify the goal when necessary.
 
-*“You’re punching him in the face, right? Okay... what do want to get out of this? Do you want to take him out, or just rough him up so he’ll do what you want?”*
+*“You’re punching him in the face, right? Okay... what do you want to get out of this? Do you want to take him out, or just rough him up so he’ll do what you want?”*
 
-**THE PLAYER CHOOSES THE SKILL RATING:**  
-The player chooses which **skill rating** to roll, following from what their character is doing on-screen. If you want to roll your ***Skirmish*** action, then get in a fight. If you want to roll your ***Command*** action, then order someone around. You can’t roll a given action rating unless your character is presently performing that action in the fiction.
+**THE PLAYER CHOOSES THE ACTION RATING:**  
+The player chooses which **action rating** to roll, following from what their character is doing on-screen. If you want to roll your ***Skirmish*** action, then get in a fight. If you want to roll your ***Command*** action, then order someone around. You can’t roll a given action rating unless your character is presently performing that action in the fiction.
+
+If the fiction calls for something only a Stand can do, you roll a **Coin Action** — Power, Speed, or Precision — instead of an action rating. Coin Actions and action ratings are not interchangeable; the fiction determines which applies.
+
+**Durability is not a Coin Action.** It's your Stand's resistance pool — you may roll it in place of Prowess when your Stand interposes itself against a physical threat within Range. See Resistance & Armor.
 
 **THE GM SETS THE POSITION:**  
-Once the player chooses their skill, the GM sets the **position** for the roll. The position represents how dangerous or troublesome the skill might be. There are three positions: **controlled**, **risky**, and **desperate**. To choose a position, the GM looks at the profiles for the three positions and picks one that most closely matches the situation at hand.
+Once the player chooses their action, the GM sets the **position** for the action roll. The position represents how dangerous or troublesome the action might be. There are three positions: **controlled**, **risky**, and **desperate**. To choose a position, the GM looks at the profiles for the three positions and picks one that most closely matches the situation at hand.
 
 **By default, an action roll is risky.** You wouldn’t be rolling if there was no risk involved. If the situation seems more dangerous, make it desperate. If it seems less dangerous, make it controlled.
 
 **THE GM SETS THE EFFECT LEVEL:**  
-The GM assesses the likely **effect level** of this skill, given the factors of the situation. Essentially, the effect level tells us “how much” this action can accomplish: will it have **limited**, **standard**, or **great** effect?
+The GM assesses the likely **effect level** of this action, given the factors of the situation. Essentially, the effect level tells us “how much” this action can accomplish: will it have **limited**, **standard**, or **great** effect?
 
 *The GM’s choices for effect level and position can be strongly influenced by the player’s choice of action rating. If a player wants to try to make a new friend by **Wrecking** something—well... maybe that’s possible, but the GM wouldn’t be crazy to say it’s a desperate roll and probably limited effect. Seems like **Consorting** would be a lot better for that. The players are always free to choose the action they perform, but that doesn’t mean all actions should be equally risky or potent.*
 
@@ -769,31 +771,31 @@ The Devil’s Bargain is always a free choice. If you don’t like one, just rej
 If it’s ever needed, the GM has final say over which Devil’s Bargains are valid.
 
 **ROLL THE DICE AND JUDGE THE RESULT:**  
-Once the goal, skill rating, position, and effect have been established, add any bonus dice and roll the dice pool to determine the outcome. (See the sets of possible outcomes, by position, in the table.)
+Once the goal, action rating, position, and effect have been established, add any bonus dice and roll the dice pool to determine the outcome. (See the sets of possible outcomes, by position, in the table.)
 
-The skill check does a lot of work for you. It tells you how well the character performs as well as how serious the consequences are for them. They might succeed at their skill without any consequences (on a **6**), or they might succeed but suffer consequences (on a **4/5**), or it might just all go wrong (on a **1-3**).
+The action roll does a lot of work for you. It tells you how well the character performs as well as how serious the consequences are for them. They might succeed at their action without any consequences (on a **6**), or they might succeed but suffer consequences (on a **4/5**), or it might just all go wrong (on a **1-3**).
 
-On a **1-3**, it’s up to the GM to decide if the PC’s skill has any effect or not, or if it even happens at all. Usually, the skill just fails completely, but in some circumstances, it might make sense or be more interesting for the skill to have some effect even on a **1-3** result.
+On a **1-3**, it’s up to the GM to decide if the PC’s action has any effect or not, or if it even happens at all. Usually, the action just fails completely, but in some circumstances, it might make sense or be more interesting for the action to have some effect even on a **1-3** result.
 
-Each **4/5** and **1-3** outcome lists suggested **consequences** for the character. The worse your position, the worse the consequences are. The GM can inflict one or more of these consequences, depending on the circumstances of the skill check. PCs have the ability to avoid or reduce the severity of consequences that they suffer by **resisting** them.
+Each **4/5** and **1-3** outcome lists suggested **consequences** for the character. The worse your position, the worse the consequences are. The GM can inflict one or more of these consequences, depending on the circumstances of the action roll. PCs have the ability to avoid or reduce the severity of consequences that they suffer by **resisting** them.
 
-When you narrate the skill after the roll, the GM and player collaborate together to say what happens on-screen. Tell us how you vault across to the other rooftop. Tell us what you say to the Inspector to convince him. The GM will tell us how he reacts. Etc.
+When you narrate the action after the roll, the GM and player collaborate together to say what happens on-screen. Tell us how you vault across to the other rooftop. Tell us what you say to the Inspector to convince him. The GM will tell us how he reacts. Etc.
 
-**SKILL CHECK SUMMARY:**
+**Action Roll SUMMARY:**
 
-- A player or GM calls for a roll. Make a **skill check** when the character performs a dangerous or troublesome skill.
+- A player or GM calls for a roll. Make an **action roll** when the character performs a dangerous or troublesome action.
 
-- The player chooses the **skill rating** to roll. Choose the skill that matches what the character is doing in the fiction.
+- The player chooses the **action rating** to roll. Choose the action that matches what the character is doing in the fiction.
 
-- The GM establishes the **position** and **effect level** of the skill. The choice of position and effect is influenced strongly by the player’s choice of skill.
+- The GM establishes the **position** and **effect level** of the action. The choice of position and effect is influenced strongly by the player’s choice of action.
 
 - Add up to two bonus dice. 1\) **Assistance** from a teammate. 2\) **Push yourself** (take 2 stress) or accept a **Devil’s Bargain**.
 
-- Roll the dice pool and judge the outcome. The players and GM narrate the skill together. The GM has final say over what happens and inflicts consequences as called for by the position and the result of the roll.
+- Roll the dice pool and judge the outcome. The players and GM narrate the action together. The GM has final say over what happens and inflicts consequences as called for by the position and the result of the roll.
 
-**SKILL CHECK:**
+**ACTION ROLL:**
 
-- **1d** for each Skill rating dot.  
+- **1d** for each action rating dot.  
 - **\+1d** if you have **Assistance**.  
 - \+**1d** if you **Push yourself** \-or- you accept a **Devil’s Bargain**.
 
@@ -816,16 +818,16 @@ When you narrate the skill after the roll, the GM and player collaborate togethe
 - **Critical**: You do it with increased effect.  
 - **6**: You do it.  
 - **4/5**: You do it, but there’s a **consequence**: you suffer **severe harm (3)**, a **serious complication** occurs, you have **reduced effect**.  
-- **1-3**: It’s the worst outcome. You suffer **severe harm (3)**, a **serious complication** occurs, you **lose this opportunity for skill**.
+- **1-3**: It’s the worst outcome. You suffer **severe harm (3)**, a **serious complication** occurs, you **lose this opportunity to act**.
 
 **DOUBLE-DUTY ROLLS:**  
-Since NPCs don’t roll for their skills, a skill check does double-duty: **it resolves the skills of the PC as well as any NPCs that are involved**. The single roll tells us how those skills interact and which consequences result. On a **6**, the PC wins and has their effect. On a **4/5**, it’s a mix—both the PC and the NPC have their effect. On a **1-3**, the NPC wins and has their effect as a consequence on the PC.
+Since NPCs don’t roll for their actions, an action roll does double-duty: **it resolves the actions of the PC as well as any NPCs that are involved**. The single roll tells us how those actions interact and which consequences result. On a **6**, the PC wins and has their effect. On a **4/5**, it’s a mix—both the PC and the NPC have their effect. On a **1-3**, the NPC wins and has their effect as a consequence on the PC.
 
 # 🚦 Position & Effect
 
 **POSITION & EFFECT (Change examples?)**
 
-In 1(800)Bizarre, you achieve goals by taking actions and facing consequences. But how many actions does it take to achieve a particular goal? That depends on the effect level of your actions. The GM judges the effect level using the profiles below. Which one best matches the skill at hand­­—great, standard, or limited? Each effect level indicates the questions that should be answered for that effect, as well as how many segments to tick if you’re using a progress clock.
+In 1(800)Bizarre, you achieve goals by taking actions and facing consequences. But how many actions does it take to achieve a particular goal? That depends on the effect level of your actions. The GM judges the effect level using the profiles below. Which one best matches the action at hand­­—great, standard, or limited? Each effect level indicates the questions that should be answered for that effect, as well as how many segments to tick if you’re using a progress clock.
 
 ![][image1]
 
@@ -883,7 +885,7 @@ When considering factors, effect level might be reduced below limited, resulting
 
 If a PC special ability gives “+1 effect,” it comes into play after the GM has assessed the effect level. For example, if you ended up with zero effect, the \+1 effect bonus from your Bodyguard ability would bump them up to limited effect.
 
-Also, remember that a PC can push themselves (take 2 stress) to get \+1 effect on their skill.
+Also, remember that a PC can push themselves (take 2 stress) to get \+1 effect on their action roll.
 
 Every factor won’t always apply to every situation. You don’t have to do an exact accounting every time, either. Use the factors to help you make a stronger judgment call—don’t feel beholden to them.
 
@@ -904,7 +906,7 @@ This kind of trade-off isn’t included in the effect factors because it’s not
 When a PC suffers an effect from an enemy or a dangerous situation, it’s called a consequence. Consequences are the companion to effects. PCs have effect on the world around them and they suffer consequences in return from the risks they face.
 
 **SETTING POSITION & EFFECT:**  
-The GM sets position and effect for a skill check at the same time, after the player says what they’re doing and chooses their skill. Usually, **Risky / Standard** is the default combination, modified by the skill being used, the strength of the opposition, and the effect factors.
+The GM sets position and effect for an action roll at the same time, after the player says what they’re doing and chooses their action. Usually, **Risky / Standard** is the default combination, modified by the **action rating** being used, the strength of the opposition, and the effect factors.
 
 The ability to set position and effect as independent variables gives you nine combinations to choose from, to help you convey a wide array of fictional circumstances.
 
@@ -939,7 +941,7 @@ A serious complication is more severe: reinforcements surround and trap you, the
 Don’t inflict a complication that negates a successful roll. If a PC tries to corner an enemy and gets a 4/5, don’t say that the enemy escapes. The player’s roll succeeded, so the enemy is cornered... maybe the PC has to wrestle them into position and during the scuffle the enemy grabs their gun.
 
 **Lost Opportunity:**  
-This consequence represents shifting circumstance. You had an opportunity to achieve your goal with this skill, but it slips away. To try again, you need a new approach—usually a different skill or a change in circumstances. Maybe you tried to Skirmish with the noble to trap her on the balcony, but she evades your maneuver and leaps out of reach. If you want to trap her now you’ll have to try another way—maybe by Swaying her with your roguish charm.
+This consequence represents shifting circumstance. You had an opportunity to achieve your goal with this action roll, but it slips away. To try again, you need a new approach—usually a different action rating or a change in circumstances. Maybe you tried to Skirmish with the noble to trap her on the balcony, but she evades your maneuver and leaps out of reach. If you want to trap her now you’ll have to try another way—maybe by Swaying her with your roguish charm.
 
 **Worse Position:**  
 This consequence represents losing control of the situation—the action carries you into a more dangerous position. Perhaps you make the leap across to the next rooftop, only to end up dangling by your fingertips. You haven’t failed, but you haven’t succeeded yet, either. You can try again, re-rolling at the new, worse position. This is a good consequence to choose to show escalating action. A situation might go from controlled, to risky, to desperate as the action plays out and the PC gets deeper and deeper in trouble.
@@ -987,8 +989,6 @@ Usually, a resistance check reduces the severity of a consequence. If you’re g
 
 You may only roll against a given consequence once.
 
-*When your Stand takes a hit from another Stand, you resist using your **Durability** dice instead of a user attribute. The mechanic is the same — roll your Durability dice, spend stress equal to 6 minus the highest result. If you have F-rank Durability (0 dice), roll 2d and take the lowest.*
-
 If you can pay 2 stress, you can recall your stand from its current position in order to roll **Durability** to resist a consequence.
 
 The GM also has the option to rule that your character completely avoids the consequence. For instance, maybe you’re in a sword fight and the consequence is getting disarmed. When you resist, the GM says that you avoid that consequence completely: you keep hold of your weapon.
@@ -1003,21 +1003,34 @@ The GM may also threaten several consequences at once, then the player may choos
 
 Once you decide to resist a consequence and roll, you suffer the stress indicated. You can’t roll first and see how much stress you’ll take, then decide whether or not to resist.
 
-**Resistance Check:**
+**Resistance Roll**
 
-- 1d for each Attribute rating.
+Roll 1d for each rating in the relevant Attribute — or your Stand's **Durability** grade, when your Stand takes the hit for you.
 
-You reduce or avoid the effects of the consequence (GM chooses).
+**You suffer stress equal to 6 minus your highest die result.**
 
-Suffer 6 stress minus the highest die result.
+| Highest die | Stress paid |
+| ----- | ----- |
+| 1 | 5 |
+| 2 | 4 |
+| 3 | 3 |
+| 4 | 2 |
+| 5 | 1 |
+| 6 | 0 |
 
-Critical: Clear 1 stress.
+**Critical (two or more 6s):** you pay 0 stress and clear 1 stress.
+
+There is no minimum stress cost. A single 6 costs you nothing.
+
+*If you have 0 dice, roll 2d and take the lowest result. A 0-dice roll cannot be critical.*
+
+The GM chooses whether resistance reduces the consequence or avoids it entirely.
 
 **Armor:**  
 If you have a type of armor that applies to the situation, you can mark an armor box to reduce or avoid a consequence, instead of rolling to resist.
 
-* **Regular Armor** — user takes a hit. Mark a charge to reduce consequence by 1 level.  
-* **Stand Armor** — your Stand takes a hit. Mark a charge to reduce consequence by 1 level. Cannot be used for direct hits on your user.  
+* **Regular Armor** — user takes a hit. This armor is not created by a stand. Mark a charge to reduce consequence by 1 level.  
+* **Stand Armor** — Your stand or user takes a hit. This armor is created/originates from a Stand. Mark a charge to reduce consequence by 1 level.  
 * **Special Armor** — NPC-only (GM tool). Flat negation rather than reduction.
 
   *Silas is taking level 2 harm, “Cut to the Ribs,” and the fight isn’t even over yet, so Ian decides to use Silas’s armor to reduce the harm. He marks the armor box and the harm becomes level 1, “Bruised.” If Silas was wearing heavy armor, he could mark a second armor box and reduce the harm again, to zero.*
@@ -1109,7 +1122,7 @@ Complex enemy threats can be broken into several “layers,” each with its own
 Remember that a clock tracks progress. It reflects the fictional situation, so the group can gauge how they’re doing. A clock is like a speedometer in a car. It shows the speed of the vehicle—it doesn’t determine the speed.
 
 **SIMPLE OBSTACLES:**  
-Not every situation and obstacle requires a clock. Use clocks when a situation is complex or layered and you need to track something over time—otherwise, resolve the result of a skill with a single roll.
+Not every situation and obstacle requires a clock. Use clocks when a situation is complex or layered and you need to track something over time—otherwise, resolve the result of a action roll with a single roll.
 
 Examples of progress clocks follow.
 
@@ -1157,7 +1170,7 @@ When you make a fortune check you may assess any trait rating to determine the d
 
 - When a supernatural power manifests with uncertain results, you might use its magnitude for a fortune check.
 
-- When a PC gathers information, you might make a fortune check using their skill rating to determine the amount of the info they get.
+- When a PC gathers information, you might make a fortune check using their action rating to determine the amount of the info they get.
 
 If no trait applies, roll 1d for sheer luck or create a dice pool (from one to four) based on the situation at hand. If two parties are directly opposed, make a fortune check for each side to see how they do, then assess the outcome of the situation by comparing their performance levels.
 
@@ -1194,7 +1207,7 @@ The flow of information from the GM to the players about the fictional world is 
 
 When you want to know something specific about the fictional world, your character can gather information. The GM will ask you how your character gathers the info (or how they learned it in the past).
 
-If it’s common knowledge, the GM will simply answer your questions. If there’s an obstacle to the discovery of the answer, a skill check is called for. If it’s not common knowledge but there’s no obstacle, a simple fortune check determines the quality of the information you gather.
+If it’s common knowledge, the GM will simply answer your questions. If there’s an obstacle to the discovery of the answer, an action rating is called for. If it’s not common knowledge but there’s no obstacle, a simple fortune check determines the quality of the information you gather.
 
 Each attempt to gather information takes time. If the situation allows, you can try again if you don’t initially get all the info that you want. But often, the opportunity is fleeting, and you’ll only get one chance to roll for that particular question.
 
@@ -1335,11 +1348,11 @@ When you create your crew, you assign some positive and negative status ratings 
 **ADVANCEMENT**
 
 **PC Advancement:**  
-Each player keeps track of the experience points (xp) that their character earns.
+Each player keeps track of the experience points (xp) that their character earns. A player character sheet has 5 XP tracks: heritage, insight, prowess, resolve, and playbook. Heritage, insight, prowess, and resolve require 5 boxes in order to advance, while the playbook track requires filling 10 boxes in order to advance. If you wish to have abilities from more than 1 playbook, you fill in 10 boxes in your playbook track to advance; you do not add an additional playbook track to your character sheet. 
 
 During the game session, mark xp:
 
-- When you make a desperate skill check. Mark 1 xp in the attribute for the skill you rolled. For example, if you roll a desperate Skirmish skill, you mark xp in Prowess. When you roll in a desperate group action, you also mark xp.
+- When you make a desperate action roll. Mark 1 xp in the attribute for the action you rolled. For example, if you roll a desperate Skirmish action, you mark xp in Prowess. When you roll in a desperate group action, you also mark xp.
 
 At the end of the session, review the xp triggers on your character sheet. For each one, mark 1 xp if it happened at all, or mark 2 xp if it happened a lot during the session. The xp triggers are:
 
@@ -1351,26 +1364,27 @@ At the end of the session, review the xp triggers on your character sheet. For e
 
 - You may mark end-of-session xp on any xp tracks you want (any attribute or your playbook xp track).
 
-When you fill an xp track, clear all the marks and take an advance. When you take an advance from your playbook track, you may choose an additional special ability. When you take an advance from an attribute, you may add an additional skill dot to one of the skills under that attribute.
+**When you fill an xp track, clear all the marks and take an advance.** 
+
+Filling an attribute track (5XP/boxes) gives you \+1d to an action of your choosing within that attribute type. For example: filling the insight track and advancing gives the player a choice to add \+1d to any action rating in the insight attribute.
+
+If you are a stand user: Filling the **playbook track** (10XP/boxes) lets you choose a stand coin stat to increase by 1 grade (F to D, D to C, etc.). When you gain an A in any stat, choose 2 standard abilities OR 1 custom ability with 2 features AND 1 standard ability.
+
+If you are not a stand user: Filling the **playbook track** (10XP/boxes) gives an advance that lets you take a **special ability from your playbook**.
 
 **Any desperate roll** marks 1 XP in the relevant attribute (Insight, Prowess, or Resolve), regardless of how many dots you have in the action.
+
+**Rolling with zero dots** at desperate position marks **2 XP** instead of 1\. That's the bonus for taking on serious risk with no training at all.
 
 ***Example Session:***  
 *Johnny Joestar is tracking his XP at the end of a session. He rolled two desperate **Hunt** action checks during the session (tracking enemy Stand users through the desert), so he marks **2 XP on his Insight XP track**. He addressed several challenges using **Tusk ACT 2's** spinning nail bullets, so he marks **2 XP** for his Stand-specific trigger. He expressed his drive to walk again and his connection to his jockey heritage multiple times during a flashback scene, so he takes **2 XP** for that. He also showcased his character's determination, but **2 XP is the maximum** for that category, so he doesn't get any more. He struggled with his **Trauma: Obsessed** (fixating on the Corpse Parts), which caused him to make a reckless decision. He marks **1 XP** for struggling with trauma.*
 
 *That's **7 XP total** at the end of the session.*
 
-*Johnny decides to put **5 XP into his Insight XP track** (filling it) and **2 XP into his Stand Coin advancement track**. He takes an advance and adds **\+1 action dot to Hunt**, bringing him from Hunt 2 to Hunt 3\. The remaining 2 XP in his Stand Coin track will carry over to the next session. He needs **8 more XP** to increase a Stand Coin stat.*
+*Johnny decides to put **5 XP into his Insight XP track** (filling it) and **2 XP into his playbook advancement track**. He takes an advance and adds **\+1 action dot to Hunt**, bringing him from Hunt 2 to Hunt 3\. The remaining 2 XP in his Stand Coin track will carry over to the next session. He needs **8 more XP** to increase a Stand Coin stat.*
 
-You can also earn xp by training during downtime. When you train, mark XP in one of your attributes or in your playbook. A given xp track can be trained only once per downtime phase.
-
-**Free expenditure (site hybrid):** XP may bank on tracks (desperate) or in a **scorecard free pool** (end-of-session triggers and Stand **Development** grade bonus). Spend freely:
-
-* **5 XP** → \+1d in a skill rating (minor advance)  
-* **10 XP** → \+1 Stand Coin grade, **or** a heritage ability, **or** \+2d in skill ratings  
-* **5 XP** → \+1 HP (heritage option, without taking more detriments)
-
-**Development** end-of-session bonus (by Stand Development grade) banks to the free pool for the player to allocate later. 
+You can also earn xp by training during downtime. When you train, mark XP in one of your attributes or in your playbook. A given xp track can be trained only once per downtime phase.  
+ 
 
 **STAND USERS**
 
@@ -1410,67 +1424,85 @@ You can also earn xp by training during downtime. When you train, mark XP in one
 
 In 1(800)Bizarre, the outcome of an All-Out-Brawl is determined by the players' wit, resources, and the fiction at hand. Position and effect are set by the GM based on the situation — not by grade comparison.
 
-When Stands clash directly, players use their Stand Coin Rolls (Power, Speed, Precision, Durability) rather than user skills. Only Stand abilities, bizarre powers, or similarly supernatural forces can damage a Stand — user skills apply only against the Stand's user directly. This creates a core tactical choice in every conflict: fight the Stand, or find and expose the user.
+When Stands clash directly, players use their Stand Coin Rolls (Power, Speed, Precision, Durability) rather than user actions. Only Stand abilities, bizarre powers, or similarly supernatural forces can damage a Stand — user actions apply only against the Stand's user directly. This creates a core tactical choice in every conflict: fight the Stand, or find and expose the user.
 
 The GM sets starting position as normal: Risky by default, adjusted up or down based on the fiction, the environment, and any relevant Stand grades. A Stand with significantly higher Speed or Power than its opposition may warrant a better starting position — but this is a GM judgment call, not a hard mechanical rule.
 
 All-Out-Brawls and other showdowns are presented by the GM during a mission or as an entanglement from gaining a Wanted Level.
 
-# 💨 Actions in Combat
+# 💨 Taking an Action
 
 ## **🌀 Taking an Action**
 
+## *Steps for taking an action, in or out of combat:*
+
+1. ## *The player states their goal.*
+
+2. ## *The player chooses the action rating.*
+
+3. ## *The GM sets the position.*
+
+4. ## *The GM sets the effect level.*
+
+5. ## *Add bonus dice.*
+
+6. ## *Roll the dice and judge the result.*
+
+## **1\. The player states their goal.**
+
+## Your goal is the concrete outcome your character achieves if they overcome the obstacle. It's the GM's job to ask when it isn't clear.
+
+## *"You're slamming him into the wall — what do you want out of it? Take him out, or make him talk?"*
+
+## **2\. The player chooses the action rating.**
+
+## Choose the action that matches what your character is doing on-screen. **You can't roll a given action rating unless your character is presently performing that action in the fiction.** If you want to roll Skirmish, get in a fight. If you want to roll Command, order someone around.
+
+> ## If the fiction calls for something only a Stand can do, you roll a **Coin Action** — Power, Speed, or Precision — instead of an action rating. Coin Actions and action ratings are not interchangeable; the fiction determines which applies.
+
+> ## **Durability is not a Coin Action.** It's your Stand's resistance pool — you may roll it in place of Prowess when your Stand interposes itself against a physical threat within Range. See Resistance.
+
+## *Group action:* see “Teamwork.”
+
+## **3\. The GM sets the position.**
+
+## **By default, an action is risky.** You wouldn't be rolling if there were no risk. More dangerous, make it desperate; less, controlled.
+
+* ## **Controlled:** You act on your terms, from a dominant advantage. Minor consequences.
+
+* ## **Risky:** You go head to head, or act under fire. Moderate consequences.
+
+* ## **Desperate:** You overreach. Severe consequences.
+
+## **4\. The GM sets the effect level.**
+
+## How much this action can accomplish: **limited**, **standard**, or **great**.
+
+## *Position and effect are strongly influenced by which action rating the player chose, not just by the situation. A player is always free to choose any action their character is actually performing — but that doesn't mean every action is equally safe or equally potent. If someone wants to calm a panicking crowd by Wrecking a parked car, sure, that's possible — and it's probably a desperate roll with limited effect. Command or Sway would have served them better. When the chosen action is a stretch for the goal, say so out loud and set position and effect accordingly.*
+
+## **5\. Add bonus dice.**
+
+## Up to two, on top of your rating:
+
+* ## **Assistance** — an ally describes how they help, takes 1 stress, and gives you \+1d.
+
+* ## For another bonus die, you can either **push yourself for \+1d** (take 2 stress) or accept a **Devil's Bargain**. You can't get dice for both — pick one. (Pushing yourself can also buy \+1 effect instead of a die, or let you act while incapacitated — see Stress & Trauma. Those uses replace this step rather than adding to it.)
+
+## If your pool is 0 dice, roll 2d and take the **lowest** result.
+
+## **6\. Roll the dice and judge the result.**
+
+* ## **1–3:** Things go badly. Severity depends on position. In a controlled position you falter rather than fail outright — withdraw and try another approach, or press on from a risky position.
+
+* ## **4/5:** You do it, but there's a consequence.
+
+* ## **6:** You do it.
+
+* ## **Two or more 6s:** Critical. You do it with increased effect.
+
+## The GM and player narrate together. The GM has final say on what happens and inflicts consequences as the position and result call for.
+
 ## 
-
-## Steps for Taking an Action (In or out of Combat)
-
-## 
-
-1. ## **Declare Intent & Approach**
-
-## State what you want to achieve.
-
-2. ## **Describe how your Stand will accomplish it through an action rating.** 
-
-   ## If it’s a group action, select a leader and agree on an action rating. Participants who fail their rolls cause 1 Stress for the leader.
-
-3. ## **GM Sets Position & Effect**
-
-   ## The GM describes the Position (risk level) and Effect (potential impact) based on the situation.
-
-   ## **Situation Levels:**
-
-   ## Controlled: You act from advantage; Minimal risk if you fail.
-
-   ## Risky: Standard circumstances; Moderate consequences if you fail.
-
-   ## Desperate: High stakes; Severe consequences if you fail.
-
-   ## **Effect Levels:**
-
-   ## Great: Exceptional impact or significant progress.
-
-   ## Standard: Expected impact or progress.
-
-   ## Limited: Reduced impact or partial progress.
-
-4. ## **Roll & Resolve the Outcome**
-
-## Roll dice equal to your Action Rating (e.g., Skirmish, Finesse) \+ 1d per assisting player.
-
-## Interpret the results:
-
-## **1-3:** Failure; the severity depends on the Position.
-
-## **4-5:** Mixed success; your action succeeds, but with consequences.
-
-## **6:** Full success; no significant drawbacks.
-
-## **6,6:** Critical success; increases Effect (e.g., Limited → Standard).
-
-## 
-
-## The GM narrates the results, explaining what happens based on the roll, including any consequences, benefits, or progress.
 
 # 🤝 Teamwork
 
@@ -1710,7 +1742,7 @@ You may choose the same activity more than once. You can only attempt actions th
 
 A PC can make time for more than two activities, at a cost. Each additional activity from the list costs 1 coin or 1 rep. This reflects the time and resulting resource drain while you’re “off the clock” and not earning from a score. When you complete a new score, you reset and get two “free” activities again.
 
-Activities on the downtime list are limited; normal actions are not. During downtime, you can still go places, do things, make skill checks, gather information, talk with other characters, etc. In other words, only activities that are on the list are limited.
+Activities on the downtime list are limited; normal actions are not. During downtime, you can still go places, do things, make action rollss, gather information, talk with other characters, etc. In other words, only activities that are on the list are limited.
 
 For any downtime activity, take \+1d to the roll if a friend or contact helps you. After the roll, you may spend coin after the roll to improve the result level. Increase the result level by one for each coin spent. So, a 1-3 result becomes a 4 or a 5, a 4/5 result becomes a 6, and a 6 becomes a critical.
 
@@ -1783,7 +1815,7 @@ Note that it’s the recovering character that takes the recovery action. Healin
 Whenever you suffer new harm, clear any ticks on your healing clock.
 
 **Recovery in Play:**  
-If there's a lull in the action and the fiction supports it, a PC can receive treatment during a score. This is a skill check — **position and effect apply** like any other roll.
+If there's a lull in the action and the fiction supports it, a PC can receive treatment during a score. This is a action roll — **position and effect apply** like any other roll.
 
 The healer rolls **Tinker**. Ticks are determined by effect level:
 
@@ -1808,7 +1840,7 @@ Critical: Clear five stars.
 1-3: Clear one star.
 
 **Reduce wanted level:**  
-Say what your character does to reduce the wanted level of the crew and make a skill check. Maybe you Consort with your friend who’s an officer and she arranges for a few incriminating Watch reports to disappear. Or maybe you Command the fear of the local citizens so they’re afraid to snitch.
+Say what your character does to reduce the wanted level of the crew and make a action roll. Maybe you Consort with your friend who’s an officer and she arranges for a few incriminating Watch reports to disappear. Or maybe you Command the fear of the local citizens so they’re afraid to snitch.
 
 Reduce wanted level according to the result: 1-3: one, 4/5: two, 6: three, critical: five.
 
@@ -1875,7 +1907,7 @@ Along with your character’s heritage and background, their vice tells us what 
 **Characters:**  
 Every player character is familiar with all of the various feats of skulduggery represented by the actions of the game. They’re all able to Skirmish in a knife-fight, Prowl in the shadows, Attune to strange energy, Consort with contacts for information, and so on.
 
-Of course, you’ll also have your specializations and skills, the qualities that make your character uniquely effective. You might want the ability to compel obedience from ghosts and channel arcane energy through your body, or maybe you want to manipulate the network of the underworld to your advantage and see danger before it strikes, or maybe you just want to be the deadliest fighter with a blade. In this chapter, you’ll learn how to create your own unique scoundrel and choose the abilities that suit the style of play you prefer.
+Of course, you’ll also have your specializations and actions, the qualities that make your character uniquely effective. You might want the ability to compel obedience from ghosts and channel arcane energy through your body, or maybe you want to manipulate the network of the underworld to your advantage and see danger before it strikes, or maybe you just want to be the deadliest fighter with a blade. In this chapter, you’ll learn how to create your own unique scoundrel and choose the abilities that suit the style of play you prefer.
 
 **Stand Users:** special persons capable of manifesting their ‘fighting spirit,’ a bizarre entity that can perform various feats but is unseen by non Stand Users. Stands are a reflection of the user’s soul, and harbor abilities tailored to that person’s livelihood or personality. It is rare for two people to have the same stand. Stand users are bizarrely attracted to other stand users
 
@@ -1934,14 +1966,14 @@ Distribute **6 points** across your Stand's six stats. Each point raises a stat 
 
 Your stats fall into two categories:
 
-**Stand Coin Rolls** are active dice pools. When the fiction calls for something only a Stand can do, you roll these instead of your user skills.
+**Stand Coin Rolls** are active dice pools. When the fiction calls for something only a Stand can do, you roll these instead of your user actions.
 
 | Stat | What it does |
 | ----- | ----- |
 | Power | Roll when your Stand applies force beyond human scale — destruction, strikes, overwhelming pressure |
 | Speed | Roll when your Stand moves, reacts, or acts faster than any human body can match |
 | Precision | Roll when your Stand performs actions requiring accuracy, fine control, or perception beyond human capability |
-| Durability | Roll when your Stand absorbs a hit before it mirrors through to you |
+| Durability | *Your Stand's capacity to take a hit so you don't have to.* Durability is not a Coin Action — you never roll it to accomplish something. It is your Stand's resistance pool, standing in for a user Attribute when your Stand absorbs the blow. **Interposing.** When you would resist a physical consequence with **Prowess**, you may instead put your Stand in the way and roll **Durability**. Resolve the roll normally: 6 minus your highest die in stress. Three conditions must hold: **The threat is physical.** Consequences you would resist with Insight or Resolve — deception, fear, mental intrusion, bizarre influence — cannot be blocked by Durability. Your Stand's body is no defense against them. **The threat is within your Range grade.** Your Stand cannot block what it cannot reach. **Your Stand is available to act.** If it's out of position elsewhere, you may pay **2 stress** to recall it, then roll. *Jotaro doesn't dodge The World's fist — Star Platinum catches it. That's Durability. When Dio taunts him, Star Platinum can't block words; that's Resolve.* |
 
 **Stand Coin Passives** define your Stand's parameters. The GM reads these to determine what's possible — they don't generate dice rolls.
 
@@ -2257,91 +2289,114 @@ These templates demonstrate how Coin stats limit *what you can get away with* an
 
 # **🌀 Spin Mastery: The Playbooks of the Perfect Spin**
 
-Spin users manipulate rotational energy, precision motion, and harmonic feedback to perform feats of science, sabotage, and surrealism. Spin abilities scale with your Coin stats. At the start of the game, choose 3 abilities. Each A-rank in Coin stats unlocks two more abilities (from custom, playbook, or standard ability list). Some abilities require a certain amount of A's before being allocated.
+Spin users manipulate rotational energy to perform feats of science, sabotage, and surrealism. At the start of the game, choose:
 
-You may mix and match across Spin playbooks. S-rank Coin stats may unlock exceptional upgrades at GM discretion. They're not classes or restrictions. They're example builds: launch pads for your imagination.
+- 1 Standard Ability  
+- 3 Abilities from Spin playbook(s)  
+- 1 set of equipment from the Spin Foundations. 
+
+When you take a playbook advancement, you may select a special ability from the various spin playbooks. Advancing to higher tiers within those playbooks will unlock greater abilities. 
+
+Spend 30XP to gain a Stand. Your stand coin starts with D in each category (6 points starting total) \- you may reallocate your stand coin stats similar to a new stand user, where F \= 0, D \= 1, C \= 2, B \= 3, A \= 4\. You gain the stand dice action ratings as well as a number of stand armor uses according to your durability. The stand does not have to be related to your character's hamon or spin abilities. Your stand gains 2 unique abilities (see stand playbook section for examples), and each A grade gives you 1 standard and 1 unique ability. To advance a stand coin stat, fill in the 10 boxes of your playbook track to advance a grade. 
+
+You may take a playbook advancement (10xp) to gain a Hamon ability. Mark 10 boxes in your playbook to learn a feature from a Hamon playbook. Learn more features to gain higher quality features.
 
 ---
 
 ## **🌀 Spin Foundations (Universal to all Spin users)**
 
-These are the core techniques known to every Spin practitioner. Players begin with access to these.
+These are the core techniques and valuable equipment that every Spin practitioner can learn. Players begin with access to these.
 
-**Golden Arc** Once per scene, a thrown Spin projectile returns. On a 6, it may hit a second target. On a crit, \+1 effect or \+1d to the return strike.
+Techniques:
 
-**Vibrational Scan** Use a spinning object to perform a Study or Survey roll. \+1 effect when detecting structure, weak points, or lifeforms.
+**Golden Arc** Your Spin projectiles return to you. On a 6, it may hit a second target. With two 6’s, \+1 effect or \+1d to the follow-up strike.
+
+**Vibrational Scan** Use a spinning object to perform a Study or Survey roll up to 25m (80ft). \+1 effect when detecting structures, weak points, or lifeforms.
 
 **Kinetic Tether** Spin threads can connect two objects. Once per score, create a tether that allows movement, redirection, or restraint. \+1d when using it for repositioning or rescue.
 
-**Reflective Barrier** Spin two objects at high frequency to bend light or sound. Once per score, redirect a single ranged attack or sound-based effect. Must be declared before the GM reveals the consequence.
+***Throw Voice*** \- Use your spin tool to throw your voice up to 60ft. Push yourself to extend the range. 
+
+***Centripetal Force*** \- While moving, you gain a special armor charge. You must be in motion when you declare this. Use this armor to push yourself. 
+
+***Detour*** \- Redirect an incoming AoE attack to a nearby area. Roll Finesse or Tinker; on a 6, full redirection with no residual consequence.
+
+***Tendon Manipulation*** \- Before making an attack with a spin tool, name an opponent’s limb. On a full success, you control that enemy’s limb and make 1 action as long as the spin weapon is embedded in that limb. Enemies can use their armor to lower or avoid the consequence of tendon manipulation.
+
+*Stagnant Space* \- You may use a spin tool to suspend an opponent up to 10 ft midair.
+
+
+Starting Equipment:
+
+*Steel Ball* \- a polished, steel ball used by beginners and experts. Can be used for spin related actions in or out of combat. 
 
 ---
 
 ## **🐎 Cavalier**
 
+Level 1
+
 Masters of mounted motion, vehicle manipulation, and movement disruption.
 
-**With 1 A:**
+*Gyroscopic Mount* \- \+1d to actions related to maneuvering or Spin related rolls when mounted or piloting.
 
-*Gyroscopic Mount* \+1 effect to movement or melee Spin rolls when mounted or piloting.
+*Remote Connection* \- You are able to remotely control/pilot your mount or vehicle without line of sight or vocal commands.  
 
-*Magnetic Pulse* Push or pull a metal object within your operational Range. Break line of sight or create an opening. Costs 1 stress.
+**Level 2**
 
-**With 2 A:**
+*Privileged Pilot* \- Your mount gains an armor charge while moving. Losing momentum loses your armor charge. 
 
-*Stirrup Surge* \+1d on Skirmish while charging. On a 6, gain a knockback effect. On a crit, increase the potency.
+*Kinetic Knockdown* \- Spin-imbued Skirmish actions gain \+1d while charging (aka speeding towards the opponent) on your mount. On a full success (6), the victim is forced back. On a crit, the victim is forced prone.
 
-*Rotational Grapple* Fire a tethered grappling hook. \+1d on mobility, chase, or extraction actions. Costs 1 stress if used to redirect a falling ally or large object.
+*Wheel of Warding* \- Your vehicle/mount makes you prepared for any engagement, adding \+1d to the engagement roll. 
 
-*Wheel of Warding* Once per conflict, use your vehicle to block a projectile. Mark 1 vehicle armor or pay 2 stress.
+**Level 3**
 
-**With 3 A:**
+*Spiral Drift* \- \+1d on Finesse or Prowl while in motion. Hunt actions gain \+1 effect. 
 
-*Spiral Drift* \+1d on Finesse or Prowl while in motion. Chases use \+1 effect. Gain "split momentum" (move and act in the same tick) once per score.
+*Gravitic Leap* \- While mounted/piloting, You may use a special armor charge to float or launch midair with Spin-warped gravity. 
 
-*Centripetal Shield* While moving, expend your Stand armor to reduce a ranged attack's harm by 1 level. You must be in motion when you declare this.
+*Stirrup Surge* \- Your mount is innately imbued with spin energy, doubling their movement speed. 
 
-*Echo Hoof* Ride at speed to reveal terrain features. Acts as a Survey roll with \+1 effect for environmental clues. The motion itself is the instrument — no separate action required.
+**Level 4**
 
-**With 4 A:**
+*Spiral Stampede* \- In a group action with all allies converging on one or more opponents/goals, add \+1d to each player’s roll, enabling their actions with spin. 
 
-*Gravity Path* You may float, pin enemies, or launch into buildings with Spin-warped gravity. 1 stress per use, 2 stress for effects beyond your immediate presence.
+Equipment:
 
-*Drift Through Dimensions* Once per campaign, you and your mount may exit the current scene through a dimensional fold. Avoid all consequences and reposition narratively.
+*Rider’s Bolas* \- These bolas allow the user to steal momentum from other opponents and transfer it to their own actions. Gain \+1 position and \+1 effect. 
 
-*Golden Track* At full speed, your next thrown Spin attack gains \+2 effect and ignores 1 level of armor.
-
-*Spiral Stampede* Nearby mounts within your operational Range follow your trajectory. Create a 6-clock "Chaos Charge." On completion: mass knockdown, enemy confusion, or opening.
+*Cavalier’s Spurs* \- These spurs track your spin tool’s use. Each usage of spin fills 1 segment of a 4 segment clock called “Displacement Charge.” With a full clock, you gain access to a new feature. “Displacement Charge” grants the user and their mount to use a special armor to disappear and reappear into another physical space within reason. The clock resets after using this feature. You take no fall damage when reappearing into a physical space.
 
 ---
 
 ## **⚔ Executioner**
 
-Precision killers, focused on high-speed takedowns, ricochets, and disablement.
+Precision killers, focused on high-speed takedowns, ricochets, and suppressing fire.
 
-**With 1 A:**
+*Miracle Shot* \- On a partial success, curve your spin tool around ¾’s cover. Grants \+1 position. On a crit, hit through supernatural barriers.
 
-*Lethal Parabola* Name an enemy's body part before a throw. On a 6, that body part is weakened, and the GM opens a 4-segment clock dictating how long before it can be used again.
+**After 1 Advance:**
 
-**With 2 A:**
+*Line Cutter* \- A straight-line throw hits up to 3 foes in your operational Range. Costs 1 stress if used mid-fight rather than in setup.
 
-*Arc Toss* Curve your throw around cover. Grants \+1 position. On a crit, hit through supernatural barriers.
+*Overload Hit* \- Take \-1d to deal damage with increased potency (+1 effect).
 
-*Line Cutter* A straight-line throw hits up to 3 foes in your operational Range. Costs 1 stress if used mid-fight rather than in setup.
+*Civil Engineer* \- On a partial success, your spin tool can change the integrity of a nearby structure within 40ft. You can cause this structure to collapse and hinder opponents. On a full success, modify the integrity of the structure to turn it into a new structure (change and mold the form and function of walls, roads, objects/entities, etc.)
 
-**With 3 A:**
+**2 Advances:** 
 
-*Spin Snipe* Treat your Range stat as one grade higher for thrown Spin attacks. At A-rank Range or above, thrown attacks suffer no range penalties regardless of distance.
+*Devastation Chain* \- Taking out an enemy grants a free follow-up throw at \-1d. On a crit, the follow up continues, again.
 
-*Devastation Chain* Taking out an enemy grants a free follow-up throw at \-1d. On a crit, the chain continues again (once per score).
+*Shotgun Scatter* \- Use a special armor charge to split a projectile mid-air using a spin tool. Then, target a number of opponents within range of the original attack. The projectile cannot be reformed into its original form. 
 
-*Overload Hit* Take \-1d to deal damage beyond your immediate presence. Open a "Residual Harm" clock in the zone.
+**3 Advances:**
 
-**With 4 A:**
+Equipment:
 
-*Shotgun Scatter* Split a Spin projectile mid-air. Hits all foes within your immediate presence.
+Fibonacci Belt \- 
 
-*Spinal Collapse* Inflict a severe debilitation unless resisted. Fill a 12-clock "Nerve Damage." Until that clock is cleared, the target cannot use the affected body system without pushing themselves.
+Spin-Driver \- This weapon imbues sharp, metal discs with overpowering spin energy; victims hit by the Spin-Driver lose their momentum.
 
 ---
 
@@ -2349,33 +2404,35 @@ Precision killers, focused on high-speed takedowns, ricochets, and disablement.
 
 Practitioners of rotational surgery, field restoration, and biochemical Spin rituals.
 
-**With 1 A:**
+*Cosmetic Reconstruction* \- You are able to use a spin tool to reconstruct the physical appearance of an ally or foe. You can make them look younger, older, or reconstruct their face for as long as your spin tool is embedded in them. 
 
-*Precision Incision* When healing with a Spin-charged tool, heal \+1 segment.
+**With 1 Advance:**
 
-*Improvised Tools* No penalties for makeshift surgery or treatment items.
+*Improvised Tools* \- No penalties for makeshift surgery or improvised treatment items.
 
-**With 2 A:**
-
-*Spin Suture* Stabilize an ally mid-combat. Stop bleeding or reduce Harm by 1 level. Costs 1 stress if under fire or in motion.
-
-*Triage Sphere* Deploy a floating orb within your operational Range. Allies near the orb gain \+1d to resistance or recovery rolls for one scene.
-
-*Remote Restoration* Throw a Spin-imbued ball to heal 1 segment or remove "bleeding" from an ally within your operational Range.
-
-**With 3 A:**
-
-*Rotary Armor Patch* Apply spinning shielding to an ally. 1 temporary armor for one conflict.
-
-*Spin Shunt* Redirect one status or environmental hazard (electricity, poison, etc.) into the terrain or machinery.
-
-*Emergency Fusion* Once per score, two PCs may act as one: share clocks, action ratings, and armor for 1 scene. Costs 2 stress per user.
+*Precision Incision* \- When healing with a Spin-charged tool, heal \+1 segment.
 
 *Spin Scanner* \+1 effect on Study for diagnosing trauma, injuries, or internal sabotage (tech or bio).
 
-**With 4 A:**
+**2 Advances:**
 
-*Spinfield Stabilizer* Create a field where allies may reduce their Harm by 1 level per scene. Requires a fixed location; lasts until the location is compromised or the scene ends.
+*Spin Suture* \- You may use your spin tool from afar to aid an ally mid-combat (if an ally has level 3 harm, they may act as if you aided them). Costs 1 special armor to end a status effect (like bleeding or poison) or protect an ally from a consequence.  
+
+*Triage Sphere* \- Deploy a floating orb. Allies within 20ft of the orb gain \+1d to resistance rolls for one scene.
+
+*Rotary Armor Patch* \- Commit a spin tool to apply a spinning shield to an ally. May grant at max 1 armor charge. Regain your spin tool after the armor charge is used.
+
+**3 Advances:**
+
+*Spinfield Stabilizer* \- Create a field where allies may reduce incoming Harm by 1 level. Requires a fixed location; lasts until the location is compromised or the scene ends.
+
+*Emergency Fusion* Once per score, two PCs may act as one: share clocks, action ratings, and armor for 1 scene. Costs 2 stress per user.
+
+Equipment
+
+20 Finger Harness
+
+- This old duster coat contains a harness with 4 mechanical arms attached to the back of the wielder. Gain a special armor charge \- use it to redirect multiple projectiles at the same time. Regain this armor charge at the start of downtime.  
 
 ---
 
@@ -2383,19 +2440,19 @@ Practitioners of rotational surgery, field restoration, and biochemical Spin rit
 
 Advanced users of destructive rotational harmonics and disruptive psychic echo.
 
+*Dismantle Strike* \- Hit a weapon or body part with Spin. On a partial success, the weapon/limb is unusable. On a full success, the weapon/limb is completely destroyed. An opponent must use armor to avoid the consequence. 
+
+*Spin Fakeout* \- Create a visual or auditory decoy. \+1d to Prowl or to spring traps. Once per scene, an enemy acts on false information — the GM determines how this plays out.
+
 **With 1 A:**
 
-*Dismantle Strike* Hit a weapon or body part with Spin. Jam or disable it — the target must push themselves or clear a 4-clock to restore function.
+*Magnetic Pulse* Push or pull a metal object within your operational Range. Break line of sight or create an opening. Costs 1 stress.
 
-*Spin Fakeout* Create a visual or auditory decoy. \+1d to Prowl or to spring traps. Once per scene, an enemy acts on false information — the GM determines how this plays out.
-
-**With 2 A:**
-
-*Fracture Intent* On a 4+, the enemy misreads your intent. They target the wrong person or act at the wrong time.
+*Fracture Intent* On a 6, the enemy misreads your intent. They target the wrong person or act at the wrong time.
 
 *Jammer Spiral* Once per score, nullify one relic, power, or tech device within F-rank Range (10ft) until its user pushes themselves to reactivate it. Costs 2 stress.
 
-**With 3 A:**
+**With 2 A:**
 
 *Stand Stagger* Hit a Stand user with Spin. Their Stand loses its next reaction or triggered effect.
 
@@ -2403,25 +2460,39 @@ Advanced users of destructive rotational harmonics and disruptive psychic echo.
 
 *Spin Muzzle* Suppress sound-based abilities or commands within F-rank Range (10ft) until the situation shifts or a target pushes themselves to break through.
 
-**With 4 A:**
+**With 3 A:**
 
 *Field Denial* Create a zone within F-rank Range (10ft) where no powers activate until the GM advances the fiction or a target pushes themselves to resist. Costs 3 stress. On a crit, the suppression blocks an ongoing ritual entirely.
 
 *Cascading Spin* Debuffs spread on contact. Pick two targets; enemies that physically interact with them inherit the effect, and so on. Costs 2 stress.
 
-*Aura Reroute* Redirect an incoming AoE attack to a nearby area. Roll Finesse or Tinker; on a 6, full redirection with no residual consequence.
+Equipment:
+
+Wrecking Ball
+
+- Wrecking Balls are covered regularly by large dimples housing smaller balls, called satellites, which can separate in-flight to strike targets on their own (this is all one roll). Even if these satellites do not quite meet their target, they produce airborne shockwaves which will induce an effect. Wrecking Balls induce “left half ataxia” (temporary [hemispatial neglect](https://en.wikipedia.org/wiki/hemispatial_neglect)); the victim ignores any spatial awareness or sensations in the left side of their body. Opponents must use an armor charge in order to regain the sensation in the left half of their body.
+
+*Ballbreaker Handwraps* \- These handwraps track your spin tool’s use. Each usage of spin builds a 4 segment clock called “kinetic tremor.” With a full clock, your next thrown Spin attack ignores 1 level of armor. The clock resets after using this feature.
 
 # ☀️ Hamon Playbook
 
 # **🔆 Hamon Mastery: The Pulse of Life**
 
-Hamon users channel life force through breath, rhythm, and internal resonance. These Ripple techniques blend martial art, elemental flow, and metaphysical vitality. At the start of the game, choose 3 abilities. Each A-rank in Coin stats unlocks two more abilities (from custom, playbook, or standard ability list). Some abilities require a certain amount of A's before being allocated.
+Hamon users channel life force through breath, rhythm, and internal resonance. These Ripple techniques blend martial art, elemental flow, and metaphysical vitality. At the start of the game, choose:
 
-You may mix and match across Hamon playbooks. S-rank Coin stats may unlock exceptional upgrades at GM discretion. They're not classes or restrictions. They're example builds: launch pads for your imagination.
+- 1 Standard Ability  
+- 3 Abilities from Hamon playbook(s)  
+- 1 set of equipment from the Spin Foundations. 
+
+When you take a playbook advancement, you may select a special ability from the various spin playbooks. Advancing to higher tiers within those playbooks will unlock greater abilities. 
+
+Spend 30XP to gain a Stand. Your stand coin starts with D in each category (6 points starting total) \- you may reallocate your stand coin stats similar to a new stand user, where F \= 0, D \= 1, C \= 2, B \= 3, A \= 4\. You gain the stand dice action ratings as well as a number of stand armor uses according to your durability. The stand does not have to be related to your character's hamon or spin abilities. Your stand gains 2 unique abilities (see stand playbook section for examples), and each A grade gives you 1 standard and 1 unique ability. To advance a stand coin stat, fill in the 10 boxes of your playbook track to advance a grade. 
+
+You may take a playbook advancement (10xp) to gain a Hamon ability. Mark 10 boxes in your playbook to learn a feature from a Hamon playbook. Learn more features to gain higher quality features.
 
 ---
 
-## **🔆 Foundations of Hamon**
+## **🔆 Foundations of Hamon (Available to all Ripple Users)**
 
 Core techniques known to all Ripple users. Every Hamon practitioner begins with access to these.
 
@@ -2432,6 +2503,20 @@ Core techniques known to all Ripple users. Every Hamon practitioner begins with 
 **Scarlet Overdrive** Ignite a weapon or limb. Inflicts a fire-based secondary effect. Foes must resist or catch fire.
 
 **Zoom Punch** Make a melee strike at one Range grade beyond your Stand's operational Range. \+1d when attacking from unexpected angles or cover.
+
+**Acrobatic Pulse** Gain stable footing \+ ability to run over bodies of water, mist, unstable surfaces, or vertical walls. \+1d to climbing, jumping, swimming, running, or vaulting.
+
+**Vital Transfer** Once per score, lower 1 Harm level from an ally. On a crit, lower 2 Harm levels.
+
+**Solar Infusion** Spend 2 stress to supercharge an object or weapon. \+1 effect on the next action using that object.
+
+Hamon Equipment:
+
+*Scarf Sensor* Your scarf vibrates with ambient changes. \+1d to resist surprise, ambush, or sudden environmental effects. Use a scarf to slow a fall or drift over unstable terrain. \+1 position on movement rolls while airborne.
+
+*Scarlet Shield* Expend your Stand armor. Enemies who make physical contact with you take Level 1 Harm unless they resist.
+
+*Sword of Pluck* A sword from the Victorian era. \+1 effect towards undead. Gain \+1d to an action rating with 0 dots \- choose again on a new day. 
 
 ---
 
@@ -2445,8 +2530,6 @@ Disciplined, orthodox Ripple practitioners grounded in martial precision and rad
 
 *Metal Silver Overdrive* Ripple conducts through metallic weapons. \+1 effect when using chains, blades, or wire tools.
 
-*Ripple Hypnosis* Once per score, with skin contact, suggest a command or surface a forgotten memory. Target resists with Resolve.
-
 **With 2 A:**
 
 *Ripple Chain* Imbue rope or chain. Functions as a melee weapon or restraint tool. \+1d when entangling.
@@ -2455,21 +2538,11 @@ Disciplined, orthodox Ripple practitioners grounded in martial precision and rad
 
 *Life Magnetism Overdrive* Spend 1 stress to shape plant matter into a glider, cloak, or shield. \+1 effect on movement or defense.
 
-*Scarlet Shield* Expend your Stand armor. Enemies who make physical contact with you take Level 1 Harm unless they resist.
-
-*Stand on Water* Gain stable footing over liquid, mist, or unstable surfaces for 1 scene. \+1 position in terrain-based actions.
-
-**With 3 A:**
+**With 3 Advances:**
 
 *Tornado Overdrive* Perform a high-speed rotational dive. Break through cover or brittle surfaces. \+1d when clearing minions or performing crowd control actions.
 
 *Ripple Sentinel* Always aware of undead or bizarre presence within your immediate presence. Doesn't require an action.
-
-*Wall Pulse* You can run across vertical surfaces. \+1d on movement rolls when climbing or jumping.
-
-*Vital Transfer* Once per score, lower 1 Harm level from an ally. On a crit, lower 2 Harm levels.
-
-*Dispel Harmonics* Once per score, cancel one magical, bizarre, or spiritual effect in your zone.
 
 *Aura Lock* Spend 1 stress to suppress ability activation within your operational Range until the target pushes themselves or the fiction shifts. Targets resist with Resolve.
 
@@ -2477,11 +2550,7 @@ Disciplined, orthodox Ripple practitioners grounded in martial precision and rad
 
 *Hamon Blade* Ripple weapons ignore 1 armor or resistance.
 
-**With 4 A:**
-
 *Deep Pass Overdrive* Sacrifice all remaining stress to fully heal an ally. This cannot be interrupted.
-
-*Solar Infusion* Spend 2 stress to supercharge an object or weapon. \+2 effect on the next action using that object.
 
 *Scarlet Wreath* Expend your Stand armor to gain 2 extra armor for 1 scene. Glows visibly.
 
@@ -2489,11 +2558,9 @@ Disciplined, orthodox Ripple practitioners grounded in martial precision and rad
 
 *Pulse Detonation* Channel stored Ripple into an AoE knockdown within your operational Range. Fill a 4-tick "Crowd Disruption" clock.
 
-*Final Flame* When you would be taken out, you may spend 2 stress to take one final action with \+2 effect. You fall unconscious immediately after.
+*Final Flame* When you would be taken out, you may spend 2 stress to take one final action with \+1 effect. You fall unconscious immediately after.
 
 *Heavenly Discipline* Ignore all fatigue-based consequences. Your breathing is flawless.
-
-*Solar Gate* Once per campaign, completely disintegrate a construct or undead within your immediate presence.
 
 *Sacred Overdrive* Once per score, spend 2 stress to make one Hamon strike that bypasses all resistances and defenses.
 
@@ -2503,17 +2570,15 @@ Disciplined, orthodox Ripple practitioners grounded in martial precision and rad
 
 ---
 
-## **💨 Adaptive Flow (Joseph/Caesar Style)**
+## **💨 Adaptive Flow (Joseph Style)**
 
 Improvisational masters of misdirection, gadgets, and battlefield manipulation using Ripple-charged tools.
 
-**With 1 A:**
+**1 Advance:**
 
 *Bubble Launcher* Spend 1 stress to fire a barrage of Hamon-charged bubbles within your operational Range. You may detonate them at will.
 
-*Ripple Hair Attack* Harden hair or fabric to deflect projectiles. Once per scene, reduce incoming Harm by 1 level. Your armor is the hardened material itself — expend it to negate rather than reduce if needed.
-
-*Scarf Sensor* Your scarf vibrates with ambient changes. \+1d to resist surprise, ambush, or sudden environmental effects.
+*Ripple Hair Attack* Harden hair or fabric to deflect projectiles. Gain an armor charge.
 
 **With 2 A:**
 
@@ -2524,8 +2589,6 @@ Improvisational masters of misdirection, gadgets, and battlefield manipulation u
 *Bubble Lenses* Bubbles can magnify or reflect light within your operational Range. Begin a 4-tick "Blinded" clock if shined into a target's eyes.
 
 *Sound-Reactive Ripple* \+1d to attacks synchronized to rhythm, speech, or music. Once per scene, cause a "Beat Drop" (3-tick distraction clock).
-
-*Aerial Float* Use a scarf or bubble glider to slow a fall or drift over unstable terrain. \+1 position on movement rolls while airborne.
 
 **With 3 A:**
 
@@ -2539,31 +2602,43 @@ Improvisational masters of misdirection, gadgets, and battlefield manipulation u
 
 *Elemental Shift* \+1 effect when fighting in terrain dominated by a specific element (fog, water, fire, ice). Ripple adapts to the environment.
 
-*Trapwork* Create a tripwire or cage trap using Ripple-infused tools within your operational Range. Fill a 4-tick "Ensnare" clock on setup.
-
-*Bubble Tracker* Tag a target with a glowing bubble. You always know their location within A-rank Range (100ft) until the bubble is destroyed or they push themselves to remove it.
-
 *Smoke Spiral* Spin a small object into a smoke cloud within your immediate presence. Starts a 3-tick "Choke or Cover" clock.
 
 *Ripple Magnet* Once per scene, call a small Ripple-infused object to your hand from within your line of sight.
 
 **With 4 A:**
 
-*Bubble Laser Grid* Set up a refracted beam field within your operational Range. Targets caught unaware take Level 3 Harm. \+1d on setup rolls.
-
 *Hamon Mirage* Use bubble refraction to hide your location or identity until you attack, take Harm, or the fiction exposes you. Attacks against you have \-1d. On a crit, gain \+1 effect on your next misdirected action.
-
-*Overclocked Pop* Spend 1 stress to burst multiple bubbles simultaneously. Affects all targets within your immediate presence.
 
 *Vacuum Cage* Trap a foe inside a sealed bubble within your operational Range. Begins a 4-tick "Suffocation" clock. Target may resist to break free.
 
 *Reflection Pulse* Bounce an attack or ability through three or more bubble surfaces. \+1 effect or redirect the trajectory. Requires pre-positioned surfaces.
 
-*Tactile Map* Use bubbles to physically map a space or reveal unseen terrain within your operational Range. \+1 effect on navigation, escape, or hidden object rolls.
-
 *Hamon Kite* Fly or coast across open space or falling terrain. \+1 position on chase or fall rolls.
 
 *Trick Bubble* Store an attack or effect in a bubble. Declare a condition now — the effect triggers when that condition is met.
+
+---
+
+## **Caesar Style**
+
+*Tactile Map* Use bubbles to physically map a space or reveal unseen terrain. \+1 effect on navigation, escape, or hidden object rolls.
+
+*Overclocked Pop* Spend 1 stress to burst multiple bubbles simultaneously. Affects all targets within your immediate presence.
+
+Level 1:
+
+*Bubble Laser Grid* Set up a refracted beam field within your operational Range. Targets caught unaware take Level 3 Harm. \+1d on setup rolls.
+
+Level 2:
+
+*Bubble Tracker* Tag a target with a glowing bubble. You always know their location within A-rank Range (100ft) until the bubble is destroyed or they push themselves to remove it.
+
+Level 3:
+
+Level 4:
+
+*Solar Gate* Once per campaign, completely disintegrate a construct or undead within your immediate presence.
 
 ---
 
@@ -2573,7 +2648,7 @@ A fusion of flesh, machine, and the Ripple. Breathless, relentless, efficient.
 
 **With 1 A:**
 
-*Pulse Core* You do not breathe — generate Ripple internally. \+1 effect in gas, underwater, or vacuum environments.
+*Pulse Core* You do not breathe — generate Ripple internally. \+1 effect in foreign air, underwater, or vacuum environments.
 
 *Auto-Filter* Immune to airborne toxins, diseases, or choking hazards. Always succeed at resisting chemical or suffocation effects.
 
@@ -2666,8 +2741,6 @@ Inverted, chilling, and parasitic. The Ripple repurposed for undeath.
 *Frost Magnetism* Pull blood-bearing targets within C-rank Range (40ft) toward you. Costs 1 stress.
 
 *Frostbite Lash* Your unarmed attacks deal \+1 Harm and start a 2-tick "Frozen Wound" clock. Once per scene.
-
-*Ebon Mist* Melt into vapor for 1 scene. Travel through vents, bars, or cracks. Cannot attack in this form.
 
 *Cracking Silence* Mute all sound within your immediate presence. \+1d to stealth or escape actions.
 
@@ -2777,17 +2850,14 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 
 * **Ambush:** When you attack from hiding or spring a trap, you get **\+1d.**  
 * **Cascade Effect:** If you roll a 6 from your resistance roll to resist a physical or bizarre consequence, the attacker suffers a mirrored backlash.  
-* **Final Barrage:** When reduced to 0 HP or Level 4 harm, make a **potent Stand attack** before going down.  
+* **Final Barrage:** When you take Level 4 harm, use your stand armor to make an attack with \+1 effect before going down.  
 * **Phantom Pain:** Spend 1 stress to make your stand attack through cover, walls, or barriers that would otherwise block it. Works within your stand range.   
-* **Savage:** When you unleash physical violence, it's especially frightening. **When you command a frightened target, take \+1d**.  
-* **Spin-Boosted Blow:** Add Spin to your next Stand attack to supercharge a single strike (adds \+1 effect and \+1d).  
-* **Steady Barrage:** You can barrage targets up to your Stand's range. Add \+1d when making multiple rapid-fire attacks.
+* **Savage:** When you unleash physical violence, it's especially frightening. **When you command a frightened target, take \+1d**.
 
 **Endurance**
 
 * **Invigorated:** you recover from harm faster. Permanently fill in one of your healing clock segments. Take **\+1d** to healing treatment rolls.  
 * **Legendary Guard:** Once per score, you may completely negate one instance of incoming harm.  
-* **Swan Song:** When you'd be taken out (Level 4 harm), spend remaining Stand armor charges to stay standing for one heroic action.  
 * **Iron Will:** You're immune to the terror that some bizarre entities inflict on sight. Take **\+1d** to resistance rolls with **Resolve**.  
 * **Tough as Nails:** Penalties from harm are one level less severe (though level 4 harm is still fatal)  
 * **Overdrive:** While wearing non-Stand armor, gain an extra **\+1 armor**.  
@@ -2800,13 +2870,13 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 * **Cloak & Dagger:** When you use a disguise or other form of covert misdirection, you get **\+1d** to rolls to confuse or deflect suspicion. When you throw off your disguise, the resulting surprise gives you the initiative in the situation.   
 * **Mesmeriser:** When you **Sway** someone, you may cause them to forget that it’s happened until they next interact with you.   
 * **Saboteur:** When you **wreck**, the work is much quieter than it should be and the damage is hidden from casual inspection.  
-* **Shadow:** Expend your Stand armor to resist a consequence from detection, surveillance, or security measures, or to push yourself for a feat of athletics or stealth.  
-* **Subterfuge:** You may expend your **stand armor** to resist a consequence from suspicion or persuasion, or to **push yourself** for subterfuge.
+* **Shadow:** Expend your stand/special armor to resist a consequence from detection, surveillance, or security measures, or to push yourself for a feat of athletics or stealth.  
+* **Subterfuge:** You may expend your **stand armor/special armor** to resist a consequence from suspicion or persuasion, or to **push yourself** for subterfuge.
 
 **Awareness**
 
 * **Bizarre Intuition:** You have a bizarre sense for danger. You cannot be surprised.  
-* **Focused:** You may expend your **stand armor** to resist a consequence of surprise or mental harm (fear, confusion, losing track of someone).  
+* **Focused:** You may expend your **stand armor/special armor** to resist a consequence of surprise or mental harm (fear, confusion, losing track of someone).  
 * **Like looking into a Mirror:** You can always tell when someone is lying.  
 * **Mastermind:** You’re always aware of supernatural entities in your presence. Take **\+1d** when you **gather info** about the bizarre.  
 * **Neural Lace:** By touching your Stand, you may read surface thoughts of nearby targets.  
@@ -2836,13 +2906,13 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 * **The Devil’s Footsteps:** When you **push yourself**, choose one of the following additional benefits:  
   * Perform a feat of athletics that verges past superhuman for 1 scene.  
   * Maneuver to confuse your enemies so they mistakenly attack each other.  
-* **Superhero Landing:** Expend **Stand armor** to reduce fall/collision harm by 1\. Gain **\+1d** for stylish aerial actions.  
+* **Superhero Landing:** Expend **Stand armor/special armor** to reduce fall/collision harm by 1\. Gain **\+1d** for stylish aerial actions.  
 * **Daredevil:** When you roll a desperate action, you get **\+1d** to your roll if you also take **\-1d** to any resistance roll(s) against consequences from your action(s).   
-* **Bizarre Improvisation:** Take **2 stress** to roll your best action rating while performing a different action. Say how you adapt your skill to this use. 
+* **Bizarre Improvisation:** Take **2 stress** to roll your best action rating while performing a different action. Say how you adapt your action to this use. 
 
 **Stand Nature**
 
-* **Automatic Trigger:** Load your Stand with a conditional action (e.g., “If X enters the room, detonate.”).  
+* **Automatic Trigger:** Load your Stand with a conditional action (e.g., “If X enters the room, detonate.”). While your ability is triggered, you gain resistance to harm if an enemy stand attacks your stand.    
 * **Weapon Recall:** Your Stand returns to your hand instantly when thrown or disarmed.  
 * **Stand Evolution:** Spend **5 stress** mid-score to unlock a temporary new unique ability.  
 * **Channel Force:** Redirect a supernatural force through your Stand's form or medium.  
