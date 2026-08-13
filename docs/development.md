@@ -137,7 +137,7 @@ For per-module detail see [`codebase/`](codebase/).
 
 1. Define model in `models.py`
 2. Create serializer in `serializers.py`
-3. Add view in `views.py`
+3. Add view under `characters/views/` (export from `views/__init__.py` if needed)
 4. Register URL in `urls.py`
 5. Add tests in `tests.py`
 

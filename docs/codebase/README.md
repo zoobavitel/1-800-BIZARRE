@@ -6,7 +6,7 @@ Implementation-oriented docs: what each major area of the repo does and where to
 |-----|--------|
 | [scripts.md](scripts.md) | [`scripts/`](../../scripts/) — setup, dev, backup, deploy |
 | [backend-app.md](backend-app.md) | [`backend/src/app/`](../../backend/src/app/) — settings, urls, WSGI/ASGI, `manage.py` |
-| [backend-characters-core.md](backend-characters-core.md) | [`backend/src/characters/`](../../backend/src/characters/) — models, serializers, `views.py`, parsers, admin, services |
+| [backend-characters-core.md](backend-characters-core.md) | [`backend/src/characters/`](../../backend/src/characters/) — models, serializers, parsers, admin, services |
 | [backend-characters-views.md](backend-characters-views.md) | [`backend/src/characters/views/`](../../backend/src/characters/views/) — DRF view modules |
 | [backend-commands.md](backend-commands.md) | `characters/management/commands/` reference |
 | [frontend.md](frontend.md) | [`frontend/src/`](../../frontend/src/) — hash routing, features, pages, **SRD UI touchpoints** |

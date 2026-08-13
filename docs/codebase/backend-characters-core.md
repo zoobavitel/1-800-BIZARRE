@@ -1,6 +1,6 @@
 # Characters app — core (`backend/src/characters/`)
 
-Primary Django app: ORM models, DRF serializers, shared viewsets in `views.py`, parsers, admin, and service helpers. URL routing lives in [`app/urls.py`](../../backend/src/app/urls.py) (see [backend-app.md](backend-app.md)). Per-module API views are under `views/` (see [backend-characters-views.md](backend-characters-views.md)).
+Primary Django app: ORM models, DRF serializers, parsers, admin, and service helpers. URL routing lives in [`app/urls.py`](../../backend/src/app/urls.py) (see [backend-app.md](backend-app.md)). API views live under the [`views/`](../../backend/src/characters/views/) package (see [backend-characters-views.md](backend-characters-views.md)).
 
 ---
 
@@ -66,15 +66,13 @@ Single module defining the game and user data schema. Migrations live in `charac
 
 ## [serializers.py](../../backend/src/characters/serializers.py)
 
-DRF `ModelSerializer` and a few `Serializer` classes for nested updates (user profile, passwords, session NPC involvement, character payloads). Aligns with ViewSets in `views.py` and `views/*.py`: exposes nested crew/playbook data, session votes, character JSON fields, image uploads, etc. Large file; new endpoints usually add or extend serializers here.
+DRF `ModelSerializer` and a few `Serializer` classes for nested updates (user profile, passwords, session NPC involvement, character payloads). Aligns with ViewSets in `views/*.py`: exposes nested crew/playbook data, session votes, character JSON fields, image uploads, etc. Large file; new endpoints usually add or extend serializers here.
 
 ---
 
-## [views.py](../../backend/src/characters/views.py)
+## [views/](../../backend/src/characters/views/)
 
-**Role:** Large barrel file containing many `ModelViewSet` and function-based API views registered in [urls.py](../../backend/src/app/urls.py): auth (`LoginView`, `RegisterView`, `CurrentUserView`), reference data, rolls, chat, XP/stress history, crew/claim/playbook viewsets, etc.
-
-**Note:** Some viewset classes are **duplicated** in the file (e.g. `ClaimViewSet` / `CrewPlaybookViewSet` blocks appear twice); Python uses the last definition. Prefer new work in `views/` package when possible. Detailed endpoint behavior: [backend-characters-views.md](backend-characters-views.md).
+**Role:** Package of DRF viewsets and function views registered in [urls.py](../../backend/src/app/urls.py). Import via `from characters.views import …` (`views/__init__.py` re-exports). Detailed map: [backend-characters-views.md](backend-characters-views.md).
 
 ---
 

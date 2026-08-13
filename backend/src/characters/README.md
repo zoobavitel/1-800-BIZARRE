@@ -8,8 +8,7 @@ The `characters` Django app. Despite the name it owns most of the game-data back
 |------|------|
 | [`models.py`](models.py) | All Django models for game entities and history rows. |
 | [`serializers.py`](serializers.py) | DRF serializers; the bulk of input validation lives here. |
-| [`views.py`](views.py) | Legacy view module. **Still active** — not all endpoints have been migrated to `views/`. |
-| [`views/`](views/) | Per-domain DRF view modules (character, campaign, NPC, crew, session, auth, gameplay, reference, utility). See [`views/README.md`](views/README.md). |
+| [`views/`](views/) | DRF view modules (character, campaign, NPC, crew, session, auth, gameplay, reference, utility, rolls, group actions). Barrel: [`views/__init__.py`](views/__init__.py). See [`views/README.md`](views/README.md). |
 | [`views_sse.py`](views_sse.py) | Server-Sent Events endpoints for live campaign updates. |
 | [`services/`](services/) | Business-logic layer pulled out of views. See [`services/README.md`](services/README.md). |
 | [`admin.py`](admin.py) | Django admin registrations. |
@@ -19,7 +18,7 @@ The `characters` Django app. Despite the name it owns most of the game-data back
 | [`roll_helpers.py`](roll_helpers.py) | Roll-resolution helpers (position/effect, action rolls, fortune, group actions). |
 | [`history_context.py`](history_context.py) | Request-scoped context used when writing roll / XP / character-history rows. |
 | [`test_legacy_models.py`](test_legacy_models.py) | Legacy top-level test file kept for historical fixtures; most tests live under [`tests/`](tests/). |
-| [`BACKEND_REFACTORING.md`](BACKEND_REFACTORING.md) | Notes on the in-progress views.py → views/ split. Treat as historical context; reality is mid-migration. |
+| [`BACKEND_REFACTORING.md`](BACKEND_REFACTORING.md) | Historical notes on the views.py → views/ split (migration complete; monolith removed). |
 
 ## Subdirectories
 

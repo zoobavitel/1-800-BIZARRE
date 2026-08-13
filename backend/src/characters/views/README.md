@@ -98,10 +98,10 @@ class CharacterViewSet(viewsets.ModelViewSet):
 
 ## Migration from Monolithic Structure
 
-The original `views.py` file (1905 lines) has been broken down into focused modules:
+The original monolithic `views.py` has been removed. All endpoints live in focused modules under this package; `views/__init__.py` re-exports them for `from characters.views import …`.
 
-- **Before**: One large file with all views mixed together
-- **After**: 8 focused files, each handling a specific domain
+- **Before**: One large file with all views mixed together (and a stale copy that incorrectly added attribute dice to action rolls)
+- **After**: Focused files per domain; package is the only import path
 
 This makes the codebase:
 - **Easier to navigate**: Find specific functionality quickly

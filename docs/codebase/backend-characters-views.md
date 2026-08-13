@@ -2,7 +2,7 @@
 
 Modular DRF views; **[`__init__.py`](../../backend/src/characters/views/__init__.py)** re-exports all symbols so [app/urls.py](../../backend/src/app/urls.py) can `from characters.views import ...` from a single namespace.
 
-The legacy **[`views.py`](../../backend/src/characters/views.py)** (parent of `views/`) still contains additional viewsets and functions — prefer importing from **`characters.views`** (package) for anything listed in `views/__init__.py`. See [backend-characters-core.md](backend-characters-core.md) for the `views.py` barrel caveat.
+There is no sibling `characters/views.py` module — the **`views/` package** is the only import path (legacy monolith removed; it incorrectly folded attribute rating into action-roll pools).
 
 **Router prefix:** All registered routes live under `/api/` (see [backend-app.md](backend-app.md)).
 
