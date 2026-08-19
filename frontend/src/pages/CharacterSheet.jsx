@@ -101,6 +101,7 @@ import {
 import {
   buildXpRequirementSnapshot,
   formatAttrTally,
+  formatInnateStandTally,
 } from "../features/character-sheet/utils/xpRequirements";
 import {
   archetypeRowsForCharacterPlaybook,
@@ -415,13 +416,12 @@ const XP_TRACK_SPEND_MAX = {
   playbook: 10,
 };
 
-/** Caps applied when a roll response ticks a track locally. */
+/** Caps applied when a roll response ticks a track locally. Playbook is uncapped (innate). */
 const XP_TRACK_APPLY_CAP = {
   insight: 5,
   prowess: 5,
   resolve: 5,
   heritage: 5,
-  playbook: 10,
 };
 
 const ATTRIBUTE_XP_SPEND_TRACKS = new Set(["insight", "prowess", "resolve"]);
@@ -12433,6 +12433,19 @@ const CharacterSheetWrapper = ({
                                 (desperate rolls; display capped)
                               </div>
                             )}
+                            <div
+                              style={{ fontSize: "10px", color: "#6b7280", marginTop: "6px" }}
+                            >
+                              Innate stand dice (Power / Speed / Precision):{" "}
+                              {xpReqSnapshot.innateStandDice.count === 0
+                                ? "none this session"
+                                : `${xpReqSnapshot.innateStandDice.count} — ${formatInnateStandTally(
+                                    xpReqSnapshot.innateStandDice.byStat,
+                                  )}`}
+                              {xpReqSnapshot.innateTrackerNote > 0
+                                ? ` · tracker +${xpReqSnapshot.innateTrackerNote} playbook (uncapped)`
+                                : ""}
+                            </div>
                           </div>
                         </div>
                         {(() => {

@@ -159,6 +159,24 @@ class XPAllocationServiceTests(TestCase):
         self.assertNotIn(self.std_a.id, ids_after)
         self.assertNotIn(self.std_b.id, ids_after)
 
+    def test_playbook_overflow_level_up_undo_restores_past_ten(self):
+        self.character.xp_clocks = {
+            **self.character.xp_clocks,
+            "playbook": 14,
+        }
+        self.character.save()
+        alloc = apply_level_up(
+            self.character,
+            xp_track="playbook",
+            choice="stat",
+            stand_stat="speed",
+        )
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.xp_clocks["playbook"], 4)
+        undo_allocation(self.character, alloc, user=self.user)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.xp_clocks["playbook"], 14)
+
     def test_b_to_a_custom2_plus_standard(self):
         self.character.xp_clocks["heritage"] = 10
         self.character.save()

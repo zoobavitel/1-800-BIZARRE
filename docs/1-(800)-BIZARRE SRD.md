@@ -521,6 +521,8 @@ Players can **buy extra HP with XP** instead of taking more detriments.
 
 **Stand-on-Stand Combat: Only Stand abilities, bizarre powers, or similarly supernatural forces can damage a Stand directly. User actions don't apply against a Stand — you need your Coin Rolls. This creates a tactical choice: target the Stand (requires your dice pool) or find and expose the user (opens up all your user actions).**
 
+**Innate function:** A desperate Power, Speed, or Precision Stand Coin Roll marks 1 playbook XP with no session or track cap. Durability is a resistance pool, not an action roll; Range and Development are passives.
+
 ---
 
 **POWER**
@@ -1353,6 +1355,8 @@ Each player keeps track of the experience points (xp) that their character earns
 During the game session, mark xp:
 
 - When you make a desperate action roll. Mark 1 xp in the attribute for the action you rolled. For example, if you roll a desperate Skirmish action, you mark xp in Prowess. When you roll in a desperate group action, you also mark xp.
+
+- **Innate (Stand Coin):** When you make a desperate action roll using **Power, Speed, or Precision** stand dice, mark 1 xp on your **playbook** track. This is an innate stand function, not a purchased ability. It is **not capped** by session or by the 10-box playbook fill — leftover marks remain after you take an advance. Range, Durability, and Development Potential do not grant this (you do not action-roll those).
 
 At the end of the session, review the xp triggers on your character sheet. For each one, mark 1 xp if it happened at all, or mark 2 xp if it happened a lot during the session. The xp triggers are:
 

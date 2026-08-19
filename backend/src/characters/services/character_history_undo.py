@@ -537,10 +537,15 @@ def undo_gm_tracker_entry(tracker: ExperienceTracker, *, gm_user) -> None:
 def _grant_clock(character: Character, clock_key: str, amount: int) -> None:
     from .xp_allocation import TRACK_CAPS
 
-    cap = TRACK_CAPS.get(clock_key, 10)
     clocks = dict(character.xp_clocks or {})
     cur = int(clocks.get(clock_key, 0) or 0)
-    clocks[clock_key] = min(cap, cur + int(amount))
+    added = cur + int(amount)
+    # Innate stand-dice XP can push playbook past 10; redo must restore overflow.
+    if clock_key == "playbook":
+        clocks[clock_key] = added
+    else:
+        cap = TRACK_CAPS.get(clock_key, 10)
+        clocks[clock_key] = min(cap, added)
     character.xp_clocks = clocks
     character.save(update_fields=["xp_clocks"])
 

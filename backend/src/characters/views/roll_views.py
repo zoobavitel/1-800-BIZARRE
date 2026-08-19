@@ -10,6 +10,8 @@ from ..models import Character, ExperienceTracker, Roll, RollHistory, Session
 from ..roll_helpers import (
     award_desperate_action_xp,
     award_heritage_expression_xp,
+    award_innate_stand_dice_xp,
+    innate_stand_stat_from_roll,
     max_stress_slots_for_character,
     normalize_effect,
     outcome_from_dice_results,
@@ -139,12 +141,33 @@ class RollViewSet(viewsets.ModelViewSet):
                 {'error': 'Only desperate action rolls can award XP.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        character = roll.character
+        if innate_stand_stat_from_roll(roll.action_name):
+            if ExperienceTracker.objects.filter(roll=roll, trigger='INNATE').exists():
+                return Response(
+                    {'error': 'Innate stand-dice XP already awarded for this roll.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            xp_awarded, track = award_innate_stand_dice_xp(
+                character, roll.session, roll, roll.action_name, request.user
+            )
+            if not xp_awarded or not track:
+                return Response(
+                    {'error': f'Cannot award innate XP for "{roll.action_name}".'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            xp_clocks = character.xp_clocks or {}
+            return Response({
+                'success': True,
+                'track': track,
+                'amount': xp_awarded,
+                'new_total': xp_clocks.get(track, 0),
+            })
         if ExperienceTracker.objects.filter(roll=roll, trigger='DESPERATE_ROLL').exists():
             return Response(
                 {'error': 'Desperate-roll XP already awarded for this roll.'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        character = roll.character
         xp_awarded, track = award_desperate_action_xp(
             character, roll.session, roll, roll.action_name, request.user
         )
@@ -218,6 +241,9 @@ class RollViewSet(viewsets.ModelViewSet):
             )
         if roll.position == 'desperate' and roll.roll_type == 'ACTION' and roll.action_name:
             award_desperate_action_xp(
+                roll.character, roll.session, roll, roll.action_name, self.request.user
+            )
+            award_innate_stand_dice_xp(
                 roll.character, roll.session, roll, roll.action_name, self.request.user
             )
         # Resistance: apply roller_stress_spent on the character so concurrent

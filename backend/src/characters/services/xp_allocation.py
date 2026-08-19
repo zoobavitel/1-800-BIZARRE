@@ -209,14 +209,16 @@ def _spend_xp_source(character, *, xp_track=None, from_pool=False, cost):
 
 def _refund_xp(character, track, cost):
     track = _normalize_track(track)
-    cap = TRACK_CAPS[track]
     clocks = dict(character.xp_clocks or {})
     current = int(clocks.get(track, 0) or 0)
     new_val = current + cost
-    if new_val > cap:
-        raise XPAllocationError(
-            f"Cannot refund {cost} XP to {track}: would exceed cap ({cap})."
-        )
+    # Innate stand-dice XP can push playbook past 10; refunds must restore overflow.
+    if track != "playbook":
+        cap = TRACK_CAPS[track]
+        if new_val > cap:
+            raise XPAllocationError(
+                f"Cannot refund {cost} XP to {track}: would exceed cap ({cap})."
+            )
     clocks[track] = new_val
     character.xp_clocks = clocks
 
@@ -224,15 +226,19 @@ def _refund_xp(character, track, cost):
 def _refund_xp_for_undo(character, track, cost):
     """Refund a spend on undo without clobbering GM grants on other tracks.
 
-    Adds ``cost`` back to the spent track only (clamped at track cap). Does not
-    restore the full ``payload_before`` clocks snapshot, so XP granted by the GM
-    after the spend is preserved.
+    Adds ``cost`` back to the spent track only. Attribute/heritage tracks clamp
+    at TRACK_CAPS; playbook is uncapped so innate overflow survives Take advance
+    undo. Does not restore the full ``payload_before`` clocks snapshot.
     """
     track = _normalize_track(track)
-    cap = TRACK_CAPS[track]
     clocks = dict(character.xp_clocks or {})
     current = int(clocks.get(track, 0) or 0)
-    clocks[track] = min(cap, current + int(cost or 0))
+    added = current + int(cost or 0)
+    if track == "playbook":
+        clocks[track] = added
+    else:
+        cap = TRACK_CAPS[track]
+        clocks[track] = min(cap, added)
     character.xp_clocks = clocks
 
 

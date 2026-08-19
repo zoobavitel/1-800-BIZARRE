@@ -32,6 +32,7 @@ from ..roll_helpers import (
     action_rating_from_action_dots,
     award_desperate_action_xp,
     award_heritage_expression_xp,
+    award_innate_stand_dice_xp,
     bump_effect,
     heritage_bonus_labels,
     max_stress_slots_for_character,
@@ -1413,6 +1414,16 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 xp_awarded, xp_track = award_desperate_action_xp(
                     character, session, roll, action_name, request.user
                 )
+                innate_xp, innate_track = award_innate_stand_dice_xp(
+                    character,
+                    session,
+                    roll,
+                    action_name,
+                    request.user,
+                    stand_stat=stand_stat_requested,
+                )
+                if innate_xp:
+                    xp_awarded, xp_track = innate_xp, innate_track
 
             if roll_type.upper() == "ACTION":
                 award_heritage_expression_xp(

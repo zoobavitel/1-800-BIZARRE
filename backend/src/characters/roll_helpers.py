@@ -172,6 +172,66 @@ def xp_track_for_action_name(action_name):
     return None
 
 
+INNATE_STAND_DICE_STATS = frozenset({"power", "speed", "precision"})
+
+
+def innate_stand_stat_from_roll(action_name, stand_stat=None):
+    """Return power|speed|precision if this is an innate stand-dice action, else None."""
+    stat = str(stand_stat or "").strip().lower()
+    if stat in INNATE_STAND_DICE_STATS:
+        return stat
+    an = str(action_name or "").strip().lower()
+    if an.startswith("stand_"):
+        tail = an[6:]
+        if tail in INNATE_STAND_DICE_STATS:
+            return tail
+        return None
+    if an in INNATE_STAND_DICE_STATS:
+        return an
+    return None
+
+
+def award_innate_stand_dice_xp(
+    character, session, roll, action_name, request_user, stand_stat=None
+):
+    """
+    Desperate ACTION using Power/Speed/Precision stand dice → +1 playbook XP.
+
+    Innate stand function: no session cap and no 10-box clip. Durability,
+    range, and development never grant this. Idempotent per roll.
+
+    Returns (xp_awarded: int, xp_track: str|None).
+    """
+    del request_user
+    position = (roll.position or "").lower()
+    roll_type = (roll.roll_type or "").upper()
+    if position != "desperate" or roll_type != "ACTION":
+        return 0, None
+    stat = innate_stand_stat_from_roll(action_name, stand_stat)
+    if not stat:
+        return 0, None
+    if ExperienceTracker.objects.filter(roll=roll, trigger="INNATE").exists():
+        return 0, None
+
+    grant = 1
+    xp_clocks = dict(character.xp_clocks or {})
+    current = int(xp_clocks.get("playbook", 0) or 0)
+    xp_clocks["playbook"] = current + grant
+    character.xp_clocks = xp_clocks
+    character.save(update_fields=["xp_clocks"])
+    ExperienceTracker.objects.create(
+        character=character,
+        session=session,
+        roll=roll,
+        trigger="INNATE",
+        description=f"Innate: desperate stand {stat} roll",
+        xp_gained=grant,
+        award_source="AUTO",
+        clock_key="playbook",
+    )
+    return grant, "playbook"
+
+
 def award_desperate_action_xp(character, session, roll, action_name, request_user):
     """
     Desperate ACTION roll → 1 XP on the relevant attribute track (cap 5).

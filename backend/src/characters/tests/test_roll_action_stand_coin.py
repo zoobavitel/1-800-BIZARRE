@@ -125,3 +125,33 @@ class RollActionStandCoinTests(TestCase):
         self.assertEqual(r.data.get("group_action_id"), ga.id)
         roll = Roll.objects.get(pk=r.data["roll_id"])
         self.assertEqual(roll.group_action_id, ga.id)
+
+    def test_stand_coin_desperate_awards_innate_playbook_xp(self):
+        self.actor.xp_clocks = {
+            "insight": 0,
+            "prowess": 0,
+            "resolve": 0,
+            "playbook": 10,
+        }
+        self.actor.save(update_fields=["xp_clocks"])
+        self.session.default_position = "desperate"
+        self.session.save(update_fields=["default_position"])
+        self.client.force_authenticate(user=self.user)
+        url = f"/api/characters/{self.actor.id}/roll-action/"
+        r = self.client.post(
+            url,
+            {
+                "action": "stand_precision",
+                "session_id": self.session.id,
+                "pool_source": "stand_coin",
+                "stand_stat": "precision",
+                "position": "desperate",
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.assertEqual(r.data.get("xp_gained"), 1)
+        self.assertEqual(r.data.get("xp_track"), "playbook")
+        self.actor.refresh_from_db()
+        self.assertEqual(self.actor.xp_clocks.get("playbook"), 11)
+
