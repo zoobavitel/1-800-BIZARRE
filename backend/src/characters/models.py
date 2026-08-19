@@ -904,10 +904,24 @@ class Character(models.Model):
                 )
             total_stand_coin_points += grade_points[grade]
 
-        if total_stand_coin_points != 6:
+        chargen_budget = 6 + max(0, int(self.stand_coin_points_gained or 0))
+        if int(self.stand_coin_points_gained or 0) == 0:
+            if total_stand_coin_points < 1 or total_stand_coin_points > 6:
+                raise ValidationError(
+                    {
+                        "stand_coin_stats": (
+                            "Chargen Stand Coin grade-value sum must be between 1 and 6 "
+                            f"(leftover unspent is allowed). Current total: {total_stand_coin_points}."
+                        )
+                    }
+                )
+        elif total_stand_coin_points > chargen_budget:
             raise ValidationError(
                 {
-                    "stand_coin_stats": f"A new character at level 1 must have exactly 6 Stand Coin points. Current total: {total_stand_coin_points}."
+                    "stand_coin_stats": (
+                        f"Stand Coin grade-value sum ({total_stand_coin_points}) exceeds "
+                        f"chargen 6 plus XP ranks ({chargen_budget})."
+                    )
                 }
             )
 

@@ -74,8 +74,19 @@ class CharacterValidationTests(TestCase):
         character.stand.power = 'A'  # 4 points; with rest (D+D+C+D+F=4) total would be 8
         character.stand.speed = 'A'
         character.stand.save()
-        with self.assertRaisesMessage(ValidationError, 'A new character at level 1 must have exactly 6 Stand Coin points.'):
+        with self.assertRaisesMessage(ValidationError, 'Chargen Stand Coin grade-value sum must be between 1 and 6'):
             character.full_clean()
+
+    def test_chargen_stand_coin_allows_unspent_below_six(self):
+        character = self._create_valid_level_1_character()
+        character.stand.power = 'D'
+        character.stand.speed = 'D'
+        character.stand.range = 'D'
+        character.stand.durability = 'D'
+        character.stand.precision = 'D'
+        character.stand.development = 'F'
+        character.stand.save()
+        character.full_clean()
 
     def test_invalid_stand_coin_stats_invalid_grade(self):
         character = self._create_valid_level_1_character()

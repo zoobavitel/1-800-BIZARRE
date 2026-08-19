@@ -67,3 +67,31 @@ class CampaignGmPlayerManagementTestCase(TestCase):
         self.pc.refresh_from_db()
         self.assertIsNone(self.pc.campaign_id)
         self.assertFalse(self.campaign.players.filter(id=self.player.id).exists())
+
+    def test_player_can_assign_own_unassigned_character(self):
+        spare = Character.objects.create(
+            user=self.player,
+            campaign=None,
+            true_name="PC Spare",
+            heritage=self.heritage,
+        )
+        self.client.force_authenticate(self.player)
+        url = f"/api/campaigns/{self.campaign.id}/assign-character/"
+        r = self.client.post(url, {"character_id": spare.id}, format="json")
+        self.assertEqual(r.status_code, status.HTTP_200_OK)
+        spare.refresh_from_db()
+        self.assertEqual(spare.campaign_id, self.campaign.id)
+
+    def test_other_user_cannot_assign_players_character(self):
+        spare = Character.objects.create(
+            user=self.player,
+            campaign=None,
+            true_name="PC Spare",
+            heritage=self.heritage,
+        )
+        self.client.force_authenticate(self.other)
+        url = f"/api/campaigns/{self.campaign.id}/assign-character/"
+        r = self.client.post(url, {"character_id": spare.id}, format="json")
+        self.assertEqual(r.status_code, status.HTTP_404_NOT_FOUND)
+        spare.refresh_from_db()
+        self.assertIsNone(spare.campaign_id)

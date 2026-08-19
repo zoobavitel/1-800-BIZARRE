@@ -133,7 +133,7 @@ export default function NpcsStandCoin({
   const onWedgeClick = useCallback(
     (e, key) => {
       e.preventDefault();
-      bump(key, 1);
+      bump(key, e.shiftKey ? -1 : 1);
     },
     [bump],
   );
@@ -159,13 +159,17 @@ export default function NpcsStandCoin({
 
   const topLetter = variant === "pc" ? pcMaxGrade : "S";
   const idleAnnounce = readOnly
-    ? "Stand coin (read-only)."
-    : "Stand coin: left-click a wedge to raise its grade; right-click to lower. Shift+Enter or Shift+Space lowers.";
+    ? variant === "pc"
+      ? "Stand coin is locked after chargen."
+      : "Stand coin (read-only)."
+    : "Stand coin: left-click a wedge to raise its grade; right-click or Shift-click to lower. Shift+Enter or Shift+Space lowers.";
   const emptyStateLines = readOnly
-    ? "Stand coin is view-only here. Open the full NPC sheet to edit, or ask the GM if this NPC is not yours."
+    ? variant === "pc"
+      ? "Stand coin is locked after chargen. Fill playbook (10) or bank 10 in Available XP, then Take advance / level up for +1 grade."
+      : "Stand coin is view-only here. Open the full NPC sheet to edit, or ask the GM if this NPC is not yours."
     : variant === "pc"
-      ? `Left-click a segment to raise its grade (F→${topLetter}). Right-click to lower. Shift+Enter / Shift+Space on a focused wedge lowers one step.`
-      : "Left-click a segment to raise its grade (F→S). Right-click to lower. Shift+Enter / Shift+Space on a focused wedge lowers one step.";
+      ? `Left-click a segment to raise its grade (F→${topLetter}) when leftover chargen points remain. Right-click or Shift-click to lower and refund. Shift+Enter / Shift+Space on a focused wedge lowers one step.`
+      : "Left-click a segment to raise its grade (F→S). Right-click or Shift-click to lower. Shift+Enter / Shift+Space on a focused wedge lowers one step.";
   const svgDefaultAria = readOnly
     ? "Stand coin: six stats (read-only)"
     : variant === "pc"
@@ -427,7 +431,7 @@ export default function NpcsStandCoin({
               aria-label={
                 readOnly
                   ? `${s.label}, grade ${g} (read-only)`
-                  : `${s.label}, grade ${g}. Left-click to raise, right-click to lower.${wedgeSuffix}`
+                  : `${s.label}, grade ${g}. Left-click to raise, right-click or Shift-click to lower.${wedgeSuffix}`
               }
               aria-disabled={readOnly ? "true" : undefined}
               onMouseEnter={() => !readOnly && setHovered(s.key)}

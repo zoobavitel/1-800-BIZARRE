@@ -162,6 +162,9 @@ def _sync_character_progress_clocks(character, raw_clocks, user):
                 pk = int(raw_id)
             except (TypeError, ValueError):
                 pk = None
+            # Date.now() temp ids overflow 32-bit PK; treat as new rows.
+            if pk is not None and pk > 2147483647:
+                pk = None
             if pk and pk > 0:
                 existing = ProgressClock.objects.filter(
                     id=pk, character_id=character.id
@@ -2341,6 +2344,33 @@ class ProgressClockSerializer(serializers.ModelSerializer):
     created_by_username = serializers.SerializerMethodField()
     created_by_character_name = serializers.SerializerMethodField()
     max_segments = serializers.IntegerField(min_value=1, max_value=12, default=4)
+
+    def to_internal_value(self, data):
+        if hasattr(data, "copy"):
+            data = data.copy()
+        else:
+            data = dict(data)
+        if data.get("max_segments") in (None, "") and data.get("segments") not in (
+            None,
+            "",
+        ):
+            data["max_segments"] = data.get("segments")
+        return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        max_seg = attrs.get("max_segments")
+        if max_seg is None and self.instance is not None:
+            max_seg = self.instance.max_segments
+        if max_seg is None:
+            max_seg = 4
+        filled = attrs.get("filled_segments")
+        if filled is None and self.instance is not None:
+            filled = self.instance.filled_segments
+        if filled is None:
+            filled = 0
+        if filled > max_seg:
+            attrs["filled_segments"] = max_seg
+        return attrs
 
     class Meta:
         model = ProgressClock

@@ -314,8 +314,16 @@ function mergeRequiredHeritageSelections(frontendPayload, heritageList) {
 // Component
 // ---------------------------------------------------------------------------
 
+function seedBlankCharacter(campaignId = null) {
+  const n = Number(campaignId);
+  return createDefaultCharacter(
+    Number.isFinite(n) && n > 0 ? { campaign: n } : {},
+  );
+}
+
 export default function CharacterPage({
   initialCharacterId = null,
+  initialNewCampaignId = null,
   initialNpcId = null,
   initialNpcCampaignId = null,
   preferNpcMode = false,
@@ -340,6 +348,7 @@ export default function CharacterPage({
   const charTabUnsavedMetaRef = useRef(charTabUnsavedMeta);
   /** Bumps when remote sync completes so CharacterSheet refetches session rolls. */
   const [sheetPollTick, setSheetPollTick] = useState(0);
+  const [sheetResetEpoch, setSheetResetEpoch] = useState(0);
 
   // ── NPC state ───────────────────────────────────────────────────────────
   const [npcs, setNpcs] = useState([]);
@@ -555,7 +564,7 @@ export default function CharacterPage({
       const blank = {
         tabId: nextTabId++,
         characterId: null,
-        character: createDefaultCharacter(),
+        character: seedBlankCharacter(initialNewCampaignId),
       };
       setCharTabs([blank]);
       setActiveCharTabId(blank.tabId);
@@ -704,6 +713,31 @@ export default function CharacterPage({
       loadCharacters();
     },
     [loadCharacters],
+  );
+
+  const handleCharacterReloaded = useCallback(
+    (fe) => {
+      const tabId = activeCharTabId;
+      if (tabId == null || !fe?.id) return;
+      setCharTabs((prev) =>
+        prev.map((t) => (t.tabId === tabId ? { ...t, character: fe } : t)),
+      );
+      setCharacters((prev) => prev.map((c) => (c.id === fe.id ? fe : c)));
+      const cleared = {
+        payload: null,
+        isNewCharacter: false,
+        isDirty: false,
+        isSaving: false,
+        dirtyIntent: false,
+      };
+      charTabUnsavedMetaRef.current = {
+        ...(charTabUnsavedMetaRef.current || {}),
+        [tabId]: cleared,
+      };
+      setCharTabUnsavedMeta((prev) => ({ ...prev, [tabId]: cleared }));
+      setSheetResetEpoch((n) => n + 1);
+    },
+    [activeCharTabId],
   );
 
   // ── Save character ───────────────────────────────────────────────────────
@@ -1784,7 +1818,7 @@ export default function CharacterPage({
           </div>
         ) : (
           <CharacterSheetWrapper
-            key={activeCharTab?.tabId ?? "new"}
+            key={`${activeCharTab?.tabId ?? "new"}-${sheetResetEpoch}`}
             character={sheetCharacter}
             sheetDraftIsDirty={
               activeCharTabId != null &&
@@ -1802,6 +1836,7 @@ export default function CharacterPage({
             onSwitchCharacter={handleSwitchCharacter}
             onCrewNameUpdated={handleCrewNameUpdated}
             onCampaignRefresh={refreshCampaigns}
+            onCharacterReloaded={handleCharacterReloaded}
             sessionDataPollTick={sheetPollTick}
             onDraftMetaChange={(meta) => {
               const tabId = activeCharTab?.tabId;

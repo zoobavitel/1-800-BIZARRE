@@ -15,5 +15,6 @@ export {
   isUserCampaignGmForCharacter,
   isGmViewingPlayerCharacterSheet,
   isUserGmOfCharacterCampaign,
+  isStandCoinChargenEditable,
 } from "./utils/characterUtils";
 export * from "./services/api";

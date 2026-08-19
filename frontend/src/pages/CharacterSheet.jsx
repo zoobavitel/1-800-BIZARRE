@@ -50,6 +50,7 @@ import {
   resolveCharacterCampaignContext,
   isUserCampaignGmForCharacter,
   isGmViewingPlayerCharacterSheet,
+  isStandCoinChargenEditable as standCoinChargenUnlocked,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -72,9 +73,20 @@ import {
   normalizeCampaignGmId,
 } from "../features/character-sheet/utils/progressClockVisibility";
 import {
+  clampClockFilled,
+  clampClockSegments,
+  clockWedgeCount,
+  isPersistedProgressClockId,
+  normalizeSheetProgressClock,
+} from "../features/character-sheet/utils/progressClockSegments";
+import {
   markPcAutosaveBusyCollision,
   schedulePcPendingResaveDrain,
 } from "../features/character-sheet/utils/pcAutosaveQueue";
+import {
+  HISTORY_MANUAL_RESISTANCE_ATTR_OPTIONS,
+  historyManualResistanceActionName,
+} from "../features/character-sheet/utils/historyManualResistance";
 import {
   tierDieFromActionPool,
   outcomeFromActionRoll,
@@ -403,6 +415,15 @@ const XP_TRACK_SPEND_MAX = {
   playbook: 10,
 };
 
+/** Caps applied when a roll response ticks a track locally. */
+const XP_TRACK_APPLY_CAP = {
+  insight: 5,
+  prowess: 5,
+  resolve: 5,
+  heritage: 5,
+  playbook: 10,
+};
+
 const ATTRIBUTE_XP_SPEND_TRACKS = new Set(["insight", "prowess", "resolve"]);
 
 function actionOptionsForXpSpendTrack(actionRatings, spendTrack) {
@@ -511,14 +532,16 @@ const ProgressClock = ({
   onClick = null,
   interactive = false,
 }) => {
+  const n = clockWedgeCount(segments);
+  const fill = clampClockFilled(filled, n);
   const r = size / 2 - 4,
     cx = size / 2,
     cy = size / 2;
-  const sa = 360 / segments;
+  const sa = 360 / n;
   const showArrows = interactive && onClick;
   const svg = (
-    <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
-      {Array.from({ length: segments }, (_, i) => {
+    <svg width={size} height={size}>
+      {Array.from({ length: n }, (_, i) => {
         const a1 = ((i * sa - 90) * Math.PI) / 180;
         const a2 = (((i + 1) * sa - 90) * Math.PI) / 180;
         const x1 = cx + r * Math.cos(a1),
@@ -529,26 +552,18 @@ const ProgressClock = ({
           <path
             key={i}
             d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${sa > 180 ? 1 : 0} 1 ${x2} ${y2} Z`}
-            fill={i < filled ? "#dc2626" : "transparent"}
+            fill={i < fill ? "#dc2626" : "transparent"}
             stroke="#6b7280"
             strokeWidth="1"
             style={{ cursor: interactive ? "pointer" : "default" }}
             onClick={
               interactive && onClick
-                ? () => onClick(i < filled ? i : i + 1)
+                ? () => onClick(i < fill ? i : i + 1)
                 : undefined
             }
           />
         );
       })}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={r}
-        fill="transparent"
-        stroke="#6b7280"
-        strokeWidth="2"
-      />
     </svg>
   );
   if (showArrows) {
@@ -557,8 +572,8 @@ const ProgressClock = ({
         <button
           type="button"
           style={arrowBtnStyle}
-          onClick={() => onClick(Math.max(0, filled - 1))}
-          title="Decrease"
+          onClick={() => onClick(Math.max(0, fill - 1))}
+          title="Decrease filled ticks"
         >
           −
         </button>
@@ -566,8 +581,8 @@ const ProgressClock = ({
         <button
           type="button"
           style={arrowBtnStyle}
-          onClick={() => onClick(Math.min(segments, filled + 1))}
-          title="Increase"
+          onClick={() => onClick(Math.min(n, fill + 1))}
+          title="Increase filled ticks"
         >
           +
         </button>
@@ -694,35 +709,6 @@ function buildHealRollBoostPresetFromSelections(
     }
   });
   return { abilities: abilitiesPreset, heritage: heritagePreset };
-}
-
-/** SESSION card: GM-shared progress clocks (creator GM, or legacy null+visible on active session). */
-function isSessionGmSharedProgressClock(clk, gmId, activeSessionId) {
-  const gmid = normalizeCampaignGmId(gmId);
-  const creatorRaw = clk?.created_by;
-  const creator =
-    creatorRaw != null && creatorRaw !== ""
-      ? Number(creatorRaw)
-      : null;
-  const sid =
-    activeSessionId != null && activeSessionId !== ""
-      ? Number(activeSessionId)
-      : NaN;
-  const cs =
-    clk?.session != null && clk.session !== ""
-      ? Number(clk.session)
-      : NaN;
-  const sessionMatches =
-    Number.isFinite(sid) && Number.isFinite(cs) && cs === sid;
-  if (gmid != null && Number.isFinite(creator) && creator === gmid) return true;
-  if (
-    (creator == null || !Number.isFinite(creator)) &&
-    !!clk?.visible_to_players &&
-    sessionMatches
-  ) {
-    return true;
-  }
-  return false;
 }
 
 // ─── CharacterSheetWrapper ────────────────────────────────────────────────────
@@ -1216,6 +1202,8 @@ const CharacterSheetWrapper = ({
   sessionDataPollTick = 0,
   /** When true, skip merging server character snapshots into XP / stand / action state (avoids poll overwriting local spends before autosave). */
   sheetDraftIsDirty = false,
+  /** After reset-sheet: parent replaces tab character and remounts this wrapper. */
+  onCharacterReloaded,
 }) => {
   const { user } = useAuth();
   /** Last XP clocks/pool applied from a dedicated XP API; blocks stale parent hydrate until tab catches up. */
@@ -2168,6 +2156,7 @@ const CharacterSheetWrapper = ({
   const [pendingStandAError, setPendingStandAError] = useState(null);
   const [xpAllocationRows, setXpAllocationRows] = useState([]);
   const [xpAllocationUndoBusy, setXpAllocationUndoBusy] = useState(false);
+  const [resetSheetBusy, setResetSheetBusy] = useState(false);
   const [xpAllocationActionError, setXpAllocationActionError] = useState(null);
   /** Top-of-page notice after XP spend undo/redo (what specifically changed). */
   const [xpActionToast, setXpActionToast] = useState(null);
@@ -2608,11 +2597,7 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     if (sheetDraftIsDirty) return;
     const incoming = Array.isArray(character?.clocks)
-      ? character.clocks.map((c) => ({
-          ...c,
-          segments: c.segments ?? c.max_segments ?? 4,
-          filled: c.filled ?? c.filled_segments ?? 0,
-        }))
+      ? character.clocks.map((c) => normalizeSheetProgressClock(c)).filter(Boolean)
       : [];
     setClocks((prev) => {
       if (JSON.stringify(prev) === JSON.stringify(incoming)) return prev;
@@ -3181,20 +3166,16 @@ const CharacterSheetWrapper = ({
       Math.max(0, Number(character?.standCoinPointsGained) || 0),
     totalStandPoints,
   );
-  /** First-level redistribution only (all-D default, swap by lowering one stat to F). After that, +1 grade costs 10 XP via Level Up. */
-  const isStandCoinChargenEditable = useMemo(() => {
-    if (!canEditSheet || !hasStandPlaybook) return false;
-    if (Math.max(0, Number(character?.standCoinPointsGained) || 0) > 0) {
-      return false;
-    }
-    if (totalActionDots > 0) return false;
-    return true;
-  }, [
-    canEditSheet,
-    hasStandPlaybook,
-    character?.standCoinPointsGained,
-    totalActionDots,
-  ]);
+  /** First-level radar clicks until an XP-bought Stand Coin rank. Action dots do not lock this. */
+  const isStandCoinChargenEditable = useMemo(
+    () =>
+      standCoinChargenUnlocked({
+        canEditSheet,
+        hasStandPlaybook,
+        standCoinPointsGained: character?.standCoinPointsGained,
+      }),
+    [canEditSheet, hasStandPlaybook, character?.standCoinPointsGained],
+  );
   const aRankCount = Object.values(standStats).reduce(
     (n, idx) => n + (INDEX_TO_GRADE(idx) === "A" ? 1 : 0),
     0,
@@ -3519,6 +3500,45 @@ const CharacterSheetWrapper = ({
     ],
   );
 
+  const handleResetCharacterSheet = useCallback(
+    async (e) => {
+      e?.stopPropagation?.();
+      if (!characterId || resetSheetBusy || !canEditSheet) return;
+      const ok = window.confirm(
+        "Reset this character sheet?\n\nKeeps campaign, name, crew, look, vice, and heritage.\nClears extra heritage picks, playbook, trauma, stress, XP, dots, abilities, and harm.\n\nThis cannot be undone.",
+      );
+      if (!ok) return;
+      setResetSheetBusy(true);
+      setXpAllocationActionError(null);
+      try {
+        const res = await characterAPI.resetCharacterSheet(characterId);
+        const backendChar = res?.character;
+        if (backendChar) {
+          const fe = transformBackendToFrontend(backendChar);
+          onCharacterReloaded?.(fe);
+        }
+        if (Array.isArray(res?.allocations)) {
+          setXpAllocationRows(res.allocations);
+        } else {
+          setXpAllocationRows([]);
+        }
+        setXpActionToast({ kind: "ok", message: "Character sheet reset." });
+      } catch (err) {
+        const msg = err?.message || "Failed to reset character";
+        setXpAllocationActionError(msg);
+        setXpActionToast({ kind: "err", message: msg });
+      } finally {
+        setResetSheetBusy(false);
+      }
+    },
+    [
+      characterId,
+      resetSheetBusy,
+      canEditSheet,
+      onCharacterReloaded,
+    ],
+  );
+
   const handleUndoAllocationById = useCallback(
     async (allocationId) => {
       if (!characterId || xpAllocationUndoBusy) return;
@@ -3637,6 +3657,10 @@ const CharacterSheetWrapper = ({
     };
 
     const cur = Number(xp?.[track]) || 0;
+    // Innate overflow lives above 10; box ticks must not dump remainder into the pool.
+    if (track === "playbook" && cur > 10) {
+      return;
+    }
     // Click filled box → clear from that index up; click empty → fill through it.
     const desired = Math.min(idx < cur ? idx : idx + 1, maxVals[track]);
     if (!characterId) {
@@ -7074,10 +7098,15 @@ const CharacterSheetWrapper = ({
         recoveryPresentation,
       });
       if (res.xp_gained > 0 && res.xp_track) {
-        setXp((p) => ({
-          ...p,
-          [res.xp_track]: Math.min((p[res.xp_track] || 0) + res.xp_gained, 5),
-        }));
+        setXp((p) => {
+          const key = res.xp_track;
+          const next = (Number(p[key]) || 0) + Number(res.xp_gained);
+          const cap = XP_TRACK_APPLY_CAP[key];
+          return {
+            ...p,
+            [key]: cap != null ? Math.min(next, cap) : next,
+          };
+        });
       }
       if (res.stress_spent) applyStressCost(res.stress_spent);
       if (activeSessionId && res.roll_id) {
@@ -7727,14 +7756,16 @@ const CharacterSheetWrapper = ({
     const name = String(newClockName || "").trim();
     const segs = Number(newClockSegments);
     if (!name || !Number.isFinite(segs)) return;
-    const boundedSegments = Math.max(1, Math.min(12, Math.round(segs)));
+    const boundedSegments = clampClockSegments(segs);
     setClocks((p) => [
       ...p,
       {
-        id: Date.now(),
+        id: `pc-clock-${Date.now()}`,
         name,
         segments: boundedSegments,
+        max_segments: boundedSegments,
         filled: 0,
+        filled_segments: 0,
         visible_to_party: !!newClockShared,
       },
     ]);
@@ -7744,8 +7775,35 @@ const CharacterSheetWrapper = ({
     setClockEditorOpen(false);
   };
 
+  const resizeClockSegments = useCallback((clockId, rawSegments) => {
+    const nextSegs = clampClockSegments(rawSegments);
+    let filledForApi = 0;
+    setClocks((p) =>
+      p.map((c) => {
+        if (c.id !== clockId) return c;
+        const filled = clampClockFilled(c.filled ?? c.filled_segments, nextSegs);
+        filledForApi = filled;
+        return {
+          ...c,
+          segments: nextSegs,
+          max_segments: nextSegs,
+          filled,
+          filled_segments: filled,
+        };
+      }),
+    );
+    if (isPersistedProgressClockId(clockId)) {
+      progressClockAPI
+        .updateProgressClock(clockId, {
+          max_segments: nextSegs,
+          filled_segments: filledForApi,
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   const addPerfectOrganismEntityClock = useCallback((sizeLabel, segments) => {
-    const segs = Math.max(1, Math.min(12, Number(segments) || 4));
+    const segs = clampClockSegments(segments);
     const stamp = Date.now();
     setClocks((p) => [
       ...p,
@@ -8761,6 +8819,31 @@ const CharacterSheetWrapper = ({
                       >
                         {totalSpentXP} XP spent
                       </div>
+                      {characterId && canEditSheet && (
+                        <button
+                          type="button"
+                          onClick={handleResetCharacterSheet}
+                          disabled={resetSheetBusy}
+                          title="Reset character sheet. Keeps name, crew, look, vice, heritage, and campaign."
+                          style={{
+                            marginTop: 4,
+                            width: "100%",
+                            background: "#3f1d1d",
+                            border: "1px solid #b91c1c",
+                            borderRadius: 4,
+                            padding: "3px 4px",
+                            cursor: resetSheetBusy ? "wait" : "pointer",
+                            color: "#fecaca",
+                            fontSize: 8,
+                            fontWeight: 700,
+                            letterSpacing: "0.03em",
+                            lineHeight: 1.15,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          {resetSheetBusy ? "…" : "reset character"}
+                        </button>
+                      )}
                     </div>
                   </div>
                   {showHistoryPanel && (
@@ -8970,11 +9053,37 @@ const CharacterSheetWrapper = ({
                                     </div>
                                     <div
                                       style={{
-                                        display: "grid",
-                                        gridTemplateColumns: "1fr 1fr",
+                                        display: "flex",
+                                        flexDirection: "column",
                                         gap: 6,
                                       }}
                                     >
+                                      <select
+                                        value={historyManual.sessionId}
+                                        onChange={(e) =>
+                                          setHistoryManual((p) => ({
+                                            ...p,
+                                            sessionId: e.target.value,
+                                          }))
+                                        }
+                                        style={{
+                                          ...S.sel,
+                                          fontSize: 10,
+                                          padding: "2px 6px",
+                                          width: "100%",
+                                          boxSizing: "border-box",
+                                        }}
+                                      >
+                                        <option value="">Session</option>
+                                        {(charCampaign?.sessions || []).map((s) => (
+                                          <option
+                                            key={s.id}
+                                            value={String(s.id)}
+                                          >
+                                            {s.name || `Session ${s.id}`}
+                                          </option>
+                                        ))}
+                                      </select>
                                       <select
                                         value={historyManual.rollType}
                                         onChange={(e) =>
@@ -8988,6 +9097,8 @@ const CharacterSheetWrapper = ({
                                           ...S.sel,
                                           fontSize: 10,
                                           padding: "2px 6px",
+                                          width: "100%",
+                                          boxSizing: "border-box",
                                         }}
                                       >
                                         <option value="ACTION">Action</option>
@@ -8997,30 +9108,6 @@ const CharacterSheetWrapper = ({
                                         <option value="VICE">Vice roll</option>
                                         <option value="FORTUNE">Fortune roll</option>
                                         <option value="XP">XP award</option>
-                                      </select>
-                                      <select
-                                        value={historyManual.sessionId}
-                                        onChange={(e) =>
-                                          setHistoryManual((p) => ({
-                                            ...p,
-                                            sessionId: e.target.value,
-                                          }))
-                                        }
-                                        style={{
-                                          ...S.sel,
-                                          fontSize: 10,
-                                          padding: "2px 6px",
-                                        }}
-                                      >
-                                        <option value="">Session</option>
-                                        {(charCampaign?.sessions || []).map((s) => (
-                                          <option
-                                            key={s.id}
-                                            value={String(s.id)}
-                                          >
-                                            {s.name || `Session ${s.id}`}
-                                          </option>
-                                        ))}
                                       </select>
                                       {historyManual.rollType === "XP" ? (
                                         <>
@@ -9036,6 +9123,8 @@ const CharacterSheetWrapper = ({
                                               ...S.sel,
                                               fontSize: 10,
                                               padding: "2px 6px",
+                                              width: "100%",
+                                              boxSizing: "border-box",
                                             }}
                                           >
                                             <option value="playbook">Playbook</option>
@@ -9062,6 +9151,8 @@ const CharacterSheetWrapper = ({
                                               ...S.inp,
                                               fontSize: 10,
                                               padding: "2px 6px",
+                                              width: "100%",
+                                              boxSizing: "border-box",
                                             }}
                                             title="XP to add (1–20 per award)"
                                           />
@@ -9075,12 +9166,13 @@ const CharacterSheetWrapper = ({
                                             }
                                             style={{
                                               ...S.inp,
-                                              gridColumn: "1 / -1",
                                               fontSize: 10,
                                               padding: "6px",
                                               minHeight: 52,
                                               resize: "vertical",
                                               fontFamily: "inherit",
+                                              width: "100%",
+                                              boxSizing: "border-box",
                                             }}
                                             placeholder="Explain what this XP was for (appears in session history and XP log)."
                                             rows={3}
@@ -9099,11 +9191,20 @@ const CharacterSheetWrapper = ({
                                             ...S.sel,
                                             fontSize: 10,
                                             padding: "2px 6px",
+                                            width: "100%",
+                                            boxSizing: "border-box",
                                           }}
                                         >
-                                          <option value="insight">Insight</option>
-                                          <option value="prowess">Prowess</option>
-                                          <option value="resolve">Resolve</option>
+                                          {HISTORY_MANUAL_RESISTANCE_ATTR_OPTIONS.map(
+                                            (opt) => (
+                                              <option
+                                                key={opt.value}
+                                                value={opt.value}
+                                              >
+                                                {opt.label}
+                                              </option>
+                                            ),
+                                          )}
                                         </select>
                                       ) : historyManual.rollType === "VICE" ? (
                                         <div
@@ -9144,6 +9245,8 @@ const CharacterSheetWrapper = ({
                                             ...S.inp,
                                             fontSize: 10,
                                             padding: "2px 6px",
+                                            width: "100%",
+                                            boxSizing: "border-box",
                                           }}
                                           placeholder="Action"
                                         />
@@ -9161,6 +9264,8 @@ const CharacterSheetWrapper = ({
                                             ...S.inp,
                                             fontSize: 10,
                                             padding: "2px 6px",
+                                            width: "100%",
+                                            boxSizing: "border-box",
                                           }}
                                           placeholder="Dice e.g. 6,4"
                                         />
@@ -9177,19 +9282,19 @@ const CharacterSheetWrapper = ({
                                             }
                                             style={{
                                               ...S.inp,
-                                              gridColumn: "1 / -1",
                                               fontSize: 10,
                                               padding: "6px",
                                               minHeight: 44,
                                               resize: "vertical",
                                               fontFamily: "inherit",
+                                              width: "100%",
+                                              boxSizing: "border-box",
                                             }}
                                             placeholder="What this fortune resolves (shown in session history)."
                                             rows={2}
                                           />
                                           <label
                                             style={{
-                                              gridColumn: "1 / -1",
                                               fontSize: 10,
                                               color: "#d1d5db",
                                               display: "flex",
@@ -9230,6 +9335,8 @@ const CharacterSheetWrapper = ({
                                               ...S.sel,
                                               fontSize: 10,
                                               padding: "2px 6px",
+                                              width: "100%",
+                                              boxSizing: "border-box",
                                             }}
                                           >
                                             <option value="">
@@ -9267,7 +9374,6 @@ const CharacterSheetWrapper = ({
                                               color: "#d1d5db",
                                               display: "flex",
                                               alignItems: "center",
-                                              gridColumn: "1 / -1",
                                             }}
                                           >
                                             Pool = lowest Insight / Prowess / Resolve
@@ -9275,18 +9381,17 @@ const CharacterSheetWrapper = ({
                                           </div>
                                         </>
                                       ) : historyManual.rollType === "FORTUNE" ? (
-                                        <div
-                                          style={{
-                                            ...S.inp,
-                                            fontSize: 10,
-                                            padding: "6px 8px",
-                                            gridColumn: "1 / -1",
-                                            color: "#d1d5db",
-                                            display: "flex",
-                                            flexDirection: "column",
-                                            gap: 6,
-                                          }}
-                                        >
+                                          <div
+                                            style={{
+                                              ...S.inp,
+                                              fontSize: 10,
+                                              padding: "6px 8px",
+                                              color: "#d1d5db",
+                                              display: "flex",
+                                              flexDirection: "column",
+                                              gap: 6,
+                                            }}
+                                          >
                                           <div>
                                             Outcome:{" "}
                                             <strong style={{ color: "#e5e7eb" }}>
@@ -9310,7 +9415,8 @@ const CharacterSheetWrapper = ({
                                                 ...S.sel,
                                                 fontSize: 10,
                                                 padding: "2px 6px",
-                                                maxWidth: 220,
+                                                width: "100%",
+                                                boxSizing: "border-box",
                                               }}
                                             >
                                               <option value="CRITICAL_SUCCESS">
@@ -9387,7 +9493,8 @@ const CharacterSheetWrapper = ({
                                                   ...S.sel,
                                                   fontSize: 10,
                                                   padding: "2px 6px",
-                                                  maxWidth: 220,
+                                                  width: "100%",
+                                                  boxSizing: "border-box",
                                                 }}
                                               >
                                                 <option value="CRITICAL_SUCCESS">
@@ -9428,66 +9535,58 @@ const CharacterSheetWrapper = ({
                                               </button>
                                             ) : null}
                                           </div>
-                                          <select
-                                            value={historyManual.position}
-                                            onChange={(e) =>
-                                              setHistoryManual((p) => ({
-                                                ...p,
-                                                position: e.target.value,
-                                              }))
-                                            }
-                                            style={{
-                                              ...S.sel,
-                                              fontSize: 10,
-                                              padding: "2px 6px",
-                                            }}
-                                          >
-                                            <option value="controlled">
-                                              Controlled
-                                            </option>
-                                            <option value="risky">Risky</option>
-                                            <option value="desperate">
-                                              Desperate
-                                            </option>
-                                          </select>
-                                          <select
-                                            value={historyManual.effect}
-                                            onChange={(e) =>
-                                              setHistoryManual((p) => ({
-                                                ...p,
-                                                effect: e.target.value,
-                                              }))
-                                            }
-                                            style={{
-                                              ...S.sel,
-                                              fontSize: 10,
-                                              padding: "2px 6px",
-                                            }}
-                                          >
-                                            <option value="limited">
-                                              Limited
-                                            </option>
-                                            <option value="standard">
-                                              Standard
-                                            </option>
-                                            <option value="extreme">
-                                              Extreme
-                                            </option>
-                                          </select>
                                           <div
                                             style={{
-                                              gridColumn: "1 / -1",
+                                              display: "flex",
+                                              gap: 14,
+                                              flexWrap: "wrap",
+                                              alignItems: "flex-start",
+                                              marginTop: 2,
+                                            }}
+                                          >
+                                            <PositionStack
+                                              activePosition={
+                                                historyManual.position || "risky"
+                                              }
+                                              readOnly={false}
+                                              onSelect={(value) =>
+                                                setHistoryManual((p) => ({
+                                                  ...p,
+                                                  position: value,
+                                                }))
+                                              }
+                                            />
+                                            <EffectShapes
+                                              activeEffect={
+                                                historyManual.effect || "standard"
+                                              }
+                                              readOnly={false}
+                                              onSelect={(tier) =>
+                                                setHistoryManual((p) => ({
+                                                  ...p,
+                                                  effect: tier,
+                                                }))
+                                              }
+                                            />
+                                          </div>
+                                          <div
+                                            style={{
                                               fontSize: 9,
                                               color: "#6b7280",
                                               lineHeight: 1.35,
                                               marginTop: 2,
                                             }}
                                           >
-                                            Defaults: GM session row (
+                                            Click position squares or L/S/E to override this
+                                            offline record. Highlighted effect is the chosen base;
+                                            stored{" "}
+                                            <code style={{ color: "#9ca3af" }}>effect</code> still
+                                            adds push / +1 effect (now {manualHistoryEffectPreview}).
+                                            Defaults from GM session row (
                                             <code style={{ color: "#9ca3af" }}>
                                               active_session_detail.position_effect_by_character
                                             </code>
-                                            ) then session{" "}
+                                            ) then{" "}
                                             <code style={{ color: "#9ca3af" }}>
                                               default_position
                                             </code>
@@ -9495,40 +9594,14 @@ const CharacterSheetWrapper = ({
                                             <code style={{ color: "#9ca3af" }}>
                                               default_effect
                                             </code>
-                                            . Override here for this offline record. Online{" "}
+                                            . Online{" "}
                                             <code style={{ color: "#9ca3af" }}>rollAction</code>{" "}
                                             still resolves P/E from the same session map on the server
                                             (no client-sent position override).
                                           </div>
-                                          <div
-                                            style={{
-                                              gridColumn: "1 / -1",
-                                              marginTop: 6,
-                                              padding: "6px 8px",
-                                              borderRadius: 6,
-                                              border: "1px solid #374151",
-                                              background: "#0d1117",
-                                            }}
-                                          >
-                                            <div
-                                              style={{
-                                                fontSize: 9,
-                                                color: "#9ca3af",
-                                                marginBottom: 4,
-                                              }}
-                                            >
-                                              Effect tier after push + ability/heritage steps (same
-                                              order as server roll)
-                                            </div>
-                                            <EffectShapes
-                                              activeEffect={manualHistoryEffectPreview}
-                                              readOnly
-                                            />
-                                          </div>
                                           {manualHistorySuggestedDice != null ? (
                                             <div
                                               style={{
-                                                gridColumn: "1 / -1",
                                                 fontSize: 9,
                                                 color: "#a78bfa",
                                                 marginTop: 4,
@@ -10268,7 +10341,11 @@ const CharacterSheetWrapper = ({
                                                     : "ACTION",
                                                 action_name: isViceManual
                                                   ? "vice"
-                                                  : String(
+                                                  : isResistanceManual
+                                                    ? historyManualResistanceActionName(
+                                                        historyManual.action,
+                                                      )
+                                                    : String(
                                                         historyManual.action ||
                                                           "action",
                                                       ).toLowerCase(),
@@ -12133,6 +12210,7 @@ const CharacterSheetWrapper = ({
                   ].map(({ name, key, max }) => {
                     const filled = Number(xp[key]) || 0;
                     const trackFull = filled >= max;
+                    const overflowLocked = key === "playbook" && filled > max;
                     return (
                     <div
                       key={key}
@@ -12157,28 +12235,38 @@ const CharacterSheetWrapper = ({
                         {Array.from({ length: max }, (_, i) => {
                           const isFilled = i < filled;
                           const canSpendHere =
+                            !overflowLocked &&
                             canEditSheet &&
                             !poolAllocateBusy &&
                             !isFilled &&
                             unallocatedXp >= i + 1 - filled;
+                          const boxesInteractive =
+                            !overflowLocked &&
+                            canEditSheet &&
+                            (canSpendHere || isFilled);
                           return (
                             <div
                               key={i}
                               role="button"
-                              tabIndex={0}
+                              tabIndex={boxesInteractive ? 0 : -1}
                               title={
-                                isFilled
-                                  ? canEditSheet
-                                    ? `Return ${filled - i} to Available XP`
-                                    : "Filled"
-                                  : canSpendHere
-                                    ? `Spend ${i + 1 - filled} from Available XP`
-                                    : unallocatedXp < 1
-                                      ? "Need Available XP in the free pool first"
-                                      : "Not enough Available XP for this tick"
+                                overflowLocked
+                                  ? "Playbook overflow — Take advance spends 10 and leaves remainder"
+                                  : isFilled
+                                    ? canEditSheet
+                                      ? `Return ${filled - i} to Available XP`
+                                      : "Filled"
+                                    : canSpendHere
+                                      ? `Spend ${i + 1 - filled} from Available XP`
+                                      : unallocatedXp < 1
+                                        ? "Need Available XP in the free pool first"
+                                        : "Not enough Available XP for this tick"
                               }
-                              onClick={() => toggleXP(key, i)}
+                              onClick={() => {
+                                if (!overflowLocked) toggleXP(key, i);
+                              }}
                               onKeyDown={(e) => {
+                                if (overflowLocked) return;
                                 if (e.key === "Enter" || e.key === " ") {
                                   e.preventDefault();
                                   toggleXP(key, i);
@@ -12188,8 +12276,9 @@ const CharacterSheetWrapper = ({
                                 width: "13px",
                                 height: "13px",
                                 border: "1px solid #4b5563",
-                                cursor:
-                                  canSpendHere || isFilled
+                                cursor: overflowLocked
+                                  ? "default"
+                                  : canSpendHere || isFilled
                                     ? poolAllocateBusy
                                       ? "wait"
                                       : "pointer"
@@ -12283,7 +12372,9 @@ const CharacterSheetWrapper = ({
                         }}
                       >
                         Desperate ACTION → +1 on that attribute (group desperate
-                        too). End-session toggles + Dev bonus → free pool
+                        too). Desperate Power / Speed / Precision stand dice →
+                        +1 playbook (innate, uncapped; not Range, Durability, or
+                        Dev). End-session toggles + Dev bonus → free pool
                         (allocate later). Downtime training not automated yet.
                         Crew XP: use crew scorecard triggers.
                       </div>
@@ -13581,7 +13672,7 @@ const CharacterSheetWrapper = ({
                         }}
                       >
                         {isStandCoinChargenEditable
-                          ? "Chargen: every stat starts at D. Right-click a wedge to lower one stat to F, then raise another — point total stays at 6."
+                          ? "Chargen: click a wedge to raise one grade if leftover pts remain (budget 6). Right-click or Shift-click to lower and refund. This is not an advance."
                           : canAffordLevelUp
                             ? "Stand coin is locked here. Fill the playbook track (10) and Take advance, or Level up from pool (−10), for +1 Stand Coin grade."
                             : "Stand coin is locked after chargen. Fill playbook (10) or bank 10 in Available XP, then Take advance / level up from pool."}
@@ -13629,7 +13720,7 @@ const CharacterSheetWrapper = ({
                   </div>
                   ) : null}
 
-                  {/* Session info the table shares with this sheet (wanted, clocks, position/effect when enabled). */}
+                  {/* Session info the table shares with this sheet (wanted, NPC clocks). */}
                   {charCampaign && activeSessionId && (
                     <div
                       style={{
@@ -14061,96 +14152,6 @@ const CharacterSheetWrapper = ({
                           </div>
                         </div>
                       )}
-                      <div style={{ marginBottom: "8px" }}>
-                        <span style={{ fontSize: "11px", color: "#9ca3af" }}>
-                          Clocks:{" "}
-                        </span>
-                        {(charCampaign.progress_clocks || []).filter((clk) =>
-                          isSessionGmSharedProgressClock(
-                            clk,
-                            charCampaign?.gm,
-                            activeSessionId,
-                          ),
-                        ).length > 0 ? (
-                          <div
-                            style={{
-                              display: "flex",
-                              flexWrap: "wrap",
-                              gap: "12px",
-                              alignItems: "center",
-                              marginTop: "4px",
-                            }}
-                          >
-                            {(charCampaign.progress_clocks || [])
-                              .filter((clk) =>
-                                isSessionGmSharedProgressClock(
-                                  clk,
-                                  charCampaign?.gm,
-                                  activeSessionId,
-                                ),
-                              )
-                              .map((clk) => {
-                              const canEdit =
-                                isGM ||
-                                Number(clk.created_by) === Number(user?.id);
-                              return (
-                                <div
-                                  key={clk.id}
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "8px",
-                                  }}
-                                >
-                                  <div style={{ textAlign: "center" }}>
-                                    <ProgressClock
-                                      size={44}
-                                      segments={clk.max_segments}
-                                      filled={clk.filled_segments}
-                                      interactive={canEdit}
-                                      onClick={
-                                        canEdit
-                                          ? (f) => {
-                                              progressClockAPI
-                                                .updateProgressClock(clk.id, {
-                                                  filled_segments: f,
-                                                })
-                                                .then(() =>
-                                                  onCampaignRefresh?.(),
-                                                )
-                                                .catch(() => {});
-                                            }
-                                          : undefined
-                                      }
-                                    />
-                                    <span
-                                      style={{
-                                        fontSize: "10px",
-                                        color: "#6b7280",
-                                        display: "block",
-                                      }}
-                                    >
-                                      {clk.name}
-                                    </span>
-                                    <span
-                                      style={{
-                                        fontSize: "10px",
-                                        color: "#9ca3af",
-                                      }}
-                                    >
-                                      {clk.filled_segments}/{clk.max_segments}
-                                    </span>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: "12px", color: "#6b7280" }}>
-                            None
-                          </span>
-                        )}
-                      </div>
                     </div>
                   )}
 
@@ -19596,6 +19597,10 @@ const CharacterSheetWrapper = ({
                         const gmShared =
                           gmManaged &&
                           (!!clk.visible_to_players || !!clk.visible_to_party);
+                        const segs = clockWedgeCount(clk.segments);
+                        const fill = clampClockFilled(clk.filled, segs);
+                        const canResizeClock =
+                          canEditSheet && (!gmManaged || isGM);
                         return (
                         <div
                           key={clk.id}
@@ -19633,21 +19638,62 @@ const CharacterSheetWrapper = ({
                           >
                             <ProgressClock
                               size={50}
-                              segments={clk.segments}
-                              filled={clk.filled}
-                              interactive
+                              segments={segs}
+                              filled={fill}
+                              interactive={canEditSheet}
                               onClick={(f) =>
                                 setClocks((p) =>
                                   p.map((c) =>
-                                    c.id === clk.id ? { ...c, filled: f } : c,
+                                    c.id === clk.id
+                                      ? {
+                                          ...c,
+                                          filled: clampClockFilled(f, segs),
+                                          filled_segments: clampClockFilled(
+                                            f,
+                                            segs,
+                                          ),
+                                        }
+                                      : c,
                                   ),
                                 )
                               }
                             />
                           </div>
                           <div style={{ fontSize: "10px", color: "#6b7280" }}>
-                            {clk.filled}/{clk.segments}
+                            {fill}/{segs}
                           </div>
+                          {canResizeClock ? (
+                            <label
+                              style={{
+                                display: "flex",
+                                justifyContent: "center",
+                                alignItems: "center",
+                                gap: "4px",
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                marginTop: "4px",
+                              }}
+                            >
+                              Size
+                              <input
+                                type="number"
+                                min={1}
+                                max={12}
+                                title="Clock segments (1–12). −/+ ticks fill, not size."
+                                value={segs}
+                                onChange={(e) =>
+                                  resizeClockSegments(clk.id, e.target.value)
+                                }
+                                style={{
+                                  ...S.inp,
+                                  width: "48px",
+                                  fontSize: "11px",
+                                  textAlign: "center",
+                                  padding: "2px 4px",
+                                }}
+                              />
+                            </label>
+                          ) : null}
                           {gmManaged ? (
                             <div
                               title={

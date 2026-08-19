@@ -24,6 +24,7 @@ from ..models import (
     Session,
     Roll,
     RollHistory,
+    ProgressClock,
 )
 from ..parsers import MultipartJsonParser
 from ..roll_helpers import (
@@ -69,6 +70,7 @@ from ..services.character_history_undo import (
     undo_latest_gm_change,
     undo_latest_sheet_edit,
 )
+from ..services.character_sheet_reset import reset_character_sheet
 
 def _character_queryset_for_user(user):
     """Own PCs plus campaign-visible PCs for this user (staff sees all)."""
@@ -2012,6 +2014,21 @@ class CharacterViewSet(viewsets.ModelViewSet):
             }
         )
 
+    @action(detail=True, methods=["post"], url_path="reset-sheet")
+    def reset_sheet_action(self, request, pk=None):
+        """Reset mechanical sheet to chargen-blank. Keep campaign, name, crew, look, vice."""
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot reset this character.")
+        character = reset_character_sheet(character)
+        return Response(
+            {
+                "success": True,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+            }
+        )
+
     @action(detail=True, methods=["post"], url_path="redo-latest-allocation")
     def redo_latest_allocation_action(self, request, pk=None):
         character = self.get_object()
@@ -2526,23 +2543,42 @@ class CharacterViewSet(viewsets.ModelViewSet):
     def add_progress_clock(self, request, pk=None):
         """Add a progress clock to a character."""
         character = self.get_object()
-        name = request.data.get("name")
-        segments = request.data.get("segments", 4)
+        name = (request.data.get("name") or "").strip()
+        segments = request.data.get("max_segments", request.data.get("segments", 4))
         description = request.data.get("description", "")
 
         if not name:
             return Response(
                 {"error": "Clock name is required"}, status=status.HTTP_400_BAD_REQUEST
             )
-
-        # Add progress clock (simplified - you'd implement actual clock mechanics)
+        try:
+            max_segments = int(segments)
+        except (TypeError, ValueError):
+            max_segments = 4
+        max_segments = max(1, min(12, max_segments))
+        clock = ProgressClock.objects.create(
+            name=name[:100],
+            clock_type=request.data.get("clock_type") or "COUNTDOWN",
+            max_segments=max_segments,
+            filled_segments=0,
+            description=description or "",
+            character=character,
+            campaign_id=character.campaign_id,
+            visible_to_party=bool(request.data.get("visible_to_party")),
+            created_by=request.user if request.user.is_authenticated else None,
+        )
         return Response(
             {
-                "message": f"Added progress clock: {name}",
-                "name": name,
-                "segments": segments,
-                "description": description,
-            }
+                "id": clock.id,
+                "name": clock.name,
+                "max_segments": clock.max_segments,
+                "segments": clock.max_segments,
+                "filled_segments": clock.filled_segments,
+                "filled": clock.filled_segments,
+                "visible_to_party": clock.visible_to_party,
+                "description": clock.description,
+            },
+            status=status.HTTP_201_CREATED,
         )
 
     @action(detail=True, methods=["post"], url_path="update-progress-clock")

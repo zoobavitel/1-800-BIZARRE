@@ -10,7 +10,7 @@ export const getTotalXP = (xpTracks) => {
   return Object.values(xpTracks).reduce((total, xp) => total + xp, 0);
 };
 
-export const createDefaultCharacter = () => ({
+export const createDefaultCharacter = (overrides = {}) => ({
   name: "",
   standName: "",
   heritage: null,
@@ -93,6 +93,8 @@ export const createDefaultCharacter = () => ({
   standForms: [],
   standConsciousness: "",
   playbookXpArchetypes: [],
+  campaign: null,
+  ...overrides,
 });
 
 export const countActionDots = (actionRatings = {}) => {
@@ -384,6 +386,16 @@ export function isGmViewingPlayerCharacterSheet(
   const ownerId = resolveCharacterOwnerUserId(character);
   if (ownerId == null) return true;
   return ownerId !== Number(user.id);
+}
+
+/** Radar grades editable until first XP-bought Stand Coin rank (not locked by action dots). */
+export function isStandCoinChargenEditable({
+  canEditSheet,
+  hasStandPlaybook,
+  standCoinPointsGained,
+} = {}) {
+  if (!canEditSheet || !hasStandPlaybook) return false;
+  return Math.max(0, Number(standCoinPointsGained) || 0) === 0;
 }
 
 export function isUserGmOfCharacterCampaign(user, character, campaigns = []) {
