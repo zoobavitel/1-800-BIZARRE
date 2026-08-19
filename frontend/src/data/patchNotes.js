@@ -4,12 +4,61 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-08-13",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #109 from zoobavitel/fix/remove-legacy-views-py"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-08-12",
+    "version": null,
+    "sections": [
+      {
+        "title": "Documentation",
+        "items": [
+          "sync SRD and SRD_DEV working rules text"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "remove dead characters/views.py monolith"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-08-11",
     "version": null,
     "sections": [
       {
+        "title": "Other",
+        "items": [
+          "Merge pull request #108 from zoobavitel/fix/clock-visible-players-sync",
+          "Merge pull request #107 from zoobavitel/feature/sheet-history-undo-rebased",
+          "Merge pull request #106 from zoobavitel/feature/xp-available-pool-label",
+          "Merge pull request #105 from zoobavitel/feature/xp-available-pool-label",
+          "Merge pull request #101 from zoobavitel/fix/session-xp-settle-for-update-stand",
+          "Merge pull request #104 from zoobavitel/feature/npc-card-click-edit",
+          "Merge origin/master into fix/session-xp-settle-for-update-stand",
+          "Merge pull request #102 from zoobavitel/feature/xp-hybrid-rules-align",
+          "Merge pull request #103 from zoobavitel/feature/npc-clock-edit-segments",
+          "Merge pull request #100 from zoobavitel/feature/stand-playbook-identity"
+        ]
+      },
+      {
         "title": "Fixed",
         "items": [
+          "stop duplicating GM clocks as shared-party on sheet",
+          "sync GM clock player visibility and refresh list faster",
+          "satisfy trauma hydrate exhaustive-deps for CI",
+          "protect sheet ground truth from poll/autosave races",
           "stop poll/autosave wiping XP ticks",
           "ticks spend free pool; drop +1 buttons",
           "tick marks allocate pool xp",
@@ -23,6 +72,19 @@ export const PATCH_NOTES = [
         ]
       },
       {
+        "title": "Tests",
+        "items": [
+          "align XP delete test with sheet AUTO guard",
+          "expect STRUGGLE settle to free pool"
+        ]
+      },
+      {
+        "title": "Documentation",
+        "items": [
+          "refresh patch notes for sheet/XP fixes"
+        ]
+      },
+      {
         "title": "Added",
         "items": [
           "untick XP tracks refunds free pool",
@@ -32,25 +94,6 @@ export const PATCH_NOTES = [
           "open NPC edit on card click",
           "allow editing clock segments after create",
           "hybrid free-pool scorecard and spend options"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #106 from zoobavitel/feature/xp-available-pool-label",
-          "Merge pull request #105 from zoobavitel/feature/xp-available-pool-label",
-          "Merge pull request #101 from zoobavitel/fix/session-xp-settle-for-update-stand",
-          "Merge pull request #104 from zoobavitel/feature/npc-card-click-edit",
-          "Merge origin/master into fix/session-xp-settle-for-update-stand",
-          "Merge pull request #102 from zoobavitel/feature/xp-hybrid-rules-align",
-          "Merge pull request #103 from zoobavitel/feature/npc-clock-edit-segments",
-          "Merge pull request #100 from zoobavitel/feature/stand-playbook-identity"
-        ]
-      },
-      {
-        "title": "Tests",
-        "items": [
-          "expect STRUGGLE settle to free pool"
         ]
       }
     ]
@@ -706,87 +749,6 @@ export const PATCH_NOTES = [
           "enhance layout and accessibility of HomeStandCoin component",
           "enhance HomeStandCoin component layout and accessibility",
           "center stand coin in hero"
-        ]
-      },
-      {
-        "title": "Maintenance",
-        "items": [
-          "update patch notes for SPA routing utilities"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "implement SPA routing utilities and refactor navigation components"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-26",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "add position effect mapping for session actions"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-25",
-    "version": null,
-    "sections": [
-      {
-        "title": "Maintenance",
-        "items": [
-          "update patch notes and package-lock.json"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-24",
-    "version": null,
-    "sections": [
-      {
-        "title": "Maintenance",
-        "items": [
-          "update CI workflow and README for LXC deployment",
-          "update package versions and enhance CI workflow"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-23",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "enhance SessionNPCInvolvement and Roll models with new fields"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-22",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "add CrewHistory model and related functionality",
-          "improve character display and harm editor layout in CampaignManagement",
-          "enhance user profile update and validation"
-        ]
-      },
-      {
-        "title": "Refactored",
-        "items": [
-          "replace line chart with scatter chart for session data visualization"
         ]
       }
     ]
