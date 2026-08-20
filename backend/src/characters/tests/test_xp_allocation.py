@@ -300,6 +300,13 @@ class XPAllocationServiceTests(TestCase):
         with self.assertRaises(XPAllocationError):
             apply_unlock_second_playbook(self.character, secondary_playbook="SPIN")
 
+    def test_unlock_second_playbook_rejects_same_as_primary(self):
+        self.character.playbook = "HAMON"
+        self.character.unallocated_xp = 30
+        self.character.save(update_fields=["playbook", "unallocated_xp"])
+        with self.assertRaises(XPAllocationError):
+            apply_unlock_second_playbook(self.character, secondary_playbook="HAMON")
+
 
 class XPAllocationAPITests(TestCase):
     def setUp(self):
@@ -441,3 +448,16 @@ class XPAllocationAPITests(TestCase):
         self.assertEqual(self.character.secondary_playbook, "SPIN")
         self.assertEqual(self.character.unallocated_xp, 0)
         self.assertTrue(res.data.get("character", {}).get("secondary_playbook_unlocked"))
+
+    def test_unlock_second_playbook_api_rejects_short_pool(self):
+        self.character.unallocated_xp = 29
+        self.character.save(update_fields=["unallocated_xp"])
+        res = self.client.post(
+            f"/api/characters/{self.character.id}/unlock-second-playbook/",
+            {"secondary_playbook": "SPIN"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 400)
+        self.character.refresh_from_db()
+        self.assertIsNone(self.character.secondary_playbook)
+        self.assertEqual(self.character.unallocated_xp, 29)

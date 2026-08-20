@@ -4,6 +4,7 @@ from django.test import TestCase
 from rest_framework.test import APIRequestFactory
 
 from characters.models import Character, Heritage
+from characters.serializers import CharacterSerializer
 from characters.services.xp_allocation import apply_unlock_second_playbook
 
 

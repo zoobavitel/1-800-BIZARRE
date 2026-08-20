@@ -76,6 +76,7 @@ describe("createDefaultCharacter", () => {
       precision: 1,
       development: 1,
     });
+    expect(c.stress).toHaveLength(9);
     expect(c.name).toBe("");
     expect(c.heritage).toBe(null);
     expect(c.campaign).toBe(null);

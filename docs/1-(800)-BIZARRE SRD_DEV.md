@@ -1385,13 +1385,13 @@ When you create your crew, you assign some positive and negative status ratings 
 **ADVANCEMENT**
 
 **PC Advancement:**  
-Each player keeps track of the experience points (xp) that their character earns. A player character sheet has 5 XP tracks: heritage, insight, prowess, resolve, and playbook. Heritage, insight, prowess, and resolve require 5 boxes in order to advance, while the playbook track requires filling 10 boxes in order to advance. If you wish to have abilities from more than 1 playbook, you fill in 10 boxes in your playbook track to advance; you do not add an additional playbook track to your character sheet. 
+Each player keeps track of the experience points (xp) that their character earns. A player character sheet has 5 XP tracks: heritage, insight, prowess, resolve, and playbook. Heritage, insight, prowess, and resolve require 5 boxes in order to advance, while the playbook track requires filling 10 boxes in order to advance. To obtain another playbook, spend **30 XP from Available XP** (the free pool). A single track cannot pay that cost (attribute tracks cap at 5; filling playbook at 10 is a Take advance). You do not add a second playbook XP track. 
 
 During the game session, mark xp:
 
 - When you make a desperate action roll. Mark 1 xp in the attribute for the action you rolled. For example, if you roll a desperate Skirmish action, you mark xp in Prowess. When you roll in a desperate group action, you also mark xp.
 
-- When you make a desperate Stand Coin Roll (Power, Speed, or Precision), mark 1 xp on your playbook track. Durability is a resistance pool, not an action roll. See Stand Coin XP.
+- When you make a desperate Stand Coin Roll (Power, Speed, or Precision), mark 1 xp on your playbook track. When you fill 10, take an advance; leftover marks stay on the cleared track. Durability is a resistance pool, not an action roll. See Stand Coin XP.
 
 At the end of the session, review the xp triggers on your character sheet. For each one, mark 1 xp if it happened at all, or mark 2 xp if it happened a lot during the session. The xp triggers are:
 

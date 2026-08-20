@@ -118,6 +118,24 @@ class CharacterValidationTests(TestCase):
         ):
             character_f_durability.full_clean()
 
+        character_s = self._create_valid_level_1_character()
+        character_s.gm_can_have_s_rank_stand_stats = True
+        character_s.save(update_fields=["gm_can_have_s_rank_stand_stats"])
+        character_s.stand.power = "D"
+        character_s.stand.speed = "F"
+        character_s.stand.range = "F"
+        character_s.stand.durability = "S"
+        character_s.stand.precision = "F"
+        character_s.stand.development = "F"
+        character_s.stand.save()
+        character_s.stress = 9
+        character_s.full_clean()
+        character_s.stress = 8
+        with self.assertRaisesMessage(
+            ValidationError, "Stress must be 9 for a level 1 character."
+        ):
+            character_s.full_clean()
+
     def test_invalid_initial_abilities_count(self):
         character = self._create_valid_level_1_character()
         character.standard_abilities.remove(self.ability3)  # Makes count 2; expected 3

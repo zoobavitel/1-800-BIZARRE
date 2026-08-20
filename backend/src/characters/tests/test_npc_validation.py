@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from rest_framework.test import APIClient
 from rest_framework import status
 from characters.models import Campaign, NPC, Heritage, Benefit, Detriment
+from characters.serializers import NPCSerializer
 
 
 class NPCModelTest(TestCase):
@@ -200,6 +201,16 @@ class NPCVulnerabilityClockTest(TestCase):
         self.assertFalse(hasattr(NPC, "regular_armor_charges"))
         self.assertFalse(hasattr(NPC, "stand_armor_charges"))
         self.assertFalse(hasattr(NPC, "special_armor_charges"))
+        data = NPCSerializer(npc).data
+        for key in (
+            "regular_armor_charges",
+            "stand_armor_charges",
+            "special_armor_charges",
+            "regular_armor_used",
+            "stand_armor_used",
+            "special_armor_used",
+        ):
+            self.assertNotIn(key, data)
 
 
 class NPCMovementSpeedTest(TestCase):

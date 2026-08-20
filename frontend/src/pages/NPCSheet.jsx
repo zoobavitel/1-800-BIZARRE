@@ -1658,11 +1658,6 @@ const NPCSheet = ({
     conflictClocks,
     altClocks,
     vulnFilled,
-    regularUsed,
-    standUsed,
-    specialUsed,
-    hasPhysicalArmorItem,
-    physicalArmorBonusCharges,
     healQualityFortuneDice,
     healAllyPosition,
     healAllyEffect,
@@ -3317,7 +3312,7 @@ const NPCSheet = ({
 
               {/* ════ RIGHT — Clocks + Armor ════ */}
               <div>
-                {/* Durability / Vulnerability (Stand) + Armor (all playbooks) */}
+                {/* Durability / Vulnerability (Stand) */}
                 {playbook === "STAND" && isDurS && (
                   /* S-DURABILITY — No vulnerability clock */
                   <div style={{ ...S.card, border: "2px solid #16a34a" }}>
@@ -3342,67 +3337,6 @@ const NPCSheet = ({
                         "Destroy the Mechanism"
                       </div>
                     </div>
-                    {/* Still show armor for S */}
-                    <div style={{ marginTop: "12px" }}>
-                      <span style={S.lbl}>Armor Charges (S-DUR)</span>
-                      <div
-                        style={{
-                          marginTop: "8px",
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "10px",
-                        }}
-                      >
-                        <NpcPhysicalArmorBlock
-                          shortLabel
-                          hasItem={hasPhysicalArmorItem}
-                          onHasItemChange={(v) => {
-                            setHasPhysicalArmorItem(v);
-                            if (!v) setRegularUsed(0);
-                          }}
-                          bonusCharges={physicalArmorBonusCharges}
-                          onBonusChargesChange={setPhysicalArmorBonusCharges}
-                          regArmorMax={regArmorMax}
-                          regularUsed={regularUsed}
-                          onRegularUsed={setRegularUsed}
-                        />
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: "16px",
-                            justifyContent: "center",
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <ArmorTracker
-                            label="STAND"
-                            max={standArmorMax}
-                            used={standUsed}
-                            onChange={setStandUsed}
-                            color="#0ea5e9"
-                          />
-                          <ArmorTracker
-                            label="SPECIAL"
-                            max={specArmorMax}
-                            used={specialUsed}
-                            onChange={setSpecialUsed}
-                            color="#7c3aed"
-                          />
-                        </div>
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          color: "#6b7280",
-                          textAlign: "center",
-                          marginTop: "6px",
-                        }}
-                      >
-                        Spend BEFORE filling any clock. Physical = −1 harm;
-                        Stand = path armor; Special = negates harm.
-                      </div>
-                    </div>
-
                     {/* Alt win condition clocks */}
                     <div style={{ marginTop: "16px" }}>
                       <div
@@ -3574,7 +3508,7 @@ const NPCSheet = ({
                 )}
 
                 {playbook === "STAND" && !isDurS && (
-                  /* NORMAL DURABILITY — Vulnerability Clock + Armor */
+                  /* NORMAL DURABILITY — Vulnerability Clock */
                   <div style={S.card}>
                     <div
                       style={{
@@ -3700,158 +3634,6 @@ const NPCSheet = ({
                           </div>
                         )}
                       </div>
-
-                      {/* Armor charges */}
-                      <div
-                        style={{
-                          flex: 1,
-                          display: "flex",
-                          flexDirection: "column",
-                          gap: "12px",
-                        }}
-                      >
-                        <div style={{ fontSize: "10px", color: "#9ca3af" }}>
-                          Spend armor charges <strong>before</strong> filling
-                          clocks.
-                        </div>
-                        <NpcPhysicalArmorBlock
-                          shortLabel={false}
-                          hasItem={hasPhysicalArmorItem}
-                          onHasItemChange={(v) => {
-                            setHasPhysicalArmorItem(v);
-                            if (!v) setRegularUsed(0);
-                          }}
-                          bonusCharges={physicalArmorBonusCharges}
-                          onBonusChargesChange={setPhysicalArmorBonusCharges}
-                          regArmorMax={regArmorMax}
-                          regularUsed={regularUsed}
-                          onRegularUsed={setRegularUsed}
-                        />
-                        <ArmorTracker
-                          label="STAND ARMOR"
-                          max={standArmorMax}
-                          used={standUsed}
-                          onChange={setStandUsed}
-                          color="#0ea5e9"
-                        />
-                        <ArmorTracker
-                          label="SPECIAL ARMOR"
-                          max={specArmorMax}
-                          used={specialUsed}
-                          onChange={setSpecialUsed}
-                          color="#7c3aed"
-                        />
-                        <div
-                          style={{
-                            fontSize: "10px",
-                            color: "#4b5563",
-                            lineHeight: "1.5",
-                          }}
-                        >
-                          Physical: Durability baseline + optional GM extra — only
-                          when the physical armor item box is checked
-                          <br />
-                          Stand (Durability): path / Stand armor pool
-                          <br />
-                          Special (Durability): completely negate harm
-                        </div>
-                        <button
-                          onClick={() => {
-                            setRegularUsed(0);
-                            setStandUsed(0);
-                            setSpecialUsed(0);
-                          }}
-                          style={{
-                            ...S.btn,
-                            background: "#1f2937",
-                            color: "#9ca3af",
-                            fontSize: "10px",
-                            alignSelf: "flex-start",
-                          }}
-                        >
-                          Reset Armor
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {playbook !== "STAND" && (
-                  /* Hamon / Spin / Non-Bizarre — physical + special armor only */
-                  <div style={S.card}>
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "baseline",
-                        marginBottom: "10px",
-                      }}
-                    >
-                      <span style={S.lbl}>Armor</span>
-                      <span style={{ fontSize: "10px", color: "#6b7280" }}>
-                        No vulnerability clock (non-Stand)
-                      </span>
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "12px",
-                      }}
-                    >
-                      <div style={{ fontSize: "10px", color: "#9ca3af" }}>
-                        Spend armor charges <strong>before</strong> applying harm.
-                        Physical and special armor come from playbook / standard
-                        abilities — Stand armor is Stand-user only.
-                      </div>
-                      <NpcPhysicalArmorBlock
-                        shortLabel={false}
-                        hasItem={hasPhysicalArmorItem}
-                        onHasItemChange={(v) => {
-                          setHasPhysicalArmorItem(v);
-                          if (!v) setRegularUsed(0);
-                        }}
-                        bonusCharges={physicalArmorBonusCharges}
-                        onBonusChargesChange={setPhysicalArmorBonusCharges}
-                        regArmorMax={regArmorMax}
-                        regularUsed={regularUsed}
-                        onRegularUsed={setRegularUsed}
-                      />
-                      <ArmorTracker
-                        label="SPECIAL ARMOR"
-                        max={specArmorMax}
-                        used={specialUsed}
-                        onChange={setSpecialUsed}
-                        color="#7c3aed"
-                      />
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          color: "#4b5563",
-                          lineHeight: "1.5",
-                        }}
-                      >
-                        Physical: −1 harm charges when a physical armor item is
-                        checked
-                        <br />
-                        Special: completely negate harm
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setRegularUsed(0);
-                          setSpecialUsed(0);
-                        }}
-                        style={{
-                          ...S.btn,
-                          background: "#1f2937",
-                          color: "#9ca3af",
-                          fontSize: "10px",
-                          alignSelf: "flex-start",
-                        }}
-                      >
-                        Reset Armor
-                      </button>
                     </div>
                   </div>
                 )}
@@ -4766,13 +4548,13 @@ const NPCSheet = ({
                         Complements <strong style={{ color: "#94a3b8" }}>
                           Downtime recover
                         </strong>{" "}
-                        above: armor resets, stress clears, long projects, and any
+                        above: stress clears, long projects, and any
                         other between-score upkeep the table tracks for this NPC.
                       </div>
                       <button
                         type="button"
-                        aria-label="Refresh all clocks and armor charges for rest"
-                        title="Clears vulnerability, conflict, and alt clock progress; restores spent regular, stand, and special armor (autosaves)."
+                        aria-label="Refresh all clocks for rest"
+                        title="Clears vulnerability, conflict, and alt clock progress (autosaves)."
                         onClick={refreshRestClocksAndArmor}
                         style={{
                           width: "100%",
@@ -4788,7 +4570,7 @@ const NPCSheet = ({
                           cursor: "pointer",
                         }}
                       >
-                        Refresh clocks & armor charges
+                        Refresh clocks
                       </button>
                     </div>
                   </div>
@@ -5530,8 +5312,6 @@ export default function App() {
       { id: 2, name: "Expose Identity", segments: 6, filled: 0 },
     ],
     altClocks: [],
-    regularUsed: 0,
-    specialUsed: 0,
     abilities: [
       {
         id: 1,

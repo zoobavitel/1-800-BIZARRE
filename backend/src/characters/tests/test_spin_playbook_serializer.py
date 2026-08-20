@@ -6,6 +6,7 @@ from rest_framework.test import APIClient, APIRequestFactory
 
 from characters.models import Ability, Campaign, Character, Heritage, HamonAbility, SpinAbility, Vice
 from characters.serializers import CharacterSerializer
+from characters.services.xp_allocation import apply_unlock_second_playbook
 
 
 class SpinPlaybookAbilitySerializerTests(TestCase):
@@ -122,7 +123,7 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         )
         self.assertFalse(serializer.is_valid())
         self.assertIn('non_field_errors', serializer.errors)
-        self.assertIn('Spin abilities require playbook SPIN.', str(serializer.errors['non_field_errors'][0]))
+        self.assertIn('Spin abilities require playbook SPIN', str(serializer.errors['non_field_errors'][0]))
 
     def test_hamon_ability_fails_when_insufficient_a_count(self):
         hamon_char = Character.objects.create(
@@ -164,7 +165,7 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         )
         self.assertFalse(serializer.is_valid())
         self.assertIn('non_field_errors', serializer.errors)
-        self.assertIn('Hamon abilities require playbook HAMON.', str(serializer.errors['non_field_errors'][0]))
+        self.assertIn('Hamon abilities require playbook HAMON', str(serializer.errors['non_field_errors'][0]))
 
     def test_partial_hamon_ids_without_playbook_uses_instance_playbook(self):
         """Omit playbook, send hamon_ability_ids — validate against instance.playbook."""
@@ -212,9 +213,55 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn('non_field_errors', serializer.errors)
         self.assertIn(
-            'Hamon abilities require playbook HAMON.',
+            'Hamon abilities require playbook HAMON',
             str(serializer.errors['non_field_errors'][0]),
         )
+
+    def test_hamon_abilities_allowed_when_secondary_is_hamon(self):
+        stand_char = Character.objects.create(
+            user=self.user,
+            true_name='StandPlusHamon',
+            heritage=self.heritage,
+            playbook='STAND',
+            coin_stats={k: 'F' for k in ['power', 'speed', 'range', 'durability', 'precision', 'development']},
+            action_dots={},
+            trauma=[],
+            xp_clocks={},
+            stress=0,
+            unallocated_xp=30,
+        )
+        apply_unlock_second_playbook(stand_char, secondary_playbook='HAMON')
+        stand_char.refresh_from_db()
+        serializer = CharacterSerializer(
+            instance=stand_char,
+            data={'hamon_ability_ids': [self.hamon_foundation.id]},
+            partial=True,
+            context={'request': self._request()},
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_spin_abilities_allowed_when_secondary_is_spin(self):
+        stand_char = Character.objects.create(
+            user=self.user,
+            true_name='StandPlusSpin',
+            heritage=self.heritage,
+            playbook='STAND',
+            coin_stats={k: 'F' for k in ['power', 'speed', 'range', 'durability', 'precision', 'development']},
+            action_dots={},
+            trauma=[],
+            xp_clocks={},
+            stress=0,
+            unallocated_xp=30,
+        )
+        apply_unlock_second_playbook(stand_char, secondary_playbook='SPIN')
+        stand_char.refresh_from_db()
+        serializer = CharacterSerializer(
+            instance=stand_char,
+            data={'spin_ability_ids': [self.spin_foundation.id]},
+            partial=True,
+            context={'request': self._request()},
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
 
     def test_heritage_accepts_display_name_string(self):
         """PATCH may send heritage as display name (matches frontend before /heritages/ resolves)."""

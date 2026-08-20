@@ -84,6 +84,24 @@ STAND_ACTION_STAT_KEYS = frozenset({"power", "speed", "precision"})
 STAND_RESIST_STAT_KEYS = frozenset({"durability"})
 STAND_POOL_STAT_KEYS = STAND_ACTION_STAT_KEYS | STAND_RESIST_STAT_KEYS
 
+
+def resistance_stress_cost(dice, *, zero_dice=False):
+    """
+    Stress marked on a resistance roll (user attributes or Durability).
+    Highest 6 costs 0. Two 6s: pay 0 and clear 1 (return -1).
+    0-dice (2d take lower) cannot crit.
+    """
+    cleaned = [int(x) for x in (dice or [])]
+    if not cleaned:
+        return 0
+    if zero_dice:
+        return max(0, 6 - min(cleaned))
+    highest = max(cleaned)
+    sixes = sum(1 for d in cleaned if d == 6)
+    if sixes >= 2:
+        return -1
+    return max(0, 6 - highest)
+
 _STAND_GRADE_TO_DICE = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 4}
 
 

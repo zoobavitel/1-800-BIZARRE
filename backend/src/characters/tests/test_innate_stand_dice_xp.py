@@ -252,8 +252,8 @@ class InnateStandDiceXpTests(TestCase):
             },
             format="json",
         )
-        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
-        self.assertEqual(r.data.get("xp_gained") or 0, 0)
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST, r.data)
+        self.assertIn("Durability", str(r.data))
         self.assertFalse(
             ExperienceTracker.objects.filter(
                 character=self.character, trigger="INNATE"
