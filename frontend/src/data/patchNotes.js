@@ -4,6 +4,26 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-08-19",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "Coin Rolls exclude Durability",
+          "innate stand dice + desperate tracks",
+          "reset, clocks, roster, history UI"
+        ]
+      },
+      {
+        "title": "Maintenance",
+        "items": [
+          "refresh generated patch notes"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-08-13",
     "version": null,
     "sections": [
@@ -733,22 +753,7 @@ export const PATCH_NOTES = [
           "enhance session management and roll handling",
           "add increment wanted action and roll deletion",
           "add roll goal mapping by character",
-          "add action_name field to GroupAction model and update related serializers and views",
-          "enhance NPC routing and campaign management"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-28",
-    "version": null,
-    "sections": [
-      {
-        "title": "Fixed",
-        "items": [
-          "enhance layout and accessibility of HomeStandCoin component",
-          "enhance HomeStandCoin component layout and accessibility",
-          "center stand coin in hero"
+          "add action_name field to GroupAction model and update related serializers and views"
         ]
       }
     ]
