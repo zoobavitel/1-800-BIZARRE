@@ -125,18 +125,6 @@ def build_npc_field_values(npc: NPC) -> dict[str, str]:
     for seg in range(MAX_CLOCK_SEGMENTS):
         values[f"npc_vuln_seg_{seg}"] = _checkbox(seg < min(vuln_cur, vuln_max))
 
-    values["npc_armor_regular"] = (
-        f"{int(npc.regular_armor_used or 0)}/{int(npc.regular_armor_charges)}"
-    )
-    values["npc_armor_stand"] = (
-        f"{int(npc.stand_armor_used or 0)}/{int(npc.stand_armor_charges)}"
-    )
-    values["npc_armor_special"] = (
-        f"{int(npc.special_armor_used or 0)}/{int(npc.special_armor_charges)}"
-    )
-    phys_max = int(npc.regular_armor_charges) if npc.has_physical_armor_item else 0
-    values["npc_armor_physical"] = f"gear bonus {int(npc.physical_armor_bonus_charges or 0)}; pool {phys_max}"
-
     clocks = _clock_rows(npc)[1:5]
     while len(clocks) < 4:
         clocks.append({"name": "", "filled": 0, "segments": 0})

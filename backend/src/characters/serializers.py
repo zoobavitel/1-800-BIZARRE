@@ -1575,9 +1575,13 @@ class CharacterSerializer(serializers.ModelSerializer):
             }
             for c in clocks
         ]
-        from .services.xp_allocation import get_pending_stand_a_reward
+        from .services.xp_allocation import (
+            get_pending_stand_a_reward,
+            second_playbook_unlocked,
+        )
 
         data["pending_stand_a_reward"] = get_pending_stand_a_reward(instance)
+        data["secondary_playbook_unlocked"] = second_playbook_unlocked(instance)
         return data
 
     def validate_coin_boxes(self, value):
@@ -1685,6 +1689,18 @@ class CharacterSerializer(serializers.ModelSerializer):
                         )
                     }
                 )
+            prior = getattr(self.instance, "secondary_playbook", None) if self.instance else None
+            if not prior:
+                from .services.xp_allocation import second_playbook_unlocked
+
+                if not (self.instance and second_playbook_unlocked(self.instance)):
+                    raise serializers.ValidationError(
+                        {
+                            "secondary_playbook": (
+                                "Spend 30 XP (Available XP) to obtain another playbook."
+                            )
+                        }
+                    )
 
         for ha in hamon_ids:
             if count_A < ha.required_a_count:
@@ -1696,10 +1712,16 @@ class CharacterSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     f"Insufficient 'A' ratings: need {sa.required_a_count} 'A' coin stats for Spin ability '{sa.name}' (you have {count_A})."
                 )
-        if hamon_ids and playbook_val != "HAMON":
-            raise serializers.ValidationError("Hamon abilities require playbook HAMON.")
-        if spin_ids and playbook_val != "SPIN":
-            raise serializers.ValidationError("Spin abilities require playbook SPIN.")
+        has_hamon = playbook_val == "HAMON" or secondary_playbook_val == "HAMON"
+        has_spin = playbook_val == "SPIN" or secondary_playbook_val == "SPIN"
+        if hamon_ids and not has_hamon:
+            raise serializers.ValidationError(
+                "Hamon abilities require playbook HAMON (primary or secondary)."
+            )
+        if spin_ids and not has_spin:
+            raise serializers.ValidationError(
+                "Spin abilities require playbook SPIN (primary or secondary)."
+            )
         heritage = data.get("heritage") or getattr(self.instance, "heritage", None)
         # Partial PATCH: merge M2M from instance when keys omitted.
         if "selected_benefits" in data:
@@ -2804,9 +2826,6 @@ class NPCSerializer(serializers.ModelSerializer):
     selected_detriments = serializers.PrimaryKeyRelatedField(
         queryset=Detriment.objects.all(), many=True, required=False
     )
-    regular_armor_charges = serializers.IntegerField(read_only=True)
-    special_armor_charges = serializers.IntegerField(read_only=True)
-    stand_armor_charges = serializers.IntegerField(read_only=True)
     vulnerability_clock_max = serializers.IntegerField(read_only=True)
     vulnerability_clock_current = serializers.IntegerField(required=False)
     image = serializers.FileField(required=False, allow_null=True)
@@ -2859,13 +2878,6 @@ class NPCSerializer(serializers.ModelSerializer):
             "selected_spin_abilities",
             "relationships",
             "vulnerability_clock_current",
-            "armor_charges",
-            "has_physical_armor_item",
-            "physical_armor_bonus_charges",
-            "regular_armor_charges",
-            "regular_armor_used",
-            "stand_armor_used",
-            "special_armor_used",
             "creator",
             "campaign",
             "faction",
@@ -2875,8 +2887,6 @@ class NPCSerializer(serializers.ModelSerializer):
             "stand_appearance",
             "stand_manifestation",
             "special_traits",
-            "special_armor_charges",
-            "stand_armor_charges",
             "vulnerability_clock_max",
             "purveyor",
             "notes",

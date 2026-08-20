@@ -4,7 +4,7 @@ from django.test import TestCase
 from rest_framework.test import APIRequestFactory
 
 from characters.models import Character, Heritage
-from characters.serializers import CharacterSerializer
+from characters.services.xp_allocation import apply_unlock_second_playbook
 
 
 class DualPlaybookSerializerTests(TestCase):
@@ -40,7 +40,7 @@ class DualPlaybookSerializerTests(TestCase):
         serializer = CharacterSerializer(instance=self.char)
         self.assertIsNone(serializer.data.get("secondary_playbook"))
 
-    def test_accepts_distinct_primary_and_secondary(self):
+    def test_rejects_secondary_without_30_xp_spend(self):
         data = {
             "playbook": "HAMON",
             "secondary_playbook": "STAND",
@@ -51,10 +51,25 @@ class DualPlaybookSerializerTests(TestCase):
             partial=True,
             context={"request": self._request()},
         )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn("secondary_playbook", serializer.errors)
+
+    def test_accepts_distinct_primary_and_secondary_after_unlock(self):
+        self.char.unallocated_xp = 30
+        self.char.save(update_fields=["unallocated_xp"])
+        apply_unlock_second_playbook(self.char, secondary_playbook="STAND")
+        self.char.refresh_from_db()
+        self.assertEqual(self.char.secondary_playbook, "STAND")
+        serializer = CharacterSerializer(
+            instance=self.char,
+            data={"playbook": "HAMON", "secondary_playbook": "SPIN"},
+            partial=True,
+            context={"request": self._request()},
+        )
         self.assertTrue(serializer.is_valid(), serializer.errors)
         updated = serializer.save()
         self.assertEqual(updated.playbook, "HAMON")
-        self.assertEqual(updated.secondary_playbook, "STAND")
+        self.assertEqual(updated.secondary_playbook, "SPIN")
 
     def test_rejects_duplicate_playbooks(self):
         data = {

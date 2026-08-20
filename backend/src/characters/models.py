@@ -396,7 +396,7 @@ class NPC(models.Model):
     conflict_clocks = models.JSONField(default=list, blank=True)
     # Alternative win condition clocks
     alt_clocks = models.JSONField(default=list, blank=True)
-    # Armor tracking: physical (body) + stand path + special (negate) — see SRD NPC armor + path armor.
+    # Armor tracking fields kept for existing rows; NPCs no longer compute or expose armor.
     regular_armor_used = models.IntegerField(default=0)
     special_armor_used = models.IntegerField(default=0)
     stand_armor_used = models.IntegerField(default=0)
@@ -438,36 +438,6 @@ class NPC(models.Model):
             "treats or stabilizes someone (downtime or in-play recover), for any "
             "valid patient (self, another NPC, or a campaign PC)."
         ),
-    )
-
-    @property
-    def regular_armor_charges(self):
-        """Physical armor charges: Durability baseline + bonus, only if `has_physical_armor_item`."""
-        if not bool(getattr(self, "has_physical_armor_item", False)):
-            return 0
-        durability_grade = self.stand_coin_stats.get("DURABILITY", "F")
-        base = {"S": 3, "A": 3, "B": 2, "C": 1, "D": 1, "F": 0}.get(durability_grade, 0)
-        bonus = max(
-            0,
-            min(
-                6,
-                int(getattr(self, "physical_armor_bonus_charges", 0) or 0),
-            ),
-        )
-        return base + bonus
-
-    @property
-    def special_armor_charges(self):
-        """Special armor charges from Durability (completely negate harm)."""
-        durability_grade = self.stand_coin_stats.get("DURABILITY", "F")
-        return {"S": 2, "A": 2, "B": 1, "C": 1, "D": 0, "F": 0}.get(durability_grade, 0)
-
-    @property
-    def stand_armor_charges(self):
-        """Stand / path armor pool from Durability (SRD Stand Armor table; separate from physical & special)."""
-        durability_grade = self.stand_coin_stats.get("DURABILITY", "F")
-        return {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 5}.get(
-            durability_grade, 0
         )
 
     @property
@@ -1112,6 +1082,7 @@ class CharacterXPAllocation(models.Model):
         ("LEVEL_UP_HERITAGE", "Level up — heritage ability"),
         ("MINOR_ADVANCE", "Minor advance — action dot"),
         ("BUY_HP", "Buy +1 HP with XP"),
+        ("UNLOCK_SECOND_PLAYBOOK", "Unlock second playbook (30 XP)"),
     ]
 
     XP_TRACK_CHOICES = [

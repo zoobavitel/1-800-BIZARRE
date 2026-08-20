@@ -378,6 +378,12 @@ export const characterAPI = {
       body: JSON.stringify(body),
     }),
 
+  unlockSecondPlaybook: (id, body) =>
+    apiRequest(`/characters/${id}/unlock-second-playbook/`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   buyHpWithXp: (id, body) =>
     apiRequest(`/characters/${id}/buy-hp-with-xp/`, {
       method: "POST",
@@ -1361,6 +1367,10 @@ export const transformBackendToFrontend = (backendCharacter) => {
     secondaryPlaybook: backendCharacter.secondary_playbook
       ? playbookToDisplay(backendCharacter.secondary_playbook)
       : "",
+    secondaryPlaybookUnlocked: Boolean(
+      backendCharacter.secondary_playbook_unlocked ||
+        backendCharacter.secondary_playbook,
+    ),
     playbookXpArchetypes: Array.isArray(backendCharacter.playbook_xp_archetypes)
       ? [...backendCharacter.playbook_xp_archetypes]
       : [],

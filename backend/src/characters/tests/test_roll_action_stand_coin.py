@@ -155,3 +155,18 @@ class RollActionStandCoinTests(TestCase):
         self.actor.refresh_from_db()
         self.assertEqual(self.actor.xp_clocks.get("playbook"), 11)
 
+    def test_stand_coin_rejects_durability_as_action(self):
+        self.client.force_authenticate(user=self.user)
+        url = f"/api/characters/{self.actor.id}/roll-action/"
+        r = self.client.post(
+            url,
+            {
+                "action": "stand_durability",
+                "session_id": self.session.id,
+                "pool_source": "stand_coin",
+                "stand_stat": "durability",
+            },
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST, r.data)
+        self.assertIn("Durability", str(r.data))

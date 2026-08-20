@@ -28,16 +28,6 @@ const GRADE_PTS = { F: 0, D: 1, C: 2, B: 3, A: 4, S: 5 };
 // Durability → Vulnerability Clock segments
 const DUR_VULN_CLOCK = { F: 4, D: 6, C: 8, B: 10, A: 12, S: 0 };
 
-// Durability → Regular armor charges (SRD: F=0, D=1, C=1, B=2, A=3, S=3)
-const DUR_REGULAR_ARMOR = { F: 0, D: 1, C: 1, B: 2, A: 3, S: 3 };
-
-// Durability → Special armor charges (negate harm)
-const DUR_SPECIAL_ARMOR = { F: 0, D: 0, C: 1, B: 1, A: 2, S: 2 };
-
-// Durability → Stand armor charges (path / Stand soak; separate from physical reduce & special negate)
-/** SRD Stand Armor Charges (same table as PC sheet / NPC `stand_armor_charges`). */
-const DUR_STAND_ARMOR = { F: 0, D: 1, C: 2, B: 3, A: 4, S: 5 };
-
 // Power → base harm level + position note
 /** Session involvement rows use `npc` FK from JSON — may be number or string */
 function npcInvMatches(invNpcId, sheetNpcId) {
@@ -586,170 +576,6 @@ function NpcClockAddCard({
   );
 }
 
-// ─── ArmorTracker ─────────────────────────────────────────────────────────────
-
-const ArmorTracker = ({ label, max, used, onChange, color }) => {
-  if (max === 0)
-    return (
-      <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: "10px", color: "#4b5563", fontWeight: "bold" }}>
-          {label}
-        </div>
-        <div style={{ fontSize: "10px", color: "#6b7280" }}>0 charges</div>
-      </div>
-    );
-  return (
-    <div style={{ textAlign: "center" }}>
-      <div
-        style={{
-          fontSize: "10px",
-          color: "#9ca3af",
-          fontWeight: "bold",
-          marginBottom: "4px",
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          display: "flex",
-          gap: "3px",
-          justifyContent: "center",
-          flexWrap: "wrap",
-        }}
-      >
-        {Array.from({ length: max }, (_, i) => (
-          <div
-            key={i}
-            onClick={() => onChange(i < used ? i : i + 1)}
-            title={i < used ? "Spent — click to restore" : "Click to spend"}
-            style={{
-              width: "18px",
-              height: "18px",
-              border: `1px solid ${color}`,
-              cursor: "pointer",
-              background: i < used ? color : "transparent",
-              borderRadius: "2px",
-            }}
-          />
-        ))}
-      </div>
-      <div style={{ fontSize: "10px", color: "#6b7280", marginTop: "2px" }}>
-        {max - used} left
-      </div>
-    </div>
-  );
-};
-
-/** Physical armor only when fiction includes gear; bonus = GM-added charges beyond Durability tier. */
-function NpcPhysicalArmorBlock({
-  shortLabel,
-  hasItem,
-  onHasItemChange,
-  bonusCharges,
-  onBonusChargesChange,
-  regArmorMax,
-  regularUsed,
-  onRegularUsed,
-}) {
-  return (
-    <div
-      style={{
-        textAlign: "left",
-        padding: "8px",
-        background: "#0a0a14",
-        borderRadius: "4px",
-        border: "1px solid #374151",
-      }}
-    >
-      <label
-        style={{
-          display: "flex",
-          alignItems: "flex-start",
-          gap: "8px",
-          fontSize: "10px",
-          color: "#d1d5db",
-          cursor: "pointer",
-          marginBottom: "8px",
-          lineHeight: 1.45,
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={hasItem}
-          onChange={(e) => onHasItemChange(e.target.checked)}
-          style={{ marginTop: "2px" }}
-        />
-        <span>
-          <strong style={{ color: "#fbbf24" }}>Physical armor item</strong> — worn or
-          carried gear that grants −1 harm charges. Leave off when this NPC has no
-          such item.
-        </span>
-      </label>
-      {hasItem ? (
-        <>
-          <ArmorTracker
-            label={shortLabel ? "PHYSICAL" : "PHYSICAL ARMOR"}
-            max={regArmorMax}
-            used={regularUsed}
-            onChange={onRegularUsed}
-            color="#f59e0b"
-          />
-          <label
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "4px",
-              marginTop: "8px",
-              fontSize: "10px",
-              color: "#9ca3af",
-            }}
-          >
-            Extra physical charges (GM, 0–6)
-            <span
-              style={{
-                fontSize: "9px",
-                color: "#6b7280",
-                fontWeight: "normal",
-                lineHeight: 1.4,
-              }}
-            >
-              On top of the Durability baseline — better gear, improvised plating, or
-              a table grant.
-            </span>
-            <input
-              type="number"
-              min={0}
-              max={6}
-              step={1}
-              value={bonusCharges}
-              onChange={(e) => {
-                const v = Math.floor(Number(e.target.value));
-                if (!Number.isFinite(v)) return;
-                onBonusChargesChange(Math.max(0, Math.min(6, v)));
-              }}
-              style={{
-                width: "64px",
-                padding: "4px 6px",
-                borderRadius: "4px",
-                border: "1px solid #4b5563",
-                background: "#111827",
-                color: "#e5e7eb",
-                fontFamily: "monospace",
-                fontSize: "12px",
-              }}
-            />
-          </label>
-        </>
-      ) : (
-        <div style={{ fontSize: "10px", color: "#57534e", textAlign: "center" }}>
-          Physical armor tracker hidden until the item box is checked.
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── NPCSheet ─────────────────────────────────────────────────────────────────
 
 const NPCSheet = ({
@@ -1207,26 +1033,6 @@ const NPCSheet = ({
     npc?.vulnerability_clock_current ?? 0,
   );
 
-  const [regularUsed, setRegularUsed] = useState(
-    npc?.regular_armor_used ?? npc?.regularUsed ?? 0,
-  );
-  const [specialUsed, setSpecialUsed] = useState(
-    npc?.special_armor_used ?? npc?.specialUsed ?? 0,
-  );
-  const [standUsed, setStandUsed] = useState(npc?.stand_armor_used ?? 0);
-
-  const [hasPhysicalArmorItem, setHasPhysicalArmorItem] = useState(
-    () => !!npc?.has_physical_armor_item,
-  );
-  const [physicalArmorBonusCharges, setPhysicalArmorBonusCharges] = useState(
-    () => {
-      const b = Number(npc?.physical_armor_bonus_charges);
-      return Number.isFinite(b)
-        ? Math.max(0, Math.min(6, Math.floor(b)))
-        : 0;
-    },
-  );
-
   const [abilities, setAbilities] = useState(() =>
     normalizeNpcSheetAbilitiesNoStandard(npc?.abilities ?? []),
   );
@@ -1286,13 +1092,6 @@ const NPCSheet = ({
     setSelectedHamonIds(npc?.selected_hamon_abilities ?? []);
     setSelectedSpinIds(npc?.selected_spin_abilities ?? []);
     setAbilities(normalizeNpcSheetAbilitiesNoStandard(npc?.abilities ?? []));
-    setHasPhysicalArmorItem(!!npc?.has_physical_armor_item);
-    const bonusArm = Number(npc?.physical_armor_bonus_charges);
-    setPhysicalArmorBonusCharges(
-      Number.isFinite(bonusArm)
-        ? Math.max(0, Math.min(6, Math.floor(bonusArm)))
-        : 0,
-    );
     const hq = Number(npc?.heal_quality_fortune_dice ?? npc?.healQualityFortuneDice);
     setHealQualityFortuneDice(
       Number.isFinite(hq) && hq >= 1 && hq <= 4 ? hq : 2,
@@ -1579,21 +1378,7 @@ const NPCSheet = ({
 
   const durGrade = stats.durability;
   const vulnSegs = DUR_VULN_CLOCK[durGrade];
-  const baseRegPhysical = DUR_REGULAR_ARMOR[durGrade];
-  const regArmorMax = hasPhysicalArmorItem
-    ? baseRegPhysical +
-      Math.max(
-        0,
-        Math.min(6, Math.floor(Number(physicalArmorBonusCharges) || 0)),
-      )
-    : 0;
-  const specArmorMax = DUR_SPECIAL_ARMOR[durGrade];
-  const standArmorMax = DUR_STAND_ARMOR[durGrade];
   const isDurS = durGrade === "S";
-
-  useEffect(() => {
-    setRegularUsed((u) => (u > regArmorMax ? regArmorMax : u));
-  }, [regArmorMax]);
 
   const powerInfo = POWER_TABLE[stats.power];
   const speedInfo = SPEED_TABLE[stats.speed];
@@ -1609,11 +1394,11 @@ const NPCSheet = ({
       durability:
         isDurS
           ? "⚠ S-DUR: No vulnerability clock — alternative win conditions required"
-          : `${vulnSegs}-seg clock · ${regArmorMax} physical · ${standArmorMax} stand · ${specArmorMax} special`,
+          : `${vulnSegs}-seg vulnerability clock`,
       precision: `Partial → ${PRECISION_TABLE[stats.precision].partial}`,
       development: DEV_TABLE[stats.development].split("—")[0].trim(),
     }),
-    [stats, isDurS, vulnSegs, regArmorMax, standArmorMax, specArmorMax],
+    [stats, isDurS, vulnSegs],
   );
 
   const bumpStandCoinGrade = useCallback((key, delta) => {
@@ -1622,13 +1407,6 @@ const NPCSheet = ({
       const ni = Math.max(0, Math.min(GRADES.length - 1, idx + delta));
       const next = GRADES[ni];
       if (next === p[key]) return p;
-      if (key === "durability") {
-        queueMicrotask(() => {
-          setRegularUsed(0);
-          setSpecialUsed(0);
-          setStandUsed(0);
-        });
-      }
       return { ...p, [key]: next };
     });
   }, []);
@@ -1710,11 +1488,8 @@ const NPCSheet = ({
   const deleteAltClock = (id) =>
     setAltClocks((p) => p.filter((c) => !npcClockIdsMatch(c.id, id)));
 
-  /** Between-score upkeep: full armor boxes + all clock progress cleared (autosaves). */
+  /** Between-score upkeep: clock progress cleared (autosaves). */
   const refreshRestClocksAndArmor = useCallback(() => {
-    setRegularUsed(0);
-    setStandUsed(0);
-    setSpecialUsed(0);
     setVulnFilled(0);
     setConflictClocks((prev) => prev.map((c) => ({ ...c, filled: 0 })));
     setAltClocks((prev) => prev.map((c) => ({ ...c, filled: 0 })));
@@ -1741,14 +1516,6 @@ const NPCSheet = ({
       conflict_clocks: conflictClocks,
       alt_clocks: altClocks,
       vulnerability_clock_current: vulnFilled,
-      regular_armor_used: regularUsed,
-      stand_armor_used: standUsed,
-      special_armor_used: specialUsed,
-      has_physical_armor_item: hasPhysicalArmorItem,
-      physical_armor_bonus_charges: Math.max(
-        0,
-        Math.min(6, Math.floor(Number(physicalArmorBonusCharges) || 0)),
-      ),
       heal_quality_fortune_dice: healQualityFortuneDice,
       heal_recover_in_play_position: healAllyPosition,
       heal_recover_in_play_effect: healAllyEffect,
@@ -1777,11 +1544,6 @@ const NPCSheet = ({
       conflictClocks,
       altClocks,
       vulnFilled,
-      regularUsed,
-      standUsed,
-      specialUsed,
-      hasPhysicalArmorItem,
-      physicalArmorBonusCharges,
       healQualityFortuneDice,
       healAllyPosition,
       healAllyEffect,

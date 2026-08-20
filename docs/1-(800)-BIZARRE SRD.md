@@ -486,7 +486,7 @@ Players can **buy extra HP with XP** instead of taking more detriments.
 
 **The Stand Coin is made of 6 properties, rated F to S, that describe a Stand's capabilities and limits. These properties fall into two categories: Stand Coin Rolls and Stand Coin Passives.**
 
-**Stand Coin Rolls — Power, Speed, Precision, and Durability — are active dice pools. When the fiction calls for something only a Stand can do, or when you want to push beyond what your user could accomplish alone, you roll these instead of your user action ratings. These are parallel rolls, not additions to your user dice.**
+**Stand Coin Rolls — Power, Speed, and Precision — are active dice pools. Durability is not a Coin Action; it is your Stand's resistance pool when the Stand absorbs a consequence. When the fiction calls for something only a Stand can do, or when you want to push beyond what your user could accomplish alone, you roll Power, Speed, or Precision instead of your user action ratings. These are parallel rolls, not additions to your user dice.**
 
 **Stand Coin Passives — Range and Development — define your Stand's parameters. They don't generate dice rolls; the GM reads them to determine what's possible.**
 
@@ -511,61 +511,103 @@ Players can **buy extra HP with XP** instead of taking more detriments.
 
 **STAND COIN ROLLS**
 
-**How Stand Coin Rolls Work:**
+**How Stand Coin Rolls Work**
 
-**When you attempt something only a Stand can do — or want to achieve greater effect than your user alone could manage — you make a Stand Coin Roll using Power, Speed, Precision, or Durability. The fiction determines which applies. These are not interchangeable.**
+When you attempt something at a scale your user cannot reach, you make a Stand Coin Roll using Power, Speed, or Precision. The fiction determines which applies. These are not interchangeable. They are parallel rolls, not additions to your user dice. Durability is not a Coin Action.
 
-**Grade Gates: Some actions require a minimum grade to attempt at all. The GM calls this. A D-Power Stand cannot punch through a skyscraper — that action is simply unavailable. A B-Power Stand can attempt it, but starts at reduced position or effect.**
+**Obstacle Tiers**
 
-**Stand Roll Benefit: When you use a Stand Coin Roll for something your user *could* have attempted with an action roll, you gain either \+position or \+effect — GM's call based on what the fiction supports. Not both.**
+Every obstacle has a tier, F through A. Before you roll, the GM names the tier. Compare your grade against it.
 
-**Stand-on-Stand Combat: Only Stand abilities, bizarre powers, or similarly supernatural forces can damage a Stand directly. User actions don't apply against a Stand — you need your Coin Rolls. This creates a tactical choice: target the Stand (requires your dice pool) or find and expose the user (opens up all your user actions).**
+| Your grade vs. obstacle | Result |
+| ----- | ----- |
+| Two or more tiers above | No roll. You accomplish it. |
+| One tier above | Increased effect |
+| At tier | Standard effect |
+| One tier below | Reduced effect |
+| Two or more tiers below | Gated. You cannot attempt it with this Coin Roll. |
 
-**Innate function:** A desperate Power, Speed, or Precision Stand Coin Roll marks 1 playbook XP with no session or track cap. Durability is a resistance pool, not an action roll; Range and Development are passives.
+F-rank in a Coin Roll gates you out of that category entirely. Use the corresponding user action instead.
+
+***This is the whole of the Stand's mechanical advantage over a user action. A Coin Roll does not grant position or effect for being a Stand roll — it grants them by out-scaling the obstacle, which a user action rating never does at any dot count.***
+
+**Stand-on-Stand Combat**
+
+Only Stand abilities, bizarre powers, or similarly supernatural forces can damage a Stand directly. User actions don't apply against a Stand — you need your Coin Rolls. When your Coin Roll opposes another Stand, that Stand's grade in the relevant stat is the obstacle tier. Two Stands of equal grade produce standard position and standard effect.
+
+This creates a tactical choice: target the Stand (requires your dice pool) or find and expose the user (opens up all your user actions).
+
+**XP**
+
+Each desperate Stand Coin Roll marks 1 XP on your playbook track. When the track fills, clear it and take the advance; carry any excess marks onto the cleared track.
+
+**Innate function:** A desperate Power, Speed, or Precision Stand Coin Roll marks 1 playbook XP with no session cap. Filling 10 takes an advance; leftover marks stay on the cleared track. Durability is a resistance pool, not an action roll; Range and Development are passives.
 
 ---
 
 **POWER**
 
-***Used when your Stand applies force beyond human scale — destruction, impact, overwhelming physical pressure.***
+*Used when your Stand applies force beyond human scale — destruction, impact, overwhelming physical pressure.*
 
-**Roll Power dice when demolishing structures or barriers, delivering Stand-scale strikes, or overpowering something through sheer force.**
+Roll Power when demolishing structures or barriers, delivering Stand-scale strikes, or overpowering something through sheer force.
 
-**Grade reference (gate thresholds):**
+**Obstacle tiers:**
 
-* **A: Can demolish large buildings and city blocks**  
-* **B: Can destroy reinforced structures and thick concrete**  
-* **C: Can shatter stone and heavy structural materials**  
-* **D: Can break through standard materials (wood, metal plating)**  
-* **F: Human-level force — use Wreck or Skirmish instead**  
-  ---
+| Tier | Obstacle |
+| ----- | ----- |
+| A | City blocks, large buildings, landscape |
+| B | Reinforced structures, thick concrete, armored vehicles |
+| C | Stone, brick, heavy structural material |
+| D | Wood, sheet metal, standard doors and barriers |
+| F | Anything a strong person could break — use Wreck or Skirmish |
+
+---
 
 **SPEED**
 
-***Used when your Stand moves, reacts, or acts at a pace no human body can match.***
+*Used when your Stand moves, reacts, or acts at a pace no human body can match.*
 
-**Roll Speed dice when intercepting something before it can be perceived, crossing distance in an instant, or reacting to threats faster than normal physics allows.**
+Roll Speed when intercepting something before it can be perceived, crossing distance in an instant, or reacting to threats faster than normal physics allows.
 
-**Movement: Heritage sets your user's base movement speed. If your Stand is physical, its Speed grade determines its movement range. Non-physical Stands use heritage movement.**
+**Movement:** Heritage sets your user's base movement speed. If your Stand is physical, its Speed grade determines its movement range. Non-physical Stands use heritage movement.
 
-**Grade reference (movement):**
+| Grade | Movement |
+| ----- | ----- |
+| A | 60(120)ft, push to dash |
+| B | 40(80)ft, push to dash |
+| C | 35(70)ft, push to dash |
+| D | 30(60)ft, push to dash |
+| F | 25(50)ft — use heritage speed |
 
-* **A: 60(120)ft, push yourself to dash**  
-* **B: 40(80)ft, push yourself to dash**  
-* **C: 35(70)ft, push yourself to dash**  
-* **D: 30(60)ft, push yourself to dash**  
-* **F: 25(50)ft — use heritage speed instead**  
-  ---
+**Obstacle tiers:**
+
+| Tier | Obstacle |
+| ----- | ----- |
+| A | Events already in progress — a bullet in flight, an ability mid-activation |
+| B | Faster than the eye tracks — a speeding vehicle, a thrown blade |
+| C | Fast human action — a gun being drawn, someone sprinting |
+| D | Ordinary human pace — a closing door, someone walking off |
+| F | Nothing time-pressured — use Prowl or Finesse |
+
+---
 
 PRECISION
 
 *Used when your Stand performs actions requiring accuracy or control beyond human capability.*
 
-Roll Precision dice when targeting a specific point with surgical accuracy, performing fine manipulation at Stand scale, or executing a technique that demands exact control.
+Roll Precision when targeting a specific point with surgical accuracy, performing fine manipulation at Stand scale, or executing a technique that demands exact control.
 
-Precision also covers Stand-aided perception — detecting details, trajectories, or targets that require your Stand's senses rather than your own. A high-Precision Stand can perceive things no human eye could catch: movement too fast to follow, details too small to see, weaknesses invisible to normal sight. This is your Stand doing the looking, not you. *(Think: Joseph Joestar and Hermit Purple — it's the Stand perceiving, not the user.)*
+Precision also covers Stand-aided perception — detecting details, trajectories, or targets that require your Stand's senses rather than your own. This is your Stand doing the looking, not you. *(Joseph Joestar and Hermit Purple — it's the Stand perceiving, not the user.)*
 
-At D or F, the GM may rule that precision-dependent Stand actions carry automatic consequences or aren't available.
+**Obstacle tiers:**
+
+| Tier | Obstacle |
+| ----- | ----- |
+| A | Targets that shouldn't be targetable — a point inside a moving body, one component in a running machine |
+| B | Inhuman accuracy under pressure — a lock's pins, a nerve cluster, a moving target at range |
+| C | Fine work past trained human limits — a hairline flaw, a pocket taken without contact |
+| D | Careful work a steady hand could manage |
+| F | Ordinary accuracy — use Finesse, Study, or Hunt |
 
 ---
 
@@ -573,9 +615,17 @@ At D or F, the GM may rule that precision-dependent Stand actions carry automati
 
 *Used when your Stand absorbs damage before it mirrors through to you.*
 
-When your Stand takes a hit from another Stand, roll your Durability dice. Spend stress equal to 6 minus the highest result — the same structure as a standard resistance roll, but using your Stand's Coin dice instead of a user attribute. High Durability means the Stand eats the hit. Low Durability means it passes through hard. Rolling a 6 still means you mark 1 stress, but if you roll two 6’s, you resist for free. Your stand can roll to resist incoming damage within its range. 
+Durability is not a Coin Action — you never roll it to accomplish something. It is your Stand's resistance pool, standing in for a user Attribute when your Stand absorbs the blow.
 
-*If you have 0 Durability dice (F-rank), roll 2d and take the lowest result.*
+**Interposing.** When you would resist a physical consequence with **Prowess**, you may instead put your Stand in the way and roll **Durability**. Resolve the roll normally: 6 minus your highest die in stress. A single 6 costs 0 stress. Two or more 6s: pay 0 and clear 1 stress.
+
+Three conditions must hold:
+
+* **The threat is physical.** Consequences you would resist with Insight or Resolve — deception, fear, mental intrusion, bizarre influence — cannot be blocked by Durability. Your Stand's body is no defense against them.  
+* **The threat is within your Range grade.** Your Stand cannot block what it cannot reach.  
+* **Your Stand is available to act.** If it's out of position elsewhere, you may pay **2 stress** to recall it, then roll.
+
+*If you have 0 Durability dice (F-rank), roll 2d and take the lowest result. A 0-dice roll cannot be critical.*
 
 Stand Armor: Durability also determines your Stand's armor charges. When you check a Stand Armor charge, you reduce a consequence against your Stand by 1 level. Stand Armor cannot be used to protect your user from direct attacks.
 
@@ -616,13 +666,7 @@ Determines XP gain and capacity for growth.
 
 NPC STAND COIN STATS
 
-NPC stats are GM-facing parameters. NPCs don't roll Stand Coin dice — the GM reads their grades to set harm levels, determine what actions are available, and adjudicate **consequences.**
-
-**NPCs can carry any combination of Regular Armor, Stand Armor, and Special Armor depending on their nature and threat level.**
-
-* **Regular Armor — physical armor. Checked to reduce a consequence by 1 level.**  
-* **Stand Armor — defensive capability of the Stand. Checked to reduce a Stand-hit consequence by 1 level.**  
-* **Special Armor — flat negation. The attack bounces off entirely. GM tool only.**
+NPC stats are GM-facing parameters. NPCs don't roll Stand Coin dice — the GM reads their grades to set harm levels, determine what actions are available, and adjudicate **consequences.** NPCs do not track armor charges.
 
 **Power — Determines harm level and impact:**
 
@@ -642,12 +686,6 @@ NPC stats are GM-facing parameters. NPCs don't roll Stand Coin dice — the GM r
 * **A: 12 segments | B: 10 segments | C: 8 segments | D: 6 segments | F: 4 segments**
 
 **\*S-Durability Alternative Win Condition: e.g., "Expose User" / "Break Stand Logic" / "Discover Weakness" (8-segment clock)**
-
-**Stand Armor charges (Clock ÷ 3, rounded down): S=5, A=4, B=3, C/D=2, F=1**
-
-**Special Armor charges: S/A=3, B=2, C/D=1, F=0**
-
-**GM spends armor charges before filling Vulnerability Clock segments.**
 
 **Precision:**
 
@@ -669,7 +707,7 @@ NPC stats are GM-facing parameters. NPCs don't roll Stand Coin dice — the GM r
 **STRESS & TRAUMA**
 
 **STRESS:**  
-Player characters in 1(800)Bizarre have a special reserve of 9 tokens called **stress**. If you are a stand user, your durability dictates the number of stress tokens you’d have. When they suffer a consequence that they don’t want to accept, they can take stress instead. The result of a **resistance check** determines how much stress it costs to avoid a bad outcome.
+Player characters in 1(800)Bizarre have a special reserve of 9 tokens called **stress**. Stand Durability does not change how many stress boxes you have. When they suffer a consequence that they don’t want to accept, they can take stress instead. The result of a **resistance check** determines how much stress it costs to avoid a bad outcome.
 
 *During an All-Out-Brawl, Daniel’s character, Cross, gets stabbed in the chest. Daniel rolls his **Prowess** rating to resist, and gets a **2**. It costs 6 stress, minus 2 (the result of the resistance check) to resist the consequences. Daniel marks off 4 stress and describes how Cross survives.*
 
@@ -1350,13 +1388,13 @@ When you create your crew, you assign some positive and negative status ratings 
 **ADVANCEMENT**
 
 **PC Advancement:**  
-Each player keeps track of the experience points (xp) that their character earns. A player character sheet has 5 XP tracks: heritage, insight, prowess, resolve, and playbook. Heritage, insight, prowess, and resolve require 5 boxes in order to advance, while the playbook track requires filling 10 boxes in order to advance. If you wish to have abilities from more than 1 playbook, you fill in 10 boxes in your playbook track to advance; you do not add an additional playbook track to your character sheet. 
+Each player keeps track of the experience points (xp) that their character earns. A player character sheet has 5 XP tracks: heritage, insight, prowess, resolve, and playbook. Heritage, insight, prowess, and resolve require 5 boxes in order to advance, while the playbook track requires filling 10 boxes in order to advance. To obtain another playbook, spend **30 XP from Available XP** (the free pool). A single track cannot pay that cost (attribute tracks cap at 5; filling playbook at 10 is a Take advance). You do not add a second playbook XP track. 
 
 During the game session, mark xp:
 
 - When you make a desperate action roll. Mark 1 xp in the attribute for the action you rolled. For example, if you roll a desperate Skirmish action, you mark xp in Prowess. When you roll in a desperate group action, you also mark xp.
 
-- **Innate (Stand Coin):** When you make a desperate action roll using **Power, Speed, or Precision** stand dice, mark 1 xp on your **playbook** track. This is an innate stand function, not a purchased ability. It is **not capped** by session or by the 10-box playbook fill — leftover marks remain after you take an advance. Range, Durability, and Development Potential do not grant this (you do not action-roll those).
+- When you make a desperate Stand Coin Roll (Power, Speed, or Precision), mark 1 xp on your playbook track. When you fill 10, take an advance; leftover marks stay on the cleared track. Durability is a resistance pool, not an action roll. See Stand Coin XP.
 
 At the end of the session, review the xp triggers on your character sheet. For each one, mark 1 xp if it happened at all, or mark 2 xp if it happened a lot during the session. The xp triggers are:
 

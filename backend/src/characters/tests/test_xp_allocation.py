@@ -8,6 +8,7 @@ from characters.services.xp_allocation import (
     apply_gm_forced_stand_stat,
     apply_level_up,
     apply_minor_advance,
+    apply_unlock_second_playbook,
     complete_pending_stand_a_reward,
     get_pending_stand_a_reward,
     list_allocations,
@@ -278,6 +279,27 @@ class XPAllocationServiceTests(TestCase):
         self.assertIn(self.std_a.id, ids)
         self.assertIn(self.std_b.id, ids)
 
+    def test_unlock_second_playbook_costs_30_from_pool(self):
+        self.character.unallocated_xp = 30
+        self.character.save(update_fields=["unallocated_xp"])
+        alloc = apply_unlock_second_playbook(
+            self.character, secondary_playbook="HAMON"
+        )
+        self.character.refresh_from_db()
+        self.assertEqual(alloc.allocation_type, "UNLOCK_SECOND_PLAYBOOK")
+        self.assertEqual(self.character.unallocated_xp, 0)
+        self.assertEqual(self.character.secondary_playbook, "HAMON")
+        undo_allocation(self.character, alloc)
+        self.character.refresh_from_db()
+        self.assertIsNone(self.character.secondary_playbook)
+        self.assertEqual(self.character.unallocated_xp, 30)
+
+    def test_unlock_second_playbook_rejects_short_pool(self):
+        self.character.unallocated_xp = 10
+        self.character.save(update_fields=["unallocated_xp"])
+        with self.assertRaises(XPAllocationError):
+            apply_unlock_second_playbook(self.character, secondary_playbook="SPIN")
+
 
 class XPAllocationAPITests(TestCase):
     def setUp(self):
@@ -405,3 +427,17 @@ class XPAllocationAPITests(TestCase):
         self.character.refresh_from_db()
         self.assertEqual(self.character.unallocated_xp, 0)
         self.assertEqual(self.character.bonus_hp_from_xp, 1)
+
+    def test_unlock_second_playbook_api(self):
+        self.character.unallocated_xp = 30
+        self.character.save(update_fields=["unallocated_xp"])
+        res = self.client.post(
+            f"/api/characters/{self.character.id}/unlock-second-playbook/",
+            {"secondary_playbook": "SPIN"},
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.secondary_playbook, "SPIN")
+        self.assertEqual(self.character.unallocated_xp, 0)
+        self.assertTrue(res.data.get("character", {}).get("secondary_playbook_unlocked"))

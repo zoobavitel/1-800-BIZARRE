@@ -18,6 +18,7 @@ TRACK_CAPS = {
 }
 LEVEL_UP_COST = 10
 MINOR_ADVANCE_COST = 5
+SECOND_PLAYBOOK_COST = 30
 
 STAND_STAT_FIELDS = (
     "power",
@@ -156,6 +157,7 @@ def _snapshot(character):
         "heritage_points_gained": int(character.heritage_points_gained or 0),
         "bonus_hp_from_xp": int(character.bonus_hp_from_xp or 0),
         "unallocated_xp": int(character.unallocated_xp or 0),
+        "secondary_playbook": character.secondary_playbook,
     }
 
 
@@ -173,6 +175,8 @@ def _restore_snapshot(character, snap, *, restore_xp_clocks=True):
     character.bonus_hp_from_xp = int(snap.get("bonus_hp_from_xp") or 0)
     if "unallocated_xp" in snap:
         character.unallocated_xp = int(snap.get("unallocated_xp") or 0)
+    if "secondary_playbook" in snap:
+        character.secondary_playbook = snap.get("secondary_playbook") or None
     character.advancement_ability_grants = list(
         snap.get("advancement_ability_grants") or []
     )
@@ -332,6 +336,9 @@ def allocation_summary(allocation):
     if allocation.allocation_type == "MINOR_ADVANCE":
         action = meta.get("action", "")
         return f"{base} · +1 {action.upper()} dot"
+    if allocation.allocation_type == "UNLOCK_SECOND_PLAYBOOK":
+        pb = meta.get("secondary_playbook", "")
+        return f"{base} · unlock second playbook ({pb})"
     return base
 
 
@@ -642,6 +649,63 @@ def apply_buy_hp(character, *, xp_track=None, from_pool=False):
     return allocation
 
 
+def second_playbook_unlocked(character):
+    """True if the character already has, or has paid 30 XP for, a second playbook."""
+    if getattr(character, "secondary_playbook", None):
+        return True
+    return CharacterXPAllocation.objects.filter(
+        character=character,
+        allocation_type="UNLOCK_SECOND_PLAYBOOK",
+        undone_at__isnull=True,
+    ).exists()
+
+
+@transaction.atomic
+def apply_unlock_second_playbook(character, *, secondary_playbook, from_pool=True):
+    """Spend 30 XP from the free pool to gain a second playbook."""
+    pb = str(secondary_playbook or "").strip().upper()
+    if pb not in ("STAND", "HAMON", "SPIN"):
+        raise XPAllocationError(
+            "secondary_playbook must be STAND, HAMON, or SPIN."
+        )
+    if pb == str(character.playbook or "").strip().upper():
+        raise XPAllocationError(
+            "Secondary playbook must differ from primary playbook."
+        )
+    if second_playbook_unlocked(character):
+        raise XPAllocationError("Second playbook is already unlocked.")
+
+    before = _snapshot(character)
+    source = _spend_xp_source(
+        character,
+        xp_track="playbook",
+        from_pool=True,
+        cost=SECOND_PLAYBOOK_COST,
+    )
+    character.total_xp_spent = int(character.total_xp_spent or 0) + SECOND_PLAYBOOK_COST
+    character.secondary_playbook = pb
+
+    allocation = CharacterXPAllocation.objects.create(
+        character=character,
+        allocation_type="UNLOCK_SECOND_PLAYBOOK",
+        xp_track="playbook",
+        xp_cost=SECOND_PLAYBOOK_COST,
+        payload_before=before,
+        payload_after={},
+        metadata={
+            "secondary_playbook": pb,
+            "from_pool": source == "pool",
+            "xp_track": "playbook",
+        },
+    )
+    after = _snapshot(character)
+    allocation.payload_after = after
+    allocation.save(update_fields=["payload_after"])
+    character.save()
+    allocation.refresh_from_db()
+    return allocation
+
+
 @transaction.atomic
 def undo_allocation(character, allocation, *, user=None):
     if allocation.undone_at:
@@ -662,7 +726,12 @@ def undo_allocation(character, allocation, *, user=None):
         )
 
     _restore_snapshot(character, allocation.payload_before, restore_xp_clocks=False)
-    _refund_xp_for_undo(character, allocation.xp_track, allocation.xp_cost)
+    meta = allocation.metadata or {}
+    if meta.get("from_pool"):
+        # Snapshot already restored unallocated_xp; do not also refund a track.
+        pass
+    else:
+        _refund_xp_for_undo(character, allocation.xp_track, allocation.xp_cost)
     character.save()
     allocation.undone_at = timezone.now()
     allocation.undone_by = user

@@ -257,7 +257,7 @@ function computeResistanceSummary(diceResults) {
   const highest = sorted.length ? Math.max(...sorted) : 0;
   const sixes = sorted.filter((d) => d === 6).length;
   const isCritical = sixes >= 2;
-  const stressCost = isCritical ? -1 : Math.max(1, 6 - highest);
+  const stressCost = isCritical ? -1 : Math.max(0, 6 - highest);
   const outcome = isCritical
     ? "CRITICAL_SUCCESS"
     : highest >= 6
@@ -2274,6 +2274,12 @@ const CharacterSheetWrapper = ({
   const [secondaryPlaybook, setSecondaryPlaybook] = useState(
     character?.secondaryPlaybook || "",
   );
+  const [secondaryPlaybookUnlocked, setSecondaryPlaybookUnlocked] = useState(
+    Boolean(character?.secondaryPlaybookUnlocked || character?.secondaryPlaybook),
+  );
+  const [pendingSecondPlaybook, setPendingSecondPlaybook] = useState("");
+  const [unlockSecondBusy, setUnlockSecondBusy] = useState(false);
+  const [unlockSecondError, setUnlockSecondError] = useState(null);
 
   const hasStandPlaybook =
     playbook === "Stand" || secondaryPlaybook === "Stand";
@@ -2431,6 +2437,11 @@ const CharacterSheetWrapper = ({
       setPlaybook(character.playbook);
     }
     setSecondaryPlaybook(character?.secondaryPlaybook || "");
+    setSecondaryPlaybookUnlocked(
+      Boolean(character?.secondaryPlaybookUnlocked || character?.secondaryPlaybook),
+    );
+    setPendingSecondPlaybook("");
+    setUnlockSecondError(null);
   }, [character?.id, character?.playbook, character?.secondaryPlaybook]);
 
   const [standType, setStandType] = useState(character?.standType || "");
@@ -3296,6 +3307,17 @@ const CharacterSheetWrapper = ({
     if (fe.standStats) setStandStats(fe.standStats);
     if (fe.actionRatings) setActionRatings(fe.actionRatings);
     if (fe.abilities) setAbilities(fe.abilities);
+    if (typeof fe.secondaryPlaybook === "string") {
+      setSecondaryPlaybook(fe.secondaryPlaybook);
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(fe, "secondaryPlaybookUnlocked") ||
+      fe.secondaryPlaybook
+    ) {
+      setSecondaryPlaybookUnlocked(
+        Boolean(fe.secondaryPlaybookUnlocked || fe.secondaryPlaybook),
+      );
+    }
     if (
       Object.prototype.hasOwnProperty.call(
         backendChar,
@@ -3806,13 +3828,40 @@ const CharacterSheetWrapper = ({
     try {
       const res = await characterAPI.applyLevelUp(characterId, body);
       if (res?.character) applyBackendCharacter(res.character);
-      if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
+      if (Array.isArray(res?.allocations))       setXpAllocationRows(res.allocations);
       setShowLevelUp(false);
       setLevelUpLockTrack(null);
     } catch (err) {
       setLevelUpError(err?.message || "Level up failed");
     } finally {
       setLevelUpBusy(false);
+    }
+  };
+
+  const unlockSecondPlaybook = async () => {
+    if (!characterId || unlockSecondBusy) return;
+    const pick = pendingSecondPlaybook || secondaryPlaybook;
+    if (!pick) {
+      setUnlockSecondError("Pick which playbook to gain.");
+      return;
+    }
+    if (unallocatedXp < 30) {
+      setUnlockSecondError("Need 30 Available XP.");
+      return;
+    }
+    setUnlockSecondBusy(true);
+    setUnlockSecondError(null);
+    try {
+      const res = await characterAPI.unlockSecondPlaybook(characterId, {
+        secondary_playbook: pick.toUpperCase(),
+      });
+      if (res?.character) applyBackendCharacter(res.character);
+      if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
+      setPendingSecondPlaybook("");
+    } catch (err) {
+      setUnlockSecondError(err?.message || "Could not unlock second playbook");
+    } finally {
+      setUnlockSecondBusy(false);
     }
   };
 
@@ -7434,17 +7483,11 @@ const CharacterSheetWrapper = ({
       outcome = offlineDowntimeHeal ? "" : outcomeApiToSheetDisplay(apiOut);
     }
 
-    /** User resistance critical = clear stress (-1 sentinel). Durability resist: SRD_DEV two sixes ⇒ 0 spent; otherwise 6−highest, min 1. */
+    /** Resistance: 6 − highest (a 6 costs 0). Two 6s: pay 0 and clear 1 (−1 sentinel). */
     const stressCost = isResistance
-      ? extras &&
-          typeof extras === "object" &&
-          extras.durabilityStandResistance
-        ? sixes >= 2
-          ? 0
-          : Math.max(1, 6 - highest)
-        : isCritical
-          ? -1
-          : Math.max(1, 6 - highest)
+      ? isCritical
+        ? -1
+        : Math.max(0, 6 - highest)
       : null;
     const resistanceExtraStress =
       isResistance &&
@@ -12918,11 +12961,26 @@ const CharacterSheetWrapper = ({
                         ))}
                       </select>
                       <select
-                        value={secondaryPlaybook}
-                        onChange={(e) => setSecondaryPlaybook(e.target.value)}
+                        value={
+                          secondaryPlaybookUnlocked
+                            ? secondaryPlaybook
+                            : pendingSecondPlaybook
+                        }
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (!secondaryPlaybookUnlocked) {
+                            setPendingSecondPlaybook(next);
+                            return;
+                          }
+                          setSecondaryPlaybook(next);
+                        }}
                         style={S.sel}
                         aria-label="Secondary playbook"
-                        title="Optional second playbook"
+                        title={
+                          secondaryPlaybookUnlocked
+                            ? "Second playbook"
+                            : "Spend 30 Available XP to obtain another playbook"
+                        }
                       >
                         <option value="">—</option>
                         {PLAYBOOK_SHEET_OPTIONS.filter((opt) => opt !== playbook).map(
@@ -12934,6 +12992,49 @@ const CharacterSheetWrapper = ({
                         )}
                       </select>
                     </div>
+                    {!secondaryPlaybookUnlocked ? (
+                      <div
+                        style={{
+                          marginTop: "8px",
+                          fontSize: "10px",
+                          color: "#9ca3af",
+                          lineHeight: 1.45,
+                        }}
+                      >
+                        Second playbook costs 30 Available XP (have {unallocatedXp}).
+                        {unlockSecondError ? (
+                          <div style={{ color: "#f87171", marginTop: "4px" }}>
+                            {unlockSecondError}
+                          </div>
+                        ) : null}
+                        <button
+                          type="button"
+                          disabled={
+                            !canEditSheet ||
+                            unlockSecondBusy ||
+                            unallocatedXp < 30 ||
+                            !pendingSecondPlaybook
+                          }
+                          onClick={() => void unlockSecondPlaybook()}
+                          style={{
+                            ...S.btn,
+                            marginTop: "6px",
+                            fontSize: "10px",
+                            opacity:
+                              !canEditSheet ||
+                              unlockSecondBusy ||
+                              unallocatedXp < 30 ||
+                              !pendingSecondPlaybook
+                                ? 0.5
+                                : 1,
+                          }}
+                        >
+                          {unlockSecondBusy
+                            ? "Unlocking…"
+                            : "Spend 30 XP to gain this playbook"}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                   {hasStandPlaybook && (
                     <div
@@ -16079,10 +16180,11 @@ const CharacterSheetWrapper = ({
                         {resistancePoolPreview?.modeStandDurability ? (
                           <>
                             When your <strong>Stand</strong> takes a hit, resist with
-                            Durability dice (SRD_DEV). Stress:{" "}
-                            <code style={{ color: "#9ca3af" }}>6 − highest die</code>{" "}
-                            (minimum 1 on a single six;{" "}
-                            <strong>two sixes</strong> = resist for free). Apply to the
+                            Durability dice (SRD_DEV).                             Stress:{" "}
+                            <code style={{ color: "#9ca3af" }}>6 − highest die</code>
+                            {" "}(a 6 costs 0;{" "}
+                            <strong>two sixes</strong> = resist free and clear 1
+                            stress). Apply to the
                             Stand&apos;s consequence; use Stand Armor charges separately
                             if marking armor.
                           </>

@@ -99,17 +99,13 @@ export const useDiceRolling = (characterId, xpTracks, setXpTracks) => {
       const dice1 = Math.floor(Math.random() * 6) + 1;
       const dice2 = Math.floor(Math.random() * 6) + 1;
       const result = Math.min(dice1, dice2);
-      const zeroDiceSixes =
-        dice1 === 6 && dice2 === 6 ? 2 : dice1 === 6 || dice2 === 6 ? 1 : 0;
 
       let outcome = "Failure";
       if (result >= 6) outcome = "Success";
       else if (result >= 4) outcome = "Partial Success";
 
       const zeroDiceResistanceStress = isResistanceRoll
-        ? zeroDiceSixes >= 2
-          ? -1
-          : Math.max(1, 6 - result)
+        ? Math.max(0, 6 - result)
         : null;
 
       setDiceResult({
@@ -140,7 +136,7 @@ export const useDiceRolling = (characterId, xpTracks, setXpTracks) => {
 
       const resistanceStress =
         isResistanceRoll &&
-        (sixes >= 2 ? -1 : Math.max(1, 6 - highest));
+        (sixes >= 2 ? -1 : Math.max(0, 6 - highest));
 
       setDiceResult({
         action: actionName,

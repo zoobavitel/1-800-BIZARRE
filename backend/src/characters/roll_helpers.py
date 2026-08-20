@@ -80,7 +80,9 @@ def recovery_healing_clock_segments(pool_before_roll, dice_results=None):
     return segments, out_dice, highest, critical, band
 
 
-STAND_POOL_STAT_KEYS = frozenset({"power", "speed", "precision", "durability"})
+STAND_ACTION_STAT_KEYS = frozenset({"power", "speed", "precision"})
+STAND_RESIST_STAT_KEYS = frozenset({"durability"})
+STAND_POOL_STAT_KEYS = STAND_ACTION_STAT_KEYS | STAND_RESIST_STAT_KEYS
 
 _STAND_GRADE_TO_DICE = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 4}
 

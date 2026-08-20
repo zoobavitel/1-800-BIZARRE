@@ -28,7 +28,7 @@ from ..models import (
 )
 from ..parsers import MultipartJsonParser
 from ..roll_helpers import (
-    STAND_POOL_STAT_KEYS,
+    STAND_ACTION_STAT_KEYS,
     action_rating_from_action_dots,
     award_desperate_action_xp,
     award_heritage_expression_xp,
@@ -54,6 +54,7 @@ from ..services.xp_allocation import (
     apply_gm_forced_stand_stat,
     apply_level_up,
     apply_minor_advance,
+    apply_unlock_second_playbook,
     complete_pending_stand_a_reward,
     get_pending_stand_a_reward,
     list_allocations,
@@ -85,16 +86,8 @@ def _character_queryset_for_user(user):
 _character_queryset_detail = _character_queryset_for_user
 
 def _max_stress_for_character(character):
-    """Stress capacity from durability grade (SRD baseline: 9, modified by DUR)."""
-    grade = None
-    stand = getattr(character, "stand", None)
-    if stand is not None:
-        grade = getattr(stand, "durability", None)
-    if not grade:
-        coin_stats = getattr(character, "coin_stats", None) or {}
-        if isinstance(coin_stats, dict):
-            grade = coin_stats.get("durability") or coin_stats.get("DURABILITY")
-    return {"S": 13, "A": 12, "B": 11, "C": 10, "D": 9, "F": 8}.get(grade, 9)
+    """Stress track length. Durability does not change box count (always 9)."""
+    return max_stress_slots_for_character(character)
 
 def _user_may_edit_character(user, character):
     if user.is_staff:
@@ -998,17 +991,18 @@ class CharacterViewSet(viewsets.ModelViewSet):
                             "error": (
                                 "Stand coin dice use roll_type ACTION with "
                                 "pool_source stand_coin and stand_stat "
-                                "(power|speed|precision|durability)."
+                                "(power|speed|precision)."
                             )
                         },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-                if stand_stat_requested not in STAND_POOL_STAT_KEYS:
+                if stand_stat_requested not in STAND_ACTION_STAT_KEYS:
                     return Response(
                         {
                             "error": (
-                                "stand_stat must be power, speed, precision, "
-                                "or durability when pool_source is stand_coin."
+                                "stand_stat must be power, speed, or precision "
+                                "when pool_source is stand_coin. Durability is "
+                                "a resistance pool, not a Coin Action."
                             )
                         },
                         status=status.HTTP_400_BAD_REQUEST,
@@ -1874,6 +1868,41 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     character,
                     xp_track=request.data.get("xp_track"),
                     from_pool=bool(request.data.get("from_pool")),
+                )
+            finally:
+                reset_character_history_editor(token)
+        except XPAllocationError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "allocation": CharacterXPAllocationSerializer(
+                    allocation,
+                    context={
+                        "latest_undoable_allocation_id": allocation.id,
+                    },
+                ).data,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="unlock-second-playbook")
+    def unlock_second_playbook_action(self, request, pk=None):
+        """Spend 30 XP from Available XP to gain a second playbook."""
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot advance this character.")
+
+        try:
+            token = bind_character_history_editor(request.user)
+            try:
+                allocation = apply_unlock_second_playbook(
+                    character,
+                    secondary_playbook=request.data.get("secondary_playbook"),
+                    from_pool=True,
                 )
             finally:
                 reset_character_history_editor(token)
