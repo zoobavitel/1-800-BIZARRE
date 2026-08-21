@@ -2442,7 +2442,12 @@ const CharacterSheetWrapper = ({
     );
     setPendingSecondPlaybook("");
     setUnlockSecondError(null);
-  }, [character?.id, character?.playbook, character?.secondaryPlaybook]);
+  }, [
+    character?.id,
+    character?.playbook,
+    character?.secondaryPlaybook,
+    character?.secondaryPlaybookUnlocked,
+  ]);
 
   const [standType, setStandType] = useState(character?.standType || "");
   const [standTypeCustom, setStandTypeCustom] = useState(
