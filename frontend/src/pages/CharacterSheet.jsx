@@ -3283,6 +3283,42 @@ const CharacterSheetWrapper = ({
   const CHARGEN_LEVEL_PROMPT =
     "begin allocating your action dots / playbook requirements (stand coin stats allocation)";
 
+  /** Sheet standards only (not heritage / Stand Recall / advancement grants). */
+  const sheetStandardCount = useMemo(
+    () => (abilities || []).filter((a) => a?.type === "standard").length,
+    [abilities],
+  );
+  const hasSheetCustomPackage = useMemo(
+    () =>
+      (abilities || []).some(
+        (a) => a?.type === "custom" && !a._fromAdvancement,
+      ),
+    [abilities],
+  );
+  // SRD L1: Stand = 1 standard + 2 per A-rank; Hamon/Spin = 1 standard. Custom = one unique package.
+  // Hide add buttons when L1 quota is full; show again if the player deletes a pick.
+  // After L1, + Standard stays available for XP-bought standards.
+  const maxL1StandardAbilities =
+    playbook === "Stand" ? 1 + aRankCount * 2 : 1;
+  const showAddStandardButton =
+    canEditSheet &&
+    (pcLevel > 1 || sheetStandardCount < maxL1StandardAbilities);
+  const showAddCustomButton = canEditSheet && !hasSheetCustomPackage;
+
+  useEffect(() => {
+    if (!showAddStandardButton) {
+      setStandardAbilityPickerOpen(false);
+      setStandardAbilitySelected(null);
+      setStandardAbilitySearch("");
+    }
+  }, [showAddStandardButton]);
+
+  useEffect(() => {
+    if (!showAddCustomButton) {
+      setCustomAbilityModal(null);
+    }
+  }, [showAddCustomButton]);
+
   // PC
 
   const getAttributeDice = (actions) =>
@@ -18512,6 +18548,7 @@ const CharacterSheetWrapper = ({
                       }}
                     >
                       {/* Standard: button opens popover (search + list + preview) */}
+                      {showAddStandardButton ? (
                       <div
                         style={{ position: "relative" }}
                         ref={standardAbilityPickerRef}
@@ -18749,6 +18786,7 @@ const CharacterSheetWrapper = ({
                           </div>
                         )}
                       </div>
+                      ) : null}
                       {isSpinPlaybook && (
                         <div
                           style={{ position: "relative" }}
@@ -19316,6 +19354,7 @@ const CharacterSheetWrapper = ({
                           )}
                         </div>
                       )}
+                      {showAddCustomButton ? (
                       <button
                         type="button"
                         onClick={() => {
@@ -19340,6 +19379,7 @@ const CharacterSheetWrapper = ({
                       >
                         + Custom
                       </button>
+                      ) : null}
                       {customAbilityModal && (
                         <div
                           style={{
