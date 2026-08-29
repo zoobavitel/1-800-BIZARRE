@@ -32,6 +32,7 @@ import {
   normalizeCharacterInventory,
   resolveCharacterCampaignContext,
   isUserCampaignGmForCharacter,
+  mergeAbilitiesPreferRicherCustoms,
 } from "../features/character-sheet";
 import { subscribeCampaignEvents } from "../features/character-sheet/services/campaignEvents";
 import { useAuth } from "../features/auth";
@@ -977,6 +978,14 @@ export default function CharacterPage({
             }
             return fromPayload || savedFrontend.sheetNotes || "";
           })(),
+          // Prefer richer payload customs when echo lost/weakened the unique package.
+          abilities: mergeAbilitiesPreferRicherCustoms(
+            Array.isArray(frontend.abilities) ? frontend.abilities : [],
+            Array.isArray(savedFrontend.abilities)
+              ? savedFrontend.abilities
+              : [],
+            { emptyPreferredClearsCustoms: true },
+          ),
         };
         updateActiveCharTab(merged.id, merged);
         await loadCharacters();

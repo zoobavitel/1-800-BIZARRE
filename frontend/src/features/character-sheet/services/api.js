@@ -1336,12 +1336,16 @@ export const transformBackendToFrontend = (backendCharacter) => {
           const name =
             (desc || extra[0]?.name || "Custom Ability").trim() ||
             "Custom Ability";
-          const uses =
-            extra.length >= 3
-              ? extra.map((u) => u.description || u)
-              : desc
-                ? [desc]
-                : ["", "", ""];
+          let uses;
+          if (extra.length >= 3) {
+            uses = extra.map((u) => u.description || u);
+          } else if (extra.length > 0) {
+            uses = extra.map((u) => u.description || u);
+            while (uses.length < 3) uses.push("");
+          } else {
+            // Pad so FE→BE round-trip keeps custom-single (_uses.length >= 3)
+            uses = [desc, "", ""];
+          }
           return [
             {
               id: "custom-single",
@@ -1662,38 +1666,66 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     hamon_ability_ids: abilityIdsByType(abilitiesList, "hamon"),
     spin_ability_ids: abilityIdsByType(abilitiesList, "spin"),
 
-    // Custom abilities (SRD: 3x1 or 1x3)
+    // Custom abilities (SRD: 3x1 or 1x3). Ignore advancement grants — those live on
+    // advancement_ability_grants and must not clear or shadow sheet custom_* fields.
     ...(function () {
-      const customs = (frontendCharacter.abilities || []).filter(
-        (a) => a.type === "custom",
+      const sheetCustoms = (frontendCharacter.abilities || []).filter(
+        (a) => a.type === "custom" && !a._fromAdvancement,
       );
-      if (customs.length === 0) {
+      if (sheetCustoms.length === 0) {
         return {
           custom_ability_type: "single_with_3_uses",
           custom_ability_description: "",
           extra_custom_abilities: [],
         };
       }
-      const single = customs.find((a) => a.id === "custom-single" || a._uses);
-      if (single && single._uses && single._uses.length >= 3) {
+      const padUses = (raw, n) => {
+        const uses = Array.isArray(raw)
+          ? raw.map((d) => (d == null ? "" : String(d)))
+          : [];
+        while (uses.length < n) uses.push("");
+        return uses.slice(0, n);
+      };
+      const single3 = sheetCustoms.find((a) => a.id === "custom-single");
+      if (single3) {
         return {
           custom_ability_type: "single_with_3_uses",
-          custom_ability_description: single.name || "",
-          extra_custom_abilities: single._uses.map((d) => ({ description: d })),
+          custom_ability_description:
+            single3.name || single3._description || "",
+          extra_custom_abilities: padUses(single3._uses, 3).map((d) => ({
+            description: d,
+          })),
         };
       }
-      const three = customs.filter(
-        (a) =>
-          !a._uses &&
-          (String(a.id || "").startsWith("custom-") || a.type === "custom"),
+      const single2 = sheetCustoms.find((a) => a.id === "custom-single-2");
+      if (single2) {
+        return {
+          custom_ability_type: "single_with_2_uses",
+          custom_ability_description:
+            single2.name || single2._description || "",
+          extra_custom_abilities: padUses(single2._uses, 2).map((d) => ({
+            description: d,
+          })),
+        };
+      }
+      const legacyUses = sheetCustoms.find(
+        (a) => Array.isArray(a._uses) && a._uses.length >= 3,
       );
+      if (legacyUses) {
+        return {
+          custom_ability_type: "single_with_3_uses",
+          custom_ability_description: legacyUses.name || "",
+          extra_custom_abilities: padUses(legacyUses._uses, 3).map((d) => ({
+            description: d,
+          })),
+        };
+      }
+      const three = sheetCustoms.filter((a) => !Array.isArray(a._uses));
       if (three.length >= 1) {
-        const items = three
-          .slice(0, 3)
-          .map((a) => ({
-            name: a.name || "",
-            description: a.description || "",
-          }));
+        const items = three.slice(0, 3).map((a) => ({
+          name: a.name || "",
+          description: a.description || "",
+        }));
         while (items.length < 3) items.push({ name: "", description: "" });
         return {
           custom_ability_type: "three_separate_uses",
@@ -1701,11 +1733,14 @@ export const transformFrontendToBackend = (frontendCharacter) => {
           extra_custom_abilities: items,
         };
       }
+      // Sheet customs present but unrecognized shape — prefer explicit fields over wipe
       return {
         custom_ability_type:
           frontendCharacter.custom_ability_type || "single_with_3_uses",
         custom_ability_description:
-          frontendCharacter.custom_ability_description || "",
+          frontendCharacter.custom_ability_description ||
+          sheetCustoms[0]?.name ||
+          "",
         extra_custom_abilities: frontendCharacter.extra_custom_abilities || [],
       };
     })(),

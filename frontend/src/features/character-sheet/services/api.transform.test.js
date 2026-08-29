@@ -12,6 +12,7 @@ import {
   buildMultipartOrJson,
   isImageUploadPayload,
 } from "./api";
+import { mergeAbilitiesPreferRicherCustoms } from "../utils/characterUtils";
 
 /** Minimal sheet-like object for transform coverage (spin_playbook_abilities_ui). */
 function makeSheet(overrides = {}) {
@@ -246,6 +247,102 @@ describe("transformFrontendToBackend playbook and playbook abilities", () => {
     );
     expect(out.extra_custom_abilities).toEqual([]);
     expect(out.custom_ability_description).toBe("");
+  });
+
+  test("persists custom-single package even when advancement customs also present", () => {
+    const out = transformFrontendToBackend(
+      makeSheet({
+        abilities: [
+          {
+            id: "advancement-9",
+            type: "custom",
+            name: "B→A grant",
+            _uses: ["use a", "use b"],
+            _fromAdvancement: true,
+          },
+          {
+            id: "custom-single",
+            type: "custom",
+            name: "monkey",
+            _uses: ["punch", "kick", "bite"],
+          },
+        ],
+      }),
+    );
+    expect(out.custom_ability_type).toBe("single_with_3_uses");
+    expect(out.custom_ability_description).toBe("monkey");
+    expect(out.extra_custom_abilities).toEqual([
+      { description: "punch" },
+      { description: "kick" },
+      { description: "bite" },
+    ]);
+  });
+
+  test("pads short custom-single _uses so round-trip does not clear package", () => {
+    const fe = transformBackendToFrontend({
+      custom_ability_type: "single_with_3_uses",
+      custom_ability_description: "monkey",
+      extra_custom_abilities: [],
+    });
+    const custom = fe.abilities.find((a) => a.id === "custom-single");
+    expect(custom).toBeTruthy();
+    expect(custom._uses.length).toBe(3);
+    const out = transformFrontendToBackend(makeSheet({ abilities: fe.abilities }));
+    expect(out.custom_ability_description).toBe("monkey");
+    expect(out.extra_custom_abilities).toHaveLength(3);
+  });
+
+  test("persists three separate custom abilities package", () => {
+    const out = transformFrontendToBackend(
+      makeSheet({
+        abilities: [
+          {
+            id: "custom-0",
+            type: "custom",
+            name: "Ora",
+            description: "Barrage",
+          },
+          {
+            id: "custom-1",
+            type: "custom",
+            name: "Star Finger",
+            description: "Extend",
+          },
+          {
+            id: "custom-2",
+            type: "custom",
+            name: "Time Stop",
+            description: "Za Warudo",
+          },
+        ],
+      }),
+    );
+    expect(out.custom_ability_type).toBe("three_separate_uses");
+    expect(out.extra_custom_abilities).toEqual([
+      { name: "Ora", description: "Barrage" },
+      { name: "Star Finger", description: "Extend" },
+      { name: "Time Stop", description: "Za Warudo" },
+    ]);
+  });
+
+  test("ignores only-advancement customs when deciding clear vs keep sheet fields", () => {
+    const out = transformFrontendToBackend(
+      makeSheet({
+        abilities: [
+          {
+            id: "advancement-1",
+            type: "custom",
+            name: "Grant",
+            _uses: ["a", "b"],
+            _fromAdvancement: true,
+          },
+        ],
+        custom_ability_description: "stale",
+        extra_custom_abilities: [{ description: "stale" }],
+      }),
+    );
+    expect(out.custom_ability_description).toBe("");
+    expect(out.extra_custom_abilities).toEqual([]);
   });
 });
 
@@ -493,5 +590,53 @@ describe("buildMultipartOrJson", () => {
     });
     expect(multipart).toBe(false);
     expect(JSON.parse(body).image).toBe(null);
+  });
+});
+
+describe("mergeAbilitiesPreferRicherCustoms", () => {
+  test("keeps local unique package when server echo drops it", () => {
+    const local = [
+      { id: 1, type: "standard", name: "Guardian Angel" },
+      {
+        id: "custom-single",
+        type: "custom",
+        name: "monkey",
+        _uses: ["a", "b", "c"],
+      },
+    ];
+    const server = [{ id: 1, type: "standard", name: "Guardian Angel" }];
+    const merged = mergeAbilitiesPreferRicherCustoms(local, server);
+    expect(merged.some((a) => a.name === "monkey")).toBe(true);
+  });
+
+  test("save wipe: empty preferred clears customs despite stale server echo", () => {
+    const payload = [{ id: 1, type: "standard", name: "Guardian Angel" }];
+    const server = [
+      { id: 1, type: "standard", name: "Guardian Angel" },
+      {
+        id: "custom-single",
+        type: "custom",
+        name: "monkey",
+        _uses: ["a", "b", "c"],
+      },
+    ];
+    const merged = mergeAbilitiesPreferRicherCustoms(payload, server, {
+      emptyPreferredClearsCustoms: true,
+    });
+    expect(merged.some((a) => a.type === "custom")).toBe(false);
+  });
+
+  test("hydrate: empty local yields to server customs", () => {
+    const local = [];
+    const server = [
+      {
+        id: "custom-0",
+        type: "custom",
+        name: "Ora",
+        description: "Barrage",
+      },
+    ];
+    const merged = mergeAbilitiesPreferRicherCustoms(local, server);
+    expect(merged.some((a) => a.name === "Ora")).toBe(true);
   });
 });
