@@ -51,6 +51,7 @@ import {
   isUserCampaignGmForCharacter,
   isGmViewingPlayerCharacterSheet,
   isStandCoinChargenEditable as standCoinChargenUnlocked,
+  mergeAbilitiesPreferRicherCustoms,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -3381,7 +3382,12 @@ const CharacterSheetWrapper = ({
     }
     if (fe.standStats) setStandStats(fe.standStats);
     if (fe.actionRatings) setActionRatings(fe.actionRatings);
-    if (fe.abilities) setAbilities(fe.abilities);
+    if (fe.abilities) {
+      // XP/claim responses can omit a just-saved unique package; keep richer local customs.
+      setAbilities((prev) =>
+        mergeAbilitiesPreferRicherCustoms(prev, fe.abilities),
+      );
+    }
     if (typeof fe.secondaryPlaybook === "string") {
       setSecondaryPlaybook(fe.secondaryPlaybook);
     }
@@ -3407,7 +3413,12 @@ const CharacterSheetWrapper = ({
       xp: fe.xp,
       standStats: fe.standStats,
       actionRatings: fe.actionRatings,
-      abilities: fe.abilities,
+      abilities: fe.abilities
+        ? mergeAbilitiesPreferRicherCustoms(
+            Array.isArray(prev.abilities) ? prev.abilities : [],
+            fe.abilities,
+          )
+        : prev.abilities,
       standCoinPointsGained: fe.standCoinPointsGained,
       actionDiceGained: fe.actionDiceGained,
       unallocatedXp:
@@ -7962,6 +7973,11 @@ const CharacterSheetWrapper = ({
         if (!payload.id && !hasMeaningfulDraftChanges(payload)) {
           return;
         }
+        // Superseded by a newer draft — do not PUT/PATCH stale abilities (would wipe customs).
+        if (myGen !== draftGenRef.current) {
+          pendingResaveRef.current = true;
+          return;
+        }
         // Skip save if payload matches last saved (prevents loop from server response overwriting fields)
         const { lastModified, _fieldTouches, ...rest } = payload;
         const payloadKey = JSON.stringify(rest);
@@ -7971,6 +7987,12 @@ const CharacterSheetWrapper = ({
         savingRef.current = true;
         setSaveStatus("saving");
         try {
+          // Re-check after debounce/busy gaps: another edit may have landed.
+          if (myGen !== draftGenRef.current) {
+            pendingResaveRef.current = true;
+            setSaveStatus(null);
+            return;
+          }
           await onSave(payload);
           // Clear touch flags only for fields this save included.
           const touches = payload._fieldTouches || {};
@@ -18460,11 +18482,12 @@ const CharacterSheetWrapper = ({
                             <button
                               type="button"
                               aria-label={`Remove ${ab.name || "ability"}`}
-                              onClick={() =>
+                              onClick={() => {
+                                markDirtyIntent();
                                 setAbilities((p) =>
                                   p.filter((_, i) => i !== ab._uiIndex),
-                                )
-                              }
+                                );
+                              }}
                               style={{
                                 color: "#f87171",
                                 background: "none",
@@ -18697,6 +18720,7 @@ const CharacterSheetWrapper = ({
                                           a.id === standardAbilitySelected.id,
                                       )
                                     ) {
+                                      markDirtyIntent();
                                       setAbilities((p) => [
                                         ...p,
                                         {
@@ -18964,6 +18988,7 @@ const CharacterSheetWrapper = ({
                                                     spinAbilitySelected.id,
                                               )
                                             ) {
+                                              markDirtyIntent();
                                               setAbilities((p) => [
                                                 ...p,
                                                 {
@@ -19246,6 +19271,7 @@ const CharacterSheetWrapper = ({
                                                     hamonAbilitySelected.id,
                                               )
                                             ) {
+                                              markDirtyIntent();
                                               setAbilities((p) => [
                                                 ...p,
                                                 {
@@ -19565,8 +19591,14 @@ const CharacterSheetWrapper = ({
                                   <button
                                     onClick={() => {
                                       if (!canSave) return;
+                                      markDirtyIntent();
                                       setAbilities((p) => [
-                                        ...p.filter((a) => a.type !== "custom"),
+                                        // Keep advancement grants; only replace sheet custom package
+                                        ...p.filter(
+                                          (a) =>
+                                            a.type !== "custom" ||
+                                            a._fromAdvancement,
+                                        ),
                                         ...(prev.type === "single_with_3_uses"
                                           ? [
                                               {

@@ -16,5 +16,7 @@ export {
   isGmViewingPlayerCharacterSheet,
   isUserGmOfCharacterCampaign,
   isStandCoinChargenEditable,
+  sheetCustomAbilityContentScore,
+  mergeAbilitiesPreferRicherCustoms,
 } from "./utils/characterUtils";
 export * from "./services/api";

@@ -394,6 +394,72 @@ export function isStandCoinChargenEditable({
   return Math.max(0, Number(standCoinPointsGained) || 0) === 0;
 }
 
+/**
+ * Score non-empty sheet custom ability content (excludes advancement grants).
+ * Used to prefer a local/payload package over a weak server echo that would wipe it.
+ */
+export function sheetCustomAbilityContentScore(abilities) {
+  if (!Array.isArray(abilities)) return 0;
+  let score = 0;
+  for (const a of abilities) {
+    if (!a || a.type !== "custom" || a._fromAdvancement) continue;
+    if (String(a.name || "").trim()) score += 2;
+    if (String(a.description || a._description || "").trim()) score += 1;
+    if (Array.isArray(a._uses)) {
+      for (const u of a._uses) {
+        if (String(u == null ? "" : u).trim()) score += 1;
+      }
+    }
+  }
+  return score;
+}
+
+/**
+ * Merge abilities lists: keep richer sheet custom package when the other side is empty/weaker.
+ * Advancement grants prefer `fallback` when present, else `preferred`.
+ *
+ * @param {object} [options]
+ * @param {boolean} [options.emptyPreferredClearsCustoms] When true (save echo merge),
+ *   an empty preferred sheet-custom list clears customs even if fallback still has them.
+ *   When false (XP/hydrate), empty preferred yields to fallback so server customs appear.
+ */
+export function mergeAbilitiesPreferRicherCustoms(
+  preferred,
+  fallback,
+  options = {},
+) {
+  const emptyPreferredClearsCustoms = Boolean(
+    options.emptyPreferredClearsCustoms,
+  );
+  const pref = Array.isArray(preferred) ? preferred : [];
+  const fall = Array.isArray(fallback) ? fallback : [];
+  const isSheetCustom = (a) => a && a.type === "custom" && !a._fromAdvancement;
+  const prefCustoms = pref.filter(isSheetCustom);
+  const prefScore = sheetCustomAbilityContentScore(pref);
+  const fallScore = sheetCustomAbilityContentScore(fall);
+
+  if (prefCustoms.length === 0) {
+    if (emptyPreferredClearsCustoms) {
+      const nonCustom = fall.filter((a) => a?.type !== "custom");
+      const advancement = fall.filter((a) => a?._fromAdvancement);
+      return [...nonCustom, ...advancement];
+    }
+    return fall.length > 0 ? fall : pref;
+  }
+
+  if (prefScore >= fallScore) {
+    const nonCustom = fall.filter((a) => a?.type !== "custom");
+    const advancement = fall.filter((a) => a?._fromAdvancement);
+    const prefAdv = pref.filter((a) => a?._fromAdvancement);
+    return [
+      ...nonCustom,
+      ...prefCustoms,
+      ...(advancement.length ? advancement : prefAdv),
+    ];
+  }
+  return fall.length > 0 ? fall : pref;
+}
+
 export function isUserGmOfCharacterCampaign(user, character, campaigns = []) {
   if (user?.id == null || character?.id == null) return false;
   const { campaignId, campaignRecord } = resolveCharacterCampaignContext(

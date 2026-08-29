@@ -938,7 +938,17 @@ class Character(models.Model):
         std_count = self.standard_abilities.count()
         has_custom = bool(
             (self.custom_ability_description or "").strip()
-            or (self.custom_ability_type or "").strip()
+            or (
+                isinstance(self.extra_custom_abilities, list)
+                and any(
+                    (
+                        str((item or {}).get("name") or "").strip()
+                        if isinstance(item, dict)
+                        else str(item or "").strip()
+                    )
+                    for item in self.extra_custom_abilities
+                )
+            )
         )
 
         if pb in ("HAMON", "SPIN"):
