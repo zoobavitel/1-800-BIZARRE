@@ -396,7 +396,7 @@ class NPC(models.Model):
     conflict_clocks = models.JSONField(default=list, blank=True)
     # Alternative win condition clocks
     alt_clocks = models.JSONField(default=list, blank=True)
-    # Armor tracking: physical (body) + stand path + special (negate) — see SRD NPC armor + path armor.
+    # Armor tracking fields kept for existing rows; NPCs no longer compute or expose armor.
     regular_armor_used = models.IntegerField(default=0)
     special_armor_used = models.IntegerField(default=0)
     stand_armor_used = models.IntegerField(default=0)
@@ -438,36 +438,6 @@ class NPC(models.Model):
             "treats or stabilizes someone (downtime or in-play recover), for any "
             "valid patient (self, another NPC, or a campaign PC)."
         ),
-    )
-
-    @property
-    def regular_armor_charges(self):
-        """Physical armor charges: Durability baseline + bonus, only if `has_physical_armor_item`."""
-        if not bool(getattr(self, "has_physical_armor_item", False)):
-            return 0
-        durability_grade = self.stand_coin_stats.get("DURABILITY", "F")
-        base = {"S": 3, "A": 3, "B": 2, "C": 1, "D": 1, "F": 0}.get(durability_grade, 0)
-        bonus = max(
-            0,
-            min(
-                6,
-                int(getattr(self, "physical_armor_bonus_charges", 0) or 0),
-            ),
-        )
-        return base + bonus
-
-    @property
-    def special_armor_charges(self):
-        """Special armor charges from Durability (completely negate harm)."""
-        durability_grade = self.stand_coin_stats.get("DURABILITY", "F")
-        return {"S": 2, "A": 2, "B": 1, "C": 1, "D": 0, "F": 0}.get(durability_grade, 0)
-
-    @property
-    def stand_armor_charges(self):
-        """Stand / path armor pool from Durability (SRD Stand Armor table; separate from physical & special)."""
-        durability_grade = self.stand_coin_stats.get("DURABILITY", "F")
-        return {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 5}.get(
-            durability_grade, 0
         )
 
     @property
@@ -698,6 +668,14 @@ class Character(models.Model):
     heavy_armor_used = models.BooleanField(default=False)
     # SRD_DEV: Stand path armor (Durability) vs physical gear — see NPC `stand_armor_*` / `has_physical_armor_item`.
     stand_armor_used = models.IntegerField(default=0)
+    spin_armor_used = models.IntegerField(
+        default=0,
+        help_text="Spin Armor charges used this score (max 3 for Spin path).",
+    )
+    hamon_armor_used = models.IntegerField(
+        default=0,
+        help_text="Hamon Armor charges used this score (max 3 for Hamon path).",
+    )
     has_physical_armor_item = models.BooleanField(
         default=False,
         help_text=(
@@ -819,13 +797,15 @@ class Character(models.Model):
 
     def clean(self):
         super().clean()
+        pb = str(self.playbook or "STAND").upper()
         if self.level == 1 and self._is_level_1_configured():
             self._validate_action_dots_distribution()
-            self._validate_stand_coin_stats()
-            self._validate_stress_based_on_durability()
+            if pb == "STAND":
+                self._validate_stand_coin_stats()
+                self._validate_stress_based_on_durability()
             self._validate_initial_abilities_count()
         self._validate_xp_advancements()
-        if hasattr(self, "stand"):
+        if pb == "STAND" and hasattr(self, "stand"):
             self._validate_a_rank_abilities()
 
     def _validate_level_1_creation(self):
@@ -842,17 +822,37 @@ class Character(models.Model):
                     "action_dots": "A new character at level 1 must have exactly 7 action dots."
                 }
             )
+        skilled = False
+        try:
+            skilled = self.selected_benefits.filter(
+                name__iexact="Skilled From Birth"
+            ).exists()
+        except Exception:
+            pass
+        max_per = 3 if skilled else 2
+        at_three = 0
         for action, dots in self.action_dots.items():
-            if self.level == 1 and dots > 2:  # Max 2 dots per action at level 1
+            if self.level == 1 and dots > max_per:
                 raise ValidationError(
                     {
-                        "action_dots": f'Action "{action}" cannot have more than 2 dots at level 1.'
+                        "action_dots": (
+                            f'Action "{action}" cannot have more than {max_per} dots '
+                            f"at level 1."
+                        )
                     }
                 )
-            elif self.level > 1 and dots > 4:  # Max 4 dots per action after level 1
+            if self.level == 1 and dots == 3:
+                at_three += 1
+            elif self.level > 1 and dots > 4:
                 raise ValidationError(
                     {"action_dots": f'Action "{action}" cannot have more than 4 dots.'}
                 )
+        if self.level == 1 and at_three > 1:
+            raise ValidationError(
+                {
+                    "action_dots": "Skilled From Birth allows at most one action at 3 dots."
+                }
+            )
 
     def _validate_stand_coin_stats(self):
         grade_points = {"S": 5, "A": 4, "B": 3, "C": 2, "D": 1, "F": 0}
@@ -866,26 +866,20 @@ class Character(models.Model):
             "development",
         ]
 
-        # Use Stand if it exists, otherwise fall back to coin_stats (for new characters)
+        # Stand row is the only source of live grades
         grades = {}
         try:
-            if hasattr(self, "stand"):
-                stand = self.stand
-                for field in stand_fields:
-                    if hasattr(stand, field):
-                        grades[field] = str(getattr(stand, field)).upper()[:1]
+            stand = self.stand
+            for field in stand_fields:
+                if hasattr(stand, field):
+                    grades[field] = str(getattr(stand, field)).upper()[:1]
         except Exception:
             pass
-        if not grades and self.coin_stats:
-            for field in stand_fields:
-                val = self.coin_stats.get(field)
-                if val is not None:
-                    grades[field] = str(val).upper()[:1]
 
         if not grades:
             raise ValidationError(
                 {
-                    "stand": "A level 1 character must have a Stand with stats defined (or coin_stats)."
+                    "stand": "A level 1 character must have a Stand with stats defined."
                 }
             )
 
@@ -904,10 +898,24 @@ class Character(models.Model):
                 )
             total_stand_coin_points += grade_points[grade]
 
-        if total_stand_coin_points != 6:
+        chargen_budget = 6 + max(0, int(self.stand_coin_points_gained or 0))
+        if int(self.stand_coin_points_gained or 0) == 0:
+            if total_stand_coin_points < 1 or total_stand_coin_points > 6:
+                raise ValidationError(
+                    {
+                        "stand_coin_stats": (
+                            "Chargen Stand Coin grade-value sum must be between 1 and 6 "
+                            f"(leftover unspent is allowed). Current total: {total_stand_coin_points}."
+                        )
+                    }
+                )
+        elif total_stand_coin_points > chargen_budget:
             raise ValidationError(
                 {
-                    "stand_coin_stats": f"A new character at level 1 must have exactly 6 Stand Coin points. Current total: {total_stand_coin_points}."
+                    "stand_coin_stats": (
+                        f"Stand Coin grade-value sum ({total_stand_coin_points}) exceeds "
+                        f"chargen 6 plus XP ranks ({chargen_budget})."
+                    )
                 }
             )
 
@@ -922,9 +930,28 @@ class Character(models.Model):
             )
 
     def _validate_initial_abilities_count(self):
-        # SRD: At start choose 3 abilities; each A-rank in Stand Coin unlocks 2 more.
+        # Stand L1: 1 standard + unique package (+2 slots per A-rank).
+        # Hamon/Spin L1: foundations + 1 Level-1 playbook pick + 1 standard (no Stand formula).
         if self.level != 1:
             return
+        pb = str(self.playbook or "STAND").upper()
+        std_count = self.standard_abilities.count()
+        has_custom = bool(
+            (self.custom_ability_description or "").strip()
+            or (self.custom_ability_type or "").strip()
+        )
+
+        if pb in ("HAMON", "SPIN"):
+            if std_count < 1:
+                raise ValidationError(
+                    {
+                        "standard_abilities": (
+                            f"A level 1 {pb.title()} character needs at least 1 standard ability."
+                        )
+                    }
+                )
+            return
+
         a_rank_count = 0
         stand_fields = [
             "power",
@@ -935,22 +962,36 @@ class Character(models.Model):
             "development",
         ]
         try:
-            if hasattr(self, "stand"):
-                for field in stand_fields:
-                    if hasattr(self.stand, field) and getattr(self.stand, field) == "A":
-                        a_rank_count += 1
+            for field in stand_fields:
+                if hasattr(self.stand, field) and getattr(self.stand, field) == "A":
+                    a_rank_count += 1
         except Exception:
             pass
-        if a_rank_count == 0 and self.coin_stats:
-            for field in stand_fields:
-                if self.coin_stats.get(field) == "A":
-                    a_rank_count += 1
-        expected_total_abilities = 3 + (a_rank_count * 2)
-        if self.total_abilities_count != expected_total_abilities:
+        if std_count < 1:
             raise ValidationError(
                 {
-                    "standard_abilities": f"A level 1 character must have exactly {expected_total_abilities} abilities (3 base + 2 per A-rank in Stand Coin).",
-                    "total_abilities_count": self.total_abilities_count,
+                    "standard_abilities": (
+                        "A level 1 Stand character needs at least 1 standard ability."
+                    )
+                }
+            )
+        if not has_custom and a_rank_count == 0:
+            raise ValidationError(
+                {
+                    "custom_ability_description": (
+                        "A level 1 Stand character needs a unique ability package "
+                        "(1 with 3 uses, or 3 with 1 use each)."
+                    )
+                }
+            )
+        max_standards = 1 + (a_rank_count * 2)
+        if std_count > max_standards:
+            raise ValidationError(
+                {
+                    "standard_abilities": (
+                        f"Too many standard abilities for level 1 "
+                        f"(have {std_count}, max {max_standards} with {a_rank_count} A-ranks)."
+                    )
                 }
             )
 
@@ -1098,6 +1139,7 @@ class CharacterXPAllocation(models.Model):
         ("LEVEL_UP_HERITAGE", "Level up — heritage ability"),
         ("MINOR_ADVANCE", "Minor advance — action dot"),
         ("BUY_HP", "Buy +1 HP with XP"),
+        ("UNLOCK_SECOND_PLAYBOOK", "Unlock second playbook (30 XP)"),
     ]
 
     XP_TRACK_CHOICES = [
@@ -1343,6 +1385,7 @@ class Stand(models.Model):
         ("AUTOMATIC", "Automatic"),
         ("FIGHTING", "Fighting Spirit"),
         ("SHARED", "Shared"),
+        ("CONJOINED", "Conjoined"),
     ]
 
     FORM_CHOICES = [
@@ -1412,18 +1455,15 @@ class HamonAbility(models.Model):
     """Hamon abilities for Hamon playbook users based on SRD."""
 
     HAMON_TYPE_CHOICES = [
-        ("FOUNDATION", "Foundations of Hamon"),
-        ("TRADITIONALIST", "Traditionalist (Zeppeli Style)"),
-        ("ADAPTIVE_FLOW", "Adaptive Flow (Joseph/Caesar Style)"),
-        ("CYBER_HAMONIST", "Cyber-Hamonist"),
-        ("DARK_RESONANCE", "Dark Resonance"),
-        ("BIO_HARMONICS", "Bio-Harmonics"),
+        ("FOUNDATION", "Ripple Foundations"),
+        ("CAESAR_STYLE", "Caesar Style"),
+        ("CYBER_STYLE", "Cyber Style"),
+        ("VAMPIRIC_STYLE", "Vampiric Style"),
     ]
 
     HERITAGE_REQUIREMENTS = {
-        "CYBER_HAMONIST": "Cyborg",
-        "DARK_RESONANCE": "Vampire",
-        "BIO_HARMONICS": "Pillar Man",
+        "CYBER_STYLE": "Cyborg",
+        "VAMPIRIC_STYLE": "Vampire",
     }
 
     name = models.CharField(max_length=100)
@@ -1431,7 +1471,7 @@ class HamonAbility(models.Model):
     description = models.TextField()
     required_a_count = models.IntegerField(
         default=0,
-        help_text="Minimum number of A-rank Coin stats required (0 for Foundation abilities)",
+        help_text="Minimum character level required (0 for Ripple Foundations)",
     )
     stress_cost = models.IntegerField(
         default=0, help_text="Stress cost to use this ability"
@@ -1460,7 +1500,7 @@ class SpinAbility(models.Model):
     description = models.TextField()
     required_a_count = models.IntegerField(
         default=0,
-        help_text="Minimum number of A-rank Coin stats required (0 for Foundation abilities)",
+        help_text="Minimum character level required (0 for Spin Foundations)",
     )
     stress_cost = models.IntegerField(
         default=0, help_text="Stress cost to use this ability"
@@ -1636,6 +1676,7 @@ class ExperienceTracker(models.Model):
         ("STRUGGLE", "Struggle with issues from vice or trauma"),
         ("DESPERATE", "Address a challenge with action rating 0"),
         ("DESPERATE_ROLL", "Desperate skill check"),
+        ("INNATE", "Innate desperate stand-dice roll"),
         ("PLAYBOOK_SPECIFIC", "Playbook-specific XP (end of session)"),
         ("MANUAL", "Manual or offline XP award"),
     ]

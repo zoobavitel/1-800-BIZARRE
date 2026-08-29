@@ -7,6 +7,7 @@ import {
   resolveCharacterCampaignContext,
   isUserCampaignGmForCharacter,
   isGmViewingPlayerCharacterSheet,
+  isStandCoinChargenEditable,
 } from "./characterUtils";
 
 const list = [
@@ -75,8 +76,14 @@ describe("createDefaultCharacter", () => {
       precision: 1,
       development: 1,
     });
+    expect(c.stress).toHaveLength(9);
     expect(c.name).toBe("");
     expect(c.heritage).toBe(null);
+    expect(c.campaign).toBe(null);
+  });
+
+  test("accepts campaign override for roster create", () => {
+    expect(createDefaultCharacter({ campaign: 9 }).campaign).toBe(9);
   });
 });
 
@@ -97,6 +104,28 @@ describe("getCharacterCrewId / rosterHasLinkedCrewForCrewSheetFactionUi", () => 
         { id: 2, crew_id: 5 },
       ]),
     ).toBe(true);
+  });
+});
+
+describe("isStandCoinChargenEditable", () => {
+  test("owner Stand sheet stays editable after action dots if no XP coin ranks", () => {
+    expect(
+      isStandCoinChargenEditable({
+        canEditSheet: true,
+        hasStandPlaybook: true,
+        standCoinPointsGained: 0,
+      }),
+    ).toBe(true);
+  });
+
+  test("locks after XP-bought Stand Coin points", () => {
+    expect(
+      isStandCoinChargenEditable({
+        canEditSheet: true,
+        hasStandPlaybook: true,
+        standCoinPointsGained: 2,
+      }),
+    ).toBe(false);
   });
 });
 

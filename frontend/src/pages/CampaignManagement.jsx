@@ -331,6 +331,12 @@ function CampaignDetail({
           ch.campaign?.id !== campaign?.id,
       )
     : myCharacters.filter((ch) => !ch.campaign && ch.id);
+  const myCharsNotInThisCampaign = myCharacters.filter(
+    (ch) =>
+      ch.id &&
+      ch.campaign !== campaign?.id &&
+      ch.campaign?.id !== campaign?.id,
+  );
   const npcsThatCanBeAdded = allNPCs.filter((n) => !n.campaign);
   const campaignNPCs = allNPCs.filter(
     (n) => n.campaign === campaign?.id || n.campaign?.id === campaign?.id,
@@ -390,6 +396,20 @@ function CampaignDetail({
     try {
       await campaignAPI.assignCharacter(campaign.id, characterId);
       onRefresh();
+    } catch (err) {
+      setActionError(err.message);
+    }
+  };
+
+  const handleAssignOwnCharacterAndOpen = async (characterId) => {
+    setActionError(null);
+    try {
+      await campaignAPI.assignCharacter(campaign.id, characterId);
+      if (typeof onNavigateToCharacter === "function") {
+        onNavigateToCharacter(characterId);
+      } else {
+        onRefresh();
+      }
     } catch (err) {
       setActionError(err.message);
     }
@@ -1008,7 +1028,71 @@ function CampaignDetail({
                           paddingLeft: "12px",
                         }}
                       >
-                        No character assigned
+                        <div>No character assigned</div>
+                        {p.id === user?.id && (
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              alignItems: "center",
+                              gap: "6px",
+                              marginTop: "4px",
+                            }}
+                          >
+                            {typeof onNavigateToCharacter === "function" && (
+                              <a
+                                href={buildRouteHref("character", {
+                                  campaignId: campaign.id,
+                                })}
+                                onClick={(e) =>
+                                  handleSpaNavClick(e, () =>
+                                    onNavigateToCharacter(null, {
+                                      campaignId: campaign.id,
+                                    }),
+                                  )
+                                }
+                                style={{
+                                  ...S.btn,
+                                  fontSize: "10px",
+                                  padding: "2px 6px",
+                                  background: "#1d4ed8",
+                                  color: "#93c5fd",
+                                  textDecoration: "none",
+                                }}
+                              >
+                                Create new
+                              </a>
+                            )}
+                            {myCharsNotInThisCampaign.length > 0 && (
+                              <select
+                                style={{
+                                  ...S.select,
+                                  fontSize: "10px",
+                                  padding: "2px 4px",
+                                  width: "auto",
+                                  maxWidth: "180px",
+                                }}
+                                defaultValue=""
+                                onChange={(e) => {
+                                  const id = parseInt(e.target.value, 10);
+                                  if (id) handleAssignOwnCharacterAndOpen(id);
+                                }}
+                              >
+                                <option value="" disabled>
+                                  Assign existing…
+                                </option>
+                                {myCharsNotInThisCampaign.map((ch) => (
+                                  <option key={ch.id} value={ch.id}>
+                                    {ch.true_name ||
+                                      ch.alias ||
+                                      ch.name ||
+                                      `Character #${ch.id}`}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ) : (
                       p.characters.map((ch) => (

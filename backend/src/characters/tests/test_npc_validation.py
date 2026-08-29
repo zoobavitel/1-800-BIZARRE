@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from rest_framework.test import APIClient
 from rest_framework import status
 from characters.models import Campaign, NPC, Heritage, Benefit, Detriment
+from characters.serializers import NPCSerializer
 
 
 class NPCModelTest(TestCase):
@@ -103,107 +104,6 @@ class NPCModelTest(TestCase):
         self.assertEqual(npc.playbook, "SPIN")
 
 
-class NPCArmorSystemTest(TestCase):
-    """Test NPC armor and vulnerability systems."""
-
-    def setUp(self):
-        """Set up test data."""
-        self.gm_user = User.objects.create_user(
-            username="gm", email="gm@test.com", password="testpass"
-        )
-        self.campaign = Campaign.objects.create(name="Test Campaign", gm=self.gm_user)
-
-    def test_special_armor_charges_s_rank(self):
-        """Test special armor charges for S-rank durability."""
-        npc = NPC.objects.create(
-            name="S-Rank NPC",
-            creator=self.gm_user,
-            campaign=self.campaign,
-            stand_coin_stats={"DURABILITY": "S"},
-        )
-
-        self.assertEqual(npc.special_armor_charges, 2)
-
-    def test_special_armor_charges_a_rank(self):
-        """Test special armor charges for A-rank durability."""
-        npc = NPC.objects.create(
-            name="A-Rank NPC",
-            creator=self.gm_user,
-            campaign=self.campaign,
-            stand_coin_stats={"DURABILITY": "A"},
-        )
-
-        self.assertEqual(npc.special_armor_charges, 2)
-
-    def test_special_armor_charges_b_rank(self):
-        """Test special armor charges for B-rank durability."""
-        npc = NPC.objects.create(
-            name="B-Rank NPC",
-            creator=self.gm_user,
-            campaign=self.campaign,
-            stand_coin_stats={"DURABILITY": "B"},
-        )
-
-        self.assertEqual(npc.special_armor_charges, 1)
-
-    def test_special_armor_charges_c_rank(self):
-        """Test special armor charges for C-rank durability."""
-        npc = NPC.objects.create(
-            name="C-Rank NPC",
-            creator=self.gm_user,
-            campaign=self.campaign,
-            stand_coin_stats={"DURABILITY": "C"},
-        )
-
-        self.assertEqual(npc.special_armor_charges, 1)
-
-    def test_special_armor_charges_d_rank(self):
-        """Test special armor charges for D-rank durability."""
-        npc = NPC.objects.create(
-            name="D-Rank NPC",
-            creator=self.gm_user,
-            campaign=self.campaign,
-            stand_coin_stats={"DURABILITY": "D"},
-        )
-
-        self.assertEqual(npc.special_armor_charges, 0)
-
-    def test_special_armor_charges_f_rank(self):
-        """Test special armor charges for F-rank durability."""
-        npc = NPC.objects.create(
-            name="F-Rank NPC",
-            creator=self.gm_user,
-            campaign=self.campaign,
-            stand_coin_stats={"DURABILITY": "F"},
-        )
-
-        self.assertEqual(npc.special_armor_charges, 0)
-
-    def test_special_armor_charges_default(self):
-        """Test special armor charges when no durability specified."""
-        npc = NPC.objects.create(
-            name="Default NPC",
-            creator=self.gm_user,
-            campaign=self.campaign,
-            stand_coin_stats={},
-        )
-
-        self.assertEqual(npc.special_armor_charges, 0)
-
-    def test_stand_armor_charges_from_durability(self):
-        """Stand armor pool scales with DURABILITY (same grade table as sheet)."""
-        npc = NPC.objects.create(
-            name="Dur B NPC",
-            creator=self.gm_user,
-            campaign=self.campaign,
-            stand_coin_stats={"DURABILITY": "B", "DEVELOPMENT": "F"},
-        )
-        self.assertEqual(npc.stand_armor_charges, 3)
-
-        npc.stand_coin_stats = {"DURABILITY": "A", "DEVELOPMENT": "F"}
-        self.assertEqual(npc.stand_armor_charges, 4)
-
-
 class NPCVulnerabilityClockTest(TestCase):
     """Test NPC vulnerability clock system."""
 
@@ -291,30 +191,26 @@ class NPCVulnerabilityClockTest(TestCase):
 
         self.assertEqual(npc.vulnerability_clock_max, 4)
 
-    def test_regular_armor_charges_b_rank_requires_item(self):
-        """Physical armor pool is 0 without a gear item; with item, follows Durability."""
+    def test_npc_has_no_computed_armor_charges(self):
         npc = NPC.objects.create(
-            name="B-Durability NPC",
+            name="No armor NPC",
             creator=self.gm_user,
             campaign=self.campaign,
-            stand_coin_stats={"DURABILITY": "B"},
-            has_physical_armor_item=False,
+            stand_coin_stats={"DURABILITY": "A"},
         )
-        self.assertEqual(npc.regular_armor_charges, 0)
-
-        npc.has_physical_armor_item = True
-        self.assertEqual(npc.regular_armor_charges, 2)
-
-    def test_regular_armor_bonus_charges(self):
-        npc = NPC.objects.create(
-            name="Bonus armor NPC",
-            creator=self.gm_user,
-            campaign=self.campaign,
-            stand_coin_stats={"DURABILITY": "C"},
-            has_physical_armor_item=True,
-            physical_armor_bonus_charges=2,
-        )
-        self.assertEqual(npc.regular_armor_charges, 3)
+        self.assertFalse(hasattr(NPC, "regular_armor_charges"))
+        self.assertFalse(hasattr(NPC, "stand_armor_charges"))
+        self.assertFalse(hasattr(NPC, "special_armor_charges"))
+        data = NPCSerializer(npc).data
+        for key in (
+            "regular_armor_charges",
+            "stand_armor_charges",
+            "special_armor_charges",
+            "regular_armor_used",
+            "stand_armor_used",
+            "special_armor_used",
+        ):
+            self.assertNotIn(key, data)
 
 
 class NPCMovementSpeedTest(TestCase):

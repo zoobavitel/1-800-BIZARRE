@@ -83,3 +83,24 @@ class ResistanceStressPatchRaceTests(TestCase):
             5,
             "Server-applied resistance stress must survive PATCH that omits stress",
         )
+
+    def test_resistance_create_accepts_stand_durability_action_name(self):
+        self.client.force_authenticate(user=self.user)
+        create = self.client.post(
+            "/api/rolls/",
+            {
+                "character": self.actor.id,
+                "session": self.session.id,
+                "roll_type": "RESISTANCE",
+                "action_name": "stand_durability",
+                "dice_pool": 2,
+                "results": [4, 5],
+                "outcome": "PARTIAL_SUCCESS",
+                "description": "Manual resistance record Durability",
+                "roller_stress_spent": 1,
+            },
+            format="json",
+        )
+        self.assertEqual(create.status_code, status.HTTP_201_CREATED, create.data)
+        self.assertEqual(create.data.get("action_name"), "stand_durability")
+        self.assertEqual(create.data.get("roll_type"), "RESISTANCE")

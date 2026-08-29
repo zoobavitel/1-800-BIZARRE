@@ -10,6 +10,10 @@ import {
   MAX_CREATION_DOTS,
   standPathArmorMaxFromDurabilityIndex,
 } from "../constants/srd";
+import {
+  normalizeSheetProgressClock,
+  serializeSheetProgressClocks,
+} from "../utils/progressClockSegments";
 
 /** Backend Character.playbook values */
 const PLAYBOOK_BACKEND = ["STAND", "HAMON", "SPIN"];
@@ -374,6 +378,12 @@ export const characterAPI = {
       body: JSON.stringify(body),
     }),
 
+  unlockSecondPlaybook: (id, body) =>
+    apiRequest(`/characters/${id}/unlock-second-playbook/`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   buyHpWithXp: (id, body) =>
     apiRequest(`/characters/${id}/buy-hp-with-xp/`, {
       method: "POST",
@@ -388,6 +398,13 @@ export const characterAPI = {
 
   redoLatestAllocation: (id) =>
     apiRequest(`/characters/${id}/redo-latest-allocation/`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+
+  /** Reset mechanics to a blank sheet. Keeps campaign, name, crew, look, vice, heritage. */
+  resetCharacterSheet: (id) =>
+    apiRequest(`/characters/${id}/reset-sheet/`, {
       method: "POST",
       body: JSON.stringify({}),
     }),
@@ -1032,20 +1049,7 @@ export { EMPTY_HARM_SHAPE };
 /** PC sheet progress clocks: unify `segments`/`filled` with API `max_segments`/`filled_segments`. */
 function normalizeProgressClocksFromBackend(raw) {
   if (!Array.isArray(raw)) return [];
-  return raw.map((c) => ({
-    ...c,
-    id: c.id,
-    name: c.name ?? "",
-    segments: c.segments ?? c.max_segments ?? 4,
-    filled: c.filled ?? c.filled_segments ?? 0,
-    visible_to_party: Boolean(c.visible_to_party),
-    visible_to_players: Boolean(c.visible_to_players),
-    clock_type: c.clock_type,
-    session: c.session,
-    description: c.description ?? "",
-    completed: Boolean(c.completed),
-    created_by: c.created_by,
-  }));
+  return raw.map((c) => normalizeSheetProgressClock(c)).filter(Boolean);
 }
 
 // Data transformation helpers
@@ -1166,6 +1170,14 @@ export const transformBackendToFrontend = (backendCharacter) => {
       6,
       Math.max(0, Math.floor(Number(backendCharacter.physical_armor_used) || 0)),
     ),
+    spinArmorUsed: Math.min(
+      3,
+      Math.max(0, Math.floor(Number(backendCharacter.spin_armor_used) || 0)),
+    ),
+    hamonArmorUsed: Math.min(
+      3,
+      Math.max(0, Math.floor(Number(backendCharacter.hamon_armor_used) || 0)),
+    ),
     armor: {
       armor: false,
       heavy: false,
@@ -1252,6 +1264,13 @@ export const transformBackendToFrontend = (backendCharacter) => {
 
     // Healing clock
     healingClock: backendCharacter.healing_clock_filled || 0,
+    healingClockSegments: Math.min(
+      5,
+      Math.max(
+        4,
+        Math.floor(Number(backendCharacter.healing_clock_segments) || 4),
+      ),
+    ),
 
     // XP tracks
     xp: backendCharacter.xp_clocks || {
@@ -1363,6 +1382,10 @@ export const transformBackendToFrontend = (backendCharacter) => {
     secondaryPlaybook: backendCharacter.secondary_playbook
       ? playbookToDisplay(backendCharacter.secondary_playbook)
       : "",
+    secondaryPlaybookUnlocked: Boolean(
+      backendCharacter.secondary_playbook_unlocked ||
+        backendCharacter.secondary_playbook,
+    ),
     playbookXpArchetypes: Array.isArray(backendCharacter.playbook_xp_archetypes)
       ? [...backendCharacter.playbook_xp_archetypes]
       : [],
@@ -1569,6 +1592,25 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     })(),
     light_armor_used: false,
     heavy_armor_used: false,
+    healing_clock_filled: Math.max(
+      0,
+      Math.floor(Number(frontendCharacter.healingClock) || 0),
+    ),
+    healing_clock_segments: Math.min(
+      5,
+      Math.max(
+        4,
+        Math.floor(Number(frontendCharacter.healingClockSegments) || 4),
+      ),
+    ),
+    spin_armor_used: Math.min(
+      3,
+      Math.max(0, Math.floor(Number(frontendCharacter.spinArmorUsed) || 0)),
+    ),
+    hamon_armor_used: Math.min(
+      3,
+      Math.max(0, Math.floor(Number(frontendCharacter.hamonArmorUsed) || 0)),
+    ),
 
     // Harm — full L1/L2 two-slot + L3 + L4; `used` follows trimmed non-empty text
     ...(() => {
@@ -1599,8 +1641,8 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     // Never round-trip via sheet autosave PUT — stale local clocks were wiping
     // server tracks (and dropping XP that never returned to the free pool).
 
-    // Progress clocks
-    progress_clocks: frontendCharacter.clocks,
+    // Progress clocks (segments + max_segments; drop Date.now() temp ids)
+    progress_clocks: serializeSheetProgressClocks(frontendCharacter.clocks),
 
     // Additional fields (safe defaults for new character)
     campaign:

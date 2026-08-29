@@ -288,6 +288,17 @@ describe("transformBackendToFrontend sheet notes and clocks", () => {
     expect(fe.clocks[0].name).toBe("Heat");
   });
 
+  test("save payload sends max_segments 7 and drops Date.now ids", () => {
+    const be = transformFrontendToBackend(
+      makeSheet({
+        clocks: [{ id: 1750000000000, name: "Wannabe", segments: 7, filled: 0 }],
+      }),
+    );
+    expect(be.progress_clocks).toHaveLength(1);
+    expect(be.progress_clocks[0].max_segments).toBe(7);
+    expect(be.progress_clocks[0].id).toBeUndefined();
+  });
+
   test("maps sheetNotes to background_note2 on save payload", () => {
     const be = transformFrontendToBackend(
       makeSheet({ sheetNotes: "  spare sheet  " }),

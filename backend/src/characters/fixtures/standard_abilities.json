@@ -81,16 +81,6 @@
     },
     {
       "model": "characters.ability",
-      "pk": 10,
-      "fields": {
-        "name": "Legendary Guard",
-        "type": "standard",
-        "category": "endurance",
-        "description": "Once per score, you may completely negate one instance of incoming harm."
-      }
-    },
-    {
-      "model": "characters.ability",
       "pk": 11,
       "fields": {
         "name": "Battleborn",
@@ -281,16 +271,6 @@
     },
     {
       "model": "characters.ability",
-      "pk": 30,
-      "fields": {
-        "name": "Neural Lace",
-        "type": "standard",
-        "category": "awareness",
-        "description": "By touching your Stand, you may read surface thoughts of nearby targets."
-      }
-    },
-    {
-      "model": "characters.ability",
       "pk": 31,
       "fields": {
         "name": "Scout",
@@ -317,16 +297,6 @@
         "type": "standard",
         "category": "presence",
         "description": "Your presence inspires trust and courage. Allies within close range of you gain +1d to resistance rolls against fear or intimidation."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 34,
-      "fields": {
-        "name": "Notorious",
-        "type": "standard",
-        "category": "presence",
-        "description": "Your reputation precedes you. Once per score, you may invoke your crew's infamy to skip a social obstacle entirely - the GM decides what complication arises later."
       }
     },
     {
@@ -373,10 +343,10 @@
       "model": "characters.ability",
       "pk": 39,
       "fields": {
-        "name": "Guardian",
+        "name": "Guardian Angel",
         "type": "standard",
         "category": "teamwork",
-        "description": "You may expend your stand armor to protect a teammate."
+        "description": "Your Stand can manufacture armor for others. Take 2 stress to give an ally within Range one Stand Armor charge. They hold it and may check it themselves to reduce a consequence by 1 level. Unspent charges vanish at the end of the scene. You cannot give a given ally more than one charge per scene."
       }
     },
     {
@@ -467,16 +437,6 @@
         "type": "standard",
         "category": "adaptability",
         "description": "Take 2 stress to roll your best action rating while performing a different action. Say how you adapt your skill to this use."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 49,
-      "fields": {
-        "name": "Automatic Trigger",
-        "type": "standard",
-        "category": "stand_nature",
-        "description": "Load your Stand with a conditional action (e.g., \"If X enters the room, detonate.\")."
       }
     },
     {

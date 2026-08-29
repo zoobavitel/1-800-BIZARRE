@@ -10,7 +10,10 @@ export const XP_REQ_CATEGORY_KEYS = {
   PLAYBOOK: "playbook",
   BELIEFS: "beliefs",
   STRUGGLE: "struggle",
+  INNATE: "innate",
 };
+
+export const INNATE_STAND_STATS = ["power", "speed", "precision"];
 
 /**
  * @param {string|undefined} name action_name from roll
@@ -50,7 +53,7 @@ export function sumTrackerXpByTriggers(entries, sessionId, triggers, cap = 2) {
     if (!set.has(e.trigger)) continue;
     sum += Math.max(0, Number(e.xp_gained) || 0);
   }
-  return Math.min(sum, cap);
+  return cap == null ? sum : Math.min(sum, cap);
 }
 
 /**
@@ -90,6 +93,52 @@ export function tallyDesperateActionRolls(rolls, sessionId, characterId) {
 }
 
 /**
+ * @param {string|undefined} name
+ * @returns {"power"|"speed"|"precision"|""}
+ */
+export function innateStandStatFromActionName(name) {
+  const raw = String(name || "").trim().toLowerCase();
+  if (!raw) return "";
+  const token = raw.startsWith("stand_") ? raw.slice(6) : raw;
+  if (INNATE_STAND_STATS.includes(token)) return token;
+  return "";
+}
+
+/**
+ * @param {Array<Record<string, unknown>>} rolls
+ * @param {number|null|undefined} sessionId
+ * @param {number|null|undefined} characterId
+ * @returns {{ count: number, byStat: { power: number, speed: number, precision: number } }}
+ */
+export function tallyInnateStandDiceRolls(rolls, sessionId, characterId) {
+  const byStat = { power: 0, speed: 0, precision: 0 };
+  if (
+    sessionId == null ||
+    characterId == null ||
+    !Array.isArray(rolls) ||
+    rolls.length === 0
+  ) {
+    return { count: 0, byStat };
+  }
+  const sid = Number(sessionId);
+  const cid = Number(characterId);
+  let count = 0;
+  for (const r of rolls) {
+    if (r == null) continue;
+    if (r.session != null && Number(r.session) !== sid) continue;
+    if (Number(r.character) !== cid) continue;
+    if ((r.roll_type || "").toString().toUpperCase() !== "ACTION") continue;
+    const pos = (r.position || "").toString().toLowerCase();
+    if (pos !== "desperate") continue;
+    const st = innateStandStatFromActionName(r.action_name);
+    if (!st) continue;
+    count += 1;
+    byStat[st] += 1;
+  }
+  return { count, byStat };
+}
+
+/**
  * @param {object} p
  * @param {number|null|undefined} p.sessionId
  * @param {number|null|undefined} p.characterId
@@ -117,6 +166,8 @@ export function buildXpRequirementSnapshot(p) {
       playbook: 0,
       desperateTrackerNote: 0,
       desperateRolls: { count: 0, byAttribute: { insight: 0, prowess: 0, resolve: 0 } },
+      innateTrackerNote: 0,
+      innateStandDice: { count: 0, byStat: { power: 0, speed: 0, precision: 0 } },
     };
   }
 
@@ -135,6 +186,13 @@ export function buildXpRequirementSnapshot(p) {
     2,
   );
   const desperateRolls = tallyDesperateActionRolls(rolls, sessionId, characterId);
+  const innateTrackerNote = sumTrackerXpByTriggers(
+    trackerEntries,
+    sessionId,
+    ["INNATE"],
+    null,
+  );
+  const innateStandDice = tallyInnateStandDiceRolls(rolls, sessionId, characterId);
 
   return {
     hasActiveSession: true,
@@ -143,6 +201,8 @@ export function buildXpRequirementSnapshot(p) {
     playbook,
     desperateTrackerNote,
     desperateRolls,
+    innateTrackerNote,
+    innateStandDice,
   };
 }
 
@@ -150,5 +210,12 @@ export function formatAttrTally(byAttribute) {
   const parts = ["insight", "prowess", "resolve"]
     .filter((k) => (byAttribute[k] || 0) > 0)
     .map((k) => `${k} +${byAttribute[k]}`);
+  return parts.length ? parts.join(" · ") : "—";
+}
+
+export function formatInnateStandTally(byStat) {
+  const parts = INNATE_STAND_STATS
+    .filter((k) => (byStat[k] || 0) > 0)
+    .map((k) => `${k} +${byStat[k]}`);
   return parts.length ? parts.join(" · ") : "—";
 }

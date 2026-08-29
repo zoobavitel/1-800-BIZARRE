@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from characters.models import NPC
 
 from .field_maps import MAX_CLOCK_SEGMENTS, STAND_STAT_KEYS
-from .pc_builder import _checkbox, _format_inventory
+from .pc_builder import _checkbox, _format_inventory, _format_mapping, _playbook_label
 
 NPC_STAND_KEY_MAP = {
     "power": ("POWER", "power"),
@@ -18,6 +17,7 @@ NPC_STAND_KEY_MAP = {
     "precision": ("PRECISION", "precision"),
     "development": ("DEVELOPMENT", "development", "POTENTIAL", "potential"),
 }
+
 
 
 def _npc_stand_grade(npc: NPC, stat: str) -> str:
@@ -42,25 +42,29 @@ def _format_npc_abilities(npc: NPC) -> tuple[str, str]:
                 lines.append(str(item))
     for entry in npc.npc_hamon_abilities.select_related("hamon_ability").all():
         ha = entry.hamon_ability
+        path = ha.get_hamon_type_display() if ha else "Hamon"
+        level = int(getattr(ha, "required_a_count", 0) or 0)
+        tag = f"[Hamon · {path}"
+        if level > 0:
+            tag += f" · Level {level}"
+        tag += "]"
         desc = (ha.description or "").strip()
-        lines.append(f"[Hamon] {ha.name}: {desc}" if desc else f"[Hamon] {ha.name}")
+        lines.append(f"{tag} {ha.name}: {desc}" if desc else f"{tag} {ha.name}")
     for entry in npc.npc_spin_abilities.select_related("spin_ability").all():
         sa = entry.spin_ability
+        path = sa.get_spin_type_display() if sa else "Spin"
+        level = int(getattr(sa, "required_a_count", 0) or 0)
+        tag = f"[Spin · {path}"
+        if level > 0:
+            tag += f" · Level {level}"
+        tag += "]"
         desc = (sa.description or "").strip()
-        lines.append(f"[Spin] {sa.name}: {desc}" if desc else f"[Spin] {sa.name}")
+        lines.append(f"{tag} {sa.name}: {desc}" if desc else f"{tag} {sa.name}")
     if npc.custom_abilities:
         lines.append(npc.custom_abilities.strip())
     core = "\n".join(lines[:8])
     overflow = "\n".join(lines[8:])
     return core, overflow
-
-
-def _json_block(value: Any) -> str:
-    if not value:
-        return ""
-    if isinstance(value, (dict, list)):
-        return json.dumps(value, indent=2)
-    return str(value)
 
 
 def _clock_rows(npc: NPC) -> list[dict[str, Any]]:
@@ -112,7 +116,7 @@ def build_npc_field_values(npc: NPC) -> dict[str, str]:
     values["npc_look"] = npc.appearance or ""
     values["npc_role"] = npc.role or ""
     values["npc_heritage"] = npc.heritage.name if npc.heritage_id else ""
-    values["npc_playbook"] = npc.playbook or ""
+    values["npc_playbook"] = _playbook_label(npc.playbook)
     values["npc_campaign"] = npc.campaign.name if npc.campaign_id else ""
     values["npc_faction"] = npc.faction.name if npc.faction_id else ""
 
@@ -124,18 +128,6 @@ def build_npc_field_values(npc: NPC) -> dict[str, str]:
     values["npc_vulnerability"] = f"{vuln_cur}/{vuln_max}"
     for seg in range(MAX_CLOCK_SEGMENTS):
         values[f"npc_vuln_seg_{seg}"] = _checkbox(seg < min(vuln_cur, vuln_max))
-
-    values["npc_armor_regular"] = (
-        f"{int(npc.regular_armor_used or 0)}/{int(npc.regular_armor_charges)}"
-    )
-    values["npc_armor_stand"] = (
-        f"{int(npc.stand_armor_used or 0)}/{int(npc.stand_armor_charges)}"
-    )
-    values["npc_armor_special"] = (
-        f"{int(npc.special_armor_used or 0)}/{int(npc.special_armor_charges)}"
-    )
-    phys_max = int(npc.regular_armor_charges) if npc.has_physical_armor_item else 0
-    values["npc_armor_physical"] = f"gear bonus {int(npc.physical_armor_bonus_charges or 0)}; pool {phys_max}"
 
     clocks = _clock_rows(npc)[1:5]
     while len(clocks) < 4:
@@ -168,9 +160,11 @@ def build_npc_field_values(npc: NPC) -> dict[str, str]:
     values["npc_abilities_overflow"] = overflow
     values["npc_notes"] = npc.notes or ""
     values["npc_inventory_notes"] = npc.inventory_notes or ""
-    values["npc_inventory"] = _format_inventory(npc.inventory) or _json_block(npc.items)
-    values["npc_contacts"] = _json_block(npc.contacts)
-    values["npc_relationships"] = _json_block(npc.relationships)
-    values["npc_faction_status"] = _json_block(npc.faction_status)
+    values["npc_inventory"] = _format_inventory(npc.inventory) or _format_mapping(
+        npc.items
+    )
+    values["npc_contacts"] = _format_mapping(npc.contacts)
+    values["npc_relationships"] = _format_mapping(npc.relationships)
+    values["npc_faction_status"] = _format_mapping(npc.faction_status)
 
     return values

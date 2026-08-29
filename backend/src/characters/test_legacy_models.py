@@ -536,7 +536,7 @@ class HamonAbilityModelTest(TestCase):
         self.assertEqual(hamon_ability.name, 'Ripple Breathing')
         self.assertEqual(hamon_ability.hamon_type, 'FOUNDATION')
         self.assertEqual(hamon_ability.stress_cost, 0)
-        self.assertEqual(str(hamon_ability), 'Ripple Breathing (Foundations of Hamon)')
+        self.assertEqual(str(hamon_ability), 'Ripple Breathing (Ripple Foundations)')
     
     def test_hamon_foundation_abilities(self):
         """Test that foundation Hamon abilities can be created according to SRD."""

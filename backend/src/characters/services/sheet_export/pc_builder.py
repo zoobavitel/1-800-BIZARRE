@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from characters.models import Character, Trauma
 from characters.roll_helpers import max_stress_slots_for_character
+from characters.services.playbook_xp_archetype import (
+    resolve_playbook_xp_archetype_labels,
+)
 
 from .field_maps import (
     ACTION_KEYS,
@@ -14,8 +16,7 @@ from .field_maps import (
     MAX_COIN_BOXES,
     MAX_HEALING_SEGMENTS,
     MAX_STASH_SLOTS,
-    MAX_XP_PER_TRACK,
-    MAX_XP_PLAYBOOK_TRACK,
+    SPIN_HAMON_ARMOR_MAX,
     STAND_PATH_ARMOR_BY_GRADE,
     STAND_STAT_KEYS,
     TRAUMA_KEYS,
@@ -26,9 +27,22 @@ from .field_maps import (
 CHECKBOX_ON = "/Yes"
 CHECKBOX_OFF = "/Off"
 
+_PLAYBOOK_LABELS = {
+    "STAND": "Stand",
+    "HAMON": "Hamon",
+    "SPIN": "Spin",
+}
+
 
 def _checkbox(value: bool) -> str:
     return CHECKBOX_ON if value else CHECKBOX_OFF
+
+
+def _playbook_label(raw: str | None) -> str:
+    if not raw:
+        return ""
+    key = str(raw).strip().upper()
+    return _PLAYBOOK_LABELS.get(key, str(raw).replace("_", " ").title())
 
 
 def _stand_grade(character: Character, stat: str) -> str:
@@ -96,31 +110,92 @@ def _trauma_flags(character: Character) -> dict[str, bool]:
     return flags
 
 
+def _ability_line(prefix: str, name: str, desc: str = "") -> str:
+    base = f"{prefix} {name}".strip() if prefix else name
+    desc = (desc or "").strip()
+    return f"{base}: {desc}" if desc else base
+
+
 def _format_abilities(character: Character) -> tuple[str, str]:
     lines: list[str] = []
     for ability in character.standard_abilities.all():
         desc = (ability.description or "").strip()
-        lines.append(f"{ability.name}: {desc}" if desc else ability.name)
+        lines.append(_ability_line("[Standard]", ability.name, desc))
+    stand = getattr(character, "stand", None)
+    if stand is not None:
+        for sa in stand.abilities.all():
+            lines.append(_ability_line("[Stand unique]", sa.name, sa.description or ""))
     for entry in character.hamon_abilities.select_related("hamon_ability").all():
         ha = entry.hamon_ability
-        desc = (ha.description or "").strip()
-        lines.append(f"[Hamon] {ha.name}: {desc}" if desc else f"[Hamon] {ha.name}")
+        path = ha.get_hamon_type_display() if ha else "Hamon"
+        level = int(getattr(ha, "required_a_count", 0) or 0)
+        tag = f"[Hamon · {path}"
+        if level > 0:
+            tag += f" · Level {level}"
+        tag += "]"
+        lines.append(_ability_line(tag, ha.name, ha.description or ""))
     for entry in character.spin_abilities.select_related("spin_ability").all():
         sa = entry.spin_ability
-        desc = (sa.description or "").strip()
-        lines.append(f"[Spin] {sa.name}: {desc}" if desc else f"[Spin] {sa.name}")
+        path = sa.get_spin_type_display() if sa else "Spin"
+        level = int(getattr(sa, "required_a_count", 0) or 0)
+        tag = f"[Spin · {path}"
+        if level > 0:
+            tag += f" · Level {level}"
+        tag += "]"
+        lines.append(_ability_line(tag, sa.name, sa.description or ""))
     if character.custom_ability_description:
-        lines.append(f"Custom: {character.custom_ability_description}")
+        lines.append(f"[Custom] {character.custom_ability_description}")
     extra = character.extra_custom_abilities or []
     if isinstance(extra, list):
         for item in extra:
             if isinstance(item, dict):
                 name = item.get("name") or "Custom"
                 desc = item.get("description") or ""
-                lines.append(f"{name}: {desc}" if desc else name)
+                lines.append(_ability_line("[Custom]", str(name), str(desc)))
+            elif item:
+                lines.append(f"[Custom] {item}")
     core = "\n".join(lines[:8])
     overflow = "\n".join(lines[8:])
     return core, overflow
+
+
+def _format_scalar_line(item: Any) -> str:
+    if item is None or item is False:
+        return ""
+    if isinstance(item, dict):
+        name = (
+            item.get("name")
+            or item.get("item")
+            or item.get("label")
+            or item.get("title")
+            or ""
+        )
+        qty = item.get("quantity") or item.get("qty") or item.get("count")
+        note = (
+            item.get("notes")
+            or item.get("description")
+            or item.get("note")
+            or item.get("detail")
+            or ""
+        )
+        load = item.get("load") or item.get("load_cost")
+        line = str(name).strip()
+        if qty not in (None, "", 1, "1"):
+            line += f" ×{qty}"
+        if load not in (None, ""):
+            line += f" (load {load})"
+        if note:
+            line += f" — {note}"
+        if not line:
+            # Fall back to readable key/value pairs instead of raw JSON dump
+            parts = [
+                f"{k}: {v}"
+                for k, v in item.items()
+                if v not in (None, "", [], {})
+            ]
+            line = "; ".join(parts)
+        return line
+    return str(item).strip()
 
 
 def _format_inventory(inventory: Any) -> str:
@@ -129,34 +204,67 @@ def _format_inventory(inventory: Any) -> str:
     if isinstance(inventory, list):
         parts = []
         for item in inventory:
-            if isinstance(item, dict):
-                name = item.get("name") or item.get("item") or ""
-                qty = item.get("quantity") or item.get("qty")
-                note = item.get("notes") or item.get("description") or ""
-                line = str(name).strip()
-                if qty not in (None, "", 1, "1"):
-                    line += f" x{qty}"
-                if note:
-                    line += f" — {note}"
-                if line:
-                    parts.append(line)
-            elif item:
-                parts.append(str(item))
+            line = _format_scalar_line(item)
+            if line:
+                parts.append(line)
         return "\n".join(parts)
     if isinstance(inventory, dict):
-        return json.dumps(inventory, indent=2)
+        # Common shapes: {items: [...]}, {loadout: [...], stash: [...]}, or flat map
+        if "items" in inventory and isinstance(inventory.get("items"), list):
+            return _format_inventory(inventory["items"])
+        sections: list[str] = []
+        for key, val in inventory.items():
+            label = str(key).replace("_", " ").title()
+            if isinstance(val, list):
+                body = _format_inventory(val)
+                if body:
+                    sections.append(f"{label}:\n{body}")
+            elif isinstance(val, dict):
+                nested = _format_inventory(val)
+                if nested:
+                    sections.append(f"{label}:\n{nested}")
+            elif val not in (None, "", [], {}):
+                sections.append(f"{label}: {val}")
+        return "\n\n".join(sections)
     return str(inventory)
 
 
+def _format_mapping(value: Any) -> str:
+    """Human-readable dict/list for reputation / faction status."""
+    if not value:
+        return ""
+    if isinstance(value, dict):
+        lines = []
+        for k, v in value.items():
+            if v in (None, "", [], {}):
+                continue
+            lines.append(f"{k}: {v}")
+        return "\n".join(lines)
+    if isinstance(value, list):
+        parts = []
+        for item in value:
+            line = _format_scalar_line(item)
+            if line:
+                parts.append(line)
+        return "\n".join(parts)
+    return str(value)
+
+
 def _heritage_picks(character: Character) -> str:
-    benefits = [b.name for b in character.selected_benefits.all()]
-    detriments = [d.name for d in character.selected_detriments.all()]
+    benefits = []
+    for b in character.selected_benefits.all():
+        desc = (b.description or "").strip()
+        benefits.append(f"{b.name}: {desc}" if desc else b.name)
+    detriments = []
+    for d in character.selected_detriments.all():
+        desc = (d.description or "").strip()
+        detriments.append(f"{d.name}: {desc}" if desc else d.name)
     parts = []
     if benefits:
-        parts.append("Benefits: " + ", ".join(benefits))
+        parts.append("Benefits:\n" + "\n".join(f"• {x}" for x in benefits))
     if detriments:
-        parts.append("Detriments: " + ", ".join(detriments))
-    return "\n".join(parts)
+        parts.append("Detriments:\n" + "\n".join(f"• {x}" for x in detriments))
+    return "\n\n".join(parts)
 
 
 def _stash_slots(character: Character) -> list[bool]:
@@ -175,6 +283,34 @@ def _stand_armor_max(character: Character) -> int:
     return STAND_PATH_ARMOR_BY_GRADE.get(grade, 0)
 
 
+def _stand_display_name(character: Character) -> str:
+    stand = getattr(character, "stand", None)
+    if stand is not None and (stand.name or "").strip():
+        return stand.name.strip()
+    return (character.stand_name or "").strip()
+
+
+def _stand_type_label(character: Character) -> str:
+    stand = getattr(character, "stand", None)
+    if stand is None:
+        return ""
+    try:
+        return stand.get_type_display() or ""
+    except Exception:
+        return str(getattr(stand, "type", "") or "").replace("_", " ").title()
+
+
+def _stand_forms_label(character: Character) -> str:
+    stand = getattr(character, "stand", None)
+    if stand is None:
+        return ""
+    forms = getattr(stand, "forms", None) or []
+    if isinstance(forms, list) and forms:
+        return ", ".join(str(f).strip() for f in forms if str(f).strip())
+    form = (getattr(stand, "form", None) or "").strip()
+    return form
+
+
 def build_pc_field_values(character: Character) -> dict[str, str]:
     """Return AcroForm field name -> value for a PC sheet export."""
     character = (
@@ -186,13 +322,15 @@ def build_pc_field_values(character: Character) -> dict[str, str]:
             "selected_benefits",
             "selected_detriments",
             "progress_clocks",
+            "stand__abilities",
         )
         .get(pk=character.pk)
     )
 
     values: dict[str, str] = {}
     values["pc_name"] = character.true_name or ""
-    values["pc_stand_name"] = character.stand_name or ""
+    values["pc_alias"] = character.alias or ""
+    values["pc_stand_name"] = _stand_display_name(character)
     crew_name = ""
     if character.crew_id and character.crew:
         crew_name = character.crew.name or ""
@@ -202,11 +340,32 @@ def build_pc_field_values(character: Character) -> dict[str, str]:
     values["pc_look"] = character.appearance or ""
     values["pc_background"] = character.background_note or ""
     values["pc_heritage"] = character.heritage.name if character.heritage_id else ""
-    values["pc_vice"] = character.vice.name if character.vice_id else ""
+    vice_name = character.vice.name if character.vice_id else ""
+    vice_details = (character.vice_details or "").strip()
+    values["pc_vice"] = (
+        f"{vice_name} — {vice_details}" if vice_name and vice_details else vice_name
+    )
+    values["pc_vice_details"] = vice_details
     values["pc_campaign"] = character.campaign.name if character.campaign_id else ""
-    values["pc_playbook"] = character.playbook or ""
-    archetypes = character.playbook_xp_archetypes or []
-    values["pc_playbook_archetypes"] = ", ".join(str(a) for a in archetypes)
+    values["pc_playbook"] = _playbook_label(character.playbook)
+    values["pc_secondary_playbook"] = _playbook_label(character.secondary_playbook)
+    values["pc_level"] = str(max(0, int(character.level or 0)))
+    values["pc_playbook_archetypes"] = resolve_playbook_xp_archetype_labels(character)
+    values["pc_close_friend"] = character.close_friend or ""
+    values["pc_rival"] = character.rival or ""
+    values["pc_loadout"] = str(max(0, int(character.loadout or 0)))
+
+    values["pc_stand_type"] = _stand_type_label(character)
+    stand = getattr(character, "stand", None)
+    values["pc_stand_type_custom"] = (
+        (stand.type_custom or "").strip() if stand is not None else ""
+    )
+    values["pc_stand_forms"] = _stand_forms_label(character)
+    values["pc_stand_consciousness"] = (
+        str(getattr(stand, "consciousness_level", "") or "").upper()
+        if stand is not None
+        else ""
+    )
 
     for stat in STAND_STAT_KEYS:
         values[f"pc_stand_{stat}"] = _stand_grade(character, stat)
@@ -237,9 +396,9 @@ def build_pc_field_values(character: Character) -> dict[str, str]:
     healing_filled = max(0, int(character.healing_clock_filled or 0))
     healing_max = min(
         MAX_HEALING_SEGMENTS,
-        max(1, int(character.healing_clock_segments or MAX_HEALING_SEGMENTS)),
+        max(1, int(character.healing_clock_segments or 4)),
     )
-    for i in range(MAX_HEALING_SEGMENTS):
+    for i in range(healing_max):
         values[f"pc_healing_{i}"] = _checkbox(i < min(healing_filled, healing_max))
 
     stand_used = max(0, int(character.stand_armor_used or 0))
@@ -253,6 +412,19 @@ def build_pc_field_values(character: Character) -> dict[str, str]:
         else 0
     )
     values["pc_armor_physical"] = f"{phys_used}/{phys_max}"
+
+    spin_used = max(0, int(character.spin_armor_used or 0))
+    hamon_used = max(0, int(character.hamon_armor_used or 0))
+    pb = str(character.playbook or "").upper()
+    sec = str(character.secondary_playbook or "").upper()
+    show_spin = pb == "SPIN" or sec == "SPIN"
+    show_hamon = pb == "HAMON" or sec == "HAMON"
+    values["pc_armor_spin"] = (
+        f"{spin_used}/{SPIN_HAMON_ARMOR_MAX}" if show_spin else ""
+    )
+    values["pc_armor_hamon"] = (
+        f"{hamon_used}/{SPIN_HAMON_ARMOR_MAX}" if show_hamon else ""
+    )
 
     coin = character.coin_boxes or [False] * MAX_COIN_BOXES
     for i in range(MAX_COIN_BOXES):
@@ -277,6 +449,9 @@ def build_pc_field_values(character: Character) -> dict[str, str]:
     values["pc_notes"] = character.background_note2 or ""
     values["pc_inventory"] = _format_inventory(character.inventory)
     values["pc_heritage_picks"] = _heritage_picks(character)
+    values["pc_reputation"] = _format_mapping(
+        character.reputation_status
+    ) or _format_mapping(character.faction_reputation)
 
     clocks = list(character.progress_clocks.all().order_by("id")[:4])
     for idx in range(4):

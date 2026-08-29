@@ -669,6 +669,20 @@ export default function CharacterOptionsPage({ onNavigateToAbilities }) {
                 {rules.coin_stats.description}
               </p>
               <p
+                style={{
+                  fontSize: "11px",
+                  color: "#6b7280",
+                  lineHeight: "1.5",
+                  marginTop: "6px",
+                }}
+              >
+                Power, Speed, and Precision are Coin action rolls—parallel Stand
+                dice when the fiction calls for them. Durability is for
+                resisting harm and interposing when the Stand takes the hit; it
+                is not an accomplishment roll. It sets Stand armor and
+                resistance tiers.
+              </p>
+              <p
                 style={{ fontSize: "11px", color: "#6b7280", marginTop: "6px" }}
               >
                 Grades:{" "}

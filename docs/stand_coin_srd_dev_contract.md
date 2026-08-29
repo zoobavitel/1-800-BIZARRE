@@ -17,11 +17,11 @@ Matches SRD_DEV table: A=4d, B=3d, C=2d, D=1d, **F=0d (gated / use 2d keep lower
 ## Resistance
 
 - **User consequences:** Insight / Prowess / Resolve; existing attribute resistance flow.
-- **Stand hit:** **Durability** pool; stress `max(1, 6 − highest tier die)` unless **two sixes ⇒ 0 stress** (SRD_DEV “resist for free”; no automatic “clear 1 stress” like attribute crit).
+- **Stand hit:** **Durability** pool. Same stress table as user resistance: `6 − highest` (a 6 costs 0). Two or more 6s: pay 0 and **clear 1 stress**. 0-dice cannot crit.
 
 ## API surface
 
-- **`POST /characters/{id}/roll-action/`** with `pool_source: "stand_coin"` and **`stand_stat`**: `power` | `speed` | `precision` | `durability`.
+- **`POST /characters/{id}/roll-action/`** with `pool_source: "stand_coin"` and **`stand_stat`**: `power` | `speed` | `precision` (Durability is resistance, not an action roll).
 - **`action`** body should mirror `stand_{stat}` for logs (e.g. `stand_power`).
 - Push / Devil / Assist / bonuses follow same exclusion rules unless product extends them later; Ripple Breathing waive **does not** apply to stand coin rolls.
 

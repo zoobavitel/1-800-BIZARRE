@@ -29,7 +29,7 @@
       "name": "Slower Recovery",
       "hp_value": 1,
       "required": false,
-      "description": "Healing clock permanently reduced by 1 segment."
+      "description": "Healing clock is 5 segments instead of 4."
     }
   },
   {

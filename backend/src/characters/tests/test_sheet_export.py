@@ -66,6 +66,90 @@ class SheetExportServiceTests(TestCase):
         self.assertEqual(values["pc_action_hunt"], "2")
         self.assertEqual(values["pc_notes"], "Sheet notes here")
 
+    def test_pc_export_human_readable_labels(self):
+        from characters.models import Ability, Stand, StandAbility, Vice
+
+        vice = Vice.objects.create(name="Obligation", description="")
+        self.character.playbook = "STAND"
+        self.character.alias = "JoJo"
+        self.character.level = 3
+        self.character.playbook_xp_archetypes = ["PHENOMENA", "SHARED"]
+        self.character.vice = vice
+        self.character.vice_details = "Family debt"
+        self.character.close_friend = "Avdol"
+        self.character.rival = "Dio"
+        self.character.inventory = {
+            "items": [
+                {"name": "Hat", "quantity": 1, "notes": "lucky"},
+                {"name": "Photos", "qty": 3},
+            ]
+        }
+        self.character.reputation_status = {"Speedwagon Foundation": 2, "DIO": -2}
+        self.character.save()
+        stand = Stand.objects.create(
+            character=self.character,
+            name="Star Platinum",
+            type="PHENOMENA",
+            type_custom="Weather Stand",
+            form="Humanoid",
+            forms=["Phenomenon", "Mist-form"],
+            consciousness_level="A",
+            power="A",
+            speed="A",
+            range="C",
+            durability="A",
+            precision="A",
+            development="C",
+            armor=0,
+        )
+        StandAbility.objects.create(
+            stand=stand, name="Ora Rush", description="Barrage of punches"
+        )
+        ability = Ability.objects.create(
+            name="Guardian Angel",
+            type="standard",
+            description="Protect an ally once per score",
+        )
+        self.character.standard_abilities.add(ability)
+
+        values = build_pc_field_values(self.character)
+        self.assertEqual(values["pc_playbook"], "Stand")
+        self.assertEqual(values["pc_alias"], "JoJo")
+        self.assertEqual(values["pc_level"], "3")
+        self.assertIn("Phenomena", values["pc_playbook_archetypes"])
+        self.assertIn("Shared", values["pc_playbook_archetypes"])
+        self.assertNotIn("PHENOMENA", values["pc_playbook_archetypes"])
+        self.assertEqual(values["pc_stand_type"], "Phenomena")
+        self.assertEqual(values["pc_stand_type_custom"], "Weather Stand")
+        self.assertEqual(values["pc_stand_forms"], "Phenomenon, Mist-form")
+        self.assertEqual(values["pc_stand_consciousness"], "A")
+        self.assertIn("Obligation — Family debt", values["pc_vice"])
+        self.assertEqual(values["pc_close_friend"], "Avdol")
+        self.assertEqual(values["pc_rival"], "Dio")
+        self.assertIn("Hat", values["pc_inventory"])
+        self.assertIn("lucky", values["pc_inventory"])
+        self.assertNotIn("{", values["pc_inventory"])
+        self.assertIn("Speedwagon Foundation: 2", values["pc_reputation"])
+        self.assertIn("[Stand unique] Ora Rush", values["pc_abilities"])
+        self.assertIn("[Standard] Guardian Angel", values["pc_abilities"])
+        self.assertEqual(values["pc_armor_stand"], "0/5")  # Durability A → 5
+
+        pdf_bytes, _ = export_pc_pdf(self.character)
+        fields = PdfReader(io.BytesIO(pdf_bytes)).get_fields() or {}
+        self.assertIn("pc_stand_forms", fields)
+        self.assertIn("pc_reputation", fields)
+        self.assertEqual(fields["pc_playbook"].get("/V"), "Stand")
+        self.assertEqual(fields["pc_stand_forms"].get("/V"), "Phenomenon, Mist-form")
+
+    def test_spin_armor_exports_when_spin_playbook(self):
+        self.character.playbook = "SPIN"
+        self.character.spin_armor_used = 1
+        self.character.save(update_fields=["playbook", "spin_armor_used"])
+        values = build_pc_field_values(self.character)
+        self.assertEqual(values["pc_playbook"], "Spin")
+        self.assertEqual(values["pc_armor_spin"], "1/3")
+        self.assertEqual(values["pc_armor_hamon"], "")
+
     def test_filled_pdf_contains_character_name(self):
         pdf_bytes, _ = export_pc_pdf(self.character)
         reader = PdfReader(io.BytesIO(pdf_bytes))
@@ -99,12 +183,15 @@ class SheetExportServiceTests(TestCase):
         for i in range(4):
             expected = CHECKBOX_ON if i < 3 else CHECKBOX_OFF
             self.assertEqual(values[f"pc_healing_{i}"], expected)
+        # Only emit filled keys for the character's clock length
         self.assertNotIn("pc_healing_4", values)
 
         pdf_bytes, _ = export_pc_pdf(self.character)
         fields = PdfReader(io.BytesIO(pdf_bytes)).get_fields() or {}
+        # Template always has 5 slots (Slower Recovery); unused stay Off
         self.assertIn("pc_healing_3", fields)
-        self.assertNotIn("pc_healing_4", fields)
+        self.assertIn("pc_healing_4", fields)
+        self.assertEqual(fields["pc_healing_4"].get("/V"), "/Off")
 
     def test_playbook_xp_track_exports_ten_marks(self):
         self.character.xp_clocks = {

@@ -4,15 +4,26 @@ from __future__ import annotations
 
 PC_TEXT_FIELDS = (
     "pc_name",
+    "pc_alias",
     "pc_stand_name",
     "pc_crew",
     "pc_look",
     "pc_background",
     "pc_heritage",
     "pc_vice",
+    "pc_vice_details",
     "pc_campaign",
     "pc_playbook",
+    "pc_secondary_playbook",
+    "pc_level",
     "pc_playbook_archetypes",
+    "pc_close_friend",
+    "pc_rival",
+    "pc_loadout",
+    "pc_stand_type",
+    "pc_stand_type_custom",
+    "pc_stand_forms",
+    "pc_stand_consciousness",
     "pc_stand_power",
     "pc_stand_speed",
     "pc_stand_range",
@@ -39,12 +50,15 @@ PC_TEXT_FIELDS = (
     "pc_harm_l1_slot2",
     "pc_armor_stand",
     "pc_armor_physical",
+    "pc_armor_spin",
+    "pc_armor_hamon",
     "pc_unallocated_xp",
     "pc_abilities",
     "pc_abilities_overflow",
     "pc_notes",
     "pc_inventory",
     "pc_heritage_picks",
+    "pc_reputation",
     "pc_clock_1_name",
     "pc_clock_2_name",
     "pc_clock_3_name",
@@ -101,16 +115,20 @@ TRAUMA_KEYS = (
 
 XP_TRACK_KEYS = ("insight", "prowess", "resolve", "heritage", "playbook")
 
-STAND_PATH_ARMOR_BY_GRADE = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 5}
+STAND_PATH_ARMOR_BY_GRADE = {"F": 1, "D": 2, "C": 3, "B": 4, "A": 5, "S": 6}
+SPIN_HAMON_ARMOR_MAX = 3
 
 # SRD / SRD_DEV: PC stress track is always 9 boxes; Stand Durability gates armor, not stress length.
 MAX_STRESS_SLOTS = 9
 MAX_COIN_BOXES = 4
 MAX_STASH_SLOTS = 40
-MAX_HEALING_SEGMENTS = 4
+MAX_HEALING_SEGMENTS = 5
 MAX_CLOCK_SEGMENTS = 8
 MAX_XP_PER_TRACK = 8
 MAX_XP_PLAYBOOK_TRACK = 10
+
+# Bump when AcroForm field layout changes so ensure_templates rebuilds PDFs.
+TEMPLATE_REVISION = 3
 
 
 def xp_track_max_segments(track: str) -> int:

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { characterAPI } from "../../character-sheet/services/api";
+import { resistanceStressCost } from "../utils/resistanceStressCost";
 
 export const useDiceRolling = (characterId, xpTracks, setXpTracks) => {
   const [diceResult, setDiceResult] = useState(null);
@@ -99,17 +100,13 @@ export const useDiceRolling = (characterId, xpTracks, setXpTracks) => {
       const dice1 = Math.floor(Math.random() * 6) + 1;
       const dice2 = Math.floor(Math.random() * 6) + 1;
       const result = Math.min(dice1, dice2);
-      const zeroDiceSixes =
-        dice1 === 6 && dice2 === 6 ? 2 : dice1 === 6 || dice2 === 6 ? 1 : 0;
 
       let outcome = "Failure";
       if (result >= 6) outcome = "Success";
       else if (result >= 4) outcome = "Partial Success";
 
       const zeroDiceResistanceStress = isResistanceRoll
-        ? zeroDiceSixes >= 2
-          ? -1
-          : Math.max(1, 6 - result)
+        ? resistanceStressCost([dice1, dice2], { zeroDice: true })
         : null;
 
       setDiceResult({
@@ -138,9 +135,9 @@ export const useDiceRolling = (characterId, xpTracks, setXpTracks) => {
         outcome = "Partial Success";
       }
 
-      const resistanceStress =
-        isResistanceRoll &&
-        (sixes >= 2 ? -1 : Math.max(1, 6 - highest));
+      const resistanceStress = isResistanceRoll
+        ? resistanceStressCost(dice)
+        : null;
 
       setDiceResult({
         action: actionName,

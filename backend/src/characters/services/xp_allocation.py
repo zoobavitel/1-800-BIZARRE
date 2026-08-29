@@ -18,6 +18,7 @@ TRACK_CAPS = {
 }
 LEVEL_UP_COST = 10
 MINOR_ADVANCE_COST = 5
+SECOND_PLAYBOOK_COST = 30
 
 STAND_STAT_FIELDS = (
     "power",
@@ -127,15 +128,21 @@ def _set_stand_grade(character, field, grade):
     grade = str(grade).upper()[:1]
     if grade not in GRADES:
         raise XPAllocationError(f"Invalid grade: {grade}")
-    coin_stats = dict(character.coin_stats or {})
-    coin_stats[field] = grade
-    character.coin_stats = coin_stats
     try:
         if hasattr(character, "stand") and character.stand:
             setattr(character.stand, field, grade)
             character.stand.save(update_fields=[field])
+            # Keep derived mirror in sync
+            coin_stats = dict(character.coin_stats or {})
+            for f in STAND_STAT_FIELDS:
+                coin_stats[f] = str(getattr(character.stand, f)).upper()[:1]
+            character.coin_stats = coin_stats
+            return
     except Exception:
         pass
+    coin_stats = dict(character.coin_stats or {})
+    coin_stats[field] = grade
+    character.coin_stats = coin_stats
 
 
 def _snapshot(character):
@@ -156,6 +163,7 @@ def _snapshot(character):
         "heritage_points_gained": int(character.heritage_points_gained or 0),
         "bonus_hp_from_xp": int(character.bonus_hp_from_xp or 0),
         "unallocated_xp": int(character.unallocated_xp or 0),
+        "secondary_playbook": character.secondary_playbook,
     }
 
 
@@ -173,6 +181,8 @@ def _restore_snapshot(character, snap, *, restore_xp_clocks=True):
     character.bonus_hp_from_xp = int(snap.get("bonus_hp_from_xp") or 0)
     if "unallocated_xp" in snap:
         character.unallocated_xp = int(snap.get("unallocated_xp") or 0)
+    if "secondary_playbook" in snap:
+        character.secondary_playbook = snap.get("secondary_playbook") or None
     character.advancement_ability_grants = list(
         snap.get("advancement_ability_grants") or []
     )
@@ -209,14 +219,16 @@ def _spend_xp_source(character, *, xp_track=None, from_pool=False, cost):
 
 def _refund_xp(character, track, cost):
     track = _normalize_track(track)
-    cap = TRACK_CAPS[track]
     clocks = dict(character.xp_clocks or {})
     current = int(clocks.get(track, 0) or 0)
     new_val = current + cost
-    if new_val > cap:
-        raise XPAllocationError(
-            f"Cannot refund {cost} XP to {track}: would exceed cap ({cap})."
-        )
+    # Innate stand-dice XP can push playbook past 10; refunds must restore overflow.
+    if track != "playbook":
+        cap = TRACK_CAPS[track]
+        if new_val > cap:
+            raise XPAllocationError(
+                f"Cannot refund {cost} XP to {track}: would exceed cap ({cap})."
+            )
     clocks[track] = new_val
     character.xp_clocks = clocks
 
@@ -224,15 +236,19 @@ def _refund_xp(character, track, cost):
 def _refund_xp_for_undo(character, track, cost):
     """Refund a spend on undo without clobbering GM grants on other tracks.
 
-    Adds ``cost`` back to the spent track only (clamped at track cap). Does not
-    restore the full ``payload_before`` clocks snapshot, so XP granted by the GM
-    after the spend is preserved.
+    Adds ``cost`` back to the spent track only. Attribute/heritage tracks clamp
+    at TRACK_CAPS; playbook is uncapped so innate overflow survives Take advance
+    undo. Does not restore the full ``payload_before`` clocks snapshot.
     """
     track = _normalize_track(track)
-    cap = TRACK_CAPS[track]
     clocks = dict(character.xp_clocks or {})
     current = int(clocks.get(track, 0) or 0)
-    clocks[track] = min(cap, current + int(cost or 0))
+    added = current + int(cost or 0)
+    if track == "playbook":
+        clocks[track] = added
+    else:
+        cap = TRACK_CAPS[track]
+        clocks[track] = min(cap, added)
     character.xp_clocks = clocks
 
 
@@ -326,6 +342,9 @@ def allocation_summary(allocation):
     if allocation.allocation_type == "MINOR_ADVANCE":
         action = meta.get("action", "")
         return f"{base} · +1 {action.upper()} dot"
+    if allocation.allocation_type == "UNLOCK_SECOND_PLAYBOOK":
+        pb = meta.get("secondary_playbook", "")
+        return f"{base} · unlock second playbook ({pb})"
     return base
 
 
@@ -636,6 +655,77 @@ def apply_buy_hp(character, *, xp_track=None, from_pool=False):
     return allocation
 
 
+def second_playbook_unlocked(character):
+    """True if the character already has, or has paid 30 XP for, a second playbook."""
+    if getattr(character, "secondary_playbook", None):
+        return True
+    return CharacterXPAllocation.objects.filter(
+        character=character,
+        allocation_type="UNLOCK_SECOND_PLAYBOOK",
+        undone_at__isnull=True,
+    ).exists()
+
+
+@transaction.atomic
+def apply_unlock_second_playbook(character, *, secondary_playbook, from_pool=True):
+    """Spend 30 XP from playbook track first (overflow allowed), then free pool."""
+    del from_pool  # always combined wallet
+    pb = str(secondary_playbook or "").strip().upper()
+    if pb not in ("STAND", "HAMON", "SPIN"):
+        raise XPAllocationError(
+            "secondary_playbook must be STAND, HAMON, or SPIN."
+        )
+    if pb == str(character.playbook or "").strip().upper():
+        raise XPAllocationError(
+            "Secondary playbook must differ from primary playbook."
+        )
+    if second_playbook_unlocked(character):
+        raise XPAllocationError("Second playbook is already unlocked.")
+
+    clocks = dict(character.xp_clocks or {})
+    playbook_avail = int(clocks.get("playbook", 0) or 0)
+    pool = int(character.unallocated_xp or 0)
+    if playbook_avail + pool < SECOND_PLAYBOOK_COST:
+        raise XPAllocationError(
+            f"Need {SECOND_PLAYBOOK_COST} XP from playbook track + Available XP "
+            f"(have playbook {playbook_avail} + pool {pool})."
+        )
+
+    before = _snapshot(character)
+    playbook_spent = min(playbook_avail, SECOND_PLAYBOOK_COST)
+    pool_spent = SECOND_PLAYBOOK_COST - playbook_spent
+    if playbook_spent:
+        clocks["playbook"] = playbook_avail - playbook_spent
+        character.xp_clocks = clocks
+    if pool_spent:
+        character.unallocated_xp = pool - pool_spent
+
+    character.total_xp_spent = int(character.total_xp_spent or 0) + SECOND_PLAYBOOK_COST
+    character.secondary_playbook = pb
+
+    allocation = CharacterXPAllocation.objects.create(
+        character=character,
+        allocation_type="UNLOCK_SECOND_PLAYBOOK",
+        xp_track="playbook",
+        xp_cost=SECOND_PLAYBOOK_COST,
+        payload_before=before,
+        payload_after={},
+        metadata={
+            "secondary_playbook": pb,
+            "from_pool": pool_spent > 0 and playbook_spent == 0,
+            "playbook_spent": playbook_spent,
+            "pool_spent": pool_spent,
+            "xp_track": "playbook",
+        },
+    )
+    after = _snapshot(character)
+    allocation.payload_after = after
+    allocation.save(update_fields=["payload_after"])
+    character.save()
+    allocation.refresh_from_db()
+    return allocation
+
+
 @transaction.atomic
 def undo_allocation(character, allocation, *, user=None):
     if allocation.undone_at:
@@ -656,7 +746,22 @@ def undo_allocation(character, allocation, *, user=None):
         )
 
     _restore_snapshot(character, allocation.payload_before, restore_xp_clocks=False)
-    _refund_xp_for_undo(character, allocation.xp_track, allocation.xp_cost)
+    meta = allocation.metadata or {}
+    if allocation.allocation_type == "UNLOCK_SECOND_PLAYBOOK" and (
+        "playbook_spent" in meta or "pool_spent" in meta
+    ):
+        # Combined-wallet unlock: restore clocks from snapshot for playbook + pool
+        before = allocation.payload_before or {}
+        character.xp_clocks = dict(before.get("xp_clocks") or character.xp_clocks or {})
+        if "unallocated_xp" in before:
+            character.unallocated_xp = int(before.get("unallocated_xp") or 0)
+        if "secondary_playbook" in before:
+            character.secondary_playbook = before.get("secondary_playbook") or None
+    elif meta.get("from_pool"):
+        # Snapshot already restored unallocated_xp; do not also refund a track.
+        pass
+    else:
+        _refund_xp_for_undo(character, allocation.xp_track, allocation.xp_cost)
     character.save()
     allocation.undone_at = timezone.now()
     allocation.undone_by = user

@@ -24,13 +24,15 @@ from ..models import (
     Session,
     Roll,
     RollHistory,
+    ProgressClock,
 )
 from ..parsers import MultipartJsonParser
 from ..roll_helpers import (
-    STAND_POOL_STAT_KEYS,
+    STAND_ACTION_STAT_KEYS,
     action_rating_from_action_dots,
     award_desperate_action_xp,
     award_heritage_expression_xp,
+    award_innate_stand_dice_xp,
     bump_effect,
     heritage_bonus_labels,
     max_stress_slots_for_character,
@@ -52,6 +54,7 @@ from ..services.xp_allocation import (
     apply_gm_forced_stand_stat,
     apply_level_up,
     apply_minor_advance,
+    apply_unlock_second_playbook,
     complete_pending_stand_a_reward,
     get_pending_stand_a_reward,
     list_allocations,
@@ -69,6 +72,7 @@ from ..services.character_history_undo import (
     undo_latest_gm_change,
     undo_latest_sheet_edit,
 )
+from ..services.character_sheet_reset import reset_character_sheet
 
 def _character_queryset_for_user(user):
     """Own PCs plus campaign-visible PCs for this user (staff sees all)."""
@@ -82,16 +86,8 @@ def _character_queryset_for_user(user):
 _character_queryset_detail = _character_queryset_for_user
 
 def _max_stress_for_character(character):
-    """Stress capacity from durability grade (SRD baseline: 9, modified by DUR)."""
-    grade = None
-    stand = getattr(character, "stand", None)
-    if stand is not None:
-        grade = getattr(stand, "durability", None)
-    if not grade:
-        coin_stats = getattr(character, "coin_stats", None) or {}
-        if isinstance(coin_stats, dict):
-            grade = coin_stats.get("durability") or coin_stats.get("DURABILITY")
-    return {"S": 13, "A": 12, "B": 11, "C": 10, "D": 9, "F": 8}.get(grade, 9)
+    """Stress track length. Durability does not change box count (always 9)."""
+    return max_stress_slots_for_character(character)
 
 def _user_may_edit_character(user, character):
     if user.is_staff:
@@ -335,6 +331,17 @@ class CharacterViewSet(viewsets.ModelViewSet):
         if not field_name:
             return Response(
                 {"error": "Field name is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if field_name == "coin_stats":
+            return Response(
+                {
+                    "error": (
+                        "coin_stats is derived from Stand. "
+                        "PATCH nested stand grades (or use XP allocation) instead."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Check if field exists and is editable
@@ -995,17 +1002,18 @@ class CharacterViewSet(viewsets.ModelViewSet):
                             "error": (
                                 "Stand coin dice use roll_type ACTION with "
                                 "pool_source stand_coin and stand_stat "
-                                "(power|speed|precision|durability)."
+                                "(power|speed|precision)."
                             )
                         },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
-                if stand_stat_requested not in STAND_POOL_STAT_KEYS:
+                if stand_stat_requested not in STAND_ACTION_STAT_KEYS:
                     return Response(
                         {
                             "error": (
-                                "stand_stat must be power, speed, precision, "
-                                "or durability when pool_source is stand_coin."
+                                "stand_stat must be power, speed, or precision "
+                                "when pool_source is stand_coin. Durability is "
+                                "a resistance pool, not a Coin Action."
                             )
                         },
                         status=status.HTTP_400_BAD_REQUEST,
@@ -1411,6 +1419,16 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 xp_awarded, xp_track = award_desperate_action_xp(
                     character, session, roll, action_name, request.user
                 )
+                innate_xp, innate_track = award_innate_stand_dice_xp(
+                    character,
+                    session,
+                    roll,
+                    action_name,
+                    request.user,
+                    stand_stat=stand_stat_requested,
+                )
+                if innate_xp:
+                    xp_awarded, xp_track = innate_xp, innate_track
 
             if roll_type.upper() == "ACTION":
                 award_heritage_expression_xp(
@@ -1882,6 +1900,41 @@ class CharacterViewSet(viewsets.ModelViewSet):
             }
         )
 
+    @action(detail=True, methods=["post"], url_path="unlock-second-playbook")
+    def unlock_second_playbook_action(self, request, pk=None):
+        """Spend 30 XP from Available XP to gain a second playbook."""
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot advance this character.")
+
+        try:
+            token = bind_character_history_editor(request.user)
+            try:
+                allocation = apply_unlock_second_playbook(
+                    character,
+                    secondary_playbook=request.data.get("secondary_playbook"),
+                    from_pool=True,
+                )
+            finally:
+                reset_character_history_editor(token)
+        except XPAllocationError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "allocation": CharacterXPAllocationSerializer(
+                    allocation,
+                    context={
+                        "latest_undoable_allocation_id": allocation.id,
+                    },
+                ).data,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+            }
+        )
+
     @action(detail=True, methods=["post"], url_path="undo-latest-allocation")
     def undo_latest_allocation_action(self, request, pk=None):
         character = self.get_object()
@@ -2009,6 +2062,21 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "character": _character_response(character),
                 "allocations": _allocation_list_response(character),
                 **result,
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="reset-sheet")
+    def reset_sheet_action(self, request, pk=None):
+        """Reset mechanical sheet to chargen-blank. Keep campaign, name, crew, look, vice."""
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot reset this character.")
+        character = reset_character_sheet(character)
+        return Response(
+            {
+                "success": True,
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
             }
         )
 
@@ -2526,23 +2594,42 @@ class CharacterViewSet(viewsets.ModelViewSet):
     def add_progress_clock(self, request, pk=None):
         """Add a progress clock to a character."""
         character = self.get_object()
-        name = request.data.get("name")
-        segments = request.data.get("segments", 4)
+        name = (request.data.get("name") or "").strip()
+        segments = request.data.get("max_segments", request.data.get("segments", 4))
         description = request.data.get("description", "")
 
         if not name:
             return Response(
                 {"error": "Clock name is required"}, status=status.HTTP_400_BAD_REQUEST
             )
-
-        # Add progress clock (simplified - you'd implement actual clock mechanics)
+        try:
+            max_segments = int(segments)
+        except (TypeError, ValueError):
+            max_segments = 4
+        max_segments = max(1, min(12, max_segments))
+        clock = ProgressClock.objects.create(
+            name=name[:100],
+            clock_type=request.data.get("clock_type") or "COUNTDOWN",
+            max_segments=max_segments,
+            filled_segments=0,
+            description=description or "",
+            character=character,
+            campaign_id=character.campaign_id,
+            visible_to_party=bool(request.data.get("visible_to_party")),
+            created_by=request.user if request.user.is_authenticated else None,
+        )
         return Response(
             {
-                "message": f"Added progress clock: {name}",
-                "name": name,
-                "segments": segments,
-                "description": description,
-            }
+                "id": clock.id,
+                "name": clock.name,
+                "max_segments": clock.max_segments,
+                "segments": clock.max_segments,
+                "filled_segments": clock.filled_segments,
+                "filled": clock.filled_segments,
+                "visible_to_party": clock.visible_to_party,
+                "description": clock.description,
+            },
+            status=status.HTTP_201_CREATED,
         )
 
     @action(detail=True, methods=["post"], url_path="update-progress-clock")

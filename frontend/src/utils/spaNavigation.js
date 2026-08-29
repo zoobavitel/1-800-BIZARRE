@@ -35,7 +35,12 @@ export function characterHashFromIdAndName(id, trueName) {
 
 export function buildRouteHash(page, payload = {}) {
   if (page === "character") {
-    if (payload.characterId == null) return "character";
+    if (payload.characterId == null) {
+      if (payload.campaignId != null && payload.campaignId !== "") {
+        return `character/new/${payload.campaignId}`;
+      }
+      return "character";
+    }
     const id = payload.characterId;
     const slugRaw = payload.characterSlug ?? payload.slug ?? null;
     const slug =

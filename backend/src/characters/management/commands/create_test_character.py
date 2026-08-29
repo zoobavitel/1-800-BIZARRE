@@ -145,8 +145,8 @@ class Command(BaseCommand):
         """Get or create test Hamon abilities"""
         abilities = [
             ('Foundation Hamon', 'FOUNDATION', 'Basic Hamon breathing techniques'),
-            ('Zeppeli Style', 'TRADITIONALIST', 'Traditional Hamon combat techniques'),
-            ('Medical Hamon', 'MEDICAL', 'Healing and restorative Hamon'),
+            ('Caesar Style', 'CAESAR_STYLE', 'Bubble-based Hamon combat techniques'),
+            ('Cyber Style', 'CYBER_STYLE', 'Ripple channeled through cybernetics'),
         ]
 
         created_abilities = []
@@ -170,7 +170,7 @@ class Command(BaseCommand):
         abilities = [
             ('Spin Foundation', 'FOUNDATION', 'Basic Spin techniques'),
             ('Cavalier Spin', 'CAVALIER', 'Advanced Spin combat techniques'),
-            ('Architect Spin', 'ARCHITECT', 'Spin construction and manipulation'),
+            ('Ballbreaker Spin', 'BALLBREAKER', 'Spin disruption and nullification'),
         ]
 
         created_abilities = []

@@ -10,7 +10,7 @@ import {
   GRADE,
   INDEX_TO_GRADE,
   MAX_CREATION_DOTS,
-  MAX_DOTS_PER_ACTION_CREATION,
+  maxDotsPerActionAtCreation,
   STAND_COIN_CREATION_POINT_SUM,
   PC_STAT_DESC,
   STAND_STAT_KEYS,
@@ -50,6 +50,7 @@ import {
   resolveCharacterCampaignContext,
   isUserCampaignGmForCharacter,
   isGmViewingPlayerCharacterSheet,
+  isStandCoinChargenEditable as standCoinChargenUnlocked,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -72,9 +73,20 @@ import {
   normalizeCampaignGmId,
 } from "../features/character-sheet/utils/progressClockVisibility";
 import {
+  clampClockFilled,
+  clampClockSegments,
+  clockWedgeCount,
+  isPersistedProgressClockId,
+  normalizeSheetProgressClock,
+} from "../features/character-sheet/utils/progressClockSegments";
+import {
   markPcAutosaveBusyCollision,
   schedulePcPendingResaveDrain,
 } from "../features/character-sheet/utils/pcAutosaveQueue";
+import {
+  HISTORY_MANUAL_RESISTANCE_ATTR_OPTIONS,
+  historyManualResistanceActionName,
+} from "../features/character-sheet/utils/historyManualResistance";
 import {
   tierDieFromActionPool,
   outcomeFromActionRoll,
@@ -89,6 +101,7 @@ import {
 import {
   buildXpRequirementSnapshot,
   formatAttrTally,
+  formatInnateStandTally,
 } from "../features/character-sheet/utils/xpRequirements";
 import {
   archetypeRowsForCharacterPlaybook,
@@ -244,7 +257,7 @@ function computeResistanceSummary(diceResults) {
   const highest = sorted.length ? Math.max(...sorted) : 0;
   const sixes = sorted.filter((d) => d === 6).length;
   const isCritical = sixes >= 2;
-  const stressCost = isCritical ? -1 : Math.max(1, 6 - highest);
+  const stressCost = isCritical ? -1 : Math.max(0, 6 - highest);
   const outcome = isCritical
     ? "CRITICAL_SUCCESS"
     : highest >= 6
@@ -403,6 +416,14 @@ const XP_TRACK_SPEND_MAX = {
   playbook: 10,
 };
 
+/** Caps applied when a roll response ticks a track locally. Playbook is uncapped (innate). */
+const XP_TRACK_APPLY_CAP = {
+  insight: 5,
+  prowess: 5,
+  resolve: 5,
+  heritage: 5,
+};
+
 const ATTRIBUTE_XP_SPEND_TRACKS = new Set(["insight", "prowess", "resolve"]);
 
 function actionOptionsForXpSpendTrack(actionRatings, spendTrack) {
@@ -511,14 +532,16 @@ const ProgressClock = ({
   onClick = null,
   interactive = false,
 }) => {
+  const n = clockWedgeCount(segments);
+  const fill = clampClockFilled(filled, n);
   const r = size / 2 - 4,
     cx = size / 2,
     cy = size / 2;
-  const sa = 360 / segments;
+  const sa = 360 / n;
   const showArrows = interactive && onClick;
   const svg = (
-    <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
-      {Array.from({ length: segments }, (_, i) => {
+    <svg width={size} height={size}>
+      {Array.from({ length: n }, (_, i) => {
         const a1 = ((i * sa - 90) * Math.PI) / 180;
         const a2 = (((i + 1) * sa - 90) * Math.PI) / 180;
         const x1 = cx + r * Math.cos(a1),
@@ -529,26 +552,18 @@ const ProgressClock = ({
           <path
             key={i}
             d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${sa > 180 ? 1 : 0} 1 ${x2} ${y2} Z`}
-            fill={i < filled ? "#dc2626" : "transparent"}
+            fill={i < fill ? "#dc2626" : "transparent"}
             stroke="#6b7280"
             strokeWidth="1"
             style={{ cursor: interactive ? "pointer" : "default" }}
             onClick={
               interactive && onClick
-                ? () => onClick(i < filled ? i : i + 1)
+                ? () => onClick(i < fill ? i : i + 1)
                 : undefined
             }
           />
         );
       })}
-      <circle
-        cx={cx}
-        cy={cy}
-        r={r}
-        fill="transparent"
-        stroke="#6b7280"
-        strokeWidth="2"
-      />
     </svg>
   );
   if (showArrows) {
@@ -557,8 +572,8 @@ const ProgressClock = ({
         <button
           type="button"
           style={arrowBtnStyle}
-          onClick={() => onClick(Math.max(0, filled - 1))}
-          title="Decrease"
+          onClick={() => onClick(Math.max(0, fill - 1))}
+          title="Decrease filled ticks"
         >
           −
         </button>
@@ -566,8 +581,8 @@ const ProgressClock = ({
         <button
           type="button"
           style={arrowBtnStyle}
-          onClick={() => onClick(Math.min(segments, filled + 1))}
-          title="Increase"
+          onClick={() => onClick(Math.min(n, fill + 1))}
+          title="Increase filled ticks"
         >
           +
         </button>
@@ -694,35 +709,6 @@ function buildHealRollBoostPresetFromSelections(
     }
   });
   return { abilities: abilitiesPreset, heritage: heritagePreset };
-}
-
-/** SESSION card: GM-shared progress clocks (creator GM, or legacy null+visible on active session). */
-function isSessionGmSharedProgressClock(clk, gmId, activeSessionId) {
-  const gmid = normalizeCampaignGmId(gmId);
-  const creatorRaw = clk?.created_by;
-  const creator =
-    creatorRaw != null && creatorRaw !== ""
-      ? Number(creatorRaw)
-      : null;
-  const sid =
-    activeSessionId != null && activeSessionId !== ""
-      ? Number(activeSessionId)
-      : NaN;
-  const cs =
-    clk?.session != null && clk.session !== ""
-      ? Number(clk.session)
-      : NaN;
-  const sessionMatches =
-    Number.isFinite(sid) && Number.isFinite(cs) && cs === sid;
-  if (gmid != null && Number.isFinite(creator) && creator === gmid) return true;
-  if (
-    (creator == null || !Number.isFinite(creator)) &&
-    !!clk?.visible_to_players &&
-    sessionMatches
-  ) {
-    return true;
-  }
-  return false;
 }
 
 // ─── CharacterSheetWrapper ────────────────────────────────────────────────────
@@ -1216,6 +1202,8 @@ const CharacterSheetWrapper = ({
   sessionDataPollTick = 0,
   /** When true, skip merging server character snapshots into XP / stand / action state (avoids poll overwriting local spends before autosave). */
   sheetDraftIsDirty = false,
+  /** After reset-sheet: parent replaces tab character and remounts this wrapper. */
+  onCharacterReloaded,
 }) => {
   const { user } = useAuth();
   /** Last XP clocks/pool applied from a dedicated XP API; blocks stale parent hydrate until tab catches up. */
@@ -1861,6 +1849,20 @@ const CharacterSheetWrapper = ({
         Math.max(0, Math.floor(Number(character?.physicalArmorUsed) || 0)),
       ),
   );
+  const [spinArmorUsed, setSpinArmorUsed] = useState(
+    () =>
+      Math.min(
+        3,
+        Math.max(0, Math.floor(Number(character?.spinArmorUsed) || 0)),
+      ),
+  );
+  const [hamonArmorUsed, setHamonArmorUsed] = useState(
+    () =>
+      Math.min(
+        3,
+        Math.max(0, Math.floor(Number(character?.hamonArmorUsed) || 0)),
+      ),
+  );
 
   const physicalArmorMax = useMemo(() => {
     if (!hasPhysicalArmorItem) return 0;
@@ -1876,6 +1878,12 @@ const CharacterSheetWrapper = ({
   );
   const [healingClock, setHealingClock] = useState(
     character?.healingClock ?? 0,
+  );
+  const [healingClockSegments, setHealingClockSegments] = useState(() =>
+    Math.min(
+      5,
+      Math.max(4, Math.floor(Number(character?.healingClockSegments) || 4)),
+    ),
   );
 
   const [healingRecoverBusy, setHealingRecoverBusy] = useState(false);
@@ -2037,12 +2045,20 @@ const CharacterSheetWrapper = ({
     const u = character?.physicalArmorUsed;
     if (typeof u === "number" && Number.isFinite(u))
       setPhysicalArmorUsed(Math.min(6, Math.max(0, Math.floor(u))));
+    const spin = character?.spinArmorUsed;
+    if (typeof spin === "number" && Number.isFinite(spin))
+      setSpinArmorUsed(Math.min(3, Math.max(0, Math.floor(spin))));
+    const hamon = character?.hamonArmorUsed;
+    if (typeof hamon === "number" && Number.isFinite(hamon))
+      setHamonArmorUsed(Math.min(3, Math.max(0, Math.floor(hamon))));
   }, [
     character?.id,
     character?.standArmorUsed,
     character?.hasPhysicalArmorItem,
     character?.physicalArmorBonusCharges,
     character?.physicalArmorUsed,
+    character?.spinArmorUsed,
+    character?.hamonArmorUsed,
     sheetDraftIsDirty,
   ]);
 
@@ -2168,6 +2184,7 @@ const CharacterSheetWrapper = ({
   const [pendingStandAError, setPendingStandAError] = useState(null);
   const [xpAllocationRows, setXpAllocationRows] = useState([]);
   const [xpAllocationUndoBusy, setXpAllocationUndoBusy] = useState(false);
+  const [resetSheetBusy, setResetSheetBusy] = useState(false);
   const [xpAllocationActionError, setXpAllocationActionError] = useState(null);
   /** Top-of-page notice after XP spend undo/redo (what specifically changed). */
   const [xpActionToast, setXpActionToast] = useState(null);
@@ -2188,19 +2205,6 @@ const CharacterSheetWrapper = ({
   });
   const [gmRedoBusy, setGmRedoBusy] = useState(false);
   const [gmRedoError, setGmRedoError] = useState(null);
-  const [sheetUndoStatus, setSheetUndoStatus] = useState({
-    available: false,
-    summary: null,
-  });
-  const [sheetUndoBusy, setSheetUndoBusy] = useState(false);
-  const [sheetUndoError, setSheetUndoError] = useState(null);
-  const [sheetRedoStatus, setSheetRedoStatus] = useState({
-    available: false,
-    summary: null,
-  });
-  const [sheetRedoBusy, setSheetRedoBusy] = useState(false);
-  const [sheetRedoError, setSheetRedoError] = useState(null);
-
   // FIX 7: Minor advance action selector
   const [minorAdvanceAction, setMinorAdvanceAction] = useState("HUNT");
   const minorAdvanceActions = useMemo(
@@ -2285,6 +2289,12 @@ const CharacterSheetWrapper = ({
   const [secondaryPlaybook, setSecondaryPlaybook] = useState(
     character?.secondaryPlaybook || "",
   );
+  const [secondaryPlaybookUnlocked, setSecondaryPlaybookUnlocked] = useState(
+    Boolean(character?.secondaryPlaybookUnlocked || character?.secondaryPlaybook),
+  );
+  const [pendingSecondPlaybook, setPendingSecondPlaybook] = useState("");
+  const [unlockSecondBusy, setUnlockSecondBusy] = useState(false);
+  const [unlockSecondError, setUnlockSecondError] = useState(null);
 
   const hasStandPlaybook =
     playbook === "Stand" || secondaryPlaybook === "Stand";
@@ -2305,6 +2315,47 @@ const CharacterSheetWrapper = ({
     if (hid == null || !Array.isArray(heritages) || heritages.length === 0) return null;
     return heritages.find((h) => h && h.id === hid) || null;
   }, [charData?.heritage, heritages]);
+
+  const hasSkilledFromBirth = useMemo(() => {
+    if (!currentHeritage) return false;
+    const benefit = (currentHeritage.benefits || []).find(
+      (b) =>
+        String(b?.name || "")
+          .trim()
+          .toLowerCase() === "skilled from birth",
+    );
+    return Boolean(benefit && selectedBenefits.includes(benefit.id));
+  }, [currentHeritage, selectedBenefits]);
+
+  const hasSlowerRecovery = useMemo(() => {
+    if (!currentHeritage) return false;
+    const detriment = (currentHeritage.detriments || []).find(
+      (d) =>
+        String(d?.name || "")
+          .trim()
+          .toLowerCase() === "slower recovery",
+    );
+    return Boolean(detriment && selectedDetriments.includes(detriment.id));
+  }, [currentHeritage, selectedDetriments]);
+
+  useEffect(() => {
+    if (sheetDraftIsDirty) return;
+    const seg = character?.healingClockSegments;
+    if (typeof seg !== "number") return;
+    const n = Math.min(5, Math.max(4, Math.floor(seg)));
+    setHealingClockSegments((p) => (p !== n ? n : p));
+  }, [character?.id, character?.healingClockSegments, sheetDraftIsDirty]);
+
+  useEffect(() => {
+    setHealingClockSegments(hasSlowerRecovery ? 5 : 4);
+  }, [hasSlowerRecovery]);
+
+  useEffect(() => {
+    setHealingClock((prev) => {
+      const n = Math.max(0, Math.min(healingClockSegments, Number(prev) || 0));
+      return n === prev ? prev : n;
+    });
+  }, [healingClockSegments]);
 
   const heritageAutoAbilities = useMemo(() => {
     if (!currentHeritage) return [];
@@ -2442,7 +2493,17 @@ const CharacterSheetWrapper = ({
       setPlaybook(character.playbook);
     }
     setSecondaryPlaybook(character?.secondaryPlaybook || "");
-  }, [character?.id, character?.playbook, character?.secondaryPlaybook]);
+    setSecondaryPlaybookUnlocked(
+      Boolean(character?.secondaryPlaybookUnlocked || character?.secondaryPlaybook),
+    );
+    setPendingSecondPlaybook("");
+    setUnlockSecondError(null);
+  }, [
+    character?.id,
+    character?.playbook,
+    character?.secondaryPlaybook,
+    character?.secondaryPlaybookUnlocked,
+  ]);
 
   const [standType, setStandType] = useState(character?.standType || "");
   const [standTypeCustom, setStandTypeCustom] = useState(
@@ -2608,11 +2669,7 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     if (sheetDraftIsDirty) return;
     const incoming = Array.isArray(character?.clocks)
-      ? character.clocks.map((c) => ({
-          ...c,
-          segments: c.segments ?? c.max_segments ?? 4,
-          filled: c.filled ?? c.filled_segments ?? 0,
-        }))
+      ? character.clocks.map((c) => normalizeSheetProgressClock(c)).filter(Boolean)
       : [];
     setClocks((prev) => {
       if (JSON.stringify(prev) === JSON.stringify(incoming)) return prev;
@@ -3094,7 +3151,15 @@ const CharacterSheetWrapper = ({
     5,
     Math.max(0, Number.isFinite(rawDur) ? Math.floor(rawDur) : 0),
   );
-  const devVal = Math.min(5, Math.max(0, Number(standStats.development) || 1));
+  const devVal = Math.min(
+    5,
+    Math.max(
+      0,
+      Number.isFinite(Number(standStats.development))
+        ? Math.floor(Number(standStats.development))
+        : 0,
+    ),
+  );
   /** SRD_DEV: stress track fixed at 9; Stand Durability only affects armor (+ resist tiers). */
   const maxStress = 9;
   const applyStressCost = useCallback(
@@ -3181,20 +3246,16 @@ const CharacterSheetWrapper = ({
       Math.max(0, Number(character?.standCoinPointsGained) || 0),
     totalStandPoints,
   );
-  /** First-level redistribution only (all-D default, swap by lowering one stat to F). After that, +1 grade costs 10 XP via Level Up. */
-  const isStandCoinChargenEditable = useMemo(() => {
-    if (!canEditSheet || !hasStandPlaybook) return false;
-    if (Math.max(0, Number(character?.standCoinPointsGained) || 0) > 0) {
-      return false;
-    }
-    if (totalActionDots > 0) return false;
-    return true;
-  }, [
-    canEditSheet,
-    hasStandPlaybook,
-    character?.standCoinPointsGained,
-    totalActionDots,
-  ]);
+  /** First-level radar clicks until an XP-bought Stand Coin rank. Action dots do not lock this. */
+  const isStandCoinChargenEditable = useMemo(
+    () =>
+      standCoinChargenUnlocked({
+        canEditSheet,
+        hasStandPlaybook,
+        standCoinPointsGained: character?.standCoinPointsGained,
+      }),
+    [canEditSheet, hasStandPlaybook, character?.standCoinPointsGained],
+  );
   const aRankCount = Object.values(standStats).reduce(
     (n, idx) => n + (INDEX_TO_GRADE(idx) === "A" ? 1 : 0),
     0,
@@ -3208,12 +3269,18 @@ const CharacterSheetWrapper = ({
     [xp],
   );
   const canAffordLevelUp = maxXpOnAnyTrack >= 10 || unallocatedXp >= 10;
+  const secondPlaybookXpWallet =
+    (Number(xp.playbook) || 0) + unallocatedXp;
+  const canAffordSecondPlaybook = secondPlaybookXpWallet >= 30;
   // XP expenditure accounting
   // Each stand coin grade = 10 XP (cost of one level-up stat advance)
   // Each action dot = 5 XP (cost of one minor advance)
   // Level 1 baseline = 95 XP (6 coin pts × 10 + 7 dots × 5)
   const totalSpentXP = totalStandPoints * 10 + totalActionDots * 5;
   const pcLevel = 1 + Math.floor((totalSpentXP - 95) / 10);
+  const isChargenIncomplete = pcLevel < 1;
+  const CHARGEN_LEVEL_PROMPT =
+    "begin allocating your action dots / playbook requirements (stand coin stats allocation)";
 
   // PC
 
@@ -3315,6 +3382,17 @@ const CharacterSheetWrapper = ({
     if (fe.standStats) setStandStats(fe.standStats);
     if (fe.actionRatings) setActionRatings(fe.actionRatings);
     if (fe.abilities) setAbilities(fe.abilities);
+    if (typeof fe.secondaryPlaybook === "string") {
+      setSecondaryPlaybook(fe.secondaryPlaybook);
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(fe, "secondaryPlaybookUnlocked") ||
+      fe.secondaryPlaybook
+    ) {
+      setSecondaryPlaybookUnlocked(
+        Boolean(fe.secondaryPlaybookUnlocked || fe.secondaryPlaybook),
+      );
+    }
     if (
       Object.prototype.hasOwnProperty.call(
         backendChar,
@@ -3450,40 +3528,6 @@ const CharacterSheetWrapper = ({
     }
   }, [characterId, isGmViewingPc]);
 
-  const refreshSheetUndoStatus = useCallback(async () => {
-    if (!characterId || !canEditSheet) {
-      setSheetUndoStatus({ available: false, summary: null });
-      return;
-    }
-    try {
-      const res = await characterAPI.getSheetUndoStatus(characterId);
-      setSheetUndoStatus(
-        res?.available
-          ? { available: true, summary: res.summary || null }
-          : { available: false, summary: null },
-      );
-    } catch {
-      setSheetUndoStatus({ available: false, summary: null });
-    }
-  }, [characterId, canEditSheet]);
-
-  const refreshSheetRedoStatus = useCallback(async () => {
-    if (!characterId || !canEditSheet) {
-      setSheetRedoStatus({ available: false, summary: null });
-      return;
-    }
-    try {
-      const res = await characterAPI.getSheetRedoStatus(characterId);
-      setSheetRedoStatus(
-        res?.available
-          ? { available: true, summary: res.summary || null }
-          : { available: false, summary: null },
-      );
-    } catch {
-      setSheetRedoStatus({ available: false, summary: null });
-    }
-  }, [characterId, canEditSheet]);
-
   const handleUndoLatestAllocation = useCallback(
     async (e) => {
       e?.stopPropagation?.();
@@ -3516,6 +3560,45 @@ const CharacterSheetWrapper = ({
       xpAllocationUndoBusy,
       applyBackendCharacter,
       refreshXpAllocations,
+    ],
+  );
+
+  const handleResetCharacterSheet = useCallback(
+    async (e) => {
+      e?.stopPropagation?.();
+      if (!characterId || resetSheetBusy || !canEditSheet) return;
+      const ok = window.confirm(
+        "Reset this character sheet?\n\nKeeps campaign, name, crew, look, vice, and heritage.\nClears extra heritage picks, playbook, trauma, stress, XP, dots, abilities, and harm.\n\nThis cannot be undone.",
+      );
+      if (!ok) return;
+      setResetSheetBusy(true);
+      setXpAllocationActionError(null);
+      try {
+        const res = await characterAPI.resetCharacterSheet(characterId);
+        const backendChar = res?.character;
+        if (backendChar) {
+          const fe = transformBackendToFrontend(backendChar);
+          onCharacterReloaded?.(fe);
+        }
+        if (Array.isArray(res?.allocations)) {
+          setXpAllocationRows(res.allocations);
+        } else {
+          setXpAllocationRows([]);
+        }
+        setXpActionToast({ kind: "ok", message: "Character sheet reset." });
+      } catch (err) {
+        const msg = err?.message || "Failed to reset character";
+        setXpAllocationActionError(msg);
+        setXpActionToast({ kind: "err", message: msg });
+      } finally {
+        setResetSheetBusy(false);
+      }
+    },
+    [
+      characterId,
+      resetSheetBusy,
+      canEditSheet,
+      onCharacterReloaded,
     ],
   );
 
@@ -3555,9 +3638,14 @@ const CharacterSheetWrapper = ({
     ],
   );
 
-  // FIX 1: Creation-mode dot clicks — hard cap 7 total / max 2 per action
+  // FIX 1: Creation-mode dot clicks — hard cap 7 total / max 2 per action (3 with Skilled From Birth)
   const updateActionRating = (action, newVal) => {
-    if (newVal < 0 || newVal > MAX_DOTS_PER_ACTION_CREATION) return;
+    const maxDots = maxDotsPerActionAtCreation({
+      hasSkilledFromBirth,
+      actionRatings,
+      action,
+    });
+    if (newVal < 0 || newVal > maxDots) return;
     const delta = newVal - actionRatings[action];
     if (delta > 0 && totalActionDots + delta > maxActionDotsBudget) return;
     setActionRatings((p) => ({ ...p, [action]: newVal }));
@@ -3637,6 +3725,10 @@ const CharacterSheetWrapper = ({
     };
 
     const cur = Number(xp?.[track]) || 0;
+    // Innate overflow lives above 10; box ticks must not dump remainder into the pool.
+    if (track === "playbook" && cur > 10) {
+      return;
+    }
     // Click filled box → clear from that index up; click empty → fill through it.
     const desired = Math.min(idx < cur ? idx : idx + 1, maxVals[track]);
     if (!characterId) {
@@ -3782,13 +3874,42 @@ const CharacterSheetWrapper = ({
     try {
       const res = await characterAPI.applyLevelUp(characterId, body);
       if (res?.character) applyBackendCharacter(res.character);
-      if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
+      if (Array.isArray(res?.allocations))       setXpAllocationRows(res.allocations);
       setShowLevelUp(false);
       setLevelUpLockTrack(null);
     } catch (err) {
       setLevelUpError(err?.message || "Level up failed");
     } finally {
       setLevelUpBusy(false);
+    }
+  };
+
+  const unlockSecondPlaybook = async () => {
+    if (!characterId || unlockSecondBusy) return;
+    const pick = pendingSecondPlaybook || secondaryPlaybook;
+    if (!pick) {
+      setUnlockSecondError("Pick which playbook to gain.");
+      return;
+    }
+    if (secondPlaybookXpWallet < 30) {
+      setUnlockSecondError(
+        `Need 30 XP from playbook track + Available XP (have playbook ${Number(xp.playbook) || 0} + pool ${unallocatedXp}).`,
+      );
+      return;
+    }
+    setUnlockSecondBusy(true);
+    setUnlockSecondError(null);
+    try {
+      const res = await characterAPI.unlockSecondPlaybook(characterId, {
+        secondary_playbook: pick.toUpperCase(),
+      });
+      if (res?.character) applyBackendCharacter(res.character);
+      if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
+      setPendingSecondPlaybook("");
+    } catch (err) {
+      setUnlockSecondError(err?.message || "Could not unlock second playbook");
+    } finally {
+      setUnlockSecondBusy(false);
     }
   };
 
@@ -4157,7 +4278,7 @@ const CharacterSheetWrapper = ({
   const handleHealingClockAdjust = useCallback(
     (nextFilled) => {
       markFieldTouch("healingClock");
-      const cap = 4;
+      const cap = healingClockSegments;
       setHealingClock((prev) => {
         const cur = Math.max(0, Math.min(cap, Number(prev) || 0));
         const next = Math.max(0, Math.min(cap, Number(nextFilled) || 0));
@@ -4176,12 +4297,12 @@ const CharacterSheetWrapper = ({
         return remainder;
       });
     },
-    [downgradeAllHarmByOneLevel, markFieldTouch],
+    [downgradeAllHarmByOneLevel, healingClockSegments, markFieldTouch],
   );
 
   const advanceHealingClockBySegments = useCallback(
     (segmentsToAdd) => {
-      const cap = 4;
+      const cap = healingClockSegments;
       const add = Math.max(0, Math.floor(Number(segmentsToAdd) || 0));
       if (!add) return;
       setHealingClock((prev) => {
@@ -4201,12 +4322,12 @@ const CharacterSheetWrapper = ({
         return remainder;
       });
     },
-    [downgradeAllHarmByOneLevel],
+    [downgradeAllHarmByOneLevel, healingClockSegments],
   );
 
   const applyRecoverySegmentsToTrack = useCallback(
-    (currentClock, currentHarm, segmentsToAdd) => {
-      const cap = 4;
+    (currentClock, currentHarm, segmentsToAdd, segmentCap = healingClockSegments) => {
+      const cap = Math.min(5, Math.max(4, Math.floor(Number(segmentCap) || 4)));
       const add = Math.max(0, Math.floor(Number(segmentsToAdd) || 0));
       const clock = Math.max(0, Math.min(cap, Number(currentClock) || 0));
       if (!add) {
@@ -4226,7 +4347,7 @@ const CharacterSheetWrapper = ({
         nextHarm,
       };
     },
-    [downgradeAllHarmByOneLevel],
+    [downgradeAllHarmByOneLevel, healingClockSegments],
   );
 
   const extractHarmFromBackendCharacter = useCallback((rawCharacter) => {
@@ -4735,106 +4856,6 @@ const CharacterSheetWrapper = ({
     ],
   );
 
-  const handleUndoLatestSheetEdit = useCallback(
-    async (e) => {
-      e?.stopPropagation?.();
-      if (!characterId || sheetUndoBusy || !sheetUndoStatus?.available) return;
-      setSheetUndoBusy(true);
-      setSheetUndoError(null);
-      try {
-        const res = await characterAPI.undoLatestSheetEdit(characterId);
-        if (res?.character) applyBackendCharacter(res.character);
-        if (Array.isArray(res?.allocations)) {
-          setXpAllocationRows(res.allocations);
-        } else {
-          await refreshXpAllocations();
-        }
-        if (res?.status) {
-          setSheetUndoStatus(
-            res.status.available
-              ? { available: true, summary: res.status.summary || null }
-              : { available: false, summary: null },
-          );
-        } else {
-          await refreshSheetUndoStatus();
-        }
-        if (res?.redo_status) {
-          setSheetRedoStatus(
-            res.redo_status.available
-              ? { available: true, summary: res.redo_status.summary || null }
-              : { available: false, summary: null },
-          );
-        } else {
-          await refreshSheetRedoStatus();
-        }
-        setHistoryRefreshTick((x) => x + 1);
-      } catch (err) {
-        setSheetUndoError(err?.message || "Failed to undo sheet edit");
-      } finally {
-        setSheetUndoBusy(false);
-      }
-    },
-    [
-      characterId,
-      sheetUndoBusy,
-      sheetUndoStatus?.available,
-      applyBackendCharacter,
-      refreshXpAllocations,
-      refreshSheetUndoStatus,
-      refreshSheetRedoStatus,
-    ],
-  );
-
-  const handleRedoLatestSheetEdit = useCallback(
-    async (e) => {
-      e?.stopPropagation?.();
-      if (!characterId || sheetRedoBusy || !sheetRedoStatus?.available) return;
-      setSheetRedoBusy(true);
-      setSheetRedoError(null);
-      try {
-        const res = await characterAPI.redoLatestSheetEdit(characterId);
-        if (res?.character) applyBackendCharacter(res.character);
-        if (Array.isArray(res?.allocations)) {
-          setXpAllocationRows(res.allocations);
-        } else {
-          await refreshXpAllocations();
-        }
-        if (res?.status) {
-          setSheetRedoStatus(
-            res.status.available
-              ? { available: true, summary: res.status.summary || null }
-              : { available: false, summary: null },
-          );
-        } else {
-          await refreshSheetRedoStatus();
-        }
-        if (res?.undo_status) {
-          setSheetUndoStatus(
-            res.undo_status.available
-              ? { available: true, summary: res.undo_status.summary || null }
-              : { available: false, summary: null },
-          );
-        } else {
-          await refreshSheetUndoStatus();
-        }
-        setHistoryRefreshTick((x) => x + 1);
-      } catch (err) {
-        setSheetRedoError(err?.message || "Failed to redo sheet edit");
-      } finally {
-        setSheetRedoBusy(false);
-      }
-    },
-    [
-      characterId,
-      sheetRedoBusy,
-      sheetRedoStatus?.available,
-      applyBackendCharacter,
-      refreshXpAllocations,
-      refreshSheetRedoStatus,
-      refreshSheetUndoStatus,
-    ],
-  );
-
   useEffect(() => {
     if (!characterId) {
       setXpReqTracker([]);
@@ -4891,16 +4912,6 @@ const CharacterSheetWrapper = ({
     refreshGmUndoStatus();
     refreshGmRedoStatus();
   }, [refreshGmUndoStatus, refreshGmRedoStatus, sessionDataPollTick, historyRefreshTick]);
-
-  useEffect(() => {
-    refreshSheetUndoStatus();
-    refreshSheetRedoStatus();
-  }, [
-    refreshSheetUndoStatus,
-    refreshSheetRedoStatus,
-    sessionDataPollTick,
-    historyRefreshTick,
-  ]);
 
   useEffect(() => {
     if (!showXpHistoryModal || !characterId) return;
@@ -6982,15 +6993,26 @@ const CharacterSheetWrapper = ({
         if (Number.isFinite(patientId) && patientId > 0 && segments > 0) {
           try {
             const targetRaw = await characterAPI.getCharacter(patientId);
+            const targetSegCap = Math.min(
+              5,
+              Math.max(
+                4,
+                Math.floor(Number(targetRaw?.healing_clock_segments) || 4),
+              ),
+            );
             const targetClock = Math.max(
               0,
-              Math.min(4, Number(targetRaw?.healing_clock_filled) || 0),
+              Math.min(
+                targetSegCap,
+                Number(targetRaw?.healing_clock_filled) || 0,
+              ),
             );
             const targetHarm = extractHarmFromBackendCharacter(targetRaw);
             const targetRecovery = applyRecoverySegmentsToTrack(
               targetClock,
               targetHarm,
               segments,
+              targetSegCap,
             );
             await characterAPI.patchCharacter(patientId, {
               healing_clock_filled: targetRecovery.nextClock,
@@ -7074,10 +7096,15 @@ const CharacterSheetWrapper = ({
         recoveryPresentation,
       });
       if (res.xp_gained > 0 && res.xp_track) {
-        setXp((p) => ({
-          ...p,
-          [res.xp_track]: Math.min((p[res.xp_track] || 0) + res.xp_gained, 5),
-        }));
+        setXp((p) => {
+          const key = res.xp_track;
+          const next = (Number(p[key]) || 0) + Number(res.xp_gained);
+          const cap = XP_TRACK_APPLY_CAP[key];
+          return {
+            ...p,
+            [key]: cap != null ? Math.min(next, cap) : next,
+          };
+        });
       }
       if (res.stress_spent) applyStressCost(res.stress_spent);
       if (activeSessionId && res.roll_id) {
@@ -7405,17 +7432,11 @@ const CharacterSheetWrapper = ({
       outcome = offlineDowntimeHeal ? "" : outcomeApiToSheetDisplay(apiOut);
     }
 
-    /** User resistance critical = clear stress (-1 sentinel). Durability resist: SRD_DEV two sixes ⇒ 0 spent; otherwise 6−highest, min 1. */
+    /** Resistance: 6 − highest (a 6 costs 0). Two 6s: pay 0 and clear 1 (−1 sentinel). */
     const stressCost = isResistance
-      ? extras &&
-          typeof extras === "object" &&
-          extras.durabilityStandResistance
-        ? sixes >= 2
-          ? 0
-          : Math.max(1, 6 - highest)
-        : isCritical
-          ? -1
-          : Math.max(1, 6 - highest)
+      ? isCritical
+        ? -1
+        : Math.max(0, 6 - highest)
       : null;
     const resistanceExtraStress =
       isResistance &&
@@ -7727,14 +7748,16 @@ const CharacterSheetWrapper = ({
     const name = String(newClockName || "").trim();
     const segs = Number(newClockSegments);
     if (!name || !Number.isFinite(segs)) return;
-    const boundedSegments = Math.max(1, Math.min(12, Math.round(segs)));
+    const boundedSegments = clampClockSegments(segs);
     setClocks((p) => [
       ...p,
       {
-        id: Date.now(),
+        id: `pc-clock-${Date.now()}`,
         name,
         segments: boundedSegments,
+        max_segments: boundedSegments,
         filled: 0,
+        filled_segments: 0,
         visible_to_party: !!newClockShared,
       },
     ]);
@@ -7744,8 +7767,35 @@ const CharacterSheetWrapper = ({
     setClockEditorOpen(false);
   };
 
+  const resizeClockSegments = useCallback((clockId, rawSegments) => {
+    const nextSegs = clampClockSegments(rawSegments);
+    let filledForApi = 0;
+    setClocks((p) =>
+      p.map((c) => {
+        if (c.id !== clockId) return c;
+        const filled = clampClockFilled(c.filled ?? c.filled_segments, nextSegs);
+        filledForApi = filled;
+        return {
+          ...c,
+          segments: nextSegs,
+          max_segments: nextSegs,
+          filled,
+          filled_segments: filled,
+        };
+      }),
+    );
+    if (isPersistedProgressClockId(clockId)) {
+      progressClockAPI
+        .updateProgressClock(clockId, {
+          max_segments: nextSegs,
+          filled_segments: filledForApi,
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   const addPerfectOrganismEntityClock = useCallback((sizeLabel, segments) => {
-    const segs = Math.max(1, Math.min(12, Number(segments) || 4));
+    const segs = clampClockSegments(segments);
     const stamp = Date.now();
     setClocks((p) => [
       ...p,
@@ -7778,8 +7828,11 @@ const CharacterSheetWrapper = ({
       hasPhysicalArmorItem,
       physicalArmorBonusCharges,
       physicalArmorUsed,
+      spinArmorUsed,
+      hamonArmorUsed,
       harm,
       healingClock,
+      healingClockSegments,
       coinFilled,
       stash: stashBoxes,
       xp,
@@ -7812,8 +7865,11 @@ const CharacterSheetWrapper = ({
     hasPhysicalArmorItem,
     physicalArmorBonusCharges,
     physicalArmorUsed,
+    spinArmorUsed,
+    hamonArmorUsed,
     harm,
     healingClock,
+    healingClockSegments,
     coinFilled,
     stashBoxes,
     xp,
@@ -7976,8 +8032,11 @@ const CharacterSheetWrapper = ({
     hasPhysicalArmorItem,
     physicalArmorBonusCharges,
     physicalArmorUsed,
+    spinArmorUsed,
+    hamonArmorUsed,
     harm,
     healingClock,
+    healingClockSegments,
     coinFilled,
     stashBoxes,
     xp,
@@ -8439,18 +8498,21 @@ const CharacterSheetWrapper = ({
                       </div>
                       <div
                         style={{
-                          fontSize: "20px",
+                          fontSize: isChargenIncomplete ? "9px" : "20px",
                           fontWeight: "bold",
-                          lineHeight: 1,
-                          color:
-                            pcLevel >= 7
+                          lineHeight: 1.2,
+                          color: isChargenIncomplete
+                            ? "#818cf8"
+                            : pcLevel >= 7
                               ? "#f87171"
                               : pcLevel >= 4
                                 ? "#fbbf24"
                                 : "#a5b4fc",
+                          whiteSpace: isChargenIncomplete ? "normal" : undefined,
+                          wordBreak: isChargenIncomplete ? "break-word" : undefined,
                         }}
                       >
-                        {pcLevel}
+                        {isChargenIncomplete ? CHARGEN_LEVEL_PROMPT : pcLevel}
                       </div>
                       {characterId && (
                         <div
@@ -8556,96 +8618,6 @@ const CharacterSheetWrapper = ({
                               </button>
                             </div>
                           </div>
-                          {canEditSheet && (
-                            <div
-                              style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                alignItems: "center",
-                                gap: 1,
-                              }}
-                            >
-                              <span
-                                style={{
-                                  fontSize: 8,
-                                  color: "#86efac",
-                                  fontWeight: 700,
-                                  letterSpacing: "0.04em",
-                                  lineHeight: 1,
-                                }}
-                              >
-                                EDIT
-                              </span>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: 4,
-                                  justifyContent: "center",
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleUndoLatestSheetEdit(e);
-                                  }}
-                                  disabled={
-                                    sheetUndoBusy || !sheetUndoStatus?.available
-                                  }
-                                  title={
-                                    sheetUndoStatus?.available
-                                      ? `Undo last sheet edit${sheetUndoStatus.summary ? `: ${sheetUndoStatus.summary}` : ""}`
-                                      : "No sheet edits to undo"
-                                  }
-                                  style={{
-                                    background: "#14532d",
-                                    border: "1px solid #22c55e",
-                                    borderRadius: 6,
-                                    padding: "2px 6px",
-                                    cursor: sheetUndoBusy ? "wait" : "pointer",
-                                    color: "#bbf7d0",
-                                    fontSize: 12,
-                                    lineHeight: 1,
-                                    opacity: sheetUndoStatus?.available
-                                      ? 1
-                                      : 0.45,
-                                  }}
-                                >
-                                  {sheetUndoBusy ? "…" : "↩"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRedoLatestSheetEdit(e);
-                                  }}
-                                  disabled={
-                                    sheetRedoBusy || !sheetRedoStatus?.available
-                                  }
-                                  title={
-                                    sheetRedoStatus?.available
-                                      ? `Redo last undone sheet edit${sheetRedoStatus.summary ? `: ${sheetRedoStatus.summary}` : ""}`
-                                      : "No sheet edits to redo"
-                                  }
-                                  style={{
-                                    background: "#14532d",
-                                    border: "1px solid #22c55e",
-                                    borderRadius: 6,
-                                    padding: "2px 6px",
-                                    cursor: sheetRedoBusy ? "wait" : "pointer",
-                                    color: "#bbf7d0",
-                                    fontSize: 12,
-                                    lineHeight: 1,
-                                    opacity: sheetRedoStatus?.available
-                                      ? 1
-                                      : 0.45,
-                                  }}
-                                >
-                                  {sheetRedoBusy ? "…" : "↪"}
-                                </button>
-                              </div>
-                            </div>
-                          )}
                           {isGmViewingPc && (
                             <div
                               style={{
@@ -8734,9 +8706,7 @@ const CharacterSheetWrapper = ({
                           )}
                         </div>
                       )}
-                      {(sheetUndoError ||
-                        sheetRedoError ||
-                        (isGmViewingPc && (gmUndoError || gmRedoError))) && (
+                      {isGmViewingPc && (gmUndoError || gmRedoError) && (
                         <div
                           style={{
                             fontSize: 9,
@@ -8746,21 +8716,45 @@ const CharacterSheetWrapper = ({
                             lineHeight: 1.2,
                           }}
                         >
-                          {sheetUndoError ||
-                            sheetRedoError ||
-                            gmUndoError ||
-                            gmRedoError}
+                          {gmUndoError || gmRedoError}
                         </div>
                       )}
-                      <div
-                        style={{
-                          fontSize: "9px",
-                          color: "#4b5563",
-                          marginTop: "1px",
-                        }}
-                      >
-                        {totalSpentXP} XP spent
-                      </div>
+                      {!isChargenIncomplete && (
+                        <div
+                          style={{
+                            fontSize: "9px",
+                            color: "#4b5563",
+                            marginTop: "1px",
+                          }}
+                        >
+                          {totalSpentXP} XP spent
+                        </div>
+                      )}
+                      {characterId && canEditSheet && (
+                        <button
+                          type="button"
+                          onClick={handleResetCharacterSheet}
+                          disabled={resetSheetBusy}
+                          title="Reset character sheet. Keeps name, crew, look, vice, heritage, and campaign."
+                          style={{
+                            marginTop: 4,
+                            width: "100%",
+                            background: "#3f1d1d",
+                            border: "1px solid #b91c1c",
+                            borderRadius: 4,
+                            padding: "3px 4px",
+                            cursor: resetSheetBusy ? "wait" : "pointer",
+                            color: "#fecaca",
+                            fontSize: 8,
+                            fontWeight: 700,
+                            letterSpacing: "0.03em",
+                            lineHeight: 1.15,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          {resetSheetBusy ? "…" : "reset character"}
+                        </button>
+                      )}
                     </div>
                   </div>
                   {showHistoryPanel && (
@@ -8970,11 +8964,37 @@ const CharacterSheetWrapper = ({
                                     </div>
                                     <div
                                       style={{
-                                        display: "grid",
-                                        gridTemplateColumns: "1fr 1fr",
+                                        display: "flex",
+                                        flexDirection: "column",
                                         gap: 6,
                                       }}
                                     >
+                                      <select
+                                        value={historyManual.sessionId}
+                                        onChange={(e) =>
+                                          setHistoryManual((p) => ({
+                                            ...p,
+                                            sessionId: e.target.value,
+                                          }))
+                                        }
+                                        style={{
+                                          ...S.sel,
+                                          fontSize: 10,
+                                          padding: "2px 6px",
+                                          width: "100%",
+                                          boxSizing: "border-box",
+                                        }}
+                                      >
+                                        <option value="">Session</option>
+                                        {(charCampaign?.sessions || []).map((s) => (
+                                          <option
+                                            key={s.id}
+                                            value={String(s.id)}
+                                          >
+                                            {s.name || `Session ${s.id}`}
+                                          </option>
+                                        ))}
+                                      </select>
                                       <select
                                         value={historyManual.rollType}
                                         onChange={(e) =>
@@ -8988,6 +9008,8 @@ const CharacterSheetWrapper = ({
                                           ...S.sel,
                                           fontSize: 10,
                                           padding: "2px 6px",
+                                          width: "100%",
+                                          boxSizing: "border-box",
                                         }}
                                       >
                                         <option value="ACTION">Action</option>
@@ -8997,30 +9019,6 @@ const CharacterSheetWrapper = ({
                                         <option value="VICE">Vice roll</option>
                                         <option value="FORTUNE">Fortune roll</option>
                                         <option value="XP">XP award</option>
-                                      </select>
-                                      <select
-                                        value={historyManual.sessionId}
-                                        onChange={(e) =>
-                                          setHistoryManual((p) => ({
-                                            ...p,
-                                            sessionId: e.target.value,
-                                          }))
-                                        }
-                                        style={{
-                                          ...S.sel,
-                                          fontSize: 10,
-                                          padding: "2px 6px",
-                                        }}
-                                      >
-                                        <option value="">Session</option>
-                                        {(charCampaign?.sessions || []).map((s) => (
-                                          <option
-                                            key={s.id}
-                                            value={String(s.id)}
-                                          >
-                                            {s.name || `Session ${s.id}`}
-                                          </option>
-                                        ))}
                                       </select>
                                       {historyManual.rollType === "XP" ? (
                                         <>
@@ -9036,6 +9034,8 @@ const CharacterSheetWrapper = ({
                                               ...S.sel,
                                               fontSize: 10,
                                               padding: "2px 6px",
+                                              width: "100%",
+                                              boxSizing: "border-box",
                                             }}
                                           >
                                             <option value="playbook">Playbook</option>
@@ -9062,6 +9062,8 @@ const CharacterSheetWrapper = ({
                                               ...S.inp,
                                               fontSize: 10,
                                               padding: "2px 6px",
+                                              width: "100%",
+                                              boxSizing: "border-box",
                                             }}
                                             title="XP to add (1–20 per award)"
                                           />
@@ -9075,12 +9077,13 @@ const CharacterSheetWrapper = ({
                                             }
                                             style={{
                                               ...S.inp,
-                                              gridColumn: "1 / -1",
                                               fontSize: 10,
                                               padding: "6px",
                                               minHeight: 52,
                                               resize: "vertical",
                                               fontFamily: "inherit",
+                                              width: "100%",
+                                              boxSizing: "border-box",
                                             }}
                                             placeholder="Explain what this XP was for (appears in session history and XP log)."
                                             rows={3}
@@ -9099,11 +9102,20 @@ const CharacterSheetWrapper = ({
                                             ...S.sel,
                                             fontSize: 10,
                                             padding: "2px 6px",
+                                            width: "100%",
+                                            boxSizing: "border-box",
                                           }}
                                         >
-                                          <option value="insight">Insight</option>
-                                          <option value="prowess">Prowess</option>
-                                          <option value="resolve">Resolve</option>
+                                          {HISTORY_MANUAL_RESISTANCE_ATTR_OPTIONS.map(
+                                            (opt) => (
+                                              <option
+                                                key={opt.value}
+                                                value={opt.value}
+                                              >
+                                                {opt.label}
+                                              </option>
+                                            ),
+                                          )}
                                         </select>
                                       ) : historyManual.rollType === "VICE" ? (
                                         <div
@@ -9144,6 +9156,8 @@ const CharacterSheetWrapper = ({
                                             ...S.inp,
                                             fontSize: 10,
                                             padding: "2px 6px",
+                                            width: "100%",
+                                            boxSizing: "border-box",
                                           }}
                                           placeholder="Action"
                                         />
@@ -9161,6 +9175,8 @@ const CharacterSheetWrapper = ({
                                             ...S.inp,
                                             fontSize: 10,
                                             padding: "2px 6px",
+                                            width: "100%",
+                                            boxSizing: "border-box",
                                           }}
                                           placeholder="Dice e.g. 6,4"
                                         />
@@ -9177,19 +9193,19 @@ const CharacterSheetWrapper = ({
                                             }
                                             style={{
                                               ...S.inp,
-                                              gridColumn: "1 / -1",
                                               fontSize: 10,
                                               padding: "6px",
                                               minHeight: 44,
                                               resize: "vertical",
                                               fontFamily: "inherit",
+                                              width: "100%",
+                                              boxSizing: "border-box",
                                             }}
                                             placeholder="What this fortune resolves (shown in session history)."
                                             rows={2}
                                           />
                                           <label
                                             style={{
-                                              gridColumn: "1 / -1",
                                               fontSize: 10,
                                               color: "#d1d5db",
                                               display: "flex",
@@ -9230,6 +9246,8 @@ const CharacterSheetWrapper = ({
                                               ...S.sel,
                                               fontSize: 10,
                                               padding: "2px 6px",
+                                              width: "100%",
+                                              boxSizing: "border-box",
                                             }}
                                           >
                                             <option value="">
@@ -9267,7 +9285,6 @@ const CharacterSheetWrapper = ({
                                               color: "#d1d5db",
                                               display: "flex",
                                               alignItems: "center",
-                                              gridColumn: "1 / -1",
                                             }}
                                           >
                                             Pool = lowest Insight / Prowess / Resolve
@@ -9275,18 +9292,17 @@ const CharacterSheetWrapper = ({
                                           </div>
                                         </>
                                       ) : historyManual.rollType === "FORTUNE" ? (
-                                        <div
-                                          style={{
-                                            ...S.inp,
-                                            fontSize: 10,
-                                            padding: "6px 8px",
-                                            gridColumn: "1 / -1",
-                                            color: "#d1d5db",
-                                            display: "flex",
-                                            flexDirection: "column",
-                                            gap: 6,
-                                          }}
-                                        >
+                                          <div
+                                            style={{
+                                              ...S.inp,
+                                              fontSize: 10,
+                                              padding: "6px 8px",
+                                              color: "#d1d5db",
+                                              display: "flex",
+                                              flexDirection: "column",
+                                              gap: 6,
+                                            }}
+                                          >
                                           <div>
                                             Outcome:{" "}
                                             <strong style={{ color: "#e5e7eb" }}>
@@ -9310,7 +9326,8 @@ const CharacterSheetWrapper = ({
                                                 ...S.sel,
                                                 fontSize: 10,
                                                 padding: "2px 6px",
-                                                maxWidth: 220,
+                                                width: "100%",
+                                                boxSizing: "border-box",
                                               }}
                                             >
                                               <option value="CRITICAL_SUCCESS">
@@ -9387,7 +9404,8 @@ const CharacterSheetWrapper = ({
                                                   ...S.sel,
                                                   fontSize: 10,
                                                   padding: "2px 6px",
-                                                  maxWidth: 220,
+                                                  width: "100%",
+                                                  boxSizing: "border-box",
                                                 }}
                                               >
                                                 <option value="CRITICAL_SUCCESS">
@@ -9428,66 +9446,58 @@ const CharacterSheetWrapper = ({
                                               </button>
                                             ) : null}
                                           </div>
-                                          <select
-                                            value={historyManual.position}
-                                            onChange={(e) =>
-                                              setHistoryManual((p) => ({
-                                                ...p,
-                                                position: e.target.value,
-                                              }))
-                                            }
-                                            style={{
-                                              ...S.sel,
-                                              fontSize: 10,
-                                              padding: "2px 6px",
-                                            }}
-                                          >
-                                            <option value="controlled">
-                                              Controlled
-                                            </option>
-                                            <option value="risky">Risky</option>
-                                            <option value="desperate">
-                                              Desperate
-                                            </option>
-                                          </select>
-                                          <select
-                                            value={historyManual.effect}
-                                            onChange={(e) =>
-                                              setHistoryManual((p) => ({
-                                                ...p,
-                                                effect: e.target.value,
-                                              }))
-                                            }
-                                            style={{
-                                              ...S.sel,
-                                              fontSize: 10,
-                                              padding: "2px 6px",
-                                            }}
-                                          >
-                                            <option value="limited">
-                                              Limited
-                                            </option>
-                                            <option value="standard">
-                                              Standard
-                                            </option>
-                                            <option value="extreme">
-                                              Extreme
-                                            </option>
-                                          </select>
                                           <div
                                             style={{
-                                              gridColumn: "1 / -1",
+                                              display: "flex",
+                                              gap: 14,
+                                              flexWrap: "wrap",
+                                              alignItems: "flex-start",
+                                              marginTop: 2,
+                                            }}
+                                          >
+                                            <PositionStack
+                                              activePosition={
+                                                historyManual.position || "risky"
+                                              }
+                                              readOnly={false}
+                                              onSelect={(value) =>
+                                                setHistoryManual((p) => ({
+                                                  ...p,
+                                                  position: value,
+                                                }))
+                                              }
+                                            />
+                                            <EffectShapes
+                                              activeEffect={
+                                                historyManual.effect || "standard"
+                                              }
+                                              readOnly={false}
+                                              onSelect={(tier) =>
+                                                setHistoryManual((p) => ({
+                                                  ...p,
+                                                  effect: tier,
+                                                }))
+                                              }
+                                            />
+                                          </div>
+                                          <div
+                                            style={{
                                               fontSize: 9,
                                               color: "#6b7280",
                                               lineHeight: 1.35,
                                               marginTop: 2,
                                             }}
                                           >
-                                            Defaults: GM session row (
+                                            Click position squares or L/S/E to override this
+                                            offline record. Highlighted effect is the chosen base;
+                                            stored{" "}
+                                            <code style={{ color: "#9ca3af" }}>effect</code> still
+                                            adds push / +1 effect (now {manualHistoryEffectPreview}).
+                                            Defaults from GM session row (
                                             <code style={{ color: "#9ca3af" }}>
                                               active_session_detail.position_effect_by_character
                                             </code>
-                                            ) then session{" "}
+                                            ) then{" "}
                                             <code style={{ color: "#9ca3af" }}>
                                               default_position
                                             </code>
@@ -9495,40 +9505,14 @@ const CharacterSheetWrapper = ({
                                             <code style={{ color: "#9ca3af" }}>
                                               default_effect
                                             </code>
-                                            . Override here for this offline record. Online{" "}
+                                            . Online{" "}
                                             <code style={{ color: "#9ca3af" }}>rollAction</code>{" "}
                                             still resolves P/E from the same session map on the server
                                             (no client-sent position override).
                                           </div>
-                                          <div
-                                            style={{
-                                              gridColumn: "1 / -1",
-                                              marginTop: 6,
-                                              padding: "6px 8px",
-                                              borderRadius: 6,
-                                              border: "1px solid #374151",
-                                              background: "#0d1117",
-                                            }}
-                                          >
-                                            <div
-                                              style={{
-                                                fontSize: 9,
-                                                color: "#9ca3af",
-                                                marginBottom: 4,
-                                              }}
-                                            >
-                                              Effect tier after push + ability/heritage steps (same
-                                              order as server roll)
-                                            </div>
-                                            <EffectShapes
-                                              activeEffect={manualHistoryEffectPreview}
-                                              readOnly
-                                            />
-                                          </div>
                                           {manualHistorySuggestedDice != null ? (
                                             <div
                                               style={{
-                                                gridColumn: "1 / -1",
                                                 fontSize: 9,
                                                 color: "#a78bfa",
                                                 marginTop: 4,
@@ -10268,7 +10252,11 @@ const CharacterSheetWrapper = ({
                                                     : "ACTION",
                                                 action_name: isViceManual
                                                   ? "vice"
-                                                  : String(
+                                                  : isResistanceManual
+                                                    ? historyManualResistanceActionName(
+                                                        historyManual.action,
+                                                      )
+                                                    : String(
                                                         historyManual.action ||
                                                           "action",
                                                       ).toLowerCase(),
@@ -11710,9 +11698,9 @@ const CharacterSheetWrapper = ({
                             ({standArmorMax} chg)
                           </span>
                         </span>
-                        {standArmorMax === 0 ? (
+                        {standArmorMax <= 0 ? (
                           <div style={{ fontSize: "9px", color: "#6b7280" }}>
-                            F-grade durability: no stand path armor.
+                            No stand path armor at this durability grade.
                           </div>
                         ) : (
                           <div
@@ -11757,6 +11745,106 @@ const CharacterSheetWrapper = ({
                           </div>
                         )}
                       </div>
+                      {isSpinPlaybook ? (
+                        <div style={{ marginBottom: "8px" }}>
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              display: "block",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            SPIN ARMOR
+                            <span
+                              style={{ color: "#f59e0b", marginLeft: "4px" }}
+                            >
+                              (3 chg)
+                            </span>
+                          </span>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "3px",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            {Array.from({ length: 3 }, (_, i) => {
+                              const spent = i < spinArmorUsed;
+                              return (
+                                <div
+                                  key={`spin-armor-${i}`}
+                                  onClick={() =>
+                                    setSpinArmorUsed(spent ? i : i + 1)
+                                  }
+                                  title={
+                                    spent
+                                      ? "Used — click to restore"
+                                      : "Click to spend Spin armor charge"
+                                  }
+                                  style={{
+                                    width: "20px",
+                                    height: "20px",
+                                    border: "1px solid #4b5563",
+                                    cursor: "pointer",
+                                    background: spent ? "#b45309" : "#1f2937",
+                                  }}
+                                />
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+                      {isHamonPlaybook ? (
+                        <div style={{ marginBottom: "8px" }}>
+                          <span
+                            style={{
+                              fontSize: "10px",
+                              color: "#9ca3af",
+                              display: "block",
+                              marginBottom: "4px",
+                            }}
+                          >
+                            HAMON ARMOR
+                            <span
+                              style={{ color: "#22c55e", marginLeft: "4px" }}
+                            >
+                              (3 chg)
+                            </span>
+                          </span>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "3px",
+                              flexWrap: "wrap",
+                            }}
+                          >
+                            {Array.from({ length: 3 }, (_, i) => {
+                              const spent = i < hamonArmorUsed;
+                              return (
+                                <div
+                                  key={`hamon-armor-${i}`}
+                                  onClick={() =>
+                                    setHamonArmorUsed(spent ? i : i + 1)
+                                  }
+                                  title={
+                                    spent
+                                      ? "Used — click to restore"
+                                      : "Click to spend Hamon armor charge"
+                                  }
+                                  style={{
+                                    width: "20px",
+                                    height: "20px",
+                                    border: "1px solid #4b5563",
+                                    cursor: "pointer",
+                                    background: spent ? "#15803d" : "#1f2937",
+                                  }}
+                                />
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
                       {characterHasLegendaryGuard(abilities) ? (
                         <div
                           title={
@@ -11817,7 +11905,7 @@ const CharacterSheetWrapper = ({
                       >
                         <ProgressClock
                           size={55}
-                          segments={4}
+                          segments={healingClockSegments}
                           filled={healingClock}
                           interactive
                           onClick={handleHealingClockAdjust}
@@ -12133,6 +12221,7 @@ const CharacterSheetWrapper = ({
                   ].map(({ name, key, max }) => {
                     const filled = Number(xp[key]) || 0;
                     const trackFull = filled >= max;
+                    const overflowLocked = key === "playbook" && filled > max;
                     return (
                     <div
                       key={key}
@@ -12157,28 +12246,38 @@ const CharacterSheetWrapper = ({
                         {Array.from({ length: max }, (_, i) => {
                           const isFilled = i < filled;
                           const canSpendHere =
+                            !overflowLocked &&
                             canEditSheet &&
                             !poolAllocateBusy &&
                             !isFilled &&
                             unallocatedXp >= i + 1 - filled;
+                          const boxesInteractive =
+                            !overflowLocked &&
+                            canEditSheet &&
+                            (canSpendHere || isFilled);
                           return (
                             <div
                               key={i}
                               role="button"
-                              tabIndex={0}
+                              tabIndex={boxesInteractive ? 0 : -1}
                               title={
-                                isFilled
-                                  ? canEditSheet
-                                    ? `Return ${filled - i} to Available XP`
-                                    : "Filled"
-                                  : canSpendHere
-                                    ? `Spend ${i + 1 - filled} from Available XP`
-                                    : unallocatedXp < 1
-                                      ? "Need Available XP in the free pool first"
-                                      : "Not enough Available XP for this tick"
+                                overflowLocked
+                                  ? "Playbook overflow — Take advance spends 10 and leaves remainder"
+                                  : isFilled
+                                    ? canEditSheet
+                                      ? `Return ${filled - i} to Available XP`
+                                      : "Filled"
+                                    : canSpendHere
+                                      ? `Spend ${i + 1 - filled} from Available XP`
+                                      : unallocatedXp < 1
+                                        ? "Need Available XP in the free pool first"
+                                        : "Not enough Available XP for this tick"
                               }
-                              onClick={() => toggleXP(key, i)}
+                              onClick={() => {
+                                if (!overflowLocked) toggleXP(key, i);
+                              }}
                               onKeyDown={(e) => {
+                                if (overflowLocked) return;
                                 if (e.key === "Enter" || e.key === " ") {
                                   e.preventDefault();
                                   toggleXP(key, i);
@@ -12188,8 +12287,9 @@ const CharacterSheetWrapper = ({
                                 width: "13px",
                                 height: "13px",
                                 border: "1px solid #4b5563",
-                                cursor:
-                                  canSpendHere || isFilled
+                                cursor: overflowLocked
+                                  ? "default"
+                                  : canSpendHere || isFilled
                                     ? poolAllocateBusy
                                       ? "wait"
                                       : "pointer"
@@ -12283,7 +12383,9 @@ const CharacterSheetWrapper = ({
                         }}
                       >
                         Desperate ACTION → +1 on that attribute (group desperate
-                        too). End-session toggles + Dev bonus → free pool
+                        too). Desperate Power / Speed / Precision stand dice →
+                        +1 playbook (innate, uncapped; not Range, Durability, or
+                        Dev). End-session toggles + Dev bonus → free pool
                         (allocate later). Downtime training not automated yet.
                         Crew XP: use crew scorecard triggers.
                       </div>
@@ -12342,6 +12444,19 @@ const CharacterSheetWrapper = ({
                                 (desperate rolls; display capped)
                               </div>
                             )}
+                            <div
+                              style={{ fontSize: "10px", color: "#6b7280", marginTop: "6px" }}
+                            >
+                              Innate stand dice (Power / Speed / Precision):{" "}
+                              {xpReqSnapshot.innateStandDice.count === 0
+                                ? "none this session"
+                                : `${xpReqSnapshot.innateStandDice.count} — ${formatInnateStandTally(
+                                    xpReqSnapshot.innateStandDice.byStat,
+                                  )}`}
+                              {xpReqSnapshot.innateTrackerNote > 0
+                                ? ` · tracker +${xpReqSnapshot.innateTrackerNote} playbook (uncapped)`
+                                : ""}
+                            </div>
                           </div>
                         </div>
                         {(() => {
@@ -12814,11 +12929,26 @@ const CharacterSheetWrapper = ({
                         ))}
                       </select>
                       <select
-                        value={secondaryPlaybook}
-                        onChange={(e) => setSecondaryPlaybook(e.target.value)}
+                        value={
+                          secondaryPlaybookUnlocked
+                            ? secondaryPlaybook
+                            : pendingSecondPlaybook
+                        }
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (!secondaryPlaybookUnlocked) {
+                            setPendingSecondPlaybook(next);
+                            return;
+                          }
+                          setSecondaryPlaybook(next);
+                        }}
                         style={S.sel}
                         aria-label="Secondary playbook"
-                        title="Optional second playbook"
+                        title={
+                          secondaryPlaybookUnlocked
+                            ? "Second playbook"
+                            : "Spend 30 Available XP to obtain another playbook"
+                        }
                       >
                         <option value="">—</option>
                         {PLAYBOOK_SHEET_OPTIONS.filter((opt) => opt !== playbook).map(
@@ -12830,6 +12960,51 @@ const CharacterSheetWrapper = ({
                         )}
                       </select>
                     </div>
+                    {!secondaryPlaybookUnlocked ? (
+                      <div
+                        style={{
+                          marginTop: "8px",
+                          fontSize: "10px",
+                          color: "#9ca3af",
+                          lineHeight: 1.45,
+                        }}
+                      >
+                        Second playbook costs 30 XP from playbook track + Available XP
+                        (playbook {Number(xp.playbook) || 0} + pool {unallocatedXp} ={" "}
+                        {secondPlaybookXpWallet}).
+                        {unlockSecondError ? (
+                          <div style={{ color: "#f87171", marginTop: "4px" }}>
+                            {unlockSecondError}
+                          </div>
+                        ) : null}
+                        <button
+                          type="button"
+                          disabled={
+                            !canEditSheet ||
+                            unlockSecondBusy ||
+                            !canAffordSecondPlaybook ||
+                            !pendingSecondPlaybook
+                          }
+                          onClick={() => void unlockSecondPlaybook()}
+                          style={{
+                            ...S.btn,
+                            marginTop: "6px",
+                            fontSize: "10px",
+                            opacity:
+                              !canEditSheet ||
+                              unlockSecondBusy ||
+                              !canAffordSecondPlaybook ||
+                              !pendingSecondPlaybook
+                                ? 0.5
+                                : 1,
+                          }}
+                        >
+                          {unlockSecondBusy
+                            ? "Unlocking…"
+                            : "Spend 30 XP to gain this playbook"}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                   {hasStandPlaybook && (
                     <div
@@ -13581,7 +13756,7 @@ const CharacterSheetWrapper = ({
                         }}
                       >
                         {isStandCoinChargenEditable
-                          ? "Chargen: every stat starts at D. Right-click a wedge to lower one stat to F, then raise another — point total stays at 6."
+                          ? "Chargen: click a wedge to raise one grade if leftover pts remain (budget 6). Right-click or Shift-click to lower and refund. This is not an advance."
                           : canAffordLevelUp
                             ? "Stand coin is locked here. Fill the playbook track (10) and Take advance, or Level up from pool (−10), for +1 Stand Coin grade."
                             : "Stand coin is locked after chargen. Fill playbook (10) or bank 10 in Available XP, then Take advance / level up from pool."}
@@ -13619,17 +13794,27 @@ const CharacterSheetWrapper = ({
                       </span>
                       <span
                         style={{
-                          color: pcLevel >= 4 ? "#fbbf24" : "#34d399",
+                          color: isChargenIncomplete
+                            ? "#818cf8"
+                            : pcLevel >= 4
+                              ? "#fbbf24"
+                              : "#34d399",
                           fontWeight: "bold",
+                          fontSize: isChargenIncomplete ? "10px" : undefined,
+                          lineHeight: isChargenIncomplete ? 1.25 : undefined,
+                          maxWidth: isChargenIncomplete ? 220 : undefined,
+                          textAlign: isChargenIncomplete ? "right" : undefined,
                         }}
                       >
-                        Lv {pcLevel}
+                        {isChargenIncomplete
+                          ? CHARGEN_LEVEL_PROMPT
+                          : `Lv ${pcLevel}`}
                       </span>
                     </div>
                   </div>
                   ) : null}
 
-                  {/* Session info the table shares with this sheet (wanted, clocks, position/effect when enabled). */}
+                  {/* Session info the table shares with this sheet (wanted, NPC clocks). */}
                   {charCampaign && activeSessionId && (
                     <div
                       style={{
@@ -14061,96 +14246,6 @@ const CharacterSheetWrapper = ({
                           </div>
                         </div>
                       )}
-                      <div style={{ marginBottom: "8px" }}>
-                        <span style={{ fontSize: "11px", color: "#9ca3af" }}>
-                          Clocks:{" "}
-                        </span>
-                        {(charCampaign.progress_clocks || []).filter((clk) =>
-                          isSessionGmSharedProgressClock(
-                            clk,
-                            charCampaign?.gm,
-                            activeSessionId,
-                          ),
-                        ).length > 0 ? (
-                          <div
-                            style={{
-                              display: "flex",
-                              flexWrap: "wrap",
-                              gap: "12px",
-                              alignItems: "center",
-                              marginTop: "4px",
-                            }}
-                          >
-                            {(charCampaign.progress_clocks || [])
-                              .filter((clk) =>
-                                isSessionGmSharedProgressClock(
-                                  clk,
-                                  charCampaign?.gm,
-                                  activeSessionId,
-                                ),
-                              )
-                              .map((clk) => {
-                              const canEdit =
-                                isGM ||
-                                Number(clk.created_by) === Number(user?.id);
-                              return (
-                                <div
-                                  key={clk.id}
-                                  style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "8px",
-                                  }}
-                                >
-                                  <div style={{ textAlign: "center" }}>
-                                    <ProgressClock
-                                      size={44}
-                                      segments={clk.max_segments}
-                                      filled={clk.filled_segments}
-                                      interactive={canEdit}
-                                      onClick={
-                                        canEdit
-                                          ? (f) => {
-                                              progressClockAPI
-                                                .updateProgressClock(clk.id, {
-                                                  filled_segments: f,
-                                                })
-                                                .then(() =>
-                                                  onCampaignRefresh?.(),
-                                                )
-                                                .catch(() => {});
-                                            }
-                                          : undefined
-                                      }
-                                    />
-                                    <span
-                                      style={{
-                                        fontSize: "10px",
-                                        color: "#6b7280",
-                                        display: "block",
-                                      }}
-                                    >
-                                      {clk.name}
-                                    </span>
-                                    <span
-                                      style={{
-                                        fontSize: "10px",
-                                        color: "#9ca3af",
-                                      }}
-                                    >
-                                      {clk.filled_segments}/{clk.max_segments}
-                                    </span>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: "12px", color: "#6b7280" }}>
-                            None
-                          </span>
-                        )}
-                      </div>
                     </div>
                   )}
 
@@ -14474,8 +14569,12 @@ const CharacterSheetWrapper = ({
                                   >
                                     {[1, 2, 3, 4].map((d) => {
                                       const filled = d <= rating;
-                                      const isAdvDot =
-                                        d > MAX_DOTS_PER_ACTION_CREATION; // dots 3-4 require advancement
+                                      const creationCap = maxDotsPerActionAtCreation({
+                                        hasSkilledFromBirth,
+                                        actionRatings,
+                                        action,
+                                      });
+                                      const isAdvDot = d > creationCap;
                                       return (
                                         <div
                                           key={d}
@@ -16065,10 +16164,11 @@ const CharacterSheetWrapper = ({
                         {resistancePoolPreview?.modeStandDurability ? (
                           <>
                             When your <strong>Stand</strong> takes a hit, resist with
-                            Durability dice (SRD_DEV). Stress:{" "}
-                            <code style={{ color: "#9ca3af" }}>6 − highest die</code>{" "}
-                            (minimum 1 on a single six;{" "}
-                            <strong>two sixes</strong> = resist for free). Apply to the
+                            Durability dice (SRD_DEV).                             Stress:{" "}
+                            <code style={{ color: "#9ca3af" }}>6 − highest die</code>
+                            {" "}(a 6 costs 0;{" "}
+                            <strong>two sixes</strong> = resist free and clear 1
+                            stress). Apply to the
                             Stand&apos;s consequence; use Stand Armor charges separately
                             if marking armor.
                           </>
@@ -19596,6 +19696,10 @@ const CharacterSheetWrapper = ({
                         const gmShared =
                           gmManaged &&
                           (!!clk.visible_to_players || !!clk.visible_to_party);
+                        const segs = clockWedgeCount(clk.segments);
+                        const fill = clampClockFilled(clk.filled, segs);
+                        const canResizeClock =
+                          canEditSheet && (!gmManaged || isGM);
                         return (
                         <div
                           key={clk.id}
@@ -19633,21 +19737,62 @@ const CharacterSheetWrapper = ({
                           >
                             <ProgressClock
                               size={50}
-                              segments={clk.segments}
-                              filled={clk.filled}
-                              interactive
+                              segments={segs}
+                              filled={fill}
+                              interactive={canEditSheet}
                               onClick={(f) =>
                                 setClocks((p) =>
                                   p.map((c) =>
-                                    c.id === clk.id ? { ...c, filled: f } : c,
+                                    c.id === clk.id
+                                      ? {
+                                          ...c,
+                                          filled: clampClockFilled(f, segs),
+                                          filled_segments: clampClockFilled(
+                                            f,
+                                            segs,
+                                          ),
+                                        }
+                                      : c,
                                   ),
                                 )
                               }
                             />
                           </div>
                           <div style={{ fontSize: "10px", color: "#6b7280" }}>
-                            {clk.filled}/{clk.segments}
+                            {fill}/{segs}
                           </div>
+                          {canResizeClock ? (
+                            <label
+                              style={{
+                                display: "flex",
+                                justifyContent: "center",
+                                alignItems: "center",
+                                gap: "4px",
+                                fontSize: "10px",
+                                color: "#9ca3af",
+                                marginTop: "4px",
+                              }}
+                            >
+                              Size
+                              <input
+                                type="number"
+                                min={1}
+                                max={12}
+                                title="Clock segments (1–12). −/+ ticks fill, not size."
+                                value={segs}
+                                onChange={(e) =>
+                                  resizeClockSegments(clk.id, e.target.value)
+                                }
+                                style={{
+                                  ...S.inp,
+                                  width: "48px",
+                                  fontSize: "11px",
+                                  textAlign: "center",
+                                  padding: "2px 4px",
+                                }}
+                              />
+                            </label>
+                          ) : null}
                           {gmManaged ? (
                             <div
                               title={

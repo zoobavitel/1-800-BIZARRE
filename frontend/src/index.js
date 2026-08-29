@@ -217,6 +217,7 @@ function routeStateFromHash(hash) {
   const base = {
     currentPage: "home",
     characterPageId: null,
+    characterNewCampaignId: null,
     campaignPageId: null,
     campaignSessionId: null,
     npcPageId: null,
@@ -293,6 +294,15 @@ function routeStateFromHash(hash) {
   }
   if (hash === "character" || hash.startsWith("character/")) {
     const idPart = hash.replace(/^character\/?/, "");
+    if (idPart.startsWith("new/")) {
+      const campaignPart = idPart.replace(/^new\/?/, "");
+      return {
+        ...base,
+        currentPage: "character",
+        characterPageId: null,
+        characterNewCampaignId: parseHashId(campaignPart),
+      };
+    }
     return {
       ...base,
       currentPage: "character",
@@ -311,6 +321,9 @@ const App = () => {
   const [currentPage, setCurrentPage] = useState(initialRoute.currentPage);
   const [characterPageId, setCharacterPageId] = useState(
     initialRoute.characterPageId,
+  );
+  const [characterNewCampaignId, setCharacterNewCampaignId] = useState(
+    initialRoute.characterNewCampaignId,
   );
   const [campaignPageId, setCampaignPageId] = useState(
     initialRoute.campaignPageId,
@@ -346,6 +359,7 @@ const App = () => {
     const s = routeStateFromHash(window.location.hash.substring(1));
     setCurrentPage(s.currentPage);
     setCharacterPageId(s.characterPageId);
+    setCharacterNewCampaignId(s.characterNewCampaignId ?? null);
     setCampaignPageId(s.campaignPageId);
     setCampaignSessionId(s.campaignSessionId ?? null);
     setNpcPageId(s.npcPageId);
@@ -387,11 +401,20 @@ const App = () => {
     }
     setCurrentPage(page);
     if (page === "character") {
-      setCharacterPageId(payload?.characterId ?? null);
+      const characterId = payload?.characterId ?? null;
+      const newCampaignId =
+        characterId == null && payload?.campaignId != null
+          ? payload.campaignId
+          : null;
+      setCharacterPageId(characterId);
+      setCharacterNewCampaignId(newCampaignId);
       setCampaignPageId(null);
       setCampaignSessionId(null);
       setAbilityFilter(null);
-      window.location.hash = buildRouteHash(page, payload);
+      window.location.hash = buildRouteHash(page, {
+        characterId,
+        campaignId: newCampaignId,
+      });
     } else if (page === "campaigns") {
       const cur = campaignRouteRef.current;
       let nextCampaign = cur.campaignPageId;
@@ -422,6 +445,7 @@ const App = () => {
       setCampaignPageId(nextCampaign);
       setCampaignSessionId(nextSession);
       setCharacterPageId(null);
+      setCharacterNewCampaignId(null);
       setAbilityFilter(null);
 
       window.location.hash = buildRouteHash("campaigns", {
@@ -568,6 +592,7 @@ const App = () => {
         {currentPage === "character" && (
           <CharacterPage
             initialCharacterId={characterPageId}
+            initialNewCampaignId={characterNewCampaignId}
             onRegisterNavigationGuard={setNavigationGuard}
           />
         )}
@@ -592,8 +617,11 @@ const App = () => {
             initialCampaignId={campaignPageId}
             initialFactionId={campaignFactionId}
             initialSessionId={campaignSessionId}
-            onNavigateToCharacter={(id) =>
-              handlePageChange("character", { characterId: id })
+            onNavigateToCharacter={(id, opts) =>
+              handlePageChange("character", {
+                characterId: id ?? null,
+                campaignId: opts?.campaignId ?? null,
+              })
             }
             onNavigateToNPC={(id, opts) =>
               handlePageChange("npcs", {
