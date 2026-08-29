@@ -12,8 +12,8 @@ describe("playbookXpTriggerSrd", () => {
       normalizePlaybookXpArchetypeKeys("Stand", ["COLONY", "COLONY", "INVALID"]),
     ).toEqual(["COLONY"]);
     expect(
-      normalizePlaybookXpArchetypeKeys("Hamon", ["TRADITIONALIST", "COLONY"]),
-    ).toEqual(["TRADITIONALIST"]);
+      normalizePlaybookXpArchetypeKeys("Hamon", ["CAESAR_STYLE", "COLONY"]),
+    ).toEqual(["CAESAR_STYLE"]);
   });
 
   test("inferSeed Stand uses stand type", () => {
@@ -27,10 +27,10 @@ describe("playbookXpTriggerSrd", () => {
     const keys = inferSeedArchetypeKeys("Hamon", {
       abilities: [
         { type: "hamon", hamon_type: "FOUNDATION" },
-        { type: "hamon", hamon_type: "ADAPTIVE_FLOW" },
+        { type: "hamon", hamon_type: "CYBER_STYLE" },
       ],
     });
-    expect(keys).toEqual(["ADAPTIVE_FLOW"]);
+    expect(keys).toEqual(["CYBER_STYLE"]);
   });
 
   test("merged sentences respects key order", () => {
@@ -55,6 +55,7 @@ describe("playbookXpTriggerSrd", () => {
       "AUTOMATIC",
       "FIGHTING",
       "SHARED",
+      "CONJOINED",
     ]) {
       expect(keys.has(k)).toBe(true);
     }

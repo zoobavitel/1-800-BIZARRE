@@ -55,6 +55,12 @@ export const STAND_ARCHETYPE_ROWS = Object.freeze([
     trigger:
       "Address a challenge by extending your Stand's reach to cover allies or multiple locations.",
   },
+  {
+    key: "CONJOINED",
+    label: "Conjoined",
+    trigger:
+      "Address a challenge by acting through a Stand fused with or inseparable from your body.",
+  },
 ]);
 
 /** @type {readonly ArchetypeRow[]} */
@@ -88,34 +94,22 @@ export const SPIN_ARCHETYPE_ROWS = Object.freeze([
 /** @type {readonly ArchetypeRow[]} */
 export const HAMON_ARCHETYPE_ROWS = Object.freeze([
   {
-    key: "TRADITIONALIST",
-    label: "Traditionalist",
+    key: "CAESAR_STYLE",
+    label: "Caesar Style",
     trigger:
-      "Address a challenge through disciplined Hamon technique, mentorship, or self-sacrifice.",
+      "Address a challenge with bubbles, refraction, or misdirection rather than direct force.",
   },
   {
-    key: "ADAPTIVE_FLOW",
-    label: "Adaptive Flow",
-    trigger:
-      "Address a challenge by applying Hamon in an improvised or unexpected way.",
-  },
-  {
-    key: "CYBER_HAMONIST",
-    label: "Cyber-Hamonist",
+    key: "CYBER_STYLE",
+    label: "Cyber Style",
     trigger:
       "Address a challenge by channeling Ripple through technology or cybernetics.",
   },
   {
-    key: "DARK_RESONANCE",
-    label: "Dark Resonance",
+    key: "VAMPIRIC_STYLE",
+    label: "Vampiric Style",
     trigger:
-      "Address a challenge by draining, corrupting, or inverting another's life force.",
-  },
-  {
-    key: "BIO_HARMONICS",
-    label: "Bio-Harmonics",
-    trigger:
-      "Address a challenge through biological dominance, absorption, or physical transformation.",
+      "Address a challenge by draining, freezing, or inverting another's life force.",
   },
 ]);
 

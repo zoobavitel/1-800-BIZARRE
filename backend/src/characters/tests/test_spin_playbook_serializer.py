@@ -1,4 +1,4 @@
-"""Serializer tests: Spin/Hamon playbook abilities and required_a_count gating (spin_playbook_abilities_ui_86a86437)."""
+"""Serializer tests: Spin/Hamon playbook abilities and character-level gating."""
 from django.test import TestCase
 from django.contrib.auth.models import User
 from rest_framework import status
@@ -22,8 +22,8 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         )
         self.spin_gated = SpinAbility.objects.create(
             name='Spin Gated',
-            spin_type='FOUNDATION',
-            description='Needs 2 A',
+            spin_type='CAVALIER',
+            description='Needs character level 2',
             required_a_count=2,
         )
         self.hamon_foundation = HamonAbility.objects.create(
@@ -34,8 +34,8 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         )
         self.hamon_gated = HamonAbility.objects.create(
             name='Hamon Gated',
-            hamon_type='FOUNDATION',
-            description='Needs 2 A',
+            hamon_type='CAESAR_STYLE',
+            description='Needs character level 2',
             required_a_count=2,
         )
         self.char = Character.objects.create(
@@ -43,6 +43,7 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
             true_name='Tester',
             heritage=self.heritage,
             playbook='SPIN',
+            level=1,
             coin_stats={
                 'power': 'F',
                 'speed': 'F',
@@ -62,17 +63,11 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         req.user = self.user
         return req
 
-    def test_spin_ability_succeeds_when_count_a_meets_required(self):
-        """Selecting a Spin ability with required_a_count=2 when coin_stats has 2 A grades succeeds."""
+    def test_spin_ability_succeeds_when_level_meets_required(self):
+        """Selecting a Spin ability with required_a_count=2 when level>=2 succeeds."""
+        self.char.level = 2
+        self.char.save(update_fields=['level'])
         data = {
-            'coin_stats': {
-                'power': 'A',
-                'speed': 'A',
-                'range': 'F',
-                'durability': 'F',
-                'precision': 'F',
-                'development': 'F',
-            },
             'playbook': 'SPIN',
             'spin_ability_ids': [self.spin_gated.id],
         }
@@ -84,17 +79,9 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         )
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
-    def test_spin_ability_fails_when_insufficient_a_count(self):
-        """Spin ability with required_a_count=2 fails when count_A is 0."""
+    def test_spin_ability_fails_when_insufficient_level(self):
+        """Spin ability with required_a_count=2 fails at character level 1."""
         data = {
-            'coin_stats': {
-                'power': 'F',
-                'speed': 'F',
-                'range': 'F',
-                'durability': 'F',
-                'precision': 'F',
-                'development': 'F',
-            },
             'playbook': 'SPIN',
             'spin_ability_ids': [self.spin_gated.id],
         }
@@ -107,7 +94,7 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn('non_field_errors', serializer.errors)
         err = str(serializer.errors['non_field_errors'][0])
-        self.assertIn('Insufficient', err)
+        self.assertIn('level', err.lower())
         self.assertIn('Spin Gated', err)
 
     def test_spin_abilities_rejected_when_playbook_not_spin(self):
@@ -125,12 +112,13 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         self.assertIn('non_field_errors', serializer.errors)
         self.assertIn('Spin abilities require playbook SPIN', str(serializer.errors['non_field_errors'][0]))
 
-    def test_hamon_ability_fails_when_insufficient_a_count(self):
+    def test_hamon_ability_fails_when_insufficient_level(self):
         hamon_char = Character.objects.create(
             user=self.user,
             true_name='Hamon',
             heritage=self.heritage,
             playbook='HAMON',
+            level=1,
             coin_stats={k: 'F' for k in ['power', 'speed', 'range', 'durability', 'precision', 'development']},
             action_dots={},
             trauma=[],
@@ -174,6 +162,7 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
             true_name='HamonOmitPb',
             heritage=self.heritage,
             playbook='HAMON',
+            level=2,
             coin_stats={
                 'power': 'A',
                 'speed': 'A',
@@ -189,7 +178,6 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         )
         data = {
             'hamon_ability_ids': [self.hamon_gated.id],
-            # playbook intentionally omitted
         }
         serializer = CharacterSerializer(
             instance=hamon_char,
@@ -277,27 +265,32 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         self.assertEqual(serializer.validated_data['heritage'], other)
 
     def test_create_character_with_spin_abilities_via_api(self):
-        """POST /api/characters/ assigns user in perform_create; spin abilities persist when prereqs met."""
+        """POST /api/characters/ assigns user; L1 spin ability (required 0 or level met) persists."""
         client = APIClient()
         client.force_authenticate(user=self.user)
         vice = Vice.objects.create(name='ViceSpinCreate')
         campaign = Campaign.objects.create(name='C', gm=self.user)
         a1 = Ability.objects.create(name='Ability 1', type='standard', description='d')
-        a2 = Ability.objects.create(name='Ability 2', type='standard', description='d')
-        a3 = Ability.objects.create(name='Ability 3', type='standard', description='d')
+        spin_l1 = SpinAbility.objects.create(
+            name='Spin L1 Pick',
+            spin_type='CAVALIER',
+            description='Level 1',
+            required_a_count=1,
+        )
         payload = {
             'true_name': 'New Spin',
             'playbook': 'SPIN',
             'campaign': campaign.id,
             'heritage': self.heritage.id,
             'vice': vice.id,
+            'level': 1,
             'coin_stats': {
-                'power': 'A',
-                'speed': 'A',
-                'range': 'F',
-                'durability': 'F',
-                'precision': 'F',
-                'development': 'F',
+                'power': 'D',
+                'speed': 'D',
+                'range': 'D',
+                'durability': 'D',
+                'precision': 'D',
+                'development': 'D',
             },
             'action_dots': {
                 'hunt': 1,
@@ -306,23 +299,22 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
                 'tinker': 1,
                 'finesse': 1,
                 'prowl': 1,
-                'skirmish': 0,
+                'skirmish': 1,
                 'wreck': 0,
                 'bizarre': 0,
                 'command': 0,
                 'consort': 0,
                 'sway': 0,
             },
-            'stress': 0,
+            'stress': 9,
             'trauma': [],
             'xp_clocks': {},
-            'spin_ability_ids': [self.spin_gated.id],
-            'standard_abilities': [a1.id, a2.id, a3.id],
+            'spin_ability_ids': [self.spin_foundation.id, spin_l1.id],
+            'standard_abilities': [a1.id],
         }
         response = client.post('/api/characters/', payload, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         cid = response.data['id']
         character = Character.objects.get(pk=cid)
         self.assertEqual(character.playbook, 'SPIN')
-        self.assertEqual(character.spin_abilities.count(), 1)
-        self.assertEqual(character.spin_abilities.first().spin_ability_id, self.spin_gated.id)
+        self.assertEqual(character.spin_abilities.count(), 2)

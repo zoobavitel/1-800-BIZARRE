@@ -333,6 +333,17 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 {"error": "Field name is required"}, status=status.HTTP_400_BAD_REQUEST
             )
 
+        if field_name == "coin_stats":
+            return Response(
+                {
+                    "error": (
+                        "coin_stats is derived from Stand. "
+                        "PATCH nested stand grades (or use XP allocation) instead."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Check if field exists and is editable
         if not hasattr(character, field_name):
             return Response(

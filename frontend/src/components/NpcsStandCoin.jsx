@@ -168,7 +168,7 @@ export default function NpcsStandCoin({
       ? "Stand coin is locked after chargen. Fill playbook (10) or bank 10 in Available XP, then Take advance / level up for +1 grade."
       : "Stand coin is view-only here. Open the full NPC sheet to edit, or ask the GM if this NPC is not yours."
     : variant === "pc"
-      ? `Left-click a segment to raise its grade (F→${topLetter}) when leftover chargen points remain. Right-click or Shift-click to lower and refund. Shift+Enter / Shift+Space on a focused wedge lowers one step.`
+      ? "Hover or focus a wedge for grade rules."
       : "Left-click a segment to raise its grade (F→S). Right-click or Shift-click to lower. Shift+Enter / Shift+Space on a focused wedge lowers one step.";
   const svgDefaultAria = readOnly
     ? "Stand coin: six stats (read-only)"

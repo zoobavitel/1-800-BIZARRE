@@ -12,6 +12,27 @@ export const INDEX_TO_GRADE = (i) =>
 // Character creation (SRD: 7 action dots total, max 2 per action at creation)
 export const MAX_CREATION_DOTS = 7;
 export const MAX_DOTS_PER_ACTION_CREATION = 2;
+/** Skilled From Birth: one action may start at 3 dots (SRD). */
+export const MAX_DOTS_PER_ACTION_SKILLED_FROM_BIRTH = 3;
+
+/**
+ * Per-action creation cap; Skilled From Birth allows 3 dots on one action only.
+ * @param {{ hasSkilledFromBirth?: boolean, actionRatings?: Record<string, number>, action?: string }} opts
+ */
+export function maxDotsPerActionAtCreation({
+  hasSkilledFromBirth = false,
+  actionRatings = {},
+  action = "",
+} = {}) {
+  if (!hasSkilledFromBirth) return MAX_DOTS_PER_ACTION_CREATION;
+  const otherAtThree = Object.entries(actionRatings).some(
+    ([k, v]) => k !== action && Number(v) === MAX_DOTS_PER_ACTION_SKILLED_FROM_BIRTH,
+  );
+  if (otherAtThree && Number(actionRatings[action]) !== MAX_DOTS_PER_ACTION_SKILLED_FROM_BIRTH) {
+    return MAX_DOTS_PER_ACTION_CREATION;
+  }
+  return MAX_DOTS_PER_ACTION_SKILLED_FROM_BIRTH;
+}
 
 /** SRD Stand Coin creation: allocate six grade-values (indices F=0 … S=5 sum to budget 6 across six stats). */
 export const STAND_COIN_CREATION_POINT_SUM = 6;
@@ -132,14 +153,14 @@ export const TRAUMA_KEY_TO_PK = Object.fromEntries(
 );
 
 // Durability → Stand armor charges (+ resist tiers). SRD_DEV: durability does **not** change stress track length (baseline 9).
-// SRD `docs/1-(800)-BIZARRE SRD.md` Stand Armor table: F:0, D:1, C:2, B:3, A:4 (S not in table — use 5 charges for S-grade).
+// SRD `docs/1-(800)-BIZARRE SRD.md` Stand Armor table: F:1, D:2, C:3, B:4, A:5, S:6.
 export const DUR_TABLE = [
-  { armorCharges: 0, resistanceReduceLevels: 1 }, // F(0)
-  { armorCharges: 1, resistanceReduceLevels: 1 }, // D(1)
-  { armorCharges: 2, resistanceReduceLevels: 1 }, // C(2)
-  { armorCharges: 3, resistanceReduceLevels: 1 }, // B(3)
-  { armorCharges: 4, resistanceReduceLevels: 1 }, // A(4)
-  { armorCharges: 5, resistanceReduceLevels: 2 }, // S(5)
+  { armorCharges: 1, resistanceReduceLevels: 1 }, // F(0)
+  { armorCharges: 2, resistanceReduceLevels: 1 }, // D(1)
+  { armorCharges: 3, resistanceReduceLevels: 1 }, // C(2)
+  { armorCharges: 4, resistanceReduceLevels: 1 }, // B(3)
+  { armorCharges: 5, resistanceReduceLevels: 1 }, // A(4)
+  { armorCharges: 6, resistanceReduceLevels: 2 }, // S(5)
 ];
 
 /**
@@ -147,12 +168,12 @@ export const DUR_TABLE = [
  * `stand_armor_charges` and SRD Stand Armor table. Separate from physical user armor.
  */
 export const STAND_PATH_ARMOR_CHARGES_BY_GRADE = {
-  F: 0,
-  D: 1,
-  C: 2,
-  B: 3,
-  A: 4,
-  S: 5,
+  F: 1,
+  D: 2,
+  C: 3,
+  B: 4,
+  A: 5,
+  S: 6,
 };
 
 /** @param {number} durabilityIdx Stand Coin durability index 0–5 (F…S) */
@@ -188,12 +209,12 @@ export const PC_STAT_DESC = {
     "100(200) ft · Push to extend",
   ],
   durability: [
-    "0 Stand armor charges (stress track stays 9 — durability does not add boxes)",
-    "1 Stand armor charge",
+    "1 Stand armor charge (stress track stays 9 — durability does not add boxes)",
     "2 Stand armor charges",
     "3 Stand armor charges",
     "4 Stand armor charges",
-    "5 Stand armor charges · Durability resist may reduce harm by two levels",
+    "5 Stand armor charges",
+    "6 Stand armor charges · Durability resist may reduce harm by two levels",
   ],
   precision: [
     "1s and double 1s count as critical fail",

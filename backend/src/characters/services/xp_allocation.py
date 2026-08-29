@@ -128,15 +128,21 @@ def _set_stand_grade(character, field, grade):
     grade = str(grade).upper()[:1]
     if grade not in GRADES:
         raise XPAllocationError(f"Invalid grade: {grade}")
-    coin_stats = dict(character.coin_stats or {})
-    coin_stats[field] = grade
-    character.coin_stats = coin_stats
     try:
         if hasattr(character, "stand") and character.stand:
             setattr(character.stand, field, grade)
             character.stand.save(update_fields=[field])
+            # Keep derived mirror in sync
+            coin_stats = dict(character.coin_stats or {})
+            for f in STAND_STAT_FIELDS:
+                coin_stats[f] = str(getattr(character.stand, f)).upper()[:1]
+            character.coin_stats = coin_stats
+            return
     except Exception:
         pass
+    coin_stats = dict(character.coin_stats or {})
+    coin_stats[field] = grade
+    character.coin_stats = coin_stats
 
 
 def _snapshot(character):
@@ -662,7 +668,8 @@ def second_playbook_unlocked(character):
 
 @transaction.atomic
 def apply_unlock_second_playbook(character, *, secondary_playbook, from_pool=True):
-    """Spend 30 XP from the free pool to gain a second playbook."""
+    """Spend 30 XP from playbook track first (overflow allowed), then free pool."""
+    del from_pool  # always combined wallet
     pb = str(secondary_playbook or "").strip().upper()
     if pb not in ("STAND", "HAMON", "SPIN"):
         raise XPAllocationError(
@@ -675,13 +682,24 @@ def apply_unlock_second_playbook(character, *, secondary_playbook, from_pool=Tru
     if second_playbook_unlocked(character):
         raise XPAllocationError("Second playbook is already unlocked.")
 
+    clocks = dict(character.xp_clocks or {})
+    playbook_avail = int(clocks.get("playbook", 0) or 0)
+    pool = int(character.unallocated_xp or 0)
+    if playbook_avail + pool < SECOND_PLAYBOOK_COST:
+        raise XPAllocationError(
+            f"Need {SECOND_PLAYBOOK_COST} XP from playbook track + Available XP "
+            f"(have playbook {playbook_avail} + pool {pool})."
+        )
+
     before = _snapshot(character)
-    source = _spend_xp_source(
-        character,
-        xp_track="playbook",
-        from_pool=True,
-        cost=SECOND_PLAYBOOK_COST,
-    )
+    playbook_spent = min(playbook_avail, SECOND_PLAYBOOK_COST)
+    pool_spent = SECOND_PLAYBOOK_COST - playbook_spent
+    if playbook_spent:
+        clocks["playbook"] = playbook_avail - playbook_spent
+        character.xp_clocks = clocks
+    if pool_spent:
+        character.unallocated_xp = pool - pool_spent
+
     character.total_xp_spent = int(character.total_xp_spent or 0) + SECOND_PLAYBOOK_COST
     character.secondary_playbook = pb
 
@@ -694,7 +712,9 @@ def apply_unlock_second_playbook(character, *, secondary_playbook, from_pool=Tru
         payload_after={},
         metadata={
             "secondary_playbook": pb,
-            "from_pool": source == "pool",
+            "from_pool": pool_spent > 0 and playbook_spent == 0,
+            "playbook_spent": playbook_spent,
+            "pool_spent": pool_spent,
             "xp_track": "playbook",
         },
     )
@@ -727,7 +747,17 @@ def undo_allocation(character, allocation, *, user=None):
 
     _restore_snapshot(character, allocation.payload_before, restore_xp_clocks=False)
     meta = allocation.metadata or {}
-    if meta.get("from_pool"):
+    if allocation.allocation_type == "UNLOCK_SECOND_PLAYBOOK" and (
+        "playbook_spent" in meta or "pool_spent" in meta
+    ):
+        # Combined-wallet unlock: restore clocks from snapshot for playbook + pool
+        before = allocation.payload_before or {}
+        character.xp_clocks = dict(before.get("xp_clocks") or character.xp_clocks or {})
+        if "unallocated_xp" in before:
+            character.unallocated_xp = int(before.get("unallocated_xp") or 0)
+        if "secondary_playbook" in before:
+            character.secondary_playbook = before.get("secondary_playbook") or None
+    elif meta.get("from_pool"):
         # Snapshot already restored unallocated_xp; do not also refund a track.
         pass
     else:

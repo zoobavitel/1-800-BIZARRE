@@ -12,8 +12,7 @@ from .field_maps import (
     MAX_HEALING_SEGMENTS,
     MAX_STASH_SLOTS,
     MAX_STRESS_SLOTS,
-    MAX_XP_PER_TRACK,
-    MAX_XP_PLAYBOOK_TRACK,
+    TEMPLATE_REVISION,
     TRAUMA_KEYS,
     XP_TRACK_KEYS,
     xp_track_max_segments,
@@ -86,13 +85,15 @@ def build_pc_template(output_path: Path) -> None:
 
     _section_title(c, "Identity", MARGIN, y)
     y -= 16
-    _add_text_field(form, "pc_name", MARGIN, y - 2, 2.2 * inch)
+    _add_text_field(form, "pc_name", MARGIN, y - 2, 1.9 * inch)
     c.setFont("Helvetica", 7)
     c.drawString(MARGIN, y - 12, "Name")
-    _add_text_field(form, "pc_stand_name", MARGIN + 2.35 * inch, y - 2, 2.0 * inch)
-    c.drawString(MARGIN + 2.35 * inch, y - 12, "Stand Name")
-    _add_text_field(form, "pc_crew", MARGIN + 4.55 * inch, y - 2, 1.55 * inch)
-    c.drawString(MARGIN + 4.55 * inch, y - 12, "Crew")
+    _add_text_field(form, "pc_alias", MARGIN + 2.05 * inch, y - 2, 1.3 * inch)
+    c.drawString(MARGIN + 2.05 * inch, y - 12, "Alias")
+    _add_text_field(form, "pc_stand_name", MARGIN + 3.5 * inch, y - 2, 1.6 * inch)
+    c.drawString(MARGIN + 3.5 * inch, y - 12, "Stand Name")
+    _add_text_field(form, "pc_crew", MARGIN + 5.25 * inch, y - 2, 1.0 * inch)
+    c.drawString(MARGIN + 5.25 * inch, y - 12, "Crew")
     y -= 28
     _add_text_field(form, "pc_look", MARGIN, y - 2, 3.2 * inch)
     c.drawString(MARGIN, y - 12, "Look")
@@ -106,22 +107,44 @@ def build_pc_template(output_path: Path) -> None:
     _add_text_field(form, "pc_campaign", MARGIN + 3.35 * inch, y - 2, 2.75 * inch)
     c.drawString(MARGIN + 3.35 * inch, y - 12, "Campaign")
     y -= 28
-    _add_text_field(form, "pc_playbook", MARGIN, y - 2, 1.2 * inch)
+    _add_text_field(form, "pc_playbook", MARGIN, y - 2, 0.9 * inch)
     c.drawString(MARGIN, y - 12, "Playbook")
-    _add_text_field(form, "pc_playbook_archetypes", MARGIN + 1.35 * inch, y - 2, 4.75 * inch)
-    c.drawString(MARGIN + 1.35 * inch, y - 12, "Playbook XP Archetypes")
+    _add_text_field(form, "pc_secondary_playbook", MARGIN + 1.05 * inch, y - 2, 0.9 * inch)
+    c.drawString(MARGIN + 1.05 * inch, y - 12, "2nd Playbook")
+    _add_text_field(form, "pc_level", MARGIN + 2.1 * inch, y - 2, 0.45 * inch)
+    c.drawString(MARGIN + 2.1 * inch, y - 12, "Level")
+    _add_text_field(form, "pc_playbook_archetypes", MARGIN + 2.7 * inch, y - 2, 3.4 * inch)
+    c.drawString(MARGIN + 2.7 * inch, y - 12, "Playbook XP Archetypes")
+    y -= 28
+    _add_text_field(form, "pc_close_friend", MARGIN, y - 2, 2.0 * inch)
+    c.drawString(MARGIN, y - 12, "Close Friend")
+    _add_text_field(form, "pc_rival", MARGIN + 2.15 * inch, y - 2, 2.0 * inch)
+    c.drawString(MARGIN + 2.15 * inch, y - 12, "Rival")
+    _add_text_field(form, "pc_loadout", MARGIN + 4.3 * inch, y - 2, 0.5 * inch)
+    c.drawString(MARGIN + 4.3 * inch, y - 12, "Load")
+    _add_text_field(form, "pc_vice_details", MARGIN + 4.95 * inch, y - 2, 1.3 * inch)
+    c.drawString(MARGIN + 4.95 * inch, y - 12, "Vice details")
 
     col2 = MARGIN + 4.0 * inch
     col3 = MARGIN + 5.4 * inch
-    y_top = PAGE_H - MARGIN - 22 - 120
+    y_top = PAGE_H - MARGIN - 22 - 155
 
     _section_title(c, "Stand Coin", col2, y_top)
-    stat_y = y_top - 14
+    c.setFont("Helvetica", 7)
+    _add_text_field(form, "pc_stand_type", col2, y_top - 16, 1.2 * inch, 12)
+    c.drawString(col2, y_top - 26, "Type")
+    _add_text_field(form, "pc_stand_type_custom", col2, y_top - 38, 1.2 * inch, 12)
+    c.drawString(col2, y_top - 48, "Subtype")
+    _add_text_field(form, "pc_stand_forms", col2, y_top - 60, 1.2 * inch, 12)
+    c.drawString(col2, y_top - 70, "Forms")
+    _add_text_field(form, "pc_stand_consciousness", col2, y_top - 82, 0.4 * inch, 12)
+    c.drawString(col2, y_top - 92, "Mind")
+    stat_y = y_top - 108
     for stat in ("power", "speed", "range", "durability", "precision", "development"):
         c.setFont("Helvetica", 7)
         c.drawString(col2, stat_y, stat.title())
         _add_text_field(form, f"pc_stand_{stat}", col2 + 0.75 * inch, stat_y - 2, 0.35 * inch, 12)
-        stat_y -= 16
+        stat_y -= 14
 
     _section_title(c, "Action Ratings", col3, y_top)
     act_y = y_top - 14
@@ -131,7 +154,7 @@ def build_pc_template(output_path: Path) -> None:
         _add_text_field(form, f"pc_action_{action}", col3 + 0.85 * inch, act_y - 2, 0.25 * inch, 12)
         act_y -= 13
 
-    y = PAGE_H - MARGIN - 210
+    y = PAGE_H - MARGIN - 250
     _section_title(c, "Stress", MARGIN, y)
     _checkbox_row(form, "pc_stress_", MAX_STRESS_SLOTS, MARGIN, y - 14)
     y -= 32
@@ -163,12 +186,16 @@ def build_pc_template(output_path: Path) -> None:
     _section_title(c, "Healing Clock", MARGIN, y)
     _checkbox_row(form, "pc_healing_", MAX_HEALING_SEGMENTS, MARGIN, y - 14, spacing=14)
 
-    _section_title(c, "Armor Uses", MARGIN + 2.5 * inch, y)
-    _add_text_field(form, "pc_armor_stand", MARGIN + 2.5 * inch, y - 16, 1.6 * inch)
+    _section_title(c, "Armor Uses", MARGIN + 2.2 * inch, y)
+    _add_text_field(form, "pc_armor_stand", MARGIN + 2.2 * inch, y - 16, 1.0 * inch)
     c.setFont("Helvetica", 7)
-    c.drawString(MARGIN + 2.5 * inch, y - 28, "Stand armor (used/max)")
-    _add_text_field(form, "pc_armor_physical", MARGIN + 4.3 * inch, y - 16, 1.6 * inch)
-    c.drawString(MARGIN + 4.3 * inch, y - 28, "Physical gear (used/max)")
+    c.drawString(MARGIN + 2.2 * inch, y - 28, "Stand")
+    _add_text_field(form, "pc_armor_physical", MARGIN + 3.35 * inch, y - 16, 1.0 * inch)
+    c.drawString(MARGIN + 3.35 * inch, y - 28, "Physical")
+    _add_text_field(form, "pc_armor_spin", MARGIN + 4.5 * inch, y - 16, 0.85 * inch)
+    c.drawString(MARGIN + 4.5 * inch, y - 28, "Spin")
+    _add_text_field(form, "pc_armor_hamon", MARGIN + 5.5 * inch, y - 16, 0.85 * inch)
+    c.drawString(MARGIN + 5.5 * inch, y - 28, "Hamon")
 
     y -= 48
     _section_title(c, "Coin", MARGIN, y)
@@ -229,10 +256,13 @@ def build_pc_template(output_path: Path) -> None:
     _add_text_field(form, "pc_heritage_picks", MARGIN, y2 - 50, 6.5 * inch, 48)
     y2 -= 70
     _section_title(c, "Inventory", MARGIN, y2)
-    _add_text_field(form, "pc_inventory", MARGIN, y2 - 90, 6.5 * inch, 88)
-    y2 -= 110
+    _add_text_field(form, "pc_inventory", MARGIN, y2 - 80, 6.5 * inch, 78)
+    y2 -= 100
+    _section_title(c, "Reputation / Faction Status", MARGIN, y2)
+    _add_text_field(form, "pc_reputation", MARGIN, y2 - 50, 6.5 * inch, 48)
+    y2 -= 70
     _section_title(c, "Notes", MARGIN, y2)
-    _add_text_field(form, "pc_notes", MARGIN, y2 - 120, 6.5 * inch, 118)
+    _add_text_field(form, "pc_notes", MARGIN, y2 - 100, 6.5 * inch, 98)
 
     c.save()
 
@@ -366,14 +396,27 @@ def templates_dir() -> Path:
 
 
 def ensure_templates() -> tuple[Path, Path]:
-    """Build templates if missing (e.g. fresh checkout)."""
+    """Build templates if missing or TEMPLATE_REVISION bumped."""
     tdir = templates_dir()
+    tdir.mkdir(parents=True, exist_ok=True)
     pc_path = tdir / "pc_sheet_template.pdf"
     npc_path = tdir / "npc_sheet_template.pdf"
-    if not pc_path.exists():
+    rev_path = tdir / ".template_revision"
+    current = ""
+    if rev_path.exists():
+        try:
+            current = rev_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            current = ""
+    need = (
+        not pc_path.exists()
+        or not npc_path.exists()
+        or current != str(TEMPLATE_REVISION)
+    )
+    if need:
         build_pc_template(pc_path)
-    if not npc_path.exists():
         build_npc_template(npc_path)
+        rev_path.write_text(str(TEMPLATE_REVISION), encoding="utf-8")
     return pc_path, npc_path
 
 
@@ -381,3 +424,4 @@ def build_all_templates() -> None:
     tdir = templates_dir()
     build_pc_template(tdir / "pc_sheet_template.pdf")
     build_npc_template(tdir / "npc_sheet_template.pdf")
+    (tdir / ".template_revision").write_text(str(TEMPLATE_REVISION), encoding="utf-8")

@@ -1437,6 +1437,16 @@ class StandSerializer(serializers.ModelSerializer):
 _STAND_TYPE_KEYS = frozenset(k for k, _ in Stand.TYPE_CHOICES)
 _STAND_FORM_PRESETS = frozenset(k for k, _ in Stand.FORM_CHOICES)
 _STAND_CONSCIOUSNESS = frozenset("ABCDEF")
+_STAND_GRADE_FIELDS = (
+    "power",
+    "speed",
+    "range",
+    "durability",
+    "precision",
+    "development",
+)
+_STAND_GRADES = frozenset("SABCDF")
+
 
 def _stand_type_from_payload(stand_data, default="FIGHTING"):
     """Accept nested stand.type when it matches TYPE_CHOICES; else default."""
@@ -1444,6 +1454,63 @@ def _stand_type_from_payload(stand_data, default="FIGHTING"):
         return default
     raw = str(stand_data.get("type") or "").strip().upper()
     return raw if raw in _STAND_TYPE_KEYS else default
+
+
+def _normalize_grade(val):
+    if val is None:
+        return None
+    g = str(val).upper()[:1]
+    return g if g in _STAND_GRADES else None
+
+
+def _grades_from_payload(stand_data=None, coin_stats=None):
+    """Collect grade keys present in stand and/or coin_stats. Never invent D for missing keys."""
+    out = {}
+    for src in (stand_data, coin_stats):
+        if not isinstance(src, dict):
+            continue
+        for field in _STAND_GRADE_FIELDS:
+            if field not in src and field.upper() not in src:
+                continue
+            raw = src.get(field)
+            if raw is None:
+                raw = src.get(field.upper())
+            g = _normalize_grade(raw)
+            if g is not None:
+                out[field] = g
+    return out
+
+
+def _coin_stats_mirror_from_stand(stand) -> dict:
+    return {f: getattr(stand, f) for f in _STAND_GRADE_FIELDS}
+
+
+def _apply_stand_grades(stand, grades: dict) -> None:
+    for field, grade in grades.items():
+        if field in _STAND_GRADE_FIELDS:
+            setattr(stand, field, grade)
+
+
+def _a_rank_count_from_stand_or_payload(instance, data) -> int:
+    """Prefer live Stand grades; fall back to payload grades present only."""
+    if instance is not None:
+        try:
+            stand = instance.stand
+            return sum(
+                1
+                for f in _STAND_GRADE_FIELDS
+                if str(getattr(stand, f, "") or "").upper()[:1] == "A"
+            )
+        except Stand.DoesNotExist:
+            pass
+        except Exception:
+            pass
+    grades = _grades_from_payload(
+        data.get("stand") if isinstance(data.get("stand"), dict) else None,
+        data.get("coin_stats"),
+    )
+    return sum(1 for g in grades.values() if g == "A")
+
 
 def _normalize_stand_forms(raw) -> list[str]:
     """Dedupe preserving order; allow FORM_CHOICES presets and custom strings."""
@@ -1459,11 +1526,13 @@ def _normalize_stand_forms(raw) -> list[str]:
         out.append(s[:100])
     return out
 
+
 def _legacy_form_from_forms(forms: list[str]) -> str:
     for f in forms:
         if f in _STAND_FORM_PRESETS:
             return f
     return "Humanoid"
+
 
 def _apply_stand_identity_fields(stand, stand_data: dict) -> None:
     """Apply flavor identity fields from nested stand payload onto a Stand row."""
@@ -1643,9 +1712,21 @@ class CharacterSerializer(serializers.ModelSerializer):
                 )
             # Note: We don't auto-add trauma here, that's handled by the frontend
 
-        # enforce playbook ability prerequisites based on coin_stats (A-rank only; S does not count)
-        coin_stats = data.get("coin_stats") or getattr(self.instance, "coin_stats", {})
-        count_A = sum(1 for v in coin_stats.values() if v == "A")
+        # enforce playbook ability prerequisites based on Stand A-ranks (S does not count)
+        count_A = _a_rank_count_from_stand_or_payload(self.instance, data)
+        # also merge grades from initial_data stand when validate runs before create
+        if count_A == 0 and isinstance(getattr(self, "initial_data", None), dict):
+            count_A = max(
+                count_A,
+                sum(
+                    1
+                    for g in _grades_from_payload(
+                        self.initial_data.get("stand"),
+                        data.get("coin_stats") or self.initial_data.get("coin_stats"),
+                    ).values()
+                    if g == "A"
+                ),
+            )
         # Partial PATCH: omitted ability id lists must fall back to instance M2M,
         # else playbook-gated checks skip or false-reject when only abilities are sent.
         if "hamon_ability_ids" in data:
@@ -1697,20 +1778,34 @@ class CharacterSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError(
                         {
                             "secondary_playbook": (
-                                "Spend 30 XP (Available XP) to obtain another playbook."
+                                "Spend 30 XP from playbook track + Available XP to obtain another playbook."
                             )
                         }
                     )
 
+        # Spin/Hamon playbook abilities: required_a_count is character-level gate (SRD Level N)
+        pc_level = 1
+        if self.instance is not None:
+            pc_level = max(1, int(getattr(self.instance, "level", 1) or 1))
+        if "level" in data and data.get("level") is not None:
+            try:
+                pc_level = max(1, int(data.get("level")))
+            except (TypeError, ValueError):
+                pass
+
         for ha in hamon_ids:
-            if count_A < ha.required_a_count:
+            need = int(getattr(ha, "required_a_count", 0) or 0)
+            if need and pc_level < need:
                 raise serializers.ValidationError(
-                    f"Insufficient 'A' ratings: need {ha.required_a_count} 'A' coin stats for Hamon ability '{ha.name}' (you have {count_A})."
+                    f"Hamon ability '{ha.name}' requires character level {need} "
+                    f"(you are level {pc_level})."
                 )
         for sa in spin_ids:
-            if count_A < sa.required_a_count:
+            need = int(getattr(sa, "required_a_count", 0) or 0)
+            if need and pc_level < need:
                 raise serializers.ValidationError(
-                    f"Insufficient 'A' ratings: need {sa.required_a_count} 'A' coin stats for Spin ability '{sa.name}' (you have {count_A})."
+                    f"Spin ability '{sa.name}' requires character level {need} "
+                    f"(you are level {pc_level})."
                 )
         has_hamon = playbook_val == "HAMON" or secondary_playbook_val == "HAMON"
         has_spin = playbook_val == "SPIN" or secondary_playbook_val == "SPIN"
@@ -1907,7 +2002,8 @@ class CharacterSerializer(serializers.ModelSerializer):
         custom_vice = validated_data.pop("custom_vice", None)
         vice_details = validated_data.pop("vice_details", None)
         stand_data = self.initial_data.get("stand")
-        coin_stats = validated_data.get("coin_stats", {})
+        # coin_stats is derived from Stand — do not treat client JSON as write authority
+        validated_data.pop("coin_stats", None)
         hamon_ids = validated_data.pop("hamon_ability_ids", [])
         spin_ids = validated_data.pop("spin_ability_ids", [])
         std_ids = validated_data.pop("standard_abilities", [])
@@ -1921,46 +2017,67 @@ class CharacterSerializer(serializers.ModelSerializer):
         if vice_details is not None:
             validated_data["vice_details"] = vice_details
 
-        # create character instance and assign m2m
         character = super().create(validated_data)
 
-        # Create Stand if we have coin_stats or stand data (required for validation)
-        stats = stand_data or coin_stats
-        if stats and isinstance(stats, dict):
-            stand_type = _stand_type_from_payload(
-                stand_data if isinstance(stand_data, dict) else None
-            )
-            forms_default = ["Humanoid"]
-            if isinstance(stand_data, dict) and "forms" in stand_data:
-                forms_default = _normalize_stand_forms(stand_data.get("forms")) or [
-                    "Humanoid"
-                ]
-            consciousness = "C"
+        grades = _grades_from_payload(
+            stand_data if isinstance(stand_data, dict) else None,
+            self.initial_data.get("coin_stats")
+            if isinstance(self.initial_data.get("coin_stats"), dict)
+            else None,
+        )
+        # New characters default missing grades to D (full create), not partial stomp
+        for field in _STAND_GRADE_FIELDS:
+            grades.setdefault(field, "D")
+
+        stand_type = _stand_type_from_payload(
+            stand_data if isinstance(stand_data, dict) else None
+        )
+        forms_default = ["Humanoid"]
+        if isinstance(stand_data, dict) and "forms" in stand_data:
+            forms_default = _normalize_stand_forms(stand_data.get("forms")) or [
+                "Humanoid"
+            ]
+        consciousness = "C"
+        if isinstance(stand_data, dict):
+            c = str(stand_data.get("consciousness_level") or "").strip().upper()[:1]
+            if c in _STAND_CONSCIOUSNESS:
+                consciousness = c
+        type_custom = ""
+        if isinstance(stand_data, dict):
+            type_custom = str(stand_data.get("type_custom") or "").strip()[:100]
+
+        stand, created = Stand.objects.get_or_create(
+            character=character,
+            defaults={
+                "name": character.stand_name or "Unnamed Stand",
+                "type": stand_type,
+                "type_custom": type_custom,
+                "form": _legacy_form_from_forms(forms_default),
+                "forms": forms_default,
+                "consciousness_level": consciousness,
+                "power": grades["power"],
+                "speed": grades["speed"],
+                "range": grades["range"],
+                "durability": grades["durability"],
+                "precision": grades["precision"],
+                "development": grades["development"],
+                "armor": 0,
+            },
+        )
+        if not created:
+            _apply_stand_grades(stand, grades)
             if isinstance(stand_data, dict):
-                c = str(stand_data.get("consciousness_level") or "").strip().upper()[:1]
-                if c in _STAND_CONSCIOUSNESS:
-                    consciousness = c
-            type_custom = ""
-            if isinstance(stand_data, dict):
-                type_custom = str(stand_data.get("type_custom") or "").strip()[:100]
-            Stand.objects.get_or_create(
-                character=character,
-                defaults={
-                    "name": character.stand_name or "Unnamed Stand",
-                    "type": stand_type,
-                    "type_custom": type_custom,
-                    "form": _legacy_form_from_forms(forms_default),
-                    "forms": forms_default,
-                    "consciousness_level": consciousness,
-                    "power": str(stats.get("power", "D")).upper()[:1],
-                    "speed": str(stats.get("speed", "D")).upper()[:1],
-                    "range": str(stats.get("range", "D")).upper()[:1],
-                    "durability": str(stats.get("durability", "D")).upper()[:1],
-                    "precision": str(stats.get("precision", "D")).upper()[:1],
-                    "development": str(stats.get("development", "D")).upper()[:1],
-                    "armor": 0,
-                },
-            )
+                if stand_data.get("name"):
+                    stand.name = stand_data["name"]
+                resolved = _stand_type_from_payload(stand_data, default="")
+                if resolved:
+                    stand.type = resolved
+                _apply_stand_identity_fields(stand, stand_data)
+            stand.save()
+        character.coin_stats = _coin_stats_mirror_from_stand(stand)
+        character.save(update_fields=["coin_stats"])
+        character._state.fields_cache.pop("stand", None)
+        character._state.fields_cache["stand"] = stand
 
         character.standard_abilities.set(std_ids)
         for ha in hamon_ids:
@@ -1983,9 +2100,8 @@ class CharacterSerializer(serializers.ModelSerializer):
         spin_ids = validated_data.pop("spin_ability_ids", None)
         std_ids = validated_data.pop("standard_abilities", None)
         stand_data = self.initial_data.get("stand")
-        coin_stats = validated_data.get("coin_stats") or (
-            stand_data if isinstance(stand_data, dict) else {}
-        )
+        # Never persist client coin_stats as authority; Stand is writable source
+        validated_data.pop("coin_stats", None)
 
         if custom_vice:
             name = custom_vice.strip()
@@ -2000,8 +2116,30 @@ class CharacterSerializer(serializers.ModelSerializer):
 
         _attach_or_create_party_crew_from_personal_name(character)
 
-        # Sync Stand stats when coin_stats or stand data is provided
-        if coin_stats and isinstance(coin_stats, dict):
+        grades = _grades_from_payload(
+            stand_data if isinstance(stand_data, dict) else None,
+            self.initial_data.get("coin_stats")
+            if isinstance(self.initial_data.get("coin_stats"), dict)
+            else None,
+        )
+        identity_touch = isinstance(stand_data, dict) and any(
+            k in stand_data
+            for k in (
+                "name",
+                "type",
+                "type_custom",
+                "forms",
+                "form",
+                "consciousness_level",
+                "power",
+                "speed",
+                "range",
+                "durability",
+                "precision",
+                "development",
+            )
+        )
+        if grades or identity_touch:
             stand_type_default = _stand_type_from_payload(
                 stand_data if isinstance(stand_data, dict) else None
             )
@@ -2014,26 +2152,21 @@ class CharacterSerializer(serializers.ModelSerializer):
                     "form": "Humanoid",
                     "forms": ["Humanoid"],
                     "consciousness_level": "C",
-                    "power": "D",
-                    "speed": "D",
-                    "range": "D",
-                    "durability": "D",
-                    "precision": "D",
-                    "development": "D",
+                    "power": grades.get("power", "D"),
+                    "speed": grades.get("speed", "D"),
+                    "range": grades.get("range", "D"),
+                    "durability": grades.get("durability", "D"),
+                    "precision": grades.get("precision", "D"),
+                    "development": grades.get("development", "D"),
                     "armor": 0,
                 },
             )
-            for field in [
-                "power",
-                "speed",
-                "range",
-                "durability",
-                "precision",
-                "development",
-            ]:
-                grade = str(coin_stats.get(field, "D")).upper()[:1]
-                if grade in ("S", "A", "B", "C", "D", "F"):
-                    setattr(stand, field, grade)
+            if not created:
+                # Partial update: only set fields present in payload — never default missing to D
+                _apply_stand_grades(stand, grades)
+            else:
+                # Fresh Stand from get_or_create defaults — still apply any identity fields
+                _apply_stand_grades(stand, grades)
             if stand_data and isinstance(stand_data, dict):
                 if stand_data.get("name"):
                     stand.name = stand_data["name"]
@@ -2042,6 +2175,20 @@ class CharacterSerializer(serializers.ModelSerializer):
                     stand.type = resolved
                 _apply_stand_identity_fields(stand, stand_data)
             stand.save()
+            character.coin_stats = _coin_stats_mirror_from_stand(stand)
+            character.save(update_fields=["coin_stats"])
+            # Reverse OneToOne has no __delete__; stale Stand in fields_cache
+            # would make PUT/PATCH response show pre-update forms/type.
+            character._state.fields_cache.pop("stand", None)
+            character._state.fields_cache["stand"] = stand
+        else:
+            # Keep mirror coherent if Stand exists
+            try:
+                if hasattr(character, "stand") and character.stand:
+                    character.coin_stats = _coin_stats_mirror_from_stand(character.stand)
+                    character.save(update_fields=["coin_stats"])
+            except Exception:
+                pass
 
         if std_ids is not None:
             character.standard_abilities.set(std_ids)
@@ -2057,6 +2204,24 @@ class CharacterSerializer(serializers.ModelSerializer):
                 CharacterSpinAbility.objects.create(
                     character=character, spin_ability=sa
                 )
+
+        # Slower Recovery → 5-segment healing clock; else default 4
+        try:
+            slower = character.selected_detriments.filter(
+                name__iexact="Slower Recovery"
+            ).exists()
+            target_segs = 5 if slower else 4
+            if int(character.healing_clock_segments or 4) != target_segs:
+                character.healing_clock_segments = target_segs
+                filled = int(character.healing_clock_filled or 0)
+                if filled > target_segs:
+                    character.healing_clock_filled = target_segs
+                character.save(
+                    update_fields=["healing_clock_segments", "healing_clock_filled"]
+                )
+        except Exception:
+            pass
+
         req = self.context.get("request")
         _sync_character_progress_clocks(
             character,

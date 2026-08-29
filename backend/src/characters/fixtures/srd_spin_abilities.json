@@ -3,21 +3,21 @@
     "model": "characters.spinability",
     "pk": 1,
     "fields": {
-      "name": "Golden Arc",
+      "name": "Spin Armor",
       "spin_type": "FOUNDATION",
-      "description": "Once per scene, a thrown Spin projectile returns. On a 6, it may hit a second target. On a crit, +1 effect or +1d to the return strike.",
+      "description": "Your proficiency with Spin grants you 2 Spin armor charges that are regained during downtime.",
       "required_a_count": 0,
       "stress_cost": 0,
-      "frequency": "Once per scene"
+      "frequency": ""
     }
   },
   {
     "model": "characters.spinability",
     "pk": 2,
     "fields": {
-      "name": "Vibrational Scan",
+      "name": "Golden Arc",
       "spin_type": "FOUNDATION",
-      "description": "Use a spinning object to perform a Study or Survey roll. +1 effect when detecting structure, weak points, or lifeforms.",
+      "description": "Your Spin projectiles return to you. On a 6, it may hit a second target. With two 6's, +1 effect or +1d to the follow-up strike.",
       "required_a_count": 0,
       "stress_cost": 0,
       "frequency": ""
@@ -26,6 +26,18 @@
   {
     "model": "characters.spinability",
     "pk": 3,
+    "fields": {
+      "name": "Vibrational Scan",
+      "spin_type": "FOUNDATION",
+      "description": "Use a spinning object to perform a Study or Survey roll up to 25m (80ft). +1 effect when detecting structures, weak points, or lifeforms.",
+      "required_a_count": 0,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.spinability",
+    "pk": 4,
     "fields": {
       "name": "Kinetic Tether",
       "spin_type": "FOUNDATION",
@@ -37,24 +49,12 @@
   },
   {
     "model": "characters.spinability",
-    "pk": 4,
-    "fields": {
-      "name": "Reflective Barrier",
-      "spin_type": "FOUNDATION",
-      "description": "Spin two objects at high frequency to bend light or sound. Once per score, redirect a single ranged attack or sound-based effect. Must be declared before the GM reveals the consequence.",
-      "required_a_count": 0,
-      "stress_cost": 0,
-      "frequency": "Once per score"
-    }
-  },
-  {
-    "model": "characters.spinability",
     "pk": 5,
     "fields": {
-      "name": "Gyroscopic Mount",
-      "spin_type": "CAVALIER",
-      "description": "+1 effect to movement or melee Spin rolls when mounted or piloting.",
-      "required_a_count": 1,
+      "name": "Throw Voice",
+      "spin_type": "FOUNDATION",
+      "description": "Use your spin tool to throw your voice up to 60ft. Push yourself to extend the range.",
+      "required_a_count": 0,
       "stress_cost": 0,
       "frequency": ""
     }
@@ -63,11 +63,11 @@
     "model": "characters.spinability",
     "pk": 6,
     "fields": {
-      "name": "Magnetic Pulse",
-      "spin_type": "CAVALIER",
-      "description": "Push or pull a metal object within your operational Range. Break line of sight or create an opening. Costs 1 stress.",
-      "required_a_count": 1,
-      "stress_cost": 1,
+      "name": "Centripetal Force",
+      "spin_type": "FOUNDATION",
+      "description": "While moving, you gain a Spin armor charge. You must be in motion when you declare this. Use this armor to push yourself. If you lose momentum, it goes away.",
+      "required_a_count": 0,
+      "stress_cost": 0,
       "frequency": ""
     }
   },
@@ -75,10 +75,10 @@
     "model": "characters.spinability",
     "pk": 7,
     "fields": {
-      "name": "Stirrup Surge",
-      "spin_type": "CAVALIER",
-      "description": "+1d on Skirmish while charging. On a 6, gain a knockback effect. On a crit, increase the potency.",
-      "required_a_count": 2,
+      "name": "Detour",
+      "spin_type": "FOUNDATION",
+      "description": "Redirect an incoming AoE attack to a nearby area. Roll Finesse or Tinker; on a 6, full redirection with no residual consequence.",
+      "required_a_count": 0,
       "stress_cost": 0,
       "frequency": ""
     }
@@ -87,11 +87,11 @@
     "model": "characters.spinability",
     "pk": 8,
     "fields": {
-      "name": "Rotational Grapple",
-      "spin_type": "CAVALIER",
-      "description": "Fire a tethered grappling hook. +1d on mobility, chase, or extraction actions. Costs 1 stress if used to redirect a falling ally or large object.",
-      "required_a_count": 2,
-      "stress_cost": 1,
+      "name": "Tendon Manipulation",
+      "spin_type": "FOUNDATION",
+      "description": "Before making an attack with a spin tool, name an opponent's limb. On a full success, you control that enemy's limb and make 1 action for them as long as the spin weapon is embedded in that limb (drop weapon, attack themselves, trip, etc). Enemies can attempt to resist.",
+      "required_a_count": 0,
+      "stress_cost": 0,
       "frequency": ""
     }
   },
@@ -99,34 +99,34 @@
     "model": "characters.spinability",
     "pk": 9,
     "fields": {
-      "name": "Wheel of Warding",
-      "spin_type": "CAVALIER",
-      "description": "Once per conflict, use your vehicle to block a projectile. Mark 1 vehicle armor or pay 2 stress.",
-      "required_a_count": 2,
-      "stress_cost": 2,
-      "frequency": "Once per conflict"
+      "name": "Stagnant Space",
+      "spin_type": "FOUNDATION",
+      "description": "You may use a spin tool to suspend an opponent up to 10ft midair.",
+      "required_a_count": 0,
+      "stress_cost": 0,
+      "frequency": ""
     }
   },
   {
     "model": "characters.spinability",
     "pk": 10,
     "fields": {
-      "name": "Spiral Drift",
-      "spin_type": "CAVALIER",
-      "description": "+1d on Finesse or Prowl while in motion. Chases use +1 effect. Gain \"split momentum\" (move and act in the same tick) once per score.",
-      "required_a_count": 3,
+      "name": "Miracle Shot",
+      "spin_type": "FOUNDATION",
+      "description": "On a partial success, curve your spin tool around 3/4 cover. Grants +1 position. On a crit, hit through supernatural barriers.",
+      "required_a_count": 0,
       "stress_cost": 0,
-      "frequency": "Once per score"
+      "frequency": ""
     }
   },
   {
     "model": "characters.spinability",
     "pk": 11,
     "fields": {
-      "name": "Centripetal Shield",
+      "name": "Remote Connection",
       "spin_type": "CAVALIER",
-      "description": "While moving, expend your Stand armor to reduce a ranged attack's harm by 1 level. You must be in motion when you declare this.",
-      "required_a_count": 3,
+      "description": "You are able to remotely control/pilot your mount or vehicle without line of sight or vocal commands.",
+      "required_a_count": 1,
       "stress_cost": 0,
       "frequency": ""
     }
@@ -135,10 +135,10 @@
     "model": "characters.spinability",
     "pk": 12,
     "fields": {
-      "name": "Echo Hoof",
+      "name": "Privileged Pilot",
       "spin_type": "CAVALIER",
-      "description": "Ride at speed to reveal terrain features. Acts as a Survey roll with +1 effect for environmental clues. The motion itself is the instrument \u2014 no separate action required.",
-      "required_a_count": 3,
+      "description": "Your mount gains an armor charge while moving. Losing momentum loses your armor charge.",
+      "required_a_count": 2,
       "stress_cost": 0,
       "frequency": ""
     }
@@ -147,11 +147,11 @@
     "model": "characters.spinability",
     "pk": 13,
     "fields": {
-      "name": "Gravity Path",
+      "name": "Kinetic Knockdown",
       "spin_type": "CAVALIER",
-      "description": "You may float, pin enemies, or launch into buildings with Spin-warped gravity. 1 stress per use, 2 stress for effects beyond your immediate presence.",
-      "required_a_count": 4,
-      "stress_cost": 1,
+      "description": "Spin-imbued Skirmish actions gain +1d while charging (aka speeding towards the opponent) on your mount. On a full success (6), the victim is forced back. On a crit, the victim is forced prone.",
+      "required_a_count": 2,
+      "stress_cost": 0,
       "frequency": ""
     }
   },
@@ -159,22 +159,22 @@
     "model": "characters.spinability",
     "pk": 14,
     "fields": {
-      "name": "Drift Through Dimensions",
+      "name": "Gravitic Leap",
       "spin_type": "CAVALIER",
-      "description": "Once per campaign, you and your mount may exit the current scene through a dimensional fold. Avoid all consequences and reposition narratively.",
-      "required_a_count": 4,
+      "description": "While mounted/piloting, you may use a Spin armor charge to float or launch midair with Spin-warped gravity.",
+      "required_a_count": 3,
       "stress_cost": 0,
-      "frequency": "Once per campaign"
+      "frequency": ""
     }
   },
   {
     "model": "characters.spinability",
     "pk": 15,
     "fields": {
-      "name": "Golden Track",
+      "name": "Stirrup Surge",
       "spin_type": "CAVALIER",
-      "description": "At full speed, your next thrown Spin attack gains +2 effect and ignores 1 level of armor.",
-      "required_a_count": 4,
+      "description": "Your mount is innately imbued with Spin energy, doubling their movement speed.",
+      "required_a_count": 3,
       "stress_cost": 0,
       "frequency": ""
     }
@@ -185,7 +185,7 @@
     "fields": {
       "name": "Spiral Stampede",
       "spin_type": "CAVALIER",
-      "description": "Nearby mounts within your operational Range follow your trajectory. Create a 6-clock \"Chaos Charge.\" On completion: mass knockdown, enemy confusion, or opening.",
+      "description": "In a group action with all allies converging on one or more opponents/goals, add +1d to each player's roll, enabling their actions with Spin.",
       "required_a_count": 4,
       "stress_cost": 0,
       "frequency": ""
@@ -195,9 +195,9 @@
     "model": "characters.spinability",
     "pk": 17,
     "fields": {
-      "name": "Lethal Parabola",
+      "name": "Overload Hit",
       "spin_type": "EXECUTIONER",
-      "description": "Name an enemy's body part before a throw. On a 6, that body part is weakened, and the GM opens a 4-segment clock dictating how long before it can be used again.",
+      "description": "Take -1d to deal damage with increased potency (+1 effect).",
       "required_a_count": 1,
       "stress_cost": 0,
       "frequency": ""
@@ -206,18 +206,6 @@
   {
     "model": "characters.spinability",
     "pk": 18,
-    "fields": {
-      "name": "Arc Toss",
-      "spin_type": "EXECUTIONER",
-      "description": "Curve your throw around cover. Grants +1 position. On a crit, hit through supernatural barriers.",
-      "required_a_count": 2,
-      "stress_cost": 0,
-      "frequency": ""
-    }
-  },
-  {
-    "model": "characters.spinability",
-    "pk": 19,
     "fields": {
       "name": "Line Cutter",
       "spin_type": "EXECUTIONER",
@@ -229,11 +217,23 @@
   },
   {
     "model": "characters.spinability",
+    "pk": 19,
+    "fields": {
+      "name": "Civil Engineer",
+      "spin_type": "EXECUTIONER",
+      "description": "On a partial success, your spin tool can change the integrity of a nearby structure within 40ft. You can cause this structure to collapse and hinder opponents. On a full success, modify the integrity of the structure to turn it into a new structure (change and mold the form and function of walls, roads, objects/entities, etc.)",
+      "required_a_count": 2,
+      "stress_cost": 0,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.spinability",
     "pk": 20,
     "fields": {
-      "name": "Spin Snipe",
+      "name": "Devastation Chain",
       "spin_type": "EXECUTIONER",
-      "description": "Treat your Range stat as one grade higher for thrown Spin attacks. At A-rank Range or above, thrown attacks suffer no range penalties regardless of distance.",
+      "description": "Taking out an enemy grants a free follow-up throw at -1d. On a crit, the follow up continues, again.",
       "required_a_count": 3,
       "stress_cost": 0,
       "frequency": ""
@@ -243,22 +243,22 @@
     "model": "characters.spinability",
     "pk": 21,
     "fields": {
-      "name": "Devastation Chain",
+      "name": "Shotgun Scatter",
       "spin_type": "EXECUTIONER",
-      "description": "Taking out an enemy grants a free follow-up throw at -1d. On a crit, the chain continues again (once per score).",
+      "description": "Use a Spin armor charge to split a projectile mid-air using a spin tool. Then, target a number of opponents within range of the original attack. The projectile cannot be reformed into its original form.",
       "required_a_count": 3,
       "stress_cost": 0,
-      "frequency": "Once per score"
+      "frequency": ""
     }
   },
   {
     "model": "characters.spinability",
     "pk": 22,
     "fields": {
-      "name": "Overload Hit",
-      "spin_type": "EXECUTIONER",
-      "description": "Take -1d to deal damage beyond your immediate presence. Open a \"Residual Harm\" clock in the zone.",
-      "required_a_count": 3,
+      "name": "Cosmetic Reconstruction",
+      "spin_type": "MEDICO",
+      "description": "You are able to use a spin tool to reconstruct the physical appearance of an ally or foe. You can make them look younger, older, or reconstruct their face for as long as your spin tool is embedded in them.",
+      "required_a_count": 1,
       "stress_cost": 0,
       "frequency": ""
     }
@@ -267,10 +267,10 @@
     "model": "characters.spinability",
     "pk": 23,
     "fields": {
-      "name": "Shotgun Scatter",
-      "spin_type": "EXECUTIONER",
-      "description": "Split a Spin projectile mid-air. Hits all foes within your immediate presence.",
-      "required_a_count": 4,
+      "name": "Spin Suture",
+      "spin_type": "MEDICO",
+      "description": "You may use your spin tool from afar to aid an ally mid-combat (if an ally has level 3 harm, they may act as if you aided them).",
+      "required_a_count": 2,
       "stress_cost": 0,
       "frequency": ""
     }
@@ -279,10 +279,10 @@
     "model": "characters.spinability",
     "pk": 24,
     "fields": {
-      "name": "Spinal Collapse",
-      "spin_type": "EXECUTIONER",
-      "description": "Inflict a severe debilitation unless resisted. Fill a 12-clock \"Nerve Damage.\" Until that clock is cleared, the target cannot use the affected body system without pushing themselves.",
-      "required_a_count": 4,
+      "name": "Precision Incision",
+      "spin_type": "MEDICO",
+      "description": "When healing with a Spin-charged tool (Tinker or Bizarre), heal +1 segment.",
+      "required_a_count": 2,
       "stress_cost": 0,
       "frequency": ""
     }
@@ -291,10 +291,10 @@
     "model": "characters.spinability",
     "pk": 25,
     "fields": {
-      "name": "Precision Incision",
+      "name": "Triage Sphere",
       "spin_type": "MEDICO",
-      "description": "When healing with a Spin-charged tool, heal +1 segment.",
-      "required_a_count": 1,
+      "description": "Deploy a floating orb. Allies within 20ft of the orb gain +1d to resistance rolls for one scene.",
+      "required_a_count": 3,
       "stress_cost": 0,
       "frequency": ""
     }
@@ -303,10 +303,10 @@
     "model": "characters.spinability",
     "pk": 26,
     "fields": {
-      "name": "Improvised Tools",
+      "name": "Spinfield Stabilizer",
       "spin_type": "MEDICO",
-      "description": "No penalties for makeshift surgery or treatment items.",
-      "required_a_count": 1,
+      "description": "Create a field where allies may reduce incoming Harm by 1 level. Requires a fixed location; lasts until the location is compromised or the scene ends.",
+      "required_a_count": 3,
       "stress_cost": 0,
       "frequency": ""
     }
@@ -315,22 +315,22 @@
     "model": "characters.spinability",
     "pk": 27,
     "fields": {
-      "name": "Spin Suture",
+      "name": "Emergency Fusion",
       "spin_type": "MEDICO",
-      "description": "Stabilize an ally mid-combat. Stop bleeding or reduce Harm by 1 level. Costs 1 stress if under fire or in motion.",
-      "required_a_count": 2,
-      "stress_cost": 1,
-      "frequency": ""
+      "description": "Once per score, two PCs may act as one: combine clocks, action ratings, stress pool, and armor pool for 1 scene. Costs 2 stress per user.",
+      "required_a_count": 4,
+      "stress_cost": 2,
+      "frequency": "Once per score"
     }
   },
   {
     "model": "characters.spinability",
     "pk": 28,
     "fields": {
-      "name": "Triage Sphere",
-      "spin_type": "MEDICO",
-      "description": "Deploy a floating orb within your operational Range. Allies near the orb gain +1d to resistance or recovery rolls for one scene.",
-      "required_a_count": 2,
+      "name": "Dismantle Strike",
+      "spin_type": "BALLBREAKER",
+      "description": "Hit a weapon or body part with Spin. On a partial success, the weapon/limb is unusable. On a full success, the weapon/limb is completely destroyed. An opponent must use armor to avoid the consequence.",
+      "required_a_count": 1,
       "stress_cost": 0,
       "frequency": ""
     }
@@ -339,93 +339,9 @@
     "model": "characters.spinability",
     "pk": 29,
     "fields": {
-      "name": "Remote Restoration",
-      "spin_type": "MEDICO",
-      "description": "Throw a Spin-imbued ball to heal 1 segment or remove \"bleeding\" from an ally within your operational Range.",
-      "required_a_count": 2,
-      "stress_cost": 0,
-      "frequency": ""
-    }
-  },
-  {
-    "model": "characters.spinability",
-    "pk": 30,
-    "fields": {
-      "name": "Rotary Armor Patch",
-      "spin_type": "MEDICO",
-      "description": "Apply spinning shielding to an ally. 1 temporary armor for one conflict.",
-      "required_a_count": 3,
-      "stress_cost": 0,
-      "frequency": ""
-    }
-  },
-  {
-    "model": "characters.spinability",
-    "pk": 31,
-    "fields": {
-      "name": "Spin Shunt",
-      "spin_type": "MEDICO",
-      "description": "Redirect one status or environmental hazard (electricity, poison, etc.) into the terrain or machinery.",
-      "required_a_count": 3,
-      "stress_cost": 0,
-      "frequency": ""
-    }
-  },
-  {
-    "model": "characters.spinability",
-    "pk": 32,
-    "fields": {
-      "name": "Emergency Fusion",
-      "spin_type": "MEDICO",
-      "description": "Once per score, two PCs may act as one: share clocks, action ratings, and armor for 1 scene. Costs 2 stress per user.",
-      "required_a_count": 3,
-      "stress_cost": 2,
-      "frequency": "Once per score"
-    }
-  },
-  {
-    "model": "characters.spinability",
-    "pk": 33,
-    "fields": {
-      "name": "Spin Scanner",
-      "spin_type": "MEDICO",
-      "description": "+1 effect on Study for diagnosing trauma, injuries, or internal sabotage (tech or bio).",
-      "required_a_count": 3,
-      "stress_cost": 0,
-      "frequency": ""
-    }
-  },
-  {
-    "model": "characters.spinability",
-    "pk": 34,
-    "fields": {
-      "name": "Spinfield Stabilizer",
-      "spin_type": "MEDICO",
-      "description": "Create a field where allies may reduce their Harm by 1 level per scene. Requires a fixed location; lasts until the location is compromised or the scene ends.",
-      "required_a_count": 4,
-      "stress_cost": 0,
-      "frequency": ""
-    }
-  },
-  {
-    "model": "characters.spinability",
-    "pk": 35,
-    "fields": {
-      "name": "Dismantle Strike",
-      "spin_type": "BALLBREAKER",
-      "description": "Hit a weapon or body part with Spin. Jam or disable it \u2014 the target must push themselves or clear a 4-clock to restore function.",
-      "required_a_count": 1,
-      "stress_cost": 0,
-      "frequency": ""
-    }
-  },
-  {
-    "model": "characters.spinability",
-    "pk": 36,
-    "fields": {
       "name": "Spin Fakeout",
       "spin_type": "BALLBREAKER",
-      "description": "Create a visual or auditory decoy. +1d to Prowl or to spring traps. Once per scene, an enemy acts on false information \u2014 the GM determines how this plays out.",
+      "description": "Create a visual or auditory decoy. +1d to Prowl or to spring traps. Once per scene, an enemy acts on false information — the GM determines how this plays out.",
       "required_a_count": 1,
       "stress_cost": 0,
       "frequency": "Once per scene"
@@ -433,11 +349,23 @@
   },
   {
     "model": "characters.spinability",
-    "pk": 37,
+    "pk": 30,
+    "fields": {
+      "name": "Magnetic Pulse",
+      "spin_type": "BALLBREAKER",
+      "description": "Push or pull a metal object within your operational Range. Break line of sight or create an opening. Costs 1 stress.",
+      "required_a_count": 2,
+      "stress_cost": 1,
+      "frequency": ""
+    }
+  },
+  {
+    "model": "characters.spinability",
+    "pk": 31,
     "fields": {
       "name": "Fracture Intent",
       "spin_type": "BALLBREAKER",
-      "description": "On a 4+, the enemy misreads your intent. They target the wrong person or act at the wrong time.",
+      "description": "On a 6, the enemy misreads your intent. They target the wrong person or act at the wrong time.",
       "required_a_count": 2,
       "stress_cost": 0,
       "frequency": ""
@@ -445,7 +373,7 @@
   },
   {
     "model": "characters.spinability",
-    "pk": 38,
+    "pk": 32,
     "fields": {
       "name": "Jammer Spiral",
       "spin_type": "BALLBREAKER",
@@ -457,7 +385,7 @@
   },
   {
     "model": "characters.spinability",
-    "pk": 39,
+    "pk": 33,
     "fields": {
       "name": "Stand Stagger",
       "spin_type": "BALLBREAKER",
@@ -469,19 +397,7 @@
   },
   {
     "model": "characters.spinability",
-    "pk": 40,
-    "fields": {
-      "name": "Neural Disruptor",
-      "spin_type": "BALLBREAKER",
-      "description": "On hit, apply \"Silence,\" \"Stutter,\" or \"Blurred Vision\" \u2014 the target must push themselves or make a resistance roll to act normally. Costs 1 stress. On a crit, the condition persists until the target takes a significant action to clear it.",
-      "required_a_count": 3,
-      "stress_cost": 1,
-      "frequency": ""
-    }
-  },
-  {
-    "model": "characters.spinability",
-    "pk": 41,
+    "pk": 34,
     "fields": {
       "name": "Spin Muzzle",
       "spin_type": "BALLBREAKER",
@@ -493,37 +409,13 @@
   },
   {
     "model": "characters.spinability",
-    "pk": 42,
-    "fields": {
-      "name": "Field Denial",
-      "spin_type": "BALLBREAKER",
-      "description": "Create a zone within F-rank Range (10ft) where no powers activate until the GM advances the fiction or a target pushes themselves to resist. Costs 3 stress. On a crit, the suppression blocks an ongoing ritual entirely.",
-      "required_a_count": 4,
-      "stress_cost": 3,
-      "frequency": ""
-    }
-  },
-  {
-    "model": "characters.spinability",
-    "pk": 43,
+    "pk": 35,
     "fields": {
       "name": "Cascading Spin",
       "spin_type": "BALLBREAKER",
       "description": "Debuffs spread on contact. Pick two targets; enemies that physically interact with them inherit the effect, and so on. Costs 2 stress.",
       "required_a_count": 4,
       "stress_cost": 2,
-      "frequency": ""
-    }
-  },
-  {
-    "model": "characters.spinability",
-    "pk": 44,
-    "fields": {
-      "name": "Aura Reroute",
-      "spin_type": "BALLBREAKER",
-      "description": "Redirect an incoming AoE attack to a nearby area. Roll Finesse or Tinker; on a 6, full redirection with no residual consequence.",
-      "required_a_count": 4,
-      "stress_cost": 0,
       "frequency": ""
     }
   }

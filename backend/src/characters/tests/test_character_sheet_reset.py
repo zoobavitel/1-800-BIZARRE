@@ -84,7 +84,7 @@ class CharacterSheetResetTests(TestCase):
             personal_crew_name="",
             playbook="HAMON",
             secondary_playbook="SPIN",
-            playbook_xp_archetypes=["TRADITIONALIST"],
+            playbook_xp_archetypes=["CAESAR_STYLE"],
             action_dots={"hunt": 2, "study": 1, "skirmish": 2, "sway": 2},
             stress=7,
             trauma=[1, 2],

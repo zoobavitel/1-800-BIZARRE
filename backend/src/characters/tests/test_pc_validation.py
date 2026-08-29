@@ -17,6 +17,7 @@ class CharacterValidationTests(TestCase):
             user=self.user,
             true_name='Valid Character',
             heritage=self.heritage,
+            playbook='STAND',
             action_dots={
                 'hunt': 1, 'study': 1, 'survey': 1, 'tinker': 1, 
                 'finesse': 1, 'prowl': 1, 'skirmish': 1, 'wreck': 0, 
@@ -25,10 +26,12 @@ class CharacterValidationTests(TestCase):
             stress=9,
             coin_stats={},
             trauma=[],
-            xp_clocks={}
+            xp_clocks={},
+            custom_ability_type='single_with_3_uses',
+            custom_ability_description='Unique package with three uses.',
         )
         character.save()
-        character.standard_abilities.add(self.ability1, self.ability2, self.ability3)
+        character.standard_abilities.add(self.ability1)
 
         # SRD: Distribute 6 points at creation. Grade points: A=4, B=3, C=2, D=1, F=0.
         stand = Stand(
@@ -36,6 +39,7 @@ class CharacterValidationTests(TestCase):
             name='Valid Stand',
             type='FIGHTING',
             form='Humanoid',
+            forms=['Humanoid'],
             consciousness_level='C',
             power='C', speed='D', range='D', durability='D', precision='D', development='F'
         )
@@ -138,13 +142,19 @@ class CharacterValidationTests(TestCase):
 
     def test_invalid_initial_abilities_count(self):
         character = self._create_valid_level_1_character()
-        character.standard_abilities.remove(self.ability3)  # Makes count 2; expected 3
-        with self.assertRaisesMessage(ValidationError, 'A level 1 character must have exactly 3 abilities'):
+        character.standard_abilities.clear()  # 0 standards; need at least 1
+        with self.assertRaisesMessage(
+            ValidationError, 'A level 1 Stand character needs at least 1 standard ability'
+        ):
             character.full_clean()
 
         character_too_many_abilities = self._create_valid_level_1_character()
-        character_too_many_abilities.standard_abilities.add(self.ability4)  # Makes count 4; expected 3
-        with self.assertRaisesMessage(ValidationError, 'A level 1 character must have exactly 3 abilities'):
+        character_too_many_abilities.standard_abilities.add(
+            self.ability2, self.ability3
+        )  # 3 standards with 0 A-ranks; max 1
+        with self.assertRaisesMessage(
+            ValidationError, 'Too many standard abilities for level 1'
+        ):
             character_too_many_abilities.full_clean()
 
     def test_attribute_rating_calculation(self):
@@ -174,31 +184,36 @@ class CharacterValidationTests(TestCase):
         self.assertEqual(character.resolve_attribute_rating, 2)
 
     def test_valid_a_rank_abilities(self):
-        # SRD: 3 base + 2 per A-rank. One A-rank => 5 abilities. Stand 6 points: A(4)+D(1)+D(1)+F+F+F = 6.
+        # One A-rank => max 1 + 2 = 3 standards; unique package still required.
         user = User.objects.create_user(username='testuser_a_rank', password='password')
         heritage = Heritage.objects.create(name='Human_a_rank', base_hp=0, description='A standard human heritage')
-        ability5 = Ability.objects.create(name='Ability 5', type='standard', description='Desc 5')
 
         character_a_rank = Character(
             user=user,
             true_name='A-Rank Character',
             heritage=heritage,
+            playbook='STAND',
             action_dots={
                 'hunt': 1, 'study': 1, 'survey': 1, 'tinker': 1,
                 'finesse': 1, 'prowl': 1, 'skirmish': 1, 'wreck': 0,
                 'bizarre': 0, 'command': 0, 'consort': 0, 'sway': 0,
             },
             stress=9,
-            coin_stats={}
+            coin_stats={},
+            custom_ability_type='single_with_3_uses',
+            custom_ability_description='A-rank unique package.',
         )
         character_a_rank.save()
-        character_a_rank.standard_abilities.add(self.ability1, self.ability2, self.ability3, self.ability4, ability5)
+        character_a_rank.standard_abilities.add(
+            self.ability1, self.ability2, self.ability3
+        )
 
         stand_a_rank = Stand(
             character=character_a_rank,
             name='A-Rank Stand',
             type='FIGHTING',
             form='Humanoid',
+            forms=['Humanoid'],
             consciousness_level='C',
             power='A', speed='D', range='D', durability='F', precision='F', development='F'
         )
@@ -212,7 +227,7 @@ class CharacterValidationTests(TestCase):
 
     def test_invalid_a_rank_abilities_count(self):
         character = self._create_valid_level_1_character()
-        # 6 points with one A-rank: A(4)+D(1)+D(1)+F+F+F = 6. Do not add abilities (have 3, need 5).
+        # One A-rank: max standards = 3. Add 4th standard to exceed.
         character.stand.power = 'A'
         character.stand.speed = 'D'
         character.stand.range = 'D'
@@ -221,12 +236,17 @@ class CharacterValidationTests(TestCase):
         character.stand.development = 'F'
         character.stand.save()
         character.stress = 9
-        with self.assertRaisesMessage(ValidationError, 'A level 1 character must have exactly 5 abilities'):
+        character.standard_abilities.add(
+            self.ability2, self.ability3, self.ability4
+        )  # total 4 > max 3
+        with self.assertRaisesMessage(
+            ValidationError, 'Too many standard abilities for level 1'
+        ):
             character.full_clean()
 
     def test_no_a_rank_abilities(self):
         character = self._create_valid_level_1_character()
-        # Already has no A-ranks (C, D, D, C, D, F) and 3 abilities
+        # Already has no A-ranks and 1 standard + custom — valid
         try:
             character.full_clean()
             self.assertTrue(True)

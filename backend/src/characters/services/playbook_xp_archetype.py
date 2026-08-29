@@ -9,16 +9,18 @@ if TYPE_CHECKING:
 
 # Mirrors model choices — Stand.TYPE_CHOICES keys
 _STAND_ARCH_KEYS = frozenset(
-    {"COLONY", "TOOLBOUND", "PHENOMENA", "AUTOMATIC", "FIGHTING", "SHARED"}
+    {
+        "COLONY",
+        "TOOLBOUND",
+        "PHENOMENA",
+        "AUTOMATIC",
+        "FIGHTING",
+        "SHARED",
+        "CONJOINED",
+    }
 )
 _HAMON_ARCH_KEYS = frozenset(
-    {
-        "TRADITIONALIST",
-        "ADAPTIVE_FLOW",
-        "CYBER_HAMONIST",
-        "DARK_RESONANCE",
-        "BIO_HARMONICS",
-    }
+    {"CAESAR_STYLE", "CYBER_STYLE", "VAMPIRIC_STYLE"}
 )
 _SPIN_ARCH_KEYS = frozenset(
     {"CAVALIER", "EXECUTIONER", "MEDICO", "BALLBREAKER"}
@@ -96,13 +98,12 @@ _STAND_TYPE_DISPLAY = {
     "AUTOMATIC": "Automatic",
     "FIGHTING": "Fighting Spirit",
     "SHARED": "Shared",
+    "CONJOINED": "Conjoined",
 }
 _HAMON_DISPLAY = {
-    "TRADITIONALIST": "Traditionalist (Zeppeli Style)",
-    "ADAPTIVE_FLOW": "Adaptive Flow (Joseph/Caesar Style)",
-    "CYBER_HAMONIST": "Cyber-Hamonist",
-    "DARK_RESONANCE": "Dark Resonance",
-    "BIO_HARMONICS": "Bio-Harmonics",
+    "CAESAR_STYLE": "Caesar Style",
+    "CYBER_STYLE": "Cyber Style",
+    "VAMPIRIC_STYLE": "Vampiric Style",
 }
 _SPIN_DISPLAY = {
     "CAVALIER": "Cavalier",

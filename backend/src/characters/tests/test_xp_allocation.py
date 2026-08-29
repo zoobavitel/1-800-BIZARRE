@@ -294,6 +294,40 @@ class XPAllocationServiceTests(TestCase):
         self.assertIsNone(self.character.secondary_playbook)
         self.assertEqual(self.character.unallocated_xp, 30)
 
+    def test_unlock_second_playbook_from_playbook_overflow(self):
+        clocks = dict(self.character.xp_clocks or {})
+        clocks["playbook"] = 30
+        self.character.xp_clocks = clocks
+        self.character.unallocated_xp = 0
+        self.character.save(update_fields=["xp_clocks", "unallocated_xp"])
+        alloc = apply_unlock_second_playbook(
+            self.character, secondary_playbook="SPIN"
+        )
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.secondary_playbook, "SPIN")
+        self.assertEqual(int(self.character.xp_clocks.get("playbook", 0) or 0), 0)
+        self.assertEqual(alloc.metadata.get("playbook_spent"), 30)
+        undo_allocation(self.character, alloc)
+        self.character.refresh_from_db()
+        self.assertIsNone(self.character.secondary_playbook)
+        self.assertEqual(int(self.character.xp_clocks.get("playbook", 0) or 0), 30)
+
+    def test_unlock_second_playbook_combined_wallet(self):
+        clocks = dict(self.character.xp_clocks or {})
+        clocks["playbook"] = 10
+        self.character.xp_clocks = clocks
+        self.character.unallocated_xp = 20
+        self.character.save(update_fields=["xp_clocks", "unallocated_xp"])
+        alloc = apply_unlock_second_playbook(
+            self.character, secondary_playbook="SPIN"
+        )
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.secondary_playbook, "SPIN")
+        self.assertEqual(int(self.character.xp_clocks.get("playbook", 0) or 0), 0)
+        self.assertEqual(self.character.unallocated_xp, 0)
+        self.assertEqual(alloc.metadata.get("playbook_spent"), 10)
+        self.assertEqual(alloc.metadata.get("pool_spent"), 20)
+
     def test_unlock_second_playbook_rejects_short_pool(self):
         self.character.unallocated_xp = 10
         self.character.save(update_fields=["unallocated_xp"])

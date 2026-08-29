@@ -4,6 +4,24 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-08-20",
+    "version": null,
+    "sections": [
+      {
+        "title": "Maintenance",
+        "items": [
+          "refresh generated patch notes"
+        ]
+      },
+      {
+        "title": "Tests",
+        "items": [
+          "cover resist, unlock, NPC armor"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-08-19",
     "version": null,
     "sections": [
@@ -751,9 +769,7 @@ export const PATCH_NOTES = [
           "enhance AppBar with search and account menu functionality",
           "enhance action handling and group action management",
           "enhance session management and roll handling",
-          "add increment wanted action and roll deletion",
-          "add roll goal mapping by character",
-          "add action_name field to GroupAction model and update related serializers and views"
+          "add increment wanted action and roll deletion"
         ]
       }
     ]

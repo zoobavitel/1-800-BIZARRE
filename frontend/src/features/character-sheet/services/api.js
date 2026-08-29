@@ -1170,6 +1170,14 @@ export const transformBackendToFrontend = (backendCharacter) => {
       6,
       Math.max(0, Math.floor(Number(backendCharacter.physical_armor_used) || 0)),
     ),
+    spinArmorUsed: Math.min(
+      3,
+      Math.max(0, Math.floor(Number(backendCharacter.spin_armor_used) || 0)),
+    ),
+    hamonArmorUsed: Math.min(
+      3,
+      Math.max(0, Math.floor(Number(backendCharacter.hamon_armor_used) || 0)),
+    ),
     armor: {
       armor: false,
       heavy: false,
@@ -1256,6 +1264,13 @@ export const transformBackendToFrontend = (backendCharacter) => {
 
     // Healing clock
     healingClock: backendCharacter.healing_clock_filled || 0,
+    healingClockSegments: Math.min(
+      5,
+      Math.max(
+        4,
+        Math.floor(Number(backendCharacter.healing_clock_segments) || 4),
+      ),
+    ),
 
     // XP tracks
     xp: backendCharacter.xp_clocks || {
@@ -1577,6 +1592,25 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     })(),
     light_armor_used: false,
     heavy_armor_used: false,
+    healing_clock_filled: Math.max(
+      0,
+      Math.floor(Number(frontendCharacter.healingClock) || 0),
+    ),
+    healing_clock_segments: Math.min(
+      5,
+      Math.max(
+        4,
+        Math.floor(Number(frontendCharacter.healingClockSegments) || 4),
+      ),
+    ),
+    spin_armor_used: Math.min(
+      3,
+      Math.max(0, Math.floor(Number(frontendCharacter.spinArmorUsed) || 0)),
+    ),
+    hamon_armor_used: Math.min(
+      3,
+      Math.max(0, Math.floor(Number(frontendCharacter.hamonArmorUsed) || 0)),
+    ),
 
     // Harm — full L1/L2 two-slot + L3 + L4; `used` follows trimmed non-empty text
     ...(() => {

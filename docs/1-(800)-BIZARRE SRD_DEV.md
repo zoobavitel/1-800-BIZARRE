@@ -258,7 +258,7 @@ Players can **buy extra HP with XP** instead of taking more detriments.
 
 * **Physically Inferior:** \-1d when resisting physical harm.  
 * **Bizarre Blindspot:** \-1d when resisting Stand, Hamon, or supernatural effects.  
-* **Slower Recovery:** Healing clock permanently reduced by **1 segment.**  
+* **Slower Recovery:** Healing clock is **5** segments instead of 4\.  
 * **Slower Movement:** Base movement speed reduced from **30ft to 20ft.**
 
 ⭐ **Benefit Costs (Use HP to Unlock These):**
@@ -485,7 +485,7 @@ Players can **buy extra HP with XP** instead of taking more detriments.
 
 The Stand Coin is made of 6 properties, rated F to S, that describe a Stand's capabilities and limits. These properties fall into two categories: Stand Coin Rolls and Stand Coin Passives.
 
-Stand Coin Rolls — Power, Speed, and Precision — are your dice pools for taking actions. Durability is not a Coin Action; it is your Stand's resistance pool when the Stand absorbs a consequence. When the fiction calls for something only a Stand can do, or when you want to push beyond what your user could accomplish alone, you roll Power, Speed, or Precision instead of your user action ratings. These are parallel rolls, not additions to your user dice.
+Stand Coin Rolls — Power, Speed, Precision, and Durability — are your dice pools for taking actions or resisting consequences. When the fiction calls for something only a Stand can do, or when you want to push beyond what your user could accomplish alone, you roll these instead of your user action ratings. These are parallel rolls, not additions to your user dice.
 
 Stand Coin Passives — Range and Development — define your Stand's parameters. They don't generate dice rolls; the GM reads them to determine what's possible.
 
@@ -508,11 +508,17 @@ At the beginning of a new game, distribute 6 points among the six stats. Each po
 * F-rank Passives represent severe weaknesses enemies can exploit  
   ---
 
-### **STAND COIN ROLLS**
+**STAND COIN ROLLS**
 
-**How Stand Coin Rolls Work**
+**How Stand Coin Rolls Work:**
 
-When you attempt something at a scale your user cannot reach, you make a Stand Coin Roll using Power, Speed, or Precision. The fiction determines which applies. These are not interchangeable. They are parallel rolls, not additions to your user dice.
+When you attempt something only a Stand can do, you make a Stand Coin Roll using Power, Speed, or Precision. The fiction determines which applies. These are not interchangeable.
+
+Grade Gates: Some actions require a minimum grade to attempt at all. The GM calls this. A D-Power Stand cannot punch through a skyscraper — that action is simply unavailable.
+
+Stand-on-Stand Combat: Only Stand abilities, bizarre powers, or similarly supernatural forces can damage a Stand directly. User actions don't apply against a Stand — you need your Coin Rolls. This creates a tactical choice: target the Stand (requires your dice pool) or find and expose the user (opens up all your user actions).
+
+If you make desperate stand actions, you will gain 1 XP, and it’ll be allocated to the playbook track. If the playbook overflows, that XP will fill the playbook track after taking an advance. 
 
 **Obstacle Tiers**
 
@@ -614,7 +620,7 @@ Precision also covers Stand-aided perception — detecting details, trajectories
 
 Durability is not a Coin Action — you never roll it to accomplish something. It is your Stand's resistance pool, standing in for a user Attribute when your Stand absorbs the blow.
 
-**Interposing.** When you would resist a physical consequence with **Prowess**, you may instead put your Stand in the way and roll **Durability**. Resolve the roll normally: 6 minus your highest die in stress. A single 6 costs 0 stress. Two or more 6s: pay 0 and clear 1 stress.
+**Interposing.** When you would resist a physical consequence with **Prowess**, you may instead put your Stand in the way and roll **Durability**. Resolve the roll normally: 6 minus your highest die in stress.
 
 Three conditions must hold:
 
@@ -624,7 +630,7 @@ Three conditions must hold:
 
 *If you have 0 Durability dice (F-rank), roll 2d and take the lowest result.*
 
-Stand Armor: Durability also determines your Stand's armor charges. When you check a Stand Armor charge, you reduce a consequence against your Stand by 1 level. Stand armor can be used to protect the stand or user; if you use it to protect the user, the stand must be in range of the user to do so. 
+**Stand Armor:** Durability determines your Stand's armor charges. Mark a charge to reduce a consequence by 1 level against your Stand, your user, or anyone else your Stand is in position to shield. Protecting anyone other than your Stand requires the target to be within your Range grade and your Stand available to act.
 
 | Grade | Stand Armor Charges |
 | ----- | ----- |
@@ -663,7 +669,7 @@ Determines XP gain and capacity for growth.
 
 NPC STAND COIN STATS
 
-NPC stats are GM-facing parameters. NPCs don't roll Stand Coin dice — the GM reads their grades to set harm levels, determine what actions are available, and adjudicate **consequences.** NPCs do not track armor charges.
+NPC stats are GM-facing parameters. NPCs don't roll Stand Coin dice — the GM reads their grades to set harm levels, determine what actions are available, and adjudicate **consequences.**
 
 **Power — Determines harm level and impact:**
 
@@ -704,7 +710,7 @@ NPC stats are GM-facing parameters. NPCs don't roll Stand Coin dice — the GM r
 **STRESS & TRAUMA**
 
 **STRESS:**  
-Player characters in 1(800)Bizarre have a special reserve of 9 tokens called **stress**. Stand Durability does not change how many stress boxes you have. When they suffer a consequence that they don’t want to accept, they can take stress instead. The result of a **resistance check** determines how much stress it costs to avoid a bad outcome.
+Player characters in 1(800)Bizarre have a special reserve of 9 tokens called **stress**. When they suffer a consequence that they don’t want to accept, they can take stress instead. The result of a **resistance check** determines how much stress it costs to avoid a bad outcome.
 
 *During an All-Out-Brawl, Daniel’s character, Cross, gets stabbed in the chest. Daniel rolls his **Prowess** rating to resist, and gets a **2**. It costs 6 stress, minus 2 (the result of the resistance check) to resist the consequences. Daniel marks off 4 stress and describes how Cross survives.*
 
@@ -1385,13 +1391,11 @@ When you create your crew, you assign some positive and negative status ratings 
 **ADVANCEMENT**
 
 **PC Advancement:**  
-Each player keeps track of the experience points (xp) that their character earns. A player character sheet has 5 XP tracks: heritage, insight, prowess, resolve, and playbook. Heritage, insight, prowess, and resolve require 5 boxes in order to advance, while the playbook track requires filling 10 boxes in order to advance. To obtain another playbook, spend **30 XP from Available XP** (the free pool). A single track cannot pay that cost (attribute tracks cap at 5; filling playbook at 10 is a Take advance). You do not add a second playbook XP track. 
+Each player keeps track of the experience points (xp) that their character earns. A player character sheet has 5 XP tracks: heritage, insight, prowess, resolve, and playbook. Heritage, insight, prowess, and resolve require 5 boxes in order to advance, while the playbook track requires filling 10 boxes in order to advance. If you wish to have abilities from more than 1 playbook, you fill in 10 boxes in your playbook track to advance; you do not add an additional playbook track to your character sheet. 
 
 During the game session, mark xp:
 
 - When you make a desperate action roll. Mark 1 xp in the attribute for the action you rolled. For example, if you roll a desperate Skirmish action, you mark xp in Prowess. When you roll in a desperate group action, you also mark xp.
-
-- When you make a desperate Stand Coin Roll (Power, Speed, or Precision), mark 1 xp on your playbook track. When you fill 10, take an advance; leftover marks stay on the cleared track. Durability is a resistance pool, not an action roll. See Stand Coin XP.
 
 At the end of the session, review the xp triggers on your character sheet. For each one, mark 1 xp if it happened at all, or mark 2 xp if it happened a lot during the session. The xp triggers are:
 
@@ -1435,6 +1439,7 @@ You can also earn xp by training during downtime. When you train, mark XP in one
 | **Fighting Spirit** | Address a challenge through direct Stand confrontation or sustained physical force. |
 | **Phenomena** | Address a challenge by exploiting the bizarre or reality-defying nature of your Stand. |
 | **Shared** | Address a challenge by extending your Stand's reach to cover allies or multiple locations. |
+| **Conjoined** | Address a challenge by acting through a Stand fused with or inseparable from your body. |
 
 **SPIN USERS**
 
@@ -1449,11 +1454,9 @@ You can also earn xp by training during downtime. When you train, mark XP in one
 
 | Archetype | XP Trigger |
 | ----- | ----- |
-| **Traditionalist** | Address a challenge through disciplined Hamon technique, mentorship, or self-sacrifice. |
-| **Adaptive Flow** | Address a challenge by applying Hamon in an improvised or unexpected way. |
-| **Cyber-Hamonist** | Address a challenge by channeling Ripple through technology or cybernetics. |
-| **Dark Resonance** | Address a challenge by draining, corrupting, or inverting another's life force. |
-| **Bio-Harmonics** | Address a challenge through biological dominance, absorption, or physical transformation. |
+| **Caesar Style** | Address a challenge with bubble refraction, misdirection, or improvised Ripple tools. |
+| **Cyber Style** | Address a challenge by channeling Ripple through technology or cybernetics. |
+| **Vampiric Style** | Address a challenge by draining, corrupting, or inverting another's life force. |
 
 # 🥷 The Mission
 
@@ -1958,46 +1961,43 @@ In 1(800)Bizarre, your character's abilities reflect their Stand, Hamon mastery,
 
 **1\. Choose a Playbook**
 
-Your playbook defines your metaphysical focus — Stand, Hamon, or Spin. Each comes with a unique narrative flavor and a foundational list of abilities. You may select from these, or create your own. More on that later.
+**🪙 How a Stand Works** 
 
-**2\. Choose Your Heritage**
+Your Stand is a second body with its own capabilities and its own hard limits. What it can do is defined by two things: the abilities you write for it, and its Coin stats.
 
-Your heritage influences your character's origins and innate capabilities. Choose from: Human, Rock Human, Vampire, Pillar Man, Gray Matter, Haunting, Cyborg, or Oracle.
+Define your Stand's type and consciousness level: Automatic, Tool-Bound, Fighting Spirit, Phenomena, Shared, Colony, or Conjoined. The type describes how your Stand behaves, not what it can do — a Colony Stand and a Fighting Spirit with identical Coin stats are equally capable. Type is fiction; Coin is capability.
 
-Write a brief note about your family's background and life before joining the crew. If the GM deems it so, you may be able to create a unique ability based on a heritage trait.
+Then build your abilities. Choose one:
 
-**3\. Make a Background**
+* **Three unique abilities, each with one function**  
+* **One unique ability with three functions**
 
-Detail your previous life, occupation, or significant experiences. Describe how these experiences led to your alignment with your crew.
+In addition, choose **one ability from the standard abilities list.**
 
-**4\. Assign 7 Action Dots**
+*Three functions that all do the same thing make for a narrow Stand. If you can, spread them — something that protects, something that solves, something that hurts. This is a suggestion for building a Stand you'll enjoy using, not a requirement. A Stand that only does one thing, extremely well, is legal and often terrifying.*
 
-Assign 7 dots to your actions (no more than two dots in any single action at creation).
+**Writing an ability**
 
-Action categories include:
+Every ability you write — at creation or gained later — has three parts:
 
-* Insight (Study, Survey, Tinker, Hunt)  
-* Prowess (Prowl, Skirmish, Finesse, Wreck)  
-* Resolve (Bizarre, Sway, Command, Consort)
+* **Effect.** What it does, in one sentence.  
+* **Cost.** What using it takes. Stress, an armor charge, a clock you have to fill first, something you have to accomplish first — touched them this scene, already landed one hit, spent a downtime action — or a hard frequency. Every ability costs something, and the cost is where most of an ability's balance actually lives.  
+* **Limit.** What this ability specifically cannot do.
 
-**5\. Create Your Stand (or Select Hamon/Spin Technique)**
+**It rolls Stand dice.** If using the ability involves rolling, you roll your Coin — Power, Speed, or Precision — not a user action rating. Which of the three applies depends on what you're doing with it in that moment, and it can be different the next time; the fiction makes it obvious, the same way it does for any Coin Roll. What you can't do is write an ability that quietly resolves as a Skirmish or Finesse roll with a Stand-shaped description over the top. That's a user action wearing your Stand's coat. Abilities that don't roll at all — passive senses, armor charges, always-on effects — have nothing to declare here.
 
-Whether you wield a Stand, Hamon, or Spin, your powers are defined by a set of unique abilities and your Coin stats. These govern what your Stand can do — how hard it hits, how fast it moves, how far it can reach, and how well it holds together.
+**What counts as a Limit.** A Limit is specific to the ability: a hard number ("once per score"), an exclusion ("not against anything already dead"), or a fictional precondition ("you must have touched them this scene"). The rules that already apply to every Stand are not Limits and don't belong in the text. Don't write "only within my Range" or "cannot exceed my Durability's armor charges" — those are true of everything your Stand does, and restating them tells the GM nothing they didn't already know. A Limit that could be copied onto any other ability without changing its meaning isn't a Limit.
 
-You may choose one, then choose one ability from the standard abilities list:
+**No ability bypasses the system.** An ability cannot reach past your Range grade, attempt an obstacle your grade is gated out of, or produce armor charges beyond what your Durability grants. If an ability only works by breaking one of those, it isn't a strong ability — it's out of bounds. Write a different one.
 
-* Create 3 unique abilities, each with 1 function  
-* Create 1 unique ability with 3 functions
+**Before it's approved, the GM checks four things:**
 
-Not sure where to start? Use the Foundation Playbooks. They offer sample abilities and weapons tailored to each path.
+1. Effect, Cost, and Limit are all present, and all three are specific.  
+2. If it rolls dice, it rolls Coin — not a user action rating.  
+3. It doesn't reach past Range, past a grade gate, or past your armor cap.  
+4. Its Limit is particular to this ability, not a restatement of a rule that already applies.
 
-If you're playing:
-
-* **Stand:** Define your Stand's type and consciousness level: Automatic, Tool-Bound, Fighting Spirit, Phenomena, Shared, or Colony.  
-* **Hamon:** Create 3 custom abilities or select from the Hamon Foundation Playbook. You may also choose a weapon that channels Hamon energy.  
-* **Spin:** Create 3 custom abilities or select from the Spin Foundation Playbook. Choose a weapon or projection method.
-
----
+An ability that passes all four is legal regardless of how strange it is. Strangeness is the point; looseness isn't.
 
 **Coin Stats**
 
@@ -2030,11 +2030,9 @@ When a player describes an approach, ask what a bad outcome looks like before yo
 | Range | Operational distance of your Stand and its abilities |
 | Development | XP gain and capacity for growth |
 
-**Durability \-** *Your Stand's capacity to take a hit so you don't have to.*
+**Durability \-** *Your Stand's capacity to take a hit so you don't have to.* **Durability is not a Coin Action — you never roll it to accomplish something.** It is your Stand's resistance pool, standing in for a user Attribute when your Stand absorbs the blow.
 
-**Durability is not a Coin Action — you never roll it to accomplish something.** It is your Stand's resistance pool, standing in for a user Attribute when your Stand absorbs the blow.
-
-**Interposing.** When you would resist a physical consequence with **Prowess**, you may instead put your Stand in the way and roll **Durability**. Resolve the roll normally: 6 minus your highest die in stress. A single 6 costs 0 stress. Two or more 6s: pay 0 and clear 1 stress.
+**Interposing.** When you would resist a physical consequence with **Prowess**, you may instead put your Stand in the way and roll **Durability**. Resolve the roll normally: 6 minus your highest die in stress.
 
 Three conditions must hold:
 
@@ -2054,34 +2052,106 @@ Three conditions must hold:
 | D | 1d |
 | F | 0d (gated out) |
 
-For each A-grade, you may have two standard abilities or one custom ability with 2 individual features and a standard ability. **Abilities gained this way must still follow the same rules as any other unique ability** — cost, limit, and Coin Action anchor apply exactly as they do for your starting abilities. An A-rank grants more ability slots. It does not grant looser ones.
+For each A-grade, you may have two standard abilities or one custom ability with 2 individual features and a standard ability. **Abilities gained this way must still follow the same rules as any other unique ability** — cost, limit, and rolling your stand dice apply exactly as they do for your starting abilities. An A-rank grants more ability slots. It does not grant looser ones.
 
 To gain spin or hamon as a stand user, you must spend 30XP to advance and gain one of those playbooks. Vice versa for a hamon or spin user gaining a stand playbook. 
 
 ---
 
-**6\. Stress & Armor**
+**🔆 How Hamon Works**
+
+Hamon is breath and circulation turned into a weapon. You generate it yourself, out of your own lungs and your own blood, which means it costs you something every time and it stops when you do. Against anything undead — vampires, Pillar Men, anything animated past its natural span — it's devastating. Against a living man it's a very good punch.
+
+* **You have no Coin and no Coin Rolls.** Your Ripple techniques ride on your own action ratings. A Zoom Punch is **Skirmish**. A Ripple-infused blade is still Skirmish, with better effect. **Bizarre** covers the sensing and channeling work.  
+* **You have no second resistance pool.** Insight, Prowess, and Resolve are what you have. Nothing steps in front of you.  
+* **You heal.** Vital Transfer and the Ripple healing techniques are the only reliable in-play healing in the game, and they're yours. That's not incidental to the playbook — it's most of why a crew keeps you alive.  
+* **You don't write unique abilities.** Ripple is a tradition, not an invention. What you can do is what the Foundations and the playbooks contain — your creativity goes into how you use them, not into authoring new ones.
+
+**Hamon Armor.** You have **3 Hamon Armor charges.** Mark one to reduce a consequence by one level. Tracked separately from any physically worn armor and is refreshed in downtime. 
+
+**At the start of the game, you have:**
+
+* **All Ripple Foundations.** Every practitioner begins with these.  
+* **One standard ability.**  
+* **1 playbook ability** from a Hamon playbook — Caesar Style, Cyber Style, or Vampiric Style.   
+* **One set of Foundation equipment** — a weapon or focus that channels Ripple.
+
+**Advancement.** Fill the ten boxes of your playbook track to take a playbook advance and learn a new Hamon technique. Deeper picks within one playbook unlock its higher-tier features.
+
+**Gaining a Stand.** Spend 30 XP to gain a Stand playbook. Your Coin starts at D across all six stats — six points, which you may redistribute exactly as a new Stand user does. You gain the Coin Rolls, Durability as a resistance pool, and Stand Armor charges from your Durability grade. Your Stand doesn't have to have anything to do with your Hamon. It starts with three unique abilities, written under the same rules as any Stand user's, and 2 standard abilities. 
+
+---
+
+**🌀 How Spin Works**
+
+Spin is a technique, not an entity. There's nothing standing behind you. Everything you do, you do with your own hands and your own action ratings — what Spin gives you is a list of things those ratings can now accomplish, and a body that holds up under work it has no business surviving.
+
+Three things follow from that, and they're the whole difference between your sheet and a Stand user's:
+
+* **You have no Coin and no Coin Rolls.** You never roll Power, Speed, or Precision. When you put a steel ball through a man's shoulder, that's **Finesse** or **Hunt**, rolled off your own dots. Your Spin abilities change what those rolls can attempt and what they achieve — they don't replace the dice.  
+* **You have no second resistance pool.** You resist with Insight, Prowess, and Resolve. There's no Durability to put in the way; when something is coming at you, it's coming at *you*.  
+* **Your reach is equipment and fiction, not a grade.** A Stand user reads a Range grade off a table. You read the room, your throwing arm, and what's in your hands.  
+* **You don't write unique abilities.** What you can do is what the Foundations and the playbooks contain — your creativity goes into how you use them, not into authoring new ones.
+
+***Spin Armor.** You have **3 Spin Armor charges.** Mark one to reduce a consequence by one level. Tracked separately from any physical Armor and refreshed in downtime.*
+
+**At the start of the game, you have:**
+
+* **All Spin Foundations.** Every Spin practitioner knows these. They aren't picks; they're the floor.  
+* **One standard ability** from the standard abilities list.  
+* **1 playbook ability** from a Spin playbook — Cavalier, Executioner, Medico, or Ballbreaker.  
+* **One set of Foundation equipment** — steel balls, a projection method, or whatever your technique throws.
+
+**Advancement.** Fill the ten boxes of your playbook track to take a playbook advance. Spend it on a new Spin ability from any Spin playbook; deeper picks within one playbook unlock its higher-tier techniques.
+
+**Gaining a Stand.** Spend 30 XP to gain a Stand playbook. Your Coin starts at D across all six stats — six points, which you may redistribute exactly as a new Stand user does. You gain the Coin Rolls, Durability as a resistance pool, and Stand Armor charges from your Durability grade. Your Stand doesn't have to have anything to do with your Spin. It starts with three unique abilities, written under the same rules as any Stand user's, and 2 standard abilities. 
+
+---
+
+**2\. Choose Your Heritage**
+
+Your heritage influences your character's origins and innate capabilities. Choose from: Human, Rock Human, Vampire, Pillar Man, Gray Matter, Haunting, Cyborg, or Oracle.
+
+Write a brief note about your family's background and life before joining the crew.
+
+**3\. Make a Background**
+
+Detail your previous life, occupation, or significant experiences. Describe how these experiences led to your alignment with your crew.
+
+**4\. Assign 7 Action Dots**
+
+Assign 7 dots to your actions (no more than two dots in any single action at creation).
+
+Action categories include:
+
+* Insight (Study, Survey, Tinker, Hunt)  
+* Prowess (Prowl, Skirmish, Finesse, Wreck)  
+* Resolve (Bizarre, Sway, Command, Consort)
+
+**5\. Stress & Armor**
 
 Your character has **9 stress boxes.** Stress is spent to resist consequences, push yourself, and absorb harm.
 
 Track your armor separately:
 
 * **Stand Armor** — comes from your Durability grade. Checked when your Stand takes a hit to reduce the consequence by 1 level. Stands without a physical form share their Stand Armor with their user.  
-* **Armor** — physical armor worn by your user. Acquired via coin or heritage. Checked to reduce a consequence against your user by 1 level.
+* **Armor** — physical armor worn by your user. Acquired via coin or heritage. Checked to reduce a consequence against your user by 1 level.  
+* **Heavy Armor** \- physical armor acquired through coin or heritage. Treated as having 2 armor charges from 1 item. May use both charges individually or together.   
+* **Spin Armor & Hamon Armor** \- you gain 3 armor charges at the beginning of a game, and regain them during downtime. Charges are also the cost of many Spin and Hamon techniques \- check one to power an ability that calls for it. 
 
-**7\. Close Friend and Rival**
+**6\. Close Friend and Rival**
 
-Pick one close friend and one rival from your playbook's list to anchor your connections within the world.
+Pick one close friend and one rival to anchor your connections within the world.
 
-**8\. Choose Your Vice**
+**7\. Choose Your Vice**
 
 Your vice helps manage stress but also reveals vulnerabilities. Describe the details and location of your vice purveyor. Options include: Faith, Gambling, Luxury, Obligation, Pleasure, Stupor, Weird.
 
-**9\. Record Your Name, Alias, & Appearance**
+**8\. Record Your Name, Alias, & Appearance**
 
 Define how your character is known in the bizarre underworld. Give yourself a unique style and recognizable presence.
 
-**10\. XP Triggers**
+**9\. XP Triggers**
 
 Earn experience by:
 
@@ -2092,7 +2162,11 @@ Earn experience by:
 
 With 10 XP, you can raise a Coin stat one grade or take 2 action rating increases.
 
-**11\. Loadout**
+For Hamon and Spin users, marking 10 xp will let you take an advance and select an ability from a spin or hamon playbook. 
+
+To obtain features and abilities from other playbooks, you must pay 30 XP to obtain that playbook. Obtaining a stand playbook allows you to obtain a stand coin, stand dice, and stand armor, 3 custom abilities, as well as 2 standard abilities. Obtaining a spin or hamon playbook gives you their foundation abilities, a piece of equipment, and access to a 1st level playbook ability. 
+
+**10\. Loadout**
 
 Decide your load for each operation:
 
@@ -2117,7 +2191,7 @@ Each includes:
 
 * Their full Stand Coin spread
 
-* 1–2 unique abilities (not from the standard pool)
+* 3 unique abilities (not from the standard pool)
 
 * Recommended Standard Abilities by playstyle
 
@@ -2347,25 +2421,28 @@ These templates demonstrate how Coin stats limit *what you can get away with* an
 
 # **🌀 Spin Mastery: The Playbooks of the Perfect Spin**
 
-Spin users manipulate rotational energy to perform feats of science, sabotage, and surrealism. At the start of the game, choose:
+Spin users manipulate rotational energy to perform feats of science, sabotage, and surrealism. At the start of the game, you have:
 
+- **All Spin Foundations**  
 - 1 Standard Ability  
-- 3 Abilities from Spin playbook(s)  
+- 1 playbook ability (Level 1; separate from foundations) from Cavalier, Executioner, Medico, or Ballbreaker  
 - 1 set of equipment from the Spin Foundations. 
 
-When you take a playbook advancement, you may select a special ability from the various spin playbooks. Advancing to higher tiers within those playbooks will unlock greater abilities. 
+When you take a playbook advancement, you may select a special ability from the Spin playbooks. Higher character levels unlock higher-tier abilities (Level 2 at character level 2, and so on). 
 
-Spend 30XP to gain a Stand. Your stand coin starts with D in each category (6 points starting total) \- you may reallocate your stand coin stats similar to a new stand user, where F \= 0, D \= 1, C \= 2, B \= 3, A \= 4\. You gain the stand dice action ratings as well as a number of stand armor uses according to your durability. The stand does not have to be related to your character's hamon or spin abilities. Your stand gains 2 unique abilities (see stand playbook section for examples), and each A grade gives you 1 standard and 1 unique ability. To advance a stand coin stat, fill in the 10 boxes of your playbook track to advance a grade. 
+Spend 30XP to gain a Stand. Your stand coin starts with D in each category (6 points starting total) \- you may reallocate your stand coin stats similar to a new stand user, where F \= 0, D \= 1, C \= 2, B \= 3, A \= 4\. You gain the stand dice action ratings as well as a number of stand armor uses according to your durability. The stand does not have to be related to your character's hamon or spin abilities. Your stand gains **3 unique abilities** and **2 standard abilities**. Each A grade gives you additional ability slots as for any Stand user. To advance a stand coin stat, fill in the 10 boxes of your playbook track to advance a grade. 
 
-You may take a playbook advancement (10xp) to gain a Spin ability. Mark 10 boxes in your playbook to learn a feature from a Hamon playbook. Learn more features to gain higher quality features.
+You may take a playbook advancement (10xp) to gain a Spin ability. Learn more features to gain higher quality features. 
 
 ---
 
 ## **🌀 Spin Foundations (Universal to all Spin users)**
 
-These are the core techniques and valuable equipment that every Spin practitioner can learn. Players begin with access to these.
+These are the core techniques and valuable equipment that every Spin practitioner knows. Players begin with access to these. 
 
 Techniques:
+
+**Spin Armor** \- Your proficiency with spin grants you 2 Spin armor charges that are regained during downtime.
 
 **Golden Arc** Your Spin projectiles return to you. On a 6, it may hit a second target. With two 6’s, \+1 effect or \+1d to the follow-up strike.
 
@@ -2375,28 +2452,29 @@ Techniques:
 
 ***Throw Voice*** \- Use your spin tool to throw your voice up to 60ft. Push yourself to extend the range. 
 
-***Centripetal Force*** \- While moving, you gain a special armor charge. You must be in motion when you declare this. Use this armor to push yourself. 
+***Centripetal Force*** \- While moving, you gain a spin armor charge. You must be in motion when you declare this. Use this armor to push yourself. If you lose momentum, it goes away. 
 
 ***Detour*** \- Redirect an incoming AoE attack to a nearby area. Roll Finesse or Tinker; on a 6, full redirection with no residual consequence.
 
-***Tendon Manipulation*** \- Before making an attack with a spin tool, name an opponent’s limb. On a full success, you control that enemy’s limb and make 1 action as long as the spin weapon is embedded in that limb. Enemies can use their armor to lower or avoid the consequence of tendon manipulation.
+***Tendon Manipulation*** \- Before making an attack with a spin tool, name an opponent’s limb. On a full success, you control that enemy’s limb and make 1 action for them as long as the spin weapon is embedded in that limb (drop weapon, attack themselves, trip, etc). Enemies can attempt to resist.
 
-*Stagnant Space* \- You may use a spin tool to suspend an opponent up to 10 ft midair.
+**Stagnant Space** \- You may use a spin tool to suspend an opponent up to 10 ft midair.  
 
+**Miracle Shot** \- On a partial success, curve your spin tool around ¾’s cover. Grants \+1 position. On a crit, hit through supernatural barriers.
 
 Starting Equipment:
 
-*Steel Ball* \- a polished, steel ball used by beginners and experts. Can be used for spin related actions in or out of combat. 
+*Steel Ball* \- a polished, steel ball used by beginners and experts. Can be used for spin related actions in or out of combat, up to 65ft. 
+
+Steel Darts \- sharpened throwing darts, used by beginners and experts. 
 
 ---
 
 ## **🐎 Cavalier**
 
+The Cavalier takes pride in their mastery over mounted combat, animal companionship, driving skills, and using speed to overtake their opponents.
+
 Level 1
-
-Masters of mounted motion, vehicle manipulation, and movement disruption.
-
-*Gyroscopic Mount* \- \+1d to actions related to maneuvering or Spin related rolls when mounted or piloting.
 
 *Remote Connection* \- You are able to remotely control/pilot your mount or vehicle without line of sight or vocal commands.  
 
@@ -2406,13 +2484,9 @@ Masters of mounted motion, vehicle manipulation, and movement disruption.
 
 *Kinetic Knockdown* \- Spin-imbued Skirmish actions gain \+1d while charging (aka speeding towards the opponent) on your mount. On a full success (6), the victim is forced back. On a crit, the victim is forced prone.
 
-*Wheel of Warding* \- Your vehicle/mount makes you prepared for any engagement, adding \+1d to the engagement roll. 
-
 **Level 3**
 
-*Spiral Drift* \- \+1d on Finesse or Prowl while in motion. Hunt actions gain \+1 effect. 
-
-*Gravitic Leap* \- While mounted/piloting, You may use a special armor charge to float or launch midair with Spin-warped gravity. 
+*Gravitic Leap* \- While mounted/piloting, You may use a spin armor charge to float or launch midair with Spin-warped gravity. 
 
 *Stirrup Surge* \- Your mount is innately imbued with spin energy, doubling their movement speed. 
 
@@ -2422,9 +2496,9 @@ Masters of mounted motion, vehicle manipulation, and movement disruption.
 
 Equipment:
 
-*Rider’s Bolas* \- These bolas allow the user to steal momentum from other opponents and transfer it to their own actions. Gain \+1 position and \+1 effect. 
+*Rider’s Bolas* \- These bolas allow the user to steal momentum from other opponents and transfer it to their own actions. Gain \+1d to your next action.  
 
-*Cavalier’s Spurs* \- These spurs track your spin tool’s use. Each usage of spin fills 1 segment of a 4 segment clock called “Displacement Charge.” With a full clock, you gain access to a new feature. “Displacement Charge” grants the user and their mount to use a special armor to disappear and reappear into another physical space within reason. The clock resets after using this feature. You take no fall damage when reappearing into a physical space.
+*Cavalier’s Spurs* \- These spurs track your spin tool’s use. Each usage of spin fills 1 segment of a 4 segment clock called “Displacement Charge.” With a full clock, you gain access to a new feature. “Displacement Charge” grants the user and their mount to use spin armor to disappear and reappear into another physical space within reason. The clock resets after using this feature. You take no fall damage when reappearing into a physical space.
 
 ---
 
@@ -2432,23 +2506,23 @@ Equipment:
 
 Precision killers, focused on high-speed takedowns, ricochets, and suppressing fire.
 
-*Miracle Shot* \- On a partial success, curve your spin tool around ¾’s cover. Grants \+1 position. On a crit, hit through supernatural barriers.
-
-**After 1 Advance:**
-
-*Line Cutter* \- A straight-line throw hits up to 3 foes in your operational Range. Costs 1 stress if used mid-fight rather than in setup.
+**Level 1**
 
 *Overload Hit* \- Take \-1d to deal damage with increased potency (+1 effect).
 
+**Level 2**
+
+*Line Cutter* \- A straight-line throw hits up to 3 foes in your operational Range. Costs 1 stress if used mid-fight rather than in setup.
+
 *Civil Engineer* \- On a partial success, your spin tool can change the integrity of a nearby structure within 40ft. You can cause this structure to collapse and hinder opponents. On a full success, modify the integrity of the structure to turn it into a new structure (change and mold the form and function of walls, roads, objects/entities, etc.)
 
-**2 Advances:** 
+**Level 3**
 
 *Devastation Chain* \- Taking out an enemy grants a free follow-up throw at \-1d. On a crit, the follow up continues, again.
 
-*Shotgun Scatter* \- Use a special armor charge to split a projectile mid-air using a spin tool. Then, target a number of opponents within range of the original attack. The projectile cannot be reformed into its original form. 
+*Shotgun Scatter* \- Use a Spin armor charge to split a projectile mid-air using a spin tool. Then, target a number of opponents within range of the original attack. The projectile cannot be reformed into its original form. 
 
-**3 Advances:**
+**Level 4**
 
 Equipment:
 
@@ -2462,35 +2536,31 @@ Spin-Driver \- This weapon imbues sharp, metal discs with overpowering spin ener
 
 Practitioners of rotational surgery, field restoration, and biochemical Spin rituals.
 
+**Level 1:**
+
 *Cosmetic Reconstruction* \- You are able to use a spin tool to reconstruct the physical appearance of an ally or foe. You can make them look younger, older, or reconstruct their face for as long as your spin tool is embedded in them. 
 
-**With 1 Advance:**
+**Level 2:**
 
-*Improvised Tools* \- No penalties for makeshift surgery or improvised treatment items.
+*Spin Suture* \- You may use your spin tool from afar to aid an ally mid-combat (if an ally has level 3 harm, they may act as if you aided them). 
 
-*Precision Incision* \- When healing with a Spin-charged tool, heal \+1 segment.
+*Precision Incision* \- When healing with a Spin-charged tool (tinker or bizarre), heal \+1 segment.
 
-*Spin Scanner* \+1 effect on Study for diagnosing trauma, injuries, or internal sabotage (tech or bio).
-
-**2 Advances:**
-
-*Spin Suture* \- You may use your spin tool from afar to aid an ally mid-combat (if an ally has level 3 harm, they may act as if you aided them). Costs 1 special armor to end a status effect (like bleeding or poison) or protect an ally from a consequence.  
+**Level 3:**
 
 *Triage Sphere* \- Deploy a floating orb. Allies within 20ft of the orb gain \+1d to resistance rolls for one scene.
 
-*Rotary Armor Patch* \- Commit a spin tool to apply a spinning shield to an ally. May grant at max 1 armor charge. Regain your spin tool after the armor charge is used.
-
-**3 Advances:**
-
 *Spinfield Stabilizer* \- Create a field where allies may reduce incoming Harm by 1 level. Requires a fixed location; lasts until the location is compromised or the scene ends.
 
-*Emergency Fusion* Once per score, two PCs may act as one: share clocks, action ratings, and armor for 1 scene. Costs 2 stress per user.
+**Level 4:**
+
+**Emergency Fusion** Once per score, two PCs may act as one: combine clocks, action ratings, stress pool, and armor pool for 1 scene. Costs 2 stress per user.
 
 Equipment
 
 20 Finger Harness
 
-- This old duster coat contains a harness with 4 mechanical arms attached to the back of the wielder. Gain a special armor charge \- use it to redirect multiple projectiles at the same time. Regain this armor charge at the start of downtime.  
+- This old duster coat contains a harness with 4 mechanical arms attached to the back of the wielder.  
 
 ---
 
@@ -2498,11 +2568,13 @@ Equipment
 
 Advanced users of destructive rotational harmonics and disruptive psychic echo.
 
+**Level 1:**
+
 *Dismantle Strike* \- Hit a weapon or body part with Spin. On a partial success, the weapon/limb is unusable. On a full success, the weapon/limb is completely destroyed. An opponent must use armor to avoid the consequence. 
 
 *Spin Fakeout* \- Create a visual or auditory decoy. \+1d to Prowl or to spring traps. Once per scene, an enemy acts on false information — the GM determines how this plays out.
 
-**With 1 A:**
+**Level 2:**
 
 *Magnetic Pulse* Push or pull a metal object within your operational Range. Break line of sight or create an opening. Costs 1 stress.
 
@@ -2510,17 +2582,13 @@ Advanced users of destructive rotational harmonics and disruptive psychic echo.
 
 *Jammer Spiral* Once per score, nullify one relic, power, or tech device within F-rank Range (10ft) until its user pushes themselves to reactivate it. Costs 2 stress.
 
-**With 2 A:**
+**Level 3:**
 
 *Stand Stagger* Hit a Stand user with Spin. Their Stand loses its next reaction or triggered effect.
 
-*Neural Disruptor* On hit, apply "Silence," "Stutter," or "Blurred Vision" — the target must push themselves or make a resistance roll to act normally. Costs 1 stress. On a crit, the condition persists until the target takes a significant action to clear it.
-
 *Spin Muzzle* Suppress sound-based abilities or commands within F-rank Range (10ft) until the situation shifts or a target pushes themselves to break through.
 
-**With 3 A:**
-
-*Field Denial* Create a zone within F-rank Range (10ft) where no powers activate until the GM advances the fiction or a target pushes themselves to resist. Costs 3 stress. On a crit, the suppression blocks an ongoing ritual entirely.
+**Level 4:**
 
 *Cascading Spin* Debuffs spread on contact. Pick two targets; enemies that physically interact with them inherit the effect, and so on. Costs 2 stress.
 
@@ -2536,21 +2604,22 @@ Wrecking Ball
 
 # **🔆 Hamon Mastery: The Pulse of Life**
 
-Hamon users channel life force through breath, rhythm, and internal resonance. These Ripple techniques blend martial art, elemental flow, and metaphysical vitality. At the start of the game, choose:
+Hamon users channel life force through breath, rhythm, and internal resonance. These Ripple techniques blend martial art, elemental flow, and metaphysical vitality. Hamon is potent towards any undead life. At the start of the game, you have:
 
+- **All Ripple Foundations**  
 - 1 Standard Ability  
-- 3 Abilities from Hamon playbook(s)  
+- **1 playbook ability** (Level 1) from Caesar Style, Cyber Style, or Vampiric Style  
 - 1 set of equipment from the Hamon Foundations. 
 
-When you take a playbook advancement, you may select a special ability from the various spin playbooks. Advancing to higher tiers within those playbooks will unlock greater abilities. 
+When you take a playbook advancement, you may select a special ability from the Hamon playbooks. Higher character levels unlock higher-tier abilities (Level 2 at character level 2, and so on). 
 
-Spend 30XP to gain a Stand. Your stand coin starts with D in each category (6 points starting total) \- you may reallocate your stand coin stats similar to a new stand user, where F \= 0, D \= 1, C \= 2, B \= 3, A \= 4\. You gain the stand dice action ratings as well as a number of stand armor uses according to your durability. The stand does not have to be related to your character's hamon or spin abilities. Your stand gains 2 unique abilities (see stand playbook section for examples), and each A grade gives you 1 standard and 1 unique ability. To advance a stand coin stat, fill in the 10 boxes of your playbook track to advance a grade. 
+Spend 30XP to gain a Stand. Your stand coin starts with D in each category (6 points starting total) \- you may reallocate your stand coin stats similar to a new stand user, where F \= 0, D \= 1, C \= 2, B \= 3, A \= 4\. You gain the stand dice action ratings as well as a number of stand armor uses according to your durability. The stand does not have to be related to your character's hamon or spin abilities. Your stand gains **3 unique abilities** and **2 standard abilities**. Each A grade gives you additional ability slots as for any Stand user. To advance a stand coin stat, fill in the 10 boxes of your playbook track to advance a grade. 
 
 You may take a playbook advancement (10xp) to gain a Hamon ability. Mark 10 boxes in your playbook to learn a feature from a Hamon playbook. Learn more features to gain higher quality features.
 
 ---
 
-## **🔆 Foundations of Hamon (Available to all Ripple Users)**
+## **🔆 Ripple Foundations (Available to all Ripple Users)**
 
 Core techniques known to all Ripple users. Every Hamon practitioner begins with access to these.
 
@@ -2560,343 +2629,131 @@ Core techniques known to all Ripple users. Every Hamon practitioner begins with 
 
 **Scarlet Overdrive** Ignite a weapon or limb. Inflicts a fire-based secondary effect. Foes must resist or catch fire.
 
-**Zoom Punch** Make a melee strike at one Range grade beyond your Stand's operational Range. \+1d when attacking from unexpected angles or cover.
+**Zoom Punch** Make a melee strike up to 15ft. \+1d when attacking from unexpected angles or cover.
 
-**Acrobatic Pulse** Gain stable footing \+ ability to run over bodies of water, mist, unstable surfaces, or vertical walls. \+1d to climbing, jumping, swimming, running, or vaulting.
+**Acrobatic Pulse** Gain stable footing \+ ability to run over bodies of water, mist, unstable surfaces, or vertical walls. **\+1d** to climbing, jumping, swimming, running, or vaulting.
 
-**Vital Transfer** Once per score, lower 1 Harm level from an ally. On a crit, lower 2 Harm levels.
+**Vital Transfer** Use tinker or bizarre to make an action roll to heal an ally. Mark a number of segments on your **healing clock**. 1-3: one segment, 4/5: two segments, 6: three segments, critical: five segments.
 
-**Solar Infusion** Spend 2 stress to supercharge an object or weapon. \+1 effect on the next action using that object.
+**Ripple Hypnosis \-** Make a bizarre action roll to hypnotize a victim. You may extract a vivid set of memories, or force the victim to attack or perform an action once. You must continue to uphold concentration in order to make them perform multiple actions or to maintain their action. 
+
+**Ripple Deflect \-** You gain 1 Hamon Armor charge. Use this charge to reflect a projectile attack back towards the opponent. The projectile is imbued with Hamon. Pay 2 stress to regain the charge. 
+
+**Ripple Locator** \- Using the environment around you (dust, water in a container, etc.), you gain **\+1d** to locate objects or entities. 
+
+**Sendō Overdrive** Strike targets through walls or barriers within your operational Range.
+
+**Metal Silver Overdrive** Ripple conducts through metallic objects.
+
+**Age Resistance** Once per session, ignore 1 fatigue, aging, or time-based consequence.
+
+**Life Magnetism Overdrive** Your expertise with Hamon allows you to manipulate faint magnetic fields that originate from organic life. Spend 1 stress to stick/shape organic matter together. Example: shape plant matter into a glider, cloak, or shield. \+1 effect on movement or defensive action rolls.
+
+**Tornado Overdrive** Your expertise in hamon allows you to jump up to 20ft mid air, and up to 30ft horizontally. While in air, perform a high-speed rotational dive. The impact causes a shockwave of Hamon to scar the area. 
+
+**Aura Lock** Spend 2 stress to suppress an opponent’s ability activation within your range until the target pushes themselves or the fiction shifts.
+
+**Final Flame** When you would be taken out, you may spend 2 stress to take one final action with \+1 effect. You fall unconscious immediately after.
+
+**Pulse Detonation** Channel stored Ripple into an AoE knockdown within your operational Range. Fill a 4-tick "Crowd Disruption" clock.
+
+**Ripple Cutter** \- Transfer hamon into liquids; attacks using hamon infused liquid gain **\+1** **effect** towards steel structures.  
+
+**Sunlight Yellow Overdrive** \- Sacrifice all remaining stress to oneshot an undead entity. The undead entity explodes with a surging hamon shockwave, affecting foes up to 20ft radius. 
+
+**Deep Pass Overdrive** If your character dies, you have the opportunity to sacrifice all remaining stress to fully heal an ally, as well as transferring all of your knowledge (including hamon techniques) to them. They gain **\+1d** to all actions and **\+1 effect** to hamon based actions until the end of the session. 
+
+**Turquoise Blue Overdrive** \- Attacking with hamon while in a body of water may create a tempest/giant waves. The body of water loses half of its water for each use.
+
+**Time Ripple** \- Once a day, you may roll two d6’s. You may substitute the outcome of any roll with these dice. 
+
+**Guided Overdrive** Ripple arcs from your primary target to a second target within your operational Range. The second target takes splash damage.
 
 Hamon Equipment:
 
 *Scarf Sensor* Your scarf vibrates with ambient changes. \+1d to resist surprise, ambush, or sudden environmental effects. Use a scarf to slow a fall or drift over unstable terrain. \+1 position on movement rolls while airborne.
 
-*Scarlet Shield* Expend your Stand armor. Enemies who make physical contact with you take Level 1 Harm unless they resist.
+*Scarlet Shield* Expend your Hamon armor. Enemies who make physical contact are harmed unless they resist.
 
 *Sword of Pluck* A sword from the Victorian era. \+1 effect towards undead. Gain \+1d to an action rating with 0 dots \- choose again on a new day. 
 
 ---
 
-## **🥋 Traditionalist (Zeppeli Style)**
-
-Disciplined, orthodox Ripple practitioners grounded in martial precision and radiant focus.
-
-**With 1 A:**
-
-*Sendō Overdrive* Strike bizarre targets through walls or barriers within your operational Range. On a 6, begin a "Contact Clock" (4 ticks) to bypass cover entirely.
-
-*Metal Silver Overdrive* Ripple conducts through metallic weapons. \+1 effect when using chains, blades, or wire tools.
-
-**With 2 A:**
-
-*Ripple Chain* Imbue rope or chain. Functions as a melee weapon or restraint tool. \+1d when entangling.
-
-*Age Resistance* Once per session, ignore 1 fatigue, aging, or time-based consequence.
-
-*Life Magnetism Overdrive* Spend 1 stress to shape plant matter into a glider, cloak, or shield. \+1 effect on movement or defense.
-
-**With 3 Advances:**
-
-*Tornado Overdrive* Perform a high-speed rotational dive. Break through cover or brittle surfaces. \+1d when clearing minions or performing crowd control actions.
-
-*Ripple Sentinel* Always aware of undead or bizarre presence within your immediate presence. Doesn't require an action.
-
-*Aura Lock* Spend 1 stress to suppress ability activation within your operational Range until the target pushes themselves or the fiction shifts. Targets resist with Resolve.
-
-*Guided Overdrive* Ripple arcs from your primary target to a second target within your operational Range. The second target takes splash damage.
-
-*Hamon Blade* Ripple weapons ignore 1 armor or resistance.
-
-*Deep Pass Overdrive* Sacrifice all remaining stress to fully heal an ally. This cannot be interrupted.
-
-*Scarlet Wreath* Expend your Stand armor to gain 2 extra armor for 1 scene. Glows visibly.
-
-*Solar Rejection* Reflect radiant or flame-based attacks back toward their source. \+1 effect on the redirect.
-
-*Pulse Detonation* Channel stored Ripple into an AoE knockdown within your operational Range. Fill a 4-tick "Crowd Disruption" clock.
-
-*Final Flame* When you would be taken out, you may spend 2 stress to take one final action with \+1 effect. You fall unconscious immediately after.
-
-*Heavenly Discipline* Ignore all fatigue-based consequences. Your breathing is flawless.
-
-*Sacred Overdrive* Once per score, spend 2 stress to make one Hamon strike that bypasses all resistances and defenses.
-
-*Hamon Messiah* Once per score, allow an ally to channel their Hamon through your body or weapons.
-
-*Pulse Domination* When you land a successful Hamon strike, the target must push themselves or make a resistance roll before they can activate their next special ability.
-
----
-
-## **💨 Adaptive Flow (Joseph Style)**
-
-Improvisational masters of misdirection, gadgets, and battlefield manipulation using Ripple-charged tools.
-
-**1 Advance:**
-
-*Bubble Launcher* Spend 1 stress to fire a barrage of Hamon-charged bubbles within your operational Range. You may detonate them at will.
-
-*Ripple Hair Attack* Harden hair or fabric to deflect projectiles. Gain an armor charge.
-
-**With 2 A:**
-
-*Bubble Cutter* Spinning bubbles with razor edges. Ignore 1 armor on thrown attacks. \+1 effect on "Slice" or disarm clocks.
-
-*Bubble Barrier* Create one large bubble barrier within your immediate presence. Absorbs 1 attack (up to Level 2 Harm). Begins a 4-tick "Containment" clock if attacked.
-
-*Bubble Lenses* Bubbles can magnify or reflect light within your operational Range. Begin a 4-tick "Blinded" clock if shined into a target's eyes.
-
-*Sound-Reactive Ripple* \+1d to attacks synchronized to rhythm, speech, or music. Once per scene, cause a "Beat Drop" (3-tick distraction clock).
-
-**With 3 A:**
-
-*Bubble Cutter Gliding* Launch homing slicer bubbles. Track a target up to your operational Range away.
-
-*Chain Ambush* Use a Ripple-infused scarf to grapple or disarm from hiding. \+1d to stealth-based attacks or reactions.
-
-*Elastic Rebound* Once per scene, bounce off terrain or enemies to reposition. Gain \+1 effect on your next action.
-
-*Echo Feint* Leave behind a reflective bubble afterimage within your immediate presence. The next attack against you targets the illusion instead.
-
-*Elemental Shift* \+1 effect when fighting in terrain dominated by a specific element (fog, water, fire, ice). Ripple adapts to the environment.
-
-*Smoke Spiral* Spin a small object into a smoke cloud within your immediate presence. Starts a 3-tick "Choke or Cover" clock.
-
-*Ripple Magnet* Once per scene, call a small Ripple-infused object to your hand from within your line of sight.
-
-**With 4 A:**
-
-*Hamon Mirage* Use bubble refraction to hide your location or identity until you attack, take Harm, or the fiction exposes you. Attacks against you have \-1d. On a crit, gain \+1 effect on your next misdirected action.
-
-*Vacuum Cage* Trap a foe inside a sealed bubble within your operational Range. Begins a 4-tick "Suffocation" clock. Target may resist to break free.
-
-*Reflection Pulse* Bounce an attack or ability through three or more bubble surfaces. \+1 effect or redirect the trajectory. Requires pre-positioned surfaces.
-
-*Hamon Kite* Fly or coast across open space or falling terrain. \+1 position on chase or fall rolls.
-
-*Trick Bubble* Store an attack or effect in a bubble. Declare a condition now — the effect triggers when that condition is met.
-
----
-
 ## **Caesar Style**
-
-*Tactile Map* Use bubbles to physically map a space or reveal unseen terrain. \+1 effect on navigation, escape, or hidden object rolls.
-
-*Overclocked Pop* Spend 1 stress to burst multiple bubbles simultaneously. Affects all targets within your immediate presence.
 
 Level 1:
 
-*Bubble Laser Grid* Set up a refracted beam field within your operational Range. Targets caught unaware take Level 3 Harm. \+1d on setup rolls.
+*Bubble Launcher* Fire a barrage of Hamon-charged bubbles within your operational Range. You may detonate them at will.
 
 Level 2:
 
-*Bubble Tracker* Tag a target with a glowing bubble. You always know their location within A-rank Range (100ft) until the bubble is destroyed or they push themselves to remove it.
+*Reflection Pulse* Bounce an attack or ability through three or more bubble surfaces. 
+
+*Hamon Mirage* Use bubble refraction to hide your location or identity until you attack, take Harm, or the fiction exposes you. 
 
 Level 3:
 
+*Bubble Laser Grid* Set up a refracted beam of hamon infused light that passes through bubbles within your operational Range.
+
+*Trick Bubble* Store an attack or effect in a bubble. Declare a condition now — the effect triggers when that condition is met.
+
 Level 4:
 
-*Solar Gate* Once per campaign, completely disintegrate a construct or undead within your immediate presence.
+*Echo Feint* Leave behind a reflective bubble afterimage within your immediate presence. The next attack against you targets the illusion instead.
 
 ---
 
-## **⚙️ Cyber-Hamonist (Requires Cyborg Heritage)**
+## **⚙️ Cyber Style**
 
 A fusion of flesh, machine, and the Ripple. Breathless, relentless, efficient.
 
-**With 1 A:**
+**Level 1:**
 
-*Pulse Core* You do not breathe — generate Ripple internally. \+1 effect in foreign air, underwater, or vacuum environments.
+*Pulse Core* Your cybernetic enhancement allows you to generate hamon without breathing. 
 
-*Auto-Filter* Immune to airborne toxins, diseases, or choking hazards. Always succeed at resisting chemical or suffocation effects.
-
-*Shockline* Ripple discharges as electricity. \+1 effect against mechanical targets and armored enemies. On a crit, start a 4-tick "System Disruption" clock.
-
-**With 2 A:**
+**Level 2:**
 
 *Neural Sync* Spend 1 stress to seize control or short out a nearby machine within your immediate presence. Roll Tinker or Command to determine precision.
 
-*Static Field* When struck in melee, you may expend your Stand armor to deal Level 1 Harm to the attacker.
+*Shockline* When an enemy hits you, expend an armor charge to discharge an electric shock back towards the opponent. 
 
-*Magnetic Grapple* Attract or repel metal objects or cybernetic foes within C-rank Range (40ft). \+1d to mobility or disarming actions.
+**Level 3:**
 
-*Cybernetic Conduction* Ripple transmits through any conductive material. You may target enemies through circuitry, pipelines, or speaker systems anywhere within your operational Range.
+*EMP Burst* Once per score, disable all tech within your immediate presence. Starts a 5-tick "Blackout" clock. Your cybernetics are immune to this effect.
 
-*Pulse Feedback* After taking Harm, gain \+1 effect on your next physical action. Once per scene.
+*Circuit Burn* Disable an enemy's gear or weapon until they push themselves to reactivate it.
 
-*Emergency Coil* Deploy internal coils to gain 1 temporary armor for the scene. Costs 1 stress if used reactively after a consequence is declared.
+**Level 4:**
 
-*Phantom Pulse* Activate a device or strike a target through walls using ambient Ripple within your operational Range. Roll Tinker or Finesse.
-
-**With 3 A:**
-
-*Overclocked Ripple* Spend 3 stress to increase the potency of your next Hamon ability. On a crit, apply a 4-tick "Residual Heat" or "Feedback Burn" clock to the target.
-
-*EMP Burst* Once per score, disable all tech within your immediate presence. Starts a 5-tick "Blackout" clock. You are immune to this effect.
-
-*Spin-Ripple Bridge* Interface with a Spin-infused device or Stand projection using your internal circuitry. Treat as Consort or Tinker.
-
-*Charged Leap* Use magnetic propulsion to leap up to your operational Range or crash through obstacles. \+1 effect on mobility or forced entry actions.
-
-*Chain Pulse* Ripple arcs through 2–3 conductive targets within your operational Range.
-
-*Synthetic Aura* Generate a false supernatural aura. \+1d to pass as undead, bizarre, or magical. Once per scene.
-
-*Circuit Burn* Disable an enemy's gear or weapon until they push themselves to reactivate it. Costs 2 stress if the target is high-tech or Relic-class.
-
-*Reactive Musculature* Once per scene, reroll a failed Prowess roll. On a crit, gain \+1 effect.
-
-*Pulse Mirror* Record a minor visual or sound signal. Replay it once per score as a distraction or forgery.
-
-**With 4 A:**
-
-*Breathless Overdrive* Your Ripple ignores environmental limits. For one scene, all your Hamon abilities gain \+1 effect and cannot be suppressed.
-
-*Electric Soul* Transfer Ripple energy into a Stand or ally within C-rank Range (40ft). They gain \+1d on their next action. Costs 1 stress.
-
-*Thermal Control* Superheat or supercool any surface within your immediate presence. \+1 effect when breaching, disabling, or damaging tech.
-
-*Wave Recorder* Store one ability or Stand signature you've witnessed. Replay it once, narratively or tactically.
-
-*Dark Drive* Spend 1 stress to let an ally reroll their next failed roll.
-
-*Power Sink* Interrupt a magical or tech ability mid-use within your operational Range. Target must resist or lose the effect entirely.
-
-*Pulse Chainstorm* Strike up to 5 tech-tagged enemies within your operational Range with Level 1 Harm. Costs 2 stress.
-
-*Synthetic Savior* Spend 3 stress to stabilize a dying ally within your immediate presence immediately. Clears 1 Level 3 Harm. Once per score.
+*Thermal Control* Superheat or supercool any surface you can touch
 
 ---
 
-## **❄️ Dark Resonance (Requires Vampire Heritage)**
+## **❄️ Vampiric Style**
 
 Inverted, chilling, and parasitic. The Ripple repurposed for undeath.
 
-**With 1 A:**
+**Level 1:**
 
-*Blood Freeze* Touch attack slows blood flow. Target cannot move without pushing themselves. On a crit, start a 4-tick "Crystallization" clock — on completion, they are fully immobilized until someone spends a downtime action to treat them or a clock is cleared to break them free.
+*Blood Freeze* Touch attack slows blood flow. Target cannot move without pushing themselves. On a success, start a 4-tick "Crystallization" clock — on completion, they are fully immobilized. Enemies must make fortune saves to free themselves. 
 
-*Breathless Shell* You no longer breathe. Immune to smoke, gas, drowning, or vacuum. \+1 effect in cold environments.
+**Level 2**
 
 *Shadow Pulse* Emit an aura that snuffs light and distorts senses. \+1d to Prowl in dim or dark areas.
 
-**With 2 A:**
+*Frozen Fate* When you would take fatal Harm, encase yourself in ice instead. Avoid all damage. Once per score.
 
-*Frozen Grip* Spend 1 stress to freeze a limb on contact. Target must resist or lose use of it — they must push themselves to use that limb until they clear a 4-tick "Thaw" clock.
-
-*Crystallize Aura* Expend your Stand armor to encase yourself in frost. Gain 1 additional armor for one scene.
-
-*Chillwave* Once per score, emit a cold burst within your immediate presence. All enemies present must resist or take \-1d to their next action.
-
-*Aura Extinguish* Spend 3 stress to suppress all auras (Stands, Spin, Hamon) within your immediate presence until the targets push themselves or the fiction shifts. Targets may resist individually.
-
-**With 3 A:**
-
-*Dark Mirror* Once per score, reflect a light or energy-based attack back toward its source. Roll Finesse or Resolve.
+**Level 3**
 
 *Grave Pulse* Touch a corpse or undead to reanimate it briefly. It acts for one action under your direction, then crumbles.
 
-*Frost Magnetism* Pull blood-bearing targets within C-rank Range (40ft) toward you. Costs 1 stress.
+*Aura Extinguish* Spend 3 stress to touch and suppress am auras (Stands, Spin, Hamon) within your immediate presence. Victims must roll a fortune roll to regain composure.
 
-*Frostbite Lash* Your unarmed attacks deal \+1 Harm and start a 2-tick "Frozen Wound" clock. Once per scene.
+**Level 4**
 
-*Cracking Silence* Mute all sound within your immediate presence. \+1d to stealth or escape actions.
-
-*Soul Leech* When you take out a foe with Dark Resonance, regain 2 stress. Once per score.
-
-*Frozen Veil* Gain a temporary frost armor that absorbs Level 1 Harm. Breaks after use.
-
-*Shadow Chain* Bind two targets within your immediate presence together. They share stress or Harm until they resist or physically separate.
-
-**With 4 A:**
-
-*Absolute Zero Overdrive* Spend 3 stress to freeze all enemies within your immediate presence. Creates a 6-tick "Escape the Ice" clock. Cannot be used again until next downtime.
-
-*Curse Pulse* Nullify all healing or regeneration effects on one target within your immediate presence until they push themselves to recover. Requires physical contact.
-
-*Tombstorm* Unleash a cold black fog that obscures vision across the entire scene. Costs 2 stress.
-
-*Deathless Core* When you would be taken out, spend 2 stress to remain standing for one final action. You fall unconscious after.
-
-*Void Echo* Erase one short-term memory from a target within your immediate presence. They forget a scene or fact of your choice.
-
-*Frost Frame* Encapsulate a Stand or projection within your immediate presence in ice. Target must resist or push themselves before they can act.
-
-*Winter Monologue* While monologuing, enemies within your immediate presence must push themselves to interrupt or act against you.
-
-*Black Ripple Ascension* Become fully undead for one scene. Immune to radiant and light-based effects.
-
-*Frozen Fate* When you would take fatal Harm, encase yourself in ice instead. Avoid all damage. Once per score.
+*Soul Leech* When you take out a foe with Vampiric Style, regain 2 stress. Once per score.
 
 ---
-
-## **🌿 Bio-Harmonics (Requires Pillarman Heritage)**
-
-Ripple as a living waveform. Life, instinct, and elemental resonance.
-
-**With 1 A:**
-
-*Vital Bloom* Touch a plant to trigger massive, unnatural growth. Creates cover, distraction, or difficult terrain within your immediate presence.
-
-*Beast Pulse* \+1d to Consort or Command with beasts.
-
-**With 2 A:**
-
-*Floral Barrier* Expend your Stand armor to grow a plant shield that absorbs up to 2 Harm. Breaks on use.
-
-*Ripple Pollination* Mark enemies or zones within your operational Range with scented pollen. Tracked for 1 scene. \+1d to find or ambush tagged targets.
-
-*Amphibious Overdrive* \+1 effect on rolls made in aquatic, swamp, or humid environments.
-
-*Root Snare* Create an entangling trap within your operational Range. On a hit, starts a 4-tick "Escape the Vines" clock.
-
-*Natural Camouflage* Blend into organic terrain. \+1d to Prowl. On a crit, become undetectable by bizarre means until you act or the fiction exposes you.
-
-*Thermal Resonance* Detect heat, heartbeat, or intent within your immediate presence. \+1 effect to Survey or Study actions.
-
-**With 3 A:**
-
-*Photosynthetic Boost* In direct sunlight, gain \+1 effect to Skirmish, Finesse, and Wreck actions.
-
-*Beast Sync* Link senses with a creature. Share hearing, sight, or scent for 1 scene.
-
-*Ripple Burrow* Travel underground or through soft terrain up to your operational Range. Push yourself to extend beyond that.
-
-*Toxin Pulse* Your next attack delivers a paralytic. Starts a 4-tick "Poisoned" clock unless resisted.
-
-*Echo Howl* Release a primal scream. Nearby animals within your operational Range either rally as temporary allies or flee — GM decides based on the fiction.
-
-*Floral Smokescreen* Emit pollen, petals, or spores. Obscures a zone within your operational Range until the wind shifts or the scene moves on.
-
-*Chameleon Skin* Become invisible in natural terrain. Breaks when you attack or take Harm.
-
-*Sap from the Past* Touch a tree or coral. Replay ambient sound or emotion from earlier that day.
-
-**With 4 A:**
-
-*Symbiotic Revival* Spend 2 stress to stabilize and revive a dying ally within your immediate presence. They return with Level 1 Harm cleared.
-
-*Photosynthetic Armor* In sunlight, recover 1 stress or gain 1 armor at the end of each of your actions.
-
-*Tremor Sense* Feel all movement within your operational Range through terrain. \+1d to detect stealth or vibration-based triggers.
-
-*Mycelial Whisper* Speak silently to allies via roots, spores, or currents. Distance is no barrier as long as you share connected terrain.
-
-*Animal Swarm* Summon dozens of small creatures within your operational Range. Targets must resist or be distracted or disarmed.
-
-*Seed Pulse* Plant a Ripple-charged seed within your operational Range. If an enemy triggers it, they become entangled — they must push themselves or clear a 4-tick "Root Grip" clock to move.
-
-*Pulse Graft* Temporarily merge a natural trait (bark, toxin, root system) into an object or ally for 1 scene. \+1 effect on the next relevant use.
-
-*Rewild* Take over a massive plant or animal within your operational Range for 1 scene. It acts as a Tier 2+ minion (6-segment clock).
-
-*Natural Archive* Ask one question about the past from the terrain you're touching. The GM must answer truthfully.
-
-*Adaptive Bloom* Your Ripple takes on elemental traits (ice, acid, flame) for one scene. This effect is more potent against opponents vulnerable to those traits.
-
-*Nature's Cloak* An ally within your immediate presence becomes undetectable by bizarre or machine senses until they act or the fiction exposes them. Costs 1 stress.
-
-*Harmonic Overrun* Spend 3 stress to animate all natural terrain in the scene as Tier 3+ allies (8-segment clock). Lasts until the clock fills or the scene moves on.
 
 # 💪 STANDARD ABILITIES
 
@@ -2927,13 +2784,13 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 * **Cloak & Dagger:** When you use a disguise or other form of covert misdirection, you get **\+1d** to rolls to confuse or deflect suspicion. When you throw off your disguise, the resulting surprise gives you the initiative in the situation.   
 * **Mesmeriser:** When you **Sway** someone, you may cause them to forget that it’s happened until they next interact with you.   
 * **Saboteur:** When you **wreck**, the work is much quieter than it should be and the damage is hidden from casual inspection.  
-* **Shadow:** Expend your stand/special armor to resist a consequence from detection, surveillance, or security measures, or to push yourself for a feat of athletics or stealth.  
-* **Subterfuge:** You may expend your **stand armor/special armor** to resist a consequence from suspicion or persuasion, or to **push yourself** for subterfuge.
+* **Shadow:** Expend your stand/spin/hamon armor to resist a consequence from detection, surveillance, or security measures, or to push yourself for a feat of athletics or stealth.  
+* **Subterfuge:** You may expend your **stand armor/spin/hamon armor** to resist a consequence from suspicion or persuasion, or to **push yourself** for subterfuge.
 
 **Awareness**
 
 * **Bizarre Intuition:** You have a bizarre sense for danger. You cannot be surprised.  
-* **Focused:** You may expend your **stand armor/special armor** to resist a consequence of surprise or mental harm (fear, confusion, losing track of someone).  
+* **Focused:** You may expend your **stand armor/spin/hamon** to resist a consequence of surprise or mental harm (fear, confusion, losing track of someone).  
 * **Like looking into a Mirror:** You can always tell when someone is lying.  
 * **Mastermind:** You’re always aware of supernatural entities in your presence. Take **\+1d** when you **gather info** about the bizarre.  
 * **Scout:** When you **gather info** to locate a target, you get **\+1 effect.** When you hide in a prepared position or use camouflage, you get **\+1d** to roll to avoid detection.   
@@ -2949,7 +2806,6 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 
 * **Foresight:** Twice per score, you can assist a teammate without paying stress. Tell us how you prepared for this.  
 * **Bodyguard:** When you protect a teammate, take **\+1d to your resistance roll**. When you **gather info** to anticipate possible threats in the current situation, you get **\+1 effect**.  
-* **Guardian:** You may expend your stand armor to protect a teammate.  
 * **Functioning Vice:** When you indulge your vice, you may adjust the dice outcome by 1 or 2 (up or down). An ally who joins in your vice may do the same.  
 * **Stand Proud:** When you **Command** an ally in combat, they continue to fight when they would otherwise **break** (they’re not taken out when they suffer level 3 harm). They gain **\+1 effect** and **1 armor**.   
 * **Analyst:** During **downtime**, you get **two ticks** to distribute among any long-term project clocks that involve investigation or learning a new formula or design plan.  
@@ -2961,7 +2817,7 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 * **The Devil’s Footsteps:** When you **push yourself**, choose one of the following additional benefits:  
   * Perform a feat of athletics that verges past superhuman for 1 scene.  
   * Maneuver to confuse your enemies so they mistakenly attack each other.  
-* **Superhero Landing:** Expend **Stand armor/special armor** to reduce fall/collision harm by 1\. Gain **\+1d** for stylish aerial actions.  
+* **Superhero Landing:** Expend **Stand armor/spin/hamon** to reduce fall/collision harm by 1\. Gain **\+1d** for stylish aerial actions.  
 * **Daredevil:** When you roll a desperate action, you get **\+1d** to your roll if you also take **\-1d** to any resistance roll(s) against consequences from your action(s).   
 * **Bizarre Improvisation:** Take **2 stress** to roll your best action rating while performing a different action. Say how you adapt your action to this use. 
 
@@ -2970,7 +2826,8 @@ Ripple as a living waveform. Life, instinct, and elemental resonance.
 * **Weapon Recall:** Your Stand returns to your hand instantly when thrown or disarmed.  
 * **Stand Evolution:** Spend **5 stress** mid-score to unlock a temporary new unique ability.  
 * **Channel Force:** Redirect a supernatural force through your Stand's form or medium.  
-* **Requiem:** Spend 5 stress to elevate your stand beyond its normal limits temporarily. For one scene, treat all your stand coin stats as one grade higher. 
+* **Requiem:** Spend 5 stress to elevate your stand beyond its normal limits temporarily. For one scene, treat all your stand coin stats as one grade higher.   
+* **Guardian Angel:** Your Stand can manufacture armor for others. Take 2 stress to give an ally within Range one Stand Armor charge. They hold it and may check it themselves to reduce a consequence by 1 level. Unspent charges vanish at the end of the scene. You cannot give a given ally more than one charge per scene. 
 
 # 📕 Resources
 

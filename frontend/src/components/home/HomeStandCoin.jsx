@@ -21,14 +21,14 @@ const STATS = [
     label: "Power",
     grade: "D",
     blurb:
-      "SRD_DEV: roll parallel Stand-coin dice when brute force or harm from the Stand is what matters.",
+      "Coin action roll: parallel Stand dice when brute force or Stand harm is what matters.",
   },
   {
     key: "speed",
     label: "Speed",
     grade: "B",
     blurb:
-      "SRD_DEV: roll parallel dice when quickness sets conflict position or mobility.",
+      "Coin action roll: parallel dice when quickness sets conflict position or mobility.",
   },
   {
     key: "range",
@@ -42,14 +42,14 @@ const STATS = [
     label: "Durability",
     grade: "A",
     blurb:
-      "Soak and grit: on character sheets this is a 0–4 dice pool, not an F–S wedge roll. The letter keeps the classic six-spoke look.",
+      "Resist and interpose when the Stand takes the hit—not an accomplishment roll. Sets Stand armor charges and resistance tiers.",
   },
   {
     key: "precision",
     label: "Precision",
     grade: "B",
     blurb:
-      "SRD_DEV: roll parallel dice for finesse, aim, and controlled Stand effects.",
+      "Coin action roll: parallel dice for finesse, aim, and controlled Stand effects.",
   },
   {
     key: "development",
@@ -161,8 +161,8 @@ export default function HomeStandCoin() {
         >
           <title id="home-stand-coin-title">
             SRD_DEV demo stand coin: six-wedge radar (Power, Speed, Range,
-            Durability, Precision, Development). F–S grades; parallel dice on
-            Power, Speed, and Precision when the fiction calls for it.
+            Durability, Precision, Development). F–S grades; Power, Speed, and
+            Precision are Coin action rolls; Durability resists and interposes.
           </title>
           <defs>
             <clipPath id="home-stand-coin-clip">
@@ -336,9 +336,10 @@ export default function HomeStandCoin() {
               aria-hidden={!!active}
             >
               <span className="home-stand-coin-readout-hint">
-                Hover or tap a wedge for F–S shorthand. SRD_DEV uses parallel
-                Stand-coin rolls on Power, Speed, and Precision when the table
-                agrees the fiction needs them.
+                Hover or tap a wedge for F–S shorthand. Power, Speed, and
+                Precision are Coin action rolls (parallel Stand dice when the
+                table agrees the fiction needs them). Durability resists harm
+                and interposes—it is not rolled to accomplish goals.
               </span>
             </div>
             <div
