@@ -1147,6 +1147,7 @@ class CharacterXPAllocation(models.Model):
         ("LEVEL_UP_STAT", "Level up — Stand Coin stat"),
         ("LEVEL_UP_DOTS", "Level up — action dots"),
         ("LEVEL_UP_HERITAGE", "Level up — heritage ability"),
+        ("LEVEL_UP_PLAYBOOK_ABILITY", "Level up — playbook ability"),
         ("MINOR_ADVANCE", "Minor advance — action dot"),
         ("BUY_HP", "Buy +1 HP with XP"),
         ("UNLOCK_SECOND_PLAYBOOK", "Unlock second playbook (30 XP)"),

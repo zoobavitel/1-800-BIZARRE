@@ -316,6 +316,30 @@ def _apply_b_to_a_reward(character, allocation_id, reward):
     return added_standard
 
 
+def non_foundation_playbook_ability_count(hamon_abilities, spin_abilities):
+    """Non-foundation Hamon + Spin picks (shared quota)."""
+    count = 0
+    for ha in hamon_abilities or []:
+        if getattr(ha, "hamon_type", None) != "FOUNDATION":
+            count += 1
+    for sa in spin_abilities or []:
+        if getattr(sa, "spin_type", None) != "FOUNDATION":
+            count += 1
+    return count
+
+
+def playbook_ability_slot_budget(character):
+    """SRD: one free L1 pick + one slot per playbook ability advance."""
+    if character is None or not getattr(character, "pk", None):
+        return 1
+    advances = CharacterXPAllocation.objects.filter(
+        character=character,
+        allocation_type="LEVEL_UP_PLAYBOOK_ABILITY",
+        undone_at__isnull=True,
+    ).count()
+    return 1 + advances
+
+
 def allocation_summary(allocation):
     """Human-readable summary for API/UI."""
     meta = allocation.metadata or {}
@@ -337,6 +361,8 @@ def allocation_summary(allocation):
         return f"{base} · +2 dots ({', '.join(actions)})"
     if allocation.allocation_type == "LEVEL_UP_HERITAGE":
         return f"{base} · +1 heritage ability"
+    if allocation.allocation_type == "LEVEL_UP_PLAYBOOK_ABILITY":
+        return f"{base} · +1 playbook ability pick"
     if allocation.allocation_type == "BUY_HP":
         return f"{base} · +1 HP"
     if allocation.allocation_type == "MINOR_ADVANCE":
@@ -361,8 +387,10 @@ def apply_level_up(
     from_pool=False,
 ):
     choice = str(choice or "").strip().lower()
-    if choice not in ("stat", "dots", "heritage"):
-        raise XPAllocationError("choice must be 'stat', 'dots', or 'heritage'.")
+    if choice not in ("stat", "dots", "heritage", "playbook_ability"):
+        raise XPAllocationError(
+            "choice must be 'stat', 'dots', 'heritage', or 'playbook_ability'."
+        )
 
     before = _snapshot(character)
     source = _spend_xp_source(
@@ -372,6 +400,25 @@ def apply_level_up(
     track = "heritage" if source == "pool" else _normalize_track(xp_track)
     character.total_xp_spent = int(character.total_xp_spent or 0) + LEVEL_UP_COST
 
+    primary_playbook = str(character.playbook or "STAND").upper()
+    if track == "playbook" and primary_playbook in ("HAMON", "SPIN"):
+        if choice != "playbook_ability":
+            raise XPAllocationError(
+                "Spin/Hamon characters spend a full playbook track on +1 playbook ability."
+            )
+    elif track == "playbook" and primary_playbook == "STAND" and choice == "playbook_ability":
+        raise XPAllocationError(
+            "Stand users spend playbook advances on Stand Coin stats."
+        )
+    if choice == "stat" and primary_playbook in ("HAMON", "SPIN"):
+        raise XPAllocationError(
+            "Spin/Hamon characters take playbook ability advances, not Stand Coin stats."
+        )
+    if choice == "playbook_ability" and primary_playbook not in ("HAMON", "SPIN"):
+        raise XPAllocationError(
+            "Playbook ability advances are for Hamon/Spin primary characters."
+        )
+
     metadata = {
         "xp_track": track,
         "choice": choice,
@@ -379,7 +426,18 @@ def apply_level_up(
     }
     allocation_type = None
 
-    if choice == "stat":
+    if choice == "playbook_ability":
+        allocation_type = "LEVEL_UP_PLAYBOOK_ABILITY"
+        allocation = CharacterXPAllocation.objects.create(
+            character=character,
+            allocation_type=allocation_type,
+            xp_track=track,
+            xp_cost=LEVEL_UP_COST,
+            payload_before=before,
+            payload_after={},
+            metadata=metadata,
+        )
+    elif choice == "stat":
         stat = _normalize_stand_stat(stand_stat)
         grades = _get_stand_grades(character)
         old_grade = grades.get(stat, "D")
@@ -450,7 +508,7 @@ def apply_level_up(
             metadata=metadata,
         )
 
-    else:
+    elif choice == "dots":
         raw_actions = actions or []
         if not isinstance(raw_actions, list) or len(raw_actions) != 2:
             raise XPAllocationError("Level-up dots path requires exactly 2 actions.")

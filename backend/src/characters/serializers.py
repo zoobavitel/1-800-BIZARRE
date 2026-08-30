@@ -1712,21 +1712,6 @@ class CharacterSerializer(serializers.ModelSerializer):
                 )
             # Note: We don't auto-add trauma here, that's handled by the frontend
 
-        # enforce playbook ability prerequisites based on Stand A-ranks (S does not count)
-        count_A = _a_rank_count_from_stand_or_payload(self.instance, data)
-        # also merge grades from initial_data stand when validate runs before create
-        if count_A == 0 and isinstance(getattr(self, "initial_data", None), dict):
-            count_A = max(
-                count_A,
-                sum(
-                    1
-                    for g in _grades_from_payload(
-                        self.initial_data.get("stand"),
-                        data.get("coin_stats") or self.initial_data.get("coin_stats"),
-                    ).values()
-                    if g == "A"
-                ),
-            )
         # Partial PATCH: omitted ability id lists must fall back to instance M2M,
         # else playbook-gated checks skip or false-reject when only abilities are sent.
         if "hamon_ability_ids" in data:
@@ -1817,6 +1802,33 @@ class CharacterSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 "Spin abilities require playbook SPIN (primary or secondary)."
             )
+
+        from .services.xp_allocation import (
+            non_foundation_playbook_ability_count,
+            playbook_ability_slot_budget,
+        )
+
+        if has_hamon or has_spin:
+            new_nf = non_foundation_playbook_ability_count(hamon_ids, spin_ids)
+            if self.instance is not None:
+                old_hamon = [
+                    link.hamon_ability for link in self.instance.hamon_abilities.all()
+                ]
+                old_spin = [
+                    link.spin_ability for link in self.instance.spin_abilities.all()
+                ]
+                old_nf = non_foundation_playbook_ability_count(old_hamon, old_spin)
+            else:
+                old_nf = 0
+            if new_nf > old_nf:
+                budget = playbook_ability_slot_budget(self.instance)
+                if new_nf > budget:
+                    raise serializers.ValidationError(
+                        f"Playbook ability limit reached ({new_nf} selected, "
+                        f"{budget} allowed). Take a playbook advance (+1 playbook "
+                        "ability) before adding another."
+                    )
+
         heritage = data.get("heritage") or getattr(self.instance, "heritage", None)
         # Partial PATCH: merge M2M from instance when keys omitted.
         if "selected_benefits" in data:

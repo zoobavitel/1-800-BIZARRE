@@ -14,6 +14,7 @@ import {
   normalizeSheetProgressClock,
   serializeSheetProgressClocks,
 } from "../utils/progressClockSegments";
+import { computePcLevelFromSheet } from "../utils/characterUtils";
 
 /** Backend Character.playbook values */
 const PLAYBOOK_BACKEND = ["STAND", "HAMON", "SPIN"];
@@ -1498,6 +1499,11 @@ export const transformFrontendToBackend = (frontendCharacter) => {
       sway: frontendCharacter.actionRatings.SWAY,
     },
     action_dice_gained: actionDiceGained,
+
+    level: computePcLevelFromSheet({
+      standStats: frontendCharacter.standStats,
+      actionRatings: frontendCharacter.actionRatings,
+    }),
 
     // Stand: backend may use coin_stats (JSON) and/or nested stand; send grade letters (F–A)
     coin_stats: {

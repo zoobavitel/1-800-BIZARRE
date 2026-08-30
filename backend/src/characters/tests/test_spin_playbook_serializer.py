@@ -6,7 +6,7 @@ from rest_framework.test import APIClient, APIRequestFactory
 
 from characters.models import Ability, Campaign, Character, Heritage, HamonAbility, SpinAbility, Vice
 from characters.serializers import CharacterSerializer
-from characters.services.xp_allocation import apply_unlock_second_playbook
+from characters.services.xp_allocation import apply_level_up, apply_unlock_second_playbook
 
 
 class SpinPlaybookAbilitySerializerTests(TestCase):
@@ -318,3 +318,62 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         character = Character.objects.get(pk=cid)
         self.assertEqual(character.playbook, 'SPIN')
         self.assertEqual(character.spin_abilities.count(), 2)
+
+    def test_two_non_foundation_spin_abilities_rejected_at_l1(self):
+        spin_l1_a = SpinAbility.objects.create(
+            name='Spin L1 A',
+            spin_type='CAVALIER',
+            description='Level 1 A',
+            required_a_count=1,
+        )
+        spin_l1_b = SpinAbility.objects.create(
+            name='Spin L1 B',
+            spin_type='EXECUTIONER',
+            description='Level 1 B',
+            required_a_count=1,
+        )
+        data = {
+            'playbook': 'SPIN',
+            'spin_ability_ids': [spin_l1_a.id, spin_l1_b.id],
+        }
+        serializer = CharacterSerializer(
+            instance=self.char,
+            data=data,
+            partial=True,
+            context={'request': self._request()},
+        )
+        self.assertFalse(serializer.is_valid())
+        self.assertIn('non_field_errors', serializer.errors)
+        self.assertIn('Playbook ability limit', str(serializer.errors['non_field_errors'][0]))
+
+    def test_second_non_foundation_allowed_after_playbook_advance(self):
+        spin_l1_a = SpinAbility.objects.create(
+            name='Spin L1 A',
+            spin_type='CAVALIER',
+            description='Level 1 A',
+            required_a_count=1,
+        )
+        spin_l1_b = SpinAbility.objects.create(
+            name='Spin L1 B',
+            spin_type='EXECUTIONER',
+            description='Level 1 B',
+            required_a_count=1,
+        )
+        self.char.xp_clocks = {'playbook': 10}
+        self.char.save(update_fields=['xp_clocks'])
+        apply_level_up(
+            self.char,
+            xp_track='playbook',
+            choice='playbook_ability',
+        )
+        data = {
+            'playbook': 'SPIN',
+            'spin_ability_ids': [spin_l1_a.id, spin_l1_b.id],
+        }
+        serializer = CharacterSerializer(
+            instance=self.char,
+            data=data,
+            partial=True,
+            context={'request': self._request()},
+        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
