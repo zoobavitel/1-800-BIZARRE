@@ -469,3 +469,87 @@ export function isUserGmOfCharacterCampaign(user, character, campaigns = []) {
   if (campaignId == null) return false;
   return isUserCampaignGmForCharacter(user, { campaignRecord, campaignId });
 }
+
+/** SRD Level N stored in required_a_count (0 = foundation). */
+export function playbookAbilityRequiredLevel(ability) {
+  const raw = ability?.required_a_count;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export function isSpinFoundationAbility(ability) {
+  return String(ability?.spin_type || "").toUpperCase() === "FOUNDATION";
+}
+
+export function isHamonFoundationAbility(ability) {
+  return String(ability?.hamon_type || "").toUpperCase() === "FOUNDATION";
+}
+
+export function playbookGateLevel(pcLevel) {
+  return Math.max(1, Number(pcLevel) || 0);
+}
+
+export function playbookAbilityLevelMet(ability, pcLevel) {
+  const req = playbookAbilityRequiredLevel(ability);
+  if (req === 0) return true;
+  return playbookGateLevel(pcLevel) >= req;
+}
+
+export function playbookAbilityRequirementLabel(ability, pcLevel) {
+  const req = playbookAbilityRequiredLevel(ability);
+  if (req === 0) return "Foundation";
+  const gate = playbookGateLevel(pcLevel);
+  if (gate >= req) return `Level ${req}`;
+  return `Requires level ${req} (you are L${gate})`;
+}
+
+export function countNonFoundationPlaybookAbilities(abilities, kind) {
+  return (abilities || []).filter((a) => {
+    if (a?.type !== kind) return false;
+    if (kind === "spin") return !isSpinFoundationAbility(a);
+    if (kind === "hamon") return !isHamonFoundationAbility(a);
+    return false;
+  }).length;
+}
+
+export function countCombinedNonFoundationPlaybookAbilities(abilities) {
+  return (
+    countNonFoundationPlaybookAbilities(abilities, "spin") +
+    countNonFoundationPlaybookAbilities(abilities, "hamon")
+  );
+}
+
+export function playbookAbilitySlotBudget(xpAllocationRows) {
+  const advances = (xpAllocationRows || []).filter(
+    (a) => !a.undone_at && a.allocation_type === "LEVEL_UP_PLAYBOOK_ABILITY",
+  ).length;
+  return 1 + advances;
+}
+
+export function canAddNonFoundationPlaybookAbility({
+  abilities,
+  ability,
+  kind,
+  xpAllocationRows,
+}) {
+  const isFoundation =
+    kind === "spin"
+      ? isSpinFoundationAbility(ability)
+      : isHamonFoundationAbility(ability);
+  if (isFoundation) return true;
+  const used = countCombinedNonFoundationPlaybookAbilities(abilities);
+  const slots = playbookAbilitySlotBudget(xpAllocationRows);
+  return used < slots;
+}
+
+/** Match sheet LEVEL formula: 95 XP L1 baseline, +10 XP per level. */
+export function computePcLevelFromSheet({ standStats, actionRatings }) {
+  const totalStandPoints = Object.values(standStats || {}).reduce(
+    (s, v) => s + (Number(v) || 0),
+    0,
+  );
+  const totalActionDots = countActionDots(actionRatings);
+  const totalSpentXP = totalStandPoints * 10 + totalActionDots * 5;
+  return Math.max(1, 1 + Math.floor((totalSpentXP - 95) / 10));
+}

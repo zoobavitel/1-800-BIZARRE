@@ -52,6 +52,11 @@ import {
   isGmViewingPlayerCharacterSheet,
   isStandCoinChargenEditable as standCoinChargenUnlocked,
   mergeAbilitiesPreferRicherCustoms,
+  playbookAbilityLevelMet,
+  playbookAbilityRequirementLabel,
+  canAddNonFoundationPlaybookAbility,
+  countCombinedNonFoundationPlaybookAbilities,
+  playbookAbilitySlotBudget,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -3280,6 +3285,15 @@ const CharacterSheetWrapper = ({
   const totalSpentXP = totalStandPoints * 10 + totalActionDots * 5;
   const pcLevel = 1 + Math.floor((totalSpentXP - 95) / 10);
   const isChargenIncomplete = pcLevel < 1;
+  const primaryIsSpinOrHamon = playbook === "Spin" || playbook === "Hamon";
+  const playbookAbilitySlots = useMemo(
+    () => playbookAbilitySlotBudget(xpAllocationRows),
+    [xpAllocationRows],
+  );
+  const nonFoundationPlaybookUsed = useMemo(
+    () => countCombinedNonFoundationPlaybookAbilities(abilities),
+    [abilities],
+  );
   const CHARGEN_LEVEL_PROMPT =
     "begin allocating your action dots / playbook requirements (stand coin stats allocation)";
 
@@ -12373,6 +12387,11 @@ const CharacterSheetWrapper = ({
                               setLevelUpLockTrack("playbook");
                               setLevelUpSpendTrack("playbook");
                               setLevelUpFromPool(false);
+                              setLevelUpChoice(
+                                playbook === "Spin" || playbook === "Hamon"
+                                  ? "playbook_ability"
+                                  : "stat",
+                              );
                               setShowLevelUp(true);
                               return;
                             }
@@ -18863,10 +18882,6 @@ const CharacterSheetWrapper = ({
                                 }}
                               >
                                 {(() => {
-                                  const need = (a) =>
-                                    typeof a.required_a_count === "number"
-                                      ? a.required_a_count
-                                      : 0;
                                   const available = spinAbilitiesList.filter(
                                     (a) =>
                                       !abilities.some(
@@ -18903,8 +18918,27 @@ const CharacterSheetWrapper = ({
                                     </div>
                                   ) : (
                                     filtered.map((a) => {
-                                      const req = need(a);
-                                      const met = aRankCount >= req;
+                                      const levelMet = playbookAbilityLevelMet(
+                                        a,
+                                        pcLevel,
+                                      );
+                                      const quotaMet =
+                                        canAddNonFoundationPlaybookAbility({
+                                          abilities,
+                                          ability: a,
+                                          kind: "spin",
+                                          xpAllocationRows,
+                                        });
+                                      const met = levelMet && quotaMet;
+                                      const reqLabel =
+                                        playbookAbilityRequirementLabel(
+                                          a,
+                                          pcLevel,
+                                        );
+                                      const quotaLabel =
+                                        levelMet && !quotaMet
+                                          ? `Playbook advance required (${nonFoundationPlaybookUsed}/${playbookAbilitySlots})`
+                                          : reqLabel;
                                       return (
                                         <div
                                           key={a.id}
@@ -18935,9 +18969,7 @@ const CharacterSheetWrapper = ({
                                               marginLeft: "6px",
                                             }}
                                           >
-                                            {req === 0
-                                              ? "Foundation"
-                                              : `${req} A-rank coin stat${req === 1 ? "" : "s"} (${aRankCount} have)`}
+                                            {quotaLabel}
                                           </span>
                                         </div>
                                       );
@@ -18993,15 +19025,21 @@ const CharacterSheetWrapper = ({
                                     </div>
                                   )}
                                   {(() => {
-                                    const req =
-                                      typeof spinAbilitySelected.required_a_count ===
-                                      "number"
-                                        ? spinAbilitySelected.required_a_count
-                                        : 0;
-                                    const canAdd = aRankCount >= req;
+                                    const levelMet = playbookAbilityLevelMet(
+                                      spinAbilitySelected,
+                                      pcLevel,
+                                    );
+                                    const quotaMet =
+                                      canAddNonFoundationPlaybookAbility({
+                                        abilities,
+                                        ability: spinAbilitySelected,
+                                        kind: "spin",
+                                        xpAllocationRows,
+                                      });
+                                    const canAdd = levelMet && quotaMet;
                                     return (
                                       <>
-                                        {!canAdd && (
+                                        {!levelMet && (
                                           <div
                                             style={{
                                               color: "#f87171",
@@ -19009,9 +19047,25 @@ const CharacterSheetWrapper = ({
                                               fontSize: "11px",
                                             }}
                                           >
-                                            Needs {req} A-rank coin stat
-                                            {req === 1 ? "" : "s"} (you have{" "}
-                                            {aRankCount}).
+                                            {playbookAbilityRequirementLabel(
+                                              spinAbilitySelected,
+                                              pcLevel,
+                                            )}
+                                          </div>
+                                        )}
+                                        {levelMet && !quotaMet && (
+                                          <div
+                                            style={{
+                                              color: "#f87171",
+                                              marginTop: "8px",
+                                              fontSize: "11px",
+                                            }}
+                                          >
+                                            Playbook advance required (
+                                            {nonFoundationPlaybookUsed}/
+                                            {playbookAbilitySlots} slots used).
+                                            Fill the playbook track and Take
+                                            advance for +1 playbook ability.
                                           </div>
                                         )}
                                         <button
@@ -19147,10 +19201,6 @@ const CharacterSheetWrapper = ({
                                 }}
                               >
                                 {(() => {
-                                  const need = (a) =>
-                                    typeof a.required_a_count === "number"
-                                      ? a.required_a_count
-                                      : 0;
                                   const available = hamonAbilitiesList.filter(
                                     (a) =>
                                       !abilities.some(
@@ -19187,8 +19237,27 @@ const CharacterSheetWrapper = ({
                                     </div>
                                   ) : (
                                     filtered.map((a) => {
-                                      const req = need(a);
-                                      const met = aRankCount >= req;
+                                      const levelMet = playbookAbilityLevelMet(
+                                        a,
+                                        pcLevel,
+                                      );
+                                      const quotaMet =
+                                        canAddNonFoundationPlaybookAbility({
+                                          abilities,
+                                          ability: a,
+                                          kind: "hamon",
+                                          xpAllocationRows,
+                                        });
+                                      const met = levelMet && quotaMet;
+                                      const reqLabel =
+                                        playbookAbilityRequirementLabel(
+                                          a,
+                                          pcLevel,
+                                        );
+                                      const quotaLabel =
+                                        levelMet && !quotaMet
+                                          ? `Playbook advance required (${nonFoundationPlaybookUsed}/${playbookAbilitySlots})`
+                                          : reqLabel;
                                       return (
                                         <div
                                           key={a.id}
@@ -19219,9 +19288,7 @@ const CharacterSheetWrapper = ({
                                               marginLeft: "6px",
                                             }}
                                           >
-                                            {req === 0
-                                              ? "Foundation"
-                                              : `${req} A-rank coin stat${req === 1 ? "" : "s"} (${aRankCount} have)`}
+                                            {quotaLabel}
                                           </span>
                                         </div>
                                       );
@@ -19276,15 +19343,21 @@ const CharacterSheetWrapper = ({
                                     </div>
                                   )}
                                   {(() => {
-                                    const req =
-                                      typeof hamonAbilitySelected.required_a_count ===
-                                      "number"
-                                        ? hamonAbilitySelected.required_a_count
-                                        : 0;
-                                    const canAdd = aRankCount >= req;
+                                    const levelMet = playbookAbilityLevelMet(
+                                      hamonAbilitySelected,
+                                      pcLevel,
+                                    );
+                                    const quotaMet =
+                                      canAddNonFoundationPlaybookAbility({
+                                        abilities,
+                                        ability: hamonAbilitySelected,
+                                        kind: "hamon",
+                                        xpAllocationRows,
+                                      });
+                                    const canAdd = levelMet && quotaMet;
                                     return (
                                       <>
-                                        {!canAdd && (
+                                        {!levelMet && (
                                           <div
                                             style={{
                                               color: "#f87171",
@@ -19292,9 +19365,25 @@ const CharacterSheetWrapper = ({
                                               fontSize: "11px",
                                             }}
                                           >
-                                            Needs {req} A-rank coin stat
-                                            {req === 1 ? "" : "s"} (you have{" "}
-                                            {aRankCount}).
+                                            {playbookAbilityRequirementLabel(
+                                              hamonAbilitySelected,
+                                              pcLevel,
+                                            )}
+                                          </div>
+                                        )}
+                                        {levelMet && !quotaMet && (
+                                          <div
+                                            style={{
+                                              color: "#f87171",
+                                              marginTop: "8px",
+                                              fontSize: "11px",
+                                            }}
+                                          >
+                                            Playbook advance required (
+                                            {nonFoundationPlaybookUsed}/
+                                            {playbookAbilitySlots} slots used).
+                                            Fill the playbook track and Take
+                                            advance for +1 playbook ability.
                                           </div>
                                         )}
                                         <button
@@ -21508,11 +21597,24 @@ const CharacterSheetWrapper = ({
             </div>
 
             <div style={{ display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
-              {[
-                ["stat", "+1 Stand Coin"],
-                ["dots", "+2 Action Dots"],
-                ["heritage", "+1 Heritage"],
-              ].map(([val, label]) => (
+              {(
+                primaryIsSpinOrHamon &&
+                (levelUpLockTrack === "playbook" ||
+                  (!levelUpLockTrack &&
+                    !levelUpFromPool &&
+                    levelUpSpendTrack === "playbook"))
+                  ? [["playbook_ability", "+1 Playbook Ability"]]
+                  : primaryIsSpinOrHamon
+                    ? [
+                        ["dots", "+2 Action Dots"],
+                        ["heritage", "+1 Heritage"],
+                      ]
+                    : [
+                        ["stat", "+1 Stand Coin"],
+                        ["dots", "+2 Action Dots"],
+                        ["heritage", "+1 Heritage"],
+                      ]
+              ).map(([val, label]) => (
                 <button
                   key={val}
                   onClick={() => setLevelUpChoice(val)}
@@ -21529,6 +21631,20 @@ const CharacterSheetWrapper = ({
                 </button>
               ))}
             </div>
+            {levelUpChoice === "playbook_ability" && (
+              <div
+                style={{
+                  marginBottom: "16px",
+                  fontSize: "12px",
+                  color: "#9ca3af",
+                  lineHeight: 1.45,
+                }}
+              >
+                Spend 10 XP from a full playbook track to unlock one more
+                non-foundation Spin/Hamon ability pick (still gated by
+                character level).
+              </div>
+            )}
             {unallocatedXp >= 10 && !levelUpLockTrack ? (
               <label
                 style={{
@@ -21730,7 +21846,23 @@ const CharacterSheetWrapper = ({
               ) : (
                 <select
                   value={levelUpSpendTrack}
-                  onChange={(e) => setLevelUpSpendTrack(e.target.value)}
+                  onChange={(e) => {
+                    const t = e.target.value;
+                    setLevelUpSpendTrack(t);
+                    if (primaryIsSpinOrHamon && t === "playbook") {
+                      setLevelUpChoice("playbook_ability");
+                    } else if (
+                      primaryIsSpinOrHamon &&
+                      levelUpChoice === "playbook_ability"
+                    ) {
+                      setLevelUpChoice("dots");
+                    } else if (
+                      !primaryIsSpinOrHamon &&
+                      levelUpChoice === "playbook_ability"
+                    ) {
+                      setLevelUpChoice("stat");
+                    }
+                  }}
                   disabled={levelUpFromPool}
                   style={{ ...S.sel, width: "100%", marginTop: "6px" }}
                 >

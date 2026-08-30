@@ -18,5 +18,15 @@ export {
   isStandCoinChargenEditable,
   sheetCustomAbilityContentScore,
   mergeAbilitiesPreferRicherCustoms,
+  playbookAbilityRequiredLevel,
+  isSpinFoundationAbility,
+  isHamonFoundationAbility,
+  playbookGateLevel,
+  playbookAbilityLevelMet,
+  playbookAbilityRequirementLabel,
+  countCombinedNonFoundationPlaybookAbilities,
+  playbookAbilitySlotBudget,
+  canAddNonFoundationPlaybookAbility,
+  computePcLevelFromSheet,
 } from "./utils/characterUtils";
 export * from "./services/api";

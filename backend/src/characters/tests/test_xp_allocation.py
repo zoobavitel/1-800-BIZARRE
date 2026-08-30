@@ -456,6 +456,68 @@ class XPAllocationAPITests(TestCase):
         self.assertEqual(self.character.xp_clocks["playbook"], 0)
         self.assertEqual(self.character.heritage_points_gained, 1)
 
+    def test_apply_level_up_playbook_ability_for_spin_primary(self):
+        spin_char = Character.objects.create(
+            user=self.user,
+            true_name="Spin XP",
+            heritage=self.heritage,
+            playbook="SPIN",
+            action_dots={"hunt": 1, "study": 1, "survey": 1, "tinker": 1, "finesse": 1, "prowl": 1, "skirmish": 1},
+            stress=9,
+            xp_clocks={
+                "insight": 0,
+                "prowess": 0,
+                "resolve": 0,
+                "heritage": 0,
+                "playbook": 10,
+            },
+        )
+        alloc = apply_level_up(
+            spin_char,
+            xp_track="playbook",
+            choice="playbook_ability",
+        )
+        spin_char.refresh_from_db()
+        self.assertEqual(alloc.allocation_type, "LEVEL_UP_PLAYBOOK_ABILITY")
+        self.assertEqual(spin_char.xp_clocks["playbook"], 0)
+
+    def test_apply_level_up_playbook_ability_undo(self):
+        spin_char = Character.objects.create(
+            user=self.user,
+            true_name="Spin Undo",
+            heritage=self.heritage,
+            playbook="HAMON",
+            action_dots={"hunt": 1, "study": 1, "survey": 1, "tinker": 1, "finesse": 1, "prowl": 1, "skirmish": 1},
+            stress=9,
+            xp_clocks={"playbook": 10},
+        )
+        alloc = apply_level_up(
+            spin_char,
+            xp_track="playbook",
+            choice="playbook_ability",
+        )
+        undo_allocation(spin_char, alloc, user=self.user)
+        spin_char.refresh_from_db()
+        self.assertEqual(spin_char.xp_clocks["playbook"], 10)
+
+    def test_spin_primary_cannot_take_stat_from_playbook_track(self):
+        spin_char = Character.objects.create(
+            user=self.user,
+            true_name="Spin Stat Block",
+            heritage=self.heritage,
+            playbook="SPIN",
+            action_dots={"hunt": 1},
+            stress=9,
+            xp_clocks={"playbook": 10},
+        )
+        with self.assertRaises(XPAllocationError):
+            apply_level_up(
+                spin_char,
+                xp_track="playbook",
+                choice="stat",
+                stand_stat="power",
+            )
+
     def test_buy_hp_from_pool_api(self):
         self.character.unallocated_xp = 5
         self.character.save(update_fields=["unallocated_xp"])

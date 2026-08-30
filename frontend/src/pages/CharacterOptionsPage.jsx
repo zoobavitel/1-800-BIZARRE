@@ -361,8 +361,9 @@ export default function CharacterOptionsPage({ onNavigateToAbilities }) {
               >
                 {rules.playbook_abilities?.hamon ||
                   "Choose from Hamon abilities based on coin stat grades."}{" "}
-                Foundation playbooks available. Abilities gated by A-ranks.
-                Advancement for Hamon is work-in-progress.
+                Foundation playbooks available. Playbook abilities unlock by
+                character level (Level 1 at L1, Level 2 at L2, etc.). Chargen
+                includes one Level-1 pick; extra picks need a playbook advance.
               </p>
               {typeof onNavigateToAbilities === "function" && (
                 <a
@@ -403,8 +404,9 @@ export default function CharacterOptionsPage({ onNavigateToAbilities }) {
               >
                 {rules.playbook_abilities?.spin ||
                   "Choose from Spin abilities based on coin stat grades."}{" "}
-                Foundation playbooks available. Abilities gated by A-ranks.
-                Advancement for Spin is work-in-progress.
+                Foundation playbooks available. Playbook abilities unlock by
+                character level (Level 1 at L1, Level 2 at L2, etc.). Chargen
+                includes one Level-1 pick; extra picks need a playbook advance.
               </p>
               {typeof onNavigateToAbilities === "function" && (
                 <a
