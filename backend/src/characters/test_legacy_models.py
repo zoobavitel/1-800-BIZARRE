@@ -539,22 +539,44 @@ class HamonAbilityModelTest(TestCase):
         self.assertEqual(str(hamon_ability), 'Ripple Breathing (Ripple Foundations)')
     
     def test_hamon_foundation_abilities(self):
-        """Test that foundation Hamon abilities can be created according to SRD."""
-        foundation_abilities = [
-            {'name': 'Ripple Breathing', 'description': '+1d to resist poison, fatigue, or fear. Once per score, push yourself with no stress cost.'},
-            {'name': 'Overdrive', 'description': 'Spend 1 stress to charge a strike. +1 effect and +1 harm vs bizarre, undead, or inorganic targets.'},
-            {'name': 'Ripple Infusion', 'description': 'Spend 1 stress to imbue an object with Ripple energy for the scene. Gains +1 effect vs bizarre enemies.'},
-            {'name': 'Scarlet Overdrive', 'description': 'Ignite a weapon or limb. +1 harm and inflicts fire-based secondary effects.'},
+        """SRD Ripple Foundations are seeded (migration 0098); extra FOUNDATION rows can still be created."""
+        seeded_names = [
+            "Ripple Breathing",
+            "Ripple Infusion",
+            "Scarlet Overdrive",
+            "Zoom Punch",
+            "Acrobatic Pulse",
+            "Vital Transfer",
+            "Ripple Hypnosis",
+            "Ripple Deflect",
+            "Ripple Locator",
+            "Sendō Overdrive",
+            "Metal Silver Overdrive",
+            "Age Resistance",
+            "Life Magnetism Overdrive",
+            "Tornado Overdrive",
+            "Aura Lock",
+            "Final Flame",
+            "Pulse Detonation",
+            "Ripple Cutter",
+            "Sunlight Yellow Overdrive",
+            "Deep Pass Overdrive",
+            "Turquoise Blue Overdrive",
+            "Time Ripple",
+            "Guided Overdrive",
         ]
-        
-        for ability_data in foundation_abilities:
-            HamonAbility.objects.create(
-                hamon_type='FOUNDATION',
-                stress_cost=1 if 'Spend 1 stress' in ability_data['description'] else 0,
-                **ability_data
-            )
-        
-        self.assertEqual(HamonAbility.objects.filter(hamon_type='FOUNDATION').count(), 4)
+        seeded = HamonAbility.objects.filter(hamon_type="FOUNDATION")
+        self.assertEqual(seeded.count(), 23)
+        for name in seeded_names:
+            self.assertTrue(seeded.filter(name=name).exists(), name)
+
+        HamonAbility.objects.create(
+            name="Overdrive",
+            hamon_type="FOUNDATION",
+            description="Spend 1 stress to charge a strike. +1 effect and +1 harm vs bizarre, undead, or inorganic targets.",
+            stress_cost=1,
+        )
+        self.assertEqual(HamonAbility.objects.filter(hamon_type="FOUNDATION").count(), 24)
 
 
 class SpinAbilityModelTest(TestCase):
@@ -575,22 +597,31 @@ class SpinAbilityModelTest(TestCase):
         self.assertEqual(str(spin_ability), 'Golden Arc (Spin Foundations)')
     
     def test_spin_foundation_abilities(self):
-        """Test that foundation Spin abilities can be created according to SRD."""
-        foundation_abilities = [
-            {'name': 'Golden Arc', 'description': 'Once per scene, a thrown Spin projectile returns.'},
-            {'name': 'Vibrational Scan', 'description': 'Use a spinning object to perform a Study or Survey roll. +1 effect when detecting structure.'},
-            {'name': 'Kinetic Tether', 'description': 'Spin threads can connect two objects. Once per score, create a tether.'},
-            {'name': 'Rebound Tactics', 'description': '+1d on attacks that ricochet. On a 6, you may apply splash harm.'},
+        """SRD Spin Foundations are seeded (migration 0098); extra FOUNDATION rows can still be created."""
+        seeded_names = [
+            "Spin Armor",
+            "Golden Arc",
+            "Vibrational Scan",
+            "Kinetic Tether",
+            "Throw Voice",
+            "Centripetal Force",
+            "Detour",
+            "Tendon Manipulation",
+            "Stagnant Space",
+            "Miracle Shot",
         ]
-        
-        for ability_data in foundation_abilities:
-            SpinAbility.objects.create(
-                spin_type='FOUNDATION',
-                stress_cost=0,
-                **ability_data
-            )
-        
-        self.assertEqual(SpinAbility.objects.filter(spin_type='FOUNDATION').count(), 4)
+        seeded = SpinAbility.objects.filter(spin_type="FOUNDATION")
+        self.assertEqual(seeded.count(), 10)
+        for name in seeded_names:
+            self.assertTrue(seeded.filter(name=name).exists(), name)
+
+        SpinAbility.objects.create(
+            name="Rebound Tactics",
+            spin_type="FOUNDATION",
+            description="+1d on attacks that ricochet. On a 6, you may apply splash harm.",
+            stress_cost=0,
+        )
+        self.assertEqual(SpinAbility.objects.filter(spin_type="FOUNDATION").count(), 11)
 
 
 class ProgressClockModelTest(TestCase):
