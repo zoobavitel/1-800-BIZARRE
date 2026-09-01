@@ -3553,7 +3553,7 @@ const CharacterSheetWrapper = ({
     pendingStandAUses,
     pendingStandAStdId,
     pendingStandAStdIds,
-    applyBackendCharacter,
+    applyAllocationBackendCharacter,
   ]);
 
   const refreshXpAllocations = useCallback(async () => {
@@ -3636,7 +3636,7 @@ const CharacterSheetWrapper = ({
     [
       characterId,
       xpAllocationUndoBusy,
-      applyBackendCharacter,
+      applyAllocationBackendCharacter,
       refreshXpAllocations,
     ],
   );
@@ -3711,7 +3711,7 @@ const CharacterSheetWrapper = ({
     [
       characterId,
       xpAllocationUndoBusy,
-      applyBackendCharacter,
+      applyAllocationBackendCharacter,
       refreshXpAllocations,
     ],
   );
@@ -4806,7 +4806,7 @@ const CharacterSheetWrapper = ({
     },
     [
       historyUndoBusy,
-      applyBackendCharacter,
+      applyAllocationBackendCharacter,
       refetchXpReqTracker,
       refreshXpAllocations,
     ],
@@ -4848,7 +4848,7 @@ const CharacterSheetWrapper = ({
       characterId,
       gmUndoBusy,
       gmUndoStatus?.available,
-      applyBackendCharacter,
+      applyAllocationBackendCharacter,
       refreshXpAllocations,
       refreshGmUndoStatus,
       refreshGmRedoStatus,
@@ -4885,7 +4885,7 @@ const CharacterSheetWrapper = ({
     [
       characterId,
       xpAllocationUndoBusy,
-      applyBackendCharacter,
+      applyAllocationBackendCharacter,
       refreshXpAllocations,
     ],
   );
@@ -4926,7 +4926,7 @@ const CharacterSheetWrapper = ({
       characterId,
       gmRedoBusy,
       gmRedoStatus?.available,
-      applyBackendCharacter,
+      applyAllocationBackendCharacter,
       refreshXpAllocations,
       refreshGmRedoStatus,
       refreshGmUndoStatus,
