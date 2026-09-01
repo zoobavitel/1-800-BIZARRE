@@ -259,6 +259,9 @@ const apiRequest = async (endpoint, options = {}) => {
 
     return parsed;
   } catch (error) {
+    if (error?.name === "AbortError") {
+      throw error;
+    }
     console.error("API request failed:", error);
     throw error;
   }
@@ -282,19 +285,23 @@ export const characterAPI = {
     return apiRequest("/characters/", { method: "POST", body });
   },
 
-  updateCharacter: (id, data) => {
+  updateCharacter: (id, data, options = {}) => {
     const { multipart, body } = buildMultipartOrJson(data);
     if (multipart)
-      return apiRequestMultipart(`/characters/${id}/`, body, "PUT");
-    return apiRequest(`/characters/${id}/`, { method: "PUT", body });
+      return apiRequestMultipart(`/characters/${id}/`, body, "PUT", options);
+    return apiRequest(`/characters/${id}/`, { method: "PUT", body, ...options });
   },
 
   // Partial update character (JSON or multipart when imageFile present)
-  patchCharacter: (id, data) => {
+  patchCharacter: (id, data, options = {}) => {
     const { multipart, body } = buildMultipartOrJson(data);
     if (multipart)
-      return apiRequestMultipart(`/characters/${id}/`, body, "PATCH");
-    return apiRequest(`/characters/${id}/`, { method: "PATCH", body });
+      return apiRequestMultipart(`/characters/${id}/`, body, "PATCH", options);
+    return apiRequest(`/characters/${id}/`, {
+      method: "PATCH",
+      body,
+      ...options,
+    });
   },
 
   // Delete character
@@ -709,7 +716,12 @@ export const crewHistoryAPI = {
 };
 
 // Multipart request helper (for file uploads)
-const apiRequestMultipart = async (endpoint, formData, method = "POST") => {
+const apiRequestMultipart = async (
+  endpoint,
+  formData,
+  method = "POST",
+  options = {},
+) => {
   const token = localStorage.getItem("authToken");
   const base = requireApiBaseUrl();
   const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
@@ -717,7 +729,12 @@ const apiRequestMultipart = async (endpoint, formData, method = "POST") => {
   const headers = {};
   if (token) headers["Authorization"] = `Token ${token}`;
   if (url.includes("ngrok")) headers["ngrok-skip-browser-warning"] = "1";
-  const response = await fetch(url, { method, headers, body: formData });
+  const response = await fetch(url, {
+    method,
+    headers,
+    body: formData,
+    ...options,
+  });
   const { parsed, invalidJson, textPreview } =
     await readFetchResponseBody(response);
   if (!response.ok) {
@@ -1428,6 +1445,69 @@ export const transformBackendToFrontend = (backendCharacter) => {
   };
 };
 
+function standCoinPointsGainedFromSheet(frontendCharacter) {
+  return Math.max(
+    0,
+    Number(
+      frontendCharacter.standCoinPointsGained ??
+        frontendCharacter.stand_coin_points_gained,
+    ) || 0,
+  );
+}
+
+/** True once any XP allocation row exists or spend counters indicate post-chargen. */
+export function sheetPostChargen(frontendCharacter) {
+  if (!frontendCharacter?.id) return false;
+  if (frontendCharacter.hasXpAllocations === true) return true;
+  if (standCoinPointsGainedFromSheet(frontendCharacter) > 0) return true;
+  const spent = Number(
+    frontendCharacter.totalXpSpent ?? frontendCharacter.total_xp_spent ?? 0,
+  );
+  return Number.isFinite(spent) && spent > 0;
+}
+
+function buildStandGradeLetters(frontendCharacter) {
+  return {
+    power: indexToGrade(frontendCharacter.standStats?.power),
+    speed: indexToGrade(frontendCharacter.standStats?.speed),
+    range: indexToGrade(frontendCharacter.standStats?.range),
+    durability: indexToGrade(frontendCharacter.standStats?.durability),
+    precision: indexToGrade(frontendCharacter.standStats?.precision),
+    development: indexToGrade(frontendCharacter.standStats?.development),
+  };
+}
+
+function buildStandIdentityPayload(frontendCharacter) {
+  return {
+    name: frontendCharacter.standName,
+    ...(String(frontendCharacter.standType || "").trim()
+      ? {
+          type: String(frontendCharacter.standType).trim().toUpperCase(),
+        }
+      : {}),
+    forms: Array.isArray(frontendCharacter.standForms)
+      ? frontendCharacter.standForms
+          .map((x) => String(x || "").trim())
+          .filter(Boolean)
+      : [],
+    ...(String(frontendCharacter.standForms?.[0] || "").trim()
+      ? { form: String(frontendCharacter.standForms[0]).trim() }
+      : {}),
+    ...(String(frontendCharacter.standConsciousness || "")
+      .trim()
+      .toUpperCase()
+      .match(/^[A-F]$/)
+      ? {
+          consciousness_level: String(frontendCharacter.standConsciousness)
+            .trim()
+            .toUpperCase()
+            .slice(0, 1),
+        }
+      : {}),
+    type_custom: String(frontendCharacter.standTypeCustom || "").trim(),
+  };
+}
+
 export const transformFrontendToBackend = (frontendCharacter) => {
   const viceVal = frontendCharacter.vice;
   const isViceName = typeof viceVal === "string" && viceVal.trim() !== "";
@@ -1458,6 +1538,13 @@ export const transformFrontendToBackend = (frontendCharacter) => {
         MAX_CREATION_DOTS,
     ),
   );
+
+  const postChargen = sheetPostChargen(frontendCharacter);
+  const standGradesWritable = !postChargen;
+  const standGradeLetters = buildStandGradeLetters(frontendCharacter);
+  const standPayload = standGradesWritable
+    ? { ...buildStandIdentityPayload(frontendCharacter), ...standGradeLetters }
+    : buildStandIdentityPayload(frontendCharacter);
 
   return {
     true_name: frontendCharacter.name,
@@ -1498,56 +1585,20 @@ export const transformFrontendToBackend = (frontendCharacter) => {
       consort: frontendCharacter.actionRatings.CONSORT,
       sway: frontendCharacter.actionRatings.SWAY,
     },
-    action_dice_gained: actionDiceGained,
+    action_dice_gained: postChargen ? undefined : actionDiceGained,
 
-    level: computePcLevelFromSheet({
-      standStats: frontendCharacter.standStats,
-      actionRatings: frontendCharacter.actionRatings,
-    }),
+    ...(standGradesWritable
+      ? {
+          level: computePcLevelFromSheet({
+            standStats: frontendCharacter.standStats,
+            actionRatings: frontendCharacter.actionRatings,
+          }),
+          coin_stats: standGradeLetters,
+        }
+      : {}),
 
-    // Stand: backend may use coin_stats (JSON) and/or nested stand; send grade letters (F–A)
-    coin_stats: {
-      power: indexToGrade(frontendCharacter.standStats?.power),
-      speed: indexToGrade(frontendCharacter.standStats?.speed),
-      range: indexToGrade(frontendCharacter.standStats?.range),
-      durability: indexToGrade(frontendCharacter.standStats?.durability),
-      precision: indexToGrade(frontendCharacter.standStats?.precision),
-      development: indexToGrade(frontendCharacter.standStats?.development),
-    },
-    stand: {
-      name: frontendCharacter.standName,
-      power: indexToGrade(frontendCharacter.standStats?.power),
-      speed: indexToGrade(frontendCharacter.standStats?.speed),
-      range: indexToGrade(frontendCharacter.standStats?.range),
-      durability: indexToGrade(frontendCharacter.standStats?.durability),
-      precision: indexToGrade(frontendCharacter.standStats?.precision),
-      development: indexToGrade(frontendCharacter.standStats?.development),
-      ...(String(frontendCharacter.standType || "").trim()
-        ? {
-            type: String(frontendCharacter.standType).trim().toUpperCase(),
-          }
-        : {}),
-      forms: Array.isArray(frontendCharacter.standForms)
-        ? frontendCharacter.standForms
-            .map((x) => String(x || "").trim())
-            .filter(Boolean)
-        : [],
-      ...(String(frontendCharacter.standForms?.[0] || "").trim()
-        ? { form: String(frontendCharacter.standForms[0]).trim() }
-        : {}),
-      ...(String(frontendCharacter.standConsciousness || "")
-        .trim()
-        .toUpperCase()
-        .match(/^[A-F]$/)
-        ? {
-            consciousness_level: String(frontendCharacter.standConsciousness)
-              .trim()
-              .toUpperCase()
-              .slice(0, 1),
-          }
-        : {}),
-      type_custom: String(frontendCharacter.standTypeCustom || "").trim(),
-    },
+    // Stand coin grades: chargen only via autosave; post-advance changes use allocation APIs.
+    stand: standPayload,
 
     // Stress: backend integer; accept stressFilled or array length
     stress:
