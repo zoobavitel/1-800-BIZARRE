@@ -8050,10 +8050,19 @@ const CharacterSheetWrapper = ({
           if (touches.trauma) fieldTouchRef.current.trauma = false;
           if (touches.xp) fieldTouchRef.current.xp = false;
           if (touches.healingClock) fieldTouchRef.current.healingClock = false;
-          // Re-assert trauma-clear truth after save merges server echo into the tab
-          // (a stale in-flight max-stress PUT must not leave parent at 9).
-          if (stressTraumaTruthRef.current) {
-            onCharacterStressTraumaSync?.(stressTraumaTruthRef.current);
+          // Re-assert only fields this save included. A clock autosave that
+          // omitted stress must not push a stale truth-lock count over the
+          // server echo (GM unmark / concurrent roll marks).
+          if (stressTraumaTruthRef.current && (touches.stress || touches.trauma)) {
+            const truth = stressTraumaTruthRef.current;
+            onCharacterStressTraumaSync?.({
+              ...(touches.stress
+                ? { stressFilled: truth.stressFilled }
+                : {}),
+              ...(touches.trauma && truth.trauma
+                ? { trauma: truth.trauma }
+                : {}),
+            });
           }
           // Ignore stale in-flight saves that finished after newer local edits
           // (e.g. trauma-clear while a max-stress PUT was still running).

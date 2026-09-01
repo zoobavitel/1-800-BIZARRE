@@ -543,6 +543,30 @@ export function canAddNonFoundationPlaybookAbility({
   return used < slots;
 }
 
+/**
+ * Overlay server-owned stress/trauma onto a dirty local sheet draft.
+ * Skip a field when the player touched that control this draft so a poll/SSE
+ * cannot clobber an in-progress stress or trauma edit.
+ */
+export function mergeServerOwnedCharacterFields(
+  localCharacter,
+  serverCharacter,
+  fieldTouches = {},
+) {
+  if (!serverCharacter) return localCharacter;
+  if (!localCharacter) return serverCharacter;
+  const touches =
+    fieldTouches && typeof fieldTouches === "object" ? fieldTouches : {};
+  const next = { ...localCharacter };
+  if (!touches.stress && typeof serverCharacter.stressFilled === "number") {
+    next.stressFilled = serverCharacter.stressFilled;
+  }
+  if (!touches.trauma && serverCharacter.trauma != null) {
+    next.trauma = serverCharacter.trauma;
+  }
+  return next;
+}
+
 /** Match sheet LEVEL formula: 95 XP L1 baseline, +10 XP per level. */
 export function computePcLevelFromSheet({ standStats, actionRatings }) {
   const totalStandPoints = Object.values(standStats || {}).reduce(
