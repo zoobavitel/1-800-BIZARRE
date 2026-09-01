@@ -205,6 +205,42 @@ class SessionRollLoopIntegrationTests(TestCase):
         self.player.refresh_from_db()
         self.assertEqual(self.player.stress, 9)
 
+    def test_incapacitated_action_marks_two_stress(self):
+        self.player.harm_level3_used = True
+        self.player.harm_level3_name = "Study corpse"
+        self.player.stress = 4
+        self.player.save(
+            update_fields=["harm_level3_used", "harm_level3_name", "stress"]
+        )
+        rolled = self.client.post(
+            f"/api/characters/{self.player.id}/roll-action/",
+            {"action": "study", "session_id": self.session.id},
+            format="json",
+        )
+        self.assertEqual(rolled.status_code, status.HTTP_200_OK, rolled.data)
+        self.assertEqual(rolled.data.get("stress_spent"), 2)
+        self.player.refresh_from_db()
+        self.assertEqual(self.player.stress, 6)
+        roll = Roll.objects.get(pk=rolled.data["roll_id"])
+        self.assertEqual(roll.roller_stress_spent, 2)
+
+    def test_incapacitated_action_rejects_when_only_one_slot_free(self):
+        self.player.harm_level3_used = True
+        self.player.harm_level3_name = "Need help"
+        self.player.stress = 8
+        self.player.save(
+            update_fields=["harm_level3_used", "harm_level3_name", "stress"]
+        )
+        rolled = self.client.post(
+            f"/api/characters/{self.player.id}/roll-action/",
+            {"action": "study", "session_id": self.session.id},
+            format="json",
+        )
+        self.assertEqual(rolled.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("8/9", str(rolled.data.get("error", "")))
+        self.player.refresh_from_db()
+        self.assertEqual(self.player.stress, 8)
+
     def test_roll_action_persists_modifier_source_fields(self):
         rolled = self.client.post(
             f"/api/characters/{self.player.id}/roll-action/",

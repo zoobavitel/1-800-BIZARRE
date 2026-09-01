@@ -206,6 +206,49 @@ describe("resolveCharacterCampaignContext / GM undo row visibility", () => {
   });
 });
 
+describe("mergeServerOwnedCharacterFields", () => {
+  const {
+    mergeServerOwnedCharacterFields,
+  } = require("./characterUtils");
+
+  const local = {
+    name: "Draft",
+    stressFilled: 4,
+    trauma: { COLD: false },
+    clocks: [{ id: 1, filled: 2 }],
+  };
+  const server = {
+    name: "Server",
+    stressFilled: 8,
+    trauma: { COLD: true },
+    clocks: [],
+  };
+
+  test("overlays server stress and trauma when those fields were not touched", () => {
+    const next = mergeServerOwnedCharacterFields(local, server, {});
+    expect(next.stressFilled).toBe(8);
+    expect(next.trauma).toEqual({ COLD: true });
+    expect(next.clocks).toEqual([{ id: 1, filled: 2 }]);
+    expect(next.name).toBe("Draft");
+  });
+
+  test("keeps local stress when the player touched the stress track", () => {
+    const next = mergeServerOwnedCharacterFields(local, server, {
+      stress: true,
+    });
+    expect(next.stressFilled).toBe(4);
+    expect(next.trauma).toEqual({ COLD: true });
+  });
+
+  test("keeps local trauma when the player touched trauma", () => {
+    const next = mergeServerOwnedCharacterFields(local, server, {
+      trauma: true,
+    });
+    expect(next.stressFilled).toBe(8);
+    expect(next.trauma).toEqual({ COLD: false });
+  });
+});
+
 describe("playbook ability gating helpers", () => {
   test("level 1 abilities met at pcLevel 1", () => {
     const {

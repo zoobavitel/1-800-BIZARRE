@@ -33,6 +33,7 @@ import {
   resolveCharacterCampaignContext,
   isUserCampaignGmForCharacter,
   mergeAbilitiesPreferRicherCustoms,
+  mergeServerOwnedCharacterFields,
 } from "../features/character-sheet";
 import { subscribeCampaignEvents } from "../features/character-sheet/services/campaignEvents";
 import { useAuth } from "../features/auth";
@@ -47,6 +48,23 @@ const SHEET_SYNC_INTERVAL_MS = 12000;
 /** Skip poll/SSE character merge while editing, saving, or in dirtyIntent window. */
 function sheetTabIsProtected(meta) {
   return Boolean(meta?.dirtyIntent || meta?.isDirty || meta?.isSaving);
+}
+
+function fieldTouchesFromTabMeta(meta) {
+  const touches = meta?.payload?._fieldTouches;
+  return touches && typeof touches === "object" ? touches : {};
+}
+
+function applyServerOwnedSheetFields(tab, serverCharacter, meta) {
+  if (!serverCharacter) return tab;
+  return {
+    ...tab,
+    character: mergeServerOwnedCharacterFields(
+      tab.character,
+      serverCharacter,
+      fieldTouchesFromTabMeta(meta),
+    ),
+  };
 }
 
 const PAGE_STYLES = {
@@ -447,29 +465,35 @@ export default function CharacterPage({
         const next = await Promise.all(
           prev.map(async (t) => {
             if (!t.characterId) return t;
-            // Protect local sheet while editing, saving, or in the same-tick
-            // dirtyIntent window before the meta effect flushes isDirty.
-            const protect = sheetTabIsProtected(metaSnap[t.tabId]);
-            if (protect) {
-              return t;
+            // Protect local draft (XP/inventory/clocks) while editing, saving,
+            // or in the dirtyIntent window — but still overlay server stress/
+            // trauma so a clock edit cannot hide roll/GM stress (incapacitated
+            // actions key off server filled count).
+            const metaAtStart = metaSnap[t.tabId];
+            if (sheetTabIsProtected(metaAtStart)) {
+              return applyServerOwnedSheetFields(
+                t,
+                byId.get(t.characterId),
+                metaAtStart,
+              );
             }
             try {
               const raw = await characterAPI.getCharacter(t.characterId);
+              const transformed = transformBackendToFrontend(raw);
               // Re-check after await: allocate/deallocate or edits may have
               // marked dirty while the GET was in flight; applying a stale
               // snapshot would wipe free-pool XP / track ticks via hydrate.
-              const protectAfter = sheetTabIsProtected(
-                (charTabUnsavedMetaRef.current || {})[t.tabId],
-              );
-              if (protectAfter) return t;
-              const transformed = transformBackendToFrontend(raw);
+              const metaAfter = (charTabUnsavedMetaRef.current || {})[t.tabId];
+              if (sheetTabIsProtected(metaAfter)) {
+                return applyServerOwnedSheetFields(t, transformed, metaAfter);
+              }
               return { ...t, character: transformed };
             } catch {
-              const protectAfter = sheetTabIsProtected(
-                (charTabUnsavedMetaRef.current || {})[t.tabId],
-              );
-              if (protectAfter) return t;
+              const metaAfter = (charTabUnsavedMetaRef.current || {})[t.tabId];
               const updated = byId.get(t.characterId);
+              if (sheetTabIsProtected(metaAfter)) {
+                return applyServerOwnedSheetFields(t, updated, metaAfter);
+              }
               if (updated) return { ...t, character: updated };
               return t;
             }
@@ -925,10 +949,13 @@ export default function CharacterPage({
             saved && Object.prototype.hasOwnProperty.call(saved, "trauma_details")
               ? savedFrontend.trauma
               : (traumaFromPayload ?? savedFrontend.trauma),
-          // Prefer the stress we just attempted to save — stale overlapping PUTs can echo
-          // an older max-stress value and re-fill the track after a trauma clear.
-          stressFilled:
-            typeof payload.stressFilled === "number"
+          // Stress omitted from PATCH when untouched: trust the server echo so a
+          // stale local count cannot hide roll/GM marks. When the player did
+          // touch stress (trauma-clear), prefer the draft so a lagged echo
+          // cannot refill the track to 9.
+          stressFilled: !touches.stress
+            ? savedFrontend.stressFilled
+            : typeof payload.stressFilled === "number"
               ? Math.max(0, Math.floor(payload.stressFilled))
               : savedFrontend.stressFilled,
           playbookXpArchetypes:
