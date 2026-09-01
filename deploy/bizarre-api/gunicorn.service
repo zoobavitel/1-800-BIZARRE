@@ -10,10 +10,17 @@ Environment="PATH=/opt/bizarre/.venv/bin"
 Environment="DJANGO_SETTINGS_MODULE=app.settings_prod"
 # Do not use EnvironmentFile=.env here — systemd expands $ and breaks SECRET_KEY / passwords.
 # python-decouple reads backend/src/.env from WorkingDirectory.
+# SSE holds a connection. Sync workers (gunicorn default) take 1 worker per
+# EventSource; a few open sheets starve the API. gthread: SSE uses a thread.
+# workers=1 so in-process campaign SSE pub/sub reaches every client
+# (multi-process needs Redis pub/sub; see characters/realtime.py).
 ExecStart=/opt/bizarre/.venv/bin/gunicorn app.wsgi:application \
   --bind 127.0.0.1:8000 \
-  --workers 3 \
+  --worker-class gthread \
+  --workers 1 \
+  --threads 16 \
   --timeout 120
+TimeoutStopSec=30
 Restart=on-failure
 
 [Install]
