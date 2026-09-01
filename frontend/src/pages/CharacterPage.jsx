@@ -767,7 +767,7 @@ export default function CharacterPage({
 
   // ── Save character ───────────────────────────────────────────────────────
   const handleSaveCharacter = useCallback(
-    async (payload) => {
+    async (payload, options = {}) => {
       // Ensure trauma reference data is available (mirrors heritage re-fetch fallback below).
       // If the /traumas/ API call failed during initial load, traumas = [] and
       // traumaObjectToIds would silently return [] — erasing all trauma selections.
@@ -834,15 +834,16 @@ export default function CharacterPage({
           ? { imageFile: frontend.imageFile }
           : {}),
       };
-      const saveOnce = async (savePayload) => {
+      const saveOnce = async (savePayload, requestOptions = {}) => {
         // Existing characters must PATCH (partial). PUT was wiping omitted server-owned fields.
-        if (payload.id) return characterAPI.patchCharacter(payload.id, savePayload);
+        if (payload.id)
+          return characterAPI.patchCharacter(payload.id, savePayload, requestOptions);
         return characterAPI.createCharacter(savePayload);
       };
       try {
         let saved;
         try {
-          saved = await saveOnce(withFile);
+          saved = await saveOnce(withFile, options);
         } catch (err) {
           const msg = String(err?.message || "");
           const needsRequiredSelections =
@@ -872,7 +873,17 @@ export default function CharacterPage({
               ? { imageFile: frontend.imageFile }
               : {}),
           };
-          saved = await saveOnce(repairedWithFile);
+          saved = await saveOnce(repairedWithFile, options);
+        }
+        if (
+          saved?.rejected_fields &&
+          typeof saved.rejected_fields === "object" &&
+          Object.keys(saved.rejected_fields).length > 0
+        ) {
+          console.warn(
+            "Sheet save: server rejected authoritative fields (stale autosave)",
+            saved.rejected_fields,
+          );
         }
         if (!payload.id && saved.id && typeof window !== "undefined")
           window.location.hash = characterHashFromIdAndName(

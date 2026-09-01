@@ -99,8 +99,8 @@ class StandCoinChargenPersistTests(TestCase):
         self.assertEqual(self.character.coin_stats.get("power"), "B")
         self.assertEqual(self.character.coin_stats.get("speed"), "C")
 
-    def test_partial_coin_stats_only_does_not_stomp_missing_to_d(self):
-        """Legacy client sending one coin_stats key must not wipe other Stand fields."""
+    def test_partial_coin_stats_only_is_rejected_stand_unchanged(self):
+        """coin_stats is a Stand mirror — sheet PATCH must not write grades from it."""
         request = self.factory.patch(
             f"/api/characters/{self.character.id}/",
             {"coin_stats": {"power": "B"}},
@@ -110,9 +110,10 @@ class StandCoinChargenPersistTests(TestCase):
         view = CharacterViewSet.as_view({"patch": "partial_update"})
         response = view(request, pk=self.character.id)
         self.assertEqual(response.status_code, 200, response.data)
+        self.assertIn("coin_stats", response.data.get("rejected_fields", {}))
         self.character.refresh_from_db()
         stand = self.character.stand
-        self.assertEqual(stand.power, "B")
+        self.assertEqual(stand.power, "A")
         self.assertEqual(stand.speed, "C")
         self.assertEqual(stand.range, "F")
 

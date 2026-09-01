@@ -2484,7 +2484,13 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 token = bind_character_history_editor(user)
                 try:
                     serializer = CharacterSerializer(
-                        character, data={"unallocated_xp": new_pool}, partial=True
+                        character,
+                        data={"unallocated_xp": new_pool},
+                        partial=True,
+                        context={
+                            **self.get_serializer_context(),
+                            "skip_sheet_patch_guard": True,
+                        },
                     )
                     if not serializer.is_valid():
                         return Response(
@@ -2552,7 +2558,13 @@ class CharacterViewSet(viewsets.ModelViewSet):
             token = bind_character_history_editor(user)
             try:
                 serializer = CharacterSerializer(
-                    character, data={"xp_clocks": xp_clocks}, partial=True
+                    character,
+                    data={"xp_clocks": xp_clocks},
+                    partial=True,
+                    context={
+                        **self.get_serializer_context(),
+                        "skip_sheet_patch_guard": True,
+                    },
                 )
                 if not serializer.is_valid():
                     return Response(

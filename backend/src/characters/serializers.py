@@ -1491,6 +1491,24 @@ def _apply_stand_grades(stand, grades: dict) -> None:
             setattr(stand, field, grade)
 
 
+def _stand_row_defaults_for_create(character, grades: dict, *, stand_type: str) -> dict:
+    """Defaults for a new Stand row — full D baseline only when creating, not on PATCH."""
+    base = {field: "D" for field in _STAND_GRADE_FIELDS}
+    base.update({k: v for k, v in grades.items() if k in _STAND_GRADE_FIELDS})
+    base.update(
+        {
+            "name": character.stand_name or "Unnamed Stand",
+            "type": stand_type or "FIGHTING",
+            "type_custom": "",
+            "form": "Humanoid",
+            "forms": ["Humanoid"],
+            "consciousness_level": "C",
+            "armor": 0,
+        }
+    )
+    return base
+
+
 def _a_rank_count_from_stand_or_payload(instance, data) -> int:
     """Prefer live Stand grades; fall back to payload grades present only."""
     if instance is not None:
@@ -1624,6 +1642,9 @@ class CharacterSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
+        rejected = getattr(self, "_rejected_sheet_fields", None)
+        if rejected:
+            data["rejected_fields"] = rejected
         clocks = list(instance.progress_clocks.all().order_by("id"))
         data["progress_clocks"] = [
             {
@@ -2112,6 +2133,7 @@ class CharacterSerializer(serializers.ModelSerializer):
         spin_ids = validated_data.pop("spin_ability_ids", None)
         std_ids = validated_data.pop("standard_abilities", None)
         stand_data = self.initial_data.get("stand")
+        coin_stats_payload = self.initial_data.get("coin_stats")
         # Never persist client coin_stats as authority; Stand is writable source
         validated_data.pop("coin_stats", None)
 
@@ -2124,15 +2146,39 @@ class CharacterSerializer(serializers.ModelSerializer):
         if vice_details is not None:
             validated_data["vice_details"] = vice_details
 
+        from .services.sheet_patch_guard import (
+            character_in_chargen,
+            collect_rejected_sheet_patch_fields,
+            log_rejected_sheet_patch_fields,
+            payload_without_stand_grades,
+            sheet_patch_guard_enabled,
+            strip_authoritative_patch_fields,
+        )
+
+        in_chargen = character_in_chargen(instance)
+        guard_enabled = sheet_patch_guard_enabled(self)
+        rejected: dict = {}
+        if guard_enabled:
+            rejected = collect_rejected_sheet_patch_fields(
+                instance, self.initial_data
+            )
+            strip_authoritative_patch_fields(validated_data, in_chargen=in_chargen)
+            log_rejected_sheet_patch_fields(instance, rejected)
+        self._rejected_sheet_fields = rejected
+
         character = super().update(instance, validated_data)
 
         _attach_or_create_party_crew_from_personal_name(character)
 
+        if guard_enabled and not in_chargen:
+            stand_data, _coin_stats_ignored = payload_without_stand_grades(
+                stand_data, coin_stats_payload
+            )
+
+        # Stand nested payload is the only grade write source; coin_stats is a read mirror.
         grades = _grades_from_payload(
             stand_data if isinstance(stand_data, dict) else None,
-            self.initial_data.get("coin_stats")
-            if isinstance(self.initial_data.get("coin_stats"), dict)
-            else None,
+            None,
         )
         identity_touch = isinstance(stand_data, dict) and any(
             k in stand_data
@@ -2143,12 +2189,6 @@ class CharacterSerializer(serializers.ModelSerializer):
                 "forms",
                 "form",
                 "consciousness_level",
-                "power",
-                "speed",
-                "range",
-                "durability",
-                "precision",
-                "development",
             )
         )
         if grades or identity_touch:
@@ -2157,21 +2197,9 @@ class CharacterSerializer(serializers.ModelSerializer):
             )
             stand, created = Stand.objects.get_or_create(
                 character=character,
-                defaults={
-                    "name": character.stand_name or "Unnamed Stand",
-                    "type": stand_type_default,
-                    "type_custom": "",
-                    "form": "Humanoid",
-                    "forms": ["Humanoid"],
-                    "consciousness_level": "C",
-                    "power": grades.get("power", "D"),
-                    "speed": grades.get("speed", "D"),
-                    "range": grades.get("range", "D"),
-                    "durability": grades.get("durability", "D"),
-                    "precision": grades.get("precision", "D"),
-                    "development": grades.get("development", "D"),
-                    "armor": 0,
-                },
+                defaults=_stand_row_defaults_for_create(
+                    character, grades, stand_type=stand_type_default
+                ),
             )
             if not created:
                 # Partial update: only set fields present in payload — never default missing to D

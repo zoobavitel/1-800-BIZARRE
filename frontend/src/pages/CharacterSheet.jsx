@@ -1218,6 +1218,8 @@ const CharacterSheetWrapper = ({
   const stressTraumaTruthRef = useRef(null);
   /** Bumped when draft deps change; stale in-flight autosaves must not win lastSaved. */
   const draftGenRef = useRef(0);
+  /** Abort in-flight autosave PATCH when allocation APIs return fresher state. */
+  const autosaveAbortRef = useRef(null);
   const pendingResaveRef = useRef(false);
   /**
    * Same-tick protect before meta effect computes isDirty.
@@ -3478,6 +3480,20 @@ const CharacterSheetWrapper = ({
     }));
   }, [onCharacterXpSync]);
 
+  /** After server-owned XP/stand allocation APIs — invalidate stale autosaves. */
+  const applyAllocationBackendCharacter = useCallback(
+    (backendChar) => {
+      if (!backendChar) return;
+      if (autosaveAbortRef.current) {
+        autosaveAbortRef.current.abort();
+        autosaveAbortRef.current = null;
+      }
+      draftGenRef.current += 1;
+      applyBackendCharacter(backendChar);
+    },
+    [applyBackendCharacter],
+  );
+
   const claimPendingStandAReward = useCallback(async () => {
     if (!characterId || !pendingStandAReward?.allocation_id) return;
     let reward;
@@ -3511,11 +3527,12 @@ const CharacterSheetWrapper = ({
     setPendingStandABusy(true);
     setPendingStandAError(null);
     try {
+      draftGenRef.current += 1;
       const res = await characterAPI.claimStandAReward(characterId, {
         allocation_id: pendingStandAReward.allocation_id,
         reward,
       });
-      if (res?.character) applyBackendCharacter(res.character);
+      if (res?.character) applyAllocationBackendCharacter(res.character);
       else setPendingStandAReward(res?.pending_stand_a_reward || null);
       if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
       setPendingStandABranch("two_standard");
@@ -3597,7 +3614,7 @@ const CharacterSheetWrapper = ({
       setXpAllocationActionError(null);
       try {
         const res = await characterAPI.undoLatestAllocation(characterId);
-        if (res?.character) applyBackendCharacter(res.character);
+        if (res?.character) applyAllocationBackendCharacter(res.character);
         if (Array.isArray(res?.allocations)) {
           setXpAllocationRows(res.allocations);
         } else {
@@ -3673,7 +3690,7 @@ const CharacterSheetWrapper = ({
           characterId,
           allocationId,
         );
-        if (res?.character) applyBackendCharacter(res.character);
+        if (res?.character) applyAllocationBackendCharacter(res.character);
         if (Array.isArray(res?.allocations)) {
           setXpAllocationRows(res.allocations);
         } else {
@@ -3832,7 +3849,7 @@ const CharacterSheetWrapper = ({
       // Prefer full character echo so clocks + free pool stay in sync with parent
       // hydrate / autosave (partial setXp alone races with poll).
       if (res?.character) {
-        applyBackendCharacter(res.character);
+        applyAllocationBackendCharacter(res.character);
       } else {
         const nextPool = Number(res?.unallocated_xp);
         const nextXp =
@@ -3934,7 +3951,7 @@ const CharacterSheetWrapper = ({
 
     try {
       const res = await characterAPI.applyLevelUp(characterId, body);
-      if (res?.character) applyBackendCharacter(res.character);
+      if (res?.character) applyAllocationBackendCharacter(res.character);
       if (Array.isArray(res?.allocations))       setXpAllocationRows(res.allocations);
       setShowLevelUp(false);
       setLevelUpLockTrack(null);
@@ -3964,7 +3981,7 @@ const CharacterSheetWrapper = ({
       const res = await characterAPI.unlockSecondPlaybook(characterId, {
         secondary_playbook: pick.toUpperCase(),
       });
-      if (res?.character) applyBackendCharacter(res.character);
+      if (res?.character) applyAllocationBackendCharacter(res.character);
       if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
       setPendingSecondPlaybook("");
     } catch (err) {
@@ -3994,7 +4011,7 @@ const CharacterSheetWrapper = ({
         xp_track: track,
         action,
       });
-      if (res?.character) applyBackendCharacter(res.character);
+      if (res?.character) applyAllocationBackendCharacter(res.character);
       if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
       setShowTrackAdvance(null);
     } catch (err) {
@@ -4762,7 +4779,7 @@ const CharacterSheetWrapper = ({
       try {
         if (row.type === "sheet_edit" && row.entryId) {
           const res = await characterHistoryAPI.undo(row.entryId);
-          if (res?.character) applyBackendCharacter(res.character);
+          if (res?.character) applyAllocationBackendCharacter(res.character);
         } else if (row.type === "xp_tracker" && row.entryId) {
           const amount = Number(row.xpGained) || 0;
           const clockKey = (row.clockKey || "").trim();
@@ -4803,7 +4820,7 @@ const CharacterSheetWrapper = ({
       setGmUndoError(null);
       try {
         const res = await characterAPI.undoLatestGmChange(characterId);
-        if (res?.character) applyBackendCharacter(res.character);
+        if (res?.character) applyAllocationBackendCharacter(res.character);
         if (Array.isArray(res?.allocations)) {
           setXpAllocationRows(res.allocations);
         } else {
@@ -4847,7 +4864,7 @@ const CharacterSheetWrapper = ({
       setXpAllocationActionError(null);
       try {
         const res = await characterAPI.redoLatestAllocation(characterId);
-        if (res?.character) applyBackendCharacter(res.character);
+        if (res?.character) applyAllocationBackendCharacter(res.character);
         if (Array.isArray(res?.allocations)) {
           setXpAllocationRows(res.allocations);
         } else {
@@ -4881,7 +4898,7 @@ const CharacterSheetWrapper = ({
       setGmRedoError(null);
       try {
         const res = await characterAPI.redoLatestGmChange(characterId);
-        if (res?.character) applyBackendCharacter(res.character);
+        if (res?.character) applyAllocationBackendCharacter(res.character);
         if (Array.isArray(res?.allocations)) {
           setXpAllocationRows(res.allocations);
         } else {
@@ -7914,6 +7931,7 @@ const CharacterSheetWrapper = ({
       lastModified: new Date().toISOString(),
       selected_benefits: selectedBenefits,
       selected_detriments: selectedDetriments,
+      hasXpAllocations: xpAllocationRows.length > 0,
       _fieldTouches: { ...fieldTouchRef.current },
     };
   }, [
@@ -7950,6 +7968,7 @@ const CharacterSheetWrapper = ({
     character?.id,
     selectedBenefits,
     selectedDetriments,
+    xpAllocationRows,
   ]);
 
   const buildPayloadRef = useRef(buildPayload);
@@ -8043,7 +8062,31 @@ const CharacterSheetWrapper = ({
             setSaveStatus(null);
             return;
           }
-          await onSave(payload);
+          // Re-check immediately before network — allocation may have bumped draftGen.
+          if (myGen !== draftGenRef.current) {
+            pendingResaveRef.current = true;
+            setSaveStatus(null);
+            savingRef.current = false;
+            return;
+          }
+          if (autosaveAbortRef.current) {
+            autosaveAbortRef.current.abort();
+          }
+          const abortController = new AbortController();
+          autosaveAbortRef.current = abortController;
+          try {
+            await onSave(payload, { signal: abortController.signal });
+          } catch (err) {
+            if (err?.name === "AbortError") {
+              setSaveStatus(null);
+              return;
+            }
+            throw err;
+          } finally {
+            if (autosaveAbortRef.current === abortController) {
+              autosaveAbortRef.current = null;
+            }
+          }
           // Clear touch flags only for fields this save included.
           const touches = payload._fieldTouches || {};
           if (touches.stress) fieldTouchRef.current.stress = false;
@@ -22020,7 +22063,7 @@ const CharacterSheetWrapper = ({
                           from_pool: false,
                         });
                         if (res?.character)
-                          applyBackendCharacter(res.character);
+                          applyAllocationBackendCharacter(res.character);
                         if (Array.isArray(res?.allocations))
                           setXpAllocationRows(res.allocations);
                         setShowTrackAdvance(null);

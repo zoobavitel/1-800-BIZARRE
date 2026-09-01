@@ -11,6 +11,7 @@ import {
   normalizeStashSlots,
   buildMultipartOrJson,
   isImageUploadPayload,
+  sheetPostChargen,
 } from "./api";
 import { mergeAbilitiesPreferRicherCustoms } from "../utils/characterUtils";
 
@@ -638,5 +639,75 @@ describe("mergeAbilitiesPreferRicherCustoms", () => {
     ];
     const merged = mergeAbilitiesPreferRicherCustoms(local, server);
     expect(merged.some((a) => a.name === "Ora")).toBe(true);
+  });
+});
+
+describe("transformFrontendToBackend post-allocation autosave omit", () => {
+  test("sheetPostChargen detects allocation history signals", () => {
+    expect(sheetPostChargen({ id: 75 })).toBe(false);
+    expect(sheetPostChargen({ id: 75, hasXpAllocations: true })).toBe(true);
+    expect(
+      sheetPostChargen({ id: 75, standCoinPointsGained: 1 }),
+    ).toBe(true);
+    expect(sheetPostChargen({ id: 75, total_xp_spent: 10 })).toBe(true);
+    expect(sheetPostChargen({})).toBe(false);
+  });
+
+  test("post-allocation payload omits stand grades, level, and action_dice_gained", () => {
+    const sheet = makeSheet({
+      id: 75,
+      hasXpAllocations: true,
+      standCoinPointsGained: 2,
+      total_xp_spent: 20,
+      standStats: {
+        power: 5,
+        speed: 0,
+        range: 0,
+        durability: 5,
+        precision: 2,
+        development: 1,
+      },
+      actionRatings: {
+        HUNT: 2,
+        STUDY: 1,
+        SURVEY: 1,
+        TINKER: 1,
+        FINESSE: 1,
+        PROWL: 1,
+        SKIRMISH: 1,
+        WRECK: 0,
+        BIZARRE: 0,
+        COMMAND: 0,
+        CONSORT: 0,
+        SWAY: 0,
+      },
+    });
+    const be = transformFrontendToBackend(sheet);
+    expect(be.coin_stats).toBeUndefined();
+    expect(be.level).toBeUndefined();
+    expect(be.action_dice_gained).toBeUndefined();
+    expect(be.stand?.power).toBeUndefined();
+    expect(be.stand?.development).toBeUndefined();
+    expect(be.stand?.name).toBe("Stand");
+  });
+
+  test("chargen payload still includes stand grades and level", () => {
+    const be = transformFrontendToBackend(
+      makeSheet({
+        id: 75,
+        standStats: {
+          power: 4,
+          speed: 0,
+          range: 0,
+          durability: 0,
+          precision: 0,
+          development: 0,
+        },
+      }),
+    );
+    expect(be.coin_stats?.power).toBe("A");
+    expect(be.stand?.power).toBe("A");
+    expect(typeof be.level).toBe("number");
+    expect(typeof be.action_dice_gained).toBe("number");
   });
 });
