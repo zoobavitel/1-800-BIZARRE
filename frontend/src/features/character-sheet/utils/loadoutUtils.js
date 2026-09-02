@@ -23,7 +23,7 @@ const MULE_CAPS = {
 
 export const RIGGING_CATEGORY_OPTIONS = [
   { value: "weapons", label: "Weapons" },
-  { value: "implements", label: "Arcane Implements" },
+  { value: "implements", label: "Bizarre Implements" },
   { value: "supplies", label: "Supplies" },
   { value: "gear", label: "Gear" },
   { value: "documents", label: "Documents" },
@@ -33,7 +33,7 @@ export const RIGGING_CATEGORY_OPTIONS = [
 export const EQUIPMENT_CATEGORY_OPTIONS = [
   { value: "documents", label: "Documents" },
   { value: "gear", label: "Gear" },
-  { value: "implements", label: "Arcane Implements" },
+  { value: "implements", label: "Bizarre Implements" },
   { value: "supplies", label: "Subterfuge Supplies" },
   { value: "tools", label: "Tools" },
   { value: "weapons", label: "Weapons" },
