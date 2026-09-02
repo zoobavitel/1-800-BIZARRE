@@ -429,3 +429,44 @@ describe("playbook foundation auto-grant helpers", () => {
     ).toBe(false);
   });
 });
+
+describe("resolveCrewFromCampaign", () => {
+  test("uses sole campaign crew when character has no crew yet", () => {
+    const campaign = {
+      id: 5,
+      crews: [{ id: 12, name: "Speedwagon Foundation" }],
+      campaign_characters: [{ id: 99, crew_id: null }],
+    };
+    expect(resolveCrewFromCampaign(campaign, 99, { id: 99 })).toEqual({
+      crew: "Speedwagon Foundation",
+      crewId: 12,
+    });
+  });
+
+  test("maps roster crew_id to campaign crews name", () => {
+    const campaign = {
+      id: 5,
+      crews: [{ id: 12, name: "Passione" }],
+      campaign_characters: [{ id: 99, crew_id: 12, crew_name: "Passione" }],
+    };
+    expect(resolveCrewFromCampaign(campaign, 99, { id: 99 })).toEqual({
+      crew: "Passione",
+      crewId: 12,
+    });
+  });
+
+  test("prefers character-linked crew when already hydrated", () => {
+    const character = {
+      id: 99,
+      crew: { id: 3, name: "Existing Crew" },
+    };
+    expect(normalizeCrewFromCharacter(character)).toEqual({
+      crew: "Existing Crew",
+      crewId: 3,
+    });
+    expect(resolveCrewFromCampaign({ crews: [] }, 99, character)).toEqual({
+      crew: "Existing Crew",
+      crewId: 3,
+    });
+  });
+});
