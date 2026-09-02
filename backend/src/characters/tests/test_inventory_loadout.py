@@ -6,7 +6,13 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from characters.models import Campaign, Character, EquipmentItem, Session
+from characters.models import (
+    Campaign,
+    CampaignEquipmentAccess,
+    Character,
+    EquipmentItem,
+    Session,
+)
 from characters.services.inventory import normalize_inventory_list, normalize_inventory_item
 from characters.services.loadout import (
     compute_load_used,
@@ -169,3 +175,315 @@ class InventoryPatchApiTests(TestCase):
         self.assertEqual(res.status_code, 200)
         names = [r["name"] for r in res.json()]
         self.assertIn("Test Blade", names)
+
+
+class SrdEquipmentTemplateSyncTests(TestCase):
+    def test_sync_upserts_canonical_names_and_loads(self):
+        from characters.services.equipment_template_sync import (
+            CANONICAL_SRD_EQUIPMENT_TEMPLATES,
+            CANONICAL_TEMPLATE_NAMES,
+            sync_srd_equipment_templates,
+        )
+
+        EquipmentItem.objects.create(
+            name="Rusty Knife",
+            category="weapons",
+            scope="TEMPLATE",
+            load_slots=1,
+        )
+        climbing = EquipmentItem.objects.filter(
+            scope="TEMPLATE", name="Climbing Gear"
+        ).first()
+        if climbing:
+            climbing.load_slots = 1
+            climbing.description = "old"
+            climbing.save(update_fields=["load_slots", "description"])
+        else:
+            EquipmentItem.objects.create(
+                name="Climbing Gear",
+                category="gear",
+                scope="TEMPLATE",
+                load_slots=1,
+                description="old",
+            )
+
+        stats = sync_srd_equipment_templates(prune_obsolete=True)
+        self.assertGreaterEqual(stats["deleted"], 1)
+
+        templates = EquipmentItem.objects.filter(scope="TEMPLATE")
+        self.assertEqual(templates.count(), len(CANONICAL_SRD_EQUIPMENT_TEMPLATES))
+        self.assertEqual(
+            set(templates.values_list("name", flat=True)),
+            set(CANONICAL_TEMPLATE_NAMES),
+        )
+        self.assertFalse(templates.filter(name="Rusty Knife").exists())
+
+        by_name = {t.name: t for t in templates}
+        for row in CANONICAL_SRD_EQUIPMENT_TEMPLATES:
+            hit = by_name[row["name"]]
+            self.assertEqual(hit.load_slots, row["load_slots"], row["name"])
+            self.assertEqual(hit.category, row["category"], row["name"])
+            self.assertEqual(hit.quality, row["quality"], row["name"])
+
+        self.assertEqual(by_name["Climbing Gear"].load_slots, 2)
+        self.assertEqual(by_name["Demolition Tools"].load_slots, 2)
+        self.assertEqual(by_name["A Large Weapon"].load_slots, 2)
+        self.assertNotEqual(by_name["Climbing Gear"].description, "old")
+
+    def test_sync_idempotent(self):
+        from characters.services.equipment_template_sync import (
+            sync_srd_equipment_templates,
+        )
+
+        sync_srd_equipment_templates(prune_obsolete=True)
+        second = sync_srd_equipment_templates(prune_obsolete=True)
+        self.assertEqual(second["created"], 0)
+        self.assertEqual(second["deleted"], 0)
+        self.assertEqual(
+            second["updated"],
+            EquipmentItem.objects.filter(scope="TEMPLATE").count(),
+        )
+
+
+class EquipmentCatalogPermissionTests(TestCase):
+    def setUp(self):
+        self.gm = User.objects.create_user("eq_gm", password="pass")
+        self.creator = User.objects.create_user("eq_creator", password="pass")
+        self.other = User.objects.create_user("eq_other", password="pass")
+        self.staff = User.objects.create_user(
+            "eq_staff", password="pass", is_staff=True
+        )
+        self.campaign = Campaign.objects.create(name="EqCamp", gm=self.gm)
+        self.client = APIClient()
+
+    def test_creator_can_delete_own_site_item(self):
+        item = EquipmentItem.objects.create(
+            name="Creator Site Widget",
+            category="gear",
+            scope="SITE",
+            created_by=self.creator,
+        )
+        self.client.force_authenticate(self.creator)
+        res = self.client.delete(f"/api/equipment-items/{item.id}/")
+        self.assertEqual(res.status_code, 204)
+        self.assertFalse(EquipmentItem.objects.filter(pk=item.id).exists())
+
+    def test_non_creator_cannot_delete_site_item(self):
+        item = EquipmentItem.objects.create(
+            name="Locked Site Widget",
+            category="gear",
+            scope="SITE",
+            created_by=self.creator,
+        )
+        self.client.force_authenticate(self.other)
+        res = self.client.delete(f"/api/equipment-items/{item.id}/")
+        self.assertEqual(res.status_code, 403)
+        self.assertTrue(EquipmentItem.objects.filter(pk=item.id).exists())
+
+    def test_staff_can_delete_site_item(self):
+        item = EquipmentItem.objects.create(
+            name="Staff Wipe",
+            category="gear",
+            scope="SITE",
+            created_by=self.creator,
+        )
+        self.client.force_authenticate(self.staff)
+        res = self.client.delete(f"/api/equipment-items/{item.id}/")
+        self.assertEqual(res.status_code, 204)
+
+    def test_gm_can_delete_campaign_item(self):
+        item = EquipmentItem.objects.create(
+            name="Camp Gear",
+            category="gear",
+            scope="CAMPAIGN",
+            campaign=self.campaign,
+            created_by=self.creator,
+        )
+        self.client.force_authenticate(self.gm)
+        res = self.client.delete(f"/api/equipment-items/{item.id}/")
+        self.assertEqual(res.status_code, 204)
+
+    def test_non_staff_cannot_delete_template(self):
+        item = EquipmentItem.objects.create(
+            name="SRD Template Blade",
+            category="weapons",
+            scope="TEMPLATE",
+            created_by=self.creator,
+        )
+        self.client.force_authenticate(self.creator)
+        res = self.client.delete(f"/api/equipment-items/{item.id}/")
+        self.assertEqual(res.status_code, 403)
+
+    def test_from_kit_item_skips_duplicate_template_name(self):
+        EquipmentItem.objects.create(
+            name="Unique Template Hammer",
+            category="tools",
+            scope="TEMPLATE",
+            load_slots=2,
+        )
+        self.client.force_authenticate(self.gm)
+        res = self.client.post(
+            "/api/equipment-items/from-kit-item/",
+            {
+                "campaign": self.campaign.id,
+                "name": "Unique Template Hammer",
+                "load": 2,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(
+            EquipmentItem.objects.filter(name__iexact="Unique Template Hammer").count(),
+            1,
+        )
+
+    def test_from_kit_item_skips_duplicate_campaign_name(self):
+        first = EquipmentItem.objects.create(
+            name="Weird Widget",
+            category="gear",
+            scope="CAMPAIGN",
+            campaign=self.campaign,
+            created_by=self.gm,
+        )
+        self.client.force_authenticate(self.gm)
+        res = self.client.post(
+            "/api/equipment-items/from-kit-item/",
+            {
+                "campaign": self.campaign.id,
+                "name": "weird widget",
+                "load": 1,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["id"], first.id)
+        self.assertEqual(
+            EquipmentItem.objects.filter(
+                campaign=self.campaign, name__iexact="Weird Widget"
+            ).count(),
+            1,
+        )
+
+    def test_publish_to_site_skips_existing_site_name(self):
+        site = EquipmentItem.objects.create(
+            name="Published Gadget",
+            category="gear",
+            scope="SITE",
+            created_by=self.gm,
+        )
+        camp = EquipmentItem.objects.create(
+            name="Published Gadget",
+            category="gear",
+            scope="CAMPAIGN",
+            campaign=self.campaign,
+            created_by=self.gm,
+        )
+        self.client.force_authenticate(self.gm)
+        res = self.client.post(
+            f"/api/equipment-items/{camp.id}/publish-to-site/"
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data["id"], site.id)
+        self.assertEqual(
+            EquipmentItem.objects.filter(
+                name__iexact="Published Gadget", scope="SITE"
+            ).count(),
+            1,
+        )
+
+    def test_from_kit_item_creates_unique_custom(self):
+        self.client.force_authenticate(self.gm)
+        res = self.client.post(
+            "/api/equipment-items/from-kit-item/",
+            {
+                "campaign": self.campaign.id,
+                "name": "Unique Custom Dobby",
+                "load": 1,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data["scope"], "CAMPAIGN")
+        self.assertEqual(
+            EquipmentItem.objects.filter(name__iexact="Unique Custom Dobby").count(),
+            1,
+        )
+
+    def test_unscoped_list_hides_campaign_library(self):
+        EquipmentItem.objects.create(
+            name="Campaign Only Widget",
+            category="gear",
+            scope="CAMPAIGN",
+            campaign=self.campaign,
+            created_by=self.gm,
+        )
+        EquipmentItem.objects.create(
+            name="Site Public Widget",
+            category="gear",
+            scope="SITE",
+            created_by=self.gm,
+        )
+        self.client.force_authenticate(self.gm)
+        res = self.client.get("/api/equipment-items/")
+        self.assertEqual(res.status_code, 200)
+        names = [row["name"] for row in res.json()]
+        self.assertNotIn("Campaign Only Widget", names)
+        self.assertIn("Site Public Widget", names)
+        self.client.force_authenticate(self.staff)
+        res = self.client.get("/api/equipment-items/")
+        self.assertEqual(res.status_code, 200)
+        names = [row["name"] for row in res.json()]
+        self.assertNotIn("Campaign Only Widget", names)
+
+    def test_available_for_campaign_site_is_opt_in(self):
+        site = EquipmentItem.objects.create(
+            name="Opt In Site Widget",
+            category="gear",
+            scope="SITE",
+            created_by=self.gm,
+        )
+        EquipmentItem.objects.create(
+            name="Campaign Picker Widget",
+            category="gear",
+            scope="CAMPAIGN",
+            campaign=self.campaign,
+            created_by=self.gm,
+            available_when_adding=True,
+        )
+        self.client.force_authenticate(self.gm)
+        url = (
+            f"/api/equipment-items/?campaign={self.campaign.id}"
+            "&available_for_campaign=1"
+        )
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        names = [row["name"] for row in res.json()]
+        self.assertNotIn("Opt In Site Widget", names)
+        self.assertIn("Campaign Picker Widget", names)
+
+        CampaignEquipmentAccess.objects.create(
+            campaign=self.campaign, item=site, enabled=True
+        )
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        names = [row["name"] for row in res.json()]
+        self.assertIn("Opt In Site Widget", names)
+
+    def test_other_campaign_library_not_in_this_campaign_picker(self):
+        other = Campaign.objects.create(name="OtherEqCamp", gm=self.other)
+        EquipmentItem.objects.create(
+            name="Other Table Secret",
+            category="gear",
+            scope="CAMPAIGN",
+            campaign=other,
+            created_by=self.other,
+            available_when_adding=True,
+        )
+        self.client.force_authenticate(self.gm)
+        res = self.client.get(
+            f"/api/equipment-items/?campaign={self.campaign.id}"
+            "&available_for_campaign=1"
+        )
+        self.assertEqual(res.status_code, 200)
+        names = [row["name"] for row in res.json()]
+        self.assertNotIn("Other Table Secret", names)

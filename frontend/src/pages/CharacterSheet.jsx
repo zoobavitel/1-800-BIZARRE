@@ -768,6 +768,20 @@ const CATEGORY_LABELS = {
   stand_nature: "Stand Nature",
 };
 
+/** Compare kit rows without extra server-normalized fields causing false mismatch. */
+function inventorySyncFingerprint(inv) {
+  return JSON.stringify(
+    normalizeCharacterInventory(inv).map((item) => ({
+      id: String(item.id ?? ""),
+      name: String(item.name || ""),
+      armor_kind: String(item.armor_kind || ""),
+      load: Number(item.load) || 0,
+      detail: String(item.detail || ""),
+      category: String(item.category || ""),
+    })),
+  );
+}
+
 function hasMeaningfulDraftChanges(payload) {
   if (!payload || payload.id) return false;
   const textFields = [
@@ -1207,6 +1221,7 @@ const CharacterSheetWrapper = ({
           ? parseInt(String(campaignId), 10)
           : NaN;
       if (!Number.isFinite(cid)) return;
+      if (!String(item?.name || "").trim()) return;
       try {
         await equipmentAPI.fromKitItem({
           campaign: cid,
@@ -1232,6 +1247,7 @@ const CharacterSheetWrapper = ({
           ? parseInt(String(campaignId), 10)
           : NaN;
       if (!Number.isFinite(cid)) return;
+      if (!String(item?.name || "").trim()) return;
       try {
         const created = await equipmentAPI.fromKitItem({
           campaign: cid,
@@ -1243,6 +1259,8 @@ const CharacterSheetWrapper = ({
           coin_value: item.coin_value,
           source_character: characterId,
         });
+        const scope = String(created?.scope || "").toUpperCase();
+        if (scope === "TEMPLATE" || scope === "SITE") return;
         if (created?.id) await equipmentAPI.publishToSite(created.id);
       } catch (err) {
         console.error("Publish to site catalog failed:", err);
@@ -1272,6 +1290,16 @@ const CharacterSheetWrapper = ({
 
   useEffect(() => {
     lastSavedPayloadRef.current = null;
+  }, [character?.id]);
+
+  useEffect(() => {
+    fieldTouchRef.current = {
+      stress: false,
+      trauma: false,
+      xp: false,
+      healingClock: false,
+      inventory: false,
+    };
   }, [character?.id]);
 
   useEffect(() => {
@@ -1364,13 +1392,26 @@ const CharacterSheetWrapper = ({
     const sn = character?.sheetNotes ?? "";
     const inv = normalizeCharacterInventory(character?.inventory);
     setCharData((prev) => {
+      // After inventory autosave (incl. Del), dirty/saving can clear before the
+      // parent character prop catches up. Keep local kit until server matches
+      // so deleted rows do not reappear.
+      let nextInv = inv;
+      if (fieldTouchRef.current.inventory) {
+        const localFp = inventorySyncFingerprint(prev.inventory);
+        const serverFp = inventorySyncFingerprint(inv);
+        if (localFp !== serverFp) {
+          nextInv = prev.inventory;
+        } else {
+          fieldTouchRef.current.inventory = false;
+        }
+      }
       if (
         (prev.sheetNotes ?? "") === sn &&
-        JSON.stringify(prev.inventory ?? []) === JSON.stringify(inv)
+        JSON.stringify(prev.inventory ?? []) === JSON.stringify(nextInv ?? [])
       ) {
         return prev;
       }
-      return { ...prev, sheetNotes: sn, inventory: inv };
+      return { ...prev, sheetNotes: sn, inventory: nextInv };
     });
   }, [
     character?.id,
@@ -7968,12 +8009,14 @@ const CharacterSheetWrapper = ({
             }
           }
           // Clear touch flags only for fields this save included.
+          // Inventory touch stays until character.inventory catches up (see
+          // notes/inventory sync effect) — clearing early lets a stale prop
+          // restore deleted kit rows.
           const touches = payload._fieldTouches || {};
           if (touches.stress) fieldTouchRef.current.stress = false;
           if (touches.trauma) fieldTouchRef.current.trauma = false;
           if (touches.xp) fieldTouchRef.current.xp = false;
           if (touches.healingClock) fieldTouchRef.current.healingClock = false;
-          if (touches.inventory) fieldTouchRef.current.inventory = false;
           // Re-assert only fields this save included. A clock autosave that
           // omitted stress must not push a stale truth-lock count over the
           // server echo (GM unmark / concurrent roll marks).
@@ -11831,6 +11874,82 @@ const CharacterSheetWrapper = ({
                         }}
                       />
                     ))}
+                  </div>
+                  {/* Inventory — under stash (kit + loadout live near coin/stash) */}
+                  <div style={{ marginTop: "12px" }}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNotesInventoryExpandedPersist((prev) => ({
+                          ...prev,
+                          inventory: !prev.inventory,
+                        }))
+                      }
+                      aria-expanded={notesInventoryExpanded.inventory}
+                      aria-controls="character-sheet-inventory-panel"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        width: "100%",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        marginBottom: "8px",
+                        textAlign: "left",
+                      }}
+                    >
+                      <span
+                        aria-hidden
+                        style={{
+                          color: "#9ca3af",
+                          fontSize: "10px",
+                          lineHeight: 1,
+                          width: "12px",
+                          flexShrink: 0,
+                          userSelect: "none",
+                        }}
+                      >
+                        {notesInventoryExpanded.inventory ? "\u25bc" : "\u25ba"}
+                      </span>
+                      <span
+                        style={{
+                          color: S.lbl.color,
+                          fontSize: S.lbl.fontSize,
+                          fontWeight: S.lbl.fontWeight,
+                        }}
+                      >
+                        INVENTORY
+                      </span>
+                    </button>
+                    {notesInventoryExpanded.inventory ? (
+                      <CharacterSheetInventoryList
+                        panelId="character-sheet-inventory-panel"
+                        inventory={charData.inventory}
+                        readOnly={!canEditSheet}
+                        onChange={(next) => {
+                          markDirtyIntent();
+                          markFieldTouch("inventory");
+                          setCharData((p) => ({ ...p, inventory: next }));
+                        }}
+                        onInventoryTouch={() => markFieldTouch("inventory")}
+                        loadoutEntry={sessionLoadoutEntry}
+                        onLoadoutChange={handleLoadoutChange}
+                        activeSessionId={activeSessionId}
+                        coinFilled={coinFilled}
+                        abilities={abilities}
+                        campaignId={campaignId}
+                        characterId={characterId}
+                        isGM={isGM}
+                        onPromoteToCampaign={
+                          isGM ? handlePromoteItemToCampaign : undefined
+                        }
+                        onPublishToSite={
+                          isGM ? handlePublishItemToSite : undefined
+                        }
+                      />
+                    ) : null}
                   </div>
                 </div>
 
@@ -19766,82 +19885,6 @@ const CharacterSheetWrapper = ({
                           resize: "vertical",
                           boxSizing: "border-box",
                         }}
-                      />
-                    ) : null}
-                  </div>
-                  {/* Inventory */}
-                  <div style={{ marginBottom: "14px" }}>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setNotesInventoryExpandedPersist((prev) => ({
-                          ...prev,
-                          inventory: !prev.inventory,
-                        }))
-                      }
-                      aria-expanded={notesInventoryExpanded.inventory}
-                      aria-controls="character-sheet-inventory-panel"
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        width: "100%",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        padding: 0,
-                        marginBottom: "8px",
-                        textAlign: "left",
-                      }}
-                    >
-                      <span
-                        aria-hidden
-                        style={{
-                          color: "#9ca3af",
-                          fontSize: "10px",
-                          lineHeight: 1,
-                          width: "12px",
-                          flexShrink: 0,
-                          userSelect: "none",
-                        }}
-                      >
-                        {notesInventoryExpanded.inventory ? "\u25bc" : "\u25ba"}
-                      </span>
-                      <span
-                        style={{
-                          color: S.lbl.color,
-                          fontSize: S.lbl.fontSize,
-                          fontWeight: S.lbl.fontWeight,
-                        }}
-                      >
-                        INVENTORY
-                      </span>
-                    </button>
-                    {notesInventoryExpanded.inventory ? (
-                      <CharacterSheetInventoryList
-                        panelId="character-sheet-inventory-panel"
-                        inventory={charData.inventory}
-                        readOnly={!canEditSheet}
-                        onChange={(next) => {
-                          markDirtyIntent();
-                          markFieldTouch("inventory");
-                          setCharData((p) => ({ ...p, inventory: next }));
-                        }}
-                        onInventoryTouch={() => markFieldTouch("inventory")}
-                        loadoutEntry={sessionLoadoutEntry}
-                        onLoadoutChange={handleLoadoutChange}
-                        activeSessionId={activeSessionId}
-                        coinFilled={coinFilled}
-                        abilities={abilities}
-                        campaignId={campaignId}
-                        characterId={characterId}
-                        isGM={isGM}
-                        onPromoteToCampaign={
-                          isGM ? handlePromoteItemToCampaign : undefined
-                        }
-                        onPublishToSite={
-                          isGM ? handlePublishItemToSite : undefined
-                        }
                       />
                     ) : null}
                   </div>

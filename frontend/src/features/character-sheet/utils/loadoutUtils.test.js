@@ -8,6 +8,8 @@ import {
   inventoryArmorEntries,
   inventoryHasSpecialArmor,
   inventorySpecialArmorCount,
+  kitItemCanPublishToSiteCatalog,
+  kitItemCanSaveToCampaignLibrary,
   normalizeInventoryKitList,
   loadBandForUsed,
   loadCapForBand,
@@ -98,5 +100,81 @@ describe("loadoutUtils", () => {
         coinFilled: 1,
       }),
     ).toBe(4);
+  });
+
+  test("custom kit can save and publish; SRD template cannot", () => {
+    const templates = [
+      { id: 1, name: "Demolition Tools", scope: "TEMPLATE" },
+    ];
+    expect(
+      kitItemCanSaveToCampaignLibrary(
+        { name: "Weird widget", catalog_id: null },
+        templates,
+      ),
+    ).toBe(true);
+    expect(
+      kitItemCanPublishToSiteCatalog(
+        { name: "Weird widget", catalog_id: null },
+        templates,
+      ),
+    ).toBe(true);
+    expect(
+      kitItemCanSaveToCampaignLibrary(
+        { name: "Demolition Tools", catalog_id: 1 },
+        templates,
+      ),
+    ).toBe(false);
+    expect(
+      kitItemCanPublishToSiteCatalog(
+        { name: "Demolition Tools", catalog_id: 1 },
+        templates,
+      ),
+    ).toBe(false);
+    expect(
+      kitItemCanSaveToCampaignLibrary(
+        { name: "Demolition Tools", catalog_id: null },
+        templates,
+      ),
+    ).toBe(false);
+    expect(
+      kitItemCanPublishToSiteCatalog(
+        { name: "Demolition Tools", catalog_id: null },
+        templates,
+      ),
+    ).toBe(false);
+  });
+
+  test("campaign library item can still publish to site", () => {
+    const catalog = [
+      { id: 4, name: "Dobby", scope: "CAMPAIGN" },
+      { id: 1, name: "Demolition Tools", scope: "TEMPLATE" },
+    ];
+    expect(
+      kitItemCanSaveToCampaignLibrary(
+        { name: "Dobby", catalog_id: 4 },
+        catalog,
+      ),
+    ).toBe(false);
+    expect(
+      kitItemCanPublishToSiteCatalog({ name: "Dobby", catalog_id: 4 }, catalog),
+    ).toBe(true);
+    expect(
+      kitItemCanPublishToSiteCatalog(
+        { name: "Dobby", catalog_id: null },
+        catalog,
+      ),
+    ).toBe(true);
+    expect(
+      kitItemCanSaveToCampaignLibrary(
+        { name: "Published Gadget", catalog_id: 9 },
+        [{ id: 9, name: "Published Gadget", scope: "SITE" }],
+      ),
+    ).toBe(false);
+    expect(
+      kitItemCanPublishToSiteCatalog(
+        { name: "Published Gadget", catalog_id: 9 },
+        [{ id: 9, name: "Published Gadget", scope: "SITE" }],
+      ),
+    ).toBe(false);
   });
 });

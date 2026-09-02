@@ -10,6 +10,8 @@ import {
   computeInventoryLoadUsed,
   characterHasAbility,
   EQUIPMENT_CATEGORY_OPTIONS,
+  kitItemCanPublishToSiteCatalog,
+  kitItemCanSaveToCampaignLibrary,
   loadBandForUsed,
   loadCapForBand,
   newArmorItemDraft,
@@ -43,14 +45,117 @@ const btnStyle = {
   cursor: "pointer",
 };
 
-function ItemEditorCard({
+function CatalogSearchCard({
+  catalogItems,
+  readOnly,
+  onPick,
+  onCancel,
+}) {
+  const [query, setQuery] = useState("");
+  const q = String(query || "").trim().toLowerCase();
+  const matches = useMemo(() => {
+    const list = Array.isArray(catalogItems) ? catalogItems : [];
+    if (!q) return list.slice(0, 40);
+    return list
+      .filter((c) => {
+        const hay = `${c.name || ""} ${c.description || ""} ${c.category || ""}`.toLowerCase();
+        return hay.includes(q);
+      })
+      .slice(0, 40);
+  }, [catalogItems, q]);
+
+  return (
+    <div
+      style={{
+        border: "1px solid #374151",
+        borderRadius: "4px",
+        padding: "8px",
+        marginBottom: "8px",
+        background: "#161b22",
+      }}
+    >
+      <input
+        type="search"
+        aria-label="Search catalog"
+        autoFocus
+        readOnly={readOnly}
+        disabled={readOnly}
+        value={query}
+        placeholder="Search catalog…"
+        onChange={(e) => setQuery(e.target.value)}
+        style={{ ...rowInputStyle, width: "100%", marginBottom: "6px" }}
+      />
+      <div
+        role="listbox"
+        aria-label="Catalog search results"
+        style={{
+          maxHeight: "180px",
+          overflowY: "auto",
+          marginBottom: "6px",
+          border: "1px solid #21262d",
+          borderRadius: "4px",
+        }}
+      >
+        {matches.length === 0 ? (
+          <div style={{ color: "#6b7280", fontSize: "11px", padding: "8px" }}>
+            {q ? "No catalog matches." : "No catalog items available."}
+          </div>
+        ) : (
+          matches.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              role="option"
+              aria-selected={false}
+              disabled={readOnly}
+              onClick={() => onPick(c)}
+              style={{
+                display: "block",
+                width: "100%",
+                textAlign: "left",
+                background: "transparent",
+                border: "none",
+                borderBottom: "1px solid #21262d",
+                color: "#e5e7eb",
+                padding: "6px 8px",
+                fontFamily: "monospace",
+                fontSize: "11px",
+                cursor: readOnly ? "default" : "pointer",
+              }}
+            >
+              <span style={{ color: "#9ca3af" }}>
+                {c.scope === "CAMPAIGN"
+                  ? "Campaign"
+                  : c.scope === "SITE"
+                    ? "Site"
+                    : "Template"}{" "}
+                · {categoryLabel(c.category)} · load {c.load_slots ?? 1}
+              </span>
+              <span style={{ display: "block", fontWeight: "bold" }}>{c.name}</span>
+              {c.description ? (
+                <span style={{ display: "block", color: "#6b7280", fontSize: "10px" }}>
+                  {c.description}
+                </span>
+              ) : null}
+            </button>
+          ))
+        )}
+      </div>
+      {!readOnly ? (
+        <button type="button" style={btnStyle} onClick={onCancel}>
+          Cancel
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function CustomItemEditorCard({
   draft,
   readOnly,
   onChange,
   onSave,
   onCancel,
-  catalogItems,
-  onPickCatalog,
 }) {
   const d = draft || newInventoryItemDraft();
   return (
@@ -162,34 +267,10 @@ function ItemEditorCard({
           ))}
         </select>
       </div>
-      {catalogItems?.length > 0 && !readOnly ? (
-        <div style={{ marginBottom: "6px" }}>
-          <span style={{ color: "#8b949e", fontSize: "10px" }}>From catalog: </span>
-          <select
-            aria-label="Pick catalog item"
-            defaultValue=""
-            onChange={(e) => {
-              const id = e.target.value;
-              if (!id) return;
-              const cat = catalogItems.find((c) => String(c.id) === id);
-              if (cat) onPickCatalog(cat);
-              e.target.value = "";
-            }}
-            style={{ ...rowInputStyle, maxWidth: "100%" }}
-          >
-            <option value="">Choose template…</option>
-            {catalogItems.map((c) => (
-              <option key={c.id} value={c.id}>
-                {categoryLabel(c.category)} — {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
       {!readOnly ? (
         <div style={{ display: "flex", gap: "6px" }}>
           <button type="button" style={btnStyle} onClick={onSave}>
-            Save item
+            Save custom item
           </button>
           <button type="button" style={btnStyle} onClick={onCancel}>
             Cancel
@@ -354,24 +435,24 @@ export default function CharacterSheetInventoryList({
     loadout,
   ]);
 
-  useEffect(() => {
+  const refreshCatalog = useCallback(() => {
     if (!campaignId) {
       setCatalogItems([]);
-      return;
+      return Promise.resolve();
     }
-    let cancelled = false;
-    equipmentAPI
+    return equipmentAPI
       .list({ campaign: campaignId, available_for_campaign: true })
       .then((list) => {
-        if (!cancelled) setCatalogItems(Array.isArray(list) ? list : []);
+        setCatalogItems(Array.isArray(list) ? list : []);
       })
       .catch((e) => {
-        if (!cancelled) setCatalogError(e.message || "Catalog load failed");
+        setCatalogError(e.message || "Catalog load failed");
       });
-    return () => {
-      cancelled = true;
-    };
   }, [campaignId]);
+
+  useEffect(() => {
+    refreshCatalog();
+  }, [refreshCatalog]);
 
   const patchLoadout = useCallback(
     (patch) => {
@@ -421,7 +502,17 @@ export default function CharacterSheetInventoryList({
     setAddMode(null);
   };
 
+  const addFromCatalog = (cat) => {
+    const row = catalogItemToKitRow(cat);
+    onInventoryTouch?.();
+    onChange([...inv, row]);
+    setAddDraft(null);
+    setAddMode(null);
+  };
+
   const addingArmor = addMode === "armor";
+  const addingCustom = addMode === "custom";
+  const addingCatalog = addMode === "catalog";
 
   return (
     <div
@@ -550,20 +641,32 @@ export default function CharacterSheetInventoryList({
               {item.detail ? (
                 <div style={{ color: "#8b949e", fontSize: "10px" }}>{item.detail}</div>
               ) : null}
-              {isGM && onPromoteToCampaign && !armorKind ? (
+              {isGM &&
+              onPromoteToCampaign &&
+              !armorKind &&
+              kitItemCanSaveToCampaignLibrary(item, catalogItems) ? (
                 <button
                   type="button"
                   style={{ ...btnStyle, alignSelf: "flex-start", fontSize: "10px" }}
-                  onClick={() => onPromoteToCampaign(item)}
+                  onClick={async () => {
+                    await onPromoteToCampaign(item);
+                    await refreshCatalog();
+                  }}
                 >
                   Save to campaign library
                 </button>
               ) : null}
-              {isGM && onPublishToSite && !armorKind ? (
+              {isGM &&
+              onPublishToSite &&
+              !armorKind &&
+              kitItemCanPublishToSiteCatalog(item, catalogItems) ? (
                 <button
                   type="button"
                   style={{ ...btnStyle, alignSelf: "flex-start", fontSize: "10px" }}
-                  onClick={() => onPublishToSite(item)}
+                  onClick={async () => {
+                    await onPublishToSite(item);
+                    await refreshCatalog();
+                  }}
                 >
                   Publish to site catalog
                 </button>
@@ -573,31 +676,34 @@ export default function CharacterSheetInventoryList({
         })
       )}
 
-      {addDraft ? (
-        addingArmor ? (
-          <ArmorEditorCard
-            draft={addDraft}
-            readOnly={readOnly}
-            onChange={setAddDraft}
-            onSave={saveNewItem}
-            onCancel={cancelAdd}
-          />
-        ) : (
-          <ItemEditorCard
-            draft={addDraft}
-            readOnly={readOnly}
-            onChange={setAddDraft}
-            onSave={saveNewItem}
-            onCancel={cancelAdd}
-            catalogItems={catalogItems}
-            onPickCatalog={(cat) =>
-              setAddDraft(catalogItemToKitRow(cat))
-            }
-          />
-        )
+      {addingArmor && addDraft ? (
+        <ArmorEditorCard
+          draft={addDraft}
+          readOnly={readOnly}
+          onChange={setAddDraft}
+          onSave={saveNewItem}
+          onCancel={cancelAdd}
+        />
+      ) : null}
+      {addingCustom && addDraft ? (
+        <CustomItemEditorCard
+          draft={addDraft}
+          readOnly={readOnly}
+          onChange={setAddDraft}
+          onSave={saveNewItem}
+          onCancel={cancelAdd}
+        />
+      ) : null}
+      {addingCatalog ? (
+        <CatalogSearchCard
+          catalogItems={catalogItems}
+          readOnly={readOnly}
+          onPick={addFromCatalog}
+          onCancel={cancelAdd}
+        />
       ) : null}
 
-      {!readOnly && !addDraft ? (
+      {!readOnly && !addMode ? (
         <div
           style={{
             display: "flex",
@@ -610,11 +716,21 @@ export default function CharacterSheetInventoryList({
             type="button"
             style={btnStyle}
             onClick={() => {
-              setAddMode("item");
+              setAddMode("catalog");
+              setAddDraft(null);
+            }}
+          >
+            Add Item
+          </button>
+          <button
+            type="button"
+            style={btnStyle}
+            onClick={() => {
+              setAddMode("custom");
               setAddDraft(newInventoryItemDraft());
             }}
           >
-            Add item
+            Add Custom Item
           </button>
           <button
             type="button"

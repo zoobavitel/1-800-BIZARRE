@@ -252,6 +252,7 @@ function PendingInvitations({ invitations, onAccept, onDecline }) {
 // Campaign Detail View
 // ---------------------------------------------------------------------------
 function CampaignEquipmentPanel({ campaign, onRefresh }) {
+  const { user } = useAuth();
   const [items, setItems] = useState([]);
   const [form, setForm] = useState(null);
   const [error, setError] = useState(null);
@@ -271,6 +272,23 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
   const campaignItems = items.filter((i) => i.scope === "CAMPAIGN");
   const templates = items.filter((i) => i.scope === "TEMPLATE");
   const siteItems = items.filter((i) => i.scope === "SITE");
+
+  const canDeleteCatalogItem = (item) => {
+    if (!user) return false;
+    if (user.is_staff) return true;
+    if (item.scope === "TEMPLATE") return false;
+    if (item.created_by != null && Number(item.created_by) === Number(user.id)) {
+      return true;
+    }
+    if (
+      item.scope === "CAMPAIGN" &&
+      campaign?.gm?.id != null &&
+      Number(campaign.gm.id) === Number(user.id)
+    ) {
+      return true;
+    }
+    return false;
+  };
 
   const startCreate = () => {
     setForm({
@@ -320,6 +338,18 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
     }
   };
 
+  const handleDelete = async (item) => {
+    if (!window.confirm(`Delete catalog item “${item.name}”?`)) return;
+    setError(null);
+    try {
+      await equipmentAPI.delete(item.id);
+      loadItems();
+      onRefresh?.();
+    } catch (e) {
+      setError(e.message || "Could not delete equipment.");
+    }
+  };
+
   return (
     <div style={S.card}>
       <span style={S.sectionLbl}>Equipment catalog</span>
@@ -328,6 +358,9 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
           {error}
         </div>
       ) : null}
+      <div style={{ color: "#9ca3af", fontSize: "11px", marginBottom: "6px" }}>
+        Campaign library (this table only — not site catalog)
+      </div>
       {campaignItems.length === 0 && !form ? (
         <div style={{ color: "#6b7280", fontSize: "12px", marginBottom: "8px" }}>
           No custom equipment yet.
@@ -361,35 +394,113 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
               />
               Available when adding
             </label>
+            {canDeleteCatalogItem(item) ? (
+              <button
+                type="button"
+                style={{
+                  ...S.btn,
+                  marginLeft: "12px",
+                  fontSize: "11px",
+                  color: "#f87171",
+                }}
+                onClick={() => handleDelete(item)}
+              >
+                Delete
+              </button>
+            ) : null}
           </div>
         ))
       )}
-      {(templates.length > 0 || siteItems.length > 0) && (
+      {templates.length > 0 ? (
         <div style={{ marginTop: "10px" }}>
           <div style={{ color: "#9ca3af", fontSize: "11px", marginBottom: "6px" }}>
-            Templates & site catalog (enable for this campaign)
+            SRD templates (on for this campaign unless you disable)
           </div>
-          {[...templates, ...siteItems].map((item) => (
-            <label
+          {templates.map((item) => (
+            <div
               key={`access-${item.id}`}
               style={{
-                display: "block",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
                 fontSize: "11px",
                 color: "#d1d5db",
                 marginBottom: "4px",
+                flexWrap: "wrap",
               }}
             >
-              <input
-                type="checkbox"
-                checked={Boolean(item.enabled_for_campaign)}
-                onChange={(e) => toggleAccess(item, e.target.checked)}
-                style={{ marginRight: "6px" }}
-              />
-              {item.scope === "SITE" ? "Site" : "Template"}: {item.name}
-            </label>
+              <label style={{ display: "inline-flex", alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(item.enabled_for_campaign)}
+                  onChange={(e) => toggleAccess(item, e.target.checked)}
+                  style={{ marginRight: "6px" }}
+                />
+                Template: {item.name}
+              </label>
+              {canDeleteCatalogItem(item) ? (
+                <button
+                  type="button"
+                  style={{
+                    ...S.btn,
+                    fontSize: "10px",
+                    color: "#f87171",
+                    padding: "2px 6px",
+                  }}
+                  onClick={() => handleDelete(item)}
+                >
+                  Delete
+                </button>
+              ) : null}
+            </div>
           ))}
         </div>
-      )}
+      ) : null}
+      {siteItems.length > 0 ? (
+        <div style={{ marginTop: "10px" }}>
+          <div style={{ color: "#9ca3af", fontSize: "11px", marginBottom: "6px" }}>
+            Site catalog (hidden from add-item until you enable for this campaign)
+          </div>
+          {siteItems.map((item) => (
+            <div
+              key={`access-${item.id}`}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "11px",
+                color: "#d1d5db",
+                marginBottom: "4px",
+                flexWrap: "wrap",
+              }}
+            >
+              <label style={{ display: "inline-flex", alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={Boolean(item.enabled_for_campaign)}
+                  onChange={(e) => toggleAccess(item, e.target.checked)}
+                  style={{ marginRight: "6px" }}
+                />
+                Site: {item.name}
+              </label>
+              {canDeleteCatalogItem(item) ? (
+                <button
+                  type="button"
+                  style={{
+                    ...S.btn,
+                    fontSize: "10px",
+                    color: "#f87171",
+                    padding: "2px 6px",
+                  }}
+                  onClick={() => handleDelete(item)}
+                >
+                  Delete
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
       {form ? (
         <div style={{ marginTop: "10px" }}>
           <input
