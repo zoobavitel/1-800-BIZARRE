@@ -1,482 +1,442 @@
 [
-    {
-      "model": "characters.ability",
-      "pk": 1,
-      "fields": {
-        "name": "Ambush",
-        "type": "standard",
-        "category": "aggression",
-        "description": "When you attack from hiding or spring a trap, you get +1d."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 2,
-      "fields": {
-        "name": "Cascade Effect",
-        "type": "standard",
-        "category": "aggression",
-        "description": "If you roll a 6 from your resistance roll to resist a physical or bizarre consequence, the attacker suffers a mirrored backlash."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 3,
-      "fields": {
-        "name": "Final Barrage",
-        "type": "standard",
-        "category": "aggression",
-        "description": "When reduced to 0 HP or Level 4 harm, make a potent Stand attack before going down."
-      }
-    },
-    {
-        "model": "characters.ability",
-        "pk": 5,
-        "fields": {
-        "name": "Phantom Pain",
-        "type": "standard",
-        "category": "aggression",
-        "description": "Spend 1 stress to make your stand attack through cover, walls, or barriers that would otherwise block it. Works within your stand range."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 6,
-      "fields": {
-        "name": "Savage",
-        "type": "standard",
-        "category": "aggression",
-        "description": "When you unleash physical violence, it's especially frightening. When you command a frightened target, take +1d."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 7,
-      "fields": {
-        "name": "Spin-Boosted Blow",
-        "type": "standard",
-        "category": "aggression",
-        "description": "Add Spin to your next Stand attack to supercharge a single strike (adds +1 effect and +1d)."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 8,
-      "fields": {
-        "name": "Steady Barrage",
-        "type": "standard",
-        "category": "aggression",
-        "description": "You can barrage targets up to your Stand's range. Add +1d when making multiple rapid-fire attacks."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 9,
-      "fields": {
-        "name": "Invigorated",
-        "type": "standard",
-        "category": "endurance",
-        "description": "You recover from harm faster. Permanently fill in one of your healing clock segments. Take +1d to healing treatment rolls."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 11,
-      "fields": {
-        "name": "Battleborn",
-        "type": "standard",
-        "category": "endurance",
-        "description": "You may expend your stand armor to reduce harm from an attack in combat or to push yourself during a fight."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 12,
-      "fields": {
-        "name": "Swan Song",
-        "type": "standard",
-        "category": "endurance",
-        "description": "When you'd be taken out (Level 4 harm), spend remaining Stand armor charges to stay standing for one heroic action."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 13,
-      "fields": {
-        "name": "Iron Will",
-        "type": "standard",
-        "category": "endurance",
-        "description": "You're immune to the terror that some bizarre entities inflict on sight. Take +1d to resistance rolls with Resolve."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 14,
-      "fields": {
-        "name": "Tough as Nails",
-        "type": "standard",
-        "category": "endurance",
-        "description": "Penalties from harm are one level less severe (though level 4 harm is still fatal)."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 15,
-      "fields": {
-        "name": "Fortitude",
-        "type": "standard",
-        "category": "endurance",
-        "description": "Expend your Stand armor to resist a consequence of fatigue, weakness, or chemical effects, or to push yourself when working with technical skill or handling chemicals."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 16,
-      "fields": {
-        "name": "Overdrive",
-        "type": "standard",
-        "category": "endurance",
-        "description": "While wearing non-Stand armor, gain an extra +1 armor."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 17,
-      "fields": {
-        "name": "Masochist",
-        "type": "standard",
-        "category": "endurance",
-        "description": "When your Stand takes harm, reduce the user's damage by 1 level. If the Stand hits Level 4 harm, both die."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 18,
-      "fields": {
-        "name": "Undying Will",
-        "type": "standard",
-        "category": "endurance",
-        "description": "When taking Level 3 harm, you can act normally for one round. Afterwards, actions cost 2 stress."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 19,
-      "fields": {
-        "name": "Rule of Cool",
-        "type": "standard",
-        "category": "endurance",
-        "description": "Once per score, when you do something genuinely dramatic or stylish, clear 2 stress."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 20,
-      "fields": {
-        "name": "Bizarre Step",
-        "type": "standard",
-        "category": "cunning",
-        "description": "Push (2 stress) to instantly reposition within your stand's range. Nearby observers must resist or lose track of you."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 21,
-      "fields": {
-        "name": "Cloak & Dagger",
-        "type": "standard",
-        "category": "cunning",
-        "description": "When you use a disguise or other form of covert misdirection, you get +1d to rolls to confuse or deflect suspicion. When you throw off your disguise, the resulting surprise gives you the initiative in the situation."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 22,
-      "fields": {
-        "name": "Mesmeriser",
-        "type": "standard",
-        "category": "cunning",
-        "description": "When you Sway someone, you may cause them to forget that it's happened until they next interact with you."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 23,
-      "fields": {
-        "name": "Saboteur",
-        "type": "standard",
-        "category": "cunning",
-        "description": "When you wreck, the work is much quieter than it should be and the damage is hidden from casual inspection."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 24,
-      "fields": {
-        "name": "Shadow",
-        "type": "standard",
-        "category": "cunning",
-        "description": "Expend your Stand armor to resist a consequence from detection, surveillance, or security measures, or to push yourself for a feat of athletics or stealth."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 25,
-      "fields": {
-        "name": "Subterfuge",
-        "type": "standard",
-        "category": "cunning",
-        "description": "You may expend your stand armor to resist a consequence from suspicion or persuasion, or to push yourself for subterfuge."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 26,
-      "fields": {
-        "name": "Bizarre Intuition",
-        "type": "standard",
-        "category": "awareness",
-        "description": "You have a bizarre sense for danger. You cannot be surprised."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 27,
-      "fields": {
-        "name": "Focused",
-        "type": "standard",
-        "category": "awareness",
-        "description": "You may expend your stand armor to resist a consequence of surprise or mental harm (fear, confusion, losing track of someone)."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 28,
-      "fields": {
-        "name": "Like Looking into a Mirror",
-        "type": "standard",
-        "category": "awareness",
-        "description": "You can always tell when someone is lying."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 29,
-      "fields": {
-        "name": "Mastermind",
-        "type": "standard",
-        "category": "awareness",
-        "description": "You're always aware of supernatural entities in your presence. Take +1d when you gather info about the bizarre."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 31,
-      "fields": {
-        "name": "Scout",
-        "type": "standard",
-        "category": "awareness",
-        "description": "When you gather info to locate a target, you get +1 effect. When you hide in a prepared position or use camouflage, you get +1d to roll to avoid detection."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 32,
-      "fields": {
-        "name": "Shared Vision",
-        "type": "standard",
-        "category": "awareness",
-        "description": "You can see through your Stand's eyes, even at extreme distances."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 33,
-      "fields": {
-        "name": "Aura of Confidence",
-        "type": "standard",
-        "category": "presence",
-        "description": "Your presence inspires trust and courage. Allies within close range of you gain +1d to resistance rolls against fear or intimidation."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 35,
-      "fields": {
-        "name": "Scoundrel",
-        "type": "standard",
-        "category": "presence",
-        "description": "You gain +1d to Consort when you gather information on a target for a score. You get +1d to the engagement roll for that operation."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 36,
-      "fields": {
-        "name": "Trust in Me",
-        "type": "standard",
-        "category": "presence",
-        "description": "You get +1d vs. a target with whom you have an intimate relationship."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 37,
-      "fields": {
-        "name": "Foresight",
-        "type": "standard",
-        "category": "teamwork",
-        "description": "Twice per score, you can assist a teammate without paying stress. Tell us how you prepared for this."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 38,
-      "fields": {
-        "name": "Bodyguard",
-        "type": "standard",
-        "category": "teamwork",
-        "description": "When you protect a teammate, take +1d to your resistance roll. When you gather info to anticipate possible threats in the current situation, you get +1 effect."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 39,
-      "fields": {
-        "name": "Guardian Angel",
-        "type": "standard",
-        "category": "teamwork",
-        "description": "Your Stand can manufacture armor for others. Take 2 stress to give an ally within Range one Stand Armor charge. They hold it and may check it themselves to reduce a consequence by 1 level. Unspent charges vanish at the end of the scene. You cannot give a given ally more than one charge per scene."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 40,
-      "fields": {
-        "name": "Functioning Vice",
-        "type": "standard",
-        "category": "teamwork",
-        "description": "When you indulge your vice, you may adjust the dice outcome by 1 or 2 (up or down). An ally who joins in your vice may do the same."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 41,
-      "fields": {
-        "name": "Stand Proud",
-        "type": "standard",
-        "category": "teamwork",
-        "description": "When you Command an ally in combat, they continue to fight when they would otherwise break (they're not taken out when they suffer level 3 harm). They gain +1 effect and 1 armor."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 42,
-      "fields": {
-        "name": "Analyst",
-        "type": "standard",
-        "category": "teamwork",
-        "description": "During downtime, you get two ticks to distribute among any long-term project clocks that involve investigation or learning a new formula or design plan."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 43,
-      "fields": {
-        "name": "Expertise",
-        "type": "standard",
-        "category": "teamwork",
-        "description": "Choose one of your action ratings. When you lead a group action using that action, you can suffer only 1 stress at most, regardless of the number of failed rolls."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 44,
-      "fields": {
-        "name": "Calculating",
-        "type": "standard",
-        "category": "teamwork",
-        "description": "Due to your careful planning, during downtime, you may give yourself or another crew member +1 downtime action."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 45,
-      "fields": {
-        "name": "The Devil's Footsteps",
-        "type": "standard",
-        "category": "adaptability",
-        "description": "When you push yourself, choose one of the following additional benefits: perform a feat of athletics that verges past superhuman for 1 scene, or maneuver to confuse your enemies so they mistakenly attack each other."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 46,
-      "fields": {
-        "name": "Superhero Landing",
-        "type": "standard",
-        "category": "adaptability",
-        "description": "Expend Stand armor to reduce fall/collision harm by 1. Gain +1d for stylish aerial actions."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 47,
-      "fields": {
-        "name": "Daredevil",
-        "type": "standard",
-        "category": "adaptability",
-        "description": "When you roll a desperate action, you get +1d to your roll if you also take -1d to any resistance roll(s) against consequences from your action(s)."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 48,
-      "fields": {
-        "name": "Bizarre Improvisation",
-        "type": "standard",
-        "category": "adaptability",
-        "description": "Take 2 stress to roll your best action rating while performing a different action. Say how you adapt your skill to this use."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 50,
-      "fields": {
-        "name": "Weapon Recall",
-        "type": "standard",
-        "category": "stand_nature",
-        "description": "Your Stand returns to your hand instantly when thrown or disarmed."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 51,
-      "fields": {
-        "name": "Stand Evolution",
-        "type": "standard",
-        "category": "stand_nature",
-        "description": "Spend 5 stress mid-score to unlock a temporary new unique ability."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 52,
-      "fields": {
-        "name": "Channel Force",
-        "type": "standard",
-        "category": "stand_nature",
-        "description": "Redirect a supernatural force through your Stand's form or medium."
-      }
-    },
-    {
-      "model": "characters.ability",
-      "pk": 53,
-      "fields": {
-        "name": "Requiem",
-        "type": "standard",
-        "category": "stand_nature",
-        "description": "Spend 5 stress to elevate your stand beyond its normal limits temporarily. For one scene, treat all your stand coin stats as one grade higher."
-      }
+  {
+    "model": "characters.ability",
+    "pk": 1,
+    "fields": {
+      "name": "Ambush",
+      "type": "standard",
+      "category": "aggression",
+      "description": "When you attack from hiding or spring a trap, you get +1d."
     }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 2,
+    "fields": {
+      "name": "Cascade Effect",
+      "type": "standard",
+      "category": "aggression",
+      "description": "If you roll a 6 from your resistance roll to resist a physical or bizarre consequence, the attacker suffers a mirrored backlash."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 3,
+    "fields": {
+      "name": "Final Barrage",
+      "type": "standard",
+      "category": "aggression",
+      "description": "When you take Level 4 harm, use your stand armor to make an attack with +1 effect before going down."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 5,
+    "fields": {
+      "name": "Phantom Pain",
+      "type": "standard",
+      "category": "aggression",
+      "description": "Spend 1 stress to make your stand attack through cover, walls, or barriers that would otherwise block it. Works within your stand range."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 6,
+    "fields": {
+      "name": "Savage",
+      "type": "standard",
+      "category": "aggression",
+      "description": "When you unleash physical violence, it's especially frightening. When you command a frightened target, take +1d."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 9,
+    "fields": {
+      "name": "Invigorated",
+      "type": "standard",
+      "category": "endurance",
+      "description": "you recover from harm faster. Permanently fill in one of your healing clock segments. Take +1d to healing treatment rolls."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 13,
+    "fields": {
+      "name": "Iron Will",
+      "type": "standard",
+      "category": "endurance",
+      "description": "You're immune to the terror that some bizarre entities inflict on sight. Take +1d to resistance rolls with Resolve."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 14,
+    "fields": {
+      "name": "Tough as Nails",
+      "type": "standard",
+      "category": "endurance",
+      "description": "Penalties from harm are one level less severe (though level 4 harm is still fatal)"
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 16,
+    "fields": {
+      "name": "Overdrive",
+      "type": "standard",
+      "category": "endurance",
+      "description": "While wearing non-Stand armor, gain an extra +1 armor."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 17,
+    "fields": {
+      "name": "Masochist",
+      "type": "standard",
+      "category": "endurance",
+      "description": "When your Stand takes harm, reduce the user's damage by 1 level. If the Stand hits Level 4 harm with no way to reduce, both die."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 18,
+    "fields": {
+      "name": "Undying Will",
+      "type": "standard",
+      "category": "endurance",
+      "description": "When taking Level 3 harm, you can act normally for one round. Afterwards, actions cost 2 stress."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 20,
+    "fields": {
+      "name": "Bizarre Step",
+      "type": "standard",
+      "category": "cunning",
+      "description": "Push (2 stress) to instantly reposition within your stand's range. Nearby observers must resist or lose track of you."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 21,
+    "fields": {
+      "name": "Cloak & Dagger",
+      "type": "standard",
+      "category": "cunning",
+      "description": "When you use a disguise or other form of covert misdirection, you get +1d to rolls to confuse or deflect suspicion. When you throw off your disguise, the resulting surprise gives you the initiative in the situation."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 22,
+    "fields": {
+      "name": "Mesmeriser",
+      "type": "standard",
+      "category": "cunning",
+      "description": "When you Sway someone, you may cause them to forget that it's happened until they next interact with you."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 23,
+    "fields": {
+      "name": "Saboteur",
+      "type": "standard",
+      "category": "cunning",
+      "description": "When you wreck, the work is much quieter than it should be and the damage is hidden from casual inspection."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 24,
+    "fields": {
+      "name": "Shadow",
+      "type": "standard",
+      "category": "cunning",
+      "description": "Expend your stand/spin/hamon armor to resist a consequence from detection, surveillance, or security measures, or to push yourself for a feat of athletics or stealth."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 25,
+    "fields": {
+      "name": "Subterfuge",
+      "type": "standard",
+      "category": "cunning",
+      "description": "You may expend your stand armor/spin/hamon armor to resist a consequence from suspicion or persuasion, or to push yourself for subterfuge."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 4,
+    "fields": {
+      "name": "Mule",
+      "type": "standard",
+      "category": "cunning",
+      "description": "Your load limits are higher than normal: Light: 5 (instead of 1-3) Normal: 7 (instead of 4-5) Heavy: 8 (instead of 6)"
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 10,
+    "fields": {
+      "name": "Rigging",
+      "type": "standard",
+      "category": "cunning",
+      "description": "You get 2 free load in two of the equipment categories: Weapons Implements Supplies Gear Documents Tools"
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 26,
+    "fields": {
+      "name": "Bizarre Intuition",
+      "type": "standard",
+      "category": "awareness",
+      "description": "You have a bizarre sense for danger. You cannot be surprised."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 27,
+    "fields": {
+      "name": "Focused",
+      "type": "standard",
+      "category": "awareness",
+      "description": "You may expend your stand armor/spin/hamon to resist a consequence of surprise or mental harm (fear, confusion, losing track of someone)."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 28,
+    "fields": {
+      "name": "Like looking into a Mirror",
+      "type": "standard",
+      "category": "awareness",
+      "description": "You can always tell when someone is lying."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 29,
+    "fields": {
+      "name": "Mastermind",
+      "type": "standard",
+      "category": "awareness",
+      "description": "You're always aware of supernatural entities in your presence. Take +1d when you gather info about the bizarre."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 31,
+    "fields": {
+      "name": "Scout",
+      "type": "standard",
+      "category": "awareness",
+      "description": "When you gather info to locate a target, you get +1 effect. When you hide in a prepared position or use camouflage, you get +1d to roll to avoid detection."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 32,
+    "fields": {
+      "name": "Shared Vision",
+      "type": "standard",
+      "category": "awareness",
+      "description": "You can see through your Stand's eyes, even at extreme distances."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 33,
+    "fields": {
+      "name": "Aura of Confidence",
+      "type": "standard",
+      "category": "presence",
+      "description": "Your presence inspires trust and courage. Allies within close range of you gain +1d to resistance rolls against fear or intimidation."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 35,
+    "fields": {
+      "name": "Scoundrel",
+      "type": "standard",
+      "category": "presence",
+      "description": "You gain +1d to Consort when you gather information on a target for a score. You get +1d to the engagement roll for that operation."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 36,
+    "fields": {
+      "name": "Trust in Me",
+      "type": "standard",
+      "category": "presence",
+      "description": "You get +1d vs. a target with whom you have an intimate relationship."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 37,
+    "fields": {
+      "name": "Foresight",
+      "type": "standard",
+      "category": "teamwork",
+      "description": "Twice per score, you can assist a teammate without paying stress. Tell us how you prepared for this."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 38,
+    "fields": {
+      "name": "Bodyguard",
+      "type": "standard",
+      "category": "teamwork",
+      "description": "When you protect a teammate, take +1d to your resistance roll. When you gather info to anticipate possible threats in the current situation, you get +1 effect."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 40,
+    "fields": {
+      "name": "Functioning Vice",
+      "type": "standard",
+      "category": "teamwork",
+      "description": "When you indulge your vice, you may adjust the dice outcome by 1 or 2 (up or down). An ally who joins in your vice may do the same."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 41,
+    "fields": {
+      "name": "Stand Proud",
+      "type": "standard",
+      "category": "teamwork",
+      "description": "When you Command an ally in combat, they continue to fight when they would otherwise break (they're not taken out when they suffer level 3 harm). They gain +1 effect and 1 armor."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 42,
+    "fields": {
+      "name": "Analyst",
+      "type": "standard",
+      "category": "teamwork",
+      "description": "During downtime, you get two ticks to distribute among any long-term project clocks that involve investigation or learning a new formula or design plan."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 43,
+    "fields": {
+      "name": "Expertise",
+      "type": "standard",
+      "category": "teamwork",
+      "description": "Choose one of your action ratings. When you lead a group action using that action, you can suffer only 1 stress at most, regardless of the number of failed rolls."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 44,
+    "fields": {
+      "name": "Calculating",
+      "type": "standard",
+      "category": "teamwork",
+      "description": "Due to your careful planning, during downtime, you may give yourself or another crew member +1 downtime action."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 45,
+    "fields": {
+      "name": "The Devil's Footsteps",
+      "type": "standard",
+      "category": "adaptability",
+      "description": "When you push yourself, choose one of the following additional benefits: Perform a feat of athletics that verges past superhuman for 1 scene. Maneuver to confuse your enemies so they mistakenly attack each other."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 46,
+    "fields": {
+      "name": "Superhero Landing",
+      "type": "standard",
+      "category": "adaptability",
+      "description": "Expend Stand armor/spin/hamon to reduce fall/collision harm by 1. Gain +1d for stylish aerial actions."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 47,
+    "fields": {
+      "name": "Daredevil",
+      "type": "standard",
+      "category": "adaptability",
+      "description": "When you roll a desperate action, you get +1d to your roll if you also take -1d to any resistance roll(s) against consequences from your action(s)."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 48,
+    "fields": {
+      "name": "Bizarre Improvisation",
+      "type": "standard",
+      "category": "adaptability",
+      "description": "Take 2 stress to roll your best action rating while performing a different action. Say how you adapt your action to this use."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 50,
+    "fields": {
+      "name": "Weapon Recall",
+      "type": "standard",
+      "category": "stand_nature",
+      "description": "Your Stand returns to your hand instantly when thrown or disarmed."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 51,
+    "fields": {
+      "name": "Stand Evolution",
+      "type": "standard",
+      "category": "stand_nature",
+      "description": "Spend 5 stress mid-score to unlock a temporary new unique ability."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 52,
+    "fields": {
+      "name": "Channel Force",
+      "type": "standard",
+      "category": "stand_nature",
+      "description": "Redirect a supernatural force through your Stand's form or medium."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 53,
+    "fields": {
+      "name": "Requiem",
+      "type": "standard",
+      "category": "stand_nature",
+      "description": "Spend 5 stress to elevate your stand beyond its normal limits temporarily. For one scene, treat all your stand coin stats as one grade higher."
+    }
+  },
+  {
+    "model": "characters.ability",
+    "pk": 39,
+    "fields": {
+      "name": "Guardian Angel",
+      "type": "standard",
+      "category": "stand_nature",
+      "description": "Your Stand can manufacture armor for others. Take 2 stress to give an ally within Range one Stand Armor charge. They hold it and may check it themselves to reduce a consequence by 1 level. Unspent charges vanish at the end of the scene. You cannot give a given ally more than one charge per scene."
+    }
+  }
 ]

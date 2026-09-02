@@ -77,7 +77,7 @@ PLAYBOOKS = [
         'stand_type': 'FIGHTING',
         'coin_stats': {'power': 'D', 'speed': 'D', 'range': 'D', 'durability': 'D', 'precision': 'D', 'development': 'D'},
         'stress': 9,
-        'standard_ability_names': ['Iron Will', 'Steady Barrage', 'Reflexes'],
+        'standard_ability_names': ['Iron Will', 'Savage', 'Reflexes'],
         'stand_form': 'A humanoid Stand cloaked in elemental fire and ice. Swaps temperature states mid-combat.',
         'unique_abilities': [
             ('Thermic Chain', 'Each attack shifts element. Fire causes lingering burn (half POWER), ice creates "brittle" status (next hit +1 Harm).'),
