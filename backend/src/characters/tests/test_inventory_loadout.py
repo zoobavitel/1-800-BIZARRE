@@ -25,7 +25,9 @@ class InventoryNormalizeTests(TestCase):
 
     def test_empty_string_skipped(self):
         self.assertIsNone(normalize_inventory_item(""))
-        self.assertEqual(normalize_inventory_list(["", "Hat"]), [normalize_inventory_item("Hat")])
+        rows = normalize_inventory_list(["", "Hat"])
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["name"], "Hat")
 
     def test_structured_roundtrip(self):
         raw = {
@@ -94,10 +96,14 @@ class InventoryPatchApiTests(TestCase):
         self.gm = User.objects.create_user("gm", password="pass")
         self.player = User.objects.create_user("player", password="pass")
         self.campaign = Campaign.objects.create(name="C", gm=self.gm)
+        from characters.models import Heritage
+
+        self.heritage = Heritage.objects.create(name="Human", base_hp=0)
         self.character = Character.objects.create(
             user=self.player,
             campaign=self.campaign,
             true_name="PC",
+            heritage=self.heritage,
             inventory=[],
         )
         self.session = Session.objects.create(

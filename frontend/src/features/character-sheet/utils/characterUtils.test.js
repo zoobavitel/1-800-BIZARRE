@@ -323,26 +323,24 @@ describe("server-owned field hydration guards", () => {
 });
 
 describe("playbook ability gating helpers", () => {
-  test("level 1 abilities met at pcLevel 1", () => {
+  test("non-foundation picks are not level-gated (Plan A)", () => {
     const {
       playbookAbilityLevelMet,
       playbookAbilityRequirementLabel,
     } = require("./characterUtils");
     const ability = { required_a_count: 1, spin_type: "CAVALIER" };
     expect(playbookAbilityLevelMet(ability, 1)).toBe(true);
-    expect(playbookAbilityRequirementLabel(ability, 1)).toBe("Level 1");
+    expect(playbookAbilityRequirementLabel(ability, 1)).toBe("Playbook pick");
   });
 
-  test("level 3 ability blocked at pcLevel 1", () => {
+  test("catalog tier label is informational only", () => {
     const {
       playbookAbilityLevelMet,
       playbookAbilityRequirementLabel,
     } = require("./characterUtils");
     const ability = { required_a_count: 3, spin_type: "EXECUTIONER" };
-    expect(playbookAbilityLevelMet(ability, 1)).toBe(false);
-    expect(playbookAbilityRequirementLabel(ability, 1)).toContain(
-      "Requires level 3",
-    );
+    expect(playbookAbilityLevelMet(ability, 1)).toBe(true);
+    expect(playbookAbilityRequirementLabel(ability, 1)).toBe("Catalog tier 3");
   });
 
   test("quota allows one non-foundation then blocks second", () => {

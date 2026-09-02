@@ -27,9 +27,17 @@ class IsCampaignGMOrReadOnly(permissions.BasePermission):
         # Read permissions are allowed to any request
         if request.method in permissions.SAFE_METHODS:
             return True
-        
+
         # Write permissions are only allowed to the GM of the campaign
-        return obj.campaign.gm == request.user or request.user.is_staff
+        if obj.campaign.gm == request.user or request.user.is_staff:
+            return True
+
+        # Players may PATCH only loadout_by_character (own entry checked in perform_update).
+        if request.method in ("PATCH", "PUT"):
+            data_keys = set(getattr(request, "data", {}) or {})
+            if data_keys <= {"loadout_by_character"}:
+                return True
+        return False
 
 
 class SessionViewSet(viewsets.ModelViewSet):

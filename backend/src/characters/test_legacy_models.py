@@ -601,9 +601,8 @@ class SpinAbilityModelTest(TestCase):
         self.assertEqual(str(spin_ability), 'Golden Arc (Spin Foundations)')
     
     def test_spin_foundation_abilities(self):
-        """SRD Spin Foundations are seeded (migration 0098); extra FOUNDATION rows can still be created."""
+        """SRD Spin Foundations are seeded (migration 0098); Spin Armor removed (Plan A)."""
         seeded_names = [
-            "Spin Armor",
             "Golden Arc",
             "Vibrational Scan",
             "Kinetic Tether",
@@ -615,7 +614,7 @@ class SpinAbilityModelTest(TestCase):
             "Miracle Shot",
         ]
         seeded = SpinAbility.objects.filter(spin_type="FOUNDATION")
-        self.assertEqual(seeded.count(), 10)
+        self.assertEqual(seeded.count(), 9)
         for name in seeded_names:
             self.assertTrue(seeded.filter(name=name).exists(), name)
 
@@ -625,7 +624,7 @@ class SpinAbilityModelTest(TestCase):
             description="+1d on attacks that ricochet. On a 6, you may apply splash harm.",
             stress_cost=0,
         )
-        self.assertEqual(SpinAbility.objects.filter(spin_type="FOUNDATION").count(), 11)
+        self.assertEqual(SpinAbility.objects.filter(spin_type="FOUNDATION").count(), 10)
 
 
 class ProgressClockModelTest(TestCase):

@@ -1954,14 +1954,23 @@ class CharacterSerializer(serializers.ModelSerializer):
             #         f"Not enough XP: {extra_dice} extra dice require {required_xp} XP (5 XP each), but only {xp_gained} XP available."
             #     )
             pass  # Temporarily bypass XP validation for character creation
-        # Playbook marks stay below cap after fill-clear (leftover < 10).
-        xp_clocks = data.get("xp_clocks") or getattr(self.instance, "xp_clocks", {})
-        playbook_xp = xp_clocks.get("playbook", 0)
-        if playbook_xp >= 10:
-            raise serializers.ValidationError(
-                f"Playbook track XP cannot be {playbook_xp}; fill-clear leaves "
-                "at most 9 marks (pending advances hold filled advances)."
+        # Client xp_clocks are rejected by sheet_patch_guard on existing rows.
+        # Skip validating stale autosave echoes (often playbook:10 pre–fill-clear).
+        from .services.sheet_patch_guard import sheet_patch_guard_enabled
+
+        skip_client_clocks = bool(
+            self.instance is not None and sheet_patch_guard_enabled(self)
+        )
+        if not skip_client_clocks:
+            xp_clocks = data.get("xp_clocks") or getattr(
+                self.instance, "xp_clocks", {}
             )
+            playbook_xp = int((xp_clocks or {}).get("playbook", 0) or 0)
+            # Fill-clear keeps marks below cap; reject absurd overflow on create.
+            if playbook_xp > 10:
+                raise serializers.ValidationError(
+                    f"Playbook track XP cannot exceed 10; received {playbook_xp}."
+                )
 
         # GM character locking validation
         if self.instance and self.instance.campaign:

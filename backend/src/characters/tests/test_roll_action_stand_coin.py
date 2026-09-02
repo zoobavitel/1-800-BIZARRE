@@ -153,7 +153,8 @@ class RollActionStandCoinTests(TestCase):
         self.assertEqual(r.data.get("xp_gained"), 1)
         self.assertEqual(r.data.get("xp_track"), "playbook")
         self.actor.refresh_from_db()
-        self.assertEqual(self.actor.xp_clocks.get("playbook"), 11)
+        # Fill-clear: 10 + 1 → mint pending, leftover 1.
+        self.assertEqual(self.actor.xp_clocks.get("playbook"), 1)
 
     def test_stand_coin_rejects_durability_as_action(self):
         self.client.force_authenticate(user=self.user)
