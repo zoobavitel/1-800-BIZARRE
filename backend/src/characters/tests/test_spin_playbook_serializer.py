@@ -6,7 +6,7 @@ from rest_framework.test import APIClient, APIRequestFactory
 
 from characters.models import Ability, Campaign, Character, Heritage, HamonAbility, SpinAbility, Vice
 from characters.serializers import CharacterSerializer
-from characters.services.xp_allocation import apply_level_up, apply_unlock_second_playbook
+from characters.services.xp_allocation import apply_level_up
 
 
 class SpinPlaybookAbilitySerializerTests(TestCase):
@@ -79,8 +79,8 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         )
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
-    def test_spin_ability_fails_when_insufficient_level(self):
-        """Spin ability with required_a_count=2 fails at character level 1."""
+    def test_spin_ability_not_gated_by_character_level(self):
+        """Plan A: required_a_count no longer gates Spin picks; slot budget does."""
         data = {
             'playbook': 'SPIN',
             'spin_ability_ids': [self.spin_gated.id],
@@ -91,28 +91,34 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
             partial=True,
             context={'request': self._request()},
         )
-        self.assertFalse(serializer.is_valid())
-        self.assertIn('non_field_errors', serializer.errors)
-        err = str(serializer.errors['non_field_errors'][0])
-        self.assertIn('level', err.lower())
-        self.assertIn('Spin Gated', err)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
 
-    def test_spin_abilities_rejected_when_playbook_not_spin(self):
+    def test_spin_abilities_allowed_cross_playbook_on_stand(self):
+        """Plan A: cross-playbook Spin picks OK (slot budget still applies)."""
+        stand_char = Character.objects.create(
+            user=self.user,
+            true_name='StandCrossSpin',
+            heritage=self.heritage,
+            playbook='STAND',
+            coin_stats={k: 'F' for k in ['power', 'speed', 'range', 'durability', 'precision', 'development']},
+            action_dots={},
+            trauma=[],
+            xp_clocks={},
+            stress=0,
+        )
         data = {
-            'playbook': 'STAND',
             'spin_ability_ids': [self.spin_foundation.id],
         }
         serializer = CharacterSerializer(
-            instance=self.char,
+            instance=stand_char,
             data=data,
             partial=True,
             context={'request': self._request()},
         )
-        self.assertFalse(serializer.is_valid())
-        self.assertIn('non_field_errors', serializer.errors)
-        self.assertIn('Spin abilities require playbook SPIN', str(serializer.errors['non_field_errors'][0]))
+        self.assertTrue(serializer.is_valid(), serializer.errors)
 
-    def test_hamon_ability_fails_when_insufficient_level(self):
+    def test_hamon_ability_not_gated_by_character_level(self):
+        """Plan A: required_a_count / level no longer gates picks; slot budget does."""
         hamon_char = Character.objects.create(
             user=self.user,
             true_name='Hamon',
@@ -135,25 +141,31 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
             partial=True,
             context={'request': self._request()},
         )
-        self.assertFalse(serializer.is_valid())
-        self.assertIn('non_field_errors', serializer.errors)
-        err = str(serializer.errors['non_field_errors'][0])
-        self.assertIn('Hamon Gated', err)
+        # One non-foundation pick is within chargen budget (1).
+        self.assertTrue(serializer.is_valid(), serializer.errors)
 
-    def test_hamon_abilities_rejected_when_playbook_not_hamon(self):
+    def test_hamon_abilities_allowed_cross_playbook_on_stand(self):
+        stand_char = Character.objects.create(
+            user=self.user,
+            true_name='StandCrossHamon',
+            heritage=self.heritage,
+            playbook='STAND',
+            coin_stats={k: 'F' for k in ['power', 'speed', 'range', 'durability', 'precision', 'development']},
+            action_dots={},
+            trauma=[],
+            xp_clocks={},
+            stress=0,
+        )
         data = {
-            'playbook': 'STAND',
             'hamon_ability_ids': [self.hamon_foundation.id],
         }
         serializer = CharacterSerializer(
-            instance=self.char,
+            instance=stand_char,
             data=data,
             partial=True,
             context={'request': self._request()},
         )
-        self.assertFalse(serializer.is_valid())
-        self.assertIn('non_field_errors', serializer.errors)
-        self.assertIn('Hamon abilities require playbook HAMON', str(serializer.errors['non_field_errors'][0]))
+        self.assertTrue(serializer.is_valid(), serializer.errors)
 
     def test_partial_hamon_ids_without_playbook_uses_instance_playbook(self):
         """Omit playbook, send hamon_ability_ids — validate against instance.playbook."""
@@ -187,25 +199,20 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         )
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
-    def test_partial_hamon_ids_without_playbook_rejects_stand_instance(self):
-        """Omit playbook on STAND instance + hamon_ids → reject via instance playbook."""
+    def test_partial_hamon_ids_without_playbook_allows_cross_playbook(self):
+        """Plan A: Spin primary may take Hamon foundations (cross-playbook fill)."""
         data = {
             'hamon_ability_ids': [self.hamon_foundation.id],
         }
         serializer = CharacterSerializer(
-            instance=self.char,  # playbook SPIN in setUp; still not HAMON
+            instance=self.char,  # playbook SPIN
             data=data,
             partial=True,
             context={'request': self._request()},
         )
-        self.assertFalse(serializer.is_valid())
-        self.assertIn('non_field_errors', serializer.errors)
-        self.assertIn(
-            'Hamon abilities require playbook HAMON',
-            str(serializer.errors['non_field_errors'][0]),
-        )
+        self.assertTrue(serializer.is_valid(), serializer.errors)
 
-    def test_hamon_abilities_allowed_when_secondary_is_hamon(self):
+    def test_hamon_abilities_allowed_without_second_playbook_unlock(self):
         stand_char = Character.objects.create(
             user=self.user,
             true_name='StandPlusHamon',
@@ -216,10 +223,7 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
             trauma=[],
             xp_clocks={},
             stress=0,
-            unallocated_xp=30,
         )
-        apply_unlock_second_playbook(stand_char, secondary_playbook='HAMON')
-        stand_char.refresh_from_db()
         serializer = CharacterSerializer(
             instance=stand_char,
             data={'hamon_ability_ids': [self.hamon_foundation.id]},
@@ -228,7 +232,7 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         )
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
-    def test_spin_abilities_allowed_when_secondary_is_spin(self):
+    def test_spin_abilities_allowed_without_second_playbook_unlock(self):
         stand_char = Character.objects.create(
             user=self.user,
             true_name='StandPlusSpin',
@@ -239,10 +243,7 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
             trauma=[],
             xp_clocks={},
             stress=0,
-            unallocated_xp=30,
         )
-        apply_unlock_second_playbook(stand_char, secondary_playbook='SPIN')
-        stand_char.refresh_from_db()
         serializer = CharacterSerializer(
             instance=stand_char,
             data={'spin_ability_ids': [self.spin_foundation.id]},

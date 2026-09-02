@@ -1,7 +1,4 @@
-"""award_desperate_action_xp: always +1 XP on the attribute track (cap 5).
-
-Zero-dot desperate rolls do not grant a +2 bonus.
-"""
+"""award_desperate_action_xp: +1 attribute XP, +2 at zero dots; routes through credit_xp."""
 from django.contrib.auth.models import User
 from django.test import TestCase
 
@@ -11,6 +8,7 @@ from characters.models import (
     Crew,
     ExperienceTracker,
     Heritage,
+    PendingAdvance,
     Roll,
     Session,
 )
@@ -68,6 +66,7 @@ class DesperateActionXpTests(TestCase):
             "position": "desperate",
             "action_name": "hunt",
             "pool_action_rating": 1,
+            "results": [6],
         }
         defaults.update(kwargs)
         return Roll.objects.create(**defaults)
@@ -85,30 +84,36 @@ class DesperateActionXpTests(TestCase):
         self.assertEqual(et.xp_gained, 1)
         self.assertEqual(et.description, "Desperate roll: hunt")
 
-    def test_zero_dot_still_grants_one_xp(self):
+    def test_zero_dot_grants_two_xp(self):
         roll = self._roll(pool_action_rating=0)
         xp, track = award_desperate_action_xp(
             self.character, self.session, roll, "hunt", self.gm
         )
-        self.assertEqual(xp, 1)
+        self.assertEqual(xp, 2)
         self.assertEqual(track, "insight")
         self.character.refresh_from_db()
-        self.assertEqual(self.character.xp_clocks.get("insight"), 1)
+        self.assertEqual(self.character.xp_clocks.get("insight"), 2)
         et = ExperienceTracker.objects.get(roll=roll, trigger="DESPERATE_ROLL")
-        self.assertEqual(et.xp_gained, 1)
-        self.assertNotIn("0-dot", et.description)
+        self.assertEqual(et.xp_gained, 2)
+        self.assertIn("0-dot", et.description)
 
-    def test_track_already_at_cap_no_grant(self):
+    def test_at_cap_still_credits_and_mints_pending(self):
+        """Fill-clear: marks at 5 + 2 → 1 pending + leftover 2."""
         self.character.xp_clocks = {**self.character.xp_clocks, "insight": 5}
         self.character.save(update_fields=["xp_clocks"])
         roll = self._roll(pool_action_rating=0)
         xp, track = award_desperate_action_xp(
             self.character, self.session, roll, "hunt", self.gm
         )
-        self.assertEqual(xp, 0)
-        self.assertIsNone(track)
-        self.assertFalse(
-            ExperienceTracker.objects.filter(roll=roll, trigger="DESPERATE_ROLL").exists()
+        self.assertEqual(xp, 2)
+        self.assertEqual(track, "insight")
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.xp_clocks.get("insight"), 2)
+        self.assertEqual(
+            PendingAdvance.objects.filter(
+                character=self.character, track="insight", status="open"
+            ).count(),
+            1,
         )
 
     def test_non_desperate_position_no_grant(self):

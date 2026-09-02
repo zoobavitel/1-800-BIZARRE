@@ -2152,7 +2152,22 @@ export default function SessionGMManagementPanels({
       const trimmed = String(draftLine ?? "").trim();
       if (!trimmed) return;
       const base = normalizeCharacterInventory(currentInventory);
-      const next = [...base, trimmed];
+      const next = [
+        ...base,
+        {
+          id:
+            typeof crypto !== "undefined" && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `item-${Date.now()}`,
+          name: trimmed,
+          detail: "",
+          category: "other",
+          load: 1,
+          quality: 1,
+          coin_value: null,
+          catalog_id: null,
+        },
+      ];
       setPcRosterSheetBusyId(characterId);
       setError(null);
       try {
@@ -4244,7 +4259,9 @@ export default function SessionGMManagementPanels({
                     <div style={{ fontSize: 10, color: "#9ca3af", lineHeight: 1.35 }}>
                       Physical{" "}
                       {hasPhyArmor ? `${phyArmorUsed}/${phyArmorMax}` : "—"} · Stand{" "}
-                      {standArmorUsed}/{standArmorMax}
+                      {isStandUser && standArmorMax > 0
+                        ? `${standArmorUsed}/${standArmorMax}`
+                        : "—"}
                     </div>
                     <div style={lbl}>XP tracks</div>
                     <div style={{ fontSize: 10, color: "#9ca3af" }}>

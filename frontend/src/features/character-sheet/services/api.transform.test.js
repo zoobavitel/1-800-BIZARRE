@@ -69,15 +69,16 @@ function makeSheet(overrides = {}) {
 }
 
 describe("normalizeCharacterInventory", () => {
-  test("passes arrays through by reference", () => {
-    const a = ["rope", { name: "coin", quantity: 2 }];
-    expect(normalizeCharacterInventory(a)).toBe(a);
+  test("normalizes kit rows including armor_kind", () => {
+    const a = [{ name: "Vest", is_armor: true }];
+    const out = normalizeCharacterInventory(a);
+    expect(out[0].armor_kind).toBe("standard");
   });
 
   test("wraps non-array object as one-element array", () => {
-    expect(normalizeCharacterInventory({ legacy: true })).toEqual([
-      { legacy: true },
-    ]);
+    const out = normalizeCharacterInventory({ legacy: true, name: "Legacy" });
+    expect(out).toHaveLength(1);
+    expect(out[0].name).toBe("Legacy");
   });
 
   test("empty array for null or primitives", () => {
@@ -88,24 +89,29 @@ describe("normalizeCharacterInventory", () => {
 });
 
 describe("transformBackendToFrontend inventory", () => {
-  test("normalizes legacy object inventory to array", () => {
+  test("normalizes legacy object inventory to kit row array", () => {
     const fe = transformBackendToFrontend({
-      inventory: { imported: "blob" },
+      inventory: { imported: "blob", name: "Relic" },
     });
-    expect(fe.inventory).toEqual([{ imported: "blob" }]);
+    expect(fe.inventory).toHaveLength(1);
+    expect(fe.inventory[0].name).toBe("Relic");
+    expect(fe.inventory[0].armor_kind).toBe("");
   });
 });
 
 describe("transformFrontendToBackend inventory", () => {
-  test("sends array through; coerces non-array via normalizer", () => {
-    expect(
-      transformFrontendToBackend(makeSheet({ inventory: ["a"] })).inventory,
-    ).toEqual(["a"]);
-    expect(
-      transformFrontendToBackend(
-        makeSheet({ inventory: { only: "one" } }),
-      ).inventory,
-    ).toEqual([{ only: "one" }]);
+  test("sends normalized kit rows", () => {
+    const fromString = transformFrontendToBackend(
+      makeSheet({ inventory: ["a"] }),
+    ).inventory;
+    expect(fromString).toHaveLength(1);
+    expect(fromString[0].name).toBe("a");
+
+    const fromObject = transformFrontendToBackend(
+      makeSheet({ inventory: { only: "one", name: "Charm" } }),
+    ).inventory;
+    expect(fromObject).toHaveLength(1);
+    expect(fromObject[0].name).toBe("Charm");
   });
 });
 

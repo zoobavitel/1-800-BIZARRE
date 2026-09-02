@@ -8,6 +8,8 @@ import {
   isUserCampaignGmForCharacter,
   isGmViewingPlayerCharacterSheet,
   isStandCoinChargenEditable,
+  resolveCrewFromCampaign,
+  normalizeCrewFromCharacter,
 } from "./characterUtils";
 
 const list = [
@@ -247,29 +249,98 @@ describe("mergeServerOwnedCharacterFields", () => {
     expect(next.stressFilled).toBe(8);
     expect(next.trauma).toEqual({ COLD: false });
   });
+
+  test("keeps local healing clock when recover roll marked healingClock touched", () => {
+    const localWithHeal = {
+      ...local,
+      healingClock: 2,
+      healingClockSegments: 5,
+    };
+    const serverStale = {
+      ...server,
+      healingClock: 0,
+      healingClockSegments: 5,
+    };
+    const untouched = mergeServerOwnedCharacterFields(
+      localWithHeal,
+      serverStale,
+      {},
+    );
+    expect(untouched.healingClock).toBe(0);
+    const touched = mergeServerOwnedCharacterFields(localWithHeal, serverStale, {
+      healingClock: true,
+    });
+    expect(touched.healingClock).toBe(2);
+    expect(touched.healingClockSegments).toBe(5);
+  });
+});
+
+describe("server-owned field hydration guards", () => {
+  test("shouldSkipServerOwnedFieldHydration blocks poll overwrite when field touched", () => {
+    const { shouldSkipServerOwnedFieldHydration, SERVER_OWNED_FIELD_TOUCH_KEYS } =
+      require("./characterUtils");
+    expect(SERVER_OWNED_FIELD_TOUCH_KEYS).toContain("healingClock");
+    expect(
+      shouldSkipServerOwnedFieldHydration("healingClock", {
+        fieldTouches: { healingClock: true },
+      }),
+    ).toBe(true);
+    expect(
+      shouldSkipServerOwnedFieldHydration("healingClock", {
+        fieldTouches: {},
+        sheetDraftIsDirty: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldSkipServerOwnedFieldHydration("healingClock", {
+        fieldTouches: {},
+        sheetDraftIsDirty: false,
+      }),
+    ).toBe(false);
+  });
+
+  test("computeHealingClockAfterSegments matches recover roll +1 band", () => {
+    const { computeHealingClockAfterSegments } = require("./characterUtils");
+    expect(
+      computeHealingClockAfterSegments({
+        currentFilled: 0,
+        segmentsToAdd: 1,
+        segmentCap: 5,
+      }),
+    ).toEqual({ nextFilled: 1, completions: 0 });
+  });
+
+  test("computeHealingClockAfterSegments counts full-clock harm downgrade", () => {
+    const { computeHealingClockAfterSegments } = require("./characterUtils");
+    expect(
+      computeHealingClockAfterSegments({
+        currentFilled: 3,
+        segmentsToAdd: 2,
+        segmentCap: 4,
+      }),
+    ).toEqual({ nextFilled: 1, completions: 1 });
+  });
 });
 
 describe("playbook ability gating helpers", () => {
-  test("level 1 abilities met at pcLevel 1", () => {
+  test("non-foundation picks are not level-gated (Plan A)", () => {
     const {
       playbookAbilityLevelMet,
       playbookAbilityRequirementLabel,
     } = require("./characterUtils");
     const ability = { required_a_count: 1, spin_type: "CAVALIER" };
     expect(playbookAbilityLevelMet(ability, 1)).toBe(true);
-    expect(playbookAbilityRequirementLabel(ability, 1)).toBe("Level 1");
+    expect(playbookAbilityRequirementLabel(ability, 1)).toBe("Playbook pick");
   });
 
-  test("level 3 ability blocked at pcLevel 1", () => {
+  test("catalog tier label is informational only", () => {
     const {
       playbookAbilityLevelMet,
       playbookAbilityRequirementLabel,
     } = require("./characterUtils");
     const ability = { required_a_count: 3, spin_type: "EXECUTIONER" };
-    expect(playbookAbilityLevelMet(ability, 1)).toBe(false);
-    expect(playbookAbilityRequirementLabel(ability, 1)).toContain(
-      "Requires level 3",
-    );
+    expect(playbookAbilityLevelMet(ability, 1)).toBe(true);
+    expect(playbookAbilityRequirementLabel(ability, 1)).toBe("Catalog tier 3");
   });
 
   test("quota allows one non-foundation then blocks second", () => {
@@ -305,5 +376,95 @@ describe("playbook ability gating helpers", () => {
         ],
       }),
     ).toBe(true);
+  });
+});
+
+describe("playbook foundation auto-grant helpers", () => {
+  test("mergePlaybookFoundationAbilities adds missing foundation rows", () => {
+    const {
+      mergePlaybookFoundationAbilities,
+      abilitiesMissingPlaybookFoundations,
+    } = require("./characterUtils");
+    const catalog = [
+      { id: 1, name: "Spin Base", spin_type: "FOUNDATION" },
+      { id: 2, name: "Cavalier", spin_type: "CAVALIER", required_a_count: 1 },
+    ];
+    const abilities = [{ type: "standard", id: 9, name: "Bodyguard" }];
+    expect(abilitiesMissingPlaybookFoundations(abilities, catalog, "spin")).toBe(
+      true,
+    );
+    const merged = mergePlaybookFoundationAbilities(abilities, catalog, "spin");
+    expect(merged).toHaveLength(2);
+    expect(merged[1]).toMatchObject({
+      id: 1,
+      type: "spin",
+      _playbookFoundation: true,
+    });
+    expect(abilitiesMissingPlaybookFoundations(merged, catalog, "spin")).toBe(
+      false,
+    );
+  });
+
+  test("isPlaybookFoundationAbility detects spin and hamon foundations", () => {
+    const { isPlaybookFoundationAbility } = require("./characterUtils");
+    expect(
+      isPlaybookFoundationAbility({
+        type: "spin",
+        spin_type: "FOUNDATION",
+      }),
+    ).toBe(true);
+    expect(
+      isPlaybookFoundationAbility({
+        type: "hamon",
+        hamon_type: "FOUNDATION",
+      }),
+    ).toBe(true);
+    expect(
+      isPlaybookFoundationAbility({
+        type: "spin",
+        spin_type: "CAVALIER",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("resolveCrewFromCampaign", () => {
+  test("uses sole campaign crew when character has no crew yet", () => {
+    const campaign = {
+      id: 5,
+      crews: [{ id: 12, name: "Speedwagon Foundation" }],
+      campaign_characters: [{ id: 99, crew_id: null }],
+    };
+    expect(resolveCrewFromCampaign(campaign, 99, { id: 99 })).toEqual({
+      crew: "Speedwagon Foundation",
+      crewId: 12,
+    });
+  });
+
+  test("maps roster crew_id to campaign crews name", () => {
+    const campaign = {
+      id: 5,
+      crews: [{ id: 12, name: "Passione" }],
+      campaign_characters: [{ id: 99, crew_id: 12, crew_name: "Passione" }],
+    };
+    expect(resolveCrewFromCampaign(campaign, 99, { id: 99 })).toEqual({
+      crew: "Passione",
+      crewId: 12,
+    });
+  });
+
+  test("prefers character-linked crew when already hydrated", () => {
+    const character = {
+      id: 99,
+      crew: { id: 3, name: "Existing Crew" },
+    };
+    expect(normalizeCrewFromCharacter(character)).toEqual({
+      crew: "Existing Crew",
+      crewId: 3,
+    });
+    expect(resolveCrewFromCampaign({ crews: [] }, 99, character)).toEqual({
+      crew: "Existing Crew",
+      crewId: 3,
+    });
   });
 });

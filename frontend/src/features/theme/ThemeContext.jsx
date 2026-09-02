@@ -20,15 +20,14 @@ export const useTheme = () => {
   return context;
 };
 
-const VALID_THEMES = new Set(["dark", "light"]);
+const VALID_THEMES = new Set(["dark", "light", "cool_night"]);
 
 /** @param {unknown} raw */
 export function normalizeAppTheme(raw) {
   const t =
-    typeof raw === "string" && raw.trim().toLowerCase() === "light"
-      ? "light"
-      : "dark";
-  return t;
+    typeof raw === "string" ? raw.trim().toLowerCase().replace(/-/g, "_") : "";
+  if (VALID_THEMES.has(t)) return t;
+  return "dark";
 }
 
 function readStoredTheme() {
@@ -37,7 +36,7 @@ function readStoredTheme() {
   }
   try {
     const t = localStorage.getItem("theme");
-    return VALID_THEMES.has(t) ? t : "dark";
+    return normalizeAppTheme(t);
   } catch {
     return "dark";
   }

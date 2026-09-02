@@ -10,7 +10,9 @@ import {
   rollAPI,
   crewAPI,
   resolveMediaUrl,
+  equipmentAPI,
 } from "../features/character-sheet";
+import { EQUIPMENT_CATEGORY_OPTIONS, categoryLabel } from "../features/character-sheet/utils/loadoutUtils";
 import { isGmManagedProgressClock } from "../features/character-sheet/utils/progressClockVisibility";
 import { useAuth } from "../features/auth";
 import { subscribeCampaignEvents } from "../features/character-sheet/services/campaignEvents";
@@ -249,6 +251,221 @@ function PendingInvitations({ invitations, onAccept, onDecline }) {
 // ---------------------------------------------------------------------------
 // Campaign Detail View
 // ---------------------------------------------------------------------------
+function CampaignEquipmentPanel({ campaign, onRefresh }) {
+  const [items, setItems] = useState([]);
+  const [form, setForm] = useState(null);
+  const [error, setError] = useState(null);
+
+  const loadItems = useCallback(() => {
+    if (!campaign?.id) return;
+    equipmentAPI
+      .list({ campaign: campaign.id })
+      .then((list) => setItems(Array.isArray(list) ? list : []))
+      .catch(() => setItems([]));
+  }, [campaign?.id]);
+
+  useEffect(() => {
+    loadItems();
+  }, [loadItems]);
+
+  const campaignItems = items.filter((i) => i.scope === "CAMPAIGN");
+  const templates = items.filter((i) => i.scope === "TEMPLATE");
+  const siteItems = items.filter((i) => i.scope === "SITE");
+
+  const startCreate = () => {
+    setForm({
+      name: "",
+      description: "",
+      category: "other",
+      load_slots: 1,
+      quality: 1,
+      coin_value: "",
+      available_when_adding: true,
+    });
+    setError(null);
+  };
+
+  const handleSave = async () => {
+    if (!form?.name?.trim()) {
+      setError("Name required.");
+      return;
+    }
+    setError(null);
+    try {
+      await equipmentAPI.create({
+        name: form.name.trim(),
+        description: form.description || "",
+        category: form.category,
+        load_slots: Number(form.load_slots) || 1,
+        quality: Number(form.quality) || 1,
+        coin_value: form.coin_value === "" ? null : Number(form.coin_value),
+        scope: "CAMPAIGN",
+        campaign: campaign.id,
+        available_when_adding: Boolean(form.available_when_adding),
+      });
+      setForm(null);
+      loadItems();
+      onRefresh?.();
+    } catch (e) {
+      setError(e.message || "Could not save equipment.");
+    }
+  };
+
+  const toggleAccess = async (item, enabled) => {
+    try {
+      await equipmentAPI.setCampaignAccess(item.id, campaign.id, enabled);
+      loadItems();
+    } catch (e) {
+      setError(e.message || "Could not update access.");
+    }
+  };
+
+  return (
+    <div style={S.card}>
+      <span style={S.sectionLbl}>Equipment catalog</span>
+      {error ? (
+        <div style={{ color: "#f87171", fontSize: "11px", marginBottom: "8px" }}>
+          {error}
+        </div>
+      ) : null}
+      {campaignItems.length === 0 && !form ? (
+        <div style={{ color: "#6b7280", fontSize: "12px", marginBottom: "8px" }}>
+          No custom equipment yet.
+        </div>
+      ) : (
+        campaignItems.map((item) => (
+          <div
+            key={item.id}
+            style={{
+              padding: "6px 0",
+              borderBottom: "1px solid #1f2937",
+              fontSize: "12px",
+            }}
+          >
+            <strong style={{ color: "#e5e7eb" }}>{item.name}</strong>
+            <span style={{ color: "#6b7280", marginLeft: "8px" }}>
+              {categoryLabel(item.category)} · load {item.load_slots} · Q
+              {item.quality}
+            </span>
+            <label style={{ marginLeft: "12px", color: "#9ca3af", fontSize: "11px" }}>
+              <input
+                type="checkbox"
+                checked={item.available_when_adding}
+                onChange={(e) =>
+                  equipmentAPI
+                    .update(item.id, {
+                      available_when_adding: e.target.checked,
+                    })
+                    .then(() => loadItems())
+                }
+              />
+              Available when adding
+            </label>
+          </div>
+        ))
+      )}
+      {(templates.length > 0 || siteItems.length > 0) && (
+        <div style={{ marginTop: "10px" }}>
+          <div style={{ color: "#9ca3af", fontSize: "11px", marginBottom: "6px" }}>
+            Templates & site catalog (enable for this campaign)
+          </div>
+          {[...templates, ...siteItems].map((item) => (
+            <label
+              key={`access-${item.id}`}
+              style={{
+                display: "block",
+                fontSize: "11px",
+                color: "#d1d5db",
+                marginBottom: "4px",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={Boolean(item.enabled_for_campaign)}
+                onChange={(e) => toggleAccess(item, e.target.checked)}
+                style={{ marginRight: "6px" }}
+              />
+              {item.scope === "SITE" ? "Site" : "Template"}: {item.name}
+            </label>
+          ))}
+        </div>
+      )}
+      {form ? (
+        <div style={{ marginTop: "10px" }}>
+          <input
+            style={S.inp}
+            placeholder="Name"
+            value={form.name}
+            onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+          />
+          <textarea
+            style={{ ...S.inp, minHeight: "48px", marginTop: "6px" }}
+            placeholder="Description"
+            value={form.description}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, description: e.target.value }))
+            }
+          />
+          <div style={{ display: "flex", gap: "8px", marginTop: "6px", flexWrap: "wrap" }}>
+            <div>
+              <span style={{ fontSize: "11px", color: "#9ca3af" }}>Category</span>
+              <select
+                style={S.select}
+                value={form.category}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, category: e.target.value }))
+                }
+              >
+                {EQUIPMENT_CATEGORY_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <span style={{ fontSize: "11px", color: "#9ca3af" }}>Load slots</span>
+              <input
+                style={{ ...S.inp, width: "60px" }}
+                type="number"
+                min="0"
+                max="2"
+                aria-label="Load slots"
+                value={form.load_slots}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, load_slots: e.target.value }))
+                }
+              />
+            </div>
+            <div>
+              <span style={{ fontSize: "11px", color: "#9ca3af" }}>Quality (Q0–Q3)</span>
+              <input
+                style={{ ...S.inp, width: "60px" }}
+                type="number"
+                min="0"
+                max="3"
+                aria-label="Quality"
+                value={form.quality}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, quality: e.target.value }))
+                }
+              />
+            </div>
+          </div>
+          <div style={S.row}>
+            <button onClick={handleSave} style={S.btnPrimary}>Save</button>
+            <button onClick={() => setForm(null)} style={S.btnGhost}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={startCreate} style={{ ...S.btnPrimary, marginTop: "8px" }}>
+          + New equipment
+        </button>
+      )}
+    </div>
+  );
+}
+
 function CampaignDetail({
   campaign,
   isGM,
@@ -2310,6 +2527,10 @@ function CampaignDetail({
             </button>
           )}
         </div>
+      )}
+
+      {isGM && (
+        <CampaignEquipmentPanel campaign={campaign} onRefresh={onRefresh} />
       )}
     </div>
   );

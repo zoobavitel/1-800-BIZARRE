@@ -215,10 +215,10 @@ def award_innate_stand_dice_xp(
     character, session, roll, action_name, request_user, stand_stat=None
 ):
     """
-    Desperate ACTION using Power/Speed/Precision stand dice → +1 playbook XP.
+    Desperate Coin Action (Power/Speed/Precision) → playbook XP via credit_xp.
 
-    Innate stand function: no session cap and no 10-box clip. Durability,
-    range, and development never grant this. Idempotent per roll.
+    +1 normally, +2 at zero dots (grade F). Durability / Range / Development
+    never grant this. Idempotent per roll. No session cap.
 
     Returns (xp_awarded: int, xp_track: str|None).
     """
@@ -233,18 +233,23 @@ def award_innate_stand_dice_xp(
     if ExperienceTracker.objects.filter(roll=roll, trigger="INNATE").exists():
         return 0, None
 
-    grant = 1
-    xp_clocks = dict(character.xp_clocks or {})
-    current = int(xp_clocks.get("playbook", 0) or 0)
-    xp_clocks["playbook"] = current + grant
-    character.xp_clocks = xp_clocks
-    character.save(update_fields=["xp_clocks"])
+    rating = stand_action_rating_from_character(character, stat)
+    if getattr(roll, "pool_action_rating", None) is not None:
+        try:
+            rating = int(roll.pool_action_rating)
+        except (TypeError, ValueError):
+            pass
+    grant = 2 if rating <= 0 else 1
+    from characters.services.advancement import credit_xp
+
+    credit_xp(character, "playbook", grant, save=True)
+    zero_note = " (0-dot)" if grant == 2 else ""
     ExperienceTracker.objects.create(
         character=character,
         session=session,
         roll=roll,
         trigger="INNATE",
-        description=f"Innate: desperate stand {stat} roll",
+        description=f"Innate: desperate stand {stat} roll{zero_note}",
         xp_gained=grant,
         award_source="AUTO",
         clock_key="playbook",
@@ -254,39 +259,44 @@ def award_innate_stand_dice_xp(
 
 def award_desperate_action_xp(character, session, roll, action_name, request_user):
     """
-    Desperate ACTION roll → 1 XP on the relevant attribute track (cap 5).
+    Desperate ACTION roll → XP on the attribute track via credit_xp.
 
-    Group-action desperate ACTION rolls use the same path. Zero dots do not
-    grant a bonus (always +1, clipped only by the track cap).
+    +1 normally, +2 at zero dots (SRD). Group-action desperate uses the same
+    path. Coin Actions are not mapped here (see award_innate_stand_dice_xp).
 
     Returns (xp_awarded: int, xp_track: str|None).
     """
-    position = (roll.position or '').lower()
-    roll_type = (roll.roll_type or '').upper()
-    if position != 'desperate' or roll_type != 'ACTION' or not (action_name or '').strip():
+    del request_user
+    position = (roll.position or "").lower()
+    roll_type = (roll.roll_type or "").upper()
+    if position != "desperate" or roll_type != "ACTION" or not (action_name or "").strip():
         return 0, None
 
     track = xp_track_for_action_name(action_name)
     if not track:
         return 0, None
 
-    xp_clocks = character.xp_clocks or {}
-    current = int(xp_clocks.get(track, 0) or 0)
-    if current >= 5:
-        return 0, None
+    rating = action_rating_from_action_dots(
+        getattr(character, "action_dots", None), action_name
+    )
+    if getattr(roll, "pool_action_rating", None) is not None:
+        try:
+            rating = int(roll.pool_action_rating)
+        except (TypeError, ValueError):
+            pass
+    grant = 2 if rating <= 0 else 1
+    from characters.services.advancement import credit_xp
 
-    grant = 1
-    xp_clocks[track] = current + grant
-    character.xp_clocks = xp_clocks
-    character.save(update_fields=['xp_clocks'])
+    credit_xp(character, track, grant, save=True)
+    zero_note = " (0-dot)" if grant == 2 else ""
     ExperienceTracker.objects.create(
         character=character,
         session=session,
         roll=roll,
-        trigger='DESPERATE_ROLL',
-        description=f'Desperate roll: {action_name}',
+        trigger="DESPERATE_ROLL",
+        description=f"Desperate roll: {action_name}{zero_note}",
         xp_gained=grant,
-        award_source='AUTO',
+        award_source="AUTO",
         clock_key=track,
     )
     return grant, track

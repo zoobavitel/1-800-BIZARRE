@@ -1391,7 +1391,13 @@ When you create your crew, you assign some positive and negative status ratings 
 **ADVANCEMENT**
 
 **PC Advancement:**  
-Each player keeps track of the experience points (xp) that their character earns. A player character sheet has 5 XP tracks: heritage, insight, prowess, resolve, and playbook. Heritage, insight, prowess, and resolve require 5 boxes in order to advance, while the playbook track requires filling 10 boxes in order to advance. If you wish to have abilities from more than 1 playbook, you fill in 10 boxes in your playbook track to advance; you do not add an additional playbook track to your character sheet. 
+Each player keeps track of the experience points (xp) that their character earns. A player character sheet has 5 XP tracks: heritage, insight, prowess, resolve, and playbook. Heritage, insight, prowess, and resolve require 5 boxes in order to advance, while the playbook track requires filling 10 boxes in order to advance.
+
+There is **one playbook** on the sheet. Cross-playbook Spin/Hamon picks and acquiring a Stand each cost **one playbook fill** (see below) — you do not unlock a second playbook for 30 XP, and you do not add another playbook track.
+
+**Fill-clear:** When marks on a track reach its cap, subtract the cap, mint a **pending advance**, and leave any leftover marks on the track. Overflow can stack multiple open pendings (example: empty track + 12 insight → 2 pendings + 2 leftover). **Take advance** redeems one open pending for its reward; it does not spend those marks again.
+
+Available XP (free pool from end-session scorecard / Stand Development) is a **bank** onto tracks only — there is no “level up from pool (−10)” shortcut.
 
 During the game session, mark xp:
 
@@ -1407,24 +1413,26 @@ At the end of the session, review the xp triggers on your character sheet. For e
 
 - You may mark end-of-session xp on any xp tracks you want (any attribute or your playbook xp track).
 
-**When you fill an xp track, clear all the marks and take an advance.** 
+**When you fill an xp track, clear the filled marks (leftover stays), mint a pending, and Take advance when you choose.**
 
 Filling an attribute track (5XP/boxes) gives you \+1d to an action of your choosing within that attribute type. For example: filling the insight track and advancing gives the player a choice to add \+1d to any action rating in the insight attribute.
 
+Filling the **heritage track** (5XP/boxes) gives \+1 HP (heritage option; no extra detriments).
+
 If you are a stand user: Filling the **playbook track** (10XP/boxes) lets you choose a stand coin stat to increase by 1 grade (F to D, D to C, etc.). When you gain an A in any stat, choose 2 standard abilities OR 1 custom ability with 2 features AND 1 standard ability.
 
-If you are not a stand user: Filling the **playbook track** (10XP/boxes) gives an advance that lets you take a **special ability from your playbook**.
+If you are a Spin or Hamon user: Filling the **playbook track** (10XP/boxes) lets you take a **special ability from your playbook** (or from another Spin/Hamon chassis — still one fill per pick). Depth is how many non-foundation abilities you already own, not character level. Alternatively, redeem one playbook fill to **acquire a Stand** (Coin starts at D across; redistribute the 6 points; add 3 unique + 2 standard on the sheet). After you have a Stand, further playbook fills may advance Stand Coin like a Stand user.
 
-**Any desperate roll** marks 1 XP in the relevant attribute (Insight, Prowess, or Resolve), regardless of how many dots you have in the action.
+**Any desperate roll** marks 1 XP in the relevant attribute (Insight, Prowess, or Resolve), regardless of how many dots you have in the action. Desperate Power / Speed / Precision Coin Actions mark playbook XP the same way (Durability does not).
 
-**Rolling with zero dots** at desperate position marks **2 XP** instead of 1\. That's the bonus for taking on serious risk with no training at all.
+**Rolling with zero dots** at desperate position marks **2 XP** instead of 1\. That's the bonus for taking on serious risk with no training at all. The same \+2 applies to a 0-dice desperate Coin Action (Power / Speed / Precision).
 
 ***Example Session:***  
 *Johnny Joestar is tracking his XP at the end of a session. He rolled two desperate **Hunt** action checks during the session (tracking enemy Stand users through the desert), so he marks **2 XP on his Insight XP track**. He addressed several challenges using **Tusk ACT 2's** spinning nail bullets, so he marks **2 XP** for his Stand-specific trigger. He expressed his drive to walk again and his connection to his jockey heritage multiple times during a flashback scene, so he takes **2 XP** for that. He also showcased his character's determination, but **2 XP is the maximum** for that category, so he doesn't get any more. He struggled with his **Trauma: Obsessed** (fixating on the Corpse Parts), which caused him to make a reckless decision. He marks **1 XP** for struggling with trauma.*
 
 *That's **7 XP total** at the end of the session.*
 
-*Johnny decides to put **5 XP into his Insight XP track** (filling it) and **2 XP into his playbook advancement track**. He takes an advance and adds **\+1 action dot to Hunt**, bringing him from Hunt 2 to Hunt 3\. The remaining 2 XP in his Stand Coin track will carry over to the next session. He needs **8 more XP** to increase a Stand Coin stat.*
+*Johnny decides to put **5 XP into his Insight XP track** (filling it — minting a pending, leftover 0) and **2 XP into his playbook track**. He Takes advance on the insight pending and adds **\+1 action dot to Hunt**, bringing him from Hunt 2 to Hunt 3\. The remaining 2 XP on playbook carry forward. He needs **8 more XP** on playbook to mint a pending for a Stand Coin advance.*
 
 You can also earn xp by training during downtime. When you train, mark XP in one of your attributes or in your playbook. A given xp track can be trained only once per downtime phase.  
  
@@ -2054,7 +2062,7 @@ Three conditions must hold:
 
 For each A-grade, you may have two standard abilities or one custom ability with 2 individual features and a standard ability. **Abilities gained this way must still follow the same rules as any other unique ability** — cost, limit, and rolling your stand dice apply exactly as they do for your starting abilities. An A-rank grants more ability slots. It does not grant looser ones.
 
-To gain spin or hamon as a stand user, you must spend 30XP to advance and gain one of those playbooks. Vice versa for a hamon or spin user gaining a stand playbook. 
+Cross-playbook Spin/Hamon abilities and acquiring a Stand each cost **one playbook fill** (mint a playbook pending, then Take advance). There is no 30 XP second-playbook unlock. 
 
 ---
 
@@ -2076,9 +2084,9 @@ Hamon is breath and circulation turned into a weapon. You generate it yourself, 
 * **1 playbook ability** from a Hamon playbook — Caesar Style, Cyber Style, or Vampiric Style.   
 * **One set of Foundation equipment** — a weapon or focus that channels Ripple.
 
-**Advancement.** Fill the ten boxes of your playbook track to take a playbook advance and learn a new Hamon technique. Deeper picks within one playbook unlock its higher-tier features.
+**Advancement.** Fill the ten boxes of your playbook track to mint a pending and Take advance for a new Hamon technique (or a cross-playbook Spin pick — still one fill). Depth is owned non-foundation count, not character level.
 
-**Gaining a Stand.** Spend 30 XP to gain a Stand playbook. Your Coin starts at D across all six stats — six points, which you may redistribute exactly as a new Stand user does. You gain the Coin Rolls, Durability as a resistance pool, and Stand Armor charges from your Durability grade. Your Stand doesn't have to have anything to do with your Hamon. It starts with three unique abilities, written under the same rules as any Stand user's, and 2 standard abilities. 
+**Gaining a Stand.** Redeem **one playbook fill** to acquire a Stand. Your Coin starts at D across all six stats — six points, which you may redistribute exactly as a new Stand user does. You gain the Coin Rolls, Durability as a resistance pool, and Stand Armor charges from your Durability grade. Your Stand doesn't have to have anything to do with your Hamon. It starts with three unique abilities, written under the same rules as any Stand user's, and 2 standard abilities. 
 
 ---
 
@@ -2102,9 +2110,9 @@ Three things follow from that, and they're the whole difference between your she
 * **1 playbook ability** from a Spin playbook — Cavalier, Executioner, Medico, or Ballbreaker.  
 * **One set of Foundation equipment** — steel balls, a projection method, or whatever your technique throws.
 
-**Advancement.** Fill the ten boxes of your playbook track to take a playbook advance. Spend it on a new Spin ability from any Spin playbook; deeper picks within one playbook unlock its higher-tier techniques.
+**Advancement.** Fill the ten boxes of your playbook track to mint a pending and Take advance for a new Spin ability (any Spin chassis, or a cross-playbook Hamon pick — still one fill). Depth is owned non-foundation count, not character level.
 
-**Gaining a Stand.** Spend 30 XP to gain a Stand playbook. Your Coin starts at D across all six stats — six points, which you may redistribute exactly as a new Stand user does. You gain the Coin Rolls, Durability as a resistance pool, and Stand Armor charges from your Durability grade. Your Stand doesn't have to have anything to do with your Spin. It starts with three unique abilities, written under the same rules as any Stand user's, and 2 standard abilities. 
+**Gaining a Stand.** Redeem **one playbook fill** to acquire a Stand. Your Coin starts at D across all six stats — six points, which you may redistribute exactly as a new Stand user does. You gain the Coin Rolls, Durability as a resistance pool, and Stand Armor charges from your Durability grade. Your Stand doesn't have to have anything to do with your Spin. It starts with three unique abilities, written under the same rules as any Stand user's, and 2 standard abilities. 
 
 ---
 
@@ -2160,11 +2168,9 @@ Earn experience by:
 * Acting on background influences  
 * Taking notable risks
 
-With 10 XP, you can raise a Coin stat one grade or take 2 action rating increases.
+With 10 XP on the playbook track you mint a pending and Take advance to raise a Coin stat one grade (Stand users) or take a Spin/Hamon playbook ability (or acquire a Stand). Attribute tracks (5) give +1 action dot; heritage (5) gives +1 HP.
 
-For Hamon and Spin users, marking 10 xp will let you take an advance and select an ability from a spin or hamon playbook. 
-
-To obtain features and abilities from other playbooks, you must pay 30 XP to obtain that playbook. Obtaining a stand playbook allows you to obtain a stand coin, stand dice, and stand armor, 3 custom abilities, as well as 2 standard abilities. Obtaining a spin or hamon playbook gives you their foundation abilities, a piece of equipment, and access to a 1st level playbook ability. 
+Cross-playbook abilities and acquiring a Stand each cost **one playbook fill**. There is no 30 XP second-playbook purchase. 
 
 **10\. Loadout**
 
@@ -2430,7 +2436,7 @@ Spin users manipulate rotational energy to perform feats of science, sabotage, a
 
 When you take a playbook advancement, you may select a special ability from the Spin playbooks. Higher character levels unlock higher-tier abilities (Level 2 at character level 2, and so on). 
 
-Spend 30XP to gain a Stand. Your stand coin starts with D in each category (6 points starting total) \- you may reallocate your stand coin stats similar to a new stand user, where F \= 0, D \= 1, C \= 2, B \= 3, A \= 4\. You gain the stand dice action ratings as well as a number of stand armor uses according to your durability. The stand does not have to be related to your character's hamon or spin abilities. Your stand gains **3 unique abilities** and **2 standard abilities**. Each A grade gives you additional ability slots as for any Stand user. To advance a stand coin stat, fill in the 10 boxes of your playbook track to advance a grade. 
+Redeem **one playbook fill** to gain a Stand. Your stand coin starts with D in each category (6 points starting total) \- you may reallocate your stand coin stats similar to a new stand user, where F \= 0, D \= 1, C \= 2, B \= 3, A \= 4\. You gain the stand dice action ratings as well as a number of stand armor uses according to your durability. The stand does not have to be related to your character's hamon or spin abilities. Your stand gains **3 unique abilities** and **2 standard abilities**. Each A grade gives you additional ability slots as for any Stand user. To advance a stand coin stat, fill in the 10 boxes of your playbook track to mint a pending and Take advance. 
 
 You may take a playbook advancement (10xp) to gain a Spin ability. Learn more features to gain higher quality features. 
 
@@ -2613,7 +2619,7 @@ Hamon users channel life force through breath, rhythm, and internal resonance. T
 
 When you take a playbook advancement, you may select a special ability from the Hamon playbooks. Higher character levels unlock higher-tier abilities (Level 2 at character level 2, and so on). 
 
-Spend 30XP to gain a Stand. Your stand coin starts with D in each category (6 points starting total) \- you may reallocate your stand coin stats similar to a new stand user, where F \= 0, D \= 1, C \= 2, B \= 3, A \= 4\. You gain the stand dice action ratings as well as a number of stand armor uses according to your durability. The stand does not have to be related to your character's hamon or spin abilities. Your stand gains **3 unique abilities** and **2 standard abilities**. Each A grade gives you additional ability slots as for any Stand user. To advance a stand coin stat, fill in the 10 boxes of your playbook track to advance a grade. 
+Redeem **one playbook fill** to gain a Stand. Your stand coin starts with D in each category (6 points starting total) \- you may reallocate your stand coin stats similar to a new stand user, where F \= 0, D \= 1, C \= 2, B \= 3, A \= 4\. You gain the stand dice action ratings as well as a number of stand armor uses according to your durability. The stand does not have to be related to your character's hamon or spin abilities. Your stand gains **3 unique abilities** and **2 standard abilities**. Each A grade gives you additional ability slots as for any Stand user. To advance a stand coin stat, fill in the 10 boxes of your playbook track to mint a pending and Take advance. 
 
 You may take a playbook advancement (10xp) to gain a Hamon ability. Mark 10 boxes in your playbook to learn a feature from a Hamon playbook. Learn more features to gain higher quality features.
 

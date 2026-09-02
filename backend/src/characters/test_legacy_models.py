@@ -12,15 +12,16 @@ class HeritageModelTest(TestCase):
     
     def setUp(self):
         """Set up test heritage types based on SRD."""
+        # SRD_DEV Heritage base_hp (required dets do not grant HP).
         self.heritage_data = [
             {'name': 'Human', 'base_hp': 0},
             {'name': 'Rock Human', 'base_hp': 2},
-            {'name': 'Vampire', 'base_hp': 3},
+            {'name': 'Vampire', 'base_hp': 2},
             {'name': 'Pillar Man', 'base_hp': 1},
-            {'name': 'Gray Matter', 'base_hp': 1},
-            {'name': 'Haunting', 'base_hp': 1},
-            {'name': 'Cyborg', 'base_hp': 3},
-            {'name': 'Oracle', 'base_hp': 1},
+            {'name': 'Gray Matter', 'base_hp': 2},
+            {'name': 'Haunting', 'base_hp': 2},
+            {'name': 'Cyborg', 'base_hp': 2},
+            {'name': 'Oracle', 'base_hp': 3},
         ]
         
         for data in self.heritage_data:
@@ -35,10 +36,13 @@ class HeritageModelTest(TestCase):
         self.assertEqual(human.base_hp, 0)
         
         vampire = Heritage.objects.get(name='Vampire')
-        self.assertEqual(vampire.base_hp, 3)
-        
+        self.assertEqual(vampire.base_hp, 2)
+
         rock_human = Heritage.objects.get(name='Rock Human')
         self.assertEqual(rock_human.base_hp, 2)
+
+        oracle = Heritage.objects.get(name='Oracle')
+        self.assertEqual(oracle.base_hp, 3)
     
     def test_heritage_str_representation(self):
         """Test string representation of heritage."""
@@ -52,7 +56,7 @@ class DetrimentBenefitModelTest(TestCase):
     def setUp(self):
         """Set up test data for detriments and benefits."""
         self.human = Heritage.objects.create(name='Human', base_hp=0)
-        self.vampire = Heritage.objects.create(name='Vampire', base_hp=3)
+        self.vampire = Heritage.objects.create(name='Vampire', base_hp=2)
         
     def test_human_detriments(self):
         """Test Human heritage detriments from SRD."""
@@ -597,9 +601,8 @@ class SpinAbilityModelTest(TestCase):
         self.assertEqual(str(spin_ability), 'Golden Arc (Spin Foundations)')
     
     def test_spin_foundation_abilities(self):
-        """SRD Spin Foundations are seeded (migration 0098); extra FOUNDATION rows can still be created."""
+        """SRD Spin Foundations are seeded (migration 0098); Spin Armor removed (Plan A)."""
         seeded_names = [
-            "Spin Armor",
             "Golden Arc",
             "Vibrational Scan",
             "Kinetic Tether",
@@ -611,7 +614,7 @@ class SpinAbilityModelTest(TestCase):
             "Miracle Shot",
         ]
         seeded = SpinAbility.objects.filter(spin_type="FOUNDATION")
-        self.assertEqual(seeded.count(), 10)
+        self.assertEqual(seeded.count(), 9)
         for name in seeded_names:
             self.assertTrue(seeded.filter(name=name).exists(), name)
 
@@ -621,7 +624,7 @@ class SpinAbilityModelTest(TestCase):
             description="+1d on attacks that ricochet. On a 6, you may apply splash harm.",
             stress_cost=0,
         )
-        self.assertEqual(SpinAbility.objects.filter(spin_type="FOUNDATION").count(), 11)
+        self.assertEqual(SpinAbility.objects.filter(spin_type="FOUNDATION").count(), 10)
 
 
 class ProgressClockModelTest(TestCase):

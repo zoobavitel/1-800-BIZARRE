@@ -1,18 +1,6 @@
 [
   {
     "model": "characters.spinability",
-    "pk": 1,
-    "fields": {
-      "name": "Spin Armor",
-      "spin_type": "FOUNDATION",
-      "description": "Your proficiency with Spin grants you 2 Spin armor charges that are regained during downtime.",
-      "required_a_count": 0,
-      "stress_cost": 0,
-      "frequency": ""
-    }
-  },
-  {
-    "model": "characters.spinability",
     "pk": 2,
     "fields": {
       "name": "Golden Arc",
@@ -341,7 +329,7 @@
     "fields": {
       "name": "Spin Fakeout",
       "spin_type": "BALLBREAKER",
-      "description": "Create a visual or auditory decoy. +1d to Prowl or to spring traps. Once per scene, an enemy acts on false information — the GM determines how this plays out.",
+      "description": "Create a visual or auditory decoy. +1d to Prowl or to spring traps. Once per scene, an enemy acts on false information \u2014 the GM determines how this plays out.",
       "required_a_count": 1,
       "stress_cost": 0,
       "frequency": "Once per scene"

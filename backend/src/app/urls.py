@@ -13,6 +13,7 @@ from characters.views import (
     StandViewSet, CharacterViewSet,
     CampaignViewSet, CampaignInvitationViewSet, ShowcasedNPCViewSet,
     FactionViewSet, NPCViewSet, CrewViewSet,
+    EquipmentItemViewSet,
     TraumaViewSet, CharacterHistoryViewSet, CrewHistoryViewSet, ExperienceTrackerViewSet, SessionViewSet, SessionEventViewSet,
     RollViewSet, GroupActionViewSet,
     home, RegisterView, StandAbilityViewSet, LoginView, CurrentUserView,
@@ -46,6 +47,7 @@ router.register(r'campaign-invitations', CampaignInvitationViewSet, basename='ca
 router.register(r'showcased-npcs', ShowcasedNPCViewSet, basename='showcased-npcs')
 router.register(r'progress-clocks', ProgressClockViewSet, basename='progress-clocks')
 router.register(r'factions', FactionViewSet)
+router.register(r'equipment-items', EquipmentItemViewSet, basename='equipment-items')
 router.register(r'npcs', NPCViewSet)
 router.register(r'crews', CrewViewSet)
 router.register(r'traumas', TraumaViewSet)

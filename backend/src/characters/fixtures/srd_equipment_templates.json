@@ -1,0 +1,240 @@
+[
+  {
+    "model": "characters.equipmentitem",
+    "pk": 1,
+    "fields": {
+      "name": "False Identities",
+      "description": "Forged papers and cover identities.",
+      "category": "documents",
+      "load_slots": 1,
+      "quality": 1,
+      "coin_value": null,
+      "scope": "TEMPLATE",
+      "campaign": null,
+      "created_by": null,
+      "source_character": null,
+      "available_when_adding": true
+    }
+  },
+  {
+    "model": "characters.equipmentitem",
+    "pk": 2,
+    "fields": {
+      "name": "Records",
+      "description": "Ledgers, files, and reference documents.",
+      "category": "documents",
+      "load_slots": 1,
+      "quality": 1,
+      "coin_value": null,
+      "scope": "TEMPLATE",
+      "campaign": null,
+      "created_by": null,
+      "source_character": null,
+      "available_when_adding": true
+    }
+  },
+  {
+    "model": "characters.equipmentitem",
+    "pk": 3,
+    "fields": {
+      "name": "Blueprints",
+      "description": "Technical plans and schematics.",
+      "category": "documents",
+      "load_slots": 1,
+      "quality": 1,
+      "coin_value": null,
+      "scope": "TEMPLATE",
+      "campaign": null,
+      "created_by": null,
+      "source_character": null,
+      "available_when_adding": true
+    }
+  },
+  {
+    "model": "characters.equipmentitem",
+    "pk": 4,
+    "fields": {
+      "name": "Burglary Gear",
+      "description": "Tools for breaking and entering.",
+      "category": "gear",
+      "load_slots": 1,
+      "quality": 1,
+      "coin_value": null,
+      "scope": "TEMPLATE",
+      "campaign": null,
+      "created_by": null,
+      "source_character": null,
+      "available_when_adding": true
+    }
+  },
+  {
+    "model": "characters.equipmentitem",
+    "pk": 5,
+    "fields": {
+      "name": "Climbing Gear",
+      "description": "Ropes, pitons, and ascent kit.",
+      "category": "gear",
+      "load_slots": 1,
+      "quality": 1,
+      "coin_value": null,
+      "scope": "TEMPLATE",
+      "campaign": null,
+      "created_by": null,
+      "source_character": null,
+      "available_when_adding": true
+    }
+  },
+  {
+    "model": "characters.equipmentitem",
+    "pk": 6,
+    "fields": {
+      "name": "Lock Picks",
+      "description": "Fine tools for bypassing locks.",
+      "category": "gear",
+      "load_slots": 1,
+      "quality": 1,
+      "coin_value": null,
+      "scope": "TEMPLATE",
+      "campaign": null,
+      "created_by": null,
+      "source_character": null,
+      "available_when_adding": true
+    }
+  },
+  {
+    "model": "characters.equipmentitem",
+    "pk": 7,
+    "fields": {
+      "name": "Arcane Implements",
+      "description": "Magical or supernatural tools.",
+      "category": "implements",
+      "load_slots": 1,
+      "quality": 1,
+      "coin_value": null,
+      "scope": "TEMPLATE",
+      "campaign": null,
+      "created_by": null,
+      "source_character": null,
+      "available_when_adding": true
+    }
+  },
+  {
+    "model": "characters.equipmentitem",
+    "pk": 8,
+    "fields": {
+      "name": "Subterfuge Supplies",
+      "description": "Deception and infiltration consumables.",
+      "category": "supplies",
+      "load_slots": 1,
+      "quality": 1,
+      "coin_value": null,
+      "scope": "TEMPLATE",
+      "campaign": null,
+      "created_by": null,
+      "source_character": null,
+      "available_when_adding": true
+    }
+  },
+  {
+    "model": "characters.equipmentitem",
+    "pk": 9,
+    "fields": {
+      "name": "Demolitions Tools",
+      "description": "Explosives and breaching charges.",
+      "category": "tools",
+      "load_slots": 1,
+      "quality": 1,
+      "coin_value": null,
+      "scope": "TEMPLATE",
+      "campaign": null,
+      "created_by": null,
+      "source_character": null,
+      "available_when_adding": true
+    }
+  },
+  {
+    "model": "characters.equipmentitem",
+    "pk": 10,
+    "fields": {
+      "name": "Tinkering Tools",
+      "description": "Repair and jury-rig kit.",
+      "category": "tools",
+      "load_slots": 1,
+      "quality": 1,
+      "coin_value": null,
+      "scope": "TEMPLATE",
+      "campaign": null,
+      "created_by": null,
+      "source_character": null,
+      "available_when_adding": true
+    }
+  },
+  {
+    "model": "characters.equipmentitem",
+    "pk": 11,
+    "fields": {
+      "name": "Rusty Knife",
+      "description": "Poor quality blade (Q0).",
+      "category": "weapons",
+      "load_slots": 1,
+      "quality": 0,
+      "coin_value": null,
+      "scope": "TEMPLATE",
+      "campaign": null,
+      "created_by": null,
+      "source_character": null,
+      "available_when_adding": true
+    }
+  },
+  {
+    "model": "characters.equipmentitem",
+    "pk": 12,
+    "fields": {
+      "name": "Fighting Blade",
+      "description": "Standard fighting blade (Q1).",
+      "category": "weapons",
+      "load_slots": 1,
+      "quality": 1,
+      "coin_value": null,
+      "scope": "TEMPLATE",
+      "campaign": null,
+      "created_by": null,
+      "source_character": null,
+      "available_when_adding": true
+    }
+  },
+  {
+    "model": "characters.equipmentitem",
+    "pk": 13,
+    "fields": {
+      "name": "Pistol",
+      "description": "Handgun (Q2).",
+      "category": "weapons",
+      "load_slots": 1,
+      "quality": 2,
+      "coin_value": null,
+      "scope": "TEMPLATE",
+      "campaign": null,
+      "created_by": null,
+      "source_character": null,
+      "available_when_adding": true
+    }
+  },
+  {
+    "model": "characters.equipmentitem",
+    "pk": 14,
+    "fields": {
+      "name": "Military Rifle",
+      "description": "Heavy longarm (Q3, 2 load).",
+      "category": "weapons",
+      "load_slots": 2,
+      "quality": 3,
+      "coin_value": null,
+      "scope": "TEMPLATE",
+      "campaign": null,
+      "created_by": null,
+      "source_character": null,
+      "available_when_adding": true
+    }
+  }
+]

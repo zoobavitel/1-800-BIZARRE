@@ -46,9 +46,17 @@ from .models import (
     Roll,
     GroupAction,
     CampaignAuditLog,
+    EquipmentItem,
+    CampaignEquipmentAccess,
 )
 
 from .services.playbook_xp_archetype import normalize_playbook_xp_archetypes
+from .services.inventory import normalize_inventory_list
+from .services.loadout import (
+    apply_loadout_side_effects,
+    merge_loadout_map,
+    normalize_loadout_entry,
+)
 
 # ── NPC level computation (mirrors NPCSheet.jsx formula) ─────────────────────
 _NPC_GRADE_PTS = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 5}
@@ -706,6 +714,32 @@ class SessionSerializer(serializers.ModelSerializer):
         if instance.status == "COMPLETED" and new_status == "PLANNED":
             validated_data["auto_encoded_xp_settled"] = False
 
+        loadout_patch = validated_data.get("loadout_by_character")
+        if loadout_patch is not None:
+            merged = merge_loadout_map(instance.loadout_by_character, loadout_patch)
+            if isinstance(loadout_patch, dict):
+                for char_key, patch_entry in loadout_patch.items():
+                    if not isinstance(patch_entry, dict):
+                        continue
+                    try:
+                        char_id = int(char_key)
+                    except (TypeError, ValueError):
+                        continue
+                    try:
+                        character = Character.objects.get(pk=char_id)
+                    except Character.DoesNotExist:
+                        continue
+                    old_entry = normalize_loadout_entry(
+                        (instance.loadout_by_character or {}).get(str(char_key))
+                    )
+                    new_entry = apply_loadout_side_effects(
+                        character,
+                        old_entry,
+                        normalize_loadout_entry(patch_entry),
+                    )
+                    merged[str(char_key)] = new_entry
+            validated_data["loadout_by_character"] = merged
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -1243,6 +1277,7 @@ class SessionRecordsSerializer(serializers.ModelSerializer):
             "default_position",
             "default_effect",
             "position_effect_by_character",
+            "loadout_by_character",
             "devils_bargain_by_character",
             "ripple_breathing_free_push_claimed_by_character",
         ]
@@ -1669,9 +1704,26 @@ class CharacterSerializer(serializers.ModelSerializer):
             get_pending_stand_a_reward,
             second_playbook_unlocked,
         )
+        from .models import PendingAdvance
 
         data["pending_stand_a_reward"] = get_pending_stand_a_reward(instance)
         data["secondary_playbook_unlocked"] = second_playbook_unlocked(instance)
+        open_pendings = PendingAdvance.objects.filter(
+            character=instance, status=PendingAdvance.STATUS_OPEN
+        ).order_by("created_at", "id")
+        data["pending_advances"] = [
+            {
+                "id": p.id,
+                "track": p.track,
+                "status": p.status,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+            }
+            for p in open_pendings
+        ]
+        by_track = {}
+        for p in open_pendings:
+            by_track[p.track] = by_track.get(p.track, 0) + 1
+        data["pending_advance_counts"] = by_track
         return data
 
     def validate_coin_boxes(self, value):
@@ -1762,67 +1814,40 @@ class CharacterSerializer(serializers.ModelSerializer):
             secondary_playbook_val = self.instance.secondary_playbook
         if secondary_playbook_val == "":
             secondary_playbook_val = None
-        if secondary_playbook_val is not None:
-            valid_playbooks = {"STAND", "HAMON", "SPIN"}
-            if secondary_playbook_val not in valid_playbooks:
-                raise serializers.ValidationError(
-                    {"secondary_playbook": "Invalid secondary playbook."}
-                )
-            if secondary_playbook_val == playbook_val:
+        # Plan A: secondary_playbook is legacy-only. Reject new writes; keep
+        # grandfathered values when the client echoes the same field.
+        if "secondary_playbook" in data:
+            incoming = data.get("secondary_playbook") or None
+            if incoming == "":
+                incoming = None
+            prior = (
+                getattr(self.instance, "secondary_playbook", None)
+                if self.instance
+                else None
+            )
+            if incoming and incoming != prior:
                 raise serializers.ValidationError(
                     {
                         "secondary_playbook": (
-                            "Secondary playbook must differ from primary playbook."
+                            "Second playbook unlock is removed. Cross-playbook "
+                            "abilities cost one playbook fill each."
                         )
                     }
                 )
-            prior = getattr(self.instance, "secondary_playbook", None) if self.instance else None
-            if not prior:
-                from .services.xp_allocation import second_playbook_unlocked
 
-                if not (self.instance and second_playbook_unlocked(self.instance)):
-                    raise serializers.ValidationError(
-                        {
-                            "secondary_playbook": (
-                                "Spend 30 XP from playbook track + Available XP to obtain another playbook."
-                            )
-                        }
-                    )
-
-        # Spin/Hamon playbook abilities: required_a_count is character-level gate (SRD Level N)
-        pc_level = 1
-        if self.instance is not None:
-            pc_level = max(1, int(getattr(self.instance, "level", 1) or 1))
-        if "level" in data and data.get("level") is not None:
-            try:
-                pc_level = max(1, int(data.get("level")))
-            except (TypeError, ValueError):
-                pass
-
-        for ha in hamon_ids:
-            need = int(getattr(ha, "required_a_count", 0) or 0)
-            if need and pc_level < need:
-                raise serializers.ValidationError(
-                    f"Hamon ability '{ha.name}' requires character level {need} "
-                    f"(you are level {pc_level})."
-                )
-        for sa in spin_ids:
-            need = int(getattr(sa, "required_a_count", 0) or 0)
-            if need and pc_level < need:
-                raise serializers.ValidationError(
-                    f"Spin ability '{sa.name}' requires character level {need} "
-                    f"(you are level {pc_level})."
-                )
-        has_hamon = playbook_val == "HAMON" or secondary_playbook_val == "HAMON"
-        has_spin = playbook_val == "SPIN" or secondary_playbook_val == "SPIN"
-        if hamon_ids and not has_hamon:
-            raise serializers.ValidationError(
-                "Hamon abilities require playbook HAMON (primary or secondary)."
-            )
-        if spin_ids and not has_spin:
-            raise serializers.ValidationError(
-                "Spin abilities require playbook SPIN (primary or secondary)."
-            )
+        # Character level no longer gates Spin/Hamon picks (depth = owned
+        # non-foundation count; slot budget below). Cross-playbook fills OK.
+        has_hamon = (
+            playbook_val == "HAMON"
+            or secondary_playbook_val == "HAMON"
+            or bool(hamon_ids)
+        )
+        has_spin = (
+            playbook_val == "SPIN"
+            or secondary_playbook_val == "SPIN"
+            or bool(spin_ids)
+        )
+        _ = (has_hamon, has_spin)
 
         from .services.xp_allocation import (
             non_foundation_playbook_ability_count,
@@ -1929,13 +1954,23 @@ class CharacterSerializer(serializers.ModelSerializer):
             #         f"Not enough XP: {extra_dice} extra dice require {required_xp} XP (5 XP each), but only {xp_gained} XP available."
             #     )
             pass  # Temporarily bypass XP validation for character creation
-        # Enforce playbook XP track cap at 10 XP
-        xp_clocks = data.get("xp_clocks") or getattr(self.instance, "xp_clocks", {})
-        playbook_xp = xp_clocks.get("playbook", 0)
-        if playbook_xp > 10:
-            raise serializers.ValidationError(
-                f"Playbook track XP cannot exceed 10; received {playbook_xp}."
+        # Client xp_clocks are rejected by sheet_patch_guard on existing rows.
+        # Skip validating stale autosave echoes (often playbook:10 pre–fill-clear).
+        from .services.sheet_patch_guard import sheet_patch_guard_enabled
+
+        skip_client_clocks = bool(
+            self.instance is not None and sheet_patch_guard_enabled(self)
+        )
+        if not skip_client_clocks:
+            xp_clocks = data.get("xp_clocks") or getattr(
+                self.instance, "xp_clocks", {}
             )
+            playbook_xp = int((xp_clocks or {}).get("playbook", 0) or 0)
+            # Fill-clear keeps marks below cap; reject absurd overflow on create.
+            if playbook_xp > 10:
+                raise serializers.ValidationError(
+                    f"Playbook track XP cannot exceed 10; received {playbook_xp}."
+                )
 
         # GM character locking validation
         if self.instance and self.instance.campaign:
@@ -2028,6 +2063,9 @@ class CharacterSerializer(serializers.ModelSerializer):
             data["playbook_xp_archetypes"] = normalize_playbook_xp_archetypes(
                 playbook_val, data.get("playbook_xp_archetypes")
             )
+
+        if "inventory" in data:
+            data["inventory"] = normalize_inventory_list(data.get("inventory"))
 
         return data
 
@@ -2401,6 +2439,7 @@ class CharacterSummarySerializer(serializers.ModelSerializer):
     user_id = serializers.IntegerField(source="user.id", read_only=True)
     username = serializers.CharField(source="user.username", read_only=True)
     crew_id = serializers.IntegerField(source="crew.id", read_only=True, default=None)
+    crew_name = serializers.CharField(source="crew.name", read_only=True, default=None)
     assist_help_pending = serializers.SerializerMethodField()
 
     def get_assist_help_pending(self, obj):
@@ -2442,6 +2481,7 @@ class CharacterSummarySerializer(serializers.ModelSerializer):
             "user_id",
             "username",
             "crew_id",
+            "crew_name",
             # Portrait (upload or HTTPS URL) for GM session roster / crew lists
             "image",
             "image_url",
@@ -2491,6 +2531,82 @@ class CrewCampaignSerializer(serializers.ModelSerializer):
             "members",
             "proposed_name",
         ]
+
+class EquipmentItemSerializer(serializers.ModelSerializer):
+    enabled_for_campaign = serializers.SerializerMethodField()
+    created_by_username = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EquipmentItem
+        fields = [
+            "id",
+            "name",
+            "description",
+            "category",
+            "load_slots",
+            "quality",
+            "coin_value",
+            "scope",
+            "campaign",
+            "created_by",
+            "created_by_username",
+            "source_character",
+            "available_when_adding",
+            "enabled_for_campaign",
+        ]
+        read_only_fields = ["created_by", "created_by_username"]
+
+    def get_created_by_username(self, obj):
+        if obj.created_by_id:
+            return obj.created_by.username
+        return None
+
+    def get_enabled_for_campaign(self, obj):
+        campaign_id = self.context.get("campaign_id")
+        if not campaign_id:
+            req = self.context.get("request")
+            campaign_id = req.query_params.get("campaign") if req else None
+        if not campaign_id:
+            return None
+        try:
+            campaign_id = int(campaign_id)
+        except (TypeError, ValueError):
+            return None
+        if obj.scope == "TEMPLATE":
+            access = CampaignEquipmentAccess.objects.filter(
+                campaign_id=campaign_id, item_id=obj.id
+            ).first()
+            return access.enabled if access else True
+        if obj.scope == "SITE":
+            access = CampaignEquipmentAccess.objects.filter(
+                campaign_id=campaign_id, item_id=obj.id
+            ).first()
+            return bool(access and access.enabled)
+        if obj.scope == "CAMPAIGN" and obj.campaign_id == campaign_id:
+            return obj.available_when_adding
+        return False
+
+    def validate(self, attrs):
+        scope = attrs.get("scope") or (
+            self.instance.scope if self.instance else "CAMPAIGN"
+        )
+        campaign = attrs.get("campaign") or (
+            self.instance.campaign if self.instance else None
+        )
+        if scope == "CAMPAIGN" and not campaign:
+            raise serializers.ValidationError(
+                {"campaign": "Campaign items require a campaign."}
+            )
+        if scope in ("TEMPLATE", "SITE") and campaign:
+            attrs["campaign"] = None
+        return attrs
+
+
+class CampaignEquipmentAccessSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CampaignEquipmentAccess
+        fields = ["id", "campaign", "item", "enabled"]
+
 
 class FactionSerializer(serializers.ModelSerializer):
     npcs = NPCSummarySerializer(many=True, read_only=True)
@@ -2955,6 +3071,7 @@ class CampaignSerializer(serializers.ModelSerializer):
                 s, "position_effect_by_character", None
             )
             or {},
+            "loadout_by_character": getattr(s, "loadout_by_character", None) or {},
             "session_npcs_with_clocks": session_npcs_with_clocks,
             "session_npc_heal_roster": session_npc_heal_roster,
         }
@@ -3110,6 +3227,10 @@ class NPCSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         hamon_ids = validated_data.pop("hamon_ability_ids", [])
         spin_ids = validated_data.pop("spin_ability_ids", [])
+        if "inventory" in validated_data:
+            validated_data["inventory"] = normalize_inventory_list(
+                validated_data.get("inventory")
+            )
         if "creator" not in validated_data:
             validated_data["creator"] = self.context["request"].user
         npc = super().create(validated_data)
@@ -3124,6 +3245,10 @@ class NPCSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         hamon_ids = validated_data.pop("hamon_ability_ids", None)
         spin_ids = validated_data.pop("spin_ability_ids", None)
+        if "inventory" in validated_data:
+            validated_data["inventory"] = normalize_inventory_list(
+                validated_data.get("inventory")
+            )
         instance = super().update(instance, validated_data)
         if hamon_ids is not None:
             instance.npc_hamon_abilities.all().delete()

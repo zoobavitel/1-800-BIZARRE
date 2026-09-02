@@ -4,8 +4,12 @@ Subscribers (frontend `subscribeCampaignEvents`) refetch their panel-level
 data on any `campaign_update` event for the matching campaign. We coalesce
 on the client side, so it is fine to emit a few extra events here — we'd
 rather over-broadcast and keep panels honest than miss a change.
+
+Broadcasts run on ``transaction.on_commit`` so listeners never see
+half-applied credit_xp / allocation state.
 """
 
+from django.db import transaction
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
@@ -17,11 +21,22 @@ from .models import (
     Faction,
     GroupAction,
     NPC,
+    PendingAdvance,
     ProgressClock,
     Roll,
     Session,
 )
 from .realtime import broadcast_campaign_update
+
+
+def _broadcast_after_commit(campaign_id, reason: str) -> None:
+    if not campaign_id:
+        return
+
+    def _send():
+        broadcast_campaign_update(campaign_id, reason)
+
+    transaction.on_commit(_send)
 
 
 def _campaign_id_for_session(session_id):
@@ -72,32 +87,32 @@ def _campaign_id_for_xp(instance):
 @receiver(post_save, sender=Session)
 def _session_saved_broadcast(sender, instance, **kwargs):
     if instance.campaign_id:
-        broadcast_campaign_update(instance.campaign_id, "session")
+        _broadcast_after_commit(instance.campaign_id, "session")
 
 
 @receiver(post_save, sender=Campaign)
 def _campaign_saved_broadcast(sender, instance, **kwargs):
-    broadcast_campaign_update(instance.id, "campaign")
+    _broadcast_after_commit(instance.id, "campaign")
 
 
 @receiver(post_save, sender=Character)
 def _character_saved_broadcast(sender, instance, **kwargs):
     if instance.campaign_id:
-        broadcast_campaign_update(instance.campaign_id, "character")
+        _broadcast_after_commit(instance.campaign_id, "character")
 
 
 @receiver(post_save, sender=Roll)
 def _roll_saved_broadcast(sender, instance, **kwargs):
     cid = _campaign_id_for_session(instance.session_id)
     if cid:
-        broadcast_campaign_update(cid, "roll")
+        _broadcast_after_commit(cid, "roll")
 
 
 @receiver(post_save, sender=GroupAction)
 def _group_action_saved_broadcast(sender, instance, **kwargs):
     cid = _campaign_id_for_session(instance.session_id)
     if cid:
-        broadcast_campaign_update(cid, "group_action")
+        _broadcast_after_commit(cid, "group_action")
 
 
 @receiver(post_save, sender=ProgressClock)
@@ -105,7 +120,7 @@ def _group_action_saved_broadcast(sender, instance, **kwargs):
 def _progress_clock_changed_broadcast(sender, instance, **kwargs):
     cid = _campaign_id_for_clock(instance)
     if cid:
-        broadcast_campaign_update(cid, "progress_clock")
+        _broadcast_after_commit(cid, "progress_clock")
 
 
 @receiver(post_save, sender=ExperienceTracker)
@@ -118,22 +133,30 @@ def _experience_tracker_changed_broadcast(sender, instance, **kwargs):
     """
     cid = _campaign_id_for_xp(instance)
     if cid:
-        broadcast_campaign_update(cid, "experience_tracker")
+        _broadcast_after_commit(cid, "experience_tracker")
+
+
+@receiver(post_save, sender=PendingAdvance)
+@receiver(post_delete, sender=PendingAdvance)
+def _pending_advance_changed_broadcast(sender, instance, **kwargs):
+    cid = _campaign_id_for_xp(instance)
+    if cid:
+        _broadcast_after_commit(cid, "pending_advance")
 
 
 @receiver(post_save, sender=Crew)
 def _crew_saved_broadcast(sender, instance, **kwargs):
     if instance.campaign_id:
-        broadcast_campaign_update(instance.campaign_id, "crew")
+        _broadcast_after_commit(instance.campaign_id, "crew")
 
 
 @receiver(post_save, sender=NPC)
 def _npc_saved_broadcast(sender, instance, **kwargs):
     if instance.campaign_id:
-        broadcast_campaign_update(instance.campaign_id, "npc")
+        _broadcast_after_commit(instance.campaign_id, "npc")
 
 
 @receiver(post_save, sender=Faction)
 def _faction_saved_broadcast(sender, instance, **kwargs):
     if instance.campaign_id:
-        broadcast_campaign_update(instance.campaign_id, "faction")
+        _broadcast_after_commit(instance.campaign_id, "faction")

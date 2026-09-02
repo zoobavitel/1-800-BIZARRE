@@ -19,8 +19,8 @@ class PlaybookAbilityCatalogSyncTests(TestCase):
 
         stats = sync_playbook_ability_catalog()
 
-        self.assertEqual(SpinAbility.objects.filter(spin_type="FOUNDATION").count(), 10)
-        self.assertGreaterEqual(stats["spin_created"], 9)
+        self.assertEqual(SpinAbility.objects.filter(spin_type="FOUNDATION").count(), 9)
+        self.assertGreaterEqual(stats["spin_created"], 8)
         golden = SpinAbility.objects.get(name="Golden Arc")
         self.assertNotEqual(golden.description, "legacy")
 

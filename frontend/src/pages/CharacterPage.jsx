@@ -367,6 +367,12 @@ export default function CharacterPage({
   const charTabUnsavedMetaRef = useRef(charTabUnsavedMeta);
   /** Bumps when remote sync completes so CharacterSheet refetches session rolls. */
   const [sheetPollTick, setSheetPollTick] = useState(0);
+  const [sheetRealtimeReason, setSheetRealtimeReason] = useState("");
+  const SHEET_ABORT_SSE_REASONS = useMemo(
+    () =>
+      new Set(["character", "experience_tracker", "pending_advance"]),
+    [],
+  );
   const [sheetResetEpoch, setSheetResetEpoch] = useState(0);
 
   // ── NPC state ───────────────────────────────────────────────────────────
@@ -990,10 +996,13 @@ export default function CharacterPage({
             const fromServer = normalizeCharacterInventory(
               savedFrontend.inventory,
             );
+            const touchesInv = payload._fieldTouches?.inventory;
+            if (touchesInv) return fromPayload;
             if (
               saved &&
               Object.prototype.hasOwnProperty.call(saved, "inventory") &&
-              fromServer.length > 0
+              fromServer.length > 0 &&
+              fromPayload.length === 0
             ) {
               return fromServer;
             }
@@ -1274,11 +1283,20 @@ export default function CharacterPage({
   useEffect(() => {
     if (mode !== MODES.CHARACTER || !campaignIdForRealtime) return undefined;
     return subscribeCampaignEvents(campaignIdForRealtime, {
-      onUpdate: () => {
+      onUpdate: (reason) => {
+        const r = String(reason || "update");
+        if (SHEET_ABORT_SSE_REASONS.has(r)) {
+          setSheetRealtimeReason(r);
+        }
         void syncOpenSheetsFromServer();
       },
     });
-  }, [mode, campaignIdForRealtime, syncOpenSheetsFromServer]);
+  }, [
+    mode,
+    campaignIdForRealtime,
+    syncOpenSheetsFromServer,
+    SHEET_ABORT_SSE_REASONS,
+  ]);
 
   useEffect(() => {
     if (mode !== MODES.CHARACTER) {
@@ -1885,6 +1903,8 @@ export default function CharacterPage({
             onCampaignRefresh={refreshCampaigns}
             onCharacterReloaded={handleCharacterReloaded}
             sessionDataPollTick={sheetPollTick}
+            sheetRealtimeReason={sheetRealtimeReason}
+            onSheetRealtimeReasonHandled={() => setSheetRealtimeReason("")}
             onDraftMetaChange={(meta) => {
               const tabId = activeCharTab?.tabId;
               if (tabId == null) return;

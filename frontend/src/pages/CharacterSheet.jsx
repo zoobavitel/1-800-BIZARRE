@@ -41,22 +41,30 @@ import {
   groupActionAPI,
   characterHistoryAPI,
   sessionAPI,
+  equipmentAPI,
   normalizeHarmObject,
   computeActionDotBudget,
   resolveMediaUrl,
   normalizeCharacterInventory,
   PLAYBOOK_SHEET_OPTIONS,
+  hasPlaybook,
   transformBackendToFrontend,
   resolveCharacterCampaignContext,
   isUserCampaignGmForCharacter,
   isGmViewingPlayerCharacterSheet,
   isStandCoinChargenEditable as standCoinChargenUnlocked,
   mergeAbilitiesPreferRicherCustoms,
-  playbookAbilityLevelMet,
   playbookAbilityRequirementLabel,
   canAddNonFoundationPlaybookAbility,
   countCombinedNonFoundationPlaybookAbilities,
   playbookAbilitySlotBudget,
+  mergePlaybookFoundationAbilities,
+  abilitiesMissingPlaybookFoundations,
+  isPlaybookFoundationAbility,
+  shouldSkipServerOwnedFieldHydration,
+  computeHealingClockAfterSegments,
+  normalizeCrewFromCharacter,
+  resolveCrewFromCampaign,
 } from "../features/character-sheet";
 import { useAuth } from "../features/auth";
 import {
@@ -85,6 +93,15 @@ import {
   isPersistedProgressClockId,
   normalizeSheetProgressClock,
 } from "../features/character-sheet/utils/progressClockSegments";
+import CharacterSheetInventoryList from "../features/character-sheet/components/CharacterSheetInventoryList";
+import CharacterSheetArmorPanel from "../features/character-sheet/components/CharacterSheetArmorPanel";
+import {
+  normalizeLoadoutEntry,
+  inventoryHasPhysicalArmor,
+  inventoryPhysicalArmorCharges,
+  inventoryHasSpecialArmor,
+  inventorySpecialArmorCount,
+} from "../features/character-sheet/utils/loadoutUtils";
 import {
   markPcAutosaveBusyCollision,
   schedulePcPendingResaveDrain,
@@ -238,24 +255,6 @@ function reputationTierLabel(v) {
   return "Neutral";
 }
 
-function normalizeCrewFromCharacter(character) {
-  const rawCrew = character?.crew;
-  const crewName =
-    (typeof rawCrew === "object" ? rawCrew?.name : rawCrew) ||
-    character?.crew_name ||
-    character?.personal_crew_name ||
-    "";
-  const crewId =
-    (typeof rawCrew === "object" ? rawCrew?.id : null) ??
-    character?.crewId ??
-    character?.crew_id ??
-    null;
-  return {
-    crew: String(crewName || ""),
-    crewId: crewId == null || crewId === "" ? null : crewId,
-  };
-}
-
 function computeResistanceSummary(diceResults) {
   const sorted = (Array.isArray(diceResults) ? diceResults : [])
     .map((n) => Number(n))
@@ -302,6 +301,53 @@ function stripRetiredSheetAbilities(list) {
   return (Array.isArray(list) ? list : []).filter(
     (a) => !RETIRED_SHEET_ABILITY_NAMES.has(normalizeAbilityName(a?.name)),
   );
+}
+
+function newCustomAbilityModalDraft() {
+  return {
+    type: "three_separate_uses",
+    items: [
+      { name: "", description: "" },
+      { name: "", description: "" },
+      { name: "", description: "" },
+    ],
+  };
+}
+
+function customAbilityModalFromSheetCustoms(customs) {
+  const single = customs.find(
+    (a) => a.id === "custom-single" || Array.isArray(a._uses),
+  );
+  if (single) {
+    const uses = [...(single._uses || ["", "", ""])].slice(0, 3);
+    while (uses.length < 3) uses.push("");
+    return {
+      type: "three_separate_uses",
+      items: uses.map((useText, i) => ({
+        name:
+          i === 0 && String(single.name || "").trim()
+            ? String(single.name).trim()
+            : `Ability ${i + 1}`,
+        description: String(useText || "").trim(),
+      })),
+    };
+  }
+  const three = customs.filter((a) => !Array.isArray(a._uses));
+  const items = three.length
+    ? three.map((a) => ({
+        name: a.name || "",
+        description: a.description || "",
+      }))
+    : [
+        { name: "", description: "" },
+        { name: "", description: "" },
+        { name: "", description: "" },
+      ];
+  while (items.length < 3) items.push({ name: "", description: "" });
+  return {
+    type: "three_separate_uses",
+    items: items.slice(0, 3),
+  };
 }
 
 const VICE_OVERINDULGE_CHOICES = [
@@ -412,14 +458,6 @@ const XP_TRACK_SPEND_LABELS = {
   resolve: "Resolve",
   heritage: "Heritage",
   playbook: "Playbook",
-};
-
-const XP_TRACK_SPEND_MAX = {
-  insight: 5,
-  prowess: 5,
-  resolve: 5,
-  heritage: 5,
-  playbook: 10,
 };
 
 /** Caps applied when a roll response ticks a track locally. Playbook is uncapped (innate). */
@@ -748,7 +786,7 @@ function hasMeaningfulDraftChanges(payload) {
   if (String(payload.secondaryPlaybook || "").trim() !== "") return true;
   if ((payload.stressFilled || 0) > 0) return true;
   if ((payload.standArmorUsed || 0) > 0) return true;
-  if (Boolean(payload.hasPhysicalArmorItem)) return true;
+  if (inventoryHasPhysicalArmor(payload.inventory)) return true;
   if ((payload.physicalArmorBonusCharges || 0) > 0) return true;
   if ((payload.physicalArmorUsed || 0) > 0) return true;
   if ((payload.unallocatedXp || 0) > 0) return true;
@@ -800,286 +838,6 @@ function hasMeaningfulDraftChanges(payload) {
   return false;
 }
 
-function isPlainInventoryObject(item) {
-  return item != null && typeof item === "object" && !Array.isArray(item);
-}
-
-/** Structured row: strings, `{name|label,...}`, or opaque JSON values. */
-function inventoryRowKind(item) {
-  if (typeof item === "string") return "string";
-  if (isPlainInventoryObject(item)) {
-    const keys = Object.keys(item);
-    if (
-      keys.some((k) =>
-        ["name", "label", "detail", "description", "quantity", "uses"].includes(
-          k,
-        ),
-      )
-    ) {
-      return "object";
-    }
-  }
-  return "opaque";
-}
-
-function inventoryOpaqueText(item) {
-  try {
-    return JSON.stringify(item, null, 2);
-  } catch {
-    return String(item);
-  }
-}
-
-function objectRowExtraJson(obj) {
-  const omit = new Set(["name", "label", "detail", "description"]);
-  const rest = {};
-  for (const k of Object.keys(obj)) {
-    if (!omit.has(k)) rest[k] = obj[k];
-  }
-  const keys = Object.keys(rest);
-  if (keys.length === 0) return "";
-  try {
-    return JSON.stringify(rest);
-  } catch {
-    return "";
-  }
-}
-
-/** List editor for `charData.inventory` (JSON array persisted as-is). */
-function CharacterSheetInventoryList({ panelId, inventory, readOnly, onChange }) {
-  const inv = normalizeCharacterInventory(inventory);
-
-  const patchAt = (index, nextItem) => {
-    const next = [...inv];
-    next[index] = nextItem;
-    onChange(next);
-  };
-
-  const removeAt = (index) => {
-    onChange(inv.filter((_, i) => i !== index));
-  };
-
-  const addRow = () => {
-    onChange([...inv, ""]);
-  };
-
-  const move = (from, to) => {
-    if (to < 0 || to >= inv.length) return;
-    const next = [...inv];
-    const [row] = next.splice(from, 1);
-    next.splice(to, 0, row);
-    onChange(next);
-  };
-
-  const rowInputStyle = {
-    flex: 1,
-    minWidth: 0,
-    background: "#010409",
-    color: "#fff",
-    border: "1px solid #30363d",
-    padding: "6px 8px",
-    fontFamily: "monospace",
-    fontSize: "12px",
-    borderRadius: "4px",
-    boxSizing: "border-box",
-  };
-
-  const btnStyle = {
-    background: "#21262d",
-    color: "#c9d1d9",
-    border: "1px solid #30363d",
-    borderRadius: "4px",
-    padding: "4px 8px",
-    fontFamily: "monospace",
-    fontSize: "11px",
-    cursor: readOnly ? "default" : "pointer",
-    opacity: readOnly ? 0.45 : 1,
-  };
-
-  return (
-    <div
-      id={panelId}
-      role="list"
-      aria-label="Character inventory"
-      style={{
-        width: "100%",
-        minHeight: "48px",
-        background: "#0d1117",
-        color: "#fff",
-        border: "1px solid #374151",
-        padding: "8px",
-        fontFamily: "monospace",
-        fontSize: "12px",
-        boxSizing: "border-box",
-      }}
-    >
-      {inv.length === 0 ? (
-        <div style={{ color: "#9ca3af", marginBottom: readOnly ? 0 : "8px" }}>
-          No items.
-        </div>
-      ) : (
-        inv.map((item, index) => {
-          const kind = inventoryRowKind(item);
-          return (
-            <div
-              key={`inv-row-${index}`}
-              role="listitem"
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "6px",
-                marginBottom: index < inv.length - 1 ? "10px" : 0,
-                paddingBottom: index < inv.length - 1 ? "10px" : 0,
-                borderBottom:
-                  index < inv.length - 1 ? "1px solid #21262d" : "none",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "flex-start", gap: "6px" }}>
-                <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "6px" }}>
-                  {kind === "string" ? (
-                    <input
-                      type="text"
-                      aria-label={`Inventory item ${index + 1}`}
-                      readOnly={readOnly}
-                      disabled={readOnly}
-                      value={item}
-                      placeholder="Item…"
-                      onChange={(e) => patchAt(index, e.target.value)}
-                      style={{ ...rowInputStyle, width: "100%" }}
-                    />
-                  ) : null}
-                  {kind === "object" && isPlainInventoryObject(item) ? (
-                    <>
-                      <input
-                        type="text"
-                        aria-label={`Inventory item ${index + 1} name`}
-                        readOnly={readOnly}
-                        disabled={readOnly}
-                        value={String(item.name ?? item.label ?? "")}
-                        placeholder="Name…"
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          const next = { ...item, name: v };
-                          if (next.label != null) delete next.label;
-                          patchAt(index, next);
-                        }}
-                        style={{ ...rowInputStyle, width: "100%" }}
-                      />
-                      <input
-                        type="text"
-                        aria-label={`Inventory item ${index + 1} detail`}
-                        readOnly={readOnly}
-                        disabled={readOnly}
-                        value={String(item.detail ?? item.description ?? "")}
-                        placeholder="Detail (optional)…"
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          const next = { ...item, detail: v };
-                          if (next.description != null) delete next.description;
-                          patchAt(index, next);
-                        }}
-                        style={{ ...rowInputStyle, width: "100%" }}
-                      />
-                      {objectRowExtraJson(item) ? (
-                        <div
-                          style={{
-                            color: "#8b949e",
-                            fontSize: "10px",
-                            wordBreak: "break-all",
-                          }}
-                        >
-                          {objectRowExtraJson(item)}
-                        </div>
-                      ) : null}
-                    </>
-                  ) : null}
-                  {kind === "opaque" ? (
-                    <pre
-                      style={{
-                        margin: 0,
-                        whiteSpace: "pre-wrap",
-                        wordBreak: "break-word",
-                        color: "#c9d1d9",
-                        fontSize: "11px",
-                        background: "#010409",
-                        border: "1px solid #30363d",
-                        borderRadius: "4px",
-                        padding: "6px 8px",
-                      }}
-                    >
-                      {inventoryOpaqueText(item)}
-                    </pre>
-                  ) : null}
-                </div>
-                {!readOnly ? (
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "4px",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <button
-                      type="button"
-                      aria-label={`Move inventory item ${index + 1} up`}
-                      style={btnStyle}
-                      onClick={() => move(index, index - 1)}
-                      disabled={index === 0}
-                    >
-                      Up
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Move inventory item ${index + 1} down`}
-                      style={btnStyle}
-                      onClick={() => move(index, index + 1)}
-                      disabled={index >= inv.length - 1}
-                    >
-                      Dn
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Remove inventory item ${index + 1}`}
-                      style={{ ...btnStyle, color: "#f85149" }}
-                      onClick={() => removeAt(index)}
-                    >
-                      Del
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-              {!readOnly && kind === "opaque" ? (
-                <button
-                  type="button"
-                  style={{ ...btnStyle, alignSelf: "flex-start" }}
-                  onClick={() => patchAt(index, inventoryOpaqueText(item))}
-                >
-                  Edit as text
-                </button>
-              ) : null}
-            </div>
-          );
-        })
-      )}
-      {!readOnly ? (
-        <button
-          type="button"
-          style={{ ...btnStyle, marginTop: inv.length ? "8px" : 0 }}
-          onClick={addRow}
-        >
-          Add item
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * Healing-clock self-recover rolls: playbook action dots only (HUNT…SWAY).
- * Stand Precision/Speed/etc. belong only when table fiction or an ability/item
- * says so—we do not expose generic Stand Coin stats as recover actions here.
- */
 function pickHealClockAction(candidate) {
   const keys = Object.keys(ACTION_ATTR || {});
   const u = String(candidate || "TINKER").trim().toUpperCase();
@@ -1206,6 +964,9 @@ const CharacterSheetWrapper = ({
   onCharacterStressTraumaSync,
   /** Incremented when CharacterPage finishes a remote sync (poll, SSE, visibility) so session rolls refetch. */
   sessionDataPollTick = 0,
+  /** SSE reason that should abort in-flight sheet PATCH (character / experience_tracker / pending_advance). */
+  sheetRealtimeReason = "",
+  onSheetRealtimeReasonHandled,
   /** When true, skip merging server character snapshots into XP / stand / action state (avoids poll overwriting local spends before autosave). */
   sheetDraftIsDirty = false,
   /** After reset-sheet: parent replaces tab character and remounts this wrapper. */
@@ -1240,6 +1001,7 @@ const CharacterSheetWrapper = ({
     trauma: false,
     xp: false,
     healingClock: false,
+    inventory: false,
   });
   const markDirtyIntent = useCallback(() => {
     dirtyIntentRef.current = true;
@@ -1288,15 +1050,33 @@ const CharacterSheetWrapper = ({
   );
   const campaignIdFromCharacter = characterCampaignContext.campaignId;
   const charCampaignFromContext = characterCampaignContext.campaignRecord;
+  // Campaign assignment (normalize: backend may send campaign as object or ID)
+  const [campaignId, setCampaignId] = useState(() => campaignIdFromCharacter);
+  const charCampaignFromPicker = useMemo(() => {
+    const pickedId = Number.parseInt(String(campaignId || "").trim(), 10);
+    if (!Number.isFinite(pickedId)) return null;
+    return (campaigns || []).find((c) => Number(c?.id) === pickedId) ?? null;
+  }, [campaigns, campaignId]);
+  const effectiveCampaignLookupId = useMemo(() => {
+    const pickedId = Number.parseInt(String(campaignId || "").trim(), 10);
+    if (Number.isFinite(pickedId)) return pickedId;
+    return campaignIdFromCharacter;
+  }, [campaignId, campaignIdFromCharacter]);
   const [campaignLookup, setCampaignLookup] = useState(null);
   useEffect(() => {
-    if (charCampaignFromContext || campaignIdFromCharacter == null) {
+    const fromList =
+      charCampaignFromContext ||
+      charCampaignFromPicker ||
+      (campaigns || []).find(
+        (c) => Number(c?.id) === Number(effectiveCampaignLookupId),
+      );
+    if (fromList || effectiveCampaignLookupId == null) {
       setCampaignLookup(null);
       return undefined;
     }
     let cancelled = false;
     campaignAPI
-      .getCampaign(campaignIdFromCharacter)
+      .getCampaign(effectiveCampaignLookupId)
       .then((c) => {
         if (!cancelled) setCampaignLookup(c);
       })
@@ -1306,8 +1086,14 @@ const CharacterSheetWrapper = ({
     return () => {
       cancelled = true;
     };
-  }, [charCampaignFromContext, campaignIdFromCharacter]);
-  const charCampaign = charCampaignFromContext || campaignLookup;
+  }, [
+    charCampaignFromContext,
+    charCampaignFromPicker,
+    campaigns,
+    effectiveCampaignLookupId,
+  ]);
+  const charCampaign =
+    charCampaignFromContext || charCampaignFromPicker || campaignLookup;
   const isCampaignGm = useMemo(
     () =>
       isUserCampaignGmForCharacter(user, {
@@ -1342,6 +1128,29 @@ const CharacterSheetWrapper = ({
     const row = m[String(characterId)] ?? m[characterId];
     return row && typeof row === "object" ? row : null;
   }, [charCampaign?.active_session_detail, characterId]);
+
+  const sessionLoadoutEntry = useMemo(() => {
+    const asd = charCampaign?.active_session_detail;
+    if (!asd || characterId == null) return normalizeLoadoutEntry(null);
+    const m = asd.loadout_by_character;
+    if (!m || typeof m !== "object") return normalizeLoadoutEntry(null);
+    return normalizeLoadoutEntry(m[String(characterId)] ?? m[characterId]);
+  }, [charCampaign?.active_session_detail, characterId]);
+
+  const handleLoadoutChange = useCallback(
+    async (nextEntry) => {
+      if (!activeSessionId || characterId == null) return;
+      try {
+        await sessionAPI.patchSession(activeSessionId, {
+          loadout_by_character: { [String(characterId)]: nextEntry },
+        });
+        onCampaignRefresh?.();
+      } catch (err) {
+        console.error("Loadout save failed:", err);
+      }
+    },
+    [activeSessionId, characterId, onCampaignRefresh],
+  );
 
   /** GM campaign payloads include full NPC stats; mirror player visibility on the sheet. */
   const sessionNpcsPartyFacingDisplay = useMemo(() => {
@@ -1391,10 +1200,56 @@ const CharacterSheetWrapper = ({
         : null,
   });
 
-  // Campaign assignment (normalize: backend may send campaign as object or ID)
-  const [campaignId, setCampaignId] = useState(() => {
-    return campaignIdFromCharacter;
-  });
+  const handlePromoteItemToCampaign = useCallback(
+    async (item) => {
+      const cid =
+        campaignId != null && campaignId !== ""
+          ? parseInt(String(campaignId), 10)
+          : NaN;
+      if (!Number.isFinite(cid)) return;
+      try {
+        await equipmentAPI.fromKitItem({
+          campaign: cid,
+          name: item.name,
+          detail: item.detail,
+          category: item.category,
+          load: item.load,
+          quality: item.quality,
+          coin_value: item.coin_value,
+          source_character: characterId,
+        });
+      } catch (err) {
+        console.error("Promote to campaign library failed:", err);
+      }
+    },
+    [campaignId, characterId],
+  );
+
+  const handlePublishItemToSite = useCallback(
+    async (item) => {
+      const cid =
+        campaignId != null && campaignId !== ""
+          ? parseInt(String(campaignId), 10)
+          : NaN;
+      if (!Number.isFinite(cid)) return;
+      try {
+        const created = await equipmentAPI.fromKitItem({
+          campaign: cid,
+          name: item.name,
+          detail: item.detail,
+          category: item.category,
+          load: item.load,
+          quality: item.quality,
+          coin_value: item.coin_value,
+          source_character: characterId,
+        });
+        if (created?.id) await equipmentAPI.publishToSite(created.id);
+      } catch (err) {
+        console.error("Publish to site catalog failed:", err);
+      }
+    },
+    [campaignId, characterId],
+  );
 
   // Portrait state
   const [imageUrl, setImageUrl] = useState(character?.image_url || "");
@@ -1478,14 +1333,16 @@ const CharacterSheetWrapper = ({
     return () => window.removeEventListener("keydown", onKey);
   }, [portraitUrlModalOpen]);
 
-  // Sync crew/crewId when character changes (e.g. from parent after crew name update)
+  // Sync crew/crewId when character or campaign roster changes.
   useEffect(() => {
-    const normalized = normalizeCrewFromCharacter(character);
-    const newCrew = normalized.crew;
-    const newCrewId = normalized.crewId;
+    const resolved = resolveCrewFromCampaign(
+      charCampaign,
+      characterId,
+      character,
+    );
     setCharData((prev) =>
-      prev.crew !== newCrew || prev.crewId !== newCrewId
-        ? { ...prev, crew: newCrew, crewId: newCrewId }
+      prev.crew !== resolved.crew || prev.crewId !== resolved.crewId
+        ? { ...prev, crew: resolved.crew, crewId: resolved.crewId }
         : prev,
     );
   }, [
@@ -1495,59 +1352,12 @@ const CharacterSheetWrapper = ({
     character?.crew_id,
     character?.crew_name,
     character?.personal_crew_name,
+    characterId,
+    charCampaign,
+    charCampaign?.id,
+    charCampaign?.crews,
+    charCampaign?.campaign_characters,
   ]);
-
-  // Validate/sync crew from campaign roster whenever campaign membership is present.
-  useEffect(() => {
-    setCharData((prev) => {
-      const roster = charCampaign?.campaign_characters || [];
-      if (!Array.isArray(roster) || roster.length === 0) return prev;
-      const me = roster.find((c) => String(c.id) === String(characterId));
-      const meCrewId = me?.crewId ?? me?.crew_id ?? null;
-      const meCrewName = (
-        me?.crew ||
-        me?.crew_name ||
-        me?.personal_crew_name ||
-        ""
-      ).trim();
-      if (meCrewId || meCrewName) {
-        const nextCrewId = meCrewId ?? null;
-        const nextCrew = meCrewName || prev.crew;
-        if (
-          String(prev.crewId ?? "") === String(nextCrewId ?? "") &&
-          String(prev.crew || "") === String(nextCrew || "")
-        ) {
-          return prev;
-        }
-        return {
-          ...prev,
-          crewId: nextCrewId,
-          crew: nextCrew,
-        };
-      }
-
-      if ((prev.crew || "").trim() || prev.crewId) return prev;
-      const crews = [];
-      roster.forEach((c) => {
-        const name = (c?.crew || c?.crew_name || c?.personal_crew_name || "").trim();
-        const id = c?.crewId ?? c?.crew_id ?? null;
-        if (name || id) {
-          const key = String(id ?? name).toLowerCase();
-          if (!crews.some((x) => x.key === key)) {
-            crews.push({ key, id, name });
-          }
-        }
-      });
-      if (crews.length === 1) {
-        return {
-          ...prev,
-          crewId: crews[0].id ?? null,
-          crew: crews[0].name || prev.crew,
-        };
-      }
-      return prev;
-    });
-  }, [charCampaign?.id, charCampaign?.campaign_characters, characterId]);
 
   useEffect(() => {
     if (sheetDraftIsDirty) return;
@@ -1840,16 +1650,6 @@ const CharacterSheetWrapper = ({
   const [standArmorUsed, setStandArmorUsed] = useState(
     character?.standArmorUsed ?? 0,
   );
-  const [hasPhysicalArmorItem, setHasPhysicalArmorItem] = useState(
-    () => !!character?.hasPhysicalArmorItem,
-  );
-  const [physicalArmorBonusCharges, setPhysicalArmorBonusCharges] = useState(
-    () =>
-      Math.min(
-        6,
-        Math.max(0, Math.floor(Number(character?.physicalArmorBonusCharges) || 0)),
-      ),
-  );
   const [physicalArmorUsed, setPhysicalArmorUsed] = useState(
     () =>
       Math.min(
@@ -1871,14 +1671,52 @@ const CharacterSheetWrapper = ({
         Math.max(0, Math.floor(Number(character?.hamonArmorUsed) || 0)),
       ),
   );
+  const [specialArmorUsed, setSpecialArmorUsed] = useState(
+    () => Math.max(0, Math.floor(Number(character?.specialArmorUsed) || 0)),
+  );
+
+  const inventoryHasArmor = useMemo(
+    () => inventoryHasPhysicalArmor(charData.inventory),
+    [charData.inventory],
+  );
+
+  const inventoryArmorCharges = useMemo(
+    () => inventoryPhysicalArmorCharges(charData.inventory),
+    [charData.inventory],
+  );
+
+  const inventoryHasSpecial = useMemo(
+    () => inventoryHasSpecialArmor(charData.inventory),
+    [charData.inventory],
+  );
+
+  const inventorySpecialCount = useMemo(
+    () => inventorySpecialArmorCount(charData.inventory),
+    [charData.inventory],
+  );
 
   const physicalArmorMax = useMemo(() => {
-    if (!hasPhysicalArmorItem) return 0;
-    return Math.min(
-      6,
-      Math.max(0, Math.floor(Number(physicalArmorBonusCharges) || 0)),
+    if (!inventoryHasArmor) return 0;
+    return Math.min(6, Math.max(0, inventoryArmorCharges));
+  }, [inventoryHasArmor, inventoryArmorCharges]);
+
+  useEffect(() => {
+    if (!inventoryHasArmor) {
+      setPhysicalArmorUsed(0);
+      return;
+    }
+    setPhysicalArmorUsed((used) =>
+      Math.min(used, inventoryArmorCharges),
     );
-  }, [hasPhysicalArmorItem, physicalArmorBonusCharges]);
+  }, [inventoryHasArmor, inventoryArmorCharges]);
+
+  useEffect(() => {
+    if (!inventoryHasSpecial) {
+      setSpecialArmorUsed(0);
+      return;
+    }
+    setSpecialArmorUsed((used) => Math.min(used, inventorySpecialCount));
+  }, [inventoryHasSpecial, inventorySpecialCount]);
 
   // Harm (API can send harm or harmEntries; always keep L1/L2×2, L3, L4)
   const [harm, setHarm] = useState(() =>
@@ -1928,8 +1766,29 @@ const CharacterSheetWrapper = ({
   const [unallocatedXp, setUnallocatedXp] = useState(
     Math.max(0, Math.floor(Number(character?.unallocatedXp) || 0)),
   );
+  const [pendingAdvanceCounts, setPendingAdvanceCounts] = useState(() => ({
+    ...(character?.pendingAdvanceCounts || {}),
+  }));
   const [poolAllocateBusy, setPoolAllocateBusy] = useState(false);
   const [poolTickError, setPoolTickError] = useState(null);
+
+  // Abort in-flight autosave when SSE says character / XP / pending advanced.
+  useEffect(() => {
+    const reason = String(sheetRealtimeReason || "");
+    if (
+      reason !== "character" &&
+      reason !== "experience_tracker" &&
+      reason !== "pending_advance"
+    ) {
+      return;
+    }
+    if (autosaveAbortRef.current) {
+      autosaveAbortRef.current.abort();
+      autosaveAbortRef.current = null;
+    }
+    draftGenRef.current += 1;
+    onSheetRealtimeReasonHandled?.();
+  }, [sheetRealtimeReason, onSheetRealtimeReasonHandled]);
 
   // Hydrate sheet from server when character payload arrives after first paint (same class of bug as actionRatings).
   // Stress/trauma/XP are server-owned: merge unless the user touched that field's control this draft
@@ -2016,7 +1875,14 @@ const CharacterSheetWrapper = ({
   ]);
 
   useEffect(() => {
-    if (sheetDraftIsDirty || fieldTouchRef.current.healingClock) return;
+    if (
+      shouldSkipServerOwnedFieldHydration("healingClock", {
+        fieldTouches: fieldTouchRef.current,
+        sheetDraftIsDirty,
+      })
+    ) {
+      return;
+    }
     const h = character?.healingClock;
     if (typeof h !== "number") return;
     setHealingClock((p) => (p !== h ? h : p));
@@ -2042,14 +1908,8 @@ const CharacterSheetWrapper = ({
 
   useEffect(() => {
     if (sheetDraftIsDirty) return;
-    const s = character?.standArmorUsed;
-    if (typeof s === "number" && Number.isFinite(s))
-      setStandArmorUsed(Math.max(0, Math.floor(s)));
-    if (typeof character?.hasPhysicalArmorItem === "boolean")
-      setHasPhysicalArmorItem(character.hasPhysicalArmorItem);
-    const b = character?.physicalArmorBonusCharges;
-    if (typeof b === "number" && Number.isFinite(b))
-      setPhysicalArmorBonusCharges(Math.min(6, Math.max(0, Math.floor(b))));
+    if (typeof character?.standArmorUsed === "number" && Number.isFinite(character.standArmorUsed))
+      setStandArmorUsed(Math.max(0, Math.floor(character.standArmorUsed)));
     const u = character?.physicalArmorUsed;
     if (typeof u === "number" && Number.isFinite(u))
       setPhysicalArmorUsed(Math.min(6, Math.max(0, Math.floor(u))));
@@ -2059,14 +1919,16 @@ const CharacterSheetWrapper = ({
     const hamon = character?.hamonArmorUsed;
     if (typeof hamon === "number" && Number.isFinite(hamon))
       setHamonArmorUsed(Math.min(3, Math.max(0, Math.floor(hamon))));
+    const special = character?.specialArmorUsed;
+    if (typeof special === "number" && Number.isFinite(special))
+      setSpecialArmorUsed(Math.max(0, Math.floor(special)));
   }, [
     character?.id,
     character?.standArmorUsed,
-    character?.hasPhysicalArmorItem,
-    character?.physicalArmorBonusCharges,
     character?.physicalArmorUsed,
     character?.spinArmorUsed,
     character?.hamonArmorUsed,
+    character?.specialArmorUsed,
     sheetDraftIsDirty,
   ]);
 
@@ -2101,6 +1963,16 @@ const CharacterSheetWrapper = ({
       return changed ? { ...prev, ...nx } : prev;
     });
   }, [character?.id, character?.xp, character?.unallocatedXp, sheetDraftIsDirty]);
+
+  useEffect(() => {
+    if (sheetDraftIsDirty) return;
+    const counts = character?.pendingAdvanceCounts;
+    if (counts && typeof counts === "object") {
+      setPendingAdvanceCounts({ ...counts });
+    }
+  }, [character?.id, character?.pendingAdvanceCounts, sheetDraftIsDirty]);
+
+  // FIX 6: Level-up modal state — see below near other modal state
 
   // Hydrate coin/stash only when switching characters (id change). Parent refresh (campaign list refetch,
   // getCharacters) reuses the same id with a new object; syncing on character.coin/stash then wiped
@@ -2152,17 +2024,16 @@ const CharacterSheetWrapper = ({
 
   // FIX 6: Level-up modal state
   const [showLevelUp, setShowLevelUp] = useState(false);
-  /** When set, level-up modal spends this track only (e.g. playbook Take advance). */
+  /** When set, level-up modal redeems this track's pending advance. */
   const [levelUpLockTrack, setLevelUpLockTrack] = useState(null);
   const [levelUpChoice, setLevelUpChoice] = useState("stat");
-  const [levelUpFromPool, setLevelUpFromPool] = useState(false);
   const [levelUpStat, setLevelUpStat] = useState("power");
-  const [levelUpDot1, setLevelUpDot1] = useState("HUNT");
-  const [levelUpDot2, setLevelUpDot2] = useState("HUNT");
-  const [levelUpSpendTrack, setLevelUpSpendTrack] = useState("insight");
+  const levelUpDot1 = "HUNT";
+  const levelUpDot2 = "HUNT";
+  const [levelUpSpendTrack, setLevelUpSpendTrack] = useState("playbook");
   const [minorAdvanceSpendTrack, setMinorAdvanceSpendTrack] =
     useState("insight");
-  /** Attribute/heritage track advance picker (full track → clear for advance). */
+  /** Attribute/heritage track advance picker (pending → redeem for advance). */
   const [showTrackAdvance, setShowTrackAdvance] = useState(null);
   const [levelUpBusy, setLevelUpBusy] = useState(false);
   const [levelUpError, setLevelUpError] = useState(null);
@@ -2294,21 +2165,14 @@ const CharacterSheetWrapper = ({
 
   /** Stand / Hamon / Spin path — declared before combined abilities so recall row can key off it. */
   const [playbook, setPlaybook] = useState(character?.playbook || "Stand");
-  const [secondaryPlaybook, setSecondaryPlaybook] = useState(
-    character?.secondaryPlaybook || "",
-  );
-  const [secondaryPlaybookUnlocked, setSecondaryPlaybookUnlocked] = useState(
-    Boolean(character?.secondaryPlaybookUnlocked || character?.secondaryPlaybook),
-  );
-  const [pendingSecondPlaybook, setPendingSecondPlaybook] = useState("");
-  const [unlockSecondBusy, setUnlockSecondBusy] = useState(false);
-  const [unlockSecondError, setUnlockSecondError] = useState(null);
 
-  const hasStandPlaybook =
-    playbook === "Stand" || secondaryPlaybook === "Stand";
-  const isHamonPlaybook =
-    playbook === "Hamon" || secondaryPlaybook === "Hamon";
-  const isSpinPlaybook = playbook === "Spin" || secondaryPlaybook === "Spin";
+  const hasStandPlaybook = playbook === "Stand";
+  const isHamonPlaybook = playbook === "Hamon";
+  const isSpinPlaybook = playbook === "Spin";
+  const showSpinArmor =
+    isSpinPlaybook || (abilities || []).some((a) => a?.type === "spin");
+  const showHamonArmor =
+    isHamonPlaybook || (abilities || []).some((a) => a?.type === "hamon");
   /** Stand in either slot: Durability + Power/Precision/Speed column. */
   const showStandCoinActionColumn = hasStandPlaybook;
 
@@ -2317,6 +2181,40 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     setAbilities(stripRetiredSheetAbilities(character?.abilities || []));
   }, [character?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- only reset on sheet identity
+
+  useEffect(() => {
+    if (!isSpinPlaybook || spinAbilitiesList.length === 0) return;
+    setAbilities((prev) => {
+      if (!abilitiesMissingPlaybookFoundations(prev, spinAbilitiesList, "spin")) {
+        return prev;
+      }
+      if (canEditSheet) markDirtyIntent();
+      return mergePlaybookFoundationAbilities(prev, spinAbilitiesList, "spin");
+    });
+  }, [
+    character?.id,
+    isSpinPlaybook,
+    spinAbilitiesList,
+    canEditSheet,
+    markDirtyIntent,
+  ]);
+
+  useEffect(() => {
+    if (!isHamonPlaybook || hamonAbilitiesList.length === 0) return;
+    setAbilities((prev) => {
+      if (!abilitiesMissingPlaybookFoundations(prev, hamonAbilitiesList, "hamon")) {
+        return prev;
+      }
+      if (canEditSheet) markDirtyIntent();
+      return mergePlaybookFoundationAbilities(prev, hamonAbilitiesList, "hamon");
+    });
+  }, [
+    character?.id,
+    isHamonPlaybook,
+    hamonAbilitiesList,
+    canEditSheet,
+    markDirtyIntent,
+  ]);
 
   const currentHeritage = useMemo(() => {
     const hid = charData?.heritage;
@@ -2500,18 +2398,7 @@ const CharacterSheetWrapper = ({
     if (character?.playbook != null && character.playbook !== "") {
       setPlaybook(character.playbook);
     }
-    setSecondaryPlaybook(character?.secondaryPlaybook || "");
-    setSecondaryPlaybookUnlocked(
-      Boolean(character?.secondaryPlaybookUnlocked || character?.secondaryPlaybook),
-    );
-    setPendingSecondPlaybook("");
-    setUnlockSecondError(null);
-  }, [
-    character?.id,
-    character?.playbook,
-    character?.secondaryPlaybook,
-    character?.secondaryPlaybookUnlocked,
-  ]);
+  }, [character?.id, character?.playbook]);
 
   const [standType, setStandType] = useState(character?.standType || "");
   const [standTypeCustom, setStandTypeCustom] = useState(
@@ -2655,6 +2542,22 @@ const CharacterSheetWrapper = ({
         if (cid) {
           await campaignAPI.assignCharacter(cid, characterId);
           setCampaignAssignStatus("saved");
+          const pickedCampaign =
+            (campaigns || []).find((c) => Number(c?.id) === cid) ?? null;
+          if (pickedCampaign) {
+            const crewResolved = resolveCrewFromCampaign(
+              pickedCampaign,
+              characterId,
+              character,
+            );
+            if (crewResolved.crew || crewResolved.crewId) {
+              setCharData((prev) => ({
+                ...prev,
+                crew: crewResolved.crew || prev.crew,
+                crewId: crewResolved.crewId ?? prev.crewId,
+              }));
+            }
+          }
         } else if (currentId) {
           await campaignAPI.unassignCharacter(currentId, characterId);
           setCampaignAssignStatus("saved");
@@ -2670,7 +2573,7 @@ const CharacterSheetWrapper = ({
         setCampaignAssignError(null);
       }, 5000);
     },
-    [characterId, character?.campaign, campaignId, onCampaignRefresh],
+    [characterId, character, campaigns, campaignId, onCampaignRefresh],
   );
 
   const [clocks, setClocks] = useState(character?.clocks || []);
@@ -3215,6 +3118,9 @@ const CharacterSheetWrapper = ({
     [maxStress, onCharacterStressTraumaSync],
   );
   const standArmorMax = standPathArmorMaxFromDurabilityIndex(durVal);
+  const showStandArmor =
+    standArmorMax > 0 &&
+    hasPlaybook(playbook, character?.secondaryPlaybook, "Stand");
   const sessionDevXP = DEV_SESSION_XP[devVal] ?? 0;
 
   useEffect(() => {
@@ -3268,18 +3174,8 @@ const CharacterSheetWrapper = ({
     (n, idx) => n + (INDEX_TO_GRADE(idx) === "A" ? 1 : 0),
     0,
   );
-  const maxXpOnAnyTrack = useMemo(
-    () =>
-      XP_SPEND_TRACK_ORDER.reduce(
-        (m, t) => Math.max(m, Number(xp[t]) || 0),
-        0,
-      ),
-    [xp],
-  );
-  const canAffordLevelUp = maxXpOnAnyTrack >= 10 || unallocatedXp >= 10;
-  const secondPlaybookXpWallet =
-    (Number(xp.playbook) || 0) + unallocatedXp;
-  const canAffordSecondPlaybook = secondPlaybookXpWallet >= 30;
+  const canAffordLevelUp =
+    Number(pendingAdvanceCounts?.playbook || 0) > 0;
   // XP expenditure accounting
   // Each stand coin grade = 10 XP (cost of one level-up stat advance)
   // Each action dot = 5 XP (cost of one minor advance)
@@ -3288,6 +3184,13 @@ const CharacterSheetWrapper = ({
   const pcLevel = 1 + Math.floor((totalSpentXP - 95) / 10);
   const isChargenIncomplete = pcLevel < 1;
   const primaryIsSpinOrHamon = playbook === "Spin" || playbook === "Hamon";
+  const hasAcquiredStand = useMemo(() => {
+    if (playbook === "Stand") return true;
+    return (xpAllocationRows || []).some(
+      (a) =>
+        !a.undone_at && a.allocation_type === "LEVEL_UP_ACQUIRE_STAND",
+    );
+  }, [playbook, xpAllocationRows]);
   const playbookAbilitySlots = useMemo(
     () => playbookAbilitySlotBudget(xpAllocationRows),
     [xpAllocationRows],
@@ -3311,15 +3214,18 @@ const CharacterSheetWrapper = ({
       ),
     [abilities],
   );
-  // SRD L1: Stand = 1 standard + 2 per A-rank; Hamon/Spin = 1 standard. Custom = one unique package.
+  // SRD L1: Stand = 2 standards + 2 per A-rank; Hamon/Spin = 1 standard. Custom = one unique package.
   // Hide add buttons when L1 quota is full; show again if the player deletes a pick.
   // After L1, + Standard stays available for XP-bought standards.
   const maxL1StandardAbilities =
-    playbook === "Stand" ? 1 + aRankCount * 2 : 1;
+    playbook === "Stand" ? 2 + aRankCount * 2 : 1;
   const showAddStandardButton =
     canEditSheet &&
     (pcLevel > 1 || sheetStandardCount < maxL1StandardAbilities);
-  const showAddCustomButton = canEditSheet && !hasSheetCustomPackage;
+  const showAddCustomButton =
+    canEditSheet &&
+    !hasSheetCustomPackage &&
+    hasPlaybook(playbook, character?.secondaryPlaybook, "Stand");
 
   useEffect(() => {
     if (!showAddStandardButton) {
@@ -3417,6 +3323,16 @@ const CharacterSheetWrapper = ({
     if (typeof fe.unallocatedXp === "number") {
       setUnallocatedXp(Math.max(0, Math.floor(fe.unallocatedXp)));
     }
+    if (fe.pendingAdvanceCounts && typeof fe.pendingAdvanceCounts === "object") {
+      setPendingAdvanceCounts({ ...fe.pendingAdvanceCounts });
+    } else if (Array.isArray(fe.pendingAdvances)) {
+      const counts = {};
+      for (const p of fe.pendingAdvances) {
+        if (!p?.track) continue;
+        counts[p.track] = (counts[p.track] || 0) + 1;
+      }
+      setPendingAdvanceCounts(counts);
+    }
     if (fe.xp || typeof fe.unallocatedXp === "number") {
       const truth = {
         xp: fe.xp ? { ...fe.xp } : null,
@@ -3438,17 +3354,6 @@ const CharacterSheetWrapper = ({
       // XP/claim responses can omit a just-saved unique package; keep richer local customs.
       setAbilities((prev) =>
         mergeAbilitiesPreferRicherCustoms(prev, fe.abilities),
-      );
-    }
-    if (typeof fe.secondaryPlaybook === "string") {
-      setSecondaryPlaybook(fe.secondaryPlaybook);
-    }
-    if (
-      Object.prototype.hasOwnProperty.call(fe, "secondaryPlaybookUnlocked") ||
-      fe.secondaryPlaybook
-    ) {
-      setSecondaryPlaybookUnlocked(
-        Boolean(fe.secondaryPlaybookUnlocked || fe.secondaryPlaybook),
       );
     }
     if (
@@ -3477,6 +3382,8 @@ const CharacterSheetWrapper = ({
         typeof fe.unallocatedXp === "number"
           ? Math.max(0, Math.floor(fe.unallocatedXp))
           : prev.unallocatedXp,
+      pendingAdvanceCounts: fe.pendingAdvanceCounts || prev.pendingAdvanceCounts,
+      pendingAdvances: fe.pendingAdvances || prev.pendingAdvances,
     }));
   }, [onCharacterXpSync]);
 
@@ -3890,13 +3797,11 @@ const CharacterSheetWrapper = ({
     [levelUpChoice, levelUpStat, standStats],
   );
 
-  // FIX 6: Confirm level-up — server-side spend with reversible allocation log.
+  // FIX 6: Confirm level-up — redeem open PendingAdvance (no second XP deduct).
   const confirmLevelUp = async () => {
-    const track = levelUpLockTrack || levelUpSpendTrack;
-    const cur = Number(xp[track]) || 0;
-    const usePool =
-      !levelUpLockTrack && Boolean(levelUpFromPool) && unallocatedXp >= 10;
-    if ((!usePool && cur < 10) || !characterId) return;
+    const track = levelUpLockTrack || levelUpSpendTrack || "playbook";
+    const pendingCount = Number(pendingAdvanceCounts?.[track] || 0);
+    if (pendingCount < 1 || !characterId) return;
 
     if (levelUpChoice === "stat" && levelUpIsBtoA) {
       if (levelUpBtoARewardBranch === "custom2plus1standard") {
@@ -3922,9 +3827,9 @@ const CharacterSheetWrapper = ({
     setLevelUpBusy(true);
     setLevelUpError(null);
     const body = {
-      xp_track: usePool ? "playbook" : track,
+      xp_track: track,
       choice: levelUpChoice,
-      from_pool: usePool,
+      from_pool: false,
     };
     if (levelUpChoice === "stat") {
       body.stand_stat = levelUpStat;
@@ -3962,42 +3867,12 @@ const CharacterSheetWrapper = ({
     }
   };
 
-  const unlockSecondPlaybook = async () => {
-    if (!characterId || unlockSecondBusy) return;
-    const pick = pendingSecondPlaybook || secondaryPlaybook;
-    if (!pick) {
-      setUnlockSecondError("Pick which playbook to gain.");
-      return;
-    }
-    if (secondPlaybookXpWallet < 30) {
-      setUnlockSecondError(
-        `Need 30 XP from playbook track + Available XP (have playbook ${Number(xp.playbook) || 0} + pool ${unallocatedXp}).`,
-      );
-      return;
-    }
-    setUnlockSecondBusy(true);
-    setUnlockSecondError(null);
-    try {
-      const res = await characterAPI.unlockSecondPlaybook(characterId, {
-        secondary_playbook: pick.toUpperCase(),
-      });
-      if (res?.character) applyAllocationBackendCharacter(res.character);
-      if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
-      setPendingSecondPlaybook("");
-    } catch (err) {
-      setUnlockSecondError(err?.message || "Could not unlock second playbook");
-    } finally {
-      setUnlockSecondBusy(false);
-    }
-  };
-
-  // FIX 7: Minor advance — 5 XP from selected track (server-side allocation).
   const spendXPForDot = async () => {
     const track = minorAdvanceSpendTrack;
-    const cur = Number(xp[track]) || 0;
+    const pendingCount = Number(pendingAdvanceCounts?.[track] || 0);
     const action = minorAdvanceAction;
     if (
-      cur < 5 ||
+      pendingCount < 1 ||
       !minorAdvanceActions.includes(action) ||
       actionRatings[action] >= 4 ||
       !characterId
@@ -4383,11 +4258,13 @@ const CharacterSheetWrapper = ({
       const cap = healingClockSegments;
       const add = Math.max(0, Math.floor(Number(segmentsToAdd) || 0));
       if (!add) return;
+      markFieldTouch("healingClock");
       setHealingClock((prev) => {
-        const cur = Math.max(0, Math.min(cap, Number(prev) || 0));
-        const total = cur + add;
-        const completions = Math.floor(total / cap) - Math.floor(cur / cap);
-        const remainder = total % cap;
+        const { nextFilled, completions } = computeHealingClockAfterSegments({
+          currentFilled: prev,
+          segmentsToAdd: add,
+          segmentCap: cap,
+        });
         if (completions > 0) {
           setHarm((hPrev) => {
             let out = normalizeHarmObject(hPrev);
@@ -4397,31 +4274,32 @@ const CharacterSheetWrapper = ({
             return out;
           });
         }
-        return remainder;
+        return nextFilled;
       });
     },
-    [downgradeAllHarmByOneLevel, healingClockSegments],
+    [downgradeAllHarmByOneLevel, healingClockSegments, markFieldTouch],
   );
 
   const applyRecoverySegmentsToTrack = useCallback(
     (currentClock, currentHarm, segmentsToAdd, segmentCap = healingClockSegments) => {
       const cap = Math.min(5, Math.max(4, Math.floor(Number(segmentCap) || 4)));
-      const add = Math.max(0, Math.floor(Number(segmentsToAdd) || 0));
-      const clock = Math.max(0, Math.min(cap, Number(currentClock) || 0));
-      if (!add) {
+      const { nextFilled, completions } = computeHealingClockAfterSegments({
+        currentFilled: currentClock,
+        segmentsToAdd,
+        segmentCap: cap,
+      });
+      if (completions === 0 && nextFilled === Math.max(0, Math.min(cap, Number(currentClock) || 0))) {
         return {
-          nextClock: clock,
+          nextClock: nextFilled,
           nextHarm: normalizeHarmObject(currentHarm),
         };
       }
-      const total = clock + add;
-      const completions = Math.floor(total / cap) - Math.floor(clock / cap);
       let nextHarm = normalizeHarmObject(currentHarm);
       for (let i = 0; i < completions; i += 1) {
         nextHarm = downgradeAllHarmByOneLevel(nextHarm);
       }
       return {
-        nextClock: total % cap,
+        nextClock: nextFilled,
         nextHarm,
       };
     },
@@ -7903,11 +7781,12 @@ const CharacterSheetWrapper = ({
       stressFilled,
       trauma,
       standArmorUsed,
-      hasPhysicalArmorItem,
-      physicalArmorBonusCharges,
-      physicalArmorUsed,
+      hasPhysicalArmorItem: inventoryHasArmor,
+      physicalArmorBonusCharges: inventoryArmorCharges,
+      physicalArmorUsed: inventoryHasArmor ? physicalArmorUsed : 0,
       spinArmorUsed,
       hamonArmorUsed,
+      specialArmorUsed: inventoryHasSpecial ? specialArmorUsed : 0,
       harm,
       healingClock,
       healingClockSegments,
@@ -7918,7 +7797,7 @@ const CharacterSheetWrapper = ({
       abilities,
       clocks,
       playbook,
-      secondaryPlaybook,
+      secondaryPlaybook: "",
       playbookXpArchetypes,
       standType,
       standTypeCustom,
@@ -7941,11 +7820,13 @@ const CharacterSheetWrapper = ({
     stressFilled,
     trauma,
     standArmorUsed,
-    hasPhysicalArmorItem,
-    physicalArmorBonusCharges,
+    inventoryHasArmor,
+    inventoryArmorCharges,
     physicalArmorUsed,
     spinArmorUsed,
     hamonArmorUsed,
+    inventoryHasSpecial,
+    specialArmorUsed,
     harm,
     healingClock,
     healingClockSegments,
@@ -7956,7 +7837,6 @@ const CharacterSheetWrapper = ({
     abilities,
     clocks,
     playbook,
-    secondaryPlaybook,
     playbookXpArchetypes,
     standType,
     standTypeCustom,
@@ -8093,6 +7973,7 @@ const CharacterSheetWrapper = ({
           if (touches.trauma) fieldTouchRef.current.trauma = false;
           if (touches.xp) fieldTouchRef.current.xp = false;
           if (touches.healingClock) fieldTouchRef.current.healingClock = false;
+          if (touches.inventory) fieldTouchRef.current.inventory = false;
           // Re-assert only fields this save included. A clock autosave that
           // omitted stress must not push a stale truth-lock count over the
           // server echo (GM unmark / concurrent roll marks).
@@ -8153,11 +8034,14 @@ const CharacterSheetWrapper = ({
     stressFilled,
     trauma,
     standArmorUsed,
-    hasPhysicalArmorItem,
-    physicalArmorBonusCharges,
+    inventoryHasArmor,
+    inventoryArmorCharges,
     physicalArmorUsed,
     spinArmorUsed,
     hamonArmorUsed,
+    inventoryHasSpecial,
+    inventorySpecialCount,
+    specialArmorUsed,
     harm,
     healingClock,
     healingClockSegments,
@@ -8168,7 +8052,6 @@ const CharacterSheetWrapper = ({
     abilities,
     clocks,
     playbook,
-    secondaryPlaybook,
     playbookXpArchetypes,
     standType,
     standTypeCustom,
@@ -11658,7 +11541,7 @@ const CharacterSheetWrapper = ({
                         </div>
                       ))}
                     </div>
-                    {/* SRD_DEV: Stand path armor (Durability) vs physical gear; special negate = NPC/GM */}
+                    {/* SRD_DEV: all armor pools — Stand/Spin/Hamon + inventory gear */}
                     <div
                       style={{
                         flex: "1 1 200px",
@@ -11666,309 +11549,23 @@ const CharacterSheetWrapper = ({
                         maxWidth: "240px",
                       }}
                     >
-                      <span
-                        style={{
-                          fontSize: "10px",
-                          color: "#9ca3af",
-                          display: "block",
-                          marginBottom: "6px",
-                        }}
-                      >
-                        ARMOR
-                      </span>
-                      <div
-                        style={{
-                          marginBottom: "10px",
-                          opacity: hasPhysicalArmorItem ? 1 : 0.72,
-                        }}
-                      >
-                        <label
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "5px",
-                            cursor: "pointer",
-                            fontSize: "10px",
-                            color: "#e5e7eb",
-                            marginBottom: "4px",
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={hasPhysicalArmorItem}
-                            onChange={(e) => {
-                              const on = e.target.checked;
-                              setHasPhysicalArmorItem(on);
-                              if (!on) setPhysicalArmorUsed(0);
-                            }}
-                          />
-                          PHYSICAL
-                          <span style={{ color: "#9ca3af", fontWeight: "normal" }}>
-                            (gear / heritage)
-                          </span>
-                        </label>
-                        {hasPhysicalArmorItem ? (
-                          <>
-                            <div
-                              style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "6px",
-                                marginBottom: "4px",
-                                flexWrap: "wrap",
-                              }}
-                            >
-                              <span
-                                style={{ fontSize: "9px", color: "#6b7280" }}
-                              >
-                                Pool 0–6
-                              </span>
-                              <input
-                                type="number"
-                                min={0}
-                                max={6}
-                                value={physicalArmorBonusCharges}
-                                onChange={(e) => {
-                                  const n = Math.min(
-                                    6,
-                                    Math.max(
-                                      0,
-                                      parseInt(e.target.value, 10) || 0,
-                                    ),
-                                  );
-                                  setPhysicalArmorBonusCharges(n);
-                                }}
-                                style={{
-                                  width: "40px",
-                                  padding: "2px 4px",
-                                  fontSize: "11px",
-                                  background: "#0a0a0a",
-                                  border: "1px solid #374151",
-                                  color: "#fff",
-                                }}
-                              />
-                            </div>
-                            {physicalArmorMax === 0 ? (
-                              <div
-                                style={{ fontSize: "9px", color: "#6b7280" }}
-                              >
-                                Set pool &gt; 0 to track charges.
-                              </div>
-                            ) : (
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: "3px",
-                                  flexWrap: "wrap",
-                                }}
-                              >
-                                {Array.from(
-                                  { length: physicalArmorMax },
-                                  (_, i) => (
-                                    <div
-                                      key={`ph-${i}`}
-                                      onClick={() =>
-                                        setPhysicalArmorUsed(
-                                          i < physicalArmorUsed ? i : i + 1,
-                                        )
-                                      }
-                                      title={
-                                        i < physicalArmorUsed
-                                          ? "Used — click to restore"
-                                          : "Click to spend (−1 harm)"
-                                      }
-                                      style={{
-                                        width: "20px",
-                                        height: "20px",
-                                        border: "1px solid #4b5563",
-                                        cursor: "pointer",
-                                        background:
-                                          i < physicalArmorUsed
-                                            ? "#b45309"
-                                            : "#1f2937",
-                                      }}
-                                    />
-                                  ),
-                                )}
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <div
-                            style={{
-                              fontSize: "9px",
-                              color: "#6b7280",
-                              lineHeight: 1.35,
-                            }}
-                          >
-                            Enable only when fiction gives worn or carried
-                            physical armor (same rule as NPC sheet).
-                          </div>
-                        )}
-                      </div>
-                      <div style={{ marginBottom: "8px" }}>
-                        <span
-                          style={{
-                            fontSize: "10px",
-                            color: "#9ca3af",
-                            display: "block",
-                            marginBottom: "4px",
-                          }}
-                        >
-                          STAND (path)
-                          <span
-                            style={{ color: "#0ea5e9", marginLeft: "4px" }}
-                          >
-                            ({standArmorMax} chg)
-                          </span>
-                        </span>
-                        {standArmorMax <= 0 ? (
-                          <div style={{ fontSize: "9px", color: "#6b7280" }}>
-                            No stand path armor at this durability grade.
-                          </div>
-                        ) : (
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: "3px",
-                              flexWrap: "wrap",
-                            }}
-                          >
-                            {Array.from({ length: standArmorMax }, (_, i) => {
-                              const spent = i < standArmorUsed;
-                              return (
-                                <div
-                                  key={`st-${i}`}
-                                  onClick={() =>
-                                    setStandArmorUsed(spent ? i : i + 1)
-                                  }
-                                  title={
-                                    spent
-                                      ? "Used — click to restore"
-                                      : "Click to spend (Stand takes the hit)"
-                                  }
-                                  style={{
-                                    width: "20px",
-                                    height: "20px",
-                                    border: "1px solid #4b5563",
-                                    cursor: "pointer",
-                                    background: "#1f2937",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    fontSize: "13px",
-                                    lineHeight: 1,
-                                    color: spent ? "#e5e7eb" : "transparent",
-                                    userSelect: "none",
-                                  }}
-                                >
-                                  {spent ? "✓" : null}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                      {isSpinPlaybook ? (
-                        <div style={{ marginBottom: "8px" }}>
-                          <span
-                            style={{
-                              fontSize: "10px",
-                              color: "#9ca3af",
-                              display: "block",
-                              marginBottom: "4px",
-                            }}
-                          >
-                            SPIN ARMOR
-                            <span
-                              style={{ color: "#f59e0b", marginLeft: "4px" }}
-                            >
-                              (3 chg)
-                            </span>
-                          </span>
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: "3px",
-                              flexWrap: "wrap",
-                            }}
-                          >
-                            {Array.from({ length: 3 }, (_, i) => {
-                              const spent = i < spinArmorUsed;
-                              return (
-                                <div
-                                  key={`spin-armor-${i}`}
-                                  onClick={() =>
-                                    setSpinArmorUsed(spent ? i : i + 1)
-                                  }
-                                  title={
-                                    spent
-                                      ? "Used — click to restore"
-                                      : "Click to spend Spin armor charge"
-                                  }
-                                  style={{
-                                    width: "20px",
-                                    height: "20px",
-                                    border: "1px solid #4b5563",
-                                    cursor: "pointer",
-                                    background: spent ? "#b45309" : "#1f2937",
-                                  }}
-                                />
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : null}
-                      {isHamonPlaybook ? (
-                        <div style={{ marginBottom: "8px" }}>
-                          <span
-                            style={{
-                              fontSize: "10px",
-                              color: "#9ca3af",
-                              display: "block",
-                              marginBottom: "4px",
-                            }}
-                          >
-                            HAMON ARMOR
-                            <span
-                              style={{ color: "#22c55e", marginLeft: "4px" }}
-                            >
-                              (3 chg)
-                            </span>
-                          </span>
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: "3px",
-                              flexWrap: "wrap",
-                            }}
-                          >
-                            {Array.from({ length: 3 }, (_, i) => {
-                              const spent = i < hamonArmorUsed;
-                              return (
-                                <div
-                                  key={`hamon-armor-${i}`}
-                                  onClick={() =>
-                                    setHamonArmorUsed(spent ? i : i + 1)
-                                  }
-                                  title={
-                                    spent
-                                      ? "Used — click to restore"
-                                      : "Click to spend Hamon armor charge"
-                                  }
-                                  style={{
-                                    width: "20px",
-                                    height: "20px",
-                                    border: "1px solid #4b5563",
-                                    cursor: "pointer",
-                                    background: spent ? "#15803d" : "#1f2937",
-                                  }}
-                                />
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : null}
+                      <CharacterSheetArmorPanel
+                        showStandArmor={showStandArmor}
+                        standArmorMax={standArmorMax}
+                        standArmorUsed={standArmorUsed}
+                        onStandArmorUsedChange={setStandArmorUsed}
+                        showSpinArmor={showSpinArmor}
+                        spinArmorUsed={spinArmorUsed}
+                        onSpinArmorUsedChange={setSpinArmorUsed}
+                        showHamonArmor={showHamonArmor}
+                        hamonArmorUsed={hamonArmorUsed}
+                        onHamonArmorUsedChange={setHamonArmorUsed}
+                        inventory={charData.inventory}
+                        physicalArmorUsed={physicalArmorUsed}
+                        onPhysicalArmorUsedChange={setPhysicalArmorUsed}
+                        specialArmorUsed={specialArmorUsed}
+                        onSpecialArmorUsedChange={setSpecialArmorUsed}
+                      />
                       {characterHasLegendaryGuard(abilities) ? (
                         <div
                           title={
@@ -12286,42 +11883,22 @@ const CharacterSheetWrapper = ({
                       }}
                     >
                       Free pool (not tied to a live session). Earned from
-                      scorecard and Stand Development; spend anytime — during
-                      play or between sessions. Tick boxes on the tracks below to
-                      move XP from this pool onto a track. Spend 10 for a
-                      playbook-style level-up. Desperate-roll XP marks attribute
-                      tracks automatically and never sits here.
+                      scorecard and Stand Development; bank anytime onto the
+                      tracks below. Filling a track mints a pending advance —
+                      leftover marks stay. Take advance redeems a pending (no
+                      second XP spend). Desperate-roll XP marks attribute tracks
+                      automatically and never sits here.
                     </div>
-                    {unallocatedXp >= 10 && canEditSheet && character?.id ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLevelUpLockTrack(null);
-                          setLevelUpFromPool(true);
-                          setLevelUpSpendTrack("playbook");
-                          setLevelUpError(null);
-                          setShowLevelUp(true);
-                        }}
-                        style={{
-                          ...S.btn,
-                          fontSize: "10px",
-                          padding: "4px 8px",
-                          background: "#7c3aed",
-                          color: "#fff",
-                        }}
-                      >
-                        Level up from pool (−10)
-                      </button>
-                    ) : unallocatedXp <= 0 ? (
+                    {unallocatedXp <= 0 ? (
                       <div style={{ fontSize: "10px", color: "#6b7280" }}>
                         No free-pool XP right now. Scorecard / Dev awards land
                         here after sessions; tick track boxes when you have pool
-                        XP to spend.
+                        XP to bank.
                       </div>
                     ) : (
                       <div style={{ fontSize: "10px", color: "#6b7280" }}>
                         Click empty boxes on Insight / Prowess / Resolve /
-                        Heritage / Playbook below to spend from this pool.
+                        Heritage / Playbook below to bank from this pool.
                       </div>
                     )}
                     {poolTickError ? (
@@ -12344,8 +11921,10 @@ const CharacterSheetWrapper = ({
                     { name: "PLAYBOOK", key: "playbook", max: 10 },
                   ].map(({ name, key, max }) => {
                     const filled = Number(xp[key]) || 0;
-                    const trackFull = filled >= max;
-                    const overflowLocked = key === "playbook" && filled > max;
+                    const pendingCount = Number(
+                      pendingAdvanceCounts?.[key] || 0,
+                    );
+                    const canTakeAdvance = pendingCount > 0;
                     return (
                     <div
                       key={key}
@@ -12370,13 +11949,11 @@ const CharacterSheetWrapper = ({
                         {Array.from({ length: max }, (_, i) => {
                           const isFilled = i < filled;
                           const canSpendHere =
-                            !overflowLocked &&
                             canEditSheet &&
                             !poolAllocateBusy &&
                             !isFilled &&
                             unallocatedXp >= i + 1 - filled;
                           const boxesInteractive =
-                            !overflowLocked &&
                             canEditSheet &&
                             (canSpendHere || isFilled);
                           return (
@@ -12385,23 +11962,20 @@ const CharacterSheetWrapper = ({
                               role="button"
                               tabIndex={boxesInteractive ? 0 : -1}
                               title={
-                                overflowLocked
-                                  ? "Playbook overflow — Take advance spends 10 and leaves remainder"
-                                  : isFilled
-                                    ? canEditSheet
-                                      ? `Return ${filled - i} to Available XP`
-                                      : "Filled"
-                                    : canSpendHere
-                                      ? `Spend ${i + 1 - filled} from Available XP`
-                                      : unallocatedXp < 1
-                                        ? "Need Available XP in the free pool first"
-                                        : "Not enough Available XP for this tick"
+                                isFilled
+                                  ? canEditSheet
+                                    ? `Return ${filled - i} to Available XP`
+                                    : "Filled"
+                                  : canSpendHere
+                                    ? `Bank ${i + 1 - filled} from Available XP`
+                                    : unallocatedXp < 1
+                                      ? "Need Available XP in the free pool first"
+                                      : "Not enough Available XP for this tick"
                               }
                               onClick={() => {
-                                if (!overflowLocked) toggleXP(key, i);
+                                toggleXP(key, i);
                               }}
                               onKeyDown={(e) => {
-                                if (overflowLocked) return;
                                 if (e.key === "Enter" || e.key === " ") {
                                   e.preventDefault();
                                   toggleXP(key, i);
@@ -12411,9 +11985,8 @@ const CharacterSheetWrapper = ({
                                 width: "13px",
                                 height: "13px",
                                 border: "1px solid #4b5563",
-                                cursor: overflowLocked
-                                  ? "default"
-                                  : canSpendHere || isFilled
+                                cursor:
+                                  canSpendHere || isFilled
                                     ? poolAllocateBusy
                                       ? "wait"
                                       : "pointer"
@@ -12428,8 +12001,11 @@ const CharacterSheetWrapper = ({
                       </div>
                       <span style={{ fontSize: "10px", color: "#6b7280" }}>
                         ({filled}/{max})
+                        {pendingCount > 0
+                          ? ` · ${pendingCount} pending`
+                          : ""}
                       </span>
-                      {trackFull && canEditSheet && character?.id ? (
+                      {canTakeAdvance && canEditSheet && character?.id ? (
                         <button
                           type="button"
                           onClick={() => {
@@ -12438,7 +12014,6 @@ const CharacterSheetWrapper = ({
                             if (key === "playbook") {
                               setLevelUpLockTrack("playbook");
                               setLevelUpSpendTrack("playbook");
-                              setLevelUpFromPool(false);
                               setLevelUpChoice(
                                 playbook === "Spin" || playbook === "Hamon"
                                   ? "playbook_ability"
@@ -12470,6 +12045,7 @@ const CharacterSheetWrapper = ({
                           }}
                         >
                           Take advance
+                          {pendingCount > 1 ? ` (${pendingCount})` : ""}
                         </button>
                       ) : null}
                     </div>
@@ -12483,10 +12059,11 @@ const CharacterSheetWrapper = ({
                       lineHeight: 1.4,
                     }}
                   >
-                    Tick empty boxes to spend Available XP onto that track.
-                    When a track is full, Take advance clears it for a reward
-                    (attribute → +1 action dot; heritage → +1 HP; playbook →
-                    level-up choices).
+                    Tick empty boxes to bank Available XP onto that track.
+                    Filling a track mints a pending advance (leftover stays).
+                    Take advance redeems one pending (attribute → +1 action
+                    dot; heritage → +1 HP; playbook → coin / ability / acquire
+                    Stand).
                   </div>
 
                   <div
@@ -12512,11 +12089,12 @@ const CharacterSheetWrapper = ({
                         }}
                       >
                         Desperate ACTION → +1 on that attribute (group desperate
-                        too). Desperate Power / Speed / Precision stand dice →
-                        +1 playbook (innate, uncapped; not Range, Durability, or
-                        Dev). End-session toggles + Dev bonus → free pool
-                        (allocate later). Downtime training not automated yet.
-                        Crew XP: use crew scorecard triggers.
+                        too); 0-dot desperate → +2. Desperate Power / Speed /
+                        Precision stand dice → +1 playbook (innate, uncapped; not
+                        Range, Durability, or Dev). End-session toggles + Dev
+                        bonus → free pool (bank onto tracks later). Downtime
+                        training not automated yet. Crew XP: use crew scorecard
+                        triggers.
                       </div>
                     </div>
                     {!xpReqSnapshot.hasActiveSession && (
@@ -13041,15 +12619,9 @@ const CharacterSheetWrapper = ({
                     >
                       <select
                         value={playbook}
-                        onChange={(e) => {
-                          const next = e.target.value;
-                          setPlaybook(next);
-                          if (secondaryPlaybook === next) {
-                            setSecondaryPlaybook("");
-                          }
-                        }}
+                        onChange={(e) => setPlaybook(e.target.value)}
                         style={S.sel}
-                        aria-label="Primary playbook"
+                        aria-label="Playbook"
                       >
                         {PLAYBOOK_SHEET_OPTIONS.map((opt) => (
                           <option key={opt} value={opt}>
@@ -13057,83 +12629,7 @@ const CharacterSheetWrapper = ({
                           </option>
                         ))}
                       </select>
-                      <select
-                        value={
-                          secondaryPlaybookUnlocked
-                            ? secondaryPlaybook
-                            : pendingSecondPlaybook
-                        }
-                        onChange={(e) => {
-                          const next = e.target.value;
-                          if (!secondaryPlaybookUnlocked) {
-                            setPendingSecondPlaybook(next);
-                            return;
-                          }
-                          setSecondaryPlaybook(next);
-                        }}
-                        style={S.sel}
-                        aria-label="Secondary playbook"
-                        title={
-                          secondaryPlaybookUnlocked
-                            ? "Second playbook"
-                            : "Spend 30 Available XP to obtain another playbook"
-                        }
-                      >
-                        <option value="">—</option>
-                        {PLAYBOOK_SHEET_OPTIONS.filter((opt) => opt !== playbook).map(
-                          (opt) => (
-                            <option key={opt} value={opt}>
-                              {opt}
-                            </option>
-                          ),
-                        )}
-                      </select>
                     </div>
-                    {!secondaryPlaybookUnlocked ? (
-                      <div
-                        style={{
-                          marginTop: "8px",
-                          fontSize: "10px",
-                          color: "#9ca3af",
-                          lineHeight: 1.45,
-                        }}
-                      >
-                        Second playbook costs 30 XP from playbook track + Available XP
-                        (playbook {Number(xp.playbook) || 0} + pool {unallocatedXp} ={" "}
-                        {secondPlaybookXpWallet}).
-                        {unlockSecondError ? (
-                          <div style={{ color: "#f87171", marginTop: "4px" }}>
-                            {unlockSecondError}
-                          </div>
-                        ) : null}
-                        <button
-                          type="button"
-                          disabled={
-                            !canEditSheet ||
-                            unlockSecondBusy ||
-                            !canAffordSecondPlaybook ||
-                            !pendingSecondPlaybook
-                          }
-                          onClick={() => void unlockSecondPlaybook()}
-                          style={{
-                            ...S.btn,
-                            marginTop: "6px",
-                            fontSize: "10px",
-                            opacity:
-                              !canEditSheet ||
-                              unlockSecondBusy ||
-                              !canAffordSecondPlaybook ||
-                              !pendingSecondPlaybook
-                                ? 0.5
-                                : 1,
-                          }}
-                        >
-                          {unlockSecondBusy
-                            ? "Unlocking…"
-                            : "Spend 30 XP to gain this playbook"}
-                        </button>
-                      </div>
-                    ) : null}
                   </div>
                   {hasStandPlaybook && (
                     <div
@@ -13887,8 +13383,8 @@ const CharacterSheetWrapper = ({
                         {isStandCoinChargenEditable
                           ? "Chargen: click a wedge to raise one grade if leftover pts remain (budget 6). Right-click or Shift-click to lower and refund. This is not an advance."
                           : canAffordLevelUp
-                            ? "Stand coin is locked here. Fill the playbook track (10) and Take advance, or Level up from pool (−10), for +1 Stand Coin grade."
-                            : "Stand coin is locked after chargen. Fill playbook (10) or bank 10 in Available XP, then Take advance / level up from pool."}
+                            ? "Stand coin is locked here. Redeem a playbook pending via Take advance for +1 Stand Coin grade."
+                            : "Stand coin is locked after chargen. Fill playbook (10) to mint a pending, then Take advance for +1 grade."}
                         {" "}
                         {maxStandGradeIndex >= 5
                           ? "S-rank is enabled for this character by the GM."
@@ -18532,46 +18028,9 @@ const CharacterSheetWrapper = ({
                                 const customs = abilities.filter(
                                   (a) => a.type === "custom",
                                 );
-                                const single = customs.find(
-                                  (a) => a.id === "custom-single" || a._uses,
+                                setCustomAbilityModal(
+                                  customAbilityModalFromSheetCustoms(customs),
                                 );
-                                if (single && single._uses) {
-                                  setCustomAbilityModal({
-                                    type: "single_with_3_uses",
-                                    name: single.name || "",
-                                    uses: [
-                                      ...(single._uses || []),
-                                      "",
-                                      "",
-                                      "",
-                                    ].slice(0, 3),
-                                    items: [
-                                      { name: "", description: "" },
-                                      { name: "", description: "" },
-                                      { name: "", description: "" },
-                                    ],
-                                  });
-                                } else {
-                                  const three = customs.filter((a) => !a._uses);
-                                  const items = three.length
-                                    ? three.map((a) => ({
-                                        name: a.name || "",
-                                        description: a.description || "",
-                                      }))
-                                    : [
-                                        { name: "", description: "" },
-                                        { name: "", description: "" },
-                                        { name: "", description: "" },
-                                      ];
-                                  while (items.length < 3)
-                                    items.push({ name: "", description: "" });
-                                  setCustomAbilityModal({
-                                    type: "three_separate_uses",
-                                    name: "",
-                                    uses: ["", "", ""],
-                                    items: items.slice(0, 3),
-                                  });
-                                }
                               }}
                               style={{
                                 color: "#60a5fa",
@@ -18585,7 +18044,8 @@ const CharacterSheetWrapper = ({
                               ✏
                             </button>
                           )}
-                          {ab._uiOrigin === "sheet" ? (
+                          {ab._uiOrigin === "sheet" &&
+                          !isPlaybookFoundationAbility(ab) ? (
                             <button
                               type="button"
                               aria-label={`Remove ${ab.name || "ability"}`}
@@ -18887,7 +18347,7 @@ const CharacterSheetWrapper = ({
                               fontSize: "11px",
                             }}
                           >
-                            + Spin abilities
+                            + Spin ability
                           </button>
                           {spinAbilityPickerOpen && (
                             <div
@@ -18936,6 +18396,10 @@ const CharacterSheetWrapper = ({
                                 {(() => {
                                   const available = spinAbilitiesList.filter(
                                     (a) =>
+                                      !isPlaybookFoundationAbility({
+                                        ...a,
+                                        type: "spin",
+                                      }) &&
                                       !abilities.some(
                                         (ab) =>
                                           ab.type === "spin" && ab.id === a.id,
@@ -18970,10 +18434,6 @@ const CharacterSheetWrapper = ({
                                     </div>
                                   ) : (
                                     filtered.map((a) => {
-                                      const levelMet = playbookAbilityLevelMet(
-                                        a,
-                                        pcLevel,
-                                      );
                                       const quotaMet =
                                         canAddNonFoundationPlaybookAbility({
                                           abilities,
@@ -18981,14 +18441,13 @@ const CharacterSheetWrapper = ({
                                           kind: "spin",
                                           xpAllocationRows,
                                         });
-                                      const met = levelMet && quotaMet;
+                                      const met = quotaMet;
                                       const reqLabel =
                                         playbookAbilityRequirementLabel(
                                           a,
                                           pcLevel,
                                         );
-                                      const quotaLabel =
-                                        levelMet && !quotaMet
+                                      const quotaLabel = !quotaMet
                                           ? `Playbook advance required (${nonFoundationPlaybookUsed}/${playbookAbilitySlots})`
                                           : reqLabel;
                                       return (
@@ -19077,10 +18536,6 @@ const CharacterSheetWrapper = ({
                                     </div>
                                   )}
                                   {(() => {
-                                    const levelMet = playbookAbilityLevelMet(
-                                      spinAbilitySelected,
-                                      pcLevel,
-                                    );
                                     const quotaMet =
                                       canAddNonFoundationPlaybookAbility({
                                         abilities,
@@ -19088,24 +18543,10 @@ const CharacterSheetWrapper = ({
                                         kind: "spin",
                                         xpAllocationRows,
                                       });
-                                    const canAdd = levelMet && quotaMet;
+                                    const canAdd = quotaMet;
                                     return (
                                       <>
-                                        {!levelMet && (
-                                          <div
-                                            style={{
-                                              color: "#f87171",
-                                              marginTop: "8px",
-                                              fontSize: "11px",
-                                            }}
-                                          >
-                                            {playbookAbilityRequirementLabel(
-                                              spinAbilitySelected,
-                                              pcLevel,
-                                            )}
-                                          </div>
-                                        )}
-                                        {levelMet && !quotaMet && (
+                                        {!quotaMet && (
                                           <div
                                             style={{
                                               color: "#f87171",
@@ -19206,7 +18647,7 @@ const CharacterSheetWrapper = ({
                               fontSize: "11px",
                             }}
                           >
-                            + Hamon abilities
+                            + Hamon ability
                           </button>
                           {hamonAbilityPickerOpen && (
                             <div
@@ -19255,6 +18696,10 @@ const CharacterSheetWrapper = ({
                                 {(() => {
                                   const available = hamonAbilitiesList.filter(
                                     (a) =>
+                                      !isPlaybookFoundationAbility({
+                                        ...a,
+                                        type: "hamon",
+                                      }) &&
                                       !abilities.some(
                                         (ab) =>
                                           ab.type === "hamon" && ab.id === a.id,
@@ -19289,10 +18734,6 @@ const CharacterSheetWrapper = ({
                                     </div>
                                   ) : (
                                     filtered.map((a) => {
-                                      const levelMet = playbookAbilityLevelMet(
-                                        a,
-                                        pcLevel,
-                                      );
                                       const quotaMet =
                                         canAddNonFoundationPlaybookAbility({
                                           abilities,
@@ -19300,14 +18741,13 @@ const CharacterSheetWrapper = ({
                                           kind: "hamon",
                                           xpAllocationRows,
                                         });
-                                      const met = levelMet && quotaMet;
+                                      const met = quotaMet;
                                       const reqLabel =
                                         playbookAbilityRequirementLabel(
                                           a,
                                           pcLevel,
                                         );
-                                      const quotaLabel =
-                                        levelMet && !quotaMet
+                                      const quotaLabel = !quotaMet
                                           ? `Playbook advance required (${nonFoundationPlaybookUsed}/${playbookAbilitySlots})`
                                           : reqLabel;
                                       return (
@@ -19395,10 +18835,6 @@ const CharacterSheetWrapper = ({
                                     </div>
                                   )}
                                   {(() => {
-                                    const levelMet = playbookAbilityLevelMet(
-                                      hamonAbilitySelected,
-                                      pcLevel,
-                                    );
                                     const quotaMet =
                                       canAddNonFoundationPlaybookAbility({
                                         abilities,
@@ -19406,24 +18842,10 @@ const CharacterSheetWrapper = ({
                                         kind: "hamon",
                                         xpAllocationRows,
                                       });
-                                    const canAdd = levelMet && quotaMet;
+                                    const canAdd = quotaMet;
                                     return (
                                       <>
-                                        {!levelMet && (
-                                          <div
-                                            style={{
-                                              color: "#f87171",
-                                              marginTop: "8px",
-                                              fontSize: "11px",
-                                            }}
-                                          >
-                                            {playbookAbilityRequirementLabel(
-                                              hamonAbilitySelected,
-                                              pcLevel,
-                                            )}
-                                          </div>
-                                        )}
-                                        {levelMet && !quotaMet && (
+                                        {!quotaMet && (
                                           <div
                                             style={{
                                               color: "#f87171",
@@ -19498,19 +18920,7 @@ const CharacterSheetWrapper = ({
                       {showAddCustomButton ? (
                       <button
                         type="button"
-                        onClick={() => {
-                          setCustomAbilityModal({
-                            type: "single_with_3_uses",
-                            name: "",
-                            groupName: "",
-                            uses: ["", "", ""],
-                            items: [
-                              { name: "", description: "" },
-                              { name: "", description: "" },
-                              { name: "", description: "" },
-                            ],
-                          });
-                        }}
+                        onClick={() => setCustomAbilityModal(newCustomAbilityModalDraft())}
                         style={{
                           ...S.btn,
                           background: "#16a34a",
@@ -19552,7 +18962,7 @@ const CharacterSheetWrapper = ({
                                 marginBottom: "12px",
                               }}
                             >
-                              Custom Ability (SRD: 3x1 or 1x3)
+                              Custom abilities
                             </span>
                             <div
                               style={{
@@ -19561,206 +18971,88 @@ const CharacterSheetWrapper = ({
                                 marginBottom: "12px",
                               }}
                             >
-                              Give a custom name and list either 3 individual
-                              abilities or 1 ability that does 3 things.
+                              Add three custom abilities (one use each). Name
+                              and description required for each.
                             </div>
-                            <div style={{ marginBottom: "12px" }}>
-                              <span
-                                style={{ fontSize: "11px", color: "#9ca3af" }}
+                            {[0, 1, 2].map((i) => (
+                              <div
+                                key={i}
+                                style={{
+                                  marginBottom: "12px",
+                                  padding: "8px",
+                                  background: "#1f2937",
+                                  borderRadius: "4px",
+                                }}
                               >
-                                Type
-                              </span>
-                              <select
-                                style={S.select}
-                                value={customAbilityModal.type}
-                                onChange={(e) =>
-                                  setCustomAbilityModal((p) => ({
-                                    ...p,
-                                    type: e.target.value,
-                                  }))
-                                }
-                              >
-                                <option value="single_with_3_uses">
-                                  1 ability with 3 uses
-                                </option>
-                                <option value="three_separate_uses">
-                                  3 abilities, 1 use each
-                                </option>
-                              </select>
-                            </div>
-                            {customAbilityModal.type ===
-                            "single_with_3_uses" ? (
-                              <>
-                                <div style={{ marginBottom: "8px" }}>
-                                  <span
-                                    style={{
-                                      fontSize: "11px",
-                                      color: "#9ca3af",
-                                    }}
-                                  >
-                                    Custom ability name (required)
-                                  </span>
-                                  <input
-                                    style={S.inp}
-                                    value={customAbilityModal.name}
-                                    onChange={(e) =>
-                                      setCustomAbilityModal((p) => ({
-                                        ...p,
-                                        name: e.target.value,
-                                      }))
-                                    }
-                                    placeholder="Ability name"
-                                  />
-                                </div>
-                                {[0, 1, 2].map((i) => (
-                                  <div key={i} style={{ marginBottom: "8px" }}>
-                                    <span
-                                      style={{
-                                        fontSize: "11px",
-                                        color: "#9ca3af",
-                                      }}
-                                    >
-                                      Use {i + 1} (required)
-                                    </span>
-                                    <input
-                                      style={S.inp}
-                                      value={customAbilityModal.uses?.[i] || ""}
-                                      onChange={(e) => {
-                                        const u = [
-                                          ...(customAbilityModal.uses || [
-                                            "",
-                                            "",
-                                            "",
-                                          ]),
-                                        ];
-                                        u[i] = e.target.value;
-                                        setCustomAbilityModal((p) => ({
-                                          ...p,
-                                          uses: u,
-                                        }));
-                                      }}
-                                      placeholder={`Use ${i + 1} description`}
-                                    />
-                                  </div>
-                                ))}
-                              </>
-                            ) : (
-                              <>
-                                <div style={{ marginBottom: "8px" }}>
-                                  <span
-                                    style={{
-                                      fontSize: "11px",
-                                      color: "#9ca3af",
-                                    }}
-                                  >
-                                    Custom ability set name (optional)
-                                  </span>
-                                  <input
-                                    style={S.inp}
-                                    value={customAbilityModal.groupName || ""}
-                                    onChange={(e) =>
-                                      setCustomAbilityModal((p) => ({
-                                        ...p,
-                                        groupName: e.target.value,
-                                      }))
-                                    }
-                                    placeholder="e.g. My Stand's Tricks"
-                                  />
-                                </div>
-                                {[0, 1, 2].map((i) => (
-                                  <div
-                                    key={i}
-                                    style={{
-                                      marginBottom: "12px",
-                                      padding: "8px",
-                                      background: "#1f2937",
-                                      borderRadius: "4px",
-                                    }}
-                                  >
-                                    <span
-                                      style={{
-                                        fontSize: "11px",
-                                        color: "#9ca3af",
-                                      }}
-                                    >
-                                      Ability {i + 1} (name + description
-                                      required)
-                                    </span>
-                                    <input
-                                      style={S.inp}
-                                      value={
-                                        customAbilityModal.items?.[i]?.name ||
-                                        ""
-                                      }
-                                      onChange={(e) => {
-                                        const it = [
-                                          ...(customAbilityModal.items || []),
-                                        ];
-                                        while (it.length <= i)
-                                          it.push({
-                                            name: "",
-                                            description: "",
-                                          });
-                                        it[i] = {
-                                          ...it[i],
-                                          name: e.target.value,
-                                        };
-                                        setCustomAbilityModal((p) => ({
-                                          ...p,
-                                          items: it,
-                                        }));
-                                      }}
-                                      placeholder="Name"
-                                    />
-                                    <input
-                                      style={{ ...S.inp, marginTop: "4px" }}
-                                      value={
-                                        customAbilityModal.items?.[i]
-                                          ?.description || ""
-                                      }
-                                      onChange={(e) => {
-                                        const it = [
-                                          ...(customAbilityModal.items || []),
-                                        ];
-                                        while (it.length <= i)
-                                          it.push({
-                                            name: "",
-                                            description: "",
-                                          });
-                                        it[i] = {
-                                          ...it[i],
-                                          description: e.target.value,
-                                        };
-                                        setCustomAbilityModal((p) => ({
-                                          ...p,
-                                          items: it,
-                                        }));
-                                      }}
-                                      placeholder="Description"
-                                    />
-                                  </div>
-                                ))}
-                              </>
-                            )}
+                                <span
+                                  style={{
+                                    fontSize: "11px",
+                                    color: "#9ca3af",
+                                  }}
+                                >
+                                  Ability {i + 1} (name + description
+                                  required)
+                                </span>
+                                <input
+                                  style={S.inp}
+                                  value={
+                                    customAbilityModal.items?.[i]?.name || ""
+                                  }
+                                  onChange={(e) => {
+                                    const it = [
+                                      ...(customAbilityModal.items || []),
+                                    ];
+                                    while (it.length <= i)
+                                      it.push({
+                                        name: "",
+                                        description: "",
+                                      });
+                                    it[i] = {
+                                      ...it[i],
+                                      name: e.target.value,
+                                    };
+                                    setCustomAbilityModal((p) => ({
+                                      ...p,
+                                      items: it,
+                                    }));
+                                  }}
+                                  placeholder="Name"
+                                />
+                                <input
+                                  style={{ ...S.inp, marginTop: "4px" }}
+                                  value={
+                                    customAbilityModal.items?.[i]
+                                      ?.description || ""
+                                  }
+                                  onChange={(e) => {
+                                    const it = [
+                                      ...(customAbilityModal.items || []),
+                                    ];
+                                    while (it.length <= i)
+                                      it.push({
+                                        name: "",
+                                        description: "",
+                                      });
+                                    it[i] = {
+                                      ...it[i],
+                                      description: e.target.value,
+                                    };
+                                    setCustomAbilityModal((p) => ({
+                                      ...p,
+                                      items: it,
+                                    }));
+                                  }}
+                                  placeholder="Description"
+                                />
+                              </div>
+                            ))}
                             {(() => {
                               const prev = customAbilityModal;
-                              const validSingle =
-                                prev.type === "single_with_3_uses" &&
-                                (prev.name || "").trim() &&
-                                (prev.uses || []).every((u) =>
-                                  (u || "").trim(),
-                                );
-                              const validThree =
-                                prev.type === "three_separate_uses" &&
-                                (prev.items || []).every(
-                                  (i) =>
-                                    (i?.name || "").trim() &&
-                                    (i?.description || "").trim(),
-                                );
-                              const canSave =
-                                prev.type === "single_with_3_uses"
-                                  ? validSingle
-                                  : validThree;
+                              const canSave = (prev.items || []).every(
+                                (item) =>
+                                  (item?.name || "").trim() &&
+                                  (item?.description || "").trim(),
+                              );
                               return (
                                 <div
                                   style={{
@@ -19780,33 +19072,20 @@ const CharacterSheetWrapper = ({
                                             a.type !== "custom" ||
                                             a._fromAdvancement,
                                         ),
-                                        ...(prev.type === "single_with_3_uses"
-                                          ? [
-                                              {
-                                                id: "custom-single",
-                                                name: (prev.name || "").trim(),
-                                                type: "custom",
-                                                _uses: prev.uses || [
-                                                  "",
-                                                  "",
-                                                  "",
-                                                ],
-                                              },
-                                            ]
-                                          : prev.items
-                                              .filter(
-                                                (i) =>
-                                                  (i?.name || "").trim() &&
-                                                  (i?.description || "").trim(),
-                                              )
-                                              .map((it, i) => ({
-                                                id: `custom-${i}`,
-                                                name: (it.name || "").trim(),
-                                                description: (
-                                                  it.description || ""
-                                                ).trim(),
-                                                type: "custom",
-                                              }))),
+                                        ...(prev.items || [])
+                                          .filter(
+                                            (item) =>
+                                              (item?.name || "").trim() &&
+                                              (item?.description || "").trim(),
+                                          )
+                                          .map((it, idx) => ({
+                                            id: `custom-${idx}`,
+                                            name: (it.name || "").trim(),
+                                            description: (
+                                              it.description || ""
+                                            ).trim(),
+                                            type: "custom",
+                                          })),
                                       ]);
                                       setCustomAbilityModal(null);
                                     }}
@@ -20545,8 +19824,24 @@ const CharacterSheetWrapper = ({
                         readOnly={!canEditSheet}
                         onChange={(next) => {
                           markDirtyIntent();
+                          markFieldTouch("inventory");
                           setCharData((p) => ({ ...p, inventory: next }));
                         }}
+                        onInventoryTouch={() => markFieldTouch("inventory")}
+                        loadoutEntry={sessionLoadoutEntry}
+                        onLoadoutChange={handleLoadoutChange}
+                        activeSessionId={activeSessionId}
+                        coinFilled={coinFilled}
+                        abilities={abilities}
+                        campaignId={campaignId}
+                        characterId={characterId}
+                        isGM={isGM}
+                        onPromoteToCampaign={
+                          isGM ? handlePromoteItemToCampaign : undefined
+                        }
+                        onPublishToSite={
+                          isGM ? handlePublishItemToSite : undefined
+                        }
                       />
                     ) : null}
                   </div>
@@ -21650,22 +20945,14 @@ const CharacterSheetWrapper = ({
 
             <div style={{ display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
               {(
-                primaryIsSpinOrHamon &&
-                (levelUpLockTrack === "playbook" ||
-                  (!levelUpLockTrack &&
-                    !levelUpFromPool &&
-                    levelUpSpendTrack === "playbook"))
-                  ? [["playbook_ability", "+1 Playbook Ability"]]
-                  : primaryIsSpinOrHamon
-                    ? [
-                        ["dots", "+2 Action Dots"],
-                        ["heritage", "+1 Heritage"],
-                      ]
-                    : [
-                        ["stat", "+1 Stand Coin"],
-                        ["dots", "+2 Action Dots"],
-                        ["heritage", "+1 Heritage"],
-                      ]
+                primaryIsSpinOrHamon
+                  ? [
+                      ["playbook_ability", "+1 Playbook Ability"],
+                      ...(!hasAcquiredStand
+                        ? [["acquire_stand", "Acquire Stand"]]
+                        : [["stat", "+1 Stand Coin"]]),
+                    ]
+                  : [["stat", "+1 Stand Coin"]]
               ).map(([val, label]) => (
                 <button
                   key={val}
@@ -21692,30 +20979,25 @@ const CharacterSheetWrapper = ({
                   lineHeight: 1.45,
                 }}
               >
-                Spend 10 XP from a full playbook track to unlock one more
-                non-foundation Spin/Hamon ability pick (still gated by
-                character level).
+                Redeem one playbook pending for another non-foundation
+                Spin/Hamon ability pick (slot budget = 1 chargen + advances;
+                depth is owned non-foundation count, not character level).
               </div>
             )}
-            {unallocatedXp >= 10 && !levelUpLockTrack ? (
-              <label
+            {levelUpChoice === "acquire_stand" && (
+              <div
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  marginBottom: 12,
-                  fontSize: 12,
-                  color: "#d1d5db",
+                  marginBottom: "16px",
+                  fontSize: "12px",
+                  color: "#9ca3af",
+                  lineHeight: 1.45,
                 }}
               >
-                <input
-                  type="checkbox"
-                  checked={levelUpFromPool}
-                  onChange={(e) => setLevelUpFromPool(e.target.checked)}
-                />
-                Spend from free pool ({unallocatedXp}) instead of a track
-              </label>
-            ) : null}
+                Redeem one playbook pending to gain a Stand. Coin starts at D
+                across all six stats (6 points — redistribute on the sheet).
+                Add 3 unique + 2 standard abilities on the sheet after.
+              </div>
+            )}
 
             {levelUpChoice === "stat" && (
               <div style={{ marginBottom: "16px" }}>
@@ -21738,52 +21020,6 @@ const CharacterSheetWrapper = ({
                     </option>
                   ))}
                 </select>
-              </div>
-            )}
-
-            {levelUpChoice === "heritage" && (
-              <div
-                style={{
-                  marginBottom: "16px",
-                  fontSize: "12px",
-                  color: "#9ca3af",
-                }}
-              >
-                Spend 10 XP for +1 heritage ability pick (record the ability on
-                your sheet after confirming).
-              </div>
-            )}
-
-            {levelUpChoice === "dots" && (
-              <div style={{ marginBottom: "16px" }}>
-                <span style={S.lbl}>
-                  Choose 2 actions (+1 dot each — can pick same action twice)
-                </span>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  {[levelUpDot1, levelUpDot2].map((val, i) => (
-                    <select
-                      key={i}
-                      value={val}
-                      onChange={(e) =>
-                        i === 0
-                          ? setLevelUpDot1(e.target.value)
-                          : setLevelUpDot2(e.target.value)
-                      }
-                      style={{ ...S.sel, flex: 1 }}
-                    >
-                      {Object.keys(actionRatings).map((a) => (
-                        <option
-                          key={a}
-                          value={a}
-                          disabled={actionRatings[a] >= 4}
-                        >
-                          {a} ({actionRatings[a]}/4)
-                          {actionRatings[a] >= 4 ? " MAX" : ""}
-                        </option>
-                      ))}
-                    </select>
-                  ))}
-                </div>
               </div>
             )}
 
@@ -21881,62 +21117,18 @@ const CharacterSheetWrapper = ({
             )}
 
             <div style={{ marginBottom: "16px" }}>
-              <span style={S.lbl}>Spend 10 XP from</span>
-              {levelUpLockTrack ? (
-                <div
-                  style={{
-                    marginTop: "6px",
-                    fontSize: "12px",
-                    color: "#c4b5fd",
-                  }}
-                >
-                  {XP_TRACK_SPEND_LABELS[levelUpLockTrack] || levelUpLockTrack}{" "}
-                  track ({Number(xp[levelUpLockTrack]) || 0}/
-                  {XP_TRACK_SPEND_MAX[levelUpLockTrack] || 10}) — full track
-                  advance
-                </div>
-              ) : (
-                <select
-                  value={levelUpSpendTrack}
-                  onChange={(e) => {
-                    const t = e.target.value;
-                    setLevelUpSpendTrack(t);
-                    if (primaryIsSpinOrHamon && t === "playbook") {
-                      setLevelUpChoice("playbook_ability");
-                    } else if (
-                      primaryIsSpinOrHamon &&
-                      levelUpChoice === "playbook_ability"
-                    ) {
-                      setLevelUpChoice("dots");
-                    } else if (
-                      !primaryIsSpinOrHamon &&
-                      levelUpChoice === "playbook_ability"
-                    ) {
-                      setLevelUpChoice("stat");
-                    }
-                  }}
-                  disabled={levelUpFromPool}
-                  style={{ ...S.sel, width: "100%", marginTop: "6px" }}
-                >
-                  {XP_SPEND_TRACK_ORDER.map((t) => {
-                    const n = Number(xp[t]) || 0;
-                    const cap = XP_TRACK_SPEND_MAX[t];
-                    return (
-                      <option key={t} value={t} disabled={n < 10}>
-                        {XP_TRACK_SPEND_LABELS[t] || t}: {n}/{cap}
-                        {n < 10 ? " (need 10)" : ""}
-                      </option>
-                    );
-                  })}
-                </select>
-              )}
-              {!levelUpFromPool &&
-                !levelUpLockTrack &&
-                (Number(xp[levelUpSpendTrack]) || 0) < 10 && (
-                  <div style={{ ...S.warn, marginTop: "6px", fontSize: "10px" }}>
-                    Choose a track that has at least 10 XP
-                  </div>
-                )}
+              <span style={S.lbl}>Redeem playbook pending</span>
+              <div
+                style={{
+                  marginTop: "6px",
+                  fontSize: "12px",
+                  color: "#c4b5fd",
+                }}
+              >
+                Playbook track ({Number(xp.playbook) || 0}/10) ·{" "}
+                {Number(pendingAdvanceCounts?.playbook || 0)} open pending
+                {Number(pendingAdvanceCounts?.playbook || 0) === 1 ? "" : "s"}
+              </div>
             </div>
 
             {levelUpError && (
@@ -21952,41 +21144,27 @@ const CharacterSheetWrapper = ({
                 disabled={
                   levelUpBusy ||
                   !characterId ||
-                  !(
-                    (levelUpLockTrack
-                      ? (Number(xp[levelUpLockTrack]) || 0) >= 10
-                      : levelUpFromPool
-                        ? unallocatedXp >= 10
-                        : (Number(xp[levelUpSpendTrack]) || 0) >= 10)
-                  )
+                  Number(pendingAdvanceCounts?.playbook || 0) < 1
                 }
                 style={{
                   ...S.btn,
                   background:
                     !levelUpBusy &&
                     characterId &&
-                    (levelUpLockTrack
-                      ? (Number(xp[levelUpLockTrack]) || 0) >= 10
-                      : levelUpFromPool
-                        ? unallocatedXp >= 10
-                        : (Number(xp[levelUpSpendTrack]) || 0) >= 10)
+                    Number(pendingAdvanceCounts?.playbook || 0) >= 1
                       ? "#7c3aed"
                       : "#374151",
                   color:
                     !levelUpBusy &&
                     characterId &&
-                    (levelUpLockTrack
-                      ? (Number(xp[levelUpLockTrack]) || 0) >= 10
-                      : levelUpFromPool
-                        ? unallocatedXp >= 10
-                        : (Number(xp[levelUpSpendTrack]) || 0) >= 10)
+                    Number(pendingAdvanceCounts?.playbook || 0) >= 1
                       ? "#fff"
                       : "#6b7280",
                   flex: 1,
                   fontWeight: "bold",
                 }}
               >
-                {levelUpBusy ? "Applying…" : "Confirm (−10 XP)"}
+                {levelUpBusy ? "Applying…" : "Confirm (redeem pending)"}
               </button>
               <button
                 type="button"
@@ -22041,8 +21219,8 @@ const CharacterSheetWrapper = ({
             {showTrackAdvance.kind === "heritage" ? (
               <>
                 <p style={{ fontSize: 12, color: "#d1d5db", marginBottom: 16 }}>
-                  Clear the full heritage track (5 XP) for +1 HP (heritage option,
-                  no extra detriments).
+                  Redeem one heritage pending for +1 HP (heritage option, no
+                  extra detriments).
                 </p>
                 {minorAdvanceError && (
                   <div style={{ ...S.warn, marginBottom: 10, fontSize: 11 }}>
@@ -22083,7 +21261,7 @@ const CharacterSheetWrapper = ({
                       fontWeight: "bold",
                     }}
                   >
-                    {minorAdvanceBusy ? "…" : "Confirm (−5 XP → +1 HP)"}
+                    {minorAdvanceBusy ? "…" : "Confirm (redeem → +1 HP)"}
                   </button>
                   <button
                     type="button"
@@ -22097,8 +21275,8 @@ const CharacterSheetWrapper = ({
             ) : (
               <>
                 <p style={{ fontSize: 12, color: "#d1d5db", marginBottom: 12 }}>
-                  Clear this full attribute track (5 XP) for +1 action dot under
-                  that attribute.
+                  Redeem one attribute pending for +1 action dot under that
+                  attribute.
                 </p>
                 <span style={S.lbl}>Action</span>
                 <select
@@ -22140,7 +21318,7 @@ const CharacterSheetWrapper = ({
                       fontWeight: "bold",
                     }}
                   >
-                    {minorAdvanceBusy ? "…" : "Confirm (−5 XP)"}
+                    {minorAdvanceBusy ? "…" : "Confirm (redeem → +1 dot)"}
                   </button>
                   <button
                     type="button"

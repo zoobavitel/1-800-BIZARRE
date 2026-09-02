@@ -15,6 +15,7 @@ import {
   serializeSheetProgressClocks,
 } from "../utils/progressClockSegments";
 import { computePcLevelFromSheet } from "../utils/characterUtils";
+import { inventorySpecialArmorCount, normalizeInventoryKitList } from "../utils/loadoutUtils";
 
 /** Backend Character.playbook values */
 const PLAYBOOK_BACKEND = ["STAND", "HAMON", "SPIN"];
@@ -59,9 +60,9 @@ function hasLinkedCrew(crewId) {
 
 /** Backend `inventory` is a JSON array; legacy data may be a single object. */
 export function normalizeCharacterInventory(inv) {
-  if (Array.isArray(inv)) return inv;
-  if (inv != null && typeof inv === "object") return [inv];
-  return [];
+  return normalizeInventoryKitList(
+    Array.isArray(inv) ? inv : inv != null && typeof inv === "object" ? [inv] : [],
+  );
 }
 
 /** Map sheet labels or backend enums to API playbook */
@@ -520,8 +521,12 @@ export function normalizeListResponse(data) {
 
 // Reference data API functions
 export const referenceAPI = {
-  // Get all heritages
-  getHeritages: () => apiRequest("/heritages/"),
+  // Get all heritages (excludes junk test rows H / H2)
+  getHeritages: async () => {
+    const list = await apiRequest("/heritages/");
+    if (!Array.isArray(list)) return [];
+    return list.filter((h) => h?.name !== "H" && h?.name !== "H2");
+  },
 
   // Get all vices
   getVices: () => apiRequest("/vices/"),
@@ -656,6 +661,42 @@ export const factionAPI = {
       body: JSON.stringify(data),
     }),
   deleteFaction: (id) => apiRequest(`/factions/${id}/`, { method: "DELETE" }),
+};
+
+export const equipmentAPI = {
+  list: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.campaign != null) q.set("campaign", String(params.campaign));
+    if (params.scope) q.set("scope", params.scope);
+    if (params.available_for_campaign) q.set("available_for_campaign", "1");
+    const qs = q.toString();
+    return apiRequest(`/equipment-items/${qs ? `?${qs}` : ""}`);
+  },
+  get: (id) => apiRequest(`/equipment-items/${id}/`),
+  create: (data) =>
+    apiRequest("/equipment-items/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id, data) =>
+    apiRequest(`/equipment-items/${id}/`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  delete: (id) =>
+    apiRequest(`/equipment-items/${id}/`, { method: "DELETE" }),
+  setCampaignAccess: (id, campaignId, enabled) =>
+    apiRequest(`/equipment-items/${id}/set-campaign-access/`, {
+      method: "POST",
+      body: JSON.stringify({ campaign: campaignId, enabled }),
+    }),
+  publishToSite: (id) =>
+    apiRequest(`/equipment-items/${id}/publish-to-site/`, { method: "POST" }),
+  fromKitItem: (data) =>
+    apiRequest("/equipment-items/from-kit-item/", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
 
 // Crew API functions
@@ -1196,6 +1237,10 @@ export const transformBackendToFrontend = (backendCharacter) => {
       3,
       Math.max(0, Math.floor(Number(backendCharacter.hamon_armor_used) || 0)),
     ),
+    specialArmorUsed: Math.max(
+      0,
+      Math.floor(Number(backendCharacter.special_armor_used) || 0),
+    ),
     armor: {
       armor: false,
       heavy: false,
@@ -1302,6 +1347,19 @@ export const transformBackendToFrontend = (backendCharacter) => {
       0,
       Math.floor(Number(backendCharacter.unallocated_xp) || 0),
     ),
+    pendingAdvances: Array.isArray(backendCharacter.pending_advances)
+      ? backendCharacter.pending_advances.map((p) => ({
+          id: p.id,
+          track: p.track,
+          status: p.status,
+          createdAt: p.created_at || null,
+        }))
+      : [],
+    pendingAdvanceCounts:
+      backendCharacter.pending_advance_counts &&
+      typeof backendCharacter.pending_advance_counts === "object"
+        ? { ...backendCharacter.pending_advance_counts }
+        : {},
 
     // Abilities (standard + hamon + spin + custom from custom_ability fields)
     abilities: [
@@ -1672,6 +1730,15 @@ export const transformFrontendToBackend = (frontendCharacter) => {
       3,
       Math.max(0, Math.floor(Number(frontendCharacter.hamonArmorUsed) || 0)),
     ),
+    special_armor_used: (() => {
+      const max = inventorySpecialArmorCount(
+        normalizeCharacterInventory(frontendCharacter.inventory),
+      );
+      return Math.min(
+        max,
+        Math.max(0, Math.floor(Number(frontendCharacter.specialArmorUsed) || 0)),
+      );
+    })(),
 
     // Harm — full L1/L2 two-slot + L3 + L4; `used` follows trimmed non-empty text
     ...(() => {
@@ -1712,9 +1779,7 @@ export const transformFrontendToBackend = (frontendCharacter) => {
           ? frontendCharacter.campaign?.id
           : frontendCharacter.campaign
         : null,
-    inventory: Array.isArray(frontendCharacter.inventory)
-      ? frontendCharacter.inventory
-      : normalizeCharacterInventory(frontendCharacter.inventory),
+    inventory: normalizeCharacterInventory(frontendCharacter.inventory),
     reputation_status: frontendCharacter.reputation_status ?? {},
 
     // Standard abilities (array of Ability IDs)

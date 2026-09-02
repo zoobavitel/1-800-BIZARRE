@@ -131,7 +131,7 @@ class InnateStandDiceXpTests(TestCase):
             self.assertEqual(xp, 1)
             self.assertEqual(track, "playbook")
 
-    def test_playbook_already_at_ten_becomes_eleven(self):
+    def test_playbook_at_ten_fill_clear_leaves_one(self):
         self.character.xp_clocks = {**self.character.xp_clocks, "playbook": 10}
         self.character.save(update_fields=["xp_clocks"])
         roll = self._roll()
@@ -141,7 +141,15 @@ class InnateStandDiceXpTests(TestCase):
         self.assertEqual(xp, 1)
         self.assertEqual(track, "playbook")
         self.character.refresh_from_db()
-        self.assertEqual(self.character.xp_clocks.get("playbook"), 11)
+        self.assertEqual(self.character.xp_clocks.get("playbook"), 1)
+        from characters.models import PendingAdvance
+
+        self.assertEqual(
+            PendingAdvance.objects.filter(
+                character=self.character, track="playbook", status="open"
+            ).count(),
+            1,
+        )
 
     def test_durability_no_grant(self):
         roll = self._roll(action_name="stand_durability")
