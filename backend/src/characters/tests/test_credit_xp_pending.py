@@ -3,7 +3,15 @@
 from django.contrib.auth.models import User
 from django.test import TestCase
 
-from characters.models import Character, Heritage, PendingAdvance, Roll, Session, Campaign
+from characters.models import (
+    Character,
+    Heritage,
+    PendingAdvance,
+    Roll,
+    Session,
+    Campaign,
+    Stand,
+)
 from characters.roll_helpers import (
     award_desperate_action_xp,
     award_innate_stand_dice_xp,
@@ -177,3 +185,62 @@ class CreditXpPendingTests(TestCase):
         self.assertEqual(self.character.coin_stats.get("power"), "D")
         self.assertEqual(self.character.coin_stats.get("development"), "D")
         self.assertTrue(alloc.metadata.get("from_pending"))
+
+    def test_redeem_playbook_pending_plus_one_stand_coin(self):
+        """ToTo-shaped: leftover playbook pending at 0/10 after prior HP buys."""
+        Stand.objects.create(
+            character=self.character,
+            name="Test Stand",
+            type="FIGHTING",
+            form="Humanoid",
+            consciousness_level="C",
+            power="D",
+            speed="D",
+            range="D",
+            durability="D",
+            precision="D",
+            development="D",
+        )
+        self.character.coin_stats = {
+            "power": "D",
+            "speed": "D",
+            "range": "D",
+            "durability": "D",
+            "precision": "D",
+            "development": "D",
+        }
+        self.character.bonus_hp_from_xp = 2
+        self.character.total_xp_spent = 10
+        self.character.stand_coin_points_gained = 0
+        self.character.save()
+        credit_xp(self.character, "playbook", 10)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.xp_clocks.get("playbook"), 0)
+        self.assertEqual(
+            PendingAdvance.objects.filter(
+                character=self.character, track="playbook", status="open"
+            ).count(),
+            1,
+        )
+
+        alloc = apply_level_up(
+            self.character,
+            xp_track="playbook",
+            choice="stat",
+            stand_stat="power",
+        )
+        self.character.refresh_from_db()
+        self.assertEqual(alloc.allocation_type, "LEVEL_UP_STAT")
+        self.assertTrue(alloc.metadata.get("from_pending"))
+        self.assertEqual(self.character.stand.power, "C")
+        self.assertEqual(self.character.stand_coin_points_gained, 1)
+        self.assertEqual(self.character.total_xp_spent, 20)
+        self.assertEqual(self.character.xp_clocks.get("playbook"), 0)
+        pending = PendingAdvance.objects.get(pk=alloc.metadata["pending_id"])
+        self.assertEqual(pending.status, "redeemed_manual")
+        self.assertEqual(
+            PendingAdvance.objects.filter(
+                character=self.character, track="playbook", status="open"
+            ).count(),
+            0,
+        )

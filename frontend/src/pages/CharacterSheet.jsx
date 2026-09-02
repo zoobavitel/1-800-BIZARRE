@@ -995,6 +995,8 @@ const CharacterSheetWrapper = ({
   const draftGenRef = useRef(0);
   /** Abort in-flight autosave PATCH when allocation APIs return fresher state. */
   const autosaveAbortRef = useRef(null);
+  /** Sync guard so Confirm cannot double-fire before levelUpBusy re-renders. */
+  const levelUpInFlightRef = useRef(false);
   const pendingResaveRef = useRef(false);
   /**
    * Same-tick protect before meta effect computes isDirty.
@@ -2135,6 +2137,12 @@ const CharacterSheetWrapper = ({
 
   useEffect(() => {
     if (!showLevelUp) return;
+    // Take advance locks the pending's track. Do not fall back to a
+    // leftover 10-mark track (or insight) when clocks sit at 0/10.
+    if (levelUpLockTrack) {
+      setLevelUpSpendTrack(levelUpLockTrack);
+      return;
+    }
     setLevelUpSpendTrack((prev) => {
       if ((Number(xp[prev]) || 0) >= 10) return prev;
       return (
@@ -2142,7 +2150,7 @@ const CharacterSheetWrapper = ({
         XP_SPEND_TRACK_ORDER[0]
       );
     });
-  }, [showLevelUp, xp]);
+  }, [showLevelUp, xp, levelUpLockTrack]);
 
   useEffect(() => {
     const next = character?.pendingStandAReward || null;
@@ -3840,6 +3848,7 @@ const CharacterSheetWrapper = ({
 
   // FIX 6: Confirm level-up — redeem open PendingAdvance (no second XP deduct).
   const confirmLevelUp = async () => {
+    if (levelUpInFlightRef.current) return;
     const track = levelUpLockTrack || levelUpSpendTrack || "playbook";
     const pendingCount = Number(pendingAdvanceCounts?.[track] || 0);
     if (pendingCount < 1 || !characterId) return;
@@ -3865,8 +3874,15 @@ const CharacterSheetWrapper = ({
       }
     }
 
+    levelUpInFlightRef.current = true;
     setLevelUpBusy(true);
     setLevelUpError(null);
+    // Pause dirty-sheet PATCH so SQLite is not held while we redeem pending.
+    if (autosaveAbortRef.current) {
+      autosaveAbortRef.current.abort();
+      autosaveAbortRef.current = null;
+    }
+    draftGenRef.current += 1;
     const body = {
       xp_track: track,
       choice: levelUpChoice,
@@ -3898,12 +3914,17 @@ const CharacterSheetWrapper = ({
     try {
       const res = await characterAPI.applyLevelUp(characterId, body);
       if (res?.character) applyAllocationBackendCharacter(res.character);
-      if (Array.isArray(res?.allocations))       setXpAllocationRows(res.allocations);
+      if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
       setShowLevelUp(false);
       setLevelUpLockTrack(null);
     } catch (err) {
-      setLevelUpError(err?.message || "Level up failed");
+      if (err?.name === "AbortError") {
+        setLevelUpError("Request timed out. If coin did not change, try Confirm again.");
+      } else {
+        setLevelUpError(err?.message || "Level up failed");
+      }
     } finally {
+      levelUpInFlightRef.current = false;
       setLevelUpBusy(false);
     }
   };
@@ -7934,6 +7955,7 @@ const CharacterSheetWrapper = ({
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       if (!onSave || !canEditSheet) return;
+      if (levelUpInFlightRef.current) return;
       if (markPcAutosaveBusyCollision(savingRef.current, pendingResaveRef)) {
         return;
       }

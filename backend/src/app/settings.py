@@ -69,6 +69,10 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        # Concurrent sheet PATCH + apply-level-up must wait, not fail-fast lock.
+        'OPTIONS': {
+            'timeout': 20,
+        },
     }
 }
 

@@ -56,6 +56,24 @@ class XPAllocationError(Exception):
         self.code = code
 
 
+def validation_error_message(exc):
+    """Flatten Django ValidationError into one user-facing string."""
+    message_dict = getattr(exc, "message_dict", None)
+    if message_dict:
+        parts = []
+        for key, msgs in message_dict.items():
+            text = "; ".join(
+                str(m) for m in (msgs if isinstance(msgs, (list, tuple)) else [msgs])
+            )
+            parts.append(text if key == "__all__" else f"{key}: {text}")
+        if parts:
+            return " ".join(parts)
+    messages = getattr(exc, "messages", None)
+    if messages:
+        return " ".join(str(m) for m in messages)
+    return str(exc) or "Character save failed."
+
+
 def _normalize_track(track):
     t = str(track or "").strip().lower()
     if t not in XP_TRACKS:
@@ -643,11 +661,14 @@ def apply_level_up(
             metadata=metadata,
         )
 
-    after = _snapshot(character)
-    allocation.payload_after = after
-    allocation.save(update_fields=["payload_after"])
-    character.save()
-    _mark_pending_redeemed(pending, allocation)
+    try:
+        after = _snapshot(character)
+        allocation.payload_after = after
+        allocation.save(update_fields=["payload_after"])
+        character.save()
+        _mark_pending_redeemed(pending, allocation)
+    except ValidationError as exc:
+        raise XPAllocationError(validation_error_message(exc)) from exc
     allocation.refresh_from_db()
     return allocation
 

@@ -408,6 +408,52 @@ class XPAllocationAPITests(TestCase):
         self.character.refresh_from_db()
         self.assertEqual(self.character.action_dots["hunt"], 3)
 
+    def test_apply_level_up_playbook_pending_stand_coin_api(self):
+        """POST apply-level-up redeems playbook pending for +1 Stand Coin (0/10)."""
+        from characters.models import PendingAdvance
+        from characters.services.advancement import credit_xp
+
+        self.character.xp_clocks = {
+            **self.character.xp_clocks,
+            "playbook": 0,
+            "heritage": 0,
+        }
+        self.character.bonus_hp_from_xp = 2
+        self.character.total_xp_spent = 10
+        self.character.stand_coin_points_gained = 0
+        self.character.save()
+        credit_xp(self.character, "playbook", 10)
+        self.assertEqual(
+            PendingAdvance.objects.filter(
+                character=self.character, track="playbook", status="open"
+            ).count(),
+            1,
+        )
+        res = self.client.post(
+            f"/api/characters/{self.character.id}/apply-level-up/",
+            {
+                "xp_track": "playbook",
+                "choice": "stat",
+                "stand_stat": "power",
+                "from_pool": False,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        data = res.json()
+        self.assertTrue(data["success"])
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.stand.power, "C")
+        self.assertEqual(self.character.stand_coin_points_gained, 1)
+        self.assertEqual(
+            PendingAdvance.objects.filter(
+                character=self.character, track="playbook", status="open"
+            ).count(),
+            0,
+        )
+        self.assertEqual(data["character"]["pending_advance_counts"].get("playbook", 0), 0)
+        self.assertEqual(data["character"]["stand"]["power"], "C")
+
     def test_apply_level_up_heritage_api(self):
         self.character.xp_clocks = {
             **self.character.xp_clocks,

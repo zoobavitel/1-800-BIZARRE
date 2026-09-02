@@ -361,11 +361,15 @@ export const characterAPI = {
       }`,
     ),
 
-  applyLevelUp: (id, body) =>
-    apiRequest(`/characters/${id}/apply-level-up/`, {
+  applyLevelUp: (id, body) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25000);
+    return apiRequest(`/characters/${id}/apply-level-up/`, {
       method: "POST",
       body: JSON.stringify(body),
-    }),
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
+  },
 
   /** GM-only: force +1 Stand Coin grade as a playbook advance (tops up XP if short). */
   gmForceStandStat: (id, body) =>
