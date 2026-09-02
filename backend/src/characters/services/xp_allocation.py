@@ -266,6 +266,9 @@ def _bump_action_dot(character, action_key, delta=1):
 
 def _apply_b_to_a_reward(character, allocation_id, reward):
     branch = str(reward.get("branch") or "").strip().lower()
+    # Plan A canonical name; keep legacy alias for in-flight clients.
+    if branch == "two_unique_plus_one_standard":
+        branch = "custom2plus1standard"
     added_standard = []
 
     if branch == "custom2plus1standard":
@@ -310,10 +313,57 @@ def _apply_b_to_a_reward(character, allocation_id, reward):
             added_standard.append(ability.id)
     else:
         raise XPAllocationError(
-            "B→A reward requires branch 'custom2plus1standard' or 'two_standard'."
+            "B→A reward requires branch 'two_standard' or "
+            "'two_unique_plus_one_standard' (alias custom2plus1standard)."
         )
 
     return added_standard
+
+
+def _consume_pending_or_spend(
+    character, *, xp_track=None, from_pool=False, cost, require_pending=False
+):
+    """
+    Prefer redeeming an open PendingAdvance on xp_track (no mark spend).
+
+    Pool −cost level-ups are removed (Plan A). Legacy full-track spend still
+    works when require_pending is False and marks cover cost (pre-migration).
+    Returns (source_label, pending_or_none).
+    """
+    from characters.models import PendingAdvance
+    from characters.services.advancement import oldest_open_pending
+
+    if from_pool:
+        raise XPAllocationError(
+            "Level-up / advance from free pool is removed. "
+            "Allocate pool XP onto a track, then Take advance when a pending fills."
+        )
+    track = _normalize_track(xp_track)
+    pending = oldest_open_pending(character, track)
+    if pending is not None:
+        return track, pending
+    if require_pending:
+        raise XPAllocationError(
+            f"No open pending advance on {track}. "
+            "Fill the track (or allocate from Available XP) first."
+        )
+    # Legacy: marks still sitting at/above cost (pre–credit_xp migration).
+    _spend_xp(character, track, cost)
+    return track, None
+
+
+def _mark_pending_redeemed(pending, allocation):
+    if pending is None:
+        return
+    from django.utils import timezone
+    from characters.models import PendingAdvance
+
+    pending.status = PendingAdvance.STATUS_REDEEMED_MANUAL
+    pending.applied_at = timezone.now()
+    pending.applied_allocation = allocation
+    pending.save(
+        update_fields=["status", "applied_at", "applied_allocation"]
+    )
 
 
 def non_foundation_playbook_ability_count(hamon_abilities, spin_abilities):
@@ -340,10 +390,29 @@ def playbook_ability_slot_budget(character):
     return 1 + advances
 
 
+def character_has_acquired_stand(character):
+    """True for Stand primaries or Spin/Hamon who redeemed acquire_stand."""
+    if character is None:
+        return False
+    pb = str(getattr(character, "playbook", None) or "STAND").upper()
+    if pb == "STAND":
+        return True
+    if not getattr(character, "pk", None):
+        return False
+    return CharacterXPAllocation.objects.filter(
+        character=character,
+        allocation_type="LEVEL_UP_ACQUIRE_STAND",
+        undone_at__isnull=True,
+    ).exists()
+
+
 def allocation_summary(allocation):
     """Human-readable summary for API/UI."""
     meta = allocation.metadata or {}
-    if meta.get("from_pool"):
+    if meta.get("from_pending"):
+        track_label = allocation.get_xp_track_display()
+        base = f"Redeem pending on {track_label}"
+    elif meta.get("from_pool"):
         base = f"−{allocation.xp_cost} XP from free pool"
     else:
         track_label = allocation.get_xp_track_display()
@@ -363,6 +432,8 @@ def allocation_summary(allocation):
         return f"{base} · +1 heritage ability"
     if allocation.allocation_type == "LEVEL_UP_PLAYBOOK_ABILITY":
         return f"{base} · +1 playbook ability pick"
+    if allocation.allocation_type == "LEVEL_UP_ACQUIRE_STAND":
+        return f"{base} · acquire Stand (Coin D across)"
     if allocation.allocation_type == "BUY_HP":
         return f"{base} · +1 HP"
     if allocation.allocation_type == "MINOR_ADVANCE":
@@ -387,47 +458,91 @@ def apply_level_up(
     from_pool=False,
 ):
     choice = str(choice or "").strip().lower()
-    if choice not in ("stat", "dots", "heritage", "playbook_ability"):
+    if choice not in (
+        "stat",
+        "dots",
+        "heritage",
+        "playbook_ability",
+        "acquire_stand",
+    ):
         raise XPAllocationError(
-            "choice must be 'stat', 'dots', 'heritage', or 'playbook_ability'."
+            "choice must be 'stat', 'dots', 'heritage', "
+            "'playbook_ability', or 'acquire_stand'."
         )
 
     before = _snapshot(character)
-    source = _spend_xp_source(
-        character, xp_track=xp_track, from_pool=from_pool, cost=LEVEL_UP_COST
+    track, pending = _consume_pending_or_spend(
+        character,
+        xp_track=xp_track,
+        from_pool=from_pool,
+        cost=LEVEL_UP_COST,
+        require_pending=False,
     )
-    # Model xp_track field requires a track key; pool spends store heritage as ledger tag.
-    track = "heritage" if source == "pool" else _normalize_track(xp_track)
     character.total_xp_spent = int(character.total_xp_spent or 0) + LEVEL_UP_COST
 
     primary_playbook = str(character.playbook or "STAND").upper()
+    has_stand = character_has_acquired_stand(character)
+
     if track == "playbook" and primary_playbook in ("HAMON", "SPIN"):
-        if choice != "playbook_ability":
+        if choice == "acquire_stand":
+            if has_stand:
+                raise XPAllocationError("This character already has a Stand.")
+        elif choice == "playbook_ability":
+            pass
+        elif choice == "stat":
+            if not has_stand:
+                raise XPAllocationError(
+                    "Acquire a Stand (one playbook fill) before advancing Stand Coin."
+                )
+        else:
             raise XPAllocationError(
-                "Spin/Hamon characters spend a full playbook track on +1 playbook ability."
+                "Spin/Hamon playbook fills: +1 playbook ability, acquire Stand, "
+                "or +1 Stand Coin (after Stand acquired)."
             )
-    elif track == "playbook" and primary_playbook == "STAND" and choice == "playbook_ability":
-        raise XPAllocationError(
-            "Stand users spend playbook advances on Stand Coin stats."
-        )
-    if choice == "stat" and primary_playbook in ("HAMON", "SPIN"):
-        raise XPAllocationError(
-            "Spin/Hamon characters take playbook ability advances, not Stand Coin stats."
-        )
+    elif track == "playbook" and primary_playbook == "STAND":
+        if choice == "playbook_ability":
+            raise XPAllocationError(
+                "Stand users spend playbook advances on Stand Coin stats."
+            )
+        if choice == "acquire_stand":
+            raise XPAllocationError("Stand users already have a Stand.")
+        if choice not in ("stat", "dots", "heritage"):
+            raise XPAllocationError(
+                "Stand playbook fills advance a Stand Coin stat."
+            )
     if choice == "playbook_ability" and primary_playbook not in ("HAMON", "SPIN"):
         raise XPAllocationError(
             "Playbook ability advances are for Hamon/Spin primary characters."
+        )
+    if choice == "acquire_stand" and primary_playbook not in ("HAMON", "SPIN"):
+        raise XPAllocationError(
+            "Acquire Stand is for Hamon/Spin characters without a Stand."
         )
 
     metadata = {
         "xp_track": track,
         "choice": choice,
-        "from_pool": source == "pool",
+        "from_pool": False,
+        "from_pending": pending is not None,
+        "pending_id": pending.id if pending else None,
     }
     allocation_type = None
 
     if choice == "playbook_ability":
         allocation_type = "LEVEL_UP_PLAYBOOK_ABILITY"
+        allocation = CharacterXPAllocation.objects.create(
+            character=character,
+            allocation_type=allocation_type,
+            xp_track=track,
+            xp_cost=LEVEL_UP_COST,
+            payload_before=before,
+            payload_after={},
+            metadata=metadata,
+        )
+    elif choice == "acquire_stand":
+        for field in STAND_STAT_FIELDS:
+            _set_stand_grade(character, field, "D")
+        allocation_type = "LEVEL_UP_ACQUIRE_STAND"
         allocation = CharacterXPAllocation.objects.create(
             character=character,
             allocation_type=allocation_type,
@@ -532,6 +647,7 @@ def apply_level_up(
     allocation.payload_after = after
     allocation.save(update_fields=["payload_after"])
     character.save()
+    _mark_pending_redeemed(pending, allocation)
     allocation.refresh_from_db()
     return allocation
 
@@ -647,16 +763,22 @@ def apply_gm_forced_stand_stat(
 
 @transaction.atomic
 def apply_minor_advance(character, *, xp_track, action, from_pool=False):
+    """Redeem an attribute-track pending (or legacy 5 marks) for +1 action dot."""
     action_key = _normalize_action(action)
+    track = _normalize_track(xp_track)
+    if track not in ("insight", "prowess", "resolve"):
+        raise XPAllocationError(
+            "Minor advances only redeem insight, prowess, or resolve pendings."
+        )
 
     before = _snapshot(character)
-    source = _spend_xp_source(
+    track, pending = _consume_pending_or_spend(
         character,
-        xp_track=xp_track,
+        xp_track=track,
         from_pool=from_pool,
         cost=MINOR_ADVANCE_COST,
+        require_pending=False,
     )
-    track = "heritage" if source == "pool" else _normalize_track(xp_track)
     character.total_xp_spent = int(character.total_xp_spent or 0) + MINOR_ADVANCE_COST
     _bump_action_dot(character, action_key, 1)
     character.action_dice_gained = int(character.action_dice_gained or 0) + 1
@@ -671,28 +793,40 @@ def apply_minor_advance(character, *, xp_track, action, from_pool=False):
         metadata={
             "action": action_key,
             "xp_track": track,
-            "from_pool": source == "pool",
+            "from_pool": False,
+            "from_pending": pending is not None,
+            "pending_id": pending.id if pending else None,
         },
     )
     after = _snapshot(character)
     allocation.payload_after = after
     allocation.save(update_fields=["payload_after"])
     character.save()
+    _mark_pending_redeemed(pending, allocation)
     allocation.refresh_from_db()
     return allocation
 
 
 @transaction.atomic
 def apply_buy_hp(character, *, xp_track=None, from_pool=False):
-    """Spend 5 XP (track or free pool) for +1 bonus HP (heritage option)."""
+    """Redeem a heritage pending (or legacy 5 marks) for +1 bonus HP."""
+    if from_pool:
+        raise XPAllocationError(
+            "Buying HP from the free pool is removed. "
+            "Fill the heritage track, then Take advance."
+        )
+    track = _normalize_track(xp_track or "heritage")
+    if track != "heritage":
+        raise XPAllocationError("Heritage HP advances redeem the heritage track only.")
+
     before = _snapshot(character)
-    source = _spend_xp_source(
+    track, pending = _consume_pending_or_spend(
         character,
-        xp_track=xp_track or "heritage",
-        from_pool=from_pool,
+        xp_track=track,
+        from_pool=False,
         cost=MINOR_ADVANCE_COST,
+        require_pending=False,
     )
-    track = "heritage" if source == "pool" else _normalize_track(xp_track or "heritage")
     character.total_xp_spent = int(character.total_xp_spent or 0) + MINOR_ADVANCE_COST
     character.bonus_hp_from_xp = int(character.bonus_hp_from_xp or 0) + 1
 
@@ -703,18 +837,24 @@ def apply_buy_hp(character, *, xp_track=None, from_pool=False):
         xp_cost=MINOR_ADVANCE_COST,
         payload_before=before,
         payload_after={},
-        metadata={"from_pool": source == "pool", "xp_track": track},
+        metadata={
+            "from_pool": False,
+            "xp_track": track,
+            "from_pending": pending is not None,
+            "pending_id": pending.id if pending else None,
+        },
     )
     after = _snapshot(character)
     allocation.payload_after = after
     allocation.save(update_fields=["payload_after"])
     character.save()
+    _mark_pending_redeemed(pending, allocation)
     allocation.refresh_from_db()
     return allocation
 
 
 def second_playbook_unlocked(character):
-    """True if the character already has, or has paid 30 XP for, a second playbook."""
+    """Legacy: True if a second playbook was ever unlocked (grandfathered)."""
     if getattr(character, "secondary_playbook", None):
         return True
     return CharacterXPAllocation.objects.filter(
@@ -726,62 +866,12 @@ def second_playbook_unlocked(character):
 
 @transaction.atomic
 def apply_unlock_second_playbook(character, *, secondary_playbook, from_pool=True):
-    """Spend 30 XP from playbook track first (overflow allowed), then free pool."""
-    del from_pool  # always combined wallet
-    pb = str(secondary_playbook or "").strip().upper()
-    if pb not in ("STAND", "HAMON", "SPIN"):
-        raise XPAllocationError(
-            "secondary_playbook must be STAND, HAMON, or SPIN."
-        )
-    if pb == str(character.playbook or "").strip().upper():
-        raise XPAllocationError(
-            "Secondary playbook must differ from primary playbook."
-        )
-    if second_playbook_unlocked(character):
-        raise XPAllocationError("Second playbook is already unlocked.")
-
-    clocks = dict(character.xp_clocks or {})
-    playbook_avail = int(clocks.get("playbook", 0) or 0)
-    pool = int(character.unallocated_xp or 0)
-    if playbook_avail + pool < SECOND_PLAYBOOK_COST:
-        raise XPAllocationError(
-            f"Need {SECOND_PLAYBOOK_COST} XP from playbook track + Available XP "
-            f"(have playbook {playbook_avail} + pool {pool})."
-        )
-
-    before = _snapshot(character)
-    playbook_spent = min(playbook_avail, SECOND_PLAYBOOK_COST)
-    pool_spent = SECOND_PLAYBOOK_COST - playbook_spent
-    if playbook_spent:
-        clocks["playbook"] = playbook_avail - playbook_spent
-        character.xp_clocks = clocks
-    if pool_spent:
-        character.unallocated_xp = pool - pool_spent
-
-    character.total_xp_spent = int(character.total_xp_spent or 0) + SECOND_PLAYBOOK_COST
-    character.secondary_playbook = pb
-
-    allocation = CharacterXPAllocation.objects.create(
-        character=character,
-        allocation_type="UNLOCK_SECOND_PLAYBOOK",
-        xp_track="playbook",
-        xp_cost=SECOND_PLAYBOOK_COST,
-        payload_before=before,
-        payload_after={},
-        metadata={
-            "secondary_playbook": pb,
-            "from_pool": pool_spent > 0 and playbook_spent == 0,
-            "playbook_spent": playbook_spent,
-            "pool_spent": pool_spent,
-            "xp_track": "playbook",
-        },
+    """Removed: no 30 XP second-playbook purchase (Plan A single-playbook)."""
+    del character, secondary_playbook, from_pool
+    raise XPAllocationError(
+        "Second playbook unlock is removed. Cross-playbook abilities cost one "
+        "playbook fill each; acquiring a Stand is one playbook fill."
     )
-    after = _snapshot(character)
-    allocation.payload_after = after
-    allocation.save(update_fields=["payload_after"])
-    character.save()
-    allocation.refresh_from_db()
-    return allocation
 
 
 @transaction.atomic
@@ -815,6 +905,19 @@ def undo_allocation(character, allocation, *, user=None):
             character.unallocated_xp = int(before.get("unallocated_xp") or 0)
         if "secondary_playbook" in before:
             character.secondary_playbook = before.get("secondary_playbook") or None
+    elif meta.get("from_pending"):
+        # Marks were already cleared when pending minted; reopen the pending.
+        from characters.models import PendingAdvance
+
+        pending_id = meta.get("pending_id")
+        if pending_id:
+            PendingAdvance.objects.filter(
+                pk=pending_id, character=character
+            ).update(
+                status=PendingAdvance.STATUS_OPEN,
+                applied_at=None,
+                applied_allocation=None,
+            )
     elif meta.get("from_pool"):
         # Snapshot already restored unallocated_xp; do not also refund a track.
         pass

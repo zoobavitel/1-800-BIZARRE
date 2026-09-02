@@ -188,7 +188,7 @@ Full grade tables (movement, range, stress/armor by grade, Precision effects, De
 
 - **During session:** Mark 1 XP in the attribute for a **desperate** skill check.
 - **End of session:** Per trigger, 1 XP if it happened, 2 XP if a lot: playbook trigger; expressed beliefs/drives/heritage/background; struggled with vice or traumas. XP can go to any track. **Training (downtime):** Mark 1 XP in playbook, once per downtime per track.
-- **Spend:** 5 XP = +1d skill; 10 XP = +1 Stand Coin stat, heritage ability, or +2d in one skill. Fill track → clear and take an advance (ability or skill dot).
+- **Spend:** Bank Available XP onto tracks. Fill track → mint pending (leftover stays) → Take advance (attribute = +1d; heritage = +1 HP; playbook = Coin / playbook ability / acquire Stand). No pool −10 level-up; no 30 XP second playbook.
 
 ---
 

@@ -1704,9 +1704,26 @@ class CharacterSerializer(serializers.ModelSerializer):
             get_pending_stand_a_reward,
             second_playbook_unlocked,
         )
+        from .models import PendingAdvance
 
         data["pending_stand_a_reward"] = get_pending_stand_a_reward(instance)
         data["secondary_playbook_unlocked"] = second_playbook_unlocked(instance)
+        open_pendings = PendingAdvance.objects.filter(
+            character=instance, status=PendingAdvance.STATUS_OPEN
+        ).order_by("created_at", "id")
+        data["pending_advances"] = [
+            {
+                "id": p.id,
+                "track": p.track,
+                "status": p.status,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+            }
+            for p in open_pendings
+        ]
+        by_track = {}
+        for p in open_pendings:
+            by_track[p.track] = by_track.get(p.track, 0) + 1
+        data["pending_advance_counts"] = by_track
         return data
 
     def validate_coin_boxes(self, value):
@@ -1797,67 +1814,40 @@ class CharacterSerializer(serializers.ModelSerializer):
             secondary_playbook_val = self.instance.secondary_playbook
         if secondary_playbook_val == "":
             secondary_playbook_val = None
-        if secondary_playbook_val is not None:
-            valid_playbooks = {"STAND", "HAMON", "SPIN"}
-            if secondary_playbook_val not in valid_playbooks:
-                raise serializers.ValidationError(
-                    {"secondary_playbook": "Invalid secondary playbook."}
-                )
-            if secondary_playbook_val == playbook_val:
+        # Plan A: secondary_playbook is legacy-only. Reject new writes; keep
+        # grandfathered values when the client echoes the same field.
+        if "secondary_playbook" in data:
+            incoming = data.get("secondary_playbook") or None
+            if incoming == "":
+                incoming = None
+            prior = (
+                getattr(self.instance, "secondary_playbook", None)
+                if self.instance
+                else None
+            )
+            if incoming and incoming != prior:
                 raise serializers.ValidationError(
                     {
                         "secondary_playbook": (
-                            "Secondary playbook must differ from primary playbook."
+                            "Second playbook unlock is removed. Cross-playbook "
+                            "abilities cost one playbook fill each."
                         )
                     }
                 )
-            prior = getattr(self.instance, "secondary_playbook", None) if self.instance else None
-            if not prior:
-                from .services.xp_allocation import second_playbook_unlocked
 
-                if not (self.instance and second_playbook_unlocked(self.instance)):
-                    raise serializers.ValidationError(
-                        {
-                            "secondary_playbook": (
-                                "Spend 30 XP from playbook track + Available XP to obtain another playbook."
-                            )
-                        }
-                    )
-
-        # Spin/Hamon playbook abilities: required_a_count is character-level gate (SRD Level N)
-        pc_level = 1
-        if self.instance is not None:
-            pc_level = max(1, int(getattr(self.instance, "level", 1) or 1))
-        if "level" in data and data.get("level") is not None:
-            try:
-                pc_level = max(1, int(data.get("level")))
-            except (TypeError, ValueError):
-                pass
-
-        for ha in hamon_ids:
-            need = int(getattr(ha, "required_a_count", 0) or 0)
-            if need and pc_level < need:
-                raise serializers.ValidationError(
-                    f"Hamon ability '{ha.name}' requires character level {need} "
-                    f"(you are level {pc_level})."
-                )
-        for sa in spin_ids:
-            need = int(getattr(sa, "required_a_count", 0) or 0)
-            if need and pc_level < need:
-                raise serializers.ValidationError(
-                    f"Spin ability '{sa.name}' requires character level {need} "
-                    f"(you are level {pc_level})."
-                )
-        has_hamon = playbook_val == "HAMON" or secondary_playbook_val == "HAMON"
-        has_spin = playbook_val == "SPIN" or secondary_playbook_val == "SPIN"
-        if hamon_ids and not has_hamon:
-            raise serializers.ValidationError(
-                "Hamon abilities require playbook HAMON (primary or secondary)."
-            )
-        if spin_ids and not has_spin:
-            raise serializers.ValidationError(
-                "Spin abilities require playbook SPIN (primary or secondary)."
-            )
+        # Character level no longer gates Spin/Hamon picks (depth = owned
+        # non-foundation count; slot budget below). Cross-playbook fills OK.
+        has_hamon = (
+            playbook_val == "HAMON"
+            or secondary_playbook_val == "HAMON"
+            or bool(hamon_ids)
+        )
+        has_spin = (
+            playbook_val == "SPIN"
+            or secondary_playbook_val == "SPIN"
+            or bool(spin_ids)
+        )
+        _ = (has_hamon, has_spin)
 
         from .services.xp_allocation import (
             non_foundation_playbook_ability_count,
@@ -1964,12 +1954,13 @@ class CharacterSerializer(serializers.ModelSerializer):
             #         f"Not enough XP: {extra_dice} extra dice require {required_xp} XP (5 XP each), but only {xp_gained} XP available."
             #     )
             pass  # Temporarily bypass XP validation for character creation
-        # Enforce playbook XP track cap at 10 XP
+        # Playbook marks stay below cap after fill-clear (leftover < 10).
         xp_clocks = data.get("xp_clocks") or getattr(self.instance, "xp_clocks", {})
         playbook_xp = xp_clocks.get("playbook", 0)
-        if playbook_xp > 10:
+        if playbook_xp >= 10:
             raise serializers.ValidationError(
-                f"Playbook track XP cannot exceed 10; received {playbook_xp}."
+                f"Playbook track XP cannot be {playbook_xp}; fill-clear leaves "
+                "at most 9 marks (pending advances hold filled advances)."
             )
 
         # GM character locking validation

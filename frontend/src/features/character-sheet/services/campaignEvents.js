@@ -12,7 +12,7 @@ const RECONNECT_MAX_MS = 30000;
 
 /**
  * @param {number} campaignId
- * @param {{ onUpdate?: () => void }} handlers
+ * @param {{ onUpdate?: (reason?: string) => void }} handlers
  * @returns {() => void} unsubscribe
  */
 export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
@@ -74,7 +74,7 @@ export function subscribeCampaignEvents(campaignId, { onUpdate } = {}) {
       try {
         const data = JSON.parse(e.data);
         if (data && data.type === "campaign_update") {
-          onUpdate?.();
+          onUpdate?.(data.reason || "update");
         }
         // Successful traffic: reset backoff so transient blips recover quickly.
         if (data && (data.type === "campaign_update" || data.type === "connected")) {

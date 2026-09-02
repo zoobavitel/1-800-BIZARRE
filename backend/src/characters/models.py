@@ -719,6 +719,11 @@ class Character(models.Model):
         null=True,
         blank=True,
         default=None,
+        help_text=(
+            "Legacy only (pre–single-playbook). Not a live rules field; "
+            "cross-playbook abilities come from playbook fills. Prefer "
+            "legacy_secondary_playbook naming in docs."
+        ),
     )
     playbook_xp_archetypes = models.JSONField(
         default=list,
@@ -1248,16 +1253,18 @@ class Character(models.Model):
 
 
 class CharacterXPAllocation(models.Model):
-    """Reversible XP spend log (level-up, minor advance, etc.)."""
+    """Reversible XP spend / fill-redeem log (level-up, heritage HP, etc.)."""
 
     ALLOCATION_TYPE_CHOICES = [
         ("LEVEL_UP_STAT", "Level up — Stand Coin stat"),
         ("LEVEL_UP_DOTS", "Level up — action dots"),
         ("LEVEL_UP_HERITAGE", "Level up — heritage ability"),
         ("LEVEL_UP_PLAYBOOK_ABILITY", "Level up — playbook ability"),
+        ("LEVEL_UP_ACQUIRE_STAND", "Level up — acquire Stand"),
         ("MINOR_ADVANCE", "Minor advance — action dot"),
         ("BUY_HP", "Buy +1 HP with XP"),
         ("UNLOCK_SECOND_PLAYBOOK", "Unlock second playbook (30 XP)"),
+        ("REDEEM_PENDING", "Redeem pending advance"),
     ]
 
     XP_TRACK_CHOICES = [
@@ -1292,6 +1299,53 @@ class CharacterXPAllocation(models.Model):
 
     def __str__(self):
         return f"{self.allocation_type} ({self.xp_track}, -{self.xp_cost} XP)"
+
+
+class PendingAdvance(models.Model):
+    """Open fill credit minted by credit_xp when an XP track clears."""
+
+    STATUS_OPEN = "open"
+    STATUS_APPLIED = "applied"
+    STATUS_REDEEMED_MANUAL = "redeemed_manual"
+    STATUS_CHOICES = [
+        (STATUS_OPEN, "Open"),
+        (STATUS_APPLIED, "Applied"),
+        (STATUS_REDEEMED_MANUAL, "Redeemed (manual)"),
+    ]
+
+    TRACK_CHOICES = [
+        ("insight", "Insight"),
+        ("prowess", "Prowess"),
+        ("resolve", "Resolve"),
+        ("heritage", "Heritage"),
+        ("playbook", "Playbook"),
+    ]
+
+    character = models.ForeignKey(
+        Character, on_delete=models.CASCADE, related_name="pending_advances"
+    )
+    track = models.CharField(max_length=16, choices=TRACK_CHOICES)
+    status = models.CharField(
+        max_length=32, choices=STATUS_CHOICES, default=STATUS_OPEN, db_index=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    applied_at = models.DateTimeField(null=True, blank=True)
+    applied_allocation = models.ForeignKey(
+        CharacterXPAllocation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pending_advances",
+    )
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        indexes = [
+            models.Index(fields=["character", "track", "status"]),
+        ]
+
+    def __str__(self):
+        return f"PendingAdvance({self.track}, {self.status})"
 
 
 class CharacterHistory(models.Model):

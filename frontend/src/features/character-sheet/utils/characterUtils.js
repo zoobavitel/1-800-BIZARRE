@@ -634,18 +634,27 @@ export function playbookGateLevel(pcLevel) {
   return Math.max(1, Number(pcLevel) || 0);
 }
 
-export function playbookAbilityLevelMet(ability, pcLevel) {
+/** Depth = owned non-foundation picks of that chassis (not Character.level). */
+export function playbookAbilityDepthMet(ability, ownedDepth) {
   const req = playbookAbilityRequiredLevel(ability);
   if (req === 0) return true;
-  return playbookGateLevel(pcLevel) >= req;
+  // required_a_count is informational only — Plan A drops it as a hard gate.
+  void ownedDepth;
+  return true;
+}
+
+export function playbookAbilityLevelMet(ability, pcLevel) {
+  // Legacy name kept for callers; level no longer gates Spin/Hamon picks.
+  void pcLevel;
+  return playbookAbilityDepthMet(ability, 0);
 }
 
 export function playbookAbilityRequirementLabel(ability, pcLevel) {
   const req = playbookAbilityRequiredLevel(ability);
   if (req === 0) return "Foundation";
-  const gate = playbookGateLevel(pcLevel);
-  if (gate >= req) return `Level ${req}`;
-  return `Requires level ${req} (you are L${gate})`;
+  void pcLevel;
+  // Depth / slot budget enforce acquisition; label is catalog hint only.
+  return req > 1 ? `Catalog tier ${req}` : "Playbook pick";
 }
 
 export function countNonFoundationPlaybookAbilities(abilities, kind) {

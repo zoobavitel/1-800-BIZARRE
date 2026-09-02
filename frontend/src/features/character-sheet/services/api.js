@@ -1347,6 +1347,19 @@ export const transformBackendToFrontend = (backendCharacter) => {
       0,
       Math.floor(Number(backendCharacter.unallocated_xp) || 0),
     ),
+    pendingAdvances: Array.isArray(backendCharacter.pending_advances)
+      ? backendCharacter.pending_advances.map((p) => ({
+          id: p.id,
+          track: p.track,
+          status: p.status,
+          createdAt: p.created_at || null,
+        }))
+      : [],
+    pendingAdvanceCounts:
+      backendCharacter.pending_advance_counts &&
+      typeof backendCharacter.pending_advance_counts === "object"
+        ? { ...backendCharacter.pending_advance_counts }
+        : {},
 
     // Abilities (standard + hamon + spin + custom from custom_ability fields)
     abilities: [

@@ -54,7 +54,6 @@ import {
   isGmViewingPlayerCharacterSheet,
   isStandCoinChargenEditable as standCoinChargenUnlocked,
   mergeAbilitiesPreferRicherCustoms,
-  playbookAbilityLevelMet,
   playbookAbilityRequirementLabel,
   canAddNonFoundationPlaybookAbility,
   countCombinedNonFoundationPlaybookAbilities,
@@ -973,6 +972,9 @@ const CharacterSheetWrapper = ({
   onCharacterStressTraumaSync,
   /** Incremented when CharacterPage finishes a remote sync (poll, SSE, visibility) so session rolls refetch. */
   sessionDataPollTick = 0,
+  /** SSE reason that should abort in-flight sheet PATCH (character / experience_tracker / pending_advance). */
+  sheetRealtimeReason = "",
+  onSheetRealtimeReasonHandled,
   /** When true, skip merging server character snapshots into XP / stand / action state (avoids poll overwriting local spends before autosave). */
   sheetDraftIsDirty = false,
   /** After reset-sheet: parent replaces tab character and remounts this wrapper. */
@@ -1772,8 +1774,29 @@ const CharacterSheetWrapper = ({
   const [unallocatedXp, setUnallocatedXp] = useState(
     Math.max(0, Math.floor(Number(character?.unallocatedXp) || 0)),
   );
+  const [pendingAdvanceCounts, setPendingAdvanceCounts] = useState(() => ({
+    ...(character?.pendingAdvanceCounts || {}),
+  }));
   const [poolAllocateBusy, setPoolAllocateBusy] = useState(false);
   const [poolTickError, setPoolTickError] = useState(null);
+
+  // Abort in-flight autosave when SSE says character / XP / pending advanced.
+  useEffect(() => {
+    const reason = String(sheetRealtimeReason || "");
+    if (
+      reason !== "character" &&
+      reason !== "experience_tracker" &&
+      reason !== "pending_advance"
+    ) {
+      return;
+    }
+    if (autosaveAbortRef.current) {
+      autosaveAbortRef.current.abort();
+      autosaveAbortRef.current = null;
+    }
+    draftGenRef.current += 1;
+    onSheetRealtimeReasonHandled?.();
+  }, [sheetRealtimeReason, onSheetRealtimeReasonHandled]);
 
   // Hydrate sheet from server when character payload arrives after first paint (same class of bug as actionRatings).
   // Stress/trauma/XP are server-owned: merge unless the user touched that field's control this draft
@@ -1949,6 +1972,16 @@ const CharacterSheetWrapper = ({
     });
   }, [character?.id, character?.xp, character?.unallocatedXp, sheetDraftIsDirty]);
 
+  useEffect(() => {
+    if (sheetDraftIsDirty) return;
+    const counts = character?.pendingAdvanceCounts;
+    if (counts && typeof counts === "object") {
+      setPendingAdvanceCounts({ ...counts });
+    }
+  }, [character?.id, character?.pendingAdvanceCounts, sheetDraftIsDirty]);
+
+  // FIX 6: Level-up modal state — see below near other modal state
+
   // Hydrate coin/stash only when switching characters (id change). Parent refresh (campaign list refetch,
   // getCharacters) reuses the same id with a new object; syncing on character.coin/stash then wiped
   // local boxes before autosave ran.
@@ -1999,17 +2032,16 @@ const CharacterSheetWrapper = ({
 
   // FIX 6: Level-up modal state
   const [showLevelUp, setShowLevelUp] = useState(false);
-  /** When set, level-up modal spends this track only (e.g. playbook Take advance). */
+  /** When set, level-up modal redeems this track's pending advance. */
   const [levelUpLockTrack, setLevelUpLockTrack] = useState(null);
   const [levelUpChoice, setLevelUpChoice] = useState("stat");
-  const [levelUpFromPool, setLevelUpFromPool] = useState(false);
   const [levelUpStat, setLevelUpStat] = useState("power");
   const [levelUpDot1, setLevelUpDot1] = useState("HUNT");
   const [levelUpDot2, setLevelUpDot2] = useState("HUNT");
-  const [levelUpSpendTrack, setLevelUpSpendTrack] = useState("insight");
+  const [levelUpSpendTrack, setLevelUpSpendTrack] = useState("playbook");
   const [minorAdvanceSpendTrack, setMinorAdvanceSpendTrack] =
     useState("insight");
-  /** Attribute/heritage track advance picker (full track → clear for advance). */
+  /** Attribute/heritage track advance picker (pending → redeem for advance). */
   const [showTrackAdvance, setShowTrackAdvance] = useState(null);
   const [levelUpBusy, setLevelUpBusy] = useState(false);
   const [levelUpError, setLevelUpError] = useState(null);
@@ -3158,7 +3190,8 @@ const CharacterSheetWrapper = ({
       ),
     [xp],
   );
-  const canAffordLevelUp = maxXpOnAnyTrack >= 10 || unallocatedXp >= 10;
+  const canAffordLevelUp =
+    Number(pendingAdvanceCounts?.playbook || 0) > 0;
   // XP expenditure accounting
   // Each stand coin grade = 10 XP (cost of one level-up stat advance)
   // Each action dot = 5 XP (cost of one minor advance)
@@ -3167,6 +3200,13 @@ const CharacterSheetWrapper = ({
   const pcLevel = 1 + Math.floor((totalSpentXP - 95) / 10);
   const isChargenIncomplete = pcLevel < 1;
   const primaryIsSpinOrHamon = playbook === "Spin" || playbook === "Hamon";
+  const hasAcquiredStand = useMemo(() => {
+    if (playbook === "Stand") return true;
+    return (xpAllocationRows || []).some(
+      (a) =>
+        !a.undone_at && a.allocation_type === "LEVEL_UP_ACQUIRE_STAND",
+    );
+  }, [playbook, xpAllocationRows]);
   const playbookAbilitySlots = useMemo(
     () => playbookAbilitySlotBudget(xpAllocationRows),
     [xpAllocationRows],
@@ -3299,6 +3339,16 @@ const CharacterSheetWrapper = ({
     if (typeof fe.unallocatedXp === "number") {
       setUnallocatedXp(Math.max(0, Math.floor(fe.unallocatedXp)));
     }
+    if (fe.pendingAdvanceCounts && typeof fe.pendingAdvanceCounts === "object") {
+      setPendingAdvanceCounts({ ...fe.pendingAdvanceCounts });
+    } else if (Array.isArray(fe.pendingAdvances)) {
+      const counts = {};
+      for (const p of fe.pendingAdvances) {
+        if (!p?.track) continue;
+        counts[p.track] = (counts[p.track] || 0) + 1;
+      }
+      setPendingAdvanceCounts(counts);
+    }
     if (fe.xp || typeof fe.unallocatedXp === "number") {
       const truth = {
         xp: fe.xp ? { ...fe.xp } : null,
@@ -3348,6 +3398,8 @@ const CharacterSheetWrapper = ({
         typeof fe.unallocatedXp === "number"
           ? Math.max(0, Math.floor(fe.unallocatedXp))
           : prev.unallocatedXp,
+      pendingAdvanceCounts: fe.pendingAdvanceCounts || prev.pendingAdvanceCounts,
+      pendingAdvances: fe.pendingAdvances || prev.pendingAdvances,
     }));
   }, [onCharacterXpSync]);
 
@@ -3761,13 +3813,11 @@ const CharacterSheetWrapper = ({
     [levelUpChoice, levelUpStat, standStats],
   );
 
-  // FIX 6: Confirm level-up — server-side spend with reversible allocation log.
+  // FIX 6: Confirm level-up — redeem open PendingAdvance (no second XP deduct).
   const confirmLevelUp = async () => {
-    const track = levelUpLockTrack || levelUpSpendTrack;
-    const cur = Number(xp[track]) || 0;
-    const usePool =
-      !levelUpLockTrack && Boolean(levelUpFromPool) && unallocatedXp >= 10;
-    if ((!usePool && cur < 10) || !characterId) return;
+    const track = levelUpLockTrack || levelUpSpendTrack || "playbook";
+    const pendingCount = Number(pendingAdvanceCounts?.[track] || 0);
+    if (pendingCount < 1 || !characterId) return;
 
     if (levelUpChoice === "stat" && levelUpIsBtoA) {
       if (levelUpBtoARewardBranch === "custom2plus1standard") {
@@ -3793,9 +3843,9 @@ const CharacterSheetWrapper = ({
     setLevelUpBusy(true);
     setLevelUpError(null);
     const body = {
-      xp_track: usePool ? "playbook" : track,
+      xp_track: track,
       choice: levelUpChoice,
-      from_pool: usePool,
+      from_pool: false,
     };
     if (levelUpChoice === "stat") {
       body.stand_stat = levelUpStat;
@@ -3835,10 +3885,10 @@ const CharacterSheetWrapper = ({
 
   const spendXPForDot = async () => {
     const track = minorAdvanceSpendTrack;
-    const cur = Number(xp[track]) || 0;
+    const pendingCount = Number(pendingAdvanceCounts?.[track] || 0);
     const action = minorAdvanceAction;
     if (
-      cur < 5 ||
+      pendingCount < 1 ||
       !minorAdvanceActions.includes(action) ||
       actionRatings[action] >= 4 ||
       !characterId
@@ -11850,42 +11900,22 @@ const CharacterSheetWrapper = ({
                       }}
                     >
                       Free pool (not tied to a live session). Earned from
-                      scorecard and Stand Development; spend anytime — during
-                      play or between sessions. Tick boxes on the tracks below to
-                      move XP from this pool onto a track. Spend 10 for a
-                      playbook-style level-up. Desperate-roll XP marks attribute
-                      tracks automatically and never sits here.
+                      scorecard and Stand Development; bank anytime onto the
+                      tracks below. Filling a track mints a pending advance —
+                      leftover marks stay. Take advance redeems a pending (no
+                      second XP spend). Desperate-roll XP marks attribute tracks
+                      automatically and never sits here.
                     </div>
-                    {unallocatedXp >= 10 && canEditSheet && character?.id ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLevelUpLockTrack(null);
-                          setLevelUpFromPool(true);
-                          setLevelUpSpendTrack("playbook");
-                          setLevelUpError(null);
-                          setShowLevelUp(true);
-                        }}
-                        style={{
-                          ...S.btn,
-                          fontSize: "10px",
-                          padding: "4px 8px",
-                          background: "#7c3aed",
-                          color: "#fff",
-                        }}
-                      >
-                        Level up from pool (−10)
-                      </button>
-                    ) : unallocatedXp <= 0 ? (
+                    {unallocatedXp <= 0 ? (
                       <div style={{ fontSize: "10px", color: "#6b7280" }}>
                         No free-pool XP right now. Scorecard / Dev awards land
                         here after sessions; tick track boxes when you have pool
-                        XP to spend.
+                        XP to bank.
                       </div>
                     ) : (
                       <div style={{ fontSize: "10px", color: "#6b7280" }}>
                         Click empty boxes on Insight / Prowess / Resolve /
-                        Heritage / Playbook below to spend from this pool.
+                        Heritage / Playbook below to bank from this pool.
                       </div>
                     )}
                     {poolTickError ? (
@@ -11908,8 +11938,10 @@ const CharacterSheetWrapper = ({
                     { name: "PLAYBOOK", key: "playbook", max: 10 },
                   ].map(({ name, key, max }) => {
                     const filled = Number(xp[key]) || 0;
-                    const trackFull = filled >= max;
-                    const overflowLocked = key === "playbook" && filled > max;
+                    const pendingCount = Number(
+                      pendingAdvanceCounts?.[key] || 0,
+                    );
+                    const canTakeAdvance = pendingCount > 0;
                     return (
                     <div
                       key={key}
@@ -11934,13 +11966,11 @@ const CharacterSheetWrapper = ({
                         {Array.from({ length: max }, (_, i) => {
                           const isFilled = i < filled;
                           const canSpendHere =
-                            !overflowLocked &&
                             canEditSheet &&
                             !poolAllocateBusy &&
                             !isFilled &&
                             unallocatedXp >= i + 1 - filled;
                           const boxesInteractive =
-                            !overflowLocked &&
                             canEditSheet &&
                             (canSpendHere || isFilled);
                           return (
@@ -11949,23 +11979,20 @@ const CharacterSheetWrapper = ({
                               role="button"
                               tabIndex={boxesInteractive ? 0 : -1}
                               title={
-                                overflowLocked
-                                  ? "Playbook overflow — Take advance spends 10 and leaves remainder"
-                                  : isFilled
-                                    ? canEditSheet
-                                      ? `Return ${filled - i} to Available XP`
-                                      : "Filled"
-                                    : canSpendHere
-                                      ? `Spend ${i + 1 - filled} from Available XP`
-                                      : unallocatedXp < 1
-                                        ? "Need Available XP in the free pool first"
-                                        : "Not enough Available XP for this tick"
+                                isFilled
+                                  ? canEditSheet
+                                    ? `Return ${filled - i} to Available XP`
+                                    : "Filled"
+                                  : canSpendHere
+                                    ? `Bank ${i + 1 - filled} from Available XP`
+                                    : unallocatedXp < 1
+                                      ? "Need Available XP in the free pool first"
+                                      : "Not enough Available XP for this tick"
                               }
                               onClick={() => {
-                                if (!overflowLocked) toggleXP(key, i);
+                                toggleXP(key, i);
                               }}
                               onKeyDown={(e) => {
-                                if (overflowLocked) return;
                                 if (e.key === "Enter" || e.key === " ") {
                                   e.preventDefault();
                                   toggleXP(key, i);
@@ -11975,9 +12002,8 @@ const CharacterSheetWrapper = ({
                                 width: "13px",
                                 height: "13px",
                                 border: "1px solid #4b5563",
-                                cursor: overflowLocked
-                                  ? "default"
-                                  : canSpendHere || isFilled
+                                cursor:
+                                  canSpendHere || isFilled
                                     ? poolAllocateBusy
                                       ? "wait"
                                       : "pointer"
@@ -11992,8 +12018,11 @@ const CharacterSheetWrapper = ({
                       </div>
                       <span style={{ fontSize: "10px", color: "#6b7280" }}>
                         ({filled}/{max})
+                        {pendingCount > 0
+                          ? ` · ${pendingCount} pending`
+                          : ""}
                       </span>
-                      {trackFull && canEditSheet && character?.id ? (
+                      {canTakeAdvance && canEditSheet && character?.id ? (
                         <button
                           type="button"
                           onClick={() => {
@@ -12002,7 +12031,6 @@ const CharacterSheetWrapper = ({
                             if (key === "playbook") {
                               setLevelUpLockTrack("playbook");
                               setLevelUpSpendTrack("playbook");
-                              setLevelUpFromPool(false);
                               setLevelUpChoice(
                                 playbook === "Spin" || playbook === "Hamon"
                                   ? "playbook_ability"
@@ -12034,6 +12062,7 @@ const CharacterSheetWrapper = ({
                           }}
                         >
                           Take advance
+                          {pendingCount > 1 ? ` (${pendingCount})` : ""}
                         </button>
                       ) : null}
                     </div>
@@ -12047,10 +12076,11 @@ const CharacterSheetWrapper = ({
                       lineHeight: 1.4,
                     }}
                   >
-                    Tick empty boxes to spend Available XP onto that track.
-                    When a track is full, Take advance clears it for a reward
-                    (attribute → +1 action dot; heritage → +1 HP; playbook →
-                    level-up choices).
+                    Tick empty boxes to bank Available XP onto that track.
+                    Filling a track mints a pending advance (leftover stays).
+                    Take advance redeems one pending (attribute → +1 action
+                    dot; heritage → +1 HP; playbook → coin / ability / acquire
+                    Stand).
                   </div>
 
                   <div
@@ -12076,11 +12106,12 @@ const CharacterSheetWrapper = ({
                         }}
                       >
                         Desperate ACTION → +1 on that attribute (group desperate
-                        too). Desperate Power / Speed / Precision stand dice →
-                        +1 playbook (innate, uncapped; not Range, Durability, or
-                        Dev). End-session toggles + Dev bonus → free pool
-                        (allocate later). Downtime training not automated yet.
-                        Crew XP: use crew scorecard triggers.
+                        too); 0-dot desperate → +2. Desperate Power / Speed /
+                        Precision stand dice → +1 playbook (innate, uncapped; not
+                        Range, Durability, or Dev). End-session toggles + Dev
+                        bonus → free pool (bank onto tracks later). Downtime
+                        training not automated yet. Crew XP: use crew scorecard
+                        triggers.
                       </div>
                     </div>
                     {!xpReqSnapshot.hasActiveSession && (
@@ -13369,8 +13400,8 @@ const CharacterSheetWrapper = ({
                         {isStandCoinChargenEditable
                           ? "Chargen: click a wedge to raise one grade if leftover pts remain (budget 6). Right-click or Shift-click to lower and refund. This is not an advance."
                           : canAffordLevelUp
-                            ? "Stand coin is locked here. Fill the playbook track (10) and Take advance, or Level up from pool (−10), for +1 Stand Coin grade."
-                            : "Stand coin is locked after chargen. Fill playbook (10) or bank 10 in Available XP, then Take advance / level up from pool."}
+                            ? "Stand coin is locked here. Redeem a playbook pending via Take advance for +1 Stand Coin grade."
+                            : "Stand coin is locked after chargen. Fill playbook (10) to mint a pending, then Take advance for +1 grade."}
                         {" "}
                         {maxStandGradeIndex >= 5
                           ? "S-rank is enabled for this character by the GM."
@@ -18420,10 +18451,6 @@ const CharacterSheetWrapper = ({
                                     </div>
                                   ) : (
                                     filtered.map((a) => {
-                                      const levelMet = playbookAbilityLevelMet(
-                                        a,
-                                        pcLevel,
-                                      );
                                       const quotaMet =
                                         canAddNonFoundationPlaybookAbility({
                                           abilities,
@@ -18431,14 +18458,13 @@ const CharacterSheetWrapper = ({
                                           kind: "spin",
                                           xpAllocationRows,
                                         });
-                                      const met = levelMet && quotaMet;
+                                      const met = quotaMet;
                                       const reqLabel =
                                         playbookAbilityRequirementLabel(
                                           a,
                                           pcLevel,
                                         );
-                                      const quotaLabel =
-                                        levelMet && !quotaMet
+                                      const quotaLabel = !quotaMet
                                           ? `Playbook advance required (${nonFoundationPlaybookUsed}/${playbookAbilitySlots})`
                                           : reqLabel;
                                       return (
@@ -18527,10 +18553,6 @@ const CharacterSheetWrapper = ({
                                     </div>
                                   )}
                                   {(() => {
-                                    const levelMet = playbookAbilityLevelMet(
-                                      spinAbilitySelected,
-                                      pcLevel,
-                                    );
                                     const quotaMet =
                                       canAddNonFoundationPlaybookAbility({
                                         abilities,
@@ -18538,24 +18560,10 @@ const CharacterSheetWrapper = ({
                                         kind: "spin",
                                         xpAllocationRows,
                                       });
-                                    const canAdd = levelMet && quotaMet;
+                                    const canAdd = quotaMet;
                                     return (
                                       <>
-                                        {!levelMet && (
-                                          <div
-                                            style={{
-                                              color: "#f87171",
-                                              marginTop: "8px",
-                                              fontSize: "11px",
-                                            }}
-                                          >
-                                            {playbookAbilityRequirementLabel(
-                                              spinAbilitySelected,
-                                              pcLevel,
-                                            )}
-                                          </div>
-                                        )}
-                                        {levelMet && !quotaMet && (
+                                        {!quotaMet && (
                                           <div
                                             style={{
                                               color: "#f87171",
@@ -18743,10 +18751,6 @@ const CharacterSheetWrapper = ({
                                     </div>
                                   ) : (
                                     filtered.map((a) => {
-                                      const levelMet = playbookAbilityLevelMet(
-                                        a,
-                                        pcLevel,
-                                      );
                                       const quotaMet =
                                         canAddNonFoundationPlaybookAbility({
                                           abilities,
@@ -18754,14 +18758,13 @@ const CharacterSheetWrapper = ({
                                           kind: "hamon",
                                           xpAllocationRows,
                                         });
-                                      const met = levelMet && quotaMet;
+                                      const met = quotaMet;
                                       const reqLabel =
                                         playbookAbilityRequirementLabel(
                                           a,
                                           pcLevel,
                                         );
-                                      const quotaLabel =
-                                        levelMet && !quotaMet
+                                      const quotaLabel = !quotaMet
                                           ? `Playbook advance required (${nonFoundationPlaybookUsed}/${playbookAbilitySlots})`
                                           : reqLabel;
                                       return (
@@ -18849,10 +18852,6 @@ const CharacterSheetWrapper = ({
                                     </div>
                                   )}
                                   {(() => {
-                                    const levelMet = playbookAbilityLevelMet(
-                                      hamonAbilitySelected,
-                                      pcLevel,
-                                    );
                                     const quotaMet =
                                       canAddNonFoundationPlaybookAbility({
                                         abilities,
@@ -18860,24 +18859,10 @@ const CharacterSheetWrapper = ({
                                         kind: "hamon",
                                         xpAllocationRows,
                                       });
-                                    const canAdd = levelMet && quotaMet;
+                                    const canAdd = quotaMet;
                                     return (
                                       <>
-                                        {!levelMet && (
-                                          <div
-                                            style={{
-                                              color: "#f87171",
-                                              marginTop: "8px",
-                                              fontSize: "11px",
-                                            }}
-                                          >
-                                            {playbookAbilityRequirementLabel(
-                                              hamonAbilitySelected,
-                                              pcLevel,
-                                            )}
-                                          </div>
-                                        )}
-                                        {levelMet && !quotaMet && (
+                                        {!quotaMet && (
                                           <div
                                             style={{
                                               color: "#f87171",
@@ -20977,22 +20962,14 @@ const CharacterSheetWrapper = ({
 
             <div style={{ display: "flex", gap: "8px", marginBottom: "12px", flexWrap: "wrap" }}>
               {(
-                primaryIsSpinOrHamon &&
-                (levelUpLockTrack === "playbook" ||
-                  (!levelUpLockTrack &&
-                    !levelUpFromPool &&
-                    levelUpSpendTrack === "playbook"))
-                  ? [["playbook_ability", "+1 Playbook Ability"]]
-                  : primaryIsSpinOrHamon
-                    ? [
-                        ["dots", "+2 Action Dots"],
-                        ["heritage", "+1 Heritage"],
-                      ]
-                    : [
-                        ["stat", "+1 Stand Coin"],
-                        ["dots", "+2 Action Dots"],
-                        ["heritage", "+1 Heritage"],
-                      ]
+                primaryIsSpinOrHamon
+                  ? [
+                      ["playbook_ability", "+1 Playbook Ability"],
+                      ...(!hasAcquiredStand
+                        ? [["acquire_stand", "Acquire Stand"]]
+                        : [["stat", "+1 Stand Coin"]]),
+                    ]
+                  : [["stat", "+1 Stand Coin"]]
               ).map(([val, label]) => (
                 <button
                   key={val}
@@ -21019,30 +20996,25 @@ const CharacterSheetWrapper = ({
                   lineHeight: 1.45,
                 }}
               >
-                Spend 10 XP from a full playbook track to unlock one more
-                non-foundation Spin/Hamon ability pick (still gated by
-                character level).
+                Redeem one playbook pending for another non-foundation
+                Spin/Hamon ability pick (slot budget = 1 chargen + advances;
+                depth is owned non-foundation count, not character level).
               </div>
             )}
-            {unallocatedXp >= 10 && !levelUpLockTrack ? (
-              <label
+            {levelUpChoice === "acquire_stand" && (
+              <div
                 style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  marginBottom: 12,
-                  fontSize: 12,
-                  color: "#d1d5db",
+                  marginBottom: "16px",
+                  fontSize: "12px",
+                  color: "#9ca3af",
+                  lineHeight: 1.45,
                 }}
               >
-                <input
-                  type="checkbox"
-                  checked={levelUpFromPool}
-                  onChange={(e) => setLevelUpFromPool(e.target.checked)}
-                />
-                Spend from free pool ({unallocatedXp}) instead of a track
-              </label>
-            ) : null}
+                Redeem one playbook pending to gain a Stand. Coin starts at D
+                across all six stats (6 points — redistribute on the sheet).
+                Add 3 unique + 2 standard abilities on the sheet after.
+              </div>
+            )}
 
             {levelUpChoice === "stat" && (
               <div style={{ marginBottom: "16px" }}>
@@ -21065,52 +21037,6 @@ const CharacterSheetWrapper = ({
                     </option>
                   ))}
                 </select>
-              </div>
-            )}
-
-            {levelUpChoice === "heritage" && (
-              <div
-                style={{
-                  marginBottom: "16px",
-                  fontSize: "12px",
-                  color: "#9ca3af",
-                }}
-              >
-                Spend 10 XP for +1 heritage ability pick (record the ability on
-                your sheet after confirming).
-              </div>
-            )}
-
-            {levelUpChoice === "dots" && (
-              <div style={{ marginBottom: "16px" }}>
-                <span style={S.lbl}>
-                  Choose 2 actions (+1 dot each — can pick same action twice)
-                </span>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  {[levelUpDot1, levelUpDot2].map((val, i) => (
-                    <select
-                      key={i}
-                      value={val}
-                      onChange={(e) =>
-                        i === 0
-                          ? setLevelUpDot1(e.target.value)
-                          : setLevelUpDot2(e.target.value)
-                      }
-                      style={{ ...S.sel, flex: 1 }}
-                    >
-                      {Object.keys(actionRatings).map((a) => (
-                        <option
-                          key={a}
-                          value={a}
-                          disabled={actionRatings[a] >= 4}
-                        >
-                          {a} ({actionRatings[a]}/4)
-                          {actionRatings[a] >= 4 ? " MAX" : ""}
-                        </option>
-                      ))}
-                    </select>
-                  ))}
-                </div>
               </div>
             )}
 
@@ -21208,62 +21134,18 @@ const CharacterSheetWrapper = ({
             )}
 
             <div style={{ marginBottom: "16px" }}>
-              <span style={S.lbl}>Spend 10 XP from</span>
-              {levelUpLockTrack ? (
-                <div
-                  style={{
-                    marginTop: "6px",
-                    fontSize: "12px",
-                    color: "#c4b5fd",
-                  }}
-                >
-                  {XP_TRACK_SPEND_LABELS[levelUpLockTrack] || levelUpLockTrack}{" "}
-                  track ({Number(xp[levelUpLockTrack]) || 0}/
-                  {XP_TRACK_SPEND_MAX[levelUpLockTrack] || 10}) — full track
-                  advance
-                </div>
-              ) : (
-                <select
-                  value={levelUpSpendTrack}
-                  onChange={(e) => {
-                    const t = e.target.value;
-                    setLevelUpSpendTrack(t);
-                    if (primaryIsSpinOrHamon && t === "playbook") {
-                      setLevelUpChoice("playbook_ability");
-                    } else if (
-                      primaryIsSpinOrHamon &&
-                      levelUpChoice === "playbook_ability"
-                    ) {
-                      setLevelUpChoice("dots");
-                    } else if (
-                      !primaryIsSpinOrHamon &&
-                      levelUpChoice === "playbook_ability"
-                    ) {
-                      setLevelUpChoice("stat");
-                    }
-                  }}
-                  disabled={levelUpFromPool}
-                  style={{ ...S.sel, width: "100%", marginTop: "6px" }}
-                >
-                  {XP_SPEND_TRACK_ORDER.map((t) => {
-                    const n = Number(xp[t]) || 0;
-                    const cap = XP_TRACK_SPEND_MAX[t];
-                    return (
-                      <option key={t} value={t} disabled={n < 10}>
-                        {XP_TRACK_SPEND_LABELS[t] || t}: {n}/{cap}
-                        {n < 10 ? " (need 10)" : ""}
-                      </option>
-                    );
-                  })}
-                </select>
-              )}
-              {!levelUpFromPool &&
-                !levelUpLockTrack &&
-                (Number(xp[levelUpSpendTrack]) || 0) < 10 && (
-                  <div style={{ ...S.warn, marginTop: "6px", fontSize: "10px" }}>
-                    Choose a track that has at least 10 XP
-                  </div>
-                )}
+              <span style={S.lbl}>Redeem playbook pending</span>
+              <div
+                style={{
+                  marginTop: "6px",
+                  fontSize: "12px",
+                  color: "#c4b5fd",
+                }}
+              >
+                Playbook track ({Number(xp.playbook) || 0}/10) ·{" "}
+                {Number(pendingAdvanceCounts?.playbook || 0)} open pending
+                {Number(pendingAdvanceCounts?.playbook || 0) === 1 ? "" : "s"}
+              </div>
             </div>
 
             {levelUpError && (
@@ -21279,41 +21161,27 @@ const CharacterSheetWrapper = ({
                 disabled={
                   levelUpBusy ||
                   !characterId ||
-                  !(
-                    (levelUpLockTrack
-                      ? (Number(xp[levelUpLockTrack]) || 0) >= 10
-                      : levelUpFromPool
-                        ? unallocatedXp >= 10
-                        : (Number(xp[levelUpSpendTrack]) || 0) >= 10)
-                  )
+                  Number(pendingAdvanceCounts?.playbook || 0) < 1
                 }
                 style={{
                   ...S.btn,
                   background:
                     !levelUpBusy &&
                     characterId &&
-                    (levelUpLockTrack
-                      ? (Number(xp[levelUpLockTrack]) || 0) >= 10
-                      : levelUpFromPool
-                        ? unallocatedXp >= 10
-                        : (Number(xp[levelUpSpendTrack]) || 0) >= 10)
+                    Number(pendingAdvanceCounts?.playbook || 0) >= 1
                       ? "#7c3aed"
                       : "#374151",
                   color:
                     !levelUpBusy &&
                     characterId &&
-                    (levelUpLockTrack
-                      ? (Number(xp[levelUpLockTrack]) || 0) >= 10
-                      : levelUpFromPool
-                        ? unallocatedXp >= 10
-                        : (Number(xp[levelUpSpendTrack]) || 0) >= 10)
+                    Number(pendingAdvanceCounts?.playbook || 0) >= 1
                       ? "#fff"
                       : "#6b7280",
                   flex: 1,
                   fontWeight: "bold",
                 }}
               >
-                {levelUpBusy ? "Applying…" : "Confirm (−10 XP)"}
+                {levelUpBusy ? "Applying…" : "Confirm (redeem pending)"}
               </button>
               <button
                 type="button"
@@ -21368,8 +21236,8 @@ const CharacterSheetWrapper = ({
             {showTrackAdvance.kind === "heritage" ? (
               <>
                 <p style={{ fontSize: 12, color: "#d1d5db", marginBottom: 16 }}>
-                  Clear the full heritage track (5 XP) for +1 HP (heritage option,
-                  no extra detriments).
+                  Redeem one heritage pending for +1 HP (heritage option, no
+                  extra detriments).
                 </p>
                 {minorAdvanceError && (
                   <div style={{ ...S.warn, marginBottom: 10, fontSize: 11 }}>
@@ -21410,7 +21278,7 @@ const CharacterSheetWrapper = ({
                       fontWeight: "bold",
                     }}
                   >
-                    {minorAdvanceBusy ? "…" : "Confirm (−5 XP → +1 HP)"}
+                    {minorAdvanceBusy ? "…" : "Confirm (redeem → +1 HP)"}
                   </button>
                   <button
                     type="button"
@@ -21424,8 +21292,8 @@ const CharacterSheetWrapper = ({
             ) : (
               <>
                 <p style={{ fontSize: 12, color: "#d1d5db", marginBottom: 12 }}>
-                  Clear this full attribute track (5 XP) for +1 action dot under
-                  that attribute.
+                  Redeem one attribute pending for +1 action dot under that
+                  attribute.
                 </p>
                 <span style={S.lbl}>Action</span>
                 <select
@@ -21467,7 +21335,7 @@ const CharacterSheetWrapper = ({
                       fontWeight: "bold",
                     }}
                   >
-                    {minorAdvanceBusy ? "…" : "Confirm (−5 XP)"}
+                    {minorAdvanceBusy ? "…" : "Confirm (redeem → +1 dot)"}
                   </button>
                   <button
                     type="button"

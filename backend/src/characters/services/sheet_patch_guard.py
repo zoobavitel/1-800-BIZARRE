@@ -34,6 +34,8 @@ ALWAYS_PATCH_REJECTED_FIELDS = frozenset(
         "heritage_points_gained",
         "advancement_ability_grants",
         "coin_stats",
+        "bonus_hp_from_xp",
+        "secondary_playbook",
     }
 )
 

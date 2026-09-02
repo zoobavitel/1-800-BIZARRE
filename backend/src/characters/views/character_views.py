@@ -2208,29 +2208,13 @@ class CharacterViewSet(viewsets.ModelViewSet):
                     {"error": f"Only {pool} XP available in free pool."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            raw_xp_clocks = getattr(locked, "xp_clocks", None)
-            if isinstance(raw_xp_clocks, str):
-                try:
-                    raw_xp_clocks = json.loads(raw_xp_clocks)
-                except Exception:
-                    raw_xp_clocks = {}
-            if not isinstance(raw_xp_clocks, dict):
-                raw_xp_clocks = {}
-            xp_clocks = dict(raw_xp_clocks or {})
-            cur = int(xp_clocks.get(track, 0) or 0)
-            new_xp = cur + amount
-            cap = 10 if track == "playbook" else 5
-            if new_xp > cap:
-                return Response(
-                    {"error": f"{track} track cannot exceed {cap} XP."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-            xp_clocks[track] = new_xp
+            from characters.services.advancement import credit_xp
+
             locked.unallocated_xp = pool - amount
-            locked.xp_clocks = xp_clocks
+            locked.save(update_fields=["unallocated_xp"])
             token = bind_character_history_editor(user)
             try:
-                locked.save(update_fields=["unallocated_xp", "xp_clocks"])
+                credited = credit_xp(locked, track, amount, save=True)
             finally:
                 reset_character_history_editor(token)
             ExperienceTracker.objects.create(
@@ -2258,7 +2242,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 "success": True,
                 "track": track,
                 "amount": amount,
-                "new_track_total": new_xp,
+                "new_track_total": credited["marks"],
+                "pendings_minted": credited["pendings_minted"],
                 "unallocated_xp": locked.unallocated_xp,
                 "xp_clocks": locked.xp_clocks,
                 "character": _character_response(locked),
@@ -2534,48 +2519,18 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 }
             )
 
-        # `xp_clocks` is a JSONField, but legacy rows may have it as a string or
-        # another unexpected type. Coerce to dict to avoid 500s from serializer.
-        raw_xp_clocks = getattr(character, "xp_clocks", None)
-        if isinstance(raw_xp_clocks, str):
-            try:
-                raw_xp_clocks = json.loads(raw_xp_clocks)
-            except Exception:
-                raw_xp_clocks = {}
-        if not isinstance(raw_xp_clocks, dict):
-            raw_xp_clocks = {}
-        xp_clocks = dict(raw_xp_clocks or {})
-        current = int(xp_clocks.get(track, 0) or 0)
-        new_xp = current + amount
-        if track == "playbook" and new_xp > 10:
-            return Response(
-                {"error": "Playbook track cannot exceed 10 XP."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        xp_clocks[track] = new_xp
-
+        # Track awards go through credit_xp (fill-clear → PendingAdvance).
         with transaction.atomic():
+            locked = Character.objects.select_for_update().get(pk=character.pk)
+            from characters.services.advancement import credit_xp
+
             token = bind_character_history_editor(user)
             try:
-                serializer = CharacterSerializer(
-                    character,
-                    data={"xp_clocks": xp_clocks},
-                    partial=True,
-                    context={
-                        **self.get_serializer_context(),
-                        "skip_sheet_patch_guard": True,
-                    },
-                )
-                if not serializer.is_valid():
-                    return Response(
-                        {"error": "Failed to add XP", "errors": serializer.errors},
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                serializer.save()
+                credited = credit_xp(locked, track, amount, save=True)
             finally:
                 reset_character_history_editor(token)
             tracker = ExperienceTracker.objects.create(
-                character=character,
+                character=locked,
                 session=session_obj,
                 roll=None,
                 trigger="MANUAL",
@@ -2590,13 +2545,15 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 clock_key=track,
             )
 
+        locked.refresh_from_db()
         return Response(
             {
                 "success": True,
                 "track": track,
                 "amount": amount,
-                "new_total": new_xp,
-                "xp_clocks": xp_clocks,
+                "new_total": credited["marks"],
+                "pendings_minted": credited["pendings_minted"],
+                "xp_clocks": locked.xp_clocks,
                 "experience_tracker_id": tracker.id,
                 "message": f"Added {amount} XP to {track} track",
             }
