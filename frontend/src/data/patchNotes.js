@@ -8,16 +8,23 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
-        "title": "Added",
+        "title": "Fixed",
         "items": [
-          "Plan A fill-clear PendingAdvance and single-playbook cutover",
-          "add loadout, inventory, and armor"
+          "align Plan A tests and player loadout PATCH permission"
         ]
       },
       {
         "title": "Tests",
         "items": [
+          "align XP allocation suites with Plan A pending redeem",
           "cover resolveCrewFromCampaign helpers"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "Plan A fill-clear PendingAdvance and single-playbook cutover",
+          "add loadout, inventory, and armor"
         ]
       },
       {
@@ -779,24 +786,6 @@ export const PATCH_NOTES = [
         "title": "Documentation",
         "items": [
           "clarify resistance counterattack tick scaling"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-05-04",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "SRD Speed & Bizarre Intuition; NPC rules; session GM panels"
-        ]
-      },
-      {
-        "title": "Documentation",
-        "items": [
-          "drop NPC harm clock; vulnerability clock only"
         ]
       }
     ]

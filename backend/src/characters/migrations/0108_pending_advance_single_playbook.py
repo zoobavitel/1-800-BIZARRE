@@ -152,7 +152,7 @@ class Migration(migrations.Migration):
             model_name="pendingadvance",
             index=models.Index(
                 fields=["character", "track", "status"],
-                name="characters__charact_5f2d1a_idx",
+                name="pending_adv_char_track_status",
             ),
         ),
         migrations.AlterField(

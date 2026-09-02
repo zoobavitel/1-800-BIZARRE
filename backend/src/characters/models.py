@@ -1341,7 +1341,10 @@ class PendingAdvance(models.Model):
     class Meta:
         ordering = ["created_at", "id"]
         indexes = [
-            models.Index(fields=["character", "track", "status"]),
+            models.Index(
+                fields=["character", "track", "status"],
+                name="pending_adv_char_track_status",
+            ),
         ]
 
     def __str__(self):

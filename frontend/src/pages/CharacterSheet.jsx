@@ -2573,7 +2573,7 @@ const CharacterSheetWrapper = ({
         setCampaignAssignError(null);
       }, 5000);
     },
-    [characterId, character?.campaign, character, campaigns, campaignId, onCampaignRefresh],
+    [characterId, character, campaigns, campaignId, onCampaignRefresh],
   );
 
   const [clocks, setClocks] = useState(character?.clocks || []);
@@ -7826,7 +7826,6 @@ const CharacterSheetWrapper = ({
     spinArmorUsed,
     hamonArmorUsed,
     inventoryHasSpecial,
-    inventorySpecialCount,
     specialArmorUsed,
     harm,
     healingClock,

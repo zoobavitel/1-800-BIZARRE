@@ -351,11 +351,7 @@ export default function CharacterSheetInventoryList({
     readOnly,
     derivedBand,
     loadedItemIds,
-    loadout.band,
-    loadout.carried_ids,
-    loadout.rigging_categories,
-    loadout.carry_coin,
-    loadout.armor_restored,
+    loadout,
   ]);
 
   useEffect(() => {
