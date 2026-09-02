@@ -4,6 +4,105 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-09-02",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Sync standard abilities catalog to SRD_DEV."
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-09-01",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #115 from zoobavitel/fix/advance-autosave-revert",
+          "Fix exhaustive-deps on allocation XP callbacks.",
+          "Fix advance autosave reverting allocation-owned character state.",
+          "Merge pull request #114 from zoobavitel/fix/stale-player-stress-sync"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "use the cracked-hand mark as the site favicon"
+        ]
+      },
+      {
+        "title": "Fixed",
+        "items": [
+          "run gunicorn gthread so SSE cannot starve the API",
+          "keep server stress visible on a dirty PC tab"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-08-30",
+    "version": null,
+    "sections": [
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #113 from zoobavitel/fix/playbook-ability-level-gate"
+        ]
+      },
+      {
+        "title": "Tests",
+        "items": [
+          "expect seeded Spin/Hamon foundations"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-08-29",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "upsert Spin/Hamon abilities from SRD fixtures",
+          "gate Spin/Hamon abilities by character level",
+          "hide L1 ability add buttons when quota full",
+          "keep Stand unique ability package on save"
+        ]
+      },
+      {
+        "title": "Other",
+        "items": [
+          "Merge pull request #112 from zoobavitel/fix/custom-stand-ability-persist",
+          "Merge pull request #111 from zoobavitel/fix/custom-stand-ability-persist",
+          "Merge pull request #110 from zoobavitel/feature/reset-character-sheet"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "sync SRD_DEV rules + human PDF export"
+        ]
+      }
+    ]
+  },
+  {
+    "date": "2026-08-21",
+    "version": null,
+    "sections": [
+      {
+        "title": "Fixed",
+        "items": [
+          "include missing CharacterSheet hook dependency"
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-08-20",
     "version": null,
     "sections": [
@@ -714,62 +813,7 @@ export const PATCH_NOTES = [
       {
         "title": "Other",
         "items": [
-          "Merge pull request #69 from zoobavitel/cursor/ci-lxc-tailscale-and-pages-api-url",
-          "ci(deploy-lxc): Tailscale OAuth (TS_OAUTH_*) replaces authkey",
-          "Merge pull request #68 from zoobavitel/cursor/ci-lxc-tailscale-and-pages-api-url",
-          "Merge pull request #67 from zoobavitel/cursor/ci-lxc-tailscale-and-pages-api-url",
-          "Merge pull request #66 from zoobavitel/fix/session-date-scatterplot-campaignmanagementredundancy-characteredithistory",
-          "ci(perf): optional Lighthouse desktop preset for CI stability",
-          "ci(perf): lighthouse against production build, not dev server"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "write LXC deploy key to file for ssh-action",
-          "deploy CT over Tailscale SSH; Pages API base",
-          "address remaining review comments (artifact, a11y, group action case, perf budget)",
-          "push and group-action stress semantics"
-        ]
-      },
-      {
-        "title": "Documentation",
-        "items": [
-          "add 2026-05-01 entry; dedupe workflow lines"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-04-30",
-    "version": null,
-    "sections": [
-      {
-        "title": "Maintenance",
-        "items": [
-          "add GroupAction.status CANCELLED choice"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "assist stress spend, sessions for campaign players; CI Jest/playwright layout"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "patch notes: add theme changelog line; tidy older entries"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "enhance theme management and styling across components",
-          "enhance AppBar with search and account menu functionality",
-          "enhance action handling and group action management",
-          "enhance session management and roll handling",
-          "add increment wanted action and roll deletion"
+          "Merge pull request #69 from zoobavitel/cursor/ci-lxc-tailscale-and-pages-api-url"
         ]
       }
     ]

@@ -386,12 +386,6 @@ export const characterAPI = {
       body: JSON.stringify(body),
     }),
 
-  unlockSecondPlaybook: (id, body) =>
-    apiRequest(`/characters/${id}/unlock-second-playbook/`, {
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
-
   buyHpWithXp: (id, body) =>
     apiRequest(`/characters/${id}/buy-hp-with-xp/`, {
       method: "POST",

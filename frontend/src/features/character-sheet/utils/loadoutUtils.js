@@ -234,14 +234,23 @@ export function normalizeInventoryKitItem(raw) {
   if (!raw || typeof raw !== "object") return null;
   const kind = normalizeArmorKind(raw);
   const isPhysical = kind === "standard" || kind === "heavy";
-  return {
+  const next = {
     ...raw,
     id: raw.id != null ? String(raw.id) : raw.id,
     name: String(raw.name || "Item").trim() || "Item",
     armor_kind: kind || "",
     is_armor: isPhysical,
-    load: isPhysical ? 0 : Math.max(0, Math.min(2, Number(raw.load) || 0)),
+    load: isPhysical
+      ? 0
+      : kind === "special"
+        ? Math.max(0, Math.min(2, Number(raw.load) || 0))
+        : Math.max(0, Math.min(2, Number(raw.load) || 0)),
   };
+  // Armor is not a quality factor — strip if present on kit rows.
+  if (kind) {
+    delete next.quality;
+  }
+  return next;
 }
 
 export function normalizeInventoryKitList(inv) {
@@ -315,7 +324,6 @@ export function newArmorItemDraft(partial = {}) {
     detail: "",
     category: "gear",
     load: 0,
-    quality: 1,
     coin_value: null,
     catalog_id: null,
     is_armor: true,
