@@ -258,7 +258,7 @@ Players can **buy extra HP with XP** instead of taking more detriments.
 
 * **Physically Inferior:** \-1d when resisting physical harm.  
 * **Bizarre Blindspot:** \-1d when resisting Stand, Hamon, or supernatural effects.  
-* **Slower Recovery:** Healing clock is **5** segments instead of 4\.  
+* **Slower Recovery:** Healing clock permanently reduced by **1 segment.**  
 * **Slower Movement:** Base movement speed reduced from **30ft to 20ft.**
 
 ⭐ **Benefit Costs (Use HP to Unlock These):**
@@ -646,7 +646,7 @@ User Armor is physical armor worn by the user. It is acquired through buying it 
 
 STAND COIN PASSIVES
 
-RANGE
+**RANGE**
 
 Defines the operational distance of your Stand and its abilities.
 
@@ -656,7 +656,7 @@ Defines the operational distance of your Stand and its abilities.
 * D: 20(40)ft, push yourself to extend, extension subtracts 1 effect  
 * F: 10(20)ft, push yourself to extend, extension subtracts 2 effect
 
-DEVELOPMENT (POTENTIAL)
+**DEVELOPMENT (POTENTIAL)**
 
 Determines XP gain and capacity for growth.
 
@@ -1439,7 +1439,6 @@ You can also earn xp by training during downtime. When you train, mark XP in one
 | **Fighting Spirit** | Address a challenge through direct Stand confrontation or sustained physical force. |
 | **Phenomena** | Address a challenge by exploiting the bizarre or reality-defying nature of your Stand. |
 | **Shared** | Address a challenge by extending your Stand's reach to cover allies or multiple locations. |
-| **Conjoined** | Address a challenge by acting through a Stand fused with or inseparable from your body. |
 
 **SPIN USERS**
 
@@ -1454,23 +1453,50 @@ You can also earn xp by training during downtime. When you train, mark XP in one
 
 | Archetype | XP Trigger |
 | ----- | ----- |
-| **Caesar Style** | Address a challenge with bubble refraction, misdirection, or improvised Ripple tools. |
-| **Cyber Style** | Address a challenge by channeling Ripple through technology or cybernetics. |
-| **Vampiric Style** | Address a challenge by draining, corrupting, or inverting another's life force. |
+| **Traditionalist** | Address a challenge through disciplined Hamon technique, mentorship, or self-sacrifice. |
+| **Adaptive Flow** | Address a challenge by applying Hamon in an improvised or unexpected way. |
+| **Cyber-Hamonist** | Address a challenge by channeling Ripple through technology or cybernetics. |
+| **Dark Resonance** | Address a challenge by draining, corrupting, or inverting another's life force. |
+| **Bio-Harmonics** | Address a challenge through biological dominance, absorption, or physical transformation. |
 
 # 🥷 The Mission
 
-# ⚔️ Combat & Initiative
+# Planning & Equipment
 
-**COMBAT AND INITIATIVE**
+## **Quality & Effect Level**
 
-In 1(800)Bizarre, the outcome of an All-Out-Brawl is determined by the players' wit, resources, and the fiction at hand. Position and effect are set by the GM based on the situation — not by grade comparison.
+**Quality/Tier** is one of three factors that determines your **effect level**, not your dice pool:
 
-When Stands clash directly, players use their Stand Coin Rolls (Power, Speed, Precision, Durability) rather than user actions. Only Stand abilities, bizarre powers, or similarly supernatural forces can damage a Stand — user actions apply only against the Stand's user directly. This creates a core tactical choice in every conflict: fight the Stand, or find and expose the user.
+* **Quality represents the effectiveness of tools, weapons, or other resources**, usually summarized by your crew's Tier  
+* **Fine items** count as **\+1 bonus in quality**, stacking with Tier
 
-The GM sets starting position as normal: Risky by default, adjusted up or down based on the fiction, the environment, and any relevant Stand grades. A Stand with significantly higher Speed or Power than its opposition may warrant a better starting position — but this is a GM judgment call, not a hard mechanical rule.
+So if you have:
 
-All-Out-Brawls and other showdowns are presented by the GM during a mission or as an entanglement from gaining a Wanted Level.
+* Crew Tier 1 \+ fine lock picks \= effectively Tier 2 quality
+
+## **Effect Level vs. Dice Pool**
+
+**Dice Pool** (what you roll):
+
+* 1d per action rating dot  
+* \+1d for assistance  
+* \+1d for pushing yourself or Devil's Bargain
+
+**Effect Level** (how much you accomplish):
+
+* **Great** (3 ticks on a clock)  
+* **Standard** (2 ticks)  
+* **Limited** (1 tick)
+
+The GM sets effect level based on three factors:
+
+1. **Potency** (weaknesses, time, arcane power)  
+2. **Scale** (number of opponents, area size)  
+3. **Quality/Tier** (your equipment quality vs. the target's quality)
+
+## **Example**
+
+You're picking a lock with **Quality 2 lock picks** against a **Quality 3 lock**. You're outclassed in quality, so the GM sets your effect to **limited** rather than standard—even if you roll well. Your dice pool doesn't change, but your accomplished goal is smaller because your tools aren't good enough.
 
 # 💨 Taking an Action
 
@@ -1500,7 +1526,7 @@ All-Out-Brawls and other showdowns are presented by the GM during a mission or a
 
 ## Choose the action that matches what your character is doing on-screen. **You can't roll a given action rating unless your character is presently performing that action in the fiction.** If you want to roll Skirmish, get in a fight. If you want to roll Command, order someone around.
 
-> ## If the fiction calls for something only a Stand can do, you roll a **Coin Action** — Power, Speed, or Precision — instead of an action rating. Coin Actions and action ratings are not interchangeable; the fiction determines which applies.
+> ## If the fiction calls for something only a Stand can do, you roll a **Stand Action** — Power, Speed, or Precision — instead of an action rating. Coin Actions and action ratings are not interchangeable; the fiction determines which applies.
 
 > ## **Durability is not a Coin Action.** It's your Stand's resistance pool — you may roll it in place of Prowess when your Stand interposes itself against a physical threat within Range. See Resistance.
 
@@ -1545,6 +1571,18 @@ All-Out-Brawls and other showdowns are presented by the GM during a mission or a
 ## The GM and player narrate together. The GM has final say on what happens and inflicts consequences as the position and result call for.
 
 ## 
+
+# ⚔️ Combat & Initiative
+
+**COMBAT AND INITIATIVE**
+
+In 1(800)Bizarre, the outcome of an All-Out-Brawl is determined by the players' wit, resources, and the fiction at hand. Position and effect are set by the GM based on the situation — not by grade comparison.
+
+When Stands clash directly, players use their Stand Coin Rolls (Power, Speed, Precision, Durability) rather than user actions. Only Stand abilities, bizarre powers, or similarly supernatural forces can damage a Stand — user actions apply only against the Stand's user directly. This creates a core tactical choice in every conflict: fight the Stand, or find and expose the user.
+
+The GM sets starting position as normal: Risky by default, adjusted up or down based on the fiction, the environment, and any relevant Stand grades. A Stand with significantly higher Speed or Power than its opposition may warrant a better starting position — but this is a GM judgment call, not a hard mechanical rule.
+
+All-Out-Brawls and other showdowns are presented by the GM during a mission or as an entanglement from gaining a Wanted Level.
 
 # 🤝 Teamwork
 
@@ -1965,16 +2003,17 @@ In 1(800)Bizarre, your character's abilities reflect their Stand, Hamon mastery,
 
 Your Stand is a second body with its own capabilities and its own hard limits. What it can do is defined by two things: the abilities you write for it, and its Coin stats.
 
-Define your Stand's type and consciousness level: Automatic, Tool-Bound, Fighting Spirit, Phenomena, Shared, Colony, or Conjoined. The type describes how your Stand behaves, not what it can do — a Colony Stand and a Fighting Spirit with identical Coin stats are equally capable. Type is fiction; Coin is capability.
+Define your Stand's type and consciousness level: Automatic, Tool-Bound, Fighting Spirit, Phenomena, Shared, or Colony. The type describes how your Stand behaves, not what it can do — a Colony Stand and a Fighting Spirit with identical Coin stats are equally capable. Type is fiction; Coin is capability.
 
-Then build your abilities. Choose one:
+Then build your abilities:
 
-* **Three unique abilities, each with one function**  
-* **One unique ability with three functions**
+* **Three unique abilities, each with one function**
 
-In addition, choose **one ability from the standard abilities list.**
+In addition, choose **two abilities from the standard abilities list.**
 
-*Three functions that all do the same thing make for a narrow Stand. If you can, spread them — something that protects, something that solves, something that hurts. This is a suggestion for building a Stand you'll enjoy using, not a requirement. A Stand that only does one thing, extremely well, is legal and often terrifying.*
+If your Coin spread reaches A-grade in any stat, you get more on top of these — see Reaching A below.
+
+*Three abilities that all do the same thing make for a narrow Stand. If you can, spread them — something that protects, something that solves, something that hurts. This is a suggestion for building a Stand you'll enjoy using, not a requirement. A Stand that only does one thing, extremely well, is legal and often terrifying.*
 
 **Writing an ability**
 
@@ -1986,9 +2025,9 @@ Every ability you write — at creation or gained later — has three parts:
 
 **It rolls Stand dice.** If using the ability involves rolling, you roll your Coin — Power, Speed, or Precision — not a user action rating. Which of the three applies depends on what you're doing with it in that moment, and it can be different the next time; the fiction makes it obvious, the same way it does for any Coin Roll. What you can't do is write an ability that quietly resolves as a Skirmish or Finesse roll with a Stand-shaped description over the top. That's a user action wearing your Stand's coat. Abilities that don't roll at all — passive senses, armor charges, always-on effects — have nothing to declare here.
 
-**What counts as a Limit.** A Limit is specific to the ability: a hard number ("once per score"), an exclusion ("not against anything already dead"), or a fictional precondition ("you must have touched them this scene"). The rules that already apply to every Stand are not Limits and don't belong in the text. Don't write "only within my Range" or "cannot exceed my Durability's armor charges" — those are true of everything your Stand does, and restating them tells the GM nothing they didn't already know. A Limit that could be copied onto any other ability without changing its meaning isn't a Limit.
+**What counts as a Limit?** A Limit is specific to the ability: a hard number ("once per score"), an exclusion ("not against anything already dead"), or a fictional precondition ("you must have touched them this scene"). The rules that already apply to every Stand are not Limits and don't belong in the text. Don't write "only within my Range" or "cannot exceed my Durability's armor charges" — those are true of everything your Stand does, and restating them tells the GM nothing they didn't already know. A Limit that could be copied onto any other ability without changing its meaning isn't a Limit.
 
-**No ability bypasses the system.** An ability cannot reach past your Range grade, attempt an obstacle your grade is gated out of, or produce armor charges beyond what your Durability grants. If an ability only works by breaking one of those, it isn't a strong ability — it's out of bounds. Write a different one.
+**No ability bypasses the system\!** An ability cannot reach past your Range grade, attempt an obstacle your grade is gated out of, or produce armor charges beyond what your Durability grants. If an ability only works by breaking one of those, it isn't a strong ability — it's out of bounds. Write a different one.
 
 **Before it's approved, the GM checks four things:**
 
@@ -2003,9 +2042,20 @@ An ability that passes all four is legal regardless of how strange it is. Strang
 
 Distribute **6 points** across your Stand's six stats. Each point raises a stat one grade (F→D→C→B→A). You cannot take F-rank in all six stats — at least one must be D or higher.
 
-Your stats fall into two categories:
+An A costs 4 of your 6 points, so you can start with at most one A-grade stat. Two would cost 8\.
 
-**Stand Coin Rolls** are active dice pools. When the fiction calls for something only a Stand can do, you roll these instead of your user actions. Durability is included here, but it is not treated as an action rating. It is treated as an attribute like prowess. 
+Your stats fall into three categories, and the difference between them matters.
+
+**Coin Actions — Power, Speed, Precision.** Active dice pools. When the fiction calls for something only a Stand can do, you roll these instead of your user actions.
+
+**Resistance pool — Durability.** Your Stand's capacity to take a hit so you don't have to. Durability is treated as an attribute, like Prowess — not as an action rating. You never roll it to accomplish something; it's what you roll when your Stand absorbs the blow.
+
+**Passives — Range and Development.** These define your Stand's parameters. The GM reads them to determine what's possible; they don't generate dice rolls.
+
+| Stat | What it does |
+| ----- | ----- |
+| Range | Operational distance of your Stand and its abilities |
+| Development | XP gain and capacity for growth |
 
 **Choosing Between Power, Speed, and Precision**
 
@@ -2023,14 +2073,7 @@ The same fictional action can be any of the three, depending on how the player f
 
 When a player describes an approach, ask what a bad outcome looks like before you set position and effect. The answer tells you which stat is actually being rolled — and it tells the player, too, since "if you fail, you're not slow, you're wrong" is a very different risk to sign up for than "if you fail, you're not wrong, you're late."
 
-**Stand Coin Passives** define your Stand's parameters. The GM reads these to determine what's possible — they don't generate dice rolls.
-
-| Stat | What it does |
-| ----- | ----- |
-| Range | Operational distance of your Stand and its abilities |
-| Development | XP gain and capacity for growth |
-
-**Durability \-** *Your Stand's capacity to take a hit so you don't have to.* **Durability is not a Coin Action — you never roll it to accomplish something.** It is your Stand's resistance pool, standing in for a user Attribute when your Stand absorbs the blow.
+---
 
 **Interposing.** When you would resist a physical consequence with **Prowess**, you may instead put your Stand in the way and roll **Durability**. Resolve the roll normally: 6 minus your highest die in stress.
 
@@ -2052,15 +2095,34 @@ Three conditions must hold:
 | D | 1d |
 | F | 0d (gated out) |
 
-For each A-grade, you may have two standard abilities or one custom ability with 2 individual features and a standard ability. **Abilities gained this way must still follow the same rules as any other unique ability** — cost, limit, and rolling your stand dice apply exactly as they do for your starting abilities. An A-rank grants more ability slots. It does not grant looser ones.
+#### **Reaching A**
 
-To gain spin or hamon as a stand user, you must spend 30XP to advance and gain one of those playbooks. Vice versa for a hamon or spin user gaining a stand playbook. 
+**Each time one of your Coin stats reaches A, choose one:**
+
+* **Two unique abilities, each a single feature, plus one standard ability**  
+* **Two standard abilities**
+
+This applies to any of the six stats, and it applies at character creation as well as later. If your starting spread includes an A, make this choice now, on top of your three uniques and two standards.
+
+Abilities gained this way must still follow the same rules as any other unique ability — Effect, Cost, Limit, and rolling your Stand dice apply exactly as they do for your starting abilities. An A-rank grants more ability slots. It does not grant looser ones.
+
+---
+
+#### **Learning Spin or Hamon**
+
+You don't take a second playbook. As a stand user, what you can do is learn individual techniques.
+
+Each time you fill your playbook track, you may spend that advance on **one ability from a Spin or Hamon list** — a Foundation technique or a playbook ability — instead of a Coin grade. One advance, one ability. 
+
+Your first Spin or Hamon purchase also gives you that discipline's Foundation equipment and its 3 armor charges. Later purchases are the ability alone.
+
+A character can hold more than one armor source. A Stand user who has learned Spin or Hamon tracks both pools separately, spends them separately, and refreshes both in downtime.
 
 ---
 
 **🔆 How Hamon Works**
 
-Hamon is breath and circulation turned into a weapon. You generate it yourself, out of your own lungs and your own blood, which means it costs you something every time and it stops when you do. Against anything undead — vampires, Pillar Men, anything animated past its natural span — it's devastating. Against a living man it's a very good punch.
+Hamon is the technique of turning breathing and circulation into a weapon. You generate it yourself, out of your own lungs and your own blood, which means it costs you something every time and it stops when you do. Against anything undead — vampires, Pillar Men, anything animated past its natural span — it's devastating. Against a living man it's a very good punch.
 
 * **You have no Coin and no Coin Rolls.** Your Ripple techniques ride on your own action ratings. A Zoom Punch is **Skirmish**. A Ripple-infused blade is still Skirmish, with better effect. **Bizarre** covers the sensing and channeling work.  
 * **You have no second resistance pool.** Insight, Prowess, and Resolve are what you have. Nothing steps in front of you.  
@@ -2073,12 +2135,14 @@ Hamon is breath and circulation turned into a weapon. You generate it yourself, 
 
 * **All Ripple Foundations.** Every practitioner begins with these.  
 * **One standard ability.**  
-* **1 playbook ability** from a Hamon playbook — Caesar Style, Cyber Style, or Vampiric Style.   
+* **1 playbook ability** from a Hamon playbook — Traditionalist, Adaptive Flow, Cyber-Hamonist, Dark Resonance, or Bio-Harmonics.   
 * **One set of Foundation equipment** — a weapon or focus that channels Ripple.
 
-**Advancement.** Fill the ten boxes of your playbook track to take a playbook advance and learn a new Hamon technique. Deeper picks within one playbook unlock its higher-tier features.
+**Advancement.** Fill the ten boxes of your playbook track to take an advance. Spend it on a new Hamon technique, an ability from another playbook's list, or a standard ability.
 
-**Gaining a Stand.** Spend 30 XP to gain a Stand playbook. Your Coin starts at D across all six stats — six points, which you may redistribute exactly as a new Stand user does. You gain the Coin Rolls, Durability as a resistance pool, and Stand Armor charges from your Durability grade. Your Stand doesn't have to have anything to do with your Hamon. It starts with three unique abilities, written under the same rules as any Stand user's, and 2 standard abilities. 
+Higher-tier picks within a playbook unlock as you go deeper into it. **Depth is the number of non-Foundation abilities you own from that list.** Foundations don't count toward it, for anyone. Your starting playbook ability puts you at depth 1\.
+
+**Gaining a Stand.** Fill your playbook track and spend the advance on a Stand. Your Coin starts at D across all six stats — six points, which you may redistribute exactly as a new Stand user does. You gain the Coin Rolls, Durability as a resistance pool, and Stand Armor charges from your Durability grade. Your Stand doesn't have to have anything to do with your Hamon. It starts with **one unique ability**, written under the same rules as any Stand user's, plus whatever a reallocation to A grants you.
 
 ---
 
@@ -2102,9 +2166,11 @@ Three things follow from that, and they're the whole difference between your she
 * **1 playbook ability** from a Spin playbook — Cavalier, Executioner, Medico, or Ballbreaker.  
 * **One set of Foundation equipment** — steel balls, a projection method, or whatever your technique throws.
 
-**Advancement.** Fill the ten boxes of your playbook track to take a playbook advance. Spend it on a new Spin ability from any Spin playbook; deeper picks within one playbook unlock its higher-tier techniques.
+**Advancement.** Fill the ten boxes of your playbook track to take an advance. Spend it on a new Spin ability from any Spin playbook, an ability from another playbook's list, or a standard ability.
 
-**Gaining a Stand.** Spend 30 XP to gain a Stand playbook. Your Coin starts at D across all six stats — six points, which you may redistribute exactly as a new Stand user does. You gain the Coin Rolls, Durability as a resistance pool, and Stand Armor charges from your Durability grade. Your Stand doesn't have to have anything to do with your Spin. It starts with three unique abilities, written under the same rules as any Stand user's, and 2 standard abilities. 
+Higher-tier picks within a playbook unlock as you go deeper into it. **Depth is the number of non-Foundation abilities you own from that list.** Foundations don't count toward it, for anyone. Your starting playbook ability puts you at depth 1\.
+
+**Gaining a Stand.** Fill your playbook track and spend the advance on a Stand. Your Coin starts at D across all six stats — six points, which you may redistribute exactly as a new Stand user does. You gain the Coin Rolls, Durability as a resistance pool, and Stand Armor charges from your Durability grade. Your Stand doesn't have to have anything to do with your Spin. It starts with **one unique ability**, written under the same rules as any Stand user's, plus whatever a reallocation to A grants you.
 
 ---
 
@@ -2160,11 +2226,23 @@ Earn experience by:
 * Acting on background influences  
 * Taking notable risks
 
-With 10 XP, you can raise a Coin stat one grade or take 2 action rating increases.
+You have five XP tracks. **Heritage, Insight, Prowess, and Resolve fill at 5 boxes. Your playbook track fills at 10\.** When a track fills, clear it and take an advance.
 
-For Hamon and Spin users, marking 10 xp will let you take an advance and select an ability from a spin or hamon playbook. 
+**Filling an attribute track** gives you \+1 dot in an action under that attribute. Filling Insight gives a dot in Hunt, Study, Survey, or Tinker — not in any action you like. Two dots costs two attribute fills.
 
-To obtain features and abilities from other playbooks, you must pay 30 XP to obtain that playbook. Obtaining a stand playbook allows you to obtain a stand coin, stand dice, and stand armor, 3 custom abilities, as well as 2 standard abilities. Obtaining a spin or hamon playbook gives you their foundation abilities, a piece of equipment, and access to a 1st level playbook ability. 
+**Filling your heritage track** gives you 1 heritage point.
+
+**Filling your playbook track** gives you one of:
+
+* A Coin grade step, if you have a Stand  
+* An ability from your own playbook's list  
+* An ability from another playbook's list, Foundation or otherwise  
+* A standard ability  
+* A Stand, if you don't have one (6 points, everything starts in D but you can reallocate as if you started as a stand user, and only 1 unique ability) 
+
+One fill, one advance, whichever you choose. There is no way to buy a whole playbook — you take other disciplines one technique at a time.
+
+See **Advancement** for how XP is marked and how tracks fill.
 
 **10\. Loadout**
 
@@ -2176,6 +2254,14 @@ Decide your load for each operation:
 * 7–9 Load (Encumbered): Severely hindered, very noticeable
 
 You have access to all your equipment options, choosing specific gear as needed during operations.
+
+### **Key Details**
+
+* **Items count as 1 or 2 slots**: Most items count as one slot toward your load, but some items with two connected boxes count as two slots.  
+* **Italicized items don't count**: Any items listed in italics on your character sheet don't count toward your load at all.  
+* **Armor restoration**: All of your armor boxes are **restored when you choose your load for the next score**.  
+* **Special abilities**: Some special abilities increase load limits. For example, the **Mule** ability or **Rigging** ability.  
+* **Coin weight**: One unit of **coin** takes up one item slot when carrying it.
 
 ---
 
@@ -2421,18 +2507,17 @@ These templates demonstrate how Coin stats limit *what you can get away with* an
 
 # **🌀 Spin Mastery: The Playbooks of the Perfect Spin**
 
-Spin users manipulate rotational energy to perform feats of science, sabotage, and surrealism. At the start of the game, you have:
+Spin users manipulate rotational energy to perform feats of science, sabotage, and surrealism. At the start of the game, choose:
 
-- **All Spin Foundations**  
 - 1 Standard Ability  
-- 1 playbook ability (Level 1; separate from foundations) from Cavalier, Executioner, Medico, or Ballbreaker  
+- 1 playbook ability (separate from foundations)   
 - 1 set of equipment from the Spin Foundations. 
 
-When you take a playbook advancement, you may select a special ability from the Spin playbooks. Higher character levels unlock higher-tier abilities (Level 2 at character level 2, and so on). 
+When you take a playbook advancement, you may select a special ability from the various spin playbooks. Advancing to higher tiers within those playbooks will unlock greater abilities. 
 
-Spend 30XP to gain a Stand. Your stand coin starts with D in each category (6 points starting total) \- you may reallocate your stand coin stats similar to a new stand user, where F \= 0, D \= 1, C \= 2, B \= 3, A \= 4\. You gain the stand dice action ratings as well as a number of stand armor uses according to your durability. The stand does not have to be related to your character's hamon or spin abilities. Your stand gains **3 unique abilities** and **2 standard abilities**. Each A grade gives you additional ability slots as for any Stand user. To advance a stand coin stat, fill in the 10 boxes of your playbook track to advance a grade. 
+Spend 10XP to gain a Stand. Your stand coin starts with D in each category (6 points starting total) \- you may reallocate your stand coin stats similar to a new stand user, where F \= 0, D \= 1, C \= 2, B \= 3, A \= 4\. You gain the stand dice action ratings as well as a number of stand armor uses according to your durability. The stand does not have to be related to your character's hamon or spin abilities. Your stand gains 1 unique ability (see stand playbook section for examples), and each A grade gives you 2 standard abilities or 2 unique abilities and 1 standard ability. To advance a stand coin stat, fill in the 10 boxes of your playbook track to advance a grade. 
 
-You may take a playbook advancement (10xp) to gain a Spin ability. Learn more features to gain higher quality features. 
+You may take a playbook advancement (10xp) to gain a spin ability. Mark 10 boxes in your playbook to learn a feature from a spin playbook. Learn more features to gain higher quality features.
 
 ---
 
@@ -2604,16 +2689,15 @@ Wrecking Ball
 
 # **🔆 Hamon Mastery: The Pulse of Life**
 
-Hamon users channel life force through breath, rhythm, and internal resonance. These Ripple techniques blend martial art, elemental flow, and metaphysical vitality. Hamon is potent towards any undead life. At the start of the game, you have:
+Hamon users channel life force through breath, rhythm, and internal resonance. These Ripple techniques blend martial art, elemental flow, and metaphysical vitality. Hamon is potent towards any undead life. At the start of the game, choose:
 
-- **All Ripple Foundations**  
 - 1 Standard Ability  
-- **1 playbook ability** (Level 1) from Caesar Style, Cyber Style, or Vampiric Style  
+- 3 Abilities from Hamon playbook(s)  
 - 1 set of equipment from the Hamon Foundations. 
 
-When you take a playbook advancement, you may select a special ability from the Hamon playbooks. Higher character levels unlock higher-tier abilities (Level 2 at character level 2, and so on). 
+When you take a playbook advancement, you may select a special ability from the various spin playbooks. Advancing to higher tiers within those playbooks will unlock greater abilities. 
 
-Spend 30XP to gain a Stand. Your stand coin starts with D in each category (6 points starting total) \- you may reallocate your stand coin stats similar to a new stand user, where F \= 0, D \= 1, C \= 2, B \= 3, A \= 4\. You gain the stand dice action ratings as well as a number of stand armor uses according to your durability. The stand does not have to be related to your character's hamon or spin abilities. Your stand gains **3 unique abilities** and **2 standard abilities**. Each A grade gives you additional ability slots as for any Stand user. To advance a stand coin stat, fill in the 10 boxes of your playbook track to advance a grade. 
+Spend 10XP to gain a Stand. Your stand coin starts with D in each category (6 points starting total) \- you may reallocate your stand coin stats similar to a new stand user, where F \= 0, D \= 1, C \= 2, B \= 3, A \= 4\. You gain the stand dice action ratings as well as a number of stand armor uses according to your durability. The stand does not have to be related to your character's hamon or spin abilities. Your stand gains 1 unique ability (see stand playbook section for examples), and each A grade gives you 2 standard abilities or 2 unique abilities and 1 standard ability. To advance a stand coin stat, fill in the 10 boxes of your playbook track to advance a grade. 
 
 You may take a playbook advancement (10xp) to gain a Hamon ability. Mark 10 boxes in your playbook to learn a feature from a Hamon playbook. Learn more features to gain higher quality features.
 
@@ -2703,7 +2787,7 @@ Level 4:
 
 ---
 
-## **⚙️ Cyber Style**
+## **⚙️ Cyber-Style**
 
 A fusion of flesh, machine, and the Ripple. Breathless, relentless, efficient.
 
@@ -2717,13 +2801,13 @@ A fusion of flesh, machine, and the Ripple. Breathless, relentless, efficient.
 
 *Shockline* When an enemy hits you, expend an armor charge to discharge an electric shock back towards the opponent. 
 
-**Level 3:**
+**With 3 A:**
 
 *EMP Burst* Once per score, disable all tech within your immediate presence. Starts a 5-tick "Blackout" clock. Your cybernetics are immune to this effect.
 
 *Circuit Burn* Disable an enemy's gear or weapon until they push themselves to reactivate it.
 
-**Level 4:**
+**With 4 A:**
 
 *Thermal Control* Superheat or supercool any surface you can touch
 
@@ -2751,7 +2835,7 @@ Inverted, chilling, and parasitic. The Ripple repurposed for undeath.
 
 **Level 4**
 
-*Soul Leech* When you take out a foe with Vampiric Style, regain 2 stress. Once per score.
+*Soul Leech* When you take out a foe with Dark Resonance, regain 2 stress. Once per score.
 
 ---
 
@@ -2785,7 +2869,18 @@ Inverted, chilling, and parasitic. The Ripple repurposed for undeath.
 * **Mesmeriser:** When you **Sway** someone, you may cause them to forget that it’s happened until they next interact with you.   
 * **Saboteur:** When you **wreck**, the work is much quieter than it should be and the damage is hidden from casual inspection.  
 * **Shadow:** Expend your stand/spin/hamon armor to resist a consequence from detection, surveillance, or security measures, or to push yourself for a feat of athletics or stealth.  
-* **Subterfuge:** You may expend your **stand armor/spin/hamon armor** to resist a consequence from suspicion or persuasion, or to **push yourself** for subterfuge.
+* **Subterfuge:** You may expend your **stand armor/spin/hamon armor** to resist a consequence from suspicion or persuasion, or to **push yourself** for subterfuge.  
+* **Mule:** Your load limits are higher than normal:  
+* Light: 5 (instead of 1-3)  
+* Normal: 7 (instead of 4-5)  
+* Heavy: 8 (instead of 6\)  
+* **Rigging:** You get 2 free load in two of the equipment categories:  
+* Weapons  
+* Implements  
+* Supplies  
+* Gear  
+* Documents  
+* Tools
 
 **Awareness**
 

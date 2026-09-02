@@ -8,6 +8,8 @@ import {
   isUserCampaignGmForCharacter,
   isGmViewingPlayerCharacterSheet,
   isStandCoinChargenEditable,
+  resolveCrewFromCampaign,
+  normalizeCrewFromCharacter,
 } from "./characterUtils";
 
 const list = [
@@ -247,6 +249,77 @@ describe("mergeServerOwnedCharacterFields", () => {
     expect(next.stressFilled).toBe(8);
     expect(next.trauma).toEqual({ COLD: false });
   });
+
+  test("keeps local healing clock when recover roll marked healingClock touched", () => {
+    const localWithHeal = {
+      ...local,
+      healingClock: 2,
+      healingClockSegments: 5,
+    };
+    const serverStale = {
+      ...server,
+      healingClock: 0,
+      healingClockSegments: 5,
+    };
+    const untouched = mergeServerOwnedCharacterFields(
+      localWithHeal,
+      serverStale,
+      {},
+    );
+    expect(untouched.healingClock).toBe(0);
+    const touched = mergeServerOwnedCharacterFields(localWithHeal, serverStale, {
+      healingClock: true,
+    });
+    expect(touched.healingClock).toBe(2);
+    expect(touched.healingClockSegments).toBe(5);
+  });
+});
+
+describe("server-owned field hydration guards", () => {
+  test("shouldSkipServerOwnedFieldHydration blocks poll overwrite when field touched", () => {
+    const { shouldSkipServerOwnedFieldHydration, SERVER_OWNED_FIELD_TOUCH_KEYS } =
+      require("./characterUtils");
+    expect(SERVER_OWNED_FIELD_TOUCH_KEYS).toContain("healingClock");
+    expect(
+      shouldSkipServerOwnedFieldHydration("healingClock", {
+        fieldTouches: { healingClock: true },
+      }),
+    ).toBe(true);
+    expect(
+      shouldSkipServerOwnedFieldHydration("healingClock", {
+        fieldTouches: {},
+        sheetDraftIsDirty: true,
+      }),
+    ).toBe(true);
+    expect(
+      shouldSkipServerOwnedFieldHydration("healingClock", {
+        fieldTouches: {},
+        sheetDraftIsDirty: false,
+      }),
+    ).toBe(false);
+  });
+
+  test("computeHealingClockAfterSegments matches recover roll +1 band", () => {
+    const { computeHealingClockAfterSegments } = require("./characterUtils");
+    expect(
+      computeHealingClockAfterSegments({
+        currentFilled: 0,
+        segmentsToAdd: 1,
+        segmentCap: 5,
+      }),
+    ).toEqual({ nextFilled: 1, completions: 0 });
+  });
+
+  test("computeHealingClockAfterSegments counts full-clock harm downgrade", () => {
+    const { computeHealingClockAfterSegments } = require("./characterUtils");
+    expect(
+      computeHealingClockAfterSegments({
+        currentFilled: 3,
+        segmentsToAdd: 2,
+        segmentCap: 4,
+      }),
+    ).toEqual({ nextFilled: 1, completions: 1 });
+  });
 });
 
 describe("playbook ability gating helpers", () => {
@@ -305,5 +378,54 @@ describe("playbook ability gating helpers", () => {
         ],
       }),
     ).toBe(true);
+  });
+});
+
+describe("playbook foundation auto-grant helpers", () => {
+  test("mergePlaybookFoundationAbilities adds missing foundation rows", () => {
+    const {
+      mergePlaybookFoundationAbilities,
+      abilitiesMissingPlaybookFoundations,
+    } = require("./characterUtils");
+    const catalog = [
+      { id: 1, name: "Spin Base", spin_type: "FOUNDATION" },
+      { id: 2, name: "Cavalier", spin_type: "CAVALIER", required_a_count: 1 },
+    ];
+    const abilities = [{ type: "standard", id: 9, name: "Bodyguard" }];
+    expect(abilitiesMissingPlaybookFoundations(abilities, catalog, "spin")).toBe(
+      true,
+    );
+    const merged = mergePlaybookFoundationAbilities(abilities, catalog, "spin");
+    expect(merged).toHaveLength(2);
+    expect(merged[1]).toMatchObject({
+      id: 1,
+      type: "spin",
+      _playbookFoundation: true,
+    });
+    expect(abilitiesMissingPlaybookFoundations(merged, catalog, "spin")).toBe(
+      false,
+    );
+  });
+
+  test("isPlaybookFoundationAbility detects spin and hamon foundations", () => {
+    const { isPlaybookFoundationAbility } = require("./characterUtils");
+    expect(
+      isPlaybookFoundationAbility({
+        type: "spin",
+        spin_type: "FOUNDATION",
+      }),
+    ).toBe(true);
+    expect(
+      isPlaybookFoundationAbility({
+        type: "hamon",
+        hamon_type: "FOUNDATION",
+      }),
+    ).toBe(true);
+    expect(
+      isPlaybookFoundationAbility({
+        type: "spin",
+        spin_type: "CAVALIER",
+      }),
+    ).toBe(false);
   });
 });

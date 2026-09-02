@@ -78,6 +78,42 @@
   --hm-font-heading: var(--font-heading);
 }
 
+[data-theme="cool_night"] {
+  /* Character-sheet slate palette: ink page, gray panels, coral labels, cool accents */
+  --hftf-black: #000000;
+  --hftf-deep: #0d1117;
+  --hftf-panel: #111827;
+  --hftf-border: #374151;
+  --hftf-purple: #6366f1;
+  --hftf-purple-hover: #818cf8;
+  --hftf-gold: #94a3b8;
+  --hftf-gold-muted: #64748b;
+  --hftf-orange: #f59e0b;
+  --hftf-text-cream: #f1f5f9;
+  --hftf-text-dim: #94a3b8;
+
+  --bg-page: #000000;
+  --bg-header: #1f2937;
+  --bg-card: #111827;
+  --text-primary: #ffffff;
+  --text-secondary: #94a3b8;
+  --accent: #0ea5e9;
+  --accent-hover: #38bdf8;
+  --border: #374151;
+  --surface-1: var(--bg-header);
+  --surface-2: var(--bg-card);
+  --surface-border: var(--border);
+  --text-muted: #9ca3af;
+  --text-dim: #6b7280;
+
+  --hm-dark-border: var(--hftf-border);
+  --hm-dark-text: var(--hftf-text-cream);
+  --hm-cream: var(--hftf-text-cream);
+  --hm-font-mono: var(--font-mono);
+  --hm-font-display: var(--font-display);
+  --hm-font-heading: var(--font-heading);
+}
+
 html,
 body {
   margin: 0;

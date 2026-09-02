@@ -990,10 +990,13 @@ export default function CharacterPage({
             const fromServer = normalizeCharacterInventory(
               savedFrontend.inventory,
             );
+            const touchesInv = payload._fieldTouches?.inventory;
+            if (touchesInv) return fromPayload;
             if (
               saved &&
               Object.prototype.hasOwnProperty.call(saved, "inventory") &&
-              fromServer.length > 0
+              fromServer.length > 0 &&
+              fromPayload.length === 0
             ) {
               return fromServer;
             }

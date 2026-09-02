@@ -46,9 +46,17 @@ from .models import (
     Roll,
     GroupAction,
     CampaignAuditLog,
+    EquipmentItem,
+    CampaignEquipmentAccess,
 )
 
 from .services.playbook_xp_archetype import normalize_playbook_xp_archetypes
+from .services.inventory import normalize_inventory_list
+from .services.loadout import (
+    apply_loadout_side_effects,
+    merge_loadout_map,
+    normalize_loadout_entry,
+)
 
 # ── NPC level computation (mirrors NPCSheet.jsx formula) ─────────────────────
 _NPC_GRADE_PTS = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4, "S": 5}
@@ -706,6 +714,32 @@ class SessionSerializer(serializers.ModelSerializer):
         if instance.status == "COMPLETED" and new_status == "PLANNED":
             validated_data["auto_encoded_xp_settled"] = False
 
+        loadout_patch = validated_data.get("loadout_by_character")
+        if loadout_patch is not None:
+            merged = merge_loadout_map(instance.loadout_by_character, loadout_patch)
+            if isinstance(loadout_patch, dict):
+                for char_key, patch_entry in loadout_patch.items():
+                    if not isinstance(patch_entry, dict):
+                        continue
+                    try:
+                        char_id = int(char_key)
+                    except (TypeError, ValueError):
+                        continue
+                    try:
+                        character = Character.objects.get(pk=char_id)
+                    except Character.DoesNotExist:
+                        continue
+                    old_entry = normalize_loadout_entry(
+                        (instance.loadout_by_character or {}).get(str(char_key))
+                    )
+                    new_entry = apply_loadout_side_effects(
+                        character,
+                        old_entry,
+                        normalize_loadout_entry(patch_entry),
+                    )
+                    merged[str(char_key)] = new_entry
+            validated_data["loadout_by_character"] = merged
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -1243,6 +1277,7 @@ class SessionRecordsSerializer(serializers.ModelSerializer):
             "default_position",
             "default_effect",
             "position_effect_by_character",
+            "loadout_by_character",
             "devils_bargain_by_character",
             "ripple_breathing_free_push_claimed_by_character",
         ]
@@ -2029,6 +2064,9 @@ class CharacterSerializer(serializers.ModelSerializer):
                 playbook_val, data.get("playbook_xp_archetypes")
             )
 
+        if "inventory" in data:
+            data["inventory"] = normalize_inventory_list(data.get("inventory"))
+
         return data
 
     def create(self, validated_data):
@@ -2401,6 +2439,7 @@ class CharacterSummarySerializer(serializers.ModelSerializer):
     user_id = serializers.IntegerField(source="user.id", read_only=True)
     username = serializers.CharField(source="user.username", read_only=True)
     crew_id = serializers.IntegerField(source="crew.id", read_only=True, default=None)
+    crew_name = serializers.CharField(source="crew.name", read_only=True, default=None)
     assist_help_pending = serializers.SerializerMethodField()
 
     def get_assist_help_pending(self, obj):
@@ -2442,6 +2481,7 @@ class CharacterSummarySerializer(serializers.ModelSerializer):
             "user_id",
             "username",
             "crew_id",
+            "crew_name",
             # Portrait (upload or HTTPS URL) for GM session roster / crew lists
             "image",
             "image_url",
@@ -2491,6 +2531,82 @@ class CrewCampaignSerializer(serializers.ModelSerializer):
             "members",
             "proposed_name",
         ]
+
+class EquipmentItemSerializer(serializers.ModelSerializer):
+    enabled_for_campaign = serializers.SerializerMethodField()
+    created_by_username = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EquipmentItem
+        fields = [
+            "id",
+            "name",
+            "description",
+            "category",
+            "load_slots",
+            "quality",
+            "coin_value",
+            "scope",
+            "campaign",
+            "created_by",
+            "created_by_username",
+            "source_character",
+            "available_when_adding",
+            "enabled_for_campaign",
+        ]
+        read_only_fields = ["created_by", "created_by_username"]
+
+    def get_created_by_username(self, obj):
+        if obj.created_by_id:
+            return obj.created_by.username
+        return None
+
+    def get_enabled_for_campaign(self, obj):
+        campaign_id = self.context.get("campaign_id")
+        if not campaign_id:
+            req = self.context.get("request")
+            campaign_id = req.query_params.get("campaign") if req else None
+        if not campaign_id:
+            return None
+        try:
+            campaign_id = int(campaign_id)
+        except (TypeError, ValueError):
+            return None
+        if obj.scope == "TEMPLATE":
+            access = CampaignEquipmentAccess.objects.filter(
+                campaign_id=campaign_id, item_id=obj.id
+            ).first()
+            return access.enabled if access else True
+        if obj.scope == "SITE":
+            access = CampaignEquipmentAccess.objects.filter(
+                campaign_id=campaign_id, item_id=obj.id
+            ).first()
+            return bool(access and access.enabled)
+        if obj.scope == "CAMPAIGN" and obj.campaign_id == campaign_id:
+            return obj.available_when_adding
+        return False
+
+    def validate(self, attrs):
+        scope = attrs.get("scope") or (
+            self.instance.scope if self.instance else "CAMPAIGN"
+        )
+        campaign = attrs.get("campaign") or (
+            self.instance.campaign if self.instance else None
+        )
+        if scope == "CAMPAIGN" and not campaign:
+            raise serializers.ValidationError(
+                {"campaign": "Campaign items require a campaign."}
+            )
+        if scope in ("TEMPLATE", "SITE") and campaign:
+            attrs["campaign"] = None
+        return attrs
+
+
+class CampaignEquipmentAccessSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CampaignEquipmentAccess
+        fields = ["id", "campaign", "item", "enabled"]
+
 
 class FactionSerializer(serializers.ModelSerializer):
     npcs = NPCSummarySerializer(many=True, read_only=True)
@@ -2955,6 +3071,7 @@ class CampaignSerializer(serializers.ModelSerializer):
                 s, "position_effect_by_character", None
             )
             or {},
+            "loadout_by_character": getattr(s, "loadout_by_character", None) or {},
             "session_npcs_with_clocks": session_npcs_with_clocks,
             "session_npc_heal_roster": session_npc_heal_roster,
         }
@@ -3110,6 +3227,10 @@ class NPCSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         hamon_ids = validated_data.pop("hamon_ability_ids", [])
         spin_ids = validated_data.pop("spin_ability_ids", [])
+        if "inventory" in validated_data:
+            validated_data["inventory"] = normalize_inventory_list(
+                validated_data.get("inventory")
+            )
         if "creator" not in validated_data:
             validated_data["creator"] = self.context["request"].user
         npc = super().create(validated_data)
@@ -3124,6 +3245,10 @@ class NPCSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         hamon_ids = validated_data.pop("hamon_ability_ids", None)
         spin_ids = validated_data.pop("spin_ability_ids", None)
+        if "inventory" in validated_data:
+            validated_data["inventory"] = normalize_inventory_list(
+                validated_data.get("inventory")
+            )
         instance = super().update(instance, validated_data)
         if hamon_ids is not None:
             instance.npc_hamon_abilities.all().delete()

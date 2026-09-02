@@ -328,10 +328,11 @@ export default function AccountSettingsPage() {
         <section style={S.section}>
           <h2 style={S.sectionTitle}>Theme / Appearance</h2>
           <div style={S.card}>
-            <label style={S.lbl}>HFTF</label>
+            <label style={S.lbl}>Color theme</label>
             <p style={{ ...S.mutedSmall, marginBottom: "12px" }}>
-              Same brand colors everywhere: purple accent, gold, orange, scarlet —
-              tuned for dark (ink) or light (parchment) backgrounds.
+              HFTF brand themes (purple, gold, orange) or Cool Night — the slate
+              palette used on character sheets (gray panels, coral labels, cool
+              accents).
             </p>
             <div
               style={{
@@ -416,6 +417,51 @@ export default function AccountSettingsPage() {
                   }}
                 >
                   Parchment
+                </span>
+              </button>
+              <button
+                type="button"
+                style={themeChipStyle(appTheme === "cool_night")}
+                aria-pressed={appTheme === "cool_night"}
+                onClick={() => setTheme("cool_night")}
+              >
+                <span
+                  style={{
+                    display: "flex",
+                    height: "4px",
+                    width: "100%",
+                    borderRadius: "1px",
+                    overflow: "hidden",
+                    marginBottom: "6px",
+                  }}
+                  aria-hidden
+                >
+                  <span style={{ flex: 1, background: "#111827" }} />
+                  <span style={{ flex: 1, background: "#374151" }} />
+                  <span style={{ flex: 1, background: "#f87171" }} />
+                  <span style={{ flex: 1, background: "#0ea5e9" }} />
+                </span>
+                <span
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Cool Night
+                </span>
+                <span
+                  style={{
+                    fontSize: "10px",
+                    marginTop: "4px",
+                    opacity: 0.85,
+                    letterSpacing: "0.06em",
+                    textTransform: "uppercase",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  Slate
                 </span>
               </button>
             </div>

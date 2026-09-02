@@ -273,11 +273,112 @@ export function resolveHeritagePkForSave(heritageValue, heritageList) {
  */
 export function getCharacterCrewId(c) {
   if (c == null || typeof c !== "object") return null;
+  if (c.crewId != null && c.crewId !== "") return c.crewId;
   if (c.crew_id != null && c.crew_id !== "") return c.crew_id;
   const crew = c.crew;
   if (crew != null && typeof crew === "object" && crew.id != null) return crew.id;
   if (crew != null && crew !== "") return crew;
   return null;
+}
+
+/** Crew label + linked PK from a sheet character snapshot. */
+export function normalizeCrewFromCharacter(character) {
+  const rawCrew = character?.crew;
+  const crewName =
+    (typeof rawCrew === "object" ? rawCrew?.name : rawCrew) ||
+    character?.crew_name ||
+    character?.personal_crew_name ||
+    "";
+  const crewId = getCharacterCrewId(character);
+  return {
+    crew: String(crewName || ""),
+    crewId:
+      crewId == null || crewId === ""
+        ? null
+        : typeof crewId === "number"
+          ? crewId
+          : parseInt(String(crewId), 10) || null,
+  };
+}
+
+function crewNameFromCampaignCrews(crews, crewId) {
+  if (crewId == null || crewId === "") return "";
+  const row = (crews || []).find((cr) => Number(cr?.id) === Number(crewId));
+  return (row?.name || "").trim();
+}
+
+/**
+ * Resolve crew label/id from campaign roster, campaign crews, and character.
+ * Used when campaign dropdown updates before character.campaign refresh.
+ */
+export function resolveCrewFromCampaign(campaign, characterId, character) {
+  const fromChar = normalizeCrewFromCharacter(character);
+  const crews = Array.isArray(campaign?.crews) ? campaign.crews : [];
+  const roster = Array.isArray(campaign?.campaign_characters)
+    ? campaign.campaign_characters
+    : [];
+
+  if ((fromChar.crew || "").trim()) {
+    return fromChar;
+  }
+  if (fromChar.crewId != null) {
+    const linkedName = crewNameFromCampaignCrews(crews, fromChar.crewId);
+    if (linkedName) {
+      return { crew: linkedName, crewId: fromChar.crewId };
+    }
+  }
+
+  if (characterId != null) {
+    const me = roster.find((c) => String(c.id) === String(characterId));
+    if (me) {
+      const meCrewId = getCharacterCrewId(me) ?? fromChar.crewId;
+      const meCrewName = (
+        me.crew ||
+        me.crew_name ||
+        me.personal_crew_name ||
+        crewNameFromCampaignCrews(crews, meCrewId) ||
+        ""
+      ).trim();
+      if (meCrewId || meCrewName) {
+        return {
+          crew: meCrewName || crewNameFromCampaignCrews(crews, meCrewId),
+          crewId: meCrewId ?? null,
+        };
+      }
+    }
+  }
+
+  if (crews.length === 1 && fromChar.crewId == null) {
+    return {
+      crew: (crews[0]?.name || "").trim(),
+      crewId: crews[0]?.id ?? null,
+    };
+  }
+
+  if (!(fromChar.crew || "").trim() && fromChar.crewId == null) {
+    const seen = [];
+    roster.forEach((c) => {
+      const id = getCharacterCrewId(c);
+      const name = (
+        c?.crew ||
+        c?.crew_name ||
+        c?.personal_crew_name ||
+        crewNameFromCampaignCrews(crews, id) ||
+        ""
+      ).trim();
+      if (name || id) {
+        const key = String(id ?? name).toLowerCase();
+        if (!seen.some((x) => x.key === key)) {
+          seen.push({ key, id, name });
+        }
+      }
+    });
+    if (seen.length === 1) {
+      return { crew: seen[0].name || "", crewId: seen[0].id ?? null };
+    }
+  }
+
+  return fromChar;
 }
 
 /**
@@ -482,6 +583,53 @@ export function isHamonFoundationAbility(ability) {
   return String(ability?.hamon_type || "").toUpperCase() === "FOUNDATION";
 }
 
+export function isPlaybookFoundationAbility(ability) {
+  if (ability?.type === "spin") return isSpinFoundationAbility(ability);
+  if (ability?.type === "hamon") return isHamonFoundationAbility(ability);
+  return Boolean(ability?._playbookFoundation);
+}
+
+export function playbookFoundationAbilities(catalog, kind) {
+  return (catalog || []).filter((a) =>
+    kind === "spin" ? isSpinFoundationAbility(a) : isHamonFoundationAbility(a),
+  );
+}
+
+export function sheetPlaybookFoundationRows(catalog, kind) {
+  return playbookFoundationAbilities(catalog, kind).map((a) => ({
+    id: a.id,
+    name: a.name,
+    type: kind,
+    description: a.description,
+    spin_type: a.spin_type,
+    hamon_type: a.hamon_type,
+    required_a_count: a.required_a_count,
+    _playbookFoundation: true,
+  }));
+}
+
+export function abilitiesMissingPlaybookFoundations(abilities, catalog, kind) {
+  const foundations = playbookFoundationAbilities(catalog, kind);
+  if (!foundations.length) return false;
+  const have = new Set(
+    (abilities || [])
+      .filter((a) => a?.type === kind)
+      .map((a) => Number(a.id)),
+  );
+  return foundations.some((f) => !have.has(Number(f.id)));
+}
+
+export function mergePlaybookFoundationAbilities(abilities, catalog, kind) {
+  const toAdd = sheetPlaybookFoundationRows(catalog, kind).filter(
+    (f) =>
+      !(abilities || []).some(
+        (a) => a?.type === kind && Number(a.id) === Number(f.id),
+      ),
+  );
+  if (!toAdd.length) return abilities || [];
+  return [...(abilities || []), ...toAdd];
+}
+
 export function playbookGateLevel(pcLevel) {
   return Math.max(1, Number(pcLevel) || 0);
 }
@@ -540,10 +688,47 @@ export function canAddNonFoundationPlaybookAbility({
 }
 
 /**
- * Overlay server-owned stress/trauma onto a dirty local sheet draft.
+ * Overlay server-owned stress/trauma/healing clock onto a dirty local sheet draft.
  * Skip a field when the player touched that control this draft so a poll/SSE
- * cannot clobber an in-progress stress or trauma edit.
+ * cannot clobber an in-progress edit.
  */
+export function shouldSkipServerOwnedFieldHydration(
+  fieldKey,
+  { fieldTouches = {}, sheetDraftIsDirty = false } = {},
+) {
+  if (sheetDraftIsDirty) return true;
+  return Boolean(fieldTouches?.[fieldKey]);
+}
+
+/** Keys mirrored on buildPayload `_fieldTouches` and mergeServerOwnedCharacterFields. */
+export const SERVER_OWNED_FIELD_TOUCH_KEYS = [
+  "stress",
+  "trauma",
+  "xp",
+  "healingClock",
+  "inventory",
+];
+
+/**
+ * Pure healing-clock advance (recover roll / manual +). Returns new filled count
+ * and how many full-clock harm downgrades to apply.
+ */
+export function computeHealingClockAfterSegments({
+  currentFilled = 0,
+  segmentsToAdd = 0,
+  segmentCap = 4,
+} = {}) {
+  const cap = Math.min(5, Math.max(4, Math.floor(Number(segmentCap) || 4)));
+  const add = Math.max(0, Math.floor(Number(segmentsToAdd) || 0));
+  const clock = Math.max(0, Math.min(cap, Number(currentFilled) || 0));
+  if (!add) {
+    return { nextFilled: clock, completions: 0 };
+  }
+  const total = clock + add;
+  const completions = Math.floor(total / cap) - Math.floor(clock / cap);
+  return { nextFilled: total % cap, completions };
+}
+
 export function mergeServerOwnedCharacterFields(
   localCharacter,
   serverCharacter,
@@ -559,6 +744,15 @@ export function mergeServerOwnedCharacterFields(
   }
   if (!touches.trauma && serverCharacter.trauma != null) {
     next.trauma = serverCharacter.trauma;
+  }
+  if (!touches.healingClock && typeof serverCharacter.healingClock === "number") {
+    next.healingClock = serverCharacter.healingClock;
+  }
+  if (
+    !touches.healingClock &&
+    typeof serverCharacter.healingClockSegments === "number"
+  ) {
+    next.healingClockSegments = serverCharacter.healingClockSegments;
   }
   return next;
 }

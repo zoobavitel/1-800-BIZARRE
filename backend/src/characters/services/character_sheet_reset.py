@@ -123,6 +123,7 @@ def reset_character_sheet(character):
             character.has_physical_armor_item = False
             character.physical_armor_bonus_charges = 0
             character.physical_armor_used = 0
+            character.special_armor_used = 0
 
             character.unallocated_xp = 0
             character.xp_clocks = dict(_EMPTY_XP_CLOCKS)

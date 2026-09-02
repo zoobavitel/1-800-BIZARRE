@@ -123,6 +123,97 @@ class Faction(models.Model):
         return f"{self.name} ({self.get_faction_type_display()}) - {self.campaign.name}"
 
 
+class EquipmentItem(models.Model):
+    """Campaign/site equipment catalog entry or SRD template."""
+
+    CATEGORY_CHOICES = [
+        ("documents", "Documents"),
+        ("gear", "Gear"),
+        ("implements", "Implements"),
+        ("supplies", "Supplies"),
+        ("tools", "Tools"),
+        ("weapons", "Weapons"),
+        ("other", "Other"),
+    ]
+    SCOPE_CHOICES = [
+        ("TEMPLATE", "Template"),
+        ("CAMPAIGN", "Campaign"),
+        ("SITE", "Site"),
+    ]
+
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    category = models.CharField(
+        max_length=20, choices=CATEGORY_CHOICES, default="other"
+    )
+    load_slots = models.IntegerField(
+        default=1,
+        validators=[MinValueValidator(0), MaxValueValidator(2)],
+        help_text="0 = italicized (no load); 2 = heavy item.",
+    )
+    quality = models.IntegerField(
+        default=1,
+        validators=[MinValueValidator(0), MaxValueValidator(3)],
+        help_text="SRD quality factor hint (0 poor … 3 exceptional).",
+    )
+    coin_value = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Optional resale/reference value in coin.",
+    )
+    scope = models.CharField(max_length=20, choices=SCOPE_CHOICES, default="CAMPAIGN")
+    campaign = models.ForeignKey(
+        Campaign,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="equipment_items",
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_equipment_items",
+    )
+    source_character = models.ForeignKey(
+        "Character",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="promoted_equipment_items",
+    )
+    available_when_adding = models.BooleanField(
+        default=True,
+        help_text="When false, hidden from add-item picker for this campaign.",
+    )
+
+    class Meta:
+        ordering = ["category", "name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_scope_display()})"
+
+
+class CampaignEquipmentAccess(models.Model):
+    """GM opt-in for TEMPLATE/SITE catalog items per campaign."""
+
+    campaign = models.ForeignKey(
+        Campaign, on_delete=models.CASCADE, related_name="equipment_access"
+    )
+    item = models.ForeignKey(
+        EquipmentItem, on_delete=models.CASCADE, related_name="campaign_access"
+    )
+    enabled = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ("campaign", "item")
+
+    def __str__(self):
+        state = "on" if self.enabled else "off"
+        return f"{self.campaign.name} / {self.item.name} ({state})"
+
+
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
     avatar = models.ImageField(upload_to="avatars/", null=True, blank=True)
@@ -137,7 +228,13 @@ class UserProfile(models.Model):
     show_avatars = models.BooleanField(default=True)
     show_signatures = models.BooleanField(default=True)
     theme = models.CharField(
-        max_length=20, default="dark", choices=[("dark", "Dark"), ("light", "Light")]
+        max_length=20,
+        default="dark",
+        choices=[
+            ("dark", "Dark"),
+            ("light", "Light"),
+            ("cool_night", "Cool Night"),
+        ],
     )
     email_digest = models.BooleanField(default=False)
     email_digest_days = models.JSONField(default=list, blank=True)
@@ -691,6 +788,13 @@ class Character(models.Model):
         default=0,
         help_text="Spent physical armor charges (0–6); pool size is physical_armor_bonus_charges when has_physical_armor_item.",
     )
+    special_armor_used = models.IntegerField(
+        default=0,
+        help_text=(
+            "Spent special armor boxes from inventory items (armor_kind=special). "
+            "One box per item; restored when load is chosen for the next score."
+        ),
+    )
     # Session-end Stand Development XP (and future pool sources) pending player allocation to tracks.
     unallocated_xp = models.IntegerField(
         default=0,
@@ -930,7 +1034,8 @@ class Character(models.Model):
             )
 
     def _validate_initial_abilities_count(self):
-        # Stand L1: 1 standard + unique package (+2 slots per A-rank).
+        # Stand L1 (SRD_DEV): 3 unique abilities + 2 standard abilities base;
+        # each A-rank adds up to 2 more standards (or alt unique package).
         # Hamon/Spin L1: foundations + 1 Level-1 playbook pick + 1 standard (no Stand formula).
         if self.level != 1:
             return
@@ -977,11 +1082,13 @@ class Character(models.Model):
                     a_rank_count += 1
         except Exception:
             pass
-        if std_count < 1:
+        min_standards = 2
+        if std_count < min_standards:
             raise ValidationError(
                 {
                     "standard_abilities": (
-                        "A level 1 Stand character needs at least 1 standard ability."
+                        f"A level 1 Stand character needs at least {min_standards} "
+                        "standard abilities."
                     )
                 }
             )
@@ -994,7 +1101,7 @@ class Character(models.Model):
                     )
                 }
             )
-        max_standards = 1 + (a_rank_count * 2)
+        max_standards = 2 + (a_rank_count * 2)
         if std_count > max_standards:
             raise ValidationError(
                 {
@@ -1902,6 +2009,14 @@ class Session(models.Model):
         help_text=(
             "Map of character id (string) to {position, effect} for this session; "
             "overrides default_position/default_effect for that PC's action rolls when set."
+        ),
+    )
+    loadout_by_character = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Map of character id (string) to session loadout: "
+            "band, carried_ids, carry_coin, rigging_categories, armor_restored."
         ),
     )
     auto_encoded_xp_settled = models.BooleanField(

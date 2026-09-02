@@ -5241,7 +5241,17 @@ const NPCSheet = ({
                 onClick={() =>
                   faction
                     ? setFactionInventory((p) => [...p, { name: "", qty: 1 }])
-                    : setInventory((p) => [...p, { name: "", qty: 1 }])
+                    : setInventory((p) => [
+                        ...p,
+                        {
+                          name: "",
+                          qty: 1,
+                          load: 1,
+                          quality: 1,
+                          category: "other",
+                          detail: "",
+                        },
+                      ])
                 }
                 style={{
                   ...S.btn,

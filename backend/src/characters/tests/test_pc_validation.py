@@ -31,7 +31,7 @@ class CharacterValidationTests(TestCase):
             custom_ability_description='Unique package with three uses.',
         )
         character.save()
-        character.standard_abilities.add(self.ability1)
+        character.standard_abilities.add(self.ability1, self.ability2)
 
         # SRD: Distribute 6 points at creation. Grade points: A=4, B=3, C=2, D=1, F=0.
         stand = Stand(
@@ -142,18 +142,26 @@ class CharacterValidationTests(TestCase):
 
     def test_invalid_initial_abilities_count(self):
         character = self._create_valid_level_1_character()
-        character.standard_abilities.clear()  # 0 standards; need at least 1
+        character.standard_abilities.clear()
         with self.assertRaisesMessage(
-            ValidationError, 'A level 1 Stand character needs at least 1 standard ability'
+            ValidationError,
+            "A level 1 Stand character needs at least 2 standard abilities",
         ):
             character.full_clean()
 
-        character_too_many_abilities = self._create_valid_level_1_character()
-        character_too_many_abilities.standard_abilities.add(
-            self.ability2, self.ability3
-        )  # 3 standards with 0 A-ranks; max 1
+        character_one_standard = self._create_valid_level_1_character()
+        character_one_standard.standard_abilities.set([self.ability1])
         with self.assertRaisesMessage(
-            ValidationError, 'Too many standard abilities for level 1'
+            ValidationError,
+            "A level 1 Stand character needs at least 2 standard abilities",
+        ):
+            character_one_standard.full_clean()
+
+        character_too_many_abilities = self._create_valid_level_1_character()
+        character_too_many_abilities.standard_abilities.add(self.ability3)
+        # 3 standards with 0 A-ranks; max 2
+        with self.assertRaisesMessage(
+            ValidationError, "Too many standard abilities for level 1"
         ):
             character_too_many_abilities.full_clean()
 
@@ -184,7 +192,7 @@ class CharacterValidationTests(TestCase):
         self.assertEqual(character.resolve_attribute_rating, 2)
 
     def test_valid_a_rank_abilities(self):
-        # One A-rank => max 1 + 2 = 3 standards; unique package still required.
+        # One A-rank => max 2 + 2 = 4 standards; unique package still required at L1.
         user = User.objects.create_user(username='testuser_a_rank', password='password')
         heritage = Heritage.objects.create(name='Human_a_rank', base_hp=0, description='A standard human heritage')
 
@@ -205,7 +213,7 @@ class CharacterValidationTests(TestCase):
         )
         character_a_rank.save()
         character_a_rank.standard_abilities.add(
-            self.ability1, self.ability2, self.ability3
+            self.ability1, self.ability2, self.ability3, self.ability4
         )
 
         stand_a_rank = Stand(
@@ -227,7 +235,7 @@ class CharacterValidationTests(TestCase):
 
     def test_invalid_a_rank_abilities_count(self):
         character = self._create_valid_level_1_character()
-        # One A-rank: max standards = 3. Add 4th standard to exceed.
+        # One A-rank: max standards = 4. Add 5th standard to exceed.
         character.stand.power = 'A'
         character.stand.speed = 'D'
         character.stand.range = 'D'
@@ -236,9 +244,12 @@ class CharacterValidationTests(TestCase):
         character.stand.development = 'F'
         character.stand.save()
         character.stress = 9
-        character.standard_abilities.add(
-            self.ability2, self.ability3, self.ability4
-        )  # total 4 > max 3
+        character.standard_abilities.add(self.ability3, self.ability4)
+        # ability1 + ability2 + ability3 + ability4 = 4 ok; need one more
+        extra = Ability.objects.create(
+            name='Ability 5', type='standard', description='Desc 5'
+        )
+        character.standard_abilities.add(extra)
         with self.assertRaisesMessage(
             ValidationError, 'Too many standard abilities for level 1'
         ):
@@ -246,7 +257,7 @@ class CharacterValidationTests(TestCase):
 
     def test_no_a_rank_abilities(self):
         character = self._create_valid_level_1_character()
-        # Already has no A-ranks and 1 standard + custom — valid
+        # No A-ranks: 2 standards + custom — valid
         try:
             character.full_clean()
             self.assertTrue(True)

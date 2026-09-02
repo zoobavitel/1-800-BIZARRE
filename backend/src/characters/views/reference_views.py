@@ -36,6 +36,10 @@ class HeritageViewSet(viewsets.ModelViewSet):
     queryset = Heritage.objects.all()
     serializer_class = HeritageSerializer
 
+    def get_queryset(self):
+        # Junk test heritages — not part of the SRD catalog.
+        return Heritage.objects.exclude(name__in=["H", "H2"])
+
 class ViceViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Vice.objects.all()

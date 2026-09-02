@@ -2,6 +2,7 @@
 from .character_views import CharacterViewSet
 from .campaign_views import CampaignViewSet, CampaignInvitationViewSet, ShowcasedNPCViewSet
 from .faction_views import FactionViewSet
+from .equipment_views import EquipmentItemViewSet
 from .npc_views import NPCViewSet
 from .crew_views import CrewViewSet
 from .session_views import SessionViewSet, SessionEventViewSet
@@ -26,7 +27,7 @@ from .utility_views import (
 
 __all__ = [
     'CharacterViewSet', 'CampaignViewSet', 'CampaignInvitationViewSet', 'ShowcasedNPCViewSet',
-    'FactionViewSet', 'NPCViewSet', 'CrewViewSet',
+    'FactionViewSet', 'EquipmentItemViewSet', 'NPCViewSet', 'CrewViewSet',
     'SessionViewSet', 'SessionEventViewSet', 'RollViewSet', 'GroupActionViewSet', 'RegisterView', 'LoginView', 'CurrentUserView',
     'UserProfileViewSet', 'ClaimViewSet', 'CrewSpecialAbilityViewSet',
     'CrewPlaybookViewSet', 'CrewUpgradeViewSet', 'XPHistoryViewSet',

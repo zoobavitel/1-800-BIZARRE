@@ -51,4 +51,19 @@ describe("ThemeProvider", () => {
     });
     expect(screen.getByTestId("theme-value")).toHaveTextContent("light");
   });
+
+  test("restores cool_night from localStorage", async () => {
+    localStorage.setItem("theme", "cool_night");
+    renderWithProviders(
+      <ThemeProvider>
+        <ThemeProbe />
+      </ThemeProvider>,
+    );
+
+    await waitFor(() => {
+      expect(document.documentElement.dataset.theme).toBe("cool_night");
+      expect(localStorage.getItem("theme")).toBe("cool_night");
+    });
+    expect(screen.getByTestId("theme-value")).toHaveTextContent("cool_night");
+  });
 });

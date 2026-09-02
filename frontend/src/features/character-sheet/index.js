@@ -22,6 +22,10 @@ export {
   playbookAbilityRequiredLevel,
   isSpinFoundationAbility,
   isHamonFoundationAbility,
+  isPlaybookFoundationAbility,
+  playbookFoundationAbilities,
+  mergePlaybookFoundationAbilities,
+  abilitiesMissingPlaybookFoundations,
   playbookGateLevel,
   playbookAbilityLevelMet,
   playbookAbilityRequirementLabel,
@@ -29,5 +33,10 @@ export {
   playbookAbilitySlotBudget,
   canAddNonFoundationPlaybookAbility,
   computePcLevelFromSheet,
+  shouldSkipServerOwnedFieldHydration,
+  SERVER_OWNED_FIELD_TOUCH_KEYS,
+  computeHealingClockAfterSegments,
+  normalizeCrewFromCharacter,
+  resolveCrewFromCampaign,
 } from "./utils/characterUtils";
 export * from "./services/api";

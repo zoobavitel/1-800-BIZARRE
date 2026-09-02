@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.decorators import action
 
-from ..models import Session, SessionEvent, Roll
+from ..models import Session, SessionEvent, Roll, Character
 from ..serializers import SessionSerializer, SessionEventSerializer, SessionRecordsSerializer
 
 logger = logging.getLogger(__name__)
@@ -69,10 +69,33 @@ class SessionViewSet(viewsets.ModelViewSet):
         serializer.save()
 
     def perform_update(self, serializer):
-        # Ensure only the GM can update the session
         session = self.get_object()
-        if session.campaign.gm != self.request.user and not self.request.user.is_staff:
-            raise PermissionDenied("Only the GM can update this session")
+        user = self.request.user
+        is_gm = session.campaign.gm == user or user.is_staff
+
+        if not is_gm:
+            data_keys = set(self.request.data.keys())
+            allowed_only = data_keys <= {"loadout_by_character"}
+            if not allowed_only:
+                raise PermissionDenied("Only the GM can update this session")
+            char = Character.objects.filter(
+                user=user, campaign_id=session.campaign_id
+            ).first()
+            if not char:
+                raise PermissionDenied("No character in this campaign")
+            patch = self.request.data.get("loadout_by_character")
+            if not isinstance(patch, dict) or len(patch) != 1:
+                raise PermissionDenied(
+                    "Players may only update their own loadout entry"
+                )
+            char_key = str(char.id)
+            if str(next(iter(patch.keys()))) != char_key:
+                raise PermissionDenied(
+                    "Players may only update their own loadout entry"
+                )
+            serializer.save()
+            return
+
         prev_status = session.status
         instance = serializer.save()
         skip = getattr(instance, "_skip_encoded_xp_settlement", False)
