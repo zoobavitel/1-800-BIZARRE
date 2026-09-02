@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Bell, MessageSquare, Settings, LogOut } from "lucide-react";
+import { useAuth } from "../features/auth";
 import "./UserMenu.css";
 
 function MenuItem({ icon: Icon, label, onClick, danger }) {
@@ -31,6 +32,9 @@ export default function UserMenu({
   onNavigateToAccountSettings,
   onLogout,
 }) {
+  const { user } = useAuth();
+  const username = String(user?.username || "").trim();
+
   useEffect(() => {
     const handler = (e) => {
       if (e.key === "Escape" && open) onClose?.();
@@ -67,6 +71,11 @@ export default function UserMenu({
               ◇
             </span>
             <span className="um-drawer-brand-text">User menu</span>
+            {username ? (
+              <span className="um-drawer-user-name" title={username}>
+                {username}
+              </span>
+            ) : null}
           </div>
           <button
             type="button"

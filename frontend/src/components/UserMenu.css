@@ -52,6 +52,7 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
+  flex: 1;
 }
 
 .um-hftf .um-drawer-brand-mark {
@@ -70,8 +71,20 @@
   text-transform: uppercase;
   color: var(--hm-cream, #eadeb7);
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.um-hftf .um-drawer-user-name {
+  font-family: var(--hm-font-heading, "Oswald", sans-serif);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a7e6e;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .um-hftf .um-drawer-close {
@@ -161,6 +174,10 @@
 
 [data-theme="light"] .um-hftf .um-drawer-brand-text {
   color: var(--text-primary, #1a0e2e);
+}
+
+[data-theme="light"] .um-hftf .um-drawer-user-name {
+  color: var(--text-secondary, #5a4070);
 }
 
 [data-theme="light"] .um-hftf .um-drawer-close {
