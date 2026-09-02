@@ -99,23 +99,33 @@ class XPAllocationServiceTests(TestCase):
         self.assertEqual(self.character.total_xp_spent, 10)
         self.assertEqual(self.character.stand_coin_points_gained, 1)
 
-    def test_minor_advance_from_heritage_refund_on_undo(self):
+    def test_minor_advance_from_insight_refund_on_undo(self):
+        self.character.xp_clocks = {
+            **self.character.xp_clocks,
+            "insight": 5,
+        }
+        self.character.save(update_fields=["xp_clocks"])
         alloc = apply_minor_advance(
-            self.character, xp_track="heritage", action="HUNT"
+            self.character, xp_track="insight", action="HUNT"
         )
         self.character.refresh_from_db()
-        self.assertEqual(self.character.xp_clocks["heritage"], 5)
+        self.assertEqual(self.character.xp_clocks["insight"], 0)
         self.assertEqual(self.character.action_dots["hunt"], 3)
 
         undo_allocation(self.character, alloc, user=self.user)
         self.character.refresh_from_db()
-        self.assertEqual(self.character.xp_clocks["heritage"], 5)
+        self.assertEqual(self.character.xp_clocks["insight"], 5)
         self.assertEqual(self.character.action_dots["hunt"], 2)
         self.assertIsNotNone(alloc.undone_at)
 
     def test_redo_allocation_after_undo(self):
+        self.character.xp_clocks = {
+            **self.character.xp_clocks,
+            "insight": 5,
+        }
+        self.character.save(update_fields=["xp_clocks"])
         alloc = apply_minor_advance(
-            self.character, xp_track="heritage", action="HUNT"
+            self.character, xp_track="insight", action="HUNT"
         )
         self.character.refresh_from_db()
         undo_allocation(self.character, alloc, user=self.user)
@@ -209,11 +219,14 @@ class XPAllocationServiceTests(TestCase):
         """LEVEL ↩ must not wipe GM scorecard ticks added after a spend."""
         self.character.xp_clocks = {
             **self.character.xp_clocks,
-            "playbook": 5,
+            "playbook": 10,
         }
         self.character.save()
-        alloc = apply_minor_advance(
-            self.character, xp_track="playbook", action="HUNT"
+        alloc = apply_level_up(
+            self.character,
+            xp_track="playbook",
+            choice="stat",
+            stand_stat="speed",
         )
         self.character.refresh_from_db()
         self.assertEqual(self.character.xp_clocks["playbook"], 0)
@@ -227,9 +240,9 @@ class XPAllocationServiceTests(TestCase):
 
         undo_allocation(self.character, alloc, user=self.user)
         self.character.refresh_from_db()
-        # Refund +5 on top of GM's 3 (not snapshot restore to 5, which would drop GM ticks).
-        self.assertEqual(self.character.xp_clocks["playbook"], 8)
-        self.assertEqual(self.character.action_dots.get("hunt"), 2)
+        # Refund +10 on top of GM's 3 (playbook uncapped; not snapshot wipe).
+        self.assertEqual(self.character.xp_clocks["playbook"], 13)
+        self.assertEqual(self.character.stand.speed, "D")
 
     def test_gm_forced_stand_stat_tops_up_playbook_xp(self):
         self.character.xp_clocks["playbook"] = 2
@@ -350,9 +363,14 @@ class XPAllocationAPITests(TestCase):
         self.assertEqual(len(list_allocations(self.character)), 1)
 
     def test_undo_latest_allocation_api(self):
+        self.character.xp_clocks = {
+            **self.character.xp_clocks,
+            "insight": 5,
+        }
+        self.character.save(update_fields=["xp_clocks"])
         self.client.post(
             f"/api/characters/{self.character.id}/apply-minor-advance/",
-            {"xp_track": "heritage", "action": "HUNT"},
+            {"xp_track": "insight", "action": "HUNT"},
             format="json",
         )
         res = self.client.post(
@@ -362,14 +380,18 @@ class XPAllocationAPITests(TestCase):
         )
         self.assertEqual(res.status_code, 200)
         self.character.refresh_from_db()
-        # Heritage track cap is 5; undo refunds with clamp (setUp starts at 10).
-        self.assertEqual(self.character.xp_clocks["heritage"], 5)
+        self.assertEqual(self.character.xp_clocks["insight"], 5)
         self.assertEqual(self.character.action_dots["hunt"], 2)
 
     def test_redo_latest_allocation_api(self):
+        self.character.xp_clocks = {
+            **self.character.xp_clocks,
+            "insight": 5,
+        }
+        self.character.save(update_fields=["xp_clocks"])
         self.client.post(
             f"/api/characters/{self.character.id}/apply-minor-advance/",
-            {"xp_track": "heritage", "action": "HUNT"},
+            {"xp_track": "insight", "action": "HUNT"},
             format="json",
         )
         self.client.post(

@@ -79,8 +79,8 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
         )
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
-    def test_spin_ability_fails_when_insufficient_level(self):
-        """Spin ability with required_a_count=2 fails at character level 1."""
+    def test_spin_ability_not_gated_by_character_level(self):
+        """Plan A: required_a_count no longer gates Spin picks; slot budget does."""
         data = {
             'playbook': 'SPIN',
             'spin_ability_ids': [self.spin_gated.id],
@@ -91,11 +91,7 @@ class SpinPlaybookAbilitySerializerTests(TestCase):
             partial=True,
             context={'request': self._request()},
         )
-        self.assertFalse(serializer.is_valid())
-        self.assertIn('non_field_errors', serializer.errors)
-        err = str(serializer.errors['non_field_errors'][0])
-        self.assertIn('level', err.lower())
-        self.assertIn('Spin Gated', err)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
 
     def test_spin_abilities_allowed_cross_playbook_on_stand(self):
         """Plan A: cross-playbook Spin picks OK (slot budget still applies)."""

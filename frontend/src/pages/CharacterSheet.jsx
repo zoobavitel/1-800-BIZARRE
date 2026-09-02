@@ -460,14 +460,6 @@ const XP_TRACK_SPEND_LABELS = {
   playbook: "Playbook",
 };
 
-const XP_TRACK_SPEND_MAX = {
-  insight: 5,
-  prowess: 5,
-  resolve: 5,
-  heritage: 5,
-  playbook: 10,
-};
-
 /** Caps applied when a roll response ticks a track locally. Playbook is uncapped (innate). */
 const XP_TRACK_APPLY_CAP = {
   insight: 5,
@@ -2036,8 +2028,8 @@ const CharacterSheetWrapper = ({
   const [levelUpLockTrack, setLevelUpLockTrack] = useState(null);
   const [levelUpChoice, setLevelUpChoice] = useState("stat");
   const [levelUpStat, setLevelUpStat] = useState("power");
-  const [levelUpDot1, setLevelUpDot1] = useState("HUNT");
-  const [levelUpDot2, setLevelUpDot2] = useState("HUNT");
+  const levelUpDot1 = "HUNT";
+  const levelUpDot2 = "HUNT";
   const [levelUpSpendTrack, setLevelUpSpendTrack] = useState("playbook");
   const [minorAdvanceSpendTrack, setMinorAdvanceSpendTrack] =
     useState("insight");
@@ -3181,14 +3173,6 @@ const CharacterSheetWrapper = ({
   const aRankCount = Object.values(standStats).reduce(
     (n, idx) => n + (INDEX_TO_GRADE(idx) === "A" ? 1 : 0),
     0,
-  );
-  const maxXpOnAnyTrack = useMemo(
-    () =>
-      XP_SPEND_TRACK_ORDER.reduce(
-        (m, t) => Math.max(m, Number(xp[t]) || 0),
-        0,
-      ),
-    [xp],
   );
   const canAffordLevelUp =
     Number(pendingAdvanceCounts?.playbook || 0) > 0;

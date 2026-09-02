@@ -4,6 +4,31 @@
  */
 export const PATCH_NOTES = [
   {
+    "date": "2026-09-02",
+    "version": null,
+    "sections": [
+      {
+        "title": "Added",
+        "items": [
+          "Plan A fill-clear PendingAdvance and single-playbook cutover",
+          "add loadout, inventory, and armor"
+        ]
+      },
+      {
+        "title": "Tests",
+        "items": [
+          "cover resolveCrewFromCampaign helpers"
+        ]
+      },
+      {
+        "title": "Other",
+        "items": [
+          "Sync standard abilities catalog to SRD_DEV."
+        ]
+      }
+    ]
+  },
+  {
     "date": "2026-09-01",
     "version": null,
     "sections": [
@@ -772,37 +797,6 @@ export const PATCH_NOTES = [
         "title": "Documentation",
         "items": [
           "drop NPC harm clock; vulnerability clock only"
-        ]
-      },
-      {
-        "title": "Fixed",
-        "items": [
-          "stress as marked track; sheet ability rolls UX"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-05-02",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "session XP settlement, GM sheet history splits"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-05-01",
-    "version": null,
-    "sections": [
-      {
-        "title": "Other",
-        "items": [
-          "Merge pull request #69 from zoobavitel/cursor/ci-lxc-tailscale-and-pages-api-url",
-          "ci(deploy-lxc): Tailscale OAuth (TS_OAUTH_*) replaces authkey"
         ]
       }
     ]
