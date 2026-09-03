@@ -129,7 +129,6 @@ import {
 import {
   archetypeRowsForCharacterPlaybook,
   inferSeedArchetypeKeys,
-  mergedTriggerSentencesForKeys,
   normalizePlaybookPathKey,
   normalizePlaybookXpArchetypeKeys,
   STAND_ARCHETYPE_ROWS,
@@ -12312,12 +12311,6 @@ const CharacterSheetWrapper = ({
                             v: xpReqSnapshot.playbook,
                             trigger: "PLAYBOOK_SPECIFIC",
                           };
-                          const archetypeOpts =
-                            archetypeRowsForCharacterPlaybook(playbook);
-                          const mergedArc = mergedTriggerSentencesForKeys(
-                            playbookXpArchetypes,
-                            playbook,
-                          );
                           const renderPips = (row) => {
                             const canToggle =
                               xpReqSnapshot.hasActiveSession && canEditSheet;
@@ -12426,73 +12419,7 @@ const CharacterSheetWrapper = ({
                                     abilities in the fiction (for example resisting harm,
                                     boosting rolls, or shifting position or effect with
                                     Stand, Hamon, or Spin). Max 2 XP total for this
-                                    category; multiple archetype lines below only choose
-                                    which trigger text you are showing—they do not add
-                                    extra pools.{" "}
-                                    <span style={{ color: "#9ca3af" }}>
-                                      Stand types here are the same list as under
-                                      PLAYBOOK.
-                                    </span>
-                                  </div>
-                                  <div
-                                    style={{
-                                      fontSize: "10px",
-                                      color: "#9ca3af",
-                                      marginTop: "6px",
-                                      lineHeight: 1.45,
-                                    }}
-                                  >
-                                    {mergedArc ||
-                                      "Pick one or more archetype trigger lines you are playing toward."}
-                                  </div>
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      flexWrap: "wrap",
-                                      gap: "10px 14px",
-                                      marginTop: "8px",
-                                    }}
-                                  >
-                                    {archetypeOpts.map((opt) => (
-                                      <label
-                                        key={opt.key}
-                                        style={{
-                                          display: "flex",
-                                          alignItems: "flex-start",
-                                          gap: "6px",
-                                          fontSize: "10px",
-                                          color: "#d1d5db",
-                                          cursor: canEditSheet
-                                            ? "pointer"
-                                            : "default",
-                                        }}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={playbookXpArchetypes.includes(
-                                            opt.key,
-                                          )}
-                                          disabled={!canEditSheet || !characterId}
-                                          onChange={() =>
-                                            togglePlaybookXpArchetypeKey(opt.key)
-                                          }
-                                          style={{ marginTop: 2 }}
-                                        />
-                                        <span>
-                                          <strong>{opt.label}</strong>
-                                          <span
-                                            style={{
-                                              color: "#6b7280",
-                                              display: "block",
-                                              marginTop: 2,
-                                              lineHeight: 1.35,
-                                            }}
-                                          >
-                                            {opt.trigger}
-                                          </span>
-                                        </span>
-                                      </label>
-                                    ))}
+                                    category.
                                   </div>
                                 </div>
                                 {renderPips(playbookRow)}
