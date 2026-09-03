@@ -2433,9 +2433,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 {"error": "amount must be an integer"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if amount < 1 or amount > 20:
+        if amount < 1:
             return Response(
-                {"error": "XP amount must be between 1 and 20 per award."},
+                {"error": "XP amount must be at least 1."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

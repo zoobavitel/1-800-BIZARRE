@@ -9122,7 +9122,6 @@ const CharacterSheetWrapper = ({
                                           <input
                                             type="number"
                                             min={1}
-                                            max={20}
                                             value={historyManual.xpAmount}
                                             onChange={(e) =>
                                               setHistoryManual((p) => ({
@@ -9137,7 +9136,7 @@ const CharacterSheetWrapper = ({
                                               width: "100%",
                                               boxSizing: "border-box",
                                             }}
-                                            title="XP to add (1–20 per award)"
+                                            title="XP to add"
                                           />
                                           <textarea
                                             value={historyManual.xpReason}
@@ -10002,13 +10001,9 @@ const CharacterSheetWrapper = ({
                                                 String(historyManual.xpAmount || "1"),
                                                 10,
                                               );
-                                              if (
-                                                !Number.isFinite(amt) ||
-                                                amt < 1 ||
-                                                amt > 20
-                                              ) {
+                                              if (!Number.isFinite(amt) || amt < 1) {
                                                 setHistoryWriteError(
-                                                  "XP amount must be between 1 and 20.",
+                                                  "XP amount must be at least 1.",
                                                 );
                                                 return;
                                               }
