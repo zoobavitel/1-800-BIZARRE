@@ -4,20 +4,22 @@ Load SRD reference fixtures when catalog tables are empty.
 Production DBs may have heritages (e.g. from migration 0032) but never ran loaddata
 for benefits/detriments or playbook abilities — the character sheet then shows empty lists.
 
-Safe to run multiple times: skips tables that already have rows.
+Safe to run multiple times: skips tables that already have rows (except playbook /
+equipment TEMPLATE sync which upserts).
 """
 
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
 
 from characters.models import Ability, Benefit, Detriment
+from characters.services.equipment_template_sync import sync_srd_equipment_templates
 from characters.services.playbook_ability_catalog_sync import sync_playbook_ability_catalog
 
 
 class Command(BaseCommand):
     help = (
         "Load srd_benefits, srd_detriments, standard_abilities when empty; "
-        "upsert Spin/Hamon playbook abilities from fixtures."
+        "upsert Spin/Hamon playbook abilities and SRD equipment TEMPLATEs."
     )
 
     def handle(self, *args, **options):
@@ -51,5 +53,14 @@ class Command(BaseCommand):
                 "Synced playbook abilities from fixtures "
                 f"(spin created={stats['spin_created']}, "
                 f"hamon created={stats['hamon_created']})."
+            )
+        )
+
+        eq = sync_srd_equipment_templates(prune_obsolete=True)
+        self.stdout.write(
+            self.style.SUCCESS(
+                "Synced SRD equipment TEMPLATEs "
+                f"(created={eq['created']}, updated={eq['updated']}, "
+                f"deleted={eq['deleted']})."
             )
         )

@@ -23,7 +23,7 @@ const MULE_CAPS = {
 
 export const RIGGING_CATEGORY_OPTIONS = [
   { value: "weapons", label: "Weapons" },
-  { value: "implements", label: "Arcane Implements" },
+  { value: "implements", label: "Bizarre Implements" },
   { value: "supplies", label: "Supplies" },
   { value: "gear", label: "Gear" },
   { value: "documents", label: "Documents" },
@@ -33,7 +33,7 @@ export const RIGGING_CATEGORY_OPTIONS = [
 export const EQUIPMENT_CATEGORY_OPTIONS = [
   { value: "documents", label: "Documents" },
   { value: "gear", label: "Gear" },
-  { value: "implements", label: "Arcane Implements" },
+  { value: "implements", label: "Bizarre Implements" },
   { value: "supplies", label: "Subterfuge Supplies" },
   { value: "tools", label: "Tools" },
   { value: "weapons", label: "Weapons" },
@@ -336,4 +336,63 @@ export function catalogItemToKitRow(catalogItem) {
     coin_value: catalogItem.coin_value ?? null,
     catalog_id: catalogItem.id ?? null,
   };
+}
+
+function _catalogIdNum(value) {
+  if (value == null || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function _catalogNameKey(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+/** Match kit row to catalog: id first, else same name (prefer TEMPLATE, then SITE). */
+export function catalogRowsForKitItem(item, catalogItems = []) {
+  if (!item) return [];
+  const list = Array.isArray(catalogItems) ? catalogItems : [];
+  const cid = _catalogIdNum(item.catalog_id);
+  if (cid != null) {
+    const byId = list.filter((row) => Number(row?.id) === cid);
+    if (byId.length) return byId;
+  }
+  const name = _catalogNameKey(item.name);
+  if (!name) return [];
+  return list.filter((row) => _catalogNameKey(row?.name) === name);
+}
+
+function _strongestCatalogScope(rows) {
+  let best = null;
+  for (const row of rows) {
+    const s = String(row?.scope || "").toUpperCase();
+    if (s === "TEMPLATE") return "TEMPLATE";
+    if (s === "SITE") best = "SITE";
+    else if (s === "CAMPAIGN" && best !== "SITE") best = "CAMPAIGN";
+  }
+  return best;
+}
+
+/**
+ * Custom kit rows can be saved. Hide when this name/id is already a campaign
+ * library, site, or SRD template entry (do not clone Demolition Tools).
+ */
+export function kitItemCanSaveToCampaignLibrary(item, catalogItems = []) {
+  if (!_catalogNameKey(item?.name)) return false;
+  const scope = _strongestCatalogScope(catalogRowsForKitItem(item, catalogItems));
+  if (scope === "TEMPLATE" || scope === "SITE" || scope === "CAMPAIGN") {
+    return false;
+  }
+  if (_catalogIdNum(item.catalog_id) != null) return false;
+  return true;
+}
+
+/**
+ * Custom and campaign-library rows can publish. Hide for SRD TEMPLATE and
+ * already-SITE items so base game kits are not double-saved.
+ */
+export function kitItemCanPublishToSiteCatalog(item, catalogItems = []) {
+  if (!_catalogNameKey(item?.name)) return false;
+  const scope = _strongestCatalogScope(catalogRowsForKitItem(item, catalogItems));
+  return scope !== "TEMPLATE" && scope !== "SITE";
 }

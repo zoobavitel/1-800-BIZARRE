@@ -14,7 +14,7 @@ python manage.py <command> [options]
 
 | Command | Purpose |
 |---------|---------|
-| `load_srd_reference_data` | Idempotently loads `srd_benefits` / `srd_detriments` from `characters/fixtures/` when the tables are empty. Safe to re-run on prod. |
+| `load_srd_reference_data` | Idempotently loads `srd_benefits` / `srd_detriments` / `standard_abilities` when empty; upserts Spin/Hamon playbook abilities and SRD equipment TEMPLATEs. Safe to re-run on prod. |
 | `create_stand_playbook_test_characters` | Creates five SRD playbook example PCs (Colony, Automatic, Tool-Bound, Fighting Spirit, Phenomena) under a test account. Supports `--username`, `--password`, `--clear`. |
 
 ### User / permission helpers

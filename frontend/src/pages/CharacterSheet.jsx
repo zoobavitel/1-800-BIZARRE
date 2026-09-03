@@ -129,7 +129,6 @@ import {
 import {
   archetypeRowsForCharacterPlaybook,
   inferSeedArchetypeKeys,
-  mergedTriggerSentencesForKeys,
   normalizePlaybookPathKey,
   normalizePlaybookXpArchetypeKeys,
   STAND_ARCHETYPE_ROWS,
@@ -768,6 +767,20 @@ const CATEGORY_LABELS = {
   stand_nature: "Stand Nature",
 };
 
+/** Compare kit rows without extra server-normalized fields causing false mismatch. */
+function inventorySyncFingerprint(inv) {
+  return JSON.stringify(
+    normalizeCharacterInventory(inv).map((item) => ({
+      id: String(item.id ?? ""),
+      name: String(item.name || ""),
+      armor_kind: String(item.armor_kind || ""),
+      load: Number(item.load) || 0,
+      detail: String(item.detail || ""),
+      category: String(item.category || ""),
+    })),
+  );
+}
+
 function hasMeaningfulDraftChanges(payload) {
   if (!payload || payload.id) return false;
   const textFields = [
@@ -981,6 +994,8 @@ const CharacterSheetWrapper = ({
   const draftGenRef = useRef(0);
   /** Abort in-flight autosave PATCH when allocation APIs return fresher state. */
   const autosaveAbortRef = useRef(null);
+  /** Sync guard so Confirm cannot double-fire before levelUpBusy re-renders. */
+  const levelUpInFlightRef = useRef(false);
   const pendingResaveRef = useRef(false);
   /**
    * Same-tick protect before meta effect computes isDirty.
@@ -1207,6 +1222,7 @@ const CharacterSheetWrapper = ({
           ? parseInt(String(campaignId), 10)
           : NaN;
       if (!Number.isFinite(cid)) return;
+      if (!String(item?.name || "").trim()) return;
       try {
         await equipmentAPI.fromKitItem({
           campaign: cid,
@@ -1232,6 +1248,7 @@ const CharacterSheetWrapper = ({
           ? parseInt(String(campaignId), 10)
           : NaN;
       if (!Number.isFinite(cid)) return;
+      if (!String(item?.name || "").trim()) return;
       try {
         const created = await equipmentAPI.fromKitItem({
           campaign: cid,
@@ -1243,6 +1260,8 @@ const CharacterSheetWrapper = ({
           coin_value: item.coin_value,
           source_character: characterId,
         });
+        const scope = String(created?.scope || "").toUpperCase();
+        if (scope === "TEMPLATE" || scope === "SITE") return;
         if (created?.id) await equipmentAPI.publishToSite(created.id);
       } catch (err) {
         console.error("Publish to site catalog failed:", err);
@@ -1272,6 +1291,16 @@ const CharacterSheetWrapper = ({
 
   useEffect(() => {
     lastSavedPayloadRef.current = null;
+  }, [character?.id]);
+
+  useEffect(() => {
+    fieldTouchRef.current = {
+      stress: false,
+      trauma: false,
+      xp: false,
+      healingClock: false,
+      inventory: false,
+    };
   }, [character?.id]);
 
   useEffect(() => {
@@ -1364,13 +1393,26 @@ const CharacterSheetWrapper = ({
     const sn = character?.sheetNotes ?? "";
     const inv = normalizeCharacterInventory(character?.inventory);
     setCharData((prev) => {
+      // After inventory autosave (incl. Del), dirty/saving can clear before the
+      // parent character prop catches up. Keep local kit until server matches
+      // so deleted rows do not reappear.
+      let nextInv = inv;
+      if (fieldTouchRef.current.inventory) {
+        const localFp = inventorySyncFingerprint(prev.inventory);
+        const serverFp = inventorySyncFingerprint(inv);
+        if (localFp !== serverFp) {
+          nextInv = prev.inventory;
+        } else {
+          fieldTouchRef.current.inventory = false;
+        }
+      }
       if (
         (prev.sheetNotes ?? "") === sn &&
-        JSON.stringify(prev.inventory ?? []) === JSON.stringify(inv)
+        JSON.stringify(prev.inventory ?? []) === JSON.stringify(nextInv ?? [])
       ) {
         return prev;
       }
-      return { ...prev, sheetNotes: sn, inventory: inv };
+      return { ...prev, sheetNotes: sn, inventory: nextInv };
     });
   }, [
     character?.id,
@@ -2040,10 +2082,12 @@ const CharacterSheetWrapper = ({
   const [minorAdvanceBusy, setMinorAdvanceBusy] = useState(false);
   const [minorAdvanceError, setMinorAdvanceError] = useState(null);
   const [levelUpBtoARewardBranch, setLevelUpBtoARewardBranch] = useState(
-    "custom2plus1standard",
+    "two_unique_plus_one_standard",
   );
-  const [levelUpRewardCustomName, setLevelUpRewardCustomName] = useState("");
-  const [levelUpRewardUses, setLevelUpRewardUses] = useState(["", ""]);
+  const [levelUpRewardUniques, setLevelUpRewardUniques] = useState([
+    { name: "", use: "" },
+    { name: "", use: "" },
+  ]);
   const [levelUpRewardStandardId, setLevelUpRewardStandardId] = useState("");
   const [levelUpRewardStandardIds, setLevelUpRewardStandardIds] = useState([
     "",
@@ -2056,8 +2100,10 @@ const CharacterSheetWrapper = ({
     "two_standard",
   );
   const [pendingStandAStdIds, setPendingStandAStdIds] = useState(["", ""]);
-  const [pendingStandACustomName, setPendingStandACustomName] = useState("");
-  const [pendingStandAUses, setPendingStandAUses] = useState(["", ""]);
+  const [pendingStandAUniques, setPendingStandAUniques] = useState([
+    { name: "", use: "" },
+    { name: "", use: "" },
+  ]);
   const [pendingStandAStdId, setPendingStandAStdId] = useState("");
   const [pendingStandABusy, setPendingStandABusy] = useState(false);
   const [pendingStandAError, setPendingStandAError] = useState(null);
@@ -2094,6 +2140,12 @@ const CharacterSheetWrapper = ({
 
   useEffect(() => {
     if (!showLevelUp) return;
+    // Take advance locks the pending's track. Do not fall back to a
+    // leftover 10-mark track (or insight) when clocks sit at 0/10.
+    if (levelUpLockTrack) {
+      setLevelUpSpendTrack(levelUpLockTrack);
+      return;
+    }
     setLevelUpSpendTrack((prev) => {
       if ((Number(xp[prev]) || 0) >= 10) return prev;
       return (
@@ -2101,7 +2153,7 @@ const CharacterSheetWrapper = ({
         XP_SPEND_TRACK_ORDER[0]
       );
     });
-  }, [showLevelUp, xp]);
+  }, [showLevelUp, xp, levelUpLockTrack]);
 
   useEffect(() => {
     const next = character?.pendingStandAReward || null;
@@ -3404,21 +3456,20 @@ const CharacterSheetWrapper = ({
   const claimPendingStandAReward = useCallback(async () => {
     if (!characterId || !pendingStandAReward?.allocation_id) return;
     let reward;
-    if (pendingStandABranch === "custom2plus1standard") {
-      if (
-        !pendingStandACustomName.trim() ||
-        !pendingStandAUses.every((u) => String(u || "").trim()) ||
-        !pendingStandAStdId
-      ) {
+    if (pendingStandABranch === "two_unique_plus_one_standard") {
+      const uniques = pendingStandAUniques.map((u) => ({
+        name: String(u?.name || "").trim(),
+        use: String(u?.use || "").trim(),
+      }));
+      if (!uniques.every((u) => u.name && u.use) || !pendingStandAStdId) {
         setPendingStandAError(
-          "Fill custom name, both uses, and pick a standard ability.",
+          "Fill both unique ability names and their function, and pick a standard ability.",
         );
         return;
       }
       reward = {
-        branch: "custom2plus1standard",
-        custom_name: pendingStandACustomName.trim(),
-        custom_uses: pendingStandAUses.map((u) => String(u || "").trim()),
+        branch: "two_unique_plus_one_standard",
+        unique_abilities: uniques,
         standard_ability_id: Number(pendingStandAStdId),
       };
     } else {
@@ -3444,8 +3495,10 @@ const CharacterSheetWrapper = ({
       if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
       setPendingStandABranch("two_standard");
       setPendingStandAStdIds(["", ""]);
-      setPendingStandACustomName("");
-      setPendingStandAUses(["", ""]);
+      setPendingStandAUniques([
+        { name: "", use: "" },
+        { name: "", use: "" },
+      ]);
       setPendingStandAStdId("");
     } catch (err) {
       setPendingStandAError(err?.message || "Could not claim B→A reward.");
@@ -3456,8 +3509,7 @@ const CharacterSheetWrapper = ({
     characterId,
     pendingStandAReward,
     pendingStandABranch,
-    pendingStandACustomName,
-    pendingStandAUses,
+    pendingStandAUniques,
     pendingStandAStdId,
     pendingStandAStdIds,
     applyAllocationBackendCharacter,
@@ -3799,19 +3851,19 @@ const CharacterSheetWrapper = ({
 
   // FIX 6: Confirm level-up — redeem open PendingAdvance (no second XP deduct).
   const confirmLevelUp = async () => {
+    if (levelUpInFlightRef.current) return;
     const track = levelUpLockTrack || levelUpSpendTrack || "playbook";
     const pendingCount = Number(pendingAdvanceCounts?.[track] || 0);
     if (pendingCount < 1 || !characterId) return;
 
     if (levelUpChoice === "stat" && levelUpIsBtoA) {
-      if (levelUpBtoARewardBranch === "custom2plus1standard") {
-        if (
-          !levelUpRewardCustomName.trim() ||
-          !levelUpRewardUses.every((u) => String(u || "").trim()) ||
-          !levelUpRewardStandardId
-        ) {
+      if (levelUpBtoARewardBranch === "two_unique_plus_one_standard") {
+        const filled = levelUpRewardUniques.every(
+          (u) => String(u?.name || "").trim() && String(u?.use || "").trim(),
+        );
+        if (!filled || !levelUpRewardStandardId) {
           setLevelUpError(
-            "B→A reward: fill custom name, both uses, and pick a standard ability.",
+            "B→A reward: fill both unique ability names and their function, and pick a standard ability.",
           );
           return;
         }
@@ -3824,8 +3876,15 @@ const CharacterSheetWrapper = ({
       }
     }
 
+    levelUpInFlightRef.current = true;
     setLevelUpBusy(true);
     setLevelUpError(null);
+    // Pause dirty-sheet PATCH so SQLite is not held while we redeem pending.
+    if (autosaveAbortRef.current) {
+      autosaveAbortRef.current.abort();
+      autosaveAbortRef.current = null;
+    }
+    draftGenRef.current += 1;
     const body = {
       xp_track: track,
       choice: levelUpChoice,
@@ -3834,11 +3893,13 @@ const CharacterSheetWrapper = ({
     if (levelUpChoice === "stat") {
       body.stand_stat = levelUpStat;
       if (levelUpIsBtoA) {
-        if (levelUpBtoARewardBranch === "custom2plus1standard") {
+        if (levelUpBtoARewardBranch === "two_unique_plus_one_standard") {
           body.reward = {
-            branch: "custom2plus1standard",
-            custom_name: levelUpRewardCustomName.trim(),
-            custom_uses: levelUpRewardUses.map((u) => String(u || "").trim()),
+            branch: "two_unique_plus_one_standard",
+            unique_abilities: levelUpRewardUniques.map((u) => ({
+              name: String(u?.name || "").trim(),
+              use: String(u?.use || "").trim(),
+            })),
             standard_ability_id: Number(levelUpRewardStandardId),
           };
         } else {
@@ -3857,12 +3918,17 @@ const CharacterSheetWrapper = ({
     try {
       const res = await characterAPI.applyLevelUp(characterId, body);
       if (res?.character) applyAllocationBackendCharacter(res.character);
-      if (Array.isArray(res?.allocations))       setXpAllocationRows(res.allocations);
+      if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
       setShowLevelUp(false);
       setLevelUpLockTrack(null);
     } catch (err) {
-      setLevelUpError(err?.message || "Level up failed");
+      if (err?.name === "AbortError") {
+        setLevelUpError("Request timed out. If coin did not change, try Confirm again.");
+      } else {
+        setLevelUpError(err?.message || "Level up failed");
+      }
     } finally {
+      levelUpInFlightRef.current = false;
       setLevelUpBusy(false);
     }
   };
@@ -7893,6 +7959,7 @@ const CharacterSheetWrapper = ({
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       if (!onSave || !canEditSheet) return;
+      if (levelUpInFlightRef.current) return;
       if (markPcAutosaveBusyCollision(savingRef.current, pendingResaveRef)) {
         return;
       }
@@ -7968,12 +8035,14 @@ const CharacterSheetWrapper = ({
             }
           }
           // Clear touch flags only for fields this save included.
+          // Inventory touch stays until character.inventory catches up (see
+          // notes/inventory sync effect) — clearing early lets a stale prop
+          // restore deleted kit rows.
           const touches = payload._fieldTouches || {};
           if (touches.stress) fieldTouchRef.current.stress = false;
           if (touches.trauma) fieldTouchRef.current.trauma = false;
           if (touches.xp) fieldTouchRef.current.xp = false;
           if (touches.healingClock) fieldTouchRef.current.healingClock = false;
-          if (touches.inventory) fieldTouchRef.current.inventory = false;
           // Re-assert only fields this save included. A clock autosave that
           // omitted stress must not push a stale truth-lock count over the
           // server echo (GM unmark / concurrent roll marks).
@@ -9057,7 +9126,6 @@ const CharacterSheetWrapper = ({
                                           <input
                                             type="number"
                                             min={1}
-                                            max={20}
                                             value={historyManual.xpAmount}
                                             onChange={(e) =>
                                               setHistoryManual((p) => ({
@@ -9072,7 +9140,7 @@ const CharacterSheetWrapper = ({
                                               width: "100%",
                                               boxSizing: "border-box",
                                             }}
-                                            title="XP to add (1–20 per award)"
+                                            title="XP to add"
                                           />
                                           <textarea
                                             value={historyManual.xpReason}
@@ -9937,13 +10005,9 @@ const CharacterSheetWrapper = ({
                                                 String(historyManual.xpAmount || "1"),
                                                 10,
                                               );
-                                              if (
-                                                !Number.isFinite(amt) ||
-                                                amt < 1 ||
-                                                amt > 20
-                                              ) {
+                                              if (!Number.isFinite(amt) || amt < 1) {
                                                 setHistoryWriteError(
-                                                  "XP amount must be between 1 and 20.",
+                                                  "XP amount must be at least 1.",
                                                 );
                                                 return;
                                               }
@@ -11832,6 +11896,82 @@ const CharacterSheetWrapper = ({
                       />
                     ))}
                   </div>
+                  {/* Inventory — under stash (kit + loadout live near coin/stash) */}
+                  <div style={{ marginTop: "12px" }}>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setNotesInventoryExpandedPersist((prev) => ({
+                          ...prev,
+                          inventory: !prev.inventory,
+                        }))
+                      }
+                      aria-expanded={notesInventoryExpanded.inventory}
+                      aria-controls="character-sheet-inventory-panel"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        width: "100%",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        padding: 0,
+                        marginBottom: "8px",
+                        textAlign: "left",
+                      }}
+                    >
+                      <span
+                        aria-hidden
+                        style={{
+                          color: "#9ca3af",
+                          fontSize: "10px",
+                          lineHeight: 1,
+                          width: "12px",
+                          flexShrink: 0,
+                          userSelect: "none",
+                        }}
+                      >
+                        {notesInventoryExpanded.inventory ? "\u25bc" : "\u25ba"}
+                      </span>
+                      <span
+                        style={{
+                          color: S.lbl.color,
+                          fontSize: S.lbl.fontSize,
+                          fontWeight: S.lbl.fontWeight,
+                        }}
+                      >
+                        INVENTORY
+                      </span>
+                    </button>
+                    {notesInventoryExpanded.inventory ? (
+                      <CharacterSheetInventoryList
+                        panelId="character-sheet-inventory-panel"
+                        inventory={charData.inventory}
+                        readOnly={!canEditSheet}
+                        onChange={(next) => {
+                          markDirtyIntent();
+                          markFieldTouch("inventory");
+                          setCharData((p) => ({ ...p, inventory: next }));
+                        }}
+                        onInventoryTouch={() => markFieldTouch("inventory")}
+                        loadoutEntry={sessionLoadoutEntry}
+                        onLoadoutChange={handleLoadoutChange}
+                        activeSessionId={activeSessionId}
+                        coinFilled={coinFilled}
+                        abilities={abilities}
+                        campaignId={campaignId}
+                        characterId={characterId}
+                        isGM={isGM}
+                        onPromoteToCampaign={
+                          isGM ? handlePromoteItemToCampaign : undefined
+                        }
+                        onPublishToSite={
+                          isGM ? handlePublishItemToSite : undefined
+                        }
+                      />
+                    ) : null}
+                  </div>
                 </div>
 
                 {/* XP & Advancement — free pool spendable with or without active session */}
@@ -12171,12 +12311,6 @@ const CharacterSheetWrapper = ({
                             v: xpReqSnapshot.playbook,
                             trigger: "PLAYBOOK_SPECIFIC",
                           };
-                          const archetypeOpts =
-                            archetypeRowsForCharacterPlaybook(playbook);
-                          const mergedArc = mergedTriggerSentencesForKeys(
-                            playbookXpArchetypes,
-                            playbook,
-                          );
                           const renderPips = (row) => {
                             const canToggle =
                               xpReqSnapshot.hasActiveSession && canEditSheet;
@@ -12285,73 +12419,7 @@ const CharacterSheetWrapper = ({
                                     abilities in the fiction (for example resisting harm,
                                     boosting rolls, or shifting position or effect with
                                     Stand, Hamon, or Spin). Max 2 XP total for this
-                                    category; multiple archetype lines below only choose
-                                    which trigger text you are showing—they do not add
-                                    extra pools.{" "}
-                                    <span style={{ color: "#9ca3af" }}>
-                                      Stand types here are the same list as under
-                                      PLAYBOOK.
-                                    </span>
-                                  </div>
-                                  <div
-                                    style={{
-                                      fontSize: "10px",
-                                      color: "#9ca3af",
-                                      marginTop: "6px",
-                                      lineHeight: 1.45,
-                                    }}
-                                  >
-                                    {mergedArc ||
-                                      "Pick one or more archetype trigger lines you are playing toward."}
-                                  </div>
-                                  <div
-                                    style={{
-                                      display: "flex",
-                                      flexWrap: "wrap",
-                                      gap: "10px 14px",
-                                      marginTop: "8px",
-                                    }}
-                                  >
-                                    {archetypeOpts.map((opt) => (
-                                      <label
-                                        key={opt.key}
-                                        style={{
-                                          display: "flex",
-                                          alignItems: "flex-start",
-                                          gap: "6px",
-                                          fontSize: "10px",
-                                          color: "#d1d5db",
-                                          cursor: canEditSheet
-                                            ? "pointer"
-                                            : "default",
-                                        }}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={playbookXpArchetypes.includes(
-                                            opt.key,
-                                          )}
-                                          disabled={!canEditSheet || !characterId}
-                                          onChange={() =>
-                                            togglePlaybookXpArchetypeKey(opt.key)
-                                          }
-                                          style={{ marginTop: 2 }}
-                                        />
-                                        <span>
-                                          <strong>{opt.label}</strong>
-                                          <span
-                                            style={{
-                                              color: "#6b7280",
-                                              display: "block",
-                                              marginTop: 2,
-                                              lineHeight: 1.35,
-                                            }}
-                                          >
-                                            {opt.trigger}
-                                          </span>
-                                        </span>
-                                      </label>
-                                    ))}
+                                    category.
                                   </div>
                                 </div>
                                 {renderPips(playbookRow)}
@@ -19769,82 +19837,6 @@ const CharacterSheetWrapper = ({
                       />
                     ) : null}
                   </div>
-                  {/* Inventory */}
-                  <div style={{ marginBottom: "14px" }}>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setNotesInventoryExpandedPersist((prev) => ({
-                          ...prev,
-                          inventory: !prev.inventory,
-                        }))
-                      }
-                      aria-expanded={notesInventoryExpanded.inventory}
-                      aria-controls="character-sheet-inventory-panel"
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        width: "100%",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        padding: 0,
-                        marginBottom: "8px",
-                        textAlign: "left",
-                      }}
-                    >
-                      <span
-                        aria-hidden
-                        style={{
-                          color: "#9ca3af",
-                          fontSize: "10px",
-                          lineHeight: 1,
-                          width: "12px",
-                          flexShrink: 0,
-                          userSelect: "none",
-                        }}
-                      >
-                        {notesInventoryExpanded.inventory ? "\u25bc" : "\u25ba"}
-                      </span>
-                      <span
-                        style={{
-                          color: S.lbl.color,
-                          fontSize: S.lbl.fontSize,
-                          fontWeight: S.lbl.fontWeight,
-                        }}
-                      >
-                        INVENTORY
-                      </span>
-                    </button>
-                    {notesInventoryExpanded.inventory ? (
-                      <CharacterSheetInventoryList
-                        panelId="character-sheet-inventory-panel"
-                        inventory={charData.inventory}
-                        readOnly={!canEditSheet}
-                        onChange={(next) => {
-                          markDirtyIntent();
-                          markFieldTouch("inventory");
-                          setCharData((p) => ({ ...p, inventory: next }));
-                        }}
-                        onInventoryTouch={() => markFieldTouch("inventory")}
-                        loadoutEntry={sessionLoadoutEntry}
-                        onLoadoutChange={handleLoadoutChange}
-                        activeSessionId={activeSessionId}
-                        coinFilled={coinFilled}
-                        abilities={abilities}
-                        campaignId={campaignId}
-                        characterId={characterId}
-                        isGM={isGM}
-                        onPromoteToCampaign={
-                          isGM ? handlePromoteItemToCampaign : undefined
-                        }
-                        onPublishToSite={
-                          isGM ? handlePublishItemToSite : undefined
-                        }
-                      />
-                    ) : null}
-                  </div>
                 </div>
               </div>
             </div>
@@ -21036,7 +21028,10 @@ const CharacterSheetWrapper = ({
                 <span style={S.lbl}>B→A reward (required)</span>
                 <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                   {[
-                    ["custom2plus1standard", "Custom (2 uses) + Standard"],
+                    [
+                      "two_unique_plus_one_standard",
+                      "2 Unique (1 function each) + Standard",
+                    ],
                     ["two_standard", "2 Standard abilities"],
                   ].map(([val, label]) => (
                     <button
@@ -21058,26 +21053,31 @@ const CharacterSheetWrapper = ({
                     </button>
                   ))}
                 </div>
-                {levelUpBtoARewardBranch === "custom2plus1standard" ? (
+                {levelUpBtoARewardBranch === "two_unique_plus_one_standard" ? (
                   <>
-                    <input
-                      style={{ ...S.inp, marginBottom: 6 }}
-                      value={levelUpRewardCustomName}
-                      onChange={(e) => setLevelUpRewardCustomName(e.target.value)}
-                      placeholder="Custom ability name"
-                    />
                     {[0, 1].map((i) => (
-                      <input
-                        key={i}
-                        style={{ ...S.inp, marginBottom: 6 }}
-                        value={levelUpRewardUses[i] || ""}
-                        onChange={(e) => {
-                          const next = [...levelUpRewardUses];
-                          next[i] = e.target.value;
-                          setLevelUpRewardUses(next);
-                        }}
-                        placeholder={`Use ${i + 1} description`}
-                      />
+                      <React.Fragment key={i}>
+                        <input
+                          style={{ ...S.inp, marginBottom: 6 }}
+                          value={levelUpRewardUniques[i]?.name || ""}
+                          onChange={(e) => {
+                            const next = [...levelUpRewardUniques];
+                            next[i] = { ...next[i], name: e.target.value };
+                            setLevelUpRewardUniques(next);
+                          }}
+                          placeholder={`Unique ability ${i + 1} name`}
+                        />
+                        <input
+                          style={{ ...S.inp, marginBottom: 6 }}
+                          value={levelUpRewardUniques[i]?.use || ""}
+                          onChange={(e) => {
+                            const next = [...levelUpRewardUniques];
+                            next[i] = { ...next[i], use: e.target.value };
+                            setLevelUpRewardUniques(next);
+                          }}
+                          placeholder={`Unique ability ${i + 1} function`}
+                        />
+                      </React.Fragment>
                     ))}
                     <select
                       style={{ ...S.sel, width: "100%" }}
@@ -21372,13 +21372,16 @@ const CharacterSheetWrapper = ({
             </div>
             <p style={{ fontSize: 12, color: "#d1d5db", marginBottom: 12 }}>
               Raising a Stand Coin stat to A applies a playbook advance (10 XP).
-              Choose 2 standard abilities or 1 unique ability (2 features) + 1
-              standard.
+              Choose 2 standard abilities or 2 unique abilities (one function
+              each) + 1 standard.
             </p>
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
               {[
                 ["two_standard", "2 standards"],
-                ["custom2plus1standard", "Unique + 1 standard"],
+                [
+                  "two_unique_plus_one_standard",
+                  "2 Unique (1 function each) + Standard",
+                ],
               ].map(([val, label]) => (
                 <button
                   key={val}
@@ -21401,26 +21404,31 @@ const CharacterSheetWrapper = ({
                 </button>
               ))}
             </div>
-            {pendingStandABranch === "custom2plus1standard" ? (
+            {pendingStandABranch === "two_unique_plus_one_standard" ? (
               <>
-                <input
-                  style={{ ...S.inp, marginBottom: 6 }}
-                  value={pendingStandACustomName}
-                  onChange={(e) => setPendingStandACustomName(e.target.value)}
-                  placeholder="Unique ability name"
-                />
                 {[0, 1].map((i) => (
-                  <input
-                    key={i}
-                    style={{ ...S.inp, marginBottom: 6 }}
-                    value={pendingStandAUses[i] || ""}
-                    onChange={(e) => {
-                      const next = [...pendingStandAUses];
-                      next[i] = e.target.value;
-                      setPendingStandAUses(next);
-                    }}
-                    placeholder={`Feature ${i + 1}`}
-                  />
+                  <React.Fragment key={i}>
+                    <input
+                      style={{ ...S.inp, marginBottom: 6 }}
+                      value={pendingStandAUniques[i]?.name || ""}
+                      onChange={(e) => {
+                        const next = [...pendingStandAUniques];
+                        next[i] = { ...next[i], name: e.target.value };
+                        setPendingStandAUniques(next);
+                      }}
+                      placeholder={`Unique ability ${i + 1} name`}
+                    />
+                    <input
+                      style={{ ...S.inp, marginBottom: 6 }}
+                      value={pendingStandAUniques[i]?.use || ""}
+                      onChange={(e) => {
+                        const next = [...pendingStandAUniques];
+                        next[i] = { ...next[i], use: e.target.value };
+                        setPendingStandAUniques(next);
+                      }}
+                      placeholder={`Unique ability ${i + 1} function`}
+                    />
+                  </React.Fragment>
                 ))}
                 <select
                   style={{ ...S.sel, width: "100%", marginBottom: 8 }}

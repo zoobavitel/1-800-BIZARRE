@@ -8,7 +8,8 @@ from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.parsers import JSONParser, FormParser
 from django.db import transaction
-from django.core.exceptions import PermissionDenied
+from django.db.utils import OperationalError
+from django.core.exceptions import PermissionDenied, ValidationError
 import json
 
 import random
@@ -60,6 +61,7 @@ from ..services.xp_allocation import (
     list_allocations,
     redo_allocation,
     undo_allocation,
+    validation_error_message,
 )
 from ..services.character_history_undo import (
     CharacterHistoryUndoError,
@@ -1737,6 +1739,21 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 reset_character_history_editor(token)
         except XPAllocationError as exc:
             return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+        except ValidationError as exc:
+            return Response(
+                {"error": validation_error_message(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except OperationalError:
+            return Response(
+                {
+                    "error": (
+                        "Could not apply the advance because the sheet is still "
+                        "saving. Wait a moment and confirm again."
+                    )
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         character.refresh_from_db()
         return Response(
@@ -2416,9 +2433,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 {"error": "amount must be an integer"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if amount < 1 or amount > 20:
+        if amount < 1:
             return Response(
-                {"error": "XP amount must be between 1 and 20 per award."},
+                {"error": "XP amount must be at least 1."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

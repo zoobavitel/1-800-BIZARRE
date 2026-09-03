@@ -361,11 +361,15 @@ export const characterAPI = {
       }`,
     ),
 
-  applyLevelUp: (id, body) =>
-    apiRequest(`/characters/${id}/apply-level-up/`, {
+  applyLevelUp: (id, body) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25000);
+    return apiRequest(`/characters/${id}/apply-level-up/`, {
       method: "POST",
       body: JSON.stringify(body),
-    }),
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
+  },
 
   /** GM-only: force +1 Stand Coin grade as a playbook advance (tops up XP if short). */
   gmForceStandStat: (id, body) =>
@@ -1436,13 +1440,17 @@ export const transformBackendToFrontend = (backendCharacter) => {
       })(),
       ...(backendCharacter.advancement_ability_grants || []).map((g, i) => {
         const uses = Array.isArray(g.uses) ? g.uses : [];
+        // One allocation can grant several abilities (B→A: two unique), so the
+        // slot (or map index) keeps React keys unique per grant.
+        const slot = Number.isInteger(g.slot) ? g.slot : i;
         return {
-          id: `advancement-${g.allocation_id ?? i}`,
+          id: `advancement-${g.allocation_id ?? i}-${slot}`,
           name: g.name || `Advancement Ability ${i + 1}`,
           type: "custom",
           _uses: uses.slice(0, 2),
           _fromAdvancement: true,
           _allocationId: g.allocation_id,
+          _grantSlot: slot,
         };
       }),
     ],

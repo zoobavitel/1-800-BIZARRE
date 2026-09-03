@@ -188,7 +188,7 @@ class XPAllocationServiceTests(TestCase):
         self.character.refresh_from_db()
         self.assertEqual(self.character.xp_clocks["playbook"], 14)
 
-    def test_b_to_a_custom2_plus_standard(self):
+    def test_b_to_a_two_unique_plus_standard(self):
         self.character.xp_clocks["heritage"] = 10
         self.character.save()
         alloc = apply_level_up(
@@ -197,14 +197,24 @@ class XPAllocationServiceTests(TestCase):
             choice="stat",
             stand_stat="power",
             reward={
-                "branch": "custom2plus1standard",
-                "custom_name": "Ripple Trick",
-                "custom_uses": ["Use one", "Use two"],
+                "branch": "two_unique_plus_one_standard",
+                "unique_abilities": [
+                    {"name": "Ripple Trick", "use": "Use one"},
+                    {"name": "Spin Trick", "use": "Use two"},
+                ],
                 "standard_ability_id": self.std_c.id,
             },
         )
         self.character.refresh_from_db()
-        self.assertEqual(len(self.character.advancement_ability_grants), 1)
+        grants = self.character.advancement_ability_grants
+        self.assertEqual(len(grants), 2)
+        self.assertEqual([g["slot"] for g in grants], [0, 1])
+        self.assertEqual([g["name"] for g in grants], ["Ripple Trick", "Spin Trick"])
+        for grant in grants:
+            self.assertEqual(grant["allocation_id"], alloc.id)
+            self.assertEqual(grant["custom_ability_type"], "single_with_1_use")
+            self.assertEqual(len(grant["uses"]), 1)
+        self.assertEqual([g["uses"][0] for g in grants], ["Use one", "Use two"])
         self.assertIn(self.std_c.id, list(self.character.standard_abilities.values_list("id", flat=True)))
 
         undo_allocation(self.character, alloc, user=self.user)
@@ -214,6 +224,77 @@ class XPAllocationServiceTests(TestCase):
             self.std_c.id,
             list(self.character.standard_abilities.values_list("id", flat=True)),
         )
+
+    def test_b_to_a_legacy_branch_alias_still_accepted(self):
+        self.character.xp_clocks["heritage"] = 10
+        self.character.save()
+        apply_level_up(
+            self.character,
+            xp_track="heritage",
+            choice="stat",
+            stand_stat="power",
+            reward={
+                "branch": "custom2plus1standard",
+                "unique_abilities": [
+                    {"name": "A", "use": "one"},
+                    {"name": "B", "use": "two"},
+                ],
+                "standard_ability_id": self.std_c.id,
+            },
+        )
+        self.character.refresh_from_db()
+        self.assertEqual(len(self.character.advancement_ability_grants), 2)
+
+    def test_b_to_a_legacy_custom_name_payload_rejected(self):
+        self.character.xp_clocks["heritage"] = 10
+        self.character.save()
+        with self.assertRaises(XPAllocationError) as ctx:
+            apply_level_up(
+                self.character,
+                xp_track="heritage",
+                choice="stat",
+                stand_stat="power",
+                reward={
+                    "branch": "custom2plus1standard",
+                    "custom_name": "Ripple Trick",
+                    "custom_uses": ["Use one", "Use two"],
+                    "standard_ability_id": self.std_c.id,
+                },
+            )
+        self.assertIn("unique_abilities", str(ctx.exception))
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.advancement_ability_grants, [])
+
+    def test_b_to_a_requires_exactly_two_uniques_with_function(self):
+        self.character.xp_clocks["heritage"] = 10
+        self.character.save()
+        with self.assertRaises(XPAllocationError):
+            apply_level_up(
+                self.character,
+                xp_track="heritage",
+                choice="stat",
+                stand_stat="power",
+                reward={
+                    "branch": "two_unique_plus_one_standard",
+                    "unique_abilities": [{"name": "Only one", "use": "x"}],
+                    "standard_ability_id": self.std_c.id,
+                },
+            )
+        with self.assertRaises(XPAllocationError):
+            apply_level_up(
+                self.character,
+                xp_track="heritage",
+                choice="stat",
+                stand_stat="power",
+                reward={
+                    "branch": "two_unique_plus_one_standard",
+                    "unique_abilities": [
+                        {"name": "A", "use": "one"},
+                        {"name": "B", "use": "  "},
+                    ],
+                    "standard_ability_id": self.std_c.id,
+                },
+            )
 
     def test_undo_preserves_gm_xp_granted_after_spend(self):
         """LEVEL ↩ must not wipe GM scorecard ticks added after a spend."""
@@ -291,6 +372,41 @@ class XPAllocationServiceTests(TestCase):
         ids = set(self.character.standard_abilities.values_list("id", flat=True))
         self.assertIn(self.std_a.id, ids)
         self.assertIn(self.std_b.id, ids)
+
+    def test_pending_b_to_a_claim_two_uniques_then_undo(self):
+        self.character.xp_clocks["playbook"] = 0
+        self.character.save()
+        alloc = apply_gm_forced_stand_stat(
+            self.character,
+            stand_stat="power",
+            xp_track="playbook",
+        )
+        complete_pending_stand_a_reward(
+            self.character,
+            allocation_id=alloc.id,
+            reward={
+                "branch": "two_unique_plus_one_standard",
+                "unique_abilities": [
+                    {"name": "First", "use": "does one thing"},
+                    {"name": "Second", "use": "does another thing"},
+                ],
+                "standard_ability_id": self.std_c.id,
+            },
+        )
+        self.character.refresh_from_db()
+        grants = self.character.advancement_ability_grants
+        self.assertEqual(len(grants), 2)
+        self.assertEqual({g["slot"] for g in grants}, {0, 1})
+        self.assertTrue(all(g["allocation_id"] == alloc.id for g in grants))
+
+        alloc.refresh_from_db()
+        undo_allocation(self.character, alloc, user=self.user)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.advancement_ability_grants, [])
+        self.assertNotIn(
+            self.std_c.id,
+            list(self.character.standard_abilities.values_list("id", flat=True)),
+        )
 
     def test_unlock_second_playbook_removed(self):
         self.character.unallocated_xp = 30
@@ -407,6 +523,52 @@ class XPAllocationAPITests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.character.refresh_from_db()
         self.assertEqual(self.character.action_dots["hunt"], 3)
+
+    def test_apply_level_up_playbook_pending_stand_coin_api(self):
+        """POST apply-level-up redeems playbook pending for +1 Stand Coin (0/10)."""
+        from characters.models import PendingAdvance
+        from characters.services.advancement import credit_xp
+
+        self.character.xp_clocks = {
+            **self.character.xp_clocks,
+            "playbook": 0,
+            "heritage": 0,
+        }
+        self.character.bonus_hp_from_xp = 2
+        self.character.total_xp_spent = 10
+        self.character.stand_coin_points_gained = 0
+        self.character.save()
+        credit_xp(self.character, "playbook", 10)
+        self.assertEqual(
+            PendingAdvance.objects.filter(
+                character=self.character, track="playbook", status="open"
+            ).count(),
+            1,
+        )
+        res = self.client.post(
+            f"/api/characters/{self.character.id}/apply-level-up/",
+            {
+                "xp_track": "playbook",
+                "choice": "stat",
+                "stand_stat": "power",
+                "from_pool": False,
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 200, res.content)
+        data = res.json()
+        self.assertTrue(data["success"])
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.stand.power, "C")
+        self.assertEqual(self.character.stand_coin_points_gained, 1)
+        self.assertEqual(
+            PendingAdvance.objects.filter(
+                character=self.character, track="playbook", status="open"
+            ).count(),
+            0,
+        )
+        self.assertEqual(data["character"]["pending_advance_counts"].get("playbook", 0), 0)
+        self.assertEqual(data["character"]["stand"]["power"], "C")
 
     def test_apply_level_up_heritage_api(self):
         self.character.xp_clocks = {

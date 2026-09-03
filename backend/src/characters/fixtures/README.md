@@ -13,8 +13,9 @@ JSON fixtures loaded into the `characters` app via Django's `loaddata`. Two flav
 | `srd_hamon_abilities.json`, `srd_spin_abilities.json` | Hamon / Spin playbook abilities. |
 | `srd_traumas.json` | Trauma catalogue. |
 | `standard_abilities.json` | Standard / cross-playbook abilities. |
+| `srd_equipment_templates.json` | Shared TEMPLATE equipment kits (Blades-style loadout). Also upserted by `load_srd_reference_data` / migration `0109`. |
 
-These are the rows the app cannot run without. The `load_srd_reference_data` management command idempotently seeds the benefits / detriments tables in production.
+These are the rows the app cannot run without. The `load_srd_reference_data` management command idempotently seeds the benefits / detriments tables in production (and upserts playbook abilities + equipment TEMPLATEs).
 
 ### Demo & scenario data
 
