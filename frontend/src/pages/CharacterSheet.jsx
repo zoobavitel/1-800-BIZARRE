@@ -2083,10 +2083,12 @@ const CharacterSheetWrapper = ({
   const [minorAdvanceBusy, setMinorAdvanceBusy] = useState(false);
   const [minorAdvanceError, setMinorAdvanceError] = useState(null);
   const [levelUpBtoARewardBranch, setLevelUpBtoARewardBranch] = useState(
-    "custom2plus1standard",
+    "two_unique_plus_one_standard",
   );
-  const [levelUpRewardCustomName, setLevelUpRewardCustomName] = useState("");
-  const [levelUpRewardUses, setLevelUpRewardUses] = useState(["", ""]);
+  const [levelUpRewardUniques, setLevelUpRewardUniques] = useState([
+    { name: "", use: "" },
+    { name: "", use: "" },
+  ]);
   const [levelUpRewardStandardId, setLevelUpRewardStandardId] = useState("");
   const [levelUpRewardStandardIds, setLevelUpRewardStandardIds] = useState([
     "",
@@ -2099,8 +2101,10 @@ const CharacterSheetWrapper = ({
     "two_standard",
   );
   const [pendingStandAStdIds, setPendingStandAStdIds] = useState(["", ""]);
-  const [pendingStandACustomName, setPendingStandACustomName] = useState("");
-  const [pendingStandAUses, setPendingStandAUses] = useState(["", ""]);
+  const [pendingStandAUniques, setPendingStandAUniques] = useState([
+    { name: "", use: "" },
+    { name: "", use: "" },
+  ]);
   const [pendingStandAStdId, setPendingStandAStdId] = useState("");
   const [pendingStandABusy, setPendingStandABusy] = useState(false);
   const [pendingStandAError, setPendingStandAError] = useState(null);
@@ -3453,21 +3457,20 @@ const CharacterSheetWrapper = ({
   const claimPendingStandAReward = useCallback(async () => {
     if (!characterId || !pendingStandAReward?.allocation_id) return;
     let reward;
-    if (pendingStandABranch === "custom2plus1standard") {
-      if (
-        !pendingStandACustomName.trim() ||
-        !pendingStandAUses.every((u) => String(u || "").trim()) ||
-        !pendingStandAStdId
-      ) {
+    if (pendingStandABranch === "two_unique_plus_one_standard") {
+      const uniques = pendingStandAUniques.map((u) => ({
+        name: String(u?.name || "").trim(),
+        use: String(u?.use || "").trim(),
+      }));
+      if (!uniques.every((u) => u.name && u.use) || !pendingStandAStdId) {
         setPendingStandAError(
-          "Fill custom name, both uses, and pick a standard ability.",
+          "Fill both unique ability names and their function, and pick a standard ability.",
         );
         return;
       }
       reward = {
-        branch: "custom2plus1standard",
-        custom_name: pendingStandACustomName.trim(),
-        custom_uses: pendingStandAUses.map((u) => String(u || "").trim()),
+        branch: "two_unique_plus_one_standard",
+        unique_abilities: uniques,
         standard_ability_id: Number(pendingStandAStdId),
       };
     } else {
@@ -3493,8 +3496,10 @@ const CharacterSheetWrapper = ({
       if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
       setPendingStandABranch("two_standard");
       setPendingStandAStdIds(["", ""]);
-      setPendingStandACustomName("");
-      setPendingStandAUses(["", ""]);
+      setPendingStandAUniques([
+        { name: "", use: "" },
+        { name: "", use: "" },
+      ]);
       setPendingStandAStdId("");
     } catch (err) {
       setPendingStandAError(err?.message || "Could not claim B→A reward.");
@@ -3505,8 +3510,7 @@ const CharacterSheetWrapper = ({
     characterId,
     pendingStandAReward,
     pendingStandABranch,
-    pendingStandACustomName,
-    pendingStandAUses,
+    pendingStandAUniques,
     pendingStandAStdId,
     pendingStandAStdIds,
     applyAllocationBackendCharacter,
@@ -3854,14 +3858,13 @@ const CharacterSheetWrapper = ({
     if (pendingCount < 1 || !characterId) return;
 
     if (levelUpChoice === "stat" && levelUpIsBtoA) {
-      if (levelUpBtoARewardBranch === "custom2plus1standard") {
-        if (
-          !levelUpRewardCustomName.trim() ||
-          !levelUpRewardUses.every((u) => String(u || "").trim()) ||
-          !levelUpRewardStandardId
-        ) {
+      if (levelUpBtoARewardBranch === "two_unique_plus_one_standard") {
+        const filled = levelUpRewardUniques.every(
+          (u) => String(u?.name || "").trim() && String(u?.use || "").trim(),
+        );
+        if (!filled || !levelUpRewardStandardId) {
           setLevelUpError(
-            "B→A reward: fill custom name, both uses, and pick a standard ability.",
+            "B→A reward: fill both unique ability names and their function, and pick a standard ability.",
           );
           return;
         }
@@ -3891,11 +3894,13 @@ const CharacterSheetWrapper = ({
     if (levelUpChoice === "stat") {
       body.stand_stat = levelUpStat;
       if (levelUpIsBtoA) {
-        if (levelUpBtoARewardBranch === "custom2plus1standard") {
+        if (levelUpBtoARewardBranch === "two_unique_plus_one_standard") {
           body.reward = {
-            branch: "custom2plus1standard",
-            custom_name: levelUpRewardCustomName.trim(),
-            custom_uses: levelUpRewardUses.map((u) => String(u || "").trim()),
+            branch: "two_unique_plus_one_standard",
+            unique_abilities: levelUpRewardUniques.map((u) => ({
+              name: String(u?.name || "").trim(),
+              use: String(u?.use || "").trim(),
+            })),
             standard_ability_id: Number(levelUpRewardStandardId),
           };
         } else {
@@ -21096,7 +21101,10 @@ const CharacterSheetWrapper = ({
                 <span style={S.lbl}>B→A reward (required)</span>
                 <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
                   {[
-                    ["custom2plus1standard", "Custom (2 uses) + Standard"],
+                    [
+                      "two_unique_plus_one_standard",
+                      "2 Unique (1 function each) + Standard",
+                    ],
                     ["two_standard", "2 Standard abilities"],
                   ].map(([val, label]) => (
                     <button
@@ -21118,26 +21126,31 @@ const CharacterSheetWrapper = ({
                     </button>
                   ))}
                 </div>
-                {levelUpBtoARewardBranch === "custom2plus1standard" ? (
+                {levelUpBtoARewardBranch === "two_unique_plus_one_standard" ? (
                   <>
-                    <input
-                      style={{ ...S.inp, marginBottom: 6 }}
-                      value={levelUpRewardCustomName}
-                      onChange={(e) => setLevelUpRewardCustomName(e.target.value)}
-                      placeholder="Custom ability name"
-                    />
                     {[0, 1].map((i) => (
-                      <input
-                        key={i}
-                        style={{ ...S.inp, marginBottom: 6 }}
-                        value={levelUpRewardUses[i] || ""}
-                        onChange={(e) => {
-                          const next = [...levelUpRewardUses];
-                          next[i] = e.target.value;
-                          setLevelUpRewardUses(next);
-                        }}
-                        placeholder={`Use ${i + 1} description`}
-                      />
+                      <React.Fragment key={i}>
+                        <input
+                          style={{ ...S.inp, marginBottom: 6 }}
+                          value={levelUpRewardUniques[i]?.name || ""}
+                          onChange={(e) => {
+                            const next = [...levelUpRewardUniques];
+                            next[i] = { ...next[i], name: e.target.value };
+                            setLevelUpRewardUniques(next);
+                          }}
+                          placeholder={`Unique ability ${i + 1} name`}
+                        />
+                        <input
+                          style={{ ...S.inp, marginBottom: 6 }}
+                          value={levelUpRewardUniques[i]?.use || ""}
+                          onChange={(e) => {
+                            const next = [...levelUpRewardUniques];
+                            next[i] = { ...next[i], use: e.target.value };
+                            setLevelUpRewardUniques(next);
+                          }}
+                          placeholder={`Unique ability ${i + 1} function`}
+                        />
+                      </React.Fragment>
                     ))}
                     <select
                       style={{ ...S.sel, width: "100%" }}
@@ -21432,13 +21445,16 @@ const CharacterSheetWrapper = ({
             </div>
             <p style={{ fontSize: 12, color: "#d1d5db", marginBottom: 12 }}>
               Raising a Stand Coin stat to A applies a playbook advance (10 XP).
-              Choose 2 standard abilities or 1 unique ability (2 features) + 1
-              standard.
+              Choose 2 standard abilities or 2 unique abilities (one function
+              each) + 1 standard.
             </p>
             <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
               {[
                 ["two_standard", "2 standards"],
-                ["custom2plus1standard", "Unique + 1 standard"],
+                [
+                  "two_unique_plus_one_standard",
+                  "2 Unique (1 function each) + Standard",
+                ],
               ].map(([val, label]) => (
                 <button
                   key={val}
@@ -21461,26 +21477,31 @@ const CharacterSheetWrapper = ({
                 </button>
               ))}
             </div>
-            {pendingStandABranch === "custom2plus1standard" ? (
+            {pendingStandABranch === "two_unique_plus_one_standard" ? (
               <>
-                <input
-                  style={{ ...S.inp, marginBottom: 6 }}
-                  value={pendingStandACustomName}
-                  onChange={(e) => setPendingStandACustomName(e.target.value)}
-                  placeholder="Unique ability name"
-                />
                 {[0, 1].map((i) => (
-                  <input
-                    key={i}
-                    style={{ ...S.inp, marginBottom: 6 }}
-                    value={pendingStandAUses[i] || ""}
-                    onChange={(e) => {
-                      const next = [...pendingStandAUses];
-                      next[i] = e.target.value;
-                      setPendingStandAUses(next);
-                    }}
-                    placeholder={`Feature ${i + 1}`}
-                  />
+                  <React.Fragment key={i}>
+                    <input
+                      style={{ ...S.inp, marginBottom: 6 }}
+                      value={pendingStandAUniques[i]?.name || ""}
+                      onChange={(e) => {
+                        const next = [...pendingStandAUniques];
+                        next[i] = { ...next[i], name: e.target.value };
+                        setPendingStandAUniques(next);
+                      }}
+                      placeholder={`Unique ability ${i + 1} name`}
+                    />
+                    <input
+                      style={{ ...S.inp, marginBottom: 6 }}
+                      value={pendingStandAUniques[i]?.use || ""}
+                      onChange={(e) => {
+                        const next = [...pendingStandAUniques];
+                        next[i] = { ...next[i], use: e.target.value };
+                        setPendingStandAUniques(next);
+                      }}
+                      placeholder={`Unique ability ${i + 1} function`}
+                    />
+                  </React.Fragment>
                 ))}
                 <select
                   style={{ ...S.sel, width: "100%", marginBottom: 8 }}

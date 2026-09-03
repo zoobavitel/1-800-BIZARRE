@@ -1440,13 +1440,17 @@ export const transformBackendToFrontend = (backendCharacter) => {
       })(),
       ...(backendCharacter.advancement_ability_grants || []).map((g, i) => {
         const uses = Array.isArray(g.uses) ? g.uses : [];
+        // One allocation can grant several abilities (B→A: two unique), so the
+        // slot (or map index) keeps React keys unique per grant.
+        const slot = Number.isInteger(g.slot) ? g.slot : i;
         return {
-          id: `advancement-${g.allocation_id ?? i}`,
+          id: `advancement-${g.allocation_id ?? i}-${slot}`,
           name: g.name || `Advancement Ability ${i + 1}`,
           type: "custom",
           _uses: uses.slice(0, 2),
           _fromAdvancement: true,
           _allocationId: g.allocation_id,
+          _grantSlot: slot,
         };
       }),
     ],

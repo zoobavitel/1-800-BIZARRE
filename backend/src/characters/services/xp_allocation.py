@@ -284,21 +284,39 @@ def _bump_action_dot(character, action_key, delta=1):
 
 def _apply_b_to_a_reward(character, allocation_id, reward):
     branch = str(reward.get("branch") or "").strip().lower()
-    # Plan A canonical name; keep legacy alias for in-flight clients.
-    if branch == "two_unique_plus_one_standard":
-        branch = "custom2plus1standard"
+    # Legacy clients still send the old branch name for this reward.
+    if branch == "custom2plus1standard":
+        branch = "two_unique_plus_one_standard"
     added_standard = []
 
-    if branch == "custom2plus1standard":
-        custom_name = str(reward.get("custom_name") or "").strip()
-        uses = reward.get("custom_uses") or []
-        if not custom_name:
-            raise XPAllocationError("Custom ability name is required for B→A reward.")
-        if not isinstance(uses, list) or len(uses) < 2:
-            raise XPAllocationError("Custom ability requires exactly 2 uses.")
-        use_lines = [str(u or "").strip() for u in uses[:2]]
-        if not all(use_lines):
-            raise XPAllocationError("Both custom ability uses must be filled in.")
+    if branch == "two_unique_plus_one_standard":
+        legacy_keys = ("custom_name", "custom_uses")
+        if any(reward.get(k) is not None for k in legacy_keys):
+            raise XPAllocationError(
+                "B→A reward now grants two unique abilities with one function each. "
+                "Send 'unique_abilities': [{name, use}, {name, use}] instead of "
+                "custom_name/custom_uses."
+            )
+        entries = reward.get("unique_abilities")
+        if not isinstance(entries, list) or len(entries) != 2:
+            raise XPAllocationError(
+                "B→A reward requires exactly 2 unique abilities."
+            )
+        parsed = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                raise XPAllocationError(
+                    "Each unique ability must have a name and a function."
+                )
+            name = str(entry.get("name") or "").strip()
+            use = str(entry.get("use") or "").strip()
+            if not name:
+                raise XPAllocationError("Each unique ability needs a name.")
+            if not use:
+                raise XPAllocationError(
+                    f"Unique ability '{name}' needs its one function filled in."
+                )
+            parsed.append((name, use))
         std_id = reward.get("standard_ability_id")
         if not std_id:
             raise XPAllocationError("Standard ability is required for B→A reward.")
@@ -309,14 +327,16 @@ def _apply_b_to_a_reward(character, allocation_id, reward):
         character.standard_abilities.add(ability)
         added_standard.append(ability.id)
         grants = list(character.advancement_ability_grants or [])
-        grants.append(
-            {
-                "allocation_id": allocation_id,
-                "custom_ability_type": "single_with_2_uses",
-                "name": custom_name,
-                "uses": use_lines,
-            }
-        )
+        for slot, (name, use) in enumerate(parsed):
+            grants.append(
+                {
+                    "allocation_id": allocation_id,
+                    "custom_ability_type": "single_with_1_use",
+                    "slot": slot,
+                    "name": name,
+                    "uses": [use],
+                }
+            )
         character.advancement_ability_grants = grants
     elif branch == "two_standard":
         ids = reward.get("standard_ability_ids") or []
