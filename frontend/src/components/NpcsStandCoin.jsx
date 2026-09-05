@@ -62,9 +62,9 @@ function polygonPointsForGrades(grades) {
   }).join(" ");
 }
 
-const P1 = "#6c3989";
-const P2 = "#e8ca70";
-const BG2 = "#0d0814";
+const P1 = "var(--hftf-purple)";
+const P2 = "var(--hftf-gold)";
+const BG2 = "var(--hftf-deep)";
 
 /**
  * Stand coin radar matching the homepage asset; wedges adjust grades via parent.
@@ -75,6 +75,7 @@ const BG2 = "#0d0814";
  * @param {boolean} [props.readOnly=false] — when true, wedges do not change grades (view-only).
  * @param {"npc" | "pc"} [props.variant="npc"] — PC adjusts default copy (grade cap A vs S).
  * @param {"A" | "S"} [props.pcMaxGrade="A"] — when variant is "pc", hints and aria use this as top grade.
+ * @param {Record<string, string | { grade: string, blocked?: boolean }>} [props.plannedGrades] — plan-mode ghost grade per axis.
  */
 export default function NpcsStandCoin({
   grades,
@@ -83,6 +84,7 @@ export default function NpcsStandCoin({
   readOnly = false,
   variant = "npc",
   pcMaxGrade = "A",
+  plannedGrades = null,
 }) {
   const reactId = useId().replace(/:/g, "");
   const clipId = `npc-stand-coin-clip-${reactId}`;
@@ -120,6 +122,26 @@ export default function NpcsStandCoin({
     () => polygonPointsForGrades(grades),
     [grades],
   );
+
+  const plannedMarkers = useMemo(() => {
+    if (!plannedGrades || typeof plannedGrades !== "object") return [];
+    return STAT_ORDER.map((s, i) => {
+      const raw = plannedGrades[s.key];
+      if (raw == null || raw === "") return null;
+      const letter =
+        typeof raw === "string"
+          ? raw
+          : String(raw.grade || raw.to_grade || "").trim();
+      if (!letter || GRADE_RADIUS[letter] == null) return null;
+      const blocked =
+        typeof raw === "object" &&
+        Boolean(raw.blocked || raw.blocked_reason || raw.blockedReason);
+      const t = GRADE_RADIUS[letter];
+      const r = R_DATA_MIN + t * (R_DATA_MAX - R_DATA_MIN);
+      const [x, y] = polar(CX, CY, r, statAngle(i));
+      return { key: s.key, letter, blocked, x, y };
+    }).filter(Boolean);
+  }, [plannedGrades]);
 
   const bump = useCallback(
     (key, delta) => {
@@ -209,7 +231,7 @@ export default function NpcsStandCoin({
           padding: "8px 10px",
           borderRadius: "4px",
           background: "rgba(76, 29, 149, 0.12)",
-          border: "1px solid #2d1f52",
+          border: "1px solid var(--hftf-border)",
           minHeight: "7.5rem",
           display: "flex",
           flexDirection: "column",
@@ -220,7 +242,7 @@ export default function NpcsStandCoin({
         }}
       >
         {!activeMeta ? (
-          <span style={{ fontSize: "10px", lineHeight: 1.4, color: "#6b7280" }}>
+          <span style={{ fontSize: "10px", lineHeight: 1.4, color: "var(--text-dim)" }}>
             {emptyStateLines}
           </span>
         ) : (
@@ -231,7 +253,7 @@ export default function NpcsStandCoin({
                 fontWeight: 700,
                 letterSpacing: "0.12em",
                 textTransform: "uppercase",
-                color: "#d1d5db",
+                color: "var(--hftf-text-dim)",
               }}
             >
               {activeMeta.label}
@@ -250,7 +272,7 @@ export default function NpcsStandCoin({
               style={{
                 fontSize: "10px",
                 lineHeight: 1.35,
-                color: "#9ca3af",
+                color: "var(--text-muted)",
                 maxWidth: "240px",
                 maxHeight: "3.6em",
                 overflowY: "auto",
@@ -327,6 +349,25 @@ export default function NpcsStandCoin({
             strokeWidth="1.2"
             strokeOpacity={0.9}
           />
+          {plannedMarkers.map((m) => (
+            <circle
+              key={`planned-${m.key}`}
+              cx={m.x}
+              cy={m.y}
+              r={5.5}
+              fill="none"
+              stroke={m.blocked ? "#b91c1c" : "var(--sheet-ghost)"}
+              strokeWidth={1.4}
+              strokeDasharray="3.5 2.5"
+              opacity={0.95}
+            >
+              <title>
+                {m.blocked
+                  ? `Planned ${m.key} → ${m.letter} (blocked)`
+                  : `Planned ${m.key} → ${m.letter}`}
+              </title>
+            </circle>
+          ))}
         </g>
 
         {Array.from({ length: 24 }, (_, t) => {
@@ -422,7 +463,7 @@ export default function NpcsStandCoin({
             <path
               key={`hit-${s.key}`}
               d={wedgePath(i)}
-              fill={isHot ? P1 : "#0d0814"}
+              fill={isHot ? P1 : "var(--hftf-deep)"}
               fillOpacity={isHot ? 0.28 : 0.001}
               stroke="none"
               style={{ cursor: readOnly ? "default" : "pointer" }}

@@ -15,6 +15,7 @@ import json
 import random
 from ..models import (
     AssistHelpPending,
+    AdvancementPlanItem,
     Campaign,
     Character,
     CharacterHamonAbility,
@@ -1716,6 +1717,152 @@ class CharacterViewSet(viewsets.ModelViewSet):
             },
         )
         return Response(serializer.data)
+
+    @action(detail=True, methods=["get", "post"], url_path="advancement-plan")
+    def advancement_plan(self, request, pk=None):
+        """List or append AdvancementPlanItem rows (owner or campaign GM)."""
+        from characters.services.plan_queue import (
+            PlanQueueError,
+            create_plan_item,
+            list_queued_plan_items,
+            serialize_plan_item,
+        )
+
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot edit this character's advancement plan.")
+
+        if request.method == "GET":
+            items = list_queued_plan_items(character)
+            return Response(
+                {
+                    "success": True,
+                    "items": [serialize_plan_item(i) for i in items],
+                }
+            )
+
+        try:
+            item = create_plan_item(
+                character,
+                track=request.data.get("track"),
+                kind=request.data.get("kind"),
+                payload=request.data.get("payload"),
+            )
+        except PlanQueueError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                "success": True,
+                "item": serialize_plan_item(item),
+                "items": [
+                    serialize_plan_item(i) for i in list_queued_plan_items(character)
+                ],
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(
+        detail=True,
+        methods=["patch", "delete"],
+        url_path=r"advancement-plan/(?P<item_id>[0-9]+)",
+    )
+    def advancement_plan_item(self, request, pk=None, item_id=None):
+        """Patch payload or delete one queued plan item."""
+        from characters.services.plan_queue import (
+            PlanQueueError,
+            delete_plan_item,
+            list_queued_plan_items,
+            serialize_plan_item,
+            update_plan_item,
+        )
+
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot edit this character's advancement plan.")
+
+        try:
+            item = AdvancementPlanItem.objects.get(
+                pk=int(item_id), character=character
+            )
+        except (AdvancementPlanItem.DoesNotExist, TypeError, ValueError):
+            return Response(
+                {"error": "Plan item not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if request.method == "DELETE":
+            try:
+                delete_plan_item(item)
+            except PlanQueueError as exc:
+                return Response(
+                    {"error": exc.message}, status=status.HTTP_400_BAD_REQUEST
+                )
+            return Response(
+                {
+                    "success": True,
+                    "items": [
+                        serialize_plan_item(i)
+                        for i in list_queued_plan_items(character)
+                    ],
+                }
+            )
+
+        try:
+            item = update_plan_item(
+                item,
+                payload=request.data.get("payload")
+                if "payload" in request.data
+                else None,
+                blocked_reason=request.data.get("blocked_reason")
+                if "blocked_reason" in request.data
+                else None,
+            )
+        except PlanQueueError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                "success": True,
+                "item": serialize_plan_item(item),
+                "items": [
+                    serialize_plan_item(i) for i in list_queued_plan_items(character)
+                ],
+            }
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="advancement-plan/reorder",
+    )
+    def advancement_plan_reorder(self, request, pk=None):
+        """Reorder queued items on one track. Body: {track, ordered_ids}."""
+        from characters.services.plan_queue import (
+            PlanQueueError,
+            reorder_plan_items,
+            serialize_plan_item,
+        )
+
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot edit this character's advancement plan.")
+
+        try:
+            items = reorder_plan_items(
+                character,
+                track=request.data.get("track"),
+                ordered_ids=request.data.get("ordered_ids"),
+            )
+        except PlanQueueError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                "success": True,
+                "items": [serialize_plan_item(i) for i in items],
+            }
+        )
 
     @action(detail=True, methods=["post"], url_path="apply-level-up")
     def apply_level_up_action(self, request, pk=None):

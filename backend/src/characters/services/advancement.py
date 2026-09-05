@@ -72,12 +72,32 @@ def credit_xp(character, track: str, amount: int, *, save: bool = True) -> dict:
     if save:
         character.save(update_fields=["xp_clocks"])
 
+    walk_result = None
+    if minted:
+        # Plan B: drain open pendings via first-legal queue walk.
+        # Never let walk failure roll back the mint+clear.
+        try:
+            from characters.services.plan_queue import drain_and_walk_plan
+
+            walk_result = drain_and_walk_plan(character, key)
+        except Exception as exc:  # noqa: BLE001 — mint must stick
+            import logging
+
+            logging.getLogger(__name__).exception(
+                "plan walk failed after credit_xp (character=%s track=%s): %s",
+                getattr(character, "pk", None),
+                key,
+                exc,
+            )
+            walk_result = {"applied": [], "blocked": [], "error": str(exc)}
+
     return {
         "track": key,
         "marks": marks,
         "cap": cap,
         "pending_ids": minted,
         "pendings_minted": len(minted),
+        "plan_walk": walk_result,
     }
 
 

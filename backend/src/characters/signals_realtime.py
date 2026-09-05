@@ -21,6 +21,7 @@ from .models import (
     Faction,
     GroupAction,
     NPC,
+    AdvancementPlanItem,
     PendingAdvance,
     ProgressClock,
     Roll,
@@ -142,6 +143,14 @@ def _pending_advance_changed_broadcast(sender, instance, **kwargs):
     cid = _campaign_id_for_xp(instance)
     if cid:
         _broadcast_after_commit(cid, "pending_advance")
+
+
+@receiver(post_save, sender=AdvancementPlanItem)
+@receiver(post_delete, sender=AdvancementPlanItem)
+def _advancement_plan_item_changed_broadcast(sender, instance, **kwargs):
+    cid = _campaign_id_for_xp(instance)
+    if cid:
+        _broadcast_after_commit(cid, "advancement_plan")
 
 
 @receiver(post_save, sender=Crew)
