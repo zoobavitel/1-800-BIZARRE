@@ -562,14 +562,26 @@ const DicePoolStrip = ({ label, count }) => {
 
 // ─── ProgressClock ────────────────────────────────────────────────────────────
 
+/** Filled wedges: early = red → orange → yellow → late = green. */
+const CLOCK_WEDGE_FILL_STOPS = ["#dc2626", "#ea580c", "#ca8a04", "#16a34a"];
+function clockWedgeFillColor(wedgeIndex, totalSegments) {
+  const n = Math.max(1, totalSegments);
+  const band = Math.min(
+    CLOCK_WEDGE_FILL_STOPS.length - 1,
+    Math.floor((wedgeIndex / n) * CLOCK_WEDGE_FILL_STOPS.length),
+  );
+  return CLOCK_WEDGE_FILL_STOPS[band];
+}
+
 const arrowBtnStyle = {
   background: "none",
   border: "none",
   color: "#6b7280",
   cursor: "pointer",
-  fontSize: "16px",
-  padding: "2px 4px",
+  fontSize: "12px",
+  padding: "0 1px",
   lineHeight: 1,
+  flexShrink: 0,
 };
 const ProgressClock = ({
   size = 80,
@@ -580,13 +592,23 @@ const ProgressClock = ({
 }) => {
   const n = clockWedgeCount(segments);
   const fill = clampClockFilled(filled, n);
+  // Optimistic cursor so rapid +/− before React re-paints still steps 0→1→2…
+  // instead of repeating the same absolute target (causes flicker with hydrate).
+  const fillRef = useRef(fill);
+  if (fillRef.current !== fill) fillRef.current = fill;
+  const commitFilled = (next) => {
+    if (!onClick) return;
+    const clamped = clampClockFilled(next, n);
+    fillRef.current = clamped;
+    onClick(clamped);
+  };
   const r = size / 2 - 4,
     cx = size / 2,
     cy = size / 2;
   const sa = 360 / n;
   const showArrows = interactive && onClick;
   const svg = (
-    <svg width={size} height={size}>
+    <svg width={size} height={size} style={{ flexShrink: 0 }}>
       {Array.from({ length: n }, (_, i) => {
         const a1 = ((i * sa - 90) * Math.PI) / 180;
         const a2 = (((i + 1) * sa - 90) * Math.PI) / 180;
@@ -598,13 +620,16 @@ const ProgressClock = ({
           <path
             key={i}
             d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${sa > 180 ? 1 : 0} 1 ${x2} ${y2} Z`}
-            fill={i < fill ? "#dc2626" : "transparent"}
+            fill={i < fill ? clockWedgeFillColor(i, n) : "transparent"}
             stroke="#6b7280"
             strokeWidth="1"
             style={{ cursor: interactive ? "pointer" : "default" }}
             onClick={
               interactive && onClick
-                ? () => onClick(i < fill ? i : i + 1)
+                ? () => {
+                    const cur = fillRef.current;
+                    commitFilled(i < cur ? i : i + 1);
+                  }
                 : undefined
             }
           />
@@ -614,11 +639,20 @@ const ProgressClock = ({
   );
   if (showArrows) {
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "1px",
+          minWidth: 0,
+          maxWidth: "100%",
+        }}
+      >
         <button
           type="button"
           style={arrowBtnStyle}
-          onClick={() => onClick(Math.max(0, fill - 1))}
+          onClick={() => commitFilled(fillRef.current - 1)}
           title="Decrease filled ticks"
         >
           −
@@ -627,7 +661,7 @@ const ProgressClock = ({
         <button
           type="button"
           style={arrowBtnStyle}
-          onClick={() => onClick(Math.min(n, fill + 1))}
+          onClick={() => commitFilled(fillRef.current + 1)}
           title="Increase filled ticks"
         >
           +
@@ -1583,6 +1617,8 @@ const CharacterSheetWrapper = ({
   // Only update when content differs to avoid save loop: updateActiveCharTab passes new array refs
   // after each save; without value comparison we'd trigger setState → auto-save → save → loop.
   useEffect(() => {
+    // Dirty draft must win over poll/SSE/failed-save echoes (HP budget reject → server still old).
+    if (sheetDraftIsDirty) return;
     const newBenefits = Array.isArray(character?.selected_benefits)
       ? character.selected_benefits
       : [];
@@ -1593,17 +1629,20 @@ const CharacterSheetWrapper = ({
       Array.isArray(a) &&
       Array.isArray(b) &&
       a.length === b.length &&
-      a.every((v, i) => v === b[i]);
-    setSelectedBenefits((prev) =>
-      arrEqual(prev, newBenefits) ? prev : newBenefits,
-    );
-    setSelectedDetriments((prev) =>
-      arrEqual(prev, newDetriments) ? prev : newDetriments,
-    );
+      a.every((v, i) => Number(v) === Number(b[i]));
+    setSelectedBenefits((prev) => {
+      const equal = arrEqual(prev, newBenefits);
+      return equal ? prev : newBenefits;
+    });
+    setSelectedDetriments((prev) => {
+      const equal = arrEqual(prev, newDetriments);
+      return equal ? prev : newDetriments;
+    });
   }, [
     character?.id,
     character?.selected_benefits,
     character?.selected_detriments,
+    sheetDraftIsDirty,
   ]);
 
   // When heritage changes, reset to required benefits/detriments for the new heritage
@@ -2660,8 +2699,18 @@ const CharacterSheetWrapper = ({
   );
 
   const [clocks, setClocks] = useState(character?.clocks || []);
+  /** Block poll/hydrate snap-back for a beat after local clock edits (rapid +/− flicker). */
+  const clocksHydrateGuardUntilRef = useRef(0);
   useEffect(() => {
-    if (sheetDraftIsDirty) return;
+    // Protect mid-edit: prop isDirty lags one frame; dirtyIntentRef covers the gap
+    // so poll/hydrate cannot snap filled wedges back (flicker on rapid +/−).
+    if (
+      sheetDraftIsDirty ||
+      dirtyIntentRef.current ||
+      Date.now() < clocksHydrateGuardUntilRef.current
+    ) {
+      return;
+    }
     const incoming = Array.isArray(character?.clocks)
       ? character.clocks.map((c) => normalizeSheetProgressClock(c)).filter(Boolean)
       : [];
@@ -2670,6 +2719,46 @@ const CharacterSheetWrapper = ({
       return incoming;
     });
   }, [character?.id, character?.clocks, sheetDraftIsDirty]);
+  const clockFillApiTimersRef = useRef({});
+  const clockFillPendingRef = useRef({});
+  const bumpClocksHydrateGuard = useCallback(() => {
+    clocksHydrateGuardUntilRef.current = Date.now() + 1200;
+  }, []);
+  const setClockFilled = useCallback(
+    (clockId, rawFilled, segmentsHint) => {
+      markDirtyIntent();
+      bumpClocksHydrateGuard();
+      let nextFilled = 0;
+      setClocks((p) =>
+        p.map((c) => {
+          if (c.id !== clockId) return c;
+          const nextSegs = clockWedgeCount(
+            segmentsHint ?? c.segments ?? c.max_segments,
+          );
+          nextFilled = clampClockFilled(rawFilled, nextSegs);
+          return {
+            ...c,
+            filled: nextFilled,
+            filled_segments: nextFilled,
+          };
+        }),
+      );
+      if (!isPersistedProgressClockId(clockId)) return;
+      clockFillPendingRef.current[clockId] = nextFilled;
+      const timers = clockFillApiTimersRef.current;
+      if (timers[clockId]) clearTimeout(timers[clockId]);
+      timers[clockId] = setTimeout(() => {
+        delete timers[clockId];
+        const filled_segments = clockFillPendingRef.current[clockId];
+        delete clockFillPendingRef.current[clockId];
+        if (filled_segments == null) return;
+        progressClockAPI
+          .updateProgressClock(clockId, { filled_segments })
+          .catch(() => {});
+      }, 120);
+    },
+    [markDirtyIntent, bumpClocksHydrateGuard],
+  );
   const [clockEditorOpen, setClockEditorOpen] = useState(false);
   const [newClockName, setNewClockName] = useState("");
   const [newClockSegments, setNewClockSegments] = useState(4);
@@ -8183,6 +8272,8 @@ const CharacterSheetWrapper = ({
     const segs = Number(newClockSegments);
     if (!name || !Number.isFinite(segs)) return;
     const boundedSegments = clampClockSegments(segs);
+    markDirtyIntent();
+    bumpClocksHydrateGuard();
     setClocks((p) => [
       ...p,
       {
@@ -8204,6 +8295,8 @@ const CharacterSheetWrapper = ({
   const resizeClockSegments = useCallback((clockId, rawSegments) => {
     const nextSegs = clampClockSegments(rawSegments);
     let filledForApi = 0;
+    markDirtyIntent();
+    bumpClocksHydrateGuard();
     setClocks((p) =>
       p.map((c) => {
         if (c.id !== clockId) return c;
@@ -8226,7 +8319,7 @@ const CharacterSheetWrapper = ({
         })
         .catch(() => {});
     }
-  }, []);
+  }, [markDirtyIntent, bumpClocksHydrateGuard]);
 
   const addPerfectOrganismEntityClock = useCallback((sizeLabel, segments) => {
     const segs = clampClockSegments(segments);
@@ -12193,7 +12286,12 @@ const CharacterSheetWrapper = ({
                       boxSizing: "border-box",
                     }}
                   >
-                    <span style={S.lbl}>HEALING</span>
+                    <span style={S.lbl}>
+                      <span style={{ color: "#ef4444" }} aria-hidden>
+                        {"\u271A"}
+                      </span>{" "}
+                      HEALING
+                    </span>
                     <div
                       style={{
                         display: "flex",
@@ -13535,6 +13633,24 @@ const CharacterSheetWrapper = ({
                       const toggleBenefit = (id) => {
                         const b = benefits.find((x) => x.id === id);
                         if (b?.required) return;
+                        const alreadyOn = selectedBenefits.includes(id);
+                        // Legal (non-plan): block picks that exceed HP budget — save would reject and sync used to snap checkbox back.
+                        if (
+                          !alreadyOn &&
+                          !(planMode && isPostChargen && canEditPlan)
+                        ) {
+                          const nextCost =
+                            benefitCost + (Number(b?.hp_cost) || 0);
+                          if (baseHp + detrimentGain < nextCost) {
+                            setXpActionToast({
+                              kind: "err",
+                              message:
+                                "Not enough heritage HP for that benefit. Take optional detriments first, or remove another benefit.",
+                            });
+                            return;
+                          }
+                        }
+                        markDirtyIntent();
                         setSelectedBenefits((prev) =>
                           prev.includes(id)
                             ? prev.filter((x) => x !== id)
@@ -13544,6 +13660,7 @@ const CharacterSheetWrapper = ({
                       const toggleDetriment = (id) => {
                         const d = detriments.find((x) => x.id === id);
                         if (d?.required) return;
+                        markDirtyIntent();
                         setSelectedDetriments((prev) =>
                           prev.includes(id)
                             ? prev.filter((x) => x !== id)
@@ -20166,9 +20283,9 @@ const CharacterSheetWrapper = ({
                       <div id="character-sheet-clocks-panel">
                     <div
                       style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: "10px",
+                        display: "grid",
+                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                        gap: "6px",
                         marginBottom: "8px",
                       }}
                     >
@@ -20184,65 +20301,58 @@ const CharacterSheetWrapper = ({
                         const fill = clampClockFilled(clk.filled, segs);
                         const canResizeClock =
                           canEditSheet && (!gmManaged || isGM);
+                        const gmLabel = gmShared
+                          ? "Shared by the GM"
+                          : "GM clock (private)";
                         return (
                         <div
                           key={clk.id}
                           style={{
                             background: "#374151",
-                            padding: "8px",
+                            padding: "4px",
                             borderRadius: "4px",
                             textAlign: "center",
+                            minWidth: 0,
                           }}
                         >
                           <input
                             value={clk.name}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              markDirtyIntent();
+                              bumpClocksHydrateGuard();
+                              const name = e.target.value;
                               setClocks((p) =>
                                 p.map((c) =>
-                                  c.id === clk.id
-                                    ? { ...c, name: e.target.value }
-                                    : c,
+                                  c.id === clk.id ? { ...c, name } : c,
                                 ),
-                              )
-                            }
+                              );
+                            }}
                             style={{
                               ...S.inp,
                               textAlign: "center",
-                              fontSize: "11px",
-                              width: "80px",
-                              marginBottom: "4px",
+                              fontSize: "10px",
+                              width: "100%",
+                              boxSizing: "border-box",
+                              marginBottom: "2px",
+                              padding: "2px 3px",
                             }}
                           />
                           <div
                             style={{
                               display: "flex",
                               justifyContent: "center",
+                              minWidth: 0,
                             }}
                           >
                             <ProgressClock
-                              size={50}
+                              size={32}
                               segments={segs}
                               filled={fill}
                               interactive={canEditSheet}
-                              onClick={(f) =>
-                                setClocks((p) =>
-                                  p.map((c) =>
-                                    c.id === clk.id
-                                      ? {
-                                          ...c,
-                                          filled: clampClockFilled(f, segs),
-                                          filled_segments: clampClockFilled(
-                                            f,
-                                            segs,
-                                          ),
-                                        }
-                                      : c,
-                                  ),
-                                )
-                              }
+                              onClick={(f) => setClockFilled(clk.id, f, segs)}
                             />
                           </div>
-                          <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                          <div style={{ fontSize: "9px", color: "#6b7280" }}>
                             {fill}/{segs}
                           </div>
                           {canResizeClock ? (
@@ -20251,10 +20361,10 @@ const CharacterSheetWrapper = ({
                                 display: "flex",
                                 justifyContent: "center",
                                 alignItems: "center",
-                                gap: "4px",
-                                fontSize: "10px",
+                                gap: "2px",
+                                fontSize: "9px",
                                 color: "#9ca3af",
-                                marginTop: "4px",
+                                marginTop: "2px",
                               }}
                             >
                               Size
@@ -20269,10 +20379,10 @@ const CharacterSheetWrapper = ({
                                 }
                                 style={{
                                   ...S.inp,
-                                  width: "48px",
-                                  fontSize: "11px",
+                                  width: "28px",
+                                  fontSize: "9px",
                                   textAlign: "center",
-                                  padding: "2px 4px",
+                                  padding: "1px 2px",
                                 }}
                               />
                             </label>
@@ -20285,57 +20395,65 @@ const CharacterSheetWrapper = ({
                                   : "GM clock — not shown to players until the GM marks it visible."
                               }
                               style={{
-                                fontSize: "10px",
+                                fontSize: "8px",
                                 color: gmShared ? "#6ee7b7" : "#9ca3af",
                                 marginTop: "2px",
-                                lineHeight: 1.3,
+                                lineHeight: 1.2,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
                               }}
                             >
-                              {gmShared
-                                ? "Shared by the GM"
-                                : "GM clock (private)"}
+                              {gmLabel}
                             </div>
                           ) : (
                           <label
+                            title="Shared party"
                             style={{
                               display: "flex",
                               justifyContent: "center",
                               alignItems: "center",
-                              gap: "4px",
-                              fontSize: "10px",
+                              gap: "2px",
+                              fontSize: "8px",
                               color: "#9ca3af",
                               marginTop: "2px",
+                              overflow: "hidden",
                             }}
                           >
                             <input
                               type="checkbox"
                               checked={!!clk.visible_to_party}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                markDirtyIntent();
+                                bumpClocksHydrateGuard();
+                                const visible_to_party = e.target.checked;
                                 setClocks((p) =>
                                   p.map((c) =>
                                     c.id === clk.id
-                                      ? {
-                                          ...c,
-                                          visible_to_party: e.target.checked,
-                                        }
+                                      ? { ...c, visible_to_party }
                                       : c,
                                   ),
-                                )
-                              }
+                                );
+                              }}
                             />
-                            Shared party
+                            Shared
                           </label>
                           )}
                           <button
-                            onClick={() =>
-                              setClocks((p) => p.filter((c) => c.id !== clk.id))
-                            }
+                            onClick={() => {
+                              markDirtyIntent();
+                              bumpClocksHydrateGuard();
+                              setClocks((p) =>
+                                p.filter((c) => c.id !== clk.id),
+                              );
+                            }}
                             style={{
                               color: "#f87171",
                               background: "none",
                               border: "none",
                               cursor: "pointer",
-                              fontSize: "11px",
+                              fontSize: "10px",
+                              padding: "0",
                             }}
                           >
                             ✕
@@ -20474,9 +20592,9 @@ const CharacterSheetWrapper = ({
                           <span style={S.lbl}>Shared party clocks</span>
                           <div
                             style={{
-                              display: "flex",
-                              flexWrap: "wrap",
-                              gap: "10px",
+                              display: "grid",
+                              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                              gap: "6px",
                               marginTop: "6px",
                             }}
                           >
@@ -20488,16 +20606,21 @@ const CharacterSheetWrapper = ({
                                   key={clk.id}
                                   style={{
                                     background: "#374151",
-                                    padding: "8px",
+                                    padding: "4px",
                                     borderRadius: "4px",
                                     textAlign: "center",
+                                    minWidth: 0,
                                   }}
                                 >
                                   <div
+                                    title={clk.name}
                                     style={{
-                                      fontSize: "11px",
+                                      fontSize: "10px",
                                       fontWeight: "bold",
-                                      marginBottom: "4px",
+                                      marginBottom: "2px",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      whiteSpace: "nowrap",
                                     }}
                                   >
                                     {clk.name}
@@ -20506,10 +20629,11 @@ const CharacterSheetWrapper = ({
                                     style={{
                                       display: "flex",
                                       justifyContent: "center",
+                                      minWidth: 0,
                                     }}
                                   >
                                     <ProgressClock
-                                      size={50}
+                                      size={32}
                                       segments={clk.max_segments}
                                       filled={clk.filled_segments}
                                       interactive={canEdit}
@@ -20531,22 +20655,24 @@ const CharacterSheetWrapper = ({
                                   </div>
                                   <div
                                     style={{
-                                      fontSize: "10px",
+                                      fontSize: "9px",
                                       color: "#6b7280",
                                     }}
                                   >
                                     {clk.filled_segments}/{clk.max_segments}
                                   </div>
                                   <label
+                                    title="Shared party"
                                     style={{
                                       display: "flex",
                                       alignItems: "center",
                                       justifyContent: "center",
-                                      gap: 4,
-                                      marginTop: 4,
-                                      fontSize: "10px",
+                                      gap: 2,
+                                      marginTop: 2,
+                                      fontSize: "8px",
                                       color: "#9ca3af",
                                       cursor: canEdit ? "pointer" : "default",
+                                      overflow: "hidden",
                                     }}
                                   >
                                     <input
@@ -20562,7 +20688,7 @@ const CharacterSheetWrapper = ({
                                           .catch(() => {});
                                       }}
                                     />
-                                    Shared party
+                                    Shared
                                   </label>
                                 </div>
                               );
