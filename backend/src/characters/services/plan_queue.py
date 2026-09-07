@@ -456,22 +456,28 @@ def _apply_one_plan_item(character, item: AdvancementPlanItem):
         )
 
     if kind == AdvancementPlanItem.KIND_COIN_GRADE:
-        # Re-validate bump against live grades (may have drifted).
-        live = normalize_plan_payload(
-            character,
-            kind=kind,
-            track=item.track,
-            payload={
-                "stat": payload.get("stat"),
-                "a_grant": payload.get("a_grant"),
-            },
-        )
-        reward = live.get("a_grant")
+        # Bump from *owned* live grade only. Do not re-run queue chaining here —
+        # `_effective_coin_grade_with_queue` includes this still-queued item, which
+        # would treat C→B as already at B and incorrectly demand a B→A a_grant.
+        try:
+            stat = _normalize_stand_stat(payload.get("stat"))
+        except XPAllocationError as exc:
+            raise PlanQueueError(exc.message) from exc
+        _old, _new, lands_on_a = _coin_next_grade(character, stat)
+        reward = None
+        if lands_on_a:
+            a_grant = payload.get("a_grant")
+            if a_grant is None:
+                raise PlanQueueError(
+                    "coin_grade that lands on A requires a_grant "
+                    "(two_standard or two_unique_plus_one_standard)."
+                )
+            reward = _normalize_a_grant(a_grant)
         return apply_level_up(
             character,
             xp_track="playbook",
             choice="stat",
-            stand_stat=live.get("stat"),
+            stand_stat=stat,
             reward=reward,
             from_pool=False,
         )
