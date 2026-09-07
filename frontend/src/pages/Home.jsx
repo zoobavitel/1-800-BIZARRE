@@ -9,6 +9,7 @@ import {
   siteStatsAPI,
   transformBackendToFrontend,
 } from "../features/character-sheet";
+import { getUserAvatarSrc } from "../utils/homeAvatar";
 import { useAuth } from "../features/auth";
 import { PATCH_NOTES } from "../data/patchNotes";
 import {
@@ -119,15 +120,6 @@ function getUserDisplayName(person) {
   return typeof username === "string" && username.trim()
     ? username.trim()
     : "Unknown";
-}
-
-function getUserAvatarSrc(person) {
-  const profile = person?.profile;
-  const avatar = typeof profile?.avatar === "string" ? profile.avatar.trim() : "";
-  if (avatar) return avatar;
-  const avatarUrl =
-    typeof profile?.avatar_url === "string" ? profile.avatar_url.trim() : "";
-  return avatarUrl || null;
 }
 
 const HomePage = ({
@@ -714,7 +706,9 @@ const HomePage = ({
               const gm = inv.gm;
               const crew = Array.isArray(inv.players) ? inv.players : [];
               const gmName = getUserDisplayName(gm);
-              const gmAvatarSrc = getUserAvatarSrc(gm);
+              const gmAvatarSrc = getUserAvatarSrc(gm, {
+                campaignCharacters: inv.campaign_characters,
+              });
               const desc = String(inv.campaign_description || "").trim();
               const busy = invitationBusyId === inv.id;
 
@@ -748,7 +742,9 @@ const HomePage = ({
                         ) : (
                           crew.map((player) => {
                             const playerName = getUserDisplayName(player);
-                            const playerAvatarSrc = getUserAvatarSrc(player);
+                            const playerAvatarSrc = getUserAvatarSrc(player, {
+                              campaignCharacters: inv.campaign_characters,
+                            });
                             return (
                               <span
                                 key={player.id || playerName}
@@ -801,8 +797,11 @@ const HomePage = ({
                 : 0;
               const players = Array.isArray(campaign.players) ? campaign.players : [];
               const gmName = getUserDisplayName(campaign.gm);
-              const gmAvatarSrc = getUserAvatarSrc(campaign.gm);
-              const myChar = (campaign.campaign_characters || []).find(
+              const roster = campaign.campaign_characters || [];
+              const gmAvatarSrc = getUserAvatarSrc(campaign.gm, {
+                campaignCharacters: roster,
+              });
+              const myChar = roster.find(
                 (cc) => cc.user_id === user?.id,
               );
               const playingAs = myChar?.true_name || null;
@@ -875,7 +874,9 @@ const HomePage = ({
                         ) : (
                           visiblePlayers.map((player) => {
                             const playerName = getUserDisplayName(player);
-                            const playerAvatarSrc = getUserAvatarSrc(player);
+                            const playerAvatarSrc = getUserAvatarSrc(player, {
+                              campaignCharacters: roster,
+                            });
                             return (
                               <span key={player.id || playerName} className="g-card-player-chip">
                                 {playerAvatarSrc ? (
