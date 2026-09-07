@@ -24,23 +24,23 @@ import {
 const rowInputStyle = {
   flex: 1,
   minWidth: 0,
-  background: "#010409",
-  color: "#fff",
-  border: "1px solid #30363d",
+  background: "var(--hftf-deep)",
+  color: "var(--text-primary)",
+  border: "1px solid var(--border)",
   padding: "6px 8px",
-  fontFamily: "monospace",
+  fontFamily: "var(--font-mono, monospace)",
   fontSize: "12px",
   borderRadius: "4px",
   boxSizing: "border-box",
 };
 
 const btnStyle = {
-  background: "#21262d",
-  color: "#c9d1d9",
-  border: "1px solid #30363d",
+  background: "var(--bg-header)",
+  color: "var(--hftf-text-dim)",
+  border: "1px solid var(--border)",
   borderRadius: "4px",
   padding: "4px 8px",
-  fontFamily: "monospace",
+  fontFamily: "var(--font-mono, monospace)",
   fontSize: "11px",
   cursor: "pointer",
 };
@@ -67,11 +67,11 @@ function CatalogSearchCard({
   return (
     <div
       style={{
-        border: "1px solid #374151",
+        border: "1px solid var(--border)",
         borderRadius: "4px",
         padding: "8px",
         marginBottom: "8px",
-        background: "#161b22",
+        background: "var(--bg-card)",
       }}
     >
       <input
@@ -92,12 +92,12 @@ function CatalogSearchCard({
           maxHeight: "180px",
           overflowY: "auto",
           marginBottom: "6px",
-          border: "1px solid #21262d",
+          border: "1px solid var(--border)",
           borderRadius: "4px",
         }}
       >
         {matches.length === 0 ? (
-          <div style={{ color: "#6b7280", fontSize: "11px", padding: "8px" }}>
+          <div style={{ color: "var(--text-dim)", fontSize: "11px", padding: "8px" }}>
             {q ? "No catalog matches." : "No catalog items available."}
           </div>
         ) : (
@@ -115,15 +115,15 @@ function CatalogSearchCard({
                 textAlign: "left",
                 background: "transparent",
                 border: "none",
-                borderBottom: "1px solid #21262d",
-                color: "#e5e7eb",
+                borderBottom: "1px solid var(--border)",
+                color: "var(--text-primary)",
                 padding: "6px 8px",
                 fontFamily: "monospace",
                 fontSize: "11px",
                 cursor: readOnly ? "default" : "pointer",
               }}
             >
-              <span style={{ color: "#9ca3af" }}>
+              <span style={{ color: "var(--text-muted)" }}>
                 {c.scope === "CAMPAIGN"
                   ? "Campaign"
                   : c.scope === "SITE"
@@ -133,7 +133,7 @@ function CatalogSearchCard({
               </span>
               <span style={{ display: "block", fontWeight: "bold" }}>{c.name}</span>
               {c.description ? (
-                <span style={{ display: "block", color: "#6b7280", fontSize: "10px" }}>
+                <span style={{ display: "block", color: "var(--text-dim)", fontSize: "10px" }}>
                   {c.description}
                 </span>
               ) : null}
@@ -161,11 +161,11 @@ function CustomItemEditorCard({
   return (
     <div
       style={{
-        border: "1px solid #374151",
+        border: "1px solid var(--border)",
         borderRadius: "4px",
         padding: "8px",
         marginBottom: "8px",
-        background: "#161b22",
+        background: "var(--bg-card)",
       }}
     >
       <input
@@ -287,11 +287,11 @@ function ArmorEditorCard({ draft, readOnly, onChange, onSave, onCancel }) {
   return (
     <div
       style={{
-        border: "1px solid #374151",
+        border: "1px solid var(--border)",
         borderRadius: "4px",
         padding: "8px",
         marginBottom: "8px",
-        background: "#161b22",
+        background: "var(--bg-card)",
       }}
     >
       <input
@@ -315,7 +315,7 @@ function ArmorEditorCard({ draft, readOnly, onChange, onSave, onCancel }) {
         style={{ ...rowInputStyle, width: "100%", marginBottom: "6px" }}
       />
       <div style={{ marginBottom: "6px" }}>
-        <span style={{ color: "#8b949e", fontSize: "10px", display: "block", marginBottom: "4px" }}>
+        <span style={{ color: "var(--text-dim)", fontSize: "10px", display: "block", marginBottom: "4px" }}>
           Type
         </span>
         <select
@@ -347,7 +347,7 @@ function ArmorEditorCard({ draft, readOnly, onChange, onSave, onCancel }) {
         <div
           style={{
             fontSize: "9px",
-            color: "#6b7280",
+            color: "var(--text-dim)",
             lineHeight: 1.35,
             marginBottom: "6px",
           }}
@@ -522,9 +522,9 @@ export default function CharacterSheetInventoryList({
       style={{
         width: "100%",
         minHeight: "48px",
-        background: "#0d1117",
-        color: "#fff",
-        border: "1px solid #374151",
+        background: "var(--hftf-deep)",
+        color: "var(--text-primary)",
+        border: "1px solid var(--border)",
         padding: "8px",
         fontFamily: "monospace",
         fontSize: "12px",
@@ -535,16 +535,16 @@ export default function CharacterSheetInventoryList({
         style={{
           marginBottom: "10px",
           paddingBottom: "8px",
-          borderBottom: "1px solid #21262d",
+          borderBottom: "1px solid var(--border)",
         }}
       >
         <div style={{ marginBottom: sessionActive && hasRigging && !readOnly ? "6px" : 0 }}>
-          <span style={{ color: "#9ca3af", fontSize: "11px" }}>
+          <span style={{ color: "var(--text-muted)", fontSize: "11px" }}>
             Load{" "}
             <strong
               style={{
                 color:
-                  bandMax != null && used > bandMax ? "#f85149" : "#e5e7eb",
+                  bandMax != null && used > bandMax ? "#f85149" : "var(--text-primary)",
               }}
             >
               {used}
@@ -554,7 +554,7 @@ export default function CharacterSheetInventoryList({
         </div>
         {sessionActive && onLoadoutChange && hasRigging && !readOnly ? (
           <div style={{ marginTop: "6px" }}>
-            <span style={{ color: "#8b949e", fontSize: "10px" }}>
+            <span style={{ color: "var(--text-dim)", fontSize: "10px" }}>
               Rigging categories:{" "}
             </span>
             {RIGGING_CATEGORY_OPTIONS.map((o) => {
@@ -562,7 +562,7 @@ export default function CharacterSheetInventoryList({
               return (
                 <label
                   key={o.value}
-                  style={{ color: "#c9d1d9", fontSize: "10px", marginRight: "8px" }}
+                  style={{ color: "var(--hftf-text-dim)", fontSize: "10px", marginRight: "8px" }}
                 >
                   <input
                     type="checkbox"
@@ -590,7 +590,7 @@ export default function CharacterSheetInventoryList({
       ) : null}
 
       {inv.length === 0 && !addDraft ? (
-        <div style={{ color: "#9ca3af", marginBottom: readOnly ? 0 : "8px" }}>
+        <div style={{ color: "var(--text-muted)", marginBottom: readOnly ? 0 : "8px" }}>
           No items.
         </div>
       ) : (
@@ -609,12 +609,12 @@ export default function CharacterSheetInventoryList({
                 marginBottom: index < inv.length - 1 ? "10px" : 0,
                 paddingBottom: index < inv.length - 1 ? "10px" : 0,
                 borderBottom:
-                  index < inv.length - 1 ? "1px solid #21262d" : "none",
+                  index < inv.length - 1 ? "1px solid var(--border)" : "none",
                 fontStyle: noLoad ? "italic" : "normal",
               }}
             >
               <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <span style={{ flex: 1, color: "#e5e7eb" }}>
+                <span style={{ flex: 1, color: "var(--text-primary)" }}>
                   {item.name}
                   {armorKind
                     ? ` · ${armorKindLabel(armorKind)} (${
@@ -639,7 +639,7 @@ export default function CharacterSheetInventoryList({
                 ) : null}
               </div>
               {item.detail ? (
-                <div style={{ color: "#8b949e", fontSize: "10px" }}>{item.detail}</div>
+                <div style={{ color: "var(--text-dim)", fontSize: "10px" }}>{item.detail}</div>
               ) : null}
               {isGM &&
               onPromoteToCampaign &&

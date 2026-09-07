@@ -330,9 +330,9 @@ export default function AccountSettingsPage() {
           <div style={S.card}>
             <label style={S.lbl}>Color theme</label>
             <p style={{ ...S.mutedSmall, marginBottom: "12px" }}>
-              HFTF brand themes (purple, gold, orange) or Cool Night — the slate
-              palette used on character sheets (gray panels, coral labels, cool
-              accents).
+              HFTF brand themes (purple, gold, orange) apply across the app,
+              including the player character sheet. Cool Night is an optional
+              slate escape hatch (gray panels, coral labels, cool accents).
             </p>
             <div
               style={{
