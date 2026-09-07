@@ -1724,6 +1724,11 @@ class CharacterSerializer(serializers.ModelSerializer):
         for p in open_pendings:
             by_track[p.track] = by_track.get(p.track, 0) + 1
         data["pending_advance_counts"] = by_track
+        from .services.plan_queue import list_queued_plan_items, serialize_plan_item
+
+        data["advancement_plan"] = [
+            serialize_plan_item(item) for item in list_queued_plan_items(instance)
+        ]
         return data
 
     def validate_coin_boxes(self, value):

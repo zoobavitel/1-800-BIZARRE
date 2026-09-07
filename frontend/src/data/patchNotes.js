@@ -8,8 +8,37 @@ export const PATCH_NOTES = [
     "version": null,
     "sections": [
       {
+        "title": "Other",
+        "items": [
+          "Merge pull request #118 from zoobavitel/feature/srd-equipment-templates",
+          "Merge pull request #117 from zoobavitel/cursor/plan-a-pending-advance-5176",
+          "Sync standard abilities catalog to SRD_DEV."
+        ]
+      },
+      {
+        "title": "Refactored",
+        "items": [
+          "drop archetype trigger picker from the XP panel",
+          "rename Arcane Implements to Bizarre Implements"
+        ]
+      },
+      {
+        "title": "Added",
+        "items": [
+          "B→A reward grants two unique abilities plus one standard",
+          "drop the 20 XP cap on manual awards",
+          "show the signed-in username in the user menu drawer",
+          "scope catalog per campaign and stop double-saving base kit",
+          "sync SRD equipment TEMPLATEs from fixture",
+          "Plan A fill-clear PendingAdvance and single-playbook cutover",
+          "add loadout, inventory, and armor"
+        ]
+      },
+      {
         "title": "Fixed",
         "items": [
+          "stop apply-level-up hanging behind autosave write lock",
+          "stable PendingAdvance index name + ESLint hook deps",
           "align Plan A tests and player loadout PATCH permission"
         ]
       },
@@ -18,19 +47,6 @@ export const PATCH_NOTES = [
         "items": [
           "align XP allocation suites with Plan A pending redeem",
           "cover resolveCrewFromCampaign helpers"
-        ]
-      },
-      {
-        "title": "Added",
-        "items": [
-          "Plan A fill-clear PendingAdvance and single-playbook cutover",
-          "add loadout, inventory, and armor"
-        ]
-      },
-      {
-        "title": "Other",
-        "items": [
-          "Sync standard abilities catalog to SRD_DEV."
         ]
       }
     ]
@@ -741,51 +757,19 @@ export const PATCH_NOTES = [
         "title": "Added",
         "items": [
           "enhance action dot budget calculations and add utility functions",
-          "per-track XP for level/minor advance; drop info cards",
-          "remove healing UI components and related files",
-          "add sheetDraftIsDirty prop to CharacterSheetWrapper",
-          "session retrieve P/E, stress overflow, downtime recovery UI"
+          "per-track XP for level/minor advance; drop info cards"
         ]
       },
       {
         "title": "Fixed",
         "items": [
-          "action dot budget includes action_dice_gained",
-          "Copilot review — XP settlement on session delete, multi-tracker rolls, faction image clear, history ACL"
+          "action dot budget includes action_dice_gained"
         ]
       },
       {
         "title": "Other",
         "items": [
           "Merge pull request #70 from zoobavitel/cursor/session-xp-gm-sheet-history"
-        ]
-      },
-      {
-        "title": "Tests",
-        "items": [
-          "fix Ripple Breathing Character create (drop invalid name kw)"
-        ]
-      }
-    ]
-  },
-  {
-    "date": "2026-05-05",
-    "version": null,
-    "sections": [
-      {
-        "title": "Added",
-        "items": [
-          "session NPC clocks, Staying Power on L4, Parry/Break cleanup",
-          "ripple free-push, recovery rolls, NPC sheet heals",
-          "heal bolsters picker, exclusions, downtime recover",
-          "improve session GM controls and recovery flow",
-          "track modifier sources and improve session/NPC roll flow"
-        ]
-      },
-      {
-        "title": "Documentation",
-        "items": [
-          "clarify resistance counterattack tick scaling"
         ]
       }
     ]

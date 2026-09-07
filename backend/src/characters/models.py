@@ -1351,6 +1351,63 @@ class PendingAdvance(models.Model):
         return f"PendingAdvance({self.track}, {self.status})"
 
 
+class AdvancementPlanItem(models.Model):
+    """Ordered wishlist advance; fires when credit_xp mints a matching pending."""
+
+    STATUS_QUEUED = "queued"
+    STATUS_APPLIED = "applied"
+    STATUS_CHOICES = [
+        (STATUS_QUEUED, "Queued"),
+        (STATUS_APPLIED, "Applied"),
+    ]
+
+    KIND_ACTION_DOT = "action_dot"
+    KIND_COIN_GRADE = "coin_grade"
+    KIND_ABILITY = "ability"
+    KIND_ACQUIRE_STAND = "acquire_stand"
+    KIND_CHOICES = [
+        (KIND_ACTION_DOT, "Action dot"),
+        (KIND_COIN_GRADE, "Coin grade"),
+        (KIND_ABILITY, "Ability"),
+        (KIND_ACQUIRE_STAND, "Acquire Stand"),
+    ]
+
+    TRACK_CHOICES = PendingAdvance.TRACK_CHOICES
+
+    character = models.ForeignKey(
+        Character, on_delete=models.CASCADE, related_name="advancement_plan_items"
+    )
+    track = models.CharField(max_length=16, choices=TRACK_CHOICES)
+    order = models.PositiveIntegerField(default=0)
+    kind = models.CharField(max_length=32, choices=KIND_CHOICES)
+    payload = models.JSONField(default=dict, blank=True)
+    blocked_reason = models.CharField(max_length=255, blank=True, default="")
+    status = models.CharField(
+        max_length=16, choices=STATUS_CHOICES, default=STATUS_QUEUED, db_index=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    applied_at = models.DateTimeField(null=True, blank=True)
+    applied_allocation = models.ForeignKey(
+        CharacterXPAllocation,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="plan_items",
+    )
+
+    class Meta:
+        ordering = ["track", "order", "id"]
+        indexes = [
+            models.Index(
+                fields=["character", "track", "status", "order"],
+                name="plan_item_char_track_ord",
+            ),
+        ]
+
+    def __str__(self):
+        return f"AdvancementPlanItem({self.track}, {self.kind}, {self.status})"
+
+
 class CharacterHistory(models.Model):
     character = models.ForeignKey(
         Character, on_delete=models.CASCADE, related_name="history_entries"

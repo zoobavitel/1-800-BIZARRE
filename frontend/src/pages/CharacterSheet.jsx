@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import {
   GRADE,
+  GRADE_INDEX,
   INDEX_TO_GRADE,
   MAX_CREATION_DOTS,
   maxDotsPerActionAtCreation,
@@ -27,6 +28,8 @@ import {
   DEVILS_BARGAIN_DETRIMENTS,
 } from "../features/character-sheet/constants/srd";
 import NpcsStandCoin from "../components/NpcsStandCoin";
+import AdvancementPlanStrip from "../features/character-sheet/components/AdvancementPlanStrip";
+import AdvancementPlanPanel from "../features/character-sheet/components/AdvancementPlanPanel";
 import {
   characterAPI,
   campaignAPI,
@@ -559,14 +562,26 @@ const DicePoolStrip = ({ label, count }) => {
 
 // ─── ProgressClock ────────────────────────────────────────────────────────────
 
+/** Filled wedges: early = red → orange → yellow → late = green. */
+const CLOCK_WEDGE_FILL_STOPS = ["#dc2626", "#ea580c", "#ca8a04", "#16a34a"];
+function clockWedgeFillColor(wedgeIndex, totalSegments) {
+  const n = Math.max(1, totalSegments);
+  const band = Math.min(
+    CLOCK_WEDGE_FILL_STOPS.length - 1,
+    Math.floor((wedgeIndex / n) * CLOCK_WEDGE_FILL_STOPS.length),
+  );
+  return CLOCK_WEDGE_FILL_STOPS[band];
+}
+
 const arrowBtnStyle = {
   background: "none",
   border: "none",
   color: "#6b7280",
   cursor: "pointer",
-  fontSize: "16px",
-  padding: "2px 4px",
+  fontSize: "12px",
+  padding: "0 1px",
   lineHeight: 1,
+  flexShrink: 0,
 };
 const ProgressClock = ({
   size = 80,
@@ -577,13 +592,23 @@ const ProgressClock = ({
 }) => {
   const n = clockWedgeCount(segments);
   const fill = clampClockFilled(filled, n);
+  // Optimistic cursor so rapid +/− before React re-paints still steps 0→1→2…
+  // instead of repeating the same absolute target (causes flicker with hydrate).
+  const fillRef = useRef(fill);
+  if (fillRef.current !== fill) fillRef.current = fill;
+  const commitFilled = (next) => {
+    if (!onClick) return;
+    const clamped = clampClockFilled(next, n);
+    fillRef.current = clamped;
+    onClick(clamped);
+  };
   const r = size / 2 - 4,
     cx = size / 2,
     cy = size / 2;
   const sa = 360 / n;
   const showArrows = interactive && onClick;
   const svg = (
-    <svg width={size} height={size}>
+    <svg width={size} height={size} style={{ flexShrink: 0 }}>
       {Array.from({ length: n }, (_, i) => {
         const a1 = ((i * sa - 90) * Math.PI) / 180;
         const a2 = (((i + 1) * sa - 90) * Math.PI) / 180;
@@ -595,13 +620,16 @@ const ProgressClock = ({
           <path
             key={i}
             d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${sa > 180 ? 1 : 0} 1 ${x2} ${y2} Z`}
-            fill={i < fill ? "#dc2626" : "transparent"}
+            fill={i < fill ? clockWedgeFillColor(i, n) : "transparent"}
             stroke="#6b7280"
             strokeWidth="1"
             style={{ cursor: interactive ? "pointer" : "default" }}
             onClick={
               interactive && onClick
-                ? () => onClick(i < fill ? i : i + 1)
+                ? () => {
+                    const cur = fillRef.current;
+                    commitFilled(i < cur ? i : i + 1);
+                  }
                 : undefined
             }
           />
@@ -611,11 +639,20 @@ const ProgressClock = ({
   );
   if (showArrows) {
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "1px",
+          minWidth: 0,
+          maxWidth: "100%",
+        }}
+      >
         <button
           type="button"
           style={arrowBtnStyle}
-          onClick={() => onClick(Math.max(0, fill - 1))}
+          onClick={() => commitFilled(fillRef.current - 1)}
           title="Decrease filled ticks"
         >
           −
@@ -624,7 +661,7 @@ const ProgressClock = ({
         <button
           type="button"
           style={arrowBtnStyle}
-          onClick={() => onClick(Math.min(n, fill + 1))}
+          onClick={() => commitFilled(fillRef.current + 1)}
           title="Increase filled ticks"
         >
           +
@@ -1058,6 +1095,7 @@ const CharacterSheetWrapper = ({
       ? `Created by user #${character.user_id}`
       : "Created by unknown";
   const canEditSheet = !character?.id || isGM || character?.user_id === user?.id;
+  const canEditPlan = canEditSheet;
   const canCreateManualHistoryRecord = isGM || character?.user_id === user?.id;
   const characterCampaignContext = useMemo(
     () => resolveCharacterCampaignContext(character, campaigns),
@@ -1127,6 +1165,25 @@ const CharacterSheetWrapper = ({
     [user, character, isCampaignGm, campaignIdFromCharacter],
   );
   const [activeMode, setActiveMode] = useState("CHARACTER MODE");
+  const [planMode, setPlanMode] = useState(false);
+  const [planPanelOpen, setPlanPanelOpen] = useState(false);
+  const [advancementPlan, setAdvancementPlan] = useState(
+    () => character?.advancementPlan || [],
+  );
+  const [planBusy, setPlanBusy] = useState(false);
+  const [planSessionHint, setPlanSessionHint] = useState(null);
+  /** When Coin plan click would land B→A — pick a_grant before POST. */
+  const [planBADraft, setPlanBADraft] = useState(null); // { stat }
+  const [planBABranch, setPlanBABranch] = useState("two_standard");
+  const [planBAStdIds, setPlanBAStdIds] = useState(["", ""]);
+  const [planBAUniques, setPlanBAUniques] = useState([
+    { name: "", use: "" },
+    { name: "", use: "" },
+  ]);
+  const [planBAStdId, setPlanBAStdId] = useState("");
+  const [planBAError, setPlanBAError] = useState(null);
+  /** After Cancel, don't auto-reopen B→A draft until user picks again / plan off. */
+  const [planBASuppressed, setPlanBASuppressed] = useState(false);
   const activeSessionId =
     charCampaign?.active_session ??
     (typeof charCampaign?.active_session === "object"
@@ -1560,6 +1617,8 @@ const CharacterSheetWrapper = ({
   // Only update when content differs to avoid save loop: updateActiveCharTab passes new array refs
   // after each save; without value comparison we'd trigger setState → auto-save → save → loop.
   useEffect(() => {
+    // Dirty draft must win over poll/SSE/failed-save echoes (HP budget reject → server still old).
+    if (sheetDraftIsDirty) return;
     const newBenefits = Array.isArray(character?.selected_benefits)
       ? character.selected_benefits
       : [];
@@ -1570,17 +1629,20 @@ const CharacterSheetWrapper = ({
       Array.isArray(a) &&
       Array.isArray(b) &&
       a.length === b.length &&
-      a.every((v, i) => v === b[i]);
-    setSelectedBenefits((prev) =>
-      arrEqual(prev, newBenefits) ? prev : newBenefits,
-    );
-    setSelectedDetriments((prev) =>
-      arrEqual(prev, newDetriments) ? prev : newDetriments,
-    );
+      a.every((v, i) => Number(v) === Number(b[i]));
+    setSelectedBenefits((prev) => {
+      const equal = arrEqual(prev, newBenefits);
+      return equal ? prev : newBenefits;
+    });
+    setSelectedDetriments((prev) => {
+      const equal = arrEqual(prev, newDetriments);
+      return equal ? prev : newDetriments;
+    });
   }, [
     character?.id,
     character?.selected_benefits,
     character?.selected_detriments,
+    sheetDraftIsDirty,
   ]);
 
   // When heritage changes, reset to required benefits/detriments for the new heritage
@@ -1820,7 +1882,8 @@ const CharacterSheetWrapper = ({
     if (
       reason !== "character" &&
       reason !== "experience_tracker" &&
-      reason !== "pending_advance"
+      reason !== "pending_advance" &&
+      reason !== "advancement_plan"
     ) {
       return;
     }
@@ -2013,6 +2076,13 @@ const CharacterSheetWrapper = ({
       setPendingAdvanceCounts({ ...counts });
     }
   }, [character?.id, character?.pendingAdvanceCounts, sheetDraftIsDirty]);
+
+  useEffect(() => {
+    const plan = character?.advancementPlan;
+    if (Array.isArray(plan)) {
+      setAdvancementPlan(plan);
+    }
+  }, [character?.id, character?.advancementPlan]);
 
   // FIX 6: Level-up modal state — see below near other modal state
 
@@ -2629,8 +2699,18 @@ const CharacterSheetWrapper = ({
   );
 
   const [clocks, setClocks] = useState(character?.clocks || []);
+  /** Block poll/hydrate snap-back for a beat after local clock edits (rapid +/− flicker). */
+  const clocksHydrateGuardUntilRef = useRef(0);
   useEffect(() => {
-    if (sheetDraftIsDirty) return;
+    // Protect mid-edit: prop isDirty lags one frame; dirtyIntentRef covers the gap
+    // so poll/hydrate cannot snap filled wedges back (flicker on rapid +/−).
+    if (
+      sheetDraftIsDirty ||
+      dirtyIntentRef.current ||
+      Date.now() < clocksHydrateGuardUntilRef.current
+    ) {
+      return;
+    }
     const incoming = Array.isArray(character?.clocks)
       ? character.clocks.map((c) => normalizeSheetProgressClock(c)).filter(Boolean)
       : [];
@@ -2639,6 +2719,46 @@ const CharacterSheetWrapper = ({
       return incoming;
     });
   }, [character?.id, character?.clocks, sheetDraftIsDirty]);
+  const clockFillApiTimersRef = useRef({});
+  const clockFillPendingRef = useRef({});
+  const bumpClocksHydrateGuard = useCallback(() => {
+    clocksHydrateGuardUntilRef.current = Date.now() + 1200;
+  }, []);
+  const setClockFilled = useCallback(
+    (clockId, rawFilled, segmentsHint) => {
+      markDirtyIntent();
+      bumpClocksHydrateGuard();
+      let nextFilled = 0;
+      setClocks((p) =>
+        p.map((c) => {
+          if (c.id !== clockId) return c;
+          const nextSegs = clockWedgeCount(
+            segmentsHint ?? c.segments ?? c.max_segments,
+          );
+          nextFilled = clampClockFilled(rawFilled, nextSegs);
+          return {
+            ...c,
+            filled: nextFilled,
+            filled_segments: nextFilled,
+          };
+        }),
+      );
+      if (!isPersistedProgressClockId(clockId)) return;
+      clockFillPendingRef.current[clockId] = nextFilled;
+      const timers = clockFillApiTimersRef.current;
+      if (timers[clockId]) clearTimeout(timers[clockId]);
+      timers[clockId] = setTimeout(() => {
+        delete timers[clockId];
+        const filled_segments = clockFillPendingRef.current[clockId];
+        delete clockFillPendingRef.current[clockId];
+        if (filled_segments == null) return;
+        progressClockAPI
+          .updateProgressClock(clockId, { filled_segments })
+          .catch(() => {});
+      }, 120);
+    },
+    [markDirtyIntent, bumpClocksHydrateGuard],
+  );
   const [clockEditorOpen, setClockEditorOpen] = useState(false);
   const [newClockName, setNewClockName] = useState("");
   const [newClockSegments, setNewClockSegments] = useState(4);
@@ -3243,6 +3363,10 @@ const CharacterSheetWrapper = ({
         !a.undone_at && a.allocation_type === "LEVEL_UP_ACQUIRE_STAND",
     );
   }, [playbook, xpAllocationRows]);
+  const isPostChargen = useMemo(
+    () => (xpAllocationRows || []).some((a) => !a.undone_at),
+    [xpAllocationRows],
+  );
   const playbookAbilitySlots = useMemo(
     () => playbookAbilitySlotBudget(xpAllocationRows),
     [xpAllocationRows],
@@ -3266,14 +3390,18 @@ const CharacterSheetWrapper = ({
       ),
     [abilities],
   );
-  // SRD L1: Stand = 2 standards + 2 per A-rank; Hamon/Spin = 1 standard. Custom = one unique package.
-  // Hide add buttons when L1 quota is full; show again if the player deletes a pick.
-  // After L1, + Standard stays available for XP-bought standards.
+  // SRD: Stand L1 = 2 standards; each A (incl. chargen A) grants +2 std OR 2 unique + 1 std
+  // via B→A / chargen A UI — not free +Standard. Hamon/Spin L1 = 1 standard.
+  // Free +Standard only fills base / chargen-A quota; hide once full (or post-chargen base).
   const maxL1StandardAbilities =
     playbook === "Stand" ? 2 + aRankCount * 2 : 1;
+  const maxFreeStandardAbilities = isPostChargen
+    ? playbook === "Stand"
+      ? 2
+      : 1
+    : maxL1StandardAbilities;
   const showAddStandardButton =
-    canEditSheet &&
-    (pcLevel > 1 || sheetStandardCount < maxL1StandardAbilities);
+    canEditSheet && sheetStandardCount < maxFreeStandardAbilities;
   const showAddCustomButton =
     canEditSheet &&
     !hasSheetCustomPackage &&
@@ -3743,12 +3871,225 @@ const CharacterSheetWrapper = ({
     return out;
   }, [standStats]);
 
+  /** Owned Coin grade + queued plan bumps for one stat (plan-mode effective). */
+  const effectiveCoinGradeWithPlanQueue = useCallback(
+    (key) => {
+      let effective =
+        INDEX_TO_GRADE(standStats?.[key]) || INDEX_TO_GRADE(0);
+      const queued = (advancementPlan || [])
+        .filter(
+          (i) =>
+            i.kind === "coin_grade" &&
+            (i.status === "queued" || !i.status) &&
+            i.payload?.stat === key,
+        )
+        .slice()
+        .sort(
+          (a, b) =>
+            (a.order || 0) - (b.order || 0) || (a.id || 0) - (b.id || 0),
+        );
+      for (const item of queued) {
+        const to = item.payload?.to_grade;
+        if (to && GRADE_INDEX[to] != null) effective = to;
+      }
+      return effective;
+    },
+    [standStats, advancementPlan],
+  );
+
+  /** Stats where next plan Coin bump is legal B→A (needs a_grant). */
+  const planLegalBAStats = useMemo(() => {
+    if (!planMode || !isPostChargen || !canEditPlan) return [];
+    return STAND_STAT_KEYS.filter(
+      (k) => effectiveCoinGradeWithPlanQueue(k) === "B",
+    );
+  }, [
+    planMode,
+    isPostChargen,
+    canEditPlan,
+    effectiveCoinGradeWithPlanQueue,
+  ]);
+
+  const showPlanBAGrantUI =
+    planMode &&
+    isPostChargen &&
+    canEditPlan &&
+    (Boolean(planBADraft?.stat) || planLegalBAStats.length > 0);
+
+  useEffect(() => {
+    if (!showPlanBAGrantUI || planBASuppressed) return;
+    setAbilitiesSectionExpanded(true);
+    if (planBADraft?.stat) return;
+    if (planLegalBAStats.length === 1) {
+      setPlanBADraft({ stat: planLegalBAStats[0] });
+      setPlanBAError(null);
+      setPlanBABranch("two_standard");
+    }
+  }, [
+    showPlanBAGrantUI,
+    planBASuppressed,
+    planLegalBAStats,
+    planBADraft?.stat,
+  ]);
+
   const bumpStandCoinGrade = useCallback(
-    (key, delta) => {
+    async (key, delta) => {
+      if (planMode && isPostChargen && canEditPlan) {
+        if (delta === -1) return;
+        if (delta !== 1 || !characterId || planBusy) return;
+
+        const effective = effectiveCoinGradeWithPlanQueue(key);
+        const fromIdx = GRADE_INDEX[effective] ?? 0;
+        const toGrade = GRADE[Math.min(fromIdx + 1, GRADE.length - 1)];
+        const landsOnA = effective === "B" && toGrade === "A";
+        if (landsOnA) {
+          setPlanBASuppressed(false);
+          setPlanBADraft({ stat: key });
+          setPlanBAError(null);
+          setPlanBABranch("two_standard");
+          setAbilitiesSectionExpanded(true);
+          setXpActionToast({
+            kind: "ok",
+            message: `${key.toUpperCase()} B→A needs an A-grant — pick 2 standards or 2 unique + 1 standard below.`,
+          });
+          return;
+        }
+
+        setPlanBusy(true);
+        try {
+          const res = await characterAPI.addAdvancementPlanItem(characterId, {
+            track: "playbook",
+            kind: "coin_grade",
+            payload: { stat: key },
+          });
+          if (Array.isArray(res?.items)) {
+            setAdvancementPlan(res.items);
+          }
+        } catch (err) {
+          const msg =
+            err?.message || "Failed to queue Stand Coin grade (plan).";
+          if (/a_grant/i.test(msg)) {
+            setPlanBASuppressed(false);
+            setPlanBADraft({ stat: key });
+            setPlanBAError(null);
+            setAbilitiesSectionExpanded(true);
+          }
+          setXpActionToast({ kind: "err", message: msg });
+        } finally {
+          setPlanBusy(false);
+        }
+        return;
+      }
       if (delta === 1) incrementStat(key);
       else if (delta === -1) decrementStat(key);
     },
-    [incrementStat, decrementStat],
+    [
+      planMode,
+      isPostChargen,
+      canEditPlan,
+      characterId,
+      planBusy,
+      effectiveCoinGradeWithPlanQueue,
+      incrementStat,
+      decrementStat,
+    ],
+  );
+
+  const confirmPlanBAGrant = useCallback(async () => {
+    if (!characterId || !planBADraft?.stat || planBusy) return;
+    let a_grant;
+    if (planBABranch === "two_unique_plus_one_standard") {
+      const uniques = planBAUniques.map((u) => ({
+        name: String(u?.name || "").trim(),
+        use: String(u?.use || "").trim(),
+      }));
+      if (!uniques.every((u) => u.name && u.use) || !planBAStdId) {
+        setPlanBAError(
+          "Fill both unique names + functions, and pick a standard ability.",
+        );
+        return;
+      }
+      a_grant = {
+        branch: "two_unique_plus_one_standard",
+        unique_abilities: uniques,
+        standard_ability_id: Number(planBAStdId),
+      };
+    } else {
+      if (!planBAStdIds[0] || !planBAStdIds[1]) {
+        setPlanBAError("Pick two standard abilities.");
+        return;
+      }
+      a_grant = {
+        branch: "two_standard",
+        standard_ability_ids: planBAStdIds.map((id) => Number(id)),
+      };
+    }
+    setPlanBusy(true);
+    setPlanBAError(null);
+    try {
+      const res = await characterAPI.addAdvancementPlanItem(characterId, {
+        track: "playbook",
+        kind: "coin_grade",
+        payload: { stat: planBADraft.stat, a_grant },
+      });
+      if (Array.isArray(res?.items)) setAdvancementPlan(res.items);
+      setPlanBADraft(null);
+      setPlanBAStdIds(["", ""]);
+      setPlanBAUniques([
+        { name: "", use: "" },
+        { name: "", use: "" },
+      ]);
+      setPlanBAStdId("");
+      setXpActionToast({
+        kind: "ok",
+        message: `Queued ${String(planBADraft.stat).toUpperCase()} B→A with A-grant.`,
+      });
+    } catch (err) {
+      setPlanBAError(err?.message || "Failed to queue B→A plan item.");
+    } finally {
+      setPlanBusy(false);
+    }
+  }, [
+    characterId,
+    planBADraft,
+    planBusy,
+    planBABranch,
+    planBAUniques,
+    planBAStdId,
+    planBAStdIds,
+  ]);
+
+  const queuePlanAbility = useCallback(
+    async ({ abilityId, abilitySource, abilityName }) => {
+      if (!characterId || !canEditPlan || planBusy) return false;
+      setPlanBusy(true);
+      try {
+        const res = await characterAPI.addAdvancementPlanItem(characterId, {
+          track: "playbook",
+          kind: "ability",
+          payload: {
+            ability_id: abilityId,
+            ability_source: abilitySource,
+            ability_name: abilityName,
+          },
+        });
+        if (Array.isArray(res?.items)) setAdvancementPlan(res.items);
+        setXpActionToast({
+          kind: "ok",
+          message: `Queued ${abilityName || "ability"} for next playbook fill.`,
+        });
+        return true;
+      } catch (err) {
+        setXpActionToast({
+          kind: "err",
+          message: err?.message || "Failed to queue ability.",
+        });
+        return false;
+      } finally {
+        setPlanBusy(false);
+      }
+    },
+    [characterId, canEditPlan, planBusy],
   );
 
   const toggleXP = async (track, idx) => {
@@ -4588,6 +4929,166 @@ const CharacterSheetWrapper = ({
         rolls: xpReqRolls,
       }),
     [activeSessionId, characterId, xpReqTracker, xpReqRolls],
+  );
+
+  const planSessionHadRef = useRef(false);
+  useEffect(() => {
+    const hasSession = Boolean(
+      xpReqSnapshot.hasActiveSession || activeSessionId,
+    );
+    const rising = hasSession && !planSessionHadRef.current;
+    planSessionHadRef.current = hasSession;
+    if (!rising || isGM || !planMode) return undefined;
+    setPlanMode(false);
+    setPlanSessionHint("Plan mode off — active session.");
+    const t = window.setTimeout(() => setPlanSessionHint(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [xpReqSnapshot.hasActiveSession, activeSessionId, planMode, isGM]);
+
+  useEffect(() => {
+    if (!planMode) {
+      setPlanBADraft(null);
+      setPlanBAError(null);
+      setPlanBASuppressed(false);
+    }
+  }, [planMode]);
+
+  const plannedCoinGrades = useMemo(() => {
+    const map = {};
+    const queued = (advancementPlan || [])
+      .filter(
+        (i) =>
+          i.kind === "coin_grade" &&
+          (i.status === "queued" || !i.status),
+      )
+      .slice()
+      .sort(
+        (a, b) =>
+          (a.order || 0) - (b.order || 0) || (a.id || 0) - (b.id || 0),
+      );
+    const gradeRank = { F: 0, D: 1, C: 2, B: 3, A: 4, S: 5 };
+    for (const item of queued) {
+      const stat = item.payload?.stat;
+      const grade = item.payload?.to_grade;
+      if (!stat || !grade) continue;
+      const prev = map[stat];
+      const prevRank = gradeRank[prev?.grade] ?? -1;
+      const nextRank = gradeRank[grade] ?? -1;
+      if (nextRank >= prevRank) {
+        map[stat] = {
+          grade,
+          blocked: Boolean(item.blocked_reason || item.blockedReason),
+        };
+      }
+    }
+    return map;
+  }, [advancementPlan]);
+
+  /** Extra action dots queued per action key (uppercase sheet keys). */
+  const plannedActionDotCounts = useMemo(() => {
+    const map = {};
+    for (const item of advancementPlan || []) {
+      if (item.kind !== "action_dot") continue;
+      if (item.status && item.status !== "queued") continue;
+      const action = String(item.payload?.action || "").toUpperCase();
+      if (!action) continue;
+      map[action] = (map[action] || 0) + 1;
+    }
+    return map;
+  }, [advancementPlan]);
+
+  const queuePlanActionDot = useCallback(
+    async (action) => {
+      if (!characterId || !canEditPlan || planBusy) return;
+      const track = ACTION_ATTR[action];
+      if (!track) {
+        setXpActionToast({
+          kind: "err",
+          message: `Unknown action track for ${action}.`,
+        });
+        return;
+      }
+      const owned = Math.max(0, Math.floor(Number(actionRatings[action]) || 0));
+      const planned = plannedActionDotCounts[action] || 0;
+      if (owned + planned >= 4) {
+        setXpActionToast({
+          kind: "err",
+          message: `${action} already at max (4) including planned dots.`,
+        });
+        return;
+      }
+      setPlanBusy(true);
+      try {
+        const res = await characterAPI.addAdvancementPlanItem(characterId, {
+          track,
+          kind: "action_dot",
+          payload: { action: String(action).toLowerCase() },
+        });
+        if (Array.isArray(res?.items)) setAdvancementPlan(res.items);
+        setXpActionToast({
+          kind: "ok",
+          message: `Queued +1 ${action} on ${track} fill.`,
+        });
+      } catch (err) {
+        setXpActionToast({
+          kind: "err",
+          message: err?.message || "Failed to queue action dot.",
+        });
+      } finally {
+        setPlanBusy(false);
+      }
+    },
+    [
+      characterId,
+      canEditPlan,
+      planBusy,
+      actionRatings,
+      plannedActionDotCounts,
+    ],
+  );
+
+  const handlePlanReorder = useCallback(
+    async (track, orderedIds) => {
+      if (!characterId || planBusy) return;
+      setPlanBusy(true);
+      try {
+        const res = await characterAPI.reorderAdvancementPlan(characterId, {
+          track,
+          ordered_ids: orderedIds,
+        });
+        if (Array.isArray(res?.items)) setAdvancementPlan(res.items);
+      } catch (err) {
+        setXpActionToast({
+          kind: "err",
+          message: err?.message || "Failed to reorder plan",
+        });
+      } finally {
+        setPlanBusy(false);
+      }
+    },
+    [characterId, planBusy],
+  );
+
+  const handlePlanDelete = useCallback(
+    async (itemId) => {
+      if (!characterId || planBusy) return;
+      setPlanBusy(true);
+      try {
+        const res = await characterAPI.deleteAdvancementPlanItem(
+          characterId,
+          itemId,
+        );
+        if (Array.isArray(res?.items)) setAdvancementPlan(res.items);
+      } catch (err) {
+        setXpActionToast({
+          kind: "err",
+          message: err?.message || "Failed to delete plan item",
+        });
+      } finally {
+        setPlanBusy(false);
+      }
+    },
+    [characterId, planBusy],
   );
 
   const [xpToggleBusyTrigger, setXpToggleBusyTrigger] = useState(null);
@@ -7771,6 +8272,8 @@ const CharacterSheetWrapper = ({
     const segs = Number(newClockSegments);
     if (!name || !Number.isFinite(segs)) return;
     const boundedSegments = clampClockSegments(segs);
+    markDirtyIntent();
+    bumpClocksHydrateGuard();
     setClocks((p) => [
       ...p,
       {
@@ -7792,6 +8295,8 @@ const CharacterSheetWrapper = ({
   const resizeClockSegments = useCallback((clockId, rawSegments) => {
     const nextSegs = clampClockSegments(rawSegments);
     let filledForApi = 0;
+    markDirtyIntent();
+    bumpClocksHydrateGuard();
     setClocks((p) =>
       p.map((c) => {
         if (c.id !== clockId) return c;
@@ -7814,7 +8319,7 @@ const CharacterSheetWrapper = ({
         })
         .catch(() => {});
     }
-  }, []);
+  }, [markDirtyIntent, bumpClocksHydrateGuard]);
 
   const addPerfectOrganismEntityClock = useCallback((sizeLabel, segments) => {
     const segs = clampClockSegments(segments);
@@ -8141,34 +8646,34 @@ const CharacterSheetWrapper = ({
 
   const S = {
     page: {
-      fontFamily: "monospace",
+      fontFamily: "var(--font-mono, monospace)",
       fontSize: "13px",
-      background: "#000",
-      color: "#fff",
+      background: "var(--bg-page)",
+      color: "var(--text-primary)",
       minHeight: "100vh",
     },
     hdr: {
-      background: "#1f2937",
+      background: "var(--bg-header)",
       padding: "8px 16px",
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
       flexWrap: "wrap",
       gap: "8px",
-      borderBottom: "2px solid #6b7280",
+      borderBottom: "2px solid var(--border)",
       position: "sticky",
       top: 0,
       zIndex: 10,
     },
     card: {
-      background: "#111827",
-      border: "1px solid #374151",
+      background: "var(--bg-card)",
+      border: "1px solid var(--border)",
       borderRadius: "4px",
       padding: "12px",
       marginBottom: "12px",
     },
     lbl: {
-      color: "#f87171",
+      color: "var(--sheet-label)",
       fontSize: "11px",
       fontWeight: "bold",
       marginBottom: "4px",
@@ -8176,34 +8681,34 @@ const CharacterSheetWrapper = ({
     },
     inp: {
       background: "transparent",
-      color: "#fff",
+      color: "var(--text-primary)",
       border: "none",
-      borderBottom: "1px solid #4b5563",
+      borderBottom: "1px solid var(--border)",
       padding: "2px 4px",
       width: "100%",
       minWidth: 0,
       maxWidth: "100%",
-      fontFamily: "monospace",
+      fontFamily: "var(--font-mono, monospace)",
       fontSize: "13px",
       outline: "none",
       boxSizing: "border-box",
     },
     sel: {
-      background: "#374151",
-      color: "#fff",
-      border: "1px solid #4b5563",
+      background: "var(--hftf-panel)",
+      color: "var(--text-primary)",
+      border: "1px solid var(--border)",
       padding: "4px 8px",
       fontSize: "12px",
-      fontFamily: "monospace",
+      fontFamily: "var(--font-mono, monospace)",
     },
     select: {
-      background: "#0d1117",
-      color: "#fff",
-      border: "1px solid #374151",
+      background: "var(--hftf-deep)",
+      color: "var(--text-primary)",
+      border: "1px solid var(--border)",
       borderRadius: "4px",
       padding: "4px 8px",
       fontSize: "12px",
-      fontFamily: "monospace",
+      fontFamily: "var(--font-mono, monospace)",
       width: "100%",
     },
     btn: {
@@ -8212,7 +8717,7 @@ const CharacterSheetWrapper = ({
       fontSize: "12px",
       cursor: "pointer",
       border: "none",
-      fontFamily: "monospace",
+      fontFamily: "var(--font-mono, monospace)",
     },
     btnPrimary: {
       padding: "6px 14px",
@@ -8220,8 +8725,8 @@ const CharacterSheetWrapper = ({
       fontSize: "12px",
       cursor: "pointer",
       border: "none",
-      fontFamily: "monospace",
-      background: "#7c3aed",
+      fontFamily: "var(--font-mono, monospace)",
+      background: "var(--hftf-purple)",
       color: "#fff",
     },
     btnGhost: {
@@ -8230,9 +8735,9 @@ const CharacterSheetWrapper = ({
       fontSize: "12px",
       cursor: "pointer",
       border: "none",
-      fontFamily: "monospace",
-      background: "#374151",
-      color: "#d1d5db",
+      fontFamily: "var(--font-mono, monospace)",
+      background: "var(--hftf-panel)",
+      color: "var(--hftf-text-dim)",
     },
     g2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" },
     g3: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" },
@@ -8253,12 +8758,12 @@ const CharacterSheetWrapper = ({
       color: "#a5b4fc",
     },
     gold: {
-      background: "#451a03",
-      border: "1px solid #92400e",
+      background: "var(--hftf-deep)",
+      border: "1px solid var(--hftf-orange)",
       borderRadius: "4px",
       padding: "6px 10px",
       fontSize: "11px",
-      color: "#fcd34d",
+      color: "var(--hftf-gold)",
     },
     green: {
       background: "#14532d",
@@ -8268,6 +8773,14 @@ const CharacterSheetWrapper = ({
       fontSize: "11px",
       color: "#86efac",
     },
+    planned: {
+      border: "1px dashed var(--sheet-ghost)",
+      color: "var(--sheet-ghost-text)",
+    },
+    plannedBlocked: {
+      border: "1px dashed #b91c1c",
+      color: "#fca5a5",
+    },
   };
 
   const dotColor =
@@ -8275,7 +8788,7 @@ const CharacterSheetWrapper = ({
       ? "#f87171"
       : dotsRemaining <= 2
         ? "#eab308"
-        : "#6b7280";
+        : "var(--text-dim)";
 
   const playerHeaderSubtitle =
     activeMode === "CHARACTER MODE"
@@ -8318,13 +8831,21 @@ const CharacterSheetWrapper = ({
       <div style={S.hdr}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <span
-            style={{ fontSize: "18px", fontWeight: "bold", color: "#e5e7eb" }}
+            style={{
+              fontSize: "18px",
+              fontWeight: "bold",
+              color: "var(--text-primary)",
+            }}
           >
             1(800)BIZARRE
           </span>
-          <span style={{ color: "#9ca3af", fontSize: "14px" }}>◆</span>
+          <span style={{ color: "var(--text-muted)", fontSize: "14px" }}>◆</span>
           <span
-            style={{ fontSize: "14px", color: "#9ca3af", fontWeight: "bold" }}
+            style={{
+              fontSize: "14px",
+              color: "var(--text-muted)",
+              fontWeight: "bold",
+            }}
           >
             {playerHeaderSubtitle}
           </span>
@@ -8377,7 +8898,7 @@ const CharacterSheetWrapper = ({
               style={{
                 background: "none",
                 border: "none",
-                color: "#9ca3af",
+                color: "var(--text-muted)",
                 cursor: "pointer",
                 fontSize: "18px",
               }}
@@ -8393,9 +8914,10 @@ const CharacterSheetWrapper = ({
         style={{
           display: "flex",
           justifyContent: "center",
-          gap: 0,
-          background: "#0d0d1a",
-          borderBottom: "1px solid #2d1f52",
+          alignItems: "center",
+          gap: 12,
+          background: "var(--hftf-deep)",
+          borderBottom: "1px solid var(--hftf-border)",
           padding: "6px 0",
         }}
       >
@@ -8405,16 +8927,17 @@ const CharacterSheetWrapper = ({
           style={{
             padding: "6px 24px",
             fontSize: "12px",
-            fontFamily: "monospace",
+            fontFamily: "var(--font-mono, monospace)",
             fontWeight: "bold",
             border: "1px solid",
             borderColor:
-              activeMode === "CHARACTER MODE" ? "#0f7662" : "#4b2d8f",
+              activeMode === "CHARACTER MODE" ? "#0f7662" : "var(--hftf-purple)",
             cursor: "pointer",
             letterSpacing: "0.08em",
             background:
-              activeMode === "CHARACTER MODE" ? "#0d9488" : "#1a0533",
-            color: activeMode === "CHARACTER MODE" ? "#fff" : "#9ca3af",
+              activeMode === "CHARACTER MODE" ? "#0d9488" : "var(--hftf-panel)",
+            color:
+              activeMode === "CHARACTER MODE" ? "#fff" : "var(--text-muted)",
             borderRadius: "4px 0 0 4px",
           }}
         >
@@ -8426,22 +8949,110 @@ const CharacterSheetWrapper = ({
           style={{
             padding: "6px 24px",
             fontSize: "12px",
-            fontFamily: "monospace",
+            fontFamily: "var(--font-mono, monospace)",
             fontWeight: "bold",
             border: "1px solid",
             borderColor:
-              activeMode === "CREW MODE" ? "#5b21b6" : "#4b2d8f",
+              activeMode === "CREW MODE"
+                ? "var(--hftf-purple-hover)"
+                : "var(--hftf-purple)",
             cursor: "pointer",
             letterSpacing: "0.08em",
             background:
-              activeMode === "CREW MODE" ? "#7c3aed" : "#1a0533",
-            color: activeMode === "CREW MODE" ? "#fff" : "#9ca3af",
+              activeMode === "CREW MODE"
+                ? "var(--hftf-purple)"
+                : "var(--hftf-panel)",
+            color: activeMode === "CREW MODE" ? "#fff" : "var(--text-muted)",
             borderRadius: "0 4px 4px 0",
           }}
         >
           CREW MODE
         </button>
+        {activeMode === "CHARACTER MODE" &&
+          (() => {
+            const hasSession = Boolean(
+              xpReqSnapshot.hasActiveSession || activeSessionId,
+            );
+            const planDisabled =
+              !canEditPlan || !isPostChargen || (hasSession && !isGM);
+            const planTitle = !canEditPlan
+              ? "Only the owner or GM can edit the advancement plan"
+              : !isPostChargen
+                ? "Plan mode unlocks after chargen (first XP spend)"
+                : hasSession && !isGM
+                  ? "Plan mode off during an active session"
+                  : planMode
+                    ? "Turn off plan mode"
+                    : "Turn on plan mode — queue coin grades & advances";
+            return (
+              <button
+                type="button"
+                disabled={planDisabled}
+                title={planTitle}
+                onClick={() => {
+                  if (planDisabled) return;
+                  setPlanMode((v) => !v);
+                }}
+                style={{
+                  padding: "4px 14px",
+                  fontSize: "11px",
+                  fontFamily: "var(--font-mono, monospace)",
+                  fontWeight: "bold",
+                  letterSpacing: "0.06em",
+                  borderRadius: 999,
+                  cursor: planDisabled ? "not-allowed" : "pointer",
+                  opacity: planDisabled ? 0.45 : 1,
+                  border: planMode
+                    ? "1px solid var(--sheet-ghost)"
+                    : "1px solid var(--border)",
+                  background: planMode ? "transparent" : "var(--bg-header)",
+                  color: planMode
+                    ? "var(--sheet-ghost-text)"
+                    : "var(--text-muted)",
+                }}
+              >
+                Plan{planMode ? " ON" : ""}
+              </button>
+            );
+          })()}
       </div>
+
+      {planSessionHint ? (
+        <div
+          role="status"
+          style={{
+            textAlign: "center",
+            padding: "6px 12px",
+            fontSize: 11,
+            fontFamily: "var(--font-mono, monospace)",
+            color: "var(--hftf-gold)",
+            background: "var(--hftf-deep)",
+            borderBottom: "1px solid var(--hftf-orange)",
+          }}
+        >
+          {planSessionHint}
+        </div>
+      ) : null}
+
+      {(advancementPlan || []).some(
+        (i) => i.status === "queued" || !i.status,
+      ) ? (
+        <AdvancementPlanStrip
+          items={advancementPlan}
+          xpClocks={xp}
+          onOpenPanel={() => setPlanPanelOpen(true)}
+        />
+      ) : null}
+
+      <AdvancementPlanPanel
+        open={planPanelOpen}
+        onClose={() => setPlanPanelOpen(false)}
+        items={advancementPlan}
+        canEdit={canEditPlan}
+        busy={planBusy}
+        onReorder={handlePlanReorder}
+        onDelete={handlePlanDelete}
+      />
 
       <div style={{ padding: "16px", maxWidth: "1400px", margin: "0 auto" }}>
         {/* ══════════════════════════════════ CHARACTER MODE ══════════════════════════════════ */}
@@ -8452,8 +9063,8 @@ const CharacterSheetWrapper = ({
                 style={{
                   ...S.card,
                   marginBottom: "12px",
-                  borderColor: "#92400e",
-                  color: "#fcd34d",
+                  borderColor: "var(--hftf-orange)",
+                  color: "var(--hftf-gold)",
                   fontSize: "12px",
                 }}
               >
@@ -8465,6 +9076,12 @@ const CharacterSheetWrapper = ({
               style={{
                 opacity: canEditSheet ? 1 : 0.78,
                 pointerEvents: canEditSheet ? "auto" : "none",
+                ...(planMode
+                  ? {
+                      outline: "1px dashed var(--sheet-ghost)",
+                      outlineOffset: 4,
+                    }
+                  : null),
               }}
             >
             {/* Character bar */}
@@ -11669,7 +12286,12 @@ const CharacterSheetWrapper = ({
                       boxSizing: "border-box",
                     }}
                   >
-                    <span style={S.lbl}>HEALING</span>
+                    <span style={S.lbl}>
+                      <span style={{ color: "#ef4444" }} aria-hidden>
+                        {"\u271A"}
+                      </span>{" "}
+                      HEALING
+                    </span>
                     <div
                       style={{
                         display: "flex",
@@ -13011,6 +13633,24 @@ const CharacterSheetWrapper = ({
                       const toggleBenefit = (id) => {
                         const b = benefits.find((x) => x.id === id);
                         if (b?.required) return;
+                        const alreadyOn = selectedBenefits.includes(id);
+                        // Legal (non-plan): block picks that exceed HP budget — save would reject and sync used to snap checkbox back.
+                        if (
+                          !alreadyOn &&
+                          !(planMode && isPostChargen && canEditPlan)
+                        ) {
+                          const nextCost =
+                            benefitCost + (Number(b?.hp_cost) || 0);
+                          if (baseHp + detrimentGain < nextCost) {
+                            setXpActionToast({
+                              kind: "err",
+                              message:
+                                "Not enough heritage HP for that benefit. Take optional detriments first, or remove another benefit.",
+                            });
+                            return;
+                          }
+                        }
+                        markDirtyIntent();
                         setSelectedBenefits((prev) =>
                           prev.includes(id)
                             ? prev.filter((x) => x !== id)
@@ -13020,6 +13660,7 @@ const CharacterSheetWrapper = ({
                       const toggleDetriment = (id) => {
                         const d = detriments.find((x) => x.id === id);
                         if (d?.required) return;
+                        markDirtyIntent();
                         setSelectedDetriments((prev) =>
                           prev.includes(id)
                             ? prev.filter((x) => x !== id)
@@ -13437,7 +14078,13 @@ const CharacterSheetWrapper = ({
                         grades={standCoinGrades}
                         readouts={pcStandCoinReadouts}
                         onStep={bumpStandCoinGrade}
-                        readOnly={!isStandCoinChargenEditable}
+                        plannedGrades={plannedCoinGrades}
+                        readOnly={
+                          !(
+                            isStandCoinChargenEditable ||
+                            (planMode && isPostChargen && canEditPlan)
+                          )
+                        }
                       />
 
                       <div
@@ -14198,6 +14845,26 @@ const CharacterSheetWrapper = ({
                           )}
                           {actions.map((action) => {
                             const rating = actionRatings[action];
+                            const plannedExtra =
+                              plannedActionDotCounts[action] || 0;
+                            const plannedThru = Math.min(
+                              4,
+                              rating + plannedExtra,
+                            );
+                            const creationCap = maxDotsPerActionAtCreation({
+                              hasSkilledFromBirth,
+                              actionRatings,
+                              action,
+                            });
+                            // Chargen (dots still open): L1 cap only. After budget spent / post-chargen: all 4.
+                            const showFourDotSlots =
+                              isPostChargen || dotsRemaining <= 0;
+                            const dotSlots = showFourDotSlots
+                              ? [1, 2, 3, 4]
+                              : Array.from(
+                                  { length: creationCap },
+                                  (_, i) => i + 1,
+                                );
                             return (
                               <React.Fragment key={action}>
                                 <div
@@ -14260,49 +14927,83 @@ const CharacterSheetWrapper = ({
                                     style={{ display: "flex", gap: "2px" }}
                                     data-dot-edit
                                   >
-                                    {[1, 2, 3, 4].map((d) => {
+                                    {dotSlots.map((d) => {
                                       const filled = d <= rating;
-                                      const creationCap = maxDotsPerActionAtCreation({
-                                        hasSkilledFromBirth,
-                                        actionRatings,
-                                        action,
-                                      });
+                                      const plannedGhost =
+                                        !filled && d <= plannedThru;
                                       const isAdvDot = d > creationCap;
+                                      const planClickable =
+                                        planMode &&
+                                        isPostChargen &&
+                                        canEditPlan &&
+                                        !filled &&
+                                        d === rating + plannedExtra + 1 &&
+                                        d <= 4;
                                       return (
                                         <div
                                           key={d}
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            if (isAdvDot) return; // not clickable during creation
+                                            if (planClickable) {
+                                              queuePlanActionDot(action);
+                                              return;
+                                            }
+                                            if (
+                                              planMode &&
+                                              isPostChargen
+                                            ) {
+                                              return;
+                                            }
+                                            if (isAdvDot) return;
                                             updateActionRating(
                                               action,
                                               d <= rating ? d - 1 : d,
                                             );
                                           }}
                                           title={
-                                            isAdvDot
-                                              ? filled
-                                                ? `Dot ${d} — gained via advancement`
-                                                : `Dot ${d} — unlock via advancement`
-                                              : dotsRemaining === 0 && !filled
-                                                ? "No action dots remaining"
-                                                : ""
+                                            planClickable
+                                              ? `Plan: queue +1 ${action} (next ${ACTION_ATTR[action] || "attribute"} fill)`
+                                              : plannedGhost
+                                                ? `Dot ${d} — planned (not owned yet)`
+                                                : isAdvDot
+                                                  ? filled
+                                                    ? `Dot ${d} — gained via advancement`
+                                                    : `Dot ${d} — unlock via attribute XP / plan`
+                                                  : dotsRemaining === 0 &&
+                                                      !filled
+                                                    ? "No action dots remaining"
+                                                    : ""
                                           }
                                           style={{
                                             width: "12px",
                                             height: "12px",
                                             borderRadius: "50%",
-                                            border: `1px solid ${isAdvDot ? "#374151" : "#6b7280"}`,
-                                            cursor: isAdvDot
-                                              ? "default"
-                                              : "pointer",
+                                            border: plannedGhost
+                                              ? "1px dashed var(--sheet-ghost)"
+                                              : `1px solid ${
+                                                  isAdvDot && !filled
+                                                    ? "var(--text-dim)"
+                                                    : isAdvDot
+                                                      ? "var(--border)"
+                                                      : "var(--text-dim)"
+                                                }`,
+                                            cursor: planClickable
+                                              ? "pointer"
+                                              : isAdvDot ||
+                                                  (planMode && isPostChargen)
+                                                ? "default"
+                                                : "pointer",
                                             background: filled
                                               ? isAdvDot
-                                                ? "#a78bfa"
-                                                : "#7c3aed"
-                                              : "#111827",
-                                            opacity:
-                                              isAdvDot && !filled ? 0.2 : 1,
+                                                ? "var(--sheet-ghost-text)"
+                                                : "var(--hftf-purple)"
+                                              : plannedGhost
+                                                ? "transparent"
+                                                : "var(--bg-card)",
+                                            opacity: 1,
+                                            boxShadow: planClickable
+                                              ? "0 0 0 1px var(--sheet-ghost-text)"
+                                              : undefined,
                                           }}
                                         />
                                       );
@@ -18349,6 +19050,21 @@ const CharacterSheetWrapper = ({
                                 <button
                                   type="button"
                                   onClick={() => {
+                                    // Standards are not playbook-fill picks. Extra slots
+                                    // only via B→A A-grant (plan draft / Take advance).
+                                    if (
+                                      sheetStandardCount >=
+                                      maxFreeStandardAbilities
+                                    ) {
+                                      setXpActionToast({
+                                        kind: "err",
+                                        message:
+                                          playbook === "Stand"
+                                            ? "Stand users get 2 standards at L1; more only from B→A (2 standards or 2 unique + 1 standard)."
+                                            : "Standard ability quota full.",
+                                      });
+                                      return;
+                                    }
                                     if (
                                       !abilities.some(
                                         (a) =>
@@ -18631,7 +19347,23 @@ const CharacterSheetWrapper = ({
                                         )}
                                         <button
                                           type="button"
-                                          onClick={() => {
+                                          onClick={async () => {
+                                            if (
+                                              planMode &&
+                                              isPostChargen &&
+                                              canEditPlan
+                                            ) {
+                                              await queuePlanAbility({
+                                                abilityId: spinAbilitySelected.id,
+                                                abilitySource: "spin",
+                                                abilityName:
+                                                  spinAbilitySelected.name,
+                                              });
+                                              setSpinAbilitySelected(null);
+                                              setSpinAbilitySearch("");
+                                              setSpinAbilityPickerOpen(false);
+                                              return;
+                                            }
                                             if (!canAdd) return;
                                             if (
                                               !abilities.some(
@@ -18661,21 +19393,33 @@ const CharacterSheetWrapper = ({
                                             setSpinAbilitySearch("");
                                             setSpinAbilityPickerOpen(false);
                                           }}
-                                          disabled={!canAdd}
+                                          disabled={
+                                            planMode && isPostChargen
+                                              ? false
+                                              : !canAdd
+                                          }
                                           style={{
                                             ...S.btn,
-                                            background: canAdd
-                                              ? "#7c3aed"
-                                              : "#374151",
+                                            background:
+                                              planMode && isPostChargen
+                                                ? "var(--hftf-purple)"
+                                                : canAdd
+                                                  ? "var(--hftf-purple)"
+                                                  : "var(--hftf-panel)",
                                             color: "#fff",
                                             fontSize: "11px",
                                             marginTop: "8px",
-                                            cursor: canAdd
-                                              ? "pointer"
-                                              : "not-allowed",
+                                            cursor:
+                                              planMode && isPostChargen
+                                                ? "pointer"
+                                                : canAdd
+                                                  ? "pointer"
+                                                  : "not-allowed",
                                           }}
                                         >
-                                          Add to sheet
+                                          {planMode && isPostChargen
+                                            ? "Queue for playbook fill"
+                                            : "Add to sheet"}
                                         </button>
                                       </>
                                     );
@@ -18930,7 +19674,24 @@ const CharacterSheetWrapper = ({
                                         )}
                                         <button
                                           type="button"
-                                          onClick={() => {
+                                          onClick={async () => {
+                                            if (
+                                              planMode &&
+                                              isPostChargen &&
+                                              canEditPlan
+                                            ) {
+                                              await queuePlanAbility({
+                                                abilityId:
+                                                  hamonAbilitySelected.id,
+                                                abilitySource: "hamon",
+                                                abilityName:
+                                                  hamonAbilitySelected.name,
+                                              });
+                                              setHamonAbilitySelected(null);
+                                              setHamonAbilitySearch("");
+                                              setHamonAbilityPickerOpen(false);
+                                              return;
+                                            }
                                             if (!canAdd) return;
                                             if (
                                               !abilities.some(
@@ -18960,21 +19721,33 @@ const CharacterSheetWrapper = ({
                                             setHamonAbilitySearch("");
                                             setHamonAbilityPickerOpen(false);
                                           }}
-                                          disabled={!canAdd}
+                                          disabled={
+                                            planMode && isPostChargen
+                                              ? false
+                                              : !canAdd
+                                          }
                                           style={{
                                             ...S.btn,
-                                            background: canAdd
-                                              ? "#b45309"
-                                              : "#374151",
+                                            background:
+                                              planMode && isPostChargen
+                                                ? "var(--hftf-purple)"
+                                                : canAdd
+                                                  ? "#b45309"
+                                                  : "var(--hftf-panel)",
                                             color: "#fff",
                                             fontSize: "11px",
                                             marginTop: "8px",
-                                            cursor: canAdd
-                                              ? "pointer"
-                                              : "not-allowed",
+                                            cursor:
+                                              planMode && isPostChargen
+                                                ? "pointer"
+                                                : canAdd
+                                                  ? "pointer"
+                                                  : "not-allowed",
                                           }}
                                         >
-                                          Add to sheet
+                                          {planMode && isPostChargen
+                                            ? "Queue for playbook fill"
+                                            : "Add to sheet"}
                                         </button>
                                       </>
                                     );
@@ -18998,6 +19771,275 @@ const CharacterSheetWrapper = ({
                       >
                         + Custom
                       </button>
+                      ) : null}
+                      {showPlanBAGrantUI ? (
+                        <>
+                          {planLegalBAStats.length > 1
+                            ? planLegalBAStats.map((statKey) => (
+                                <button
+                                  key={`ba-stat-${statKey}`}
+                                  type="button"
+                                  onClick={() => {
+                                    setPlanBASuppressed(false);
+                                    setPlanBADraft({ stat: statKey });
+                                    setPlanBAError(null);
+                                  }}
+                                  style={{
+                                    ...S.btn,
+                                    background:
+                                      planBADraft?.stat === statKey
+                                        ? "var(--hftf-purple)"
+                                        : "var(--hftf-deep)",
+                                    color: "#fff",
+                                    fontSize: "11px",
+                                    border:
+                                      planBADraft?.stat === statKey
+                                        ? "1px solid var(--sheet-ghost)"
+                                        : "1px solid transparent",
+                                  }}
+                                >
+                                  {String(statKey).toUpperCase()} B→A
+                                </button>
+                              ))
+                            : null}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPlanBASuppressed(false);
+                              if (
+                                !planBADraft?.stat &&
+                                planLegalBAStats.length
+                              ) {
+                                setPlanBADraft({
+                                  stat: planLegalBAStats[0],
+                                });
+                              }
+                              setPlanBABranch("two_standard");
+                              setPlanBAError(null);
+                            }}
+                            style={{
+                              ...S.btn,
+                              background:
+                                planBABranch === "two_standard" &&
+                                planBADraft?.stat
+                                  ? "var(--hftf-purple)"
+                                  : "var(--hftf-panel)",
+                              color: "#fff",
+                              fontSize: "11px",
+                              border:
+                                planBABranch === "two_standard" &&
+                                planBADraft?.stat
+                                  ? "1px solid var(--sheet-ghost)"
+                                  : "1px solid transparent",
+                            }}
+                          >
+                            + 2 Standards (B→A)
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPlanBASuppressed(false);
+                              if (
+                                !planBADraft?.stat &&
+                                planLegalBAStats.length
+                              ) {
+                                setPlanBADraft({
+                                  stat: planLegalBAStats[0],
+                                });
+                              }
+                              setPlanBABranch(
+                                "two_unique_plus_one_standard",
+                              );
+                              setPlanBAError(null);
+                            }}
+                            style={{
+                              ...S.btn,
+                              background:
+                                planBABranch ===
+                                  "two_unique_plus_one_standard" &&
+                                planBADraft?.stat
+                                  ? "var(--hftf-purple)"
+                                  : "var(--hftf-panel)",
+                              color: "#fff",
+                              fontSize: "11px",
+                              border:
+                                planBABranch ===
+                                  "two_unique_plus_one_standard" &&
+                                planBADraft?.stat
+                                  ? "1px solid var(--sheet-ghost)"
+                                  : "1px solid transparent",
+                            }}
+                          >
+                            + 2 Unique + Standard (B→A)
+                          </button>
+                        </>
+                      ) : null}
+                      </div>
+                      {showPlanBAGrantUI && planBADraft?.stat ? (
+                        <div
+                          style={{
+                            ...S.card,
+                            marginTop: 8,
+                            borderColor: "var(--sheet-ghost)",
+                            background: "var(--hftf-deep)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontWeight: "bold",
+                              color: "var(--sheet-ghost-text)",
+                              marginBottom: 6,
+                              fontSize: 12,
+                            }}
+                          >
+                            Plan queue —{" "}
+                            {String(planBADraft.stat).toUpperCase()} B→A
+                            A-grant
+                          </div>
+                          <p
+                            style={{
+                              fontSize: 11,
+                              color: "var(--hftf-text-dim)",
+                              marginBottom: 8,
+                            }}
+                          >
+                            Legal in plan mode when that Coin is at B (owned
+                            or queued). Pick branch, then abilities — one
+                            playbook fill (Coin bump + grant).
+                          </p>
+                          {planBABranch ===
+                          "two_unique_plus_one_standard" ? (
+                            <>
+                              {[0, 1].map((i) => (
+                                <React.Fragment key={i}>
+                                  <input
+                                    style={{ ...S.inp, marginBottom: 6 }}
+                                    value={planBAUniques[i]?.name || ""}
+                                    onChange={(e) => {
+                                      const next = [...planBAUniques];
+                                      next[i] = {
+                                        ...next[i],
+                                        name: e.target.value,
+                                      };
+                                      setPlanBAUniques(next);
+                                    }}
+                                    placeholder={`Unique ${i + 1} name`}
+                                  />
+                                  <input
+                                    style={{ ...S.inp, marginBottom: 6 }}
+                                    value={planBAUniques[i]?.use || ""}
+                                    onChange={(e) => {
+                                      const next = [...planBAUniques];
+                                      next[i] = {
+                                        ...next[i],
+                                        use: e.target.value,
+                                      };
+                                      setPlanBAUniques(next);
+                                    }}
+                                    placeholder={`Unique ${i + 1} function`}
+                                  />
+                                </React.Fragment>
+                              ))}
+                              <select
+                                style={{
+                                  ...S.sel,
+                                  width: "100%",
+                                  marginBottom: 8,
+                                }}
+                                value={planBAStdId}
+                                onChange={(e) =>
+                                  setPlanBAStdId(e.target.value)
+                                }
+                              >
+                                <option value="">- pick standard -</option>
+                                {standardAbilitiesList.map((a) => (
+                                  <option key={a.id} value={a.id}>
+                                    {a.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </>
+                          ) : (
+                            [0, 1].map((i) => (
+                              <select
+                                key={i}
+                                style={{
+                                  ...S.sel,
+                                  width: "100%",
+                                  marginBottom: 6,
+                                }}
+                                value={planBAStdIds[i] || ""}
+                                onChange={(e) => {
+                                  const next = [...planBAStdIds];
+                                  next[i] = e.target.value;
+                                  setPlanBAStdIds(next);
+                                }}
+                              >
+                                <option value="">
+                                  {`- pick standard ${i + 1} -`}
+                                </option>
+                                {standardAbilitiesList.map((a) => (
+                                  <option key={a.id} value={a.id}>
+                                    {a.name}
+                                  </option>
+                                ))}
+                              </select>
+                            ))
+                          )}
+                          {planBAError ? (
+                            <div
+                              style={{
+                                color: "#f87171",
+                                fontSize: 11,
+                                marginBottom: 8,
+                              }}
+                            >
+                              {planBAError}
+                            </div>
+                          ) : null}
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 8,
+                              justifyContent: "flex-end",
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPlanBADraft(null);
+                                setPlanBAError(null);
+                                setPlanBASuppressed(true);
+                              }}
+                              style={{
+                                ...S.btn,
+                                background: "#374151",
+                                color: "#fff",
+                                fontSize: 11,
+                              }}
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              disabled={planBusy || !characterId}
+                              onClick={() => void confirmPlanBAGrant()}
+                              style={{
+                                ...S.btn,
+                                background: planBusy
+                                  ? "#4b5563"
+                                  : "#7c3aed",
+                                color: "#fff",
+                                fontWeight: "bold",
+                                fontSize: 11,
+                              }}
+                            >
+                              {planBusy
+                                ? "Queuing…"
+                                : "Add B→A to plan"}
+                            </button>
+                          </div>
+                        </div>
                       ) : null}
                       {customAbilityModal && (
                         <div
@@ -19181,7 +20223,6 @@ const CharacterSheetWrapper = ({
                         </div>
                       )}
                     </div>
-                      </div>
                     ) : null}
                   </div>
 
@@ -19242,9 +20283,9 @@ const CharacterSheetWrapper = ({
                       <div id="character-sheet-clocks-panel">
                     <div
                       style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: "10px",
+                        display: "grid",
+                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                        gap: "6px",
                         marginBottom: "8px",
                       }}
                     >
@@ -19260,65 +20301,58 @@ const CharacterSheetWrapper = ({
                         const fill = clampClockFilled(clk.filled, segs);
                         const canResizeClock =
                           canEditSheet && (!gmManaged || isGM);
+                        const gmLabel = gmShared
+                          ? "Shared by the GM"
+                          : "GM clock (private)";
                         return (
                         <div
                           key={clk.id}
                           style={{
                             background: "#374151",
-                            padding: "8px",
+                            padding: "4px",
                             borderRadius: "4px",
                             textAlign: "center",
+                            minWidth: 0,
                           }}
                         >
                           <input
                             value={clk.name}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              markDirtyIntent();
+                              bumpClocksHydrateGuard();
+                              const name = e.target.value;
                               setClocks((p) =>
                                 p.map((c) =>
-                                  c.id === clk.id
-                                    ? { ...c, name: e.target.value }
-                                    : c,
+                                  c.id === clk.id ? { ...c, name } : c,
                                 ),
-                              )
-                            }
+                              );
+                            }}
                             style={{
                               ...S.inp,
                               textAlign: "center",
-                              fontSize: "11px",
-                              width: "80px",
-                              marginBottom: "4px",
+                              fontSize: "10px",
+                              width: "100%",
+                              boxSizing: "border-box",
+                              marginBottom: "2px",
+                              padding: "2px 3px",
                             }}
                           />
                           <div
                             style={{
                               display: "flex",
                               justifyContent: "center",
+                              minWidth: 0,
                             }}
                           >
                             <ProgressClock
-                              size={50}
+                              size={32}
                               segments={segs}
                               filled={fill}
                               interactive={canEditSheet}
-                              onClick={(f) =>
-                                setClocks((p) =>
-                                  p.map((c) =>
-                                    c.id === clk.id
-                                      ? {
-                                          ...c,
-                                          filled: clampClockFilled(f, segs),
-                                          filled_segments: clampClockFilled(
-                                            f,
-                                            segs,
-                                          ),
-                                        }
-                                      : c,
-                                  ),
-                                )
-                              }
+                              onClick={(f) => setClockFilled(clk.id, f, segs)}
                             />
                           </div>
-                          <div style={{ fontSize: "10px", color: "#6b7280" }}>
+                          <div style={{ fontSize: "9px", color: "#6b7280" }}>
                             {fill}/{segs}
                           </div>
                           {canResizeClock ? (
@@ -19327,10 +20361,10 @@ const CharacterSheetWrapper = ({
                                 display: "flex",
                                 justifyContent: "center",
                                 alignItems: "center",
-                                gap: "4px",
-                                fontSize: "10px",
+                                gap: "2px",
+                                fontSize: "9px",
                                 color: "#9ca3af",
-                                marginTop: "4px",
+                                marginTop: "2px",
                               }}
                             >
                               Size
@@ -19345,10 +20379,10 @@ const CharacterSheetWrapper = ({
                                 }
                                 style={{
                                   ...S.inp,
-                                  width: "48px",
-                                  fontSize: "11px",
+                                  width: "28px",
+                                  fontSize: "9px",
                                   textAlign: "center",
-                                  padding: "2px 4px",
+                                  padding: "1px 2px",
                                 }}
                               />
                             </label>
@@ -19361,57 +20395,65 @@ const CharacterSheetWrapper = ({
                                   : "GM clock — not shown to players until the GM marks it visible."
                               }
                               style={{
-                                fontSize: "10px",
+                                fontSize: "8px",
                                 color: gmShared ? "#6ee7b7" : "#9ca3af",
                                 marginTop: "2px",
-                                lineHeight: 1.3,
+                                lineHeight: 1.2,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
                               }}
                             >
-                              {gmShared
-                                ? "Shared by the GM"
-                                : "GM clock (private)"}
+                              {gmLabel}
                             </div>
                           ) : (
                           <label
+                            title="Shared party"
                             style={{
                               display: "flex",
                               justifyContent: "center",
                               alignItems: "center",
-                              gap: "4px",
-                              fontSize: "10px",
+                              gap: "2px",
+                              fontSize: "8px",
                               color: "#9ca3af",
                               marginTop: "2px",
+                              overflow: "hidden",
                             }}
                           >
                             <input
                               type="checkbox"
                               checked={!!clk.visible_to_party}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                markDirtyIntent();
+                                bumpClocksHydrateGuard();
+                                const visible_to_party = e.target.checked;
                                 setClocks((p) =>
                                   p.map((c) =>
                                     c.id === clk.id
-                                      ? {
-                                          ...c,
-                                          visible_to_party: e.target.checked,
-                                        }
+                                      ? { ...c, visible_to_party }
                                       : c,
                                   ),
-                                )
-                              }
+                                );
+                              }}
                             />
-                            Shared party
+                            Shared
                           </label>
                           )}
                           <button
-                            onClick={() =>
-                              setClocks((p) => p.filter((c) => c.id !== clk.id))
-                            }
+                            onClick={() => {
+                              markDirtyIntent();
+                              bumpClocksHydrateGuard();
+                              setClocks((p) =>
+                                p.filter((c) => c.id !== clk.id),
+                              );
+                            }}
                             style={{
                               color: "#f87171",
                               background: "none",
                               border: "none",
                               cursor: "pointer",
-                              fontSize: "11px",
+                              fontSize: "10px",
+                              padding: "0",
                             }}
                           >
                             ✕
@@ -19550,9 +20592,9 @@ const CharacterSheetWrapper = ({
                           <span style={S.lbl}>Shared party clocks</span>
                           <div
                             style={{
-                              display: "flex",
-                              flexWrap: "wrap",
-                              gap: "10px",
+                              display: "grid",
+                              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                              gap: "6px",
                               marginTop: "6px",
                             }}
                           >
@@ -19564,16 +20606,21 @@ const CharacterSheetWrapper = ({
                                   key={clk.id}
                                   style={{
                                     background: "#374151",
-                                    padding: "8px",
+                                    padding: "4px",
                                     borderRadius: "4px",
                                     textAlign: "center",
+                                    minWidth: 0,
                                   }}
                                 >
                                   <div
+                                    title={clk.name}
                                     style={{
-                                      fontSize: "11px",
+                                      fontSize: "10px",
                                       fontWeight: "bold",
-                                      marginBottom: "4px",
+                                      marginBottom: "2px",
+                                      overflow: "hidden",
+                                      textOverflow: "ellipsis",
+                                      whiteSpace: "nowrap",
                                     }}
                                   >
                                     {clk.name}
@@ -19582,10 +20629,11 @@ const CharacterSheetWrapper = ({
                                     style={{
                                       display: "flex",
                                       justifyContent: "center",
+                                      minWidth: 0,
                                     }}
                                   >
                                     <ProgressClock
-                                      size={50}
+                                      size={32}
                                       segments={clk.max_segments}
                                       filled={clk.filled_segments}
                                       interactive={canEdit}
@@ -19607,22 +20655,24 @@ const CharacterSheetWrapper = ({
                                   </div>
                                   <div
                                     style={{
-                                      fontSize: "10px",
+                                      fontSize: "9px",
                                       color: "#6b7280",
                                     }}
                                   >
                                     {clk.filled_segments}/{clk.max_segments}
                                   </div>
                                   <label
+                                    title="Shared party"
                                     style={{
                                       display: "flex",
                                       alignItems: "center",
                                       justifyContent: "center",
-                                      gap: 4,
-                                      marginTop: 4,
-                                      fontSize: "10px",
+                                      gap: 2,
+                                      marginTop: 2,
+                                      fontSize: "8px",
                                       color: "#9ca3af",
                                       cursor: canEdit ? "pointer" : "default",
+                                      overflow: "hidden",
                                     }}
                                   >
                                     <input
@@ -19638,7 +20688,7 @@ const CharacterSheetWrapper = ({
                                           .catch(() => {});
                                       }}
                                     />
-                                    Shared party
+                                    Shared
                                   </label>
                                 </div>
                               );

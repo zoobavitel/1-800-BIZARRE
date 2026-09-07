@@ -347,6 +347,33 @@ export const characterAPI = {
       body: JSON.stringify(body),
     }),
 
+  /** Plan B: ordered advancement wishlist */
+  getAdvancementPlan: (id) =>
+    apiRequest(`/characters/${id}/advancement-plan/`),
+
+  addAdvancementPlanItem: (id, body) =>
+    apiRequest(`/characters/${id}/advancement-plan/`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  updateAdvancementPlanItem: (id, itemId, body) =>
+    apiRequest(`/characters/${id}/advancement-plan/${itemId}/`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  deleteAdvancementPlanItem: (id, itemId) =>
+    apiRequest(`/characters/${id}/advancement-plan/${itemId}/`, {
+      method: "DELETE",
+    }),
+
+  reorderAdvancementPlan: (id, body) =>
+    apiRequest(`/characters/${id}/advancement-plan/reorder/`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   /** Move XP from a track back into the free pool (untick). */
   deallocatePoolXp: (id, body) =>
     apiRequest(`/characters/${id}/deallocate-pool-xp/`, {
@@ -1364,6 +1391,21 @@ export const transformBackendToFrontend = (backendCharacter) => {
       typeof backendCharacter.pending_advance_counts === "object"
         ? { ...backendCharacter.pending_advance_counts }
         : {},
+    advancementPlan: Array.isArray(backendCharacter.advancement_plan)
+      ? backendCharacter.advancement_plan.map((item) => ({
+          id: item.id,
+          track: item.track,
+          order: item.order,
+          kind: item.kind,
+          payload: item.payload || {},
+          blockedReason: item.blocked_reason || "",
+          blocked_reason: item.blocked_reason || "",
+          status: item.status,
+          createdAt: item.created_at || null,
+          appliedAt: item.applied_at || null,
+          appliedAllocationId: item.applied_allocation_id ?? null,
+        }))
+      : [],
 
     // Abilities (standard + hamon + spin + custom from custom_ability fields)
     abilities: [

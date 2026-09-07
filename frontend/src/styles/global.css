@@ -40,6 +40,11 @@
   --hm-font-mono: var(--font-mono);
   --hm-font-display: var(--font-display);
   --hm-font-heading: var(--font-heading);
+
+  /* Player character sheet chrome / plan-ghost language */
+  --sheet-label: var(--hftf-gold);
+  --sheet-ghost: var(--hftf-purple-hover);
+  --sheet-ghost-text: #d4b8e8;
 }
 
 [data-theme="light"] {
@@ -76,6 +81,11 @@
   --hm-font-mono: var(--font-mono);
   --hm-font-display: var(--font-display);
   --hm-font-heading: var(--font-heading);
+
+  /* Player character sheet chrome / plan-ghost language */
+  --sheet-label: var(--hftf-gold);
+  --sheet-ghost: var(--hftf-purple);
+  --sheet-ghost-text: var(--hftf-purple);
 }
 
 [data-theme="cool_night"] {
@@ -112,6 +122,11 @@
   --hm-font-mono: var(--font-mono);
   --hm-font-display: var(--font-display);
   --hm-font-heading: var(--font-heading);
+
+  /* Player character sheet: keep slate/coral/violet escape hatch */
+  --sheet-label: #f87171;
+  --sheet-ghost: #7c3aed;
+  --sheet-ghost-text: #c4b5fd;
 }
 
 html,

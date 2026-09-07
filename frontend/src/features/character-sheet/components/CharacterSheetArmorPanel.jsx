@@ -8,7 +8,7 @@ import {
 const boxBase = {
   width: "20px",
   height: "20px",
-  border: "1px solid #4b5563",
+  border: "1px solid var(--border)",
   cursor: "pointer",
   flexShrink: 0,
 };
@@ -17,9 +17,9 @@ function ArmorChargeBoxes({
   count,
   used,
   onToggleAt,
-  spentColor = "#1f2937",
+  spentColor = "var(--bg-header)",
   activeColor = "#b45309",
-  borderColor = "#4b5563",
+  borderColor = "var(--border)",
   showCheck = false,
   spendTitle = "Click to spend",
   restoreTitle = "Used — click to restore",
@@ -43,7 +43,7 @@ function ArmorChargeBoxes({
               justifyContent: showCheck ? "center" : undefined,
               fontSize: showCheck ? "13px" : undefined,
               lineHeight: showCheck ? 1 : undefined,
-              color: showCheck && spent ? "#e5e7eb" : "transparent",
+              color: showCheck && spent ? "var(--text-primary)" : "transparent",
               userSelect: "none",
             }}
           >
@@ -61,14 +61,16 @@ function ArmorRow({ label, sublabel, countLabel, children, hint }) {
       <span
         style={{
           fontSize: "10px",
-          color: "#9ca3af",
+          color: "var(--text-muted)",
           display: "block",
           marginBottom: "4px",
         }}
       >
         {label}
         {sublabel ? (
-          <span style={{ color: "#6b7280", fontWeight: "normal" }}>{sublabel}</span>
+          <span style={{ color: "var(--text-dim)", fontWeight: "normal" }}>
+            {sublabel}
+          </span>
         ) : null}
         {countLabel ? (
           <span style={{ marginLeft: "4px" }}>{countLabel}</span>
@@ -78,7 +80,7 @@ function ArmorRow({ label, sublabel, countLabel, children, hint }) {
         <div
           style={{
             fontSize: "9px",
-            color: "#6b7280",
+            color: "var(--text-dim)",
             lineHeight: 1.35,
             marginBottom: "4px",
           }}
@@ -137,14 +139,14 @@ export default function CharacterSheetArmorPanel({
         <span
           style={{
             fontSize: "10px",
-            color: "#9ca3af",
+            color: "var(--text-muted)",
             display: "block",
             marginBottom: "6px",
           }}
         >
-          ARMOR
+          {"\u{1F6E1}\uFE0F"} ARMOR
         </span>
-        <div style={{ fontSize: "9px", color: "#6b7280", lineHeight: 1.35 }}>
+        <div style={{ fontSize: "9px", color: "var(--text-dim)", lineHeight: 1.35 }}>
           No armor available — Stand durability, playbook abilities (Spin/Hamon),
           or inventory armor (Add armor).
         </div>
@@ -163,12 +165,12 @@ export default function CharacterSheetArmorPanel({
       <span
         style={{
           fontSize: "10px",
-          color: "#9ca3af",
+          color: "var(--text-muted)",
           display: "block",
           marginBottom: "6px",
         }}
       >
-        ARMOR
+        {"\u{1F6E1}\uFE0F"} ARMOR
       </span>
 
       {hasStand ? (
@@ -185,8 +187,8 @@ export default function CharacterSheetArmorPanel({
             onToggleAt={(i, spent) =>
               onStandArmorUsedChange(spent ? i : i + 1)
             }
-            spentColor="#1f2937"
-            activeColor="#1f2937"
+            spentColor="var(--bg-header)"
+            activeColor="var(--bg-header)"
             showCheck
             spendTitle="Click to spend (Stand takes the hit)"
           />
@@ -283,9 +285,9 @@ export default function CharacterSheetArmorPanel({
               onToggleAt={(_, spent) =>
                 onSpecialArmorUsedChange(spent ? start : start + 1)
               }
-              spentColor="#1f2937"
-              activeColor="#7c3aed"
-              borderColor="#7c3aed"
+              spentColor="var(--bg-header)"
+              activeColor="var(--hftf-purple)"
+              borderColor="var(--hftf-purple)"
               spendTitle="Click to spend special armor"
             />
           </ArmorRow>
