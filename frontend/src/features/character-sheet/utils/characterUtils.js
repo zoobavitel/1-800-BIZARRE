@@ -17,6 +17,8 @@ export const createDefaultCharacter = (overrides = {}) => ({
   background: "",
   look: "",
   vice: "",
+  closeFriend: "",
+  rival: "",
   crew: "",
   actionRatings: {
     HUNT: 0,
