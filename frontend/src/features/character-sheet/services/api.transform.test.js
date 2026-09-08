@@ -598,6 +598,27 @@ describe("buildMultipartOrJson", () => {
     expect(multipart).toBe(false);
     expect(JSON.parse(body).image).toBe(null);
   });
+
+  it("crew imageFile uses multipart image field", () => {
+    const file = new File(["x"], "crew.png", { type: "image/png" });
+    const { multipart, body } = buildMultipartOrJson({
+      imageFile: file,
+      image_url: "",
+    });
+    expect(multipart).toBe(true);
+    expect(body.get("image") instanceof File).toBe(true);
+  });
+
+  it("profile avatarFile uses multipart avatar field name", () => {
+    const file = new File(["x"], "me.png", { type: "image/png" });
+    const { multipart, body } = buildMultipartOrJson(
+      { avatarFile: file, theme: "dark", avatar_url: "" },
+      { fileFieldName: "avatar" },
+    );
+    expect(multipart).toBe(true);
+    expect(body.get("avatar") instanceof File).toBe(true);
+    expect(body.get("theme")).toBe("dark");
+  });
 });
 
 describe("mergeAbilitiesPreferRicherCustoms", () => {

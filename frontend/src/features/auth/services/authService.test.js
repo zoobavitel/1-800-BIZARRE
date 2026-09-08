@@ -43,6 +43,29 @@ describe("authAPI", () => {
     });
   });
 
+  test("updateProfile sends multipart FormData when avatarFile present", async () => {
+    global.fetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ username: "tester", avatar: "/media/avatars/a.png" }),
+    });
+    const file = new File(["x"], "a.png", { type: "image/png" });
+
+    await authAPI.updateProfile({
+      avatarFile: file,
+      theme: "dark",
+      avatar_url: "",
+    });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = global.fetch.mock.calls[0];
+    expect(url).toBe("http://localhost:8000/api/user-profiles/update/");
+    expect(init.method).toBe("PUT");
+    expect(init.body instanceof FormData).toBe(true);
+    expect(init.headers?.["Content-Type"]).toBeUndefined();
+    expect(init.body.get("avatar") instanceof File).toBe(true);
+    expect(init.body.get("theme")).toBe("dark");
+  });
+
   test("getProfile returns first array element", async () => {
     global.fetch.mockResolvedValue({
       ok: true,

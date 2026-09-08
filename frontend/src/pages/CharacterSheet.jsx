@@ -58,6 +58,7 @@ import {
   isStandCoinChargenEditable as standCoinChargenUnlocked,
   mergeAbilitiesPreferRicherCustoms,
   playbookAbilityRequirementLabel,
+  isImageUploadPayload,
   canAddNonFoundationPlaybookAbility,
   countCombinedNonFoundationPlaybookAbilities,
   playbookAbilitySlotBudget,
@@ -1332,9 +1333,11 @@ const CharacterSheetWrapper = ({
   const [imagePreview, setImagePreview] = useState(
     character?.image || character?.image_url || "",
   );
+  const [imageFile, setImageFile] = useState(null);
   const [removeImageRequested, setRemoveImageRequested] = useState(false);
   const [portraitUrlModalOpen, setPortraitUrlModalOpen] = useState(false);
   const [portraitUrlDraft, setPortraitUrlDraft] = useState("");
+  const portraitFileInputRef = useRef(null);
 
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState(null);
@@ -1374,14 +1377,30 @@ const CharacterSheetWrapper = ({
     if (next) {
       setImageUrl(next);
       setImagePreview(next);
-      setRemoveImageRequested(false);
+      setImageFile(null);
+      setRemoveImageRequested(true);
     }
     setPortraitUrlModalOpen(false);
   }, [portraitUrlDraft]);
 
+  const handlePortraitFileSelect = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setSaveErrorMessage("Portrait must be 2 MB or smaller.");
+      setSaveStatus("error");
+      return;
+    }
+    setImageFile(file);
+    setImageUrl("");
+    setImagePreview(URL.createObjectURL(file));
+    setRemoveImageRequested(false);
+  }, []);
+
   const handleRemovePortrait = useCallback(() => {
     setImageUrl("");
     setImagePreview("");
+    setImageFile(null);
     setRemoveImageRequested(true);
   }, []);
 
@@ -1598,7 +1617,10 @@ const CharacterSheetWrapper = ({
   // Portrait: sync from server/merged character; do not clobber while a file upload is pending
   useEffect(() => {
     setImageUrl(character?.image_url || "");
-    setImagePreview(character?.image || character?.image_url || "");
+    setImagePreview(
+      resolveMediaUrl(character?.image || character?.image_url || ""),
+    );
+    setImageFile(null);
     setRemoveImageRequested(false);
   }, [character?.id, character?.image, character?.image_url]);
 
@@ -2887,6 +2909,7 @@ const CharacterSheetWrapper = ({
   const [crewPortraitUrlDraft, setCrewPortraitUrlDraft] = useState("");
   const [crewPortraitSaving, setCrewPortraitSaving] = useState(false);
   const [crewPortraitMsg, setCrewPortraitMsg] = useState(null);
+  const crewPortraitFileInputRef = useRef(null);
   const [crewFactionLinks, setCrewFactionLinks] = useState([]);
   const [crewFactionAddName, setCrewFactionAddName] = useState("");
   const [crewFactionAddExistingId, setCrewFactionAddExistingId] = useState("");
@@ -8377,6 +8400,7 @@ const CharacterSheetWrapper = ({
       campaign: campaignId || null,
       image_url: imageUrl,
       ...(removeImageRequested ? { image: null } : {}),
+      ...(isImageUploadPayload(imageFile) ? { imageFile } : {}),
       id: backendId,
       lastModified: new Date().toISOString(),
       selected_benefits: selectedBenefits,
@@ -8415,6 +8439,7 @@ const CharacterSheetWrapper = ({
     standConsciousness,
     campaignId,
     imageUrl,
+    imageFile,
     removeImageRequested,
     character?.id,
     selectedBenefits,
@@ -8570,6 +8595,7 @@ const CharacterSheetWrapper = ({
             pendingResaveRef.current = true;
           }
           if (removeImageRequested) setRemoveImageRequested(false);
+          if (isImageUploadPayload(imageFile)) setImageFile(null);
           setSaveStatus("saved");
           setSaveErrorMessage(null);
           setTimeout(
@@ -8633,6 +8659,7 @@ const CharacterSheetWrapper = ({
     standConsciousness,
     campaignId,
     imageUrl,
+    imageFile,
     removeImageRequested,
     selectedBenefits,
     selectedDetriments,
@@ -11259,7 +11286,7 @@ const CharacterSheetWrapper = ({
                       >
                         {imagePreview ? (
                           <img
-                            src={imagePreview}
+                            src={resolveMediaUrl(imagePreview)}
                             alt=""
                             style={{
                               width: "100%",
@@ -11274,9 +11301,31 @@ const CharacterSheetWrapper = ({
                         )}
                       </div>
                       <div style={{ display: "flex", gap: "4px" }}>
+                        <input
+                          ref={portraitFileInputRef}
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          onChange={handlePortraitFileSelect}
+                          style={{ display: "none" }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => portraitFileInputRef.current?.click()}
+                          disabled={!canEditSheet}
+                          style={{
+                            ...S.btn,
+                            fontSize: "9px",
+                            padding: "2px 6px",
+                            background: "#1f2937",
+                            color: "#9ca3af",
+                          }}
+                        >
+                          Upload
+                        </button>
                         <button
                           type="button"
                           onClick={openPortraitUrlModal}
+                          disabled={!canEditSheet}
                           style={{
                             ...S.btn,
                             fontSize: "9px",
@@ -11290,6 +11339,7 @@ const CharacterSheetWrapper = ({
                         <button
                           type="button"
                           onClick={handleRemovePortrait}
+                          disabled={!canEditSheet}
                           style={{
                             ...S.btn,
                             fontSize: "9px",
@@ -21053,7 +21103,7 @@ const CharacterSheetWrapper = ({
                     }}
                   >
                     <span style={{ ...S.lbl, fontSize: "10px" }}>
-                      Crew portrait (HTTPS URL)
+                      Crew portrait (upload or HTTPS URL)
                     </span>
                     <div
                       style={{
@@ -21082,6 +21132,58 @@ const CharacterSheetWrapper = ({
                         />
                       ) : null}
                       <input
+                        ref={crewPortraitFileInputRef}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        style={{ display: "none" }}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          e.target.value = "";
+                          if (!file || !charData.crewId) return;
+                          if (file.size > 2 * 1024 * 1024) {
+                            setCrewPortraitMsg({
+                              ok: false,
+                              text: "Portrait must be 2 MB or smaller.",
+                            });
+                            return;
+                          }
+                          setCrewPortraitSaving(true);
+                          setCrewPortraitMsg(null);
+                          try {
+                            await crewAPI.patchCrew(charData.crewId, {
+                              imageFile: file,
+                              image_url: "",
+                            });
+                            const d = await crewAPI.getCrew(charData.crewId);
+                            setCrewData((p) => ({
+                              ...p,
+                              image: d.image ?? "",
+                              image_url: d.image_url ?? "",
+                            }));
+                            setCrewPortraitUrlDraft("");
+                            setCrewPortraitMsg({
+                              ok: true,
+                              text: "Portrait uploaded.",
+                            });
+                          } catch (err) {
+                            setCrewPortraitMsg({
+                              ok: false,
+                              text: err?.message || "Could not upload portrait.",
+                            });
+                          } finally {
+                            setCrewPortraitSaving(false);
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        style={{ ...S.btn, fontSize: 11 }}
+                        disabled={crewPortraitSaving}
+                        onClick={() => crewPortraitFileInputRef.current?.click()}
+                      >
+                        Upload
+                      </button>
+                      <input
                         type="url"
                         style={{
                           ...S.inp,
@@ -21102,13 +21204,14 @@ const CharacterSheetWrapper = ({
                         disabled={crewPortraitSaving}
                         onClick={async () => {
                           if (!charData.crewId) return;
+                          const next = String(crewPortraitUrlDraft || "").trim();
+                          if (!next) return;
                           setCrewPortraitSaving(true);
                           setCrewPortraitMsg(null);
                           try {
                             await crewAPI.patchCrew(charData.crewId, {
-                              image_url: String(
-                                crewPortraitUrlDraft || "",
-                              ).trim(),
+                              image_url: next,
+                              image: null,
                             });
                             const d = await crewAPI.getCrew(charData.crewId);
                             setCrewData((p) => ({

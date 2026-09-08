@@ -64,6 +64,8 @@ sudo cp /opt/bizarre/deploy/bizarre-api/Caddyfile.example /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 
+The example Caddyfile serves **`/media/*`** from `/opt/bizarre/backend/src/media` (Django `MEDIA_ROOT`) so uploaded PC/NPC/crew/faction/user portraits are reachable when `DEBUG=False`. Include that `media/` directory in backups alongside the database — Postgres dumps do not contain uploaded files.
+
 ## 5. Firewall (example, ufw)
 
 ```bash

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { authAPI, useAuth } from "../features/auth";
 import { useTheme } from "../features/theme/ThemeContext";
+import { resolveMediaUrl } from "../features/character-sheet/services/api";
 
 const S = {
   page: {
@@ -113,24 +114,35 @@ export default function AccountSettingsPage() {
   const { user } = useAuth();
   const { theme: appTheme, setTheme } = useTheme();
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [avatarPath, setAvatarPath] = useState("");
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState("");
   const [avatarPreviewError, setAvatarPreviewError] = useState(false);
+  const [removeAvatarRequested, setRemoveAvatarRequested] = useState(false);
   const [signature, setSignature] = useState("");
   const [showAvatars, setShowAvatars] = useState(true);
   const [showSignatures, setShowSignatures] = useState(true);
   const [displayTitle, setDisplayTitle] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
+  const avatarFileInputRef = useRef(null);
 
   useEffect(() => {
     setAvatarPreviewError(false);
-  }, [avatarUrl]);
+  }, [avatarPreview, avatarUrl]);
 
   useEffect(() => {
     authAPI
       .getProfile()
       .then((p) => {
         if (p) {
-          setAvatarUrl(p.avatar_url ?? "");
+          const path = p.avatar ?? "";
+          const url = p.avatar_url ?? "";
+          setAvatarPath(path);
+          setAvatarUrl(url);
+          setAvatarFile(null);
+          setRemoveAvatarRequested(false);
+          setAvatarPreview(resolveMediaUrl(path || url || ""));
           setSignature(p.signature ?? "");
           setDisplayTitle(p.display_title ?? "");
           setShowAvatars(p.show_avatars !== false);
@@ -140,18 +152,48 @@ export default function AccountSettingsPage() {
       .catch(() => {});
   }, []);
 
+  const handleAvatarFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setSaveMessage("Avatar must be 2 MB or smaller.");
+      return;
+    }
+    setAvatarFile(file);
+    setAvatarUrl("");
+    setRemoveAvatarRequested(false);
+    setAvatarPreview(URL.createObjectURL(file));
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setSaveMessage(null);
     try {
-      await authAPI.updateProfile({
-        avatar_url: avatarUrl.trim(),
+      const payload = {
         signature,
         display_title: displayTitle,
         show_avatars: showAvatars,
         show_signatures: showSignatures,
         theme: appTheme,
-      });
+        avatar_url: avatarUrl.trim(),
+      };
+      if (avatarFile) {
+        payload.avatarFile = avatarFile;
+        payload.avatar_url = "";
+      } else if (removeAvatarRequested) {
+        payload.avatar = null;
+      } else if (avatarUrl.trim()) {
+        payload.avatar = null;
+      }
+      const saved = await authAPI.updateProfile(payload);
+      setAvatarFile(null);
+      setRemoveAvatarRequested(false);
+      setAvatarPath(saved?.avatar ?? "");
+      setAvatarUrl(saved?.avatar_url ?? "");
+      setAvatarPreview(
+        resolveMediaUrl((saved?.avatar || saved?.avatar_url || "") ?? ""),
+      );
       setSaveMessage("Saved");
     } catch (err) {
       setSaveMessage(err.message || "Failed to save");
@@ -159,6 +201,8 @@ export default function AccountSettingsPage() {
       setSaving(false);
     }
   };
+
+  const previewSrc = avatarPreview || resolveMediaUrl(avatarPath || avatarUrl);
 
   return (
     <div style={S.page}>
@@ -178,19 +222,52 @@ export default function AccountSettingsPage() {
             </div>
           </div>
           <div style={S.card}>
-            <label style={S.lbl}>Profile picture URL</label>
+            <label style={S.lbl}>Profile picture</label>
             <p style={{ ...S.mutedSmall, margin: "0 0 8px" }}>
-              Use a direct image URL (https://…). File upload is not supported
-              here. Recommended: square image (1:1), up to 1024x1024 and 2 MB.
-              Best results at 256x256 in WebP, PNG, or JPEG.
+              Upload a JPEG, PNG, WebP, or GIF (max 2 MB), or paste an HTTPS image
+              URL. Recommended: square image (1:1), best at 256×256.
             </p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "10px" }}>
+              <input
+                ref={avatarFileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                style={{ display: "none" }}
+                onChange={handleAvatarFileSelect}
+              />
+              <button
+                type="button"
+                style={S.btn}
+                onClick={() => avatarFileInputRef.current?.click()}
+              >
+                Upload
+              </button>
+              <button
+                type="button"
+                style={S.btn}
+                onClick={() => {
+                  setAvatarFile(null);
+                  setAvatarUrl("");
+                  setAvatarPath("");
+                  setAvatarPreview("");
+                  setRemoveAvatarRequested(true);
+                }}
+              >
+                Remove
+              </button>
+            </div>
             <input
               style={S.inp}
               type="url"
               inputMode="url"
               autoComplete="off"
               value={avatarUrl}
-              onChange={(e) => setAvatarUrl(e.target.value)}
+              onChange={(e) => {
+                setAvatarUrl(e.target.value);
+                setAvatarFile(null);
+                setRemoveAvatarRequested(false);
+                setAvatarPreview(e.target.value.trim());
+              }}
               placeholder="https://example.com/avatar.png"
             />
             <div
@@ -219,9 +296,9 @@ export default function AccountSettingsPage() {
                   padding: "4px",
                 }}
               >
-                {avatarUrl.trim() && !avatarPreviewError ? (
+                {previewSrc && !avatarPreviewError ? (
                   <img
-                    src={avatarUrl.trim()}
+                    src={previewSrc}
                     alt=""
                     style={{
                       width: "100%",
@@ -232,14 +309,14 @@ export default function AccountSettingsPage() {
                     onError={() => setAvatarPreviewError(true)}
                     onLoad={() => setAvatarPreviewError(false)}
                   />
-                ) : avatarUrl.trim() && avatarPreviewError ? (
+                ) : previewSrc && avatarPreviewError ? (
                   "Invalid URL or image blocked"
                 ) : (
                   "Preview"
                 )}
               </div>
               <span style={{ color: "var(--text-muted)", fontSize: "11px" }}>
-                Preview updates as you type a valid image URL.
+                Preview updates from upload or URL.
               </span>
             </div>
           </div>

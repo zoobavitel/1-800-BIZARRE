@@ -73,6 +73,70 @@ _NPC_LEVEL_OFFSET = 9
 
 _PC_CLOCK_TYPES = {c[0] for c in ProgressClock.CLOCK_TYPE_CHOICES}
 
+PORTRAIT_MAX_BYTES = 2 * 1024 * 1024
+PORTRAIT_ALLOWED_CONTENT_TYPES = frozenset(
+    {"image/jpeg", "image/png", "image/webp", "image/gif"}
+)
+PORTRAIT_ALLOWED_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
+
+
+def validate_https_image_url(value):
+    """Normalize blank URLs; require https:// when non-empty."""
+    s = (value or "").strip()
+    if not s:
+        return ""
+    if not s.startswith("https://"):
+        raise serializers.ValidationError("Use an HTTPS image URL.")
+    return s
+
+
+def validate_portrait_upload(value):
+    """Reject oversized or non-raster portrait uploads (SVG disallowed)."""
+    if value is None:
+        return value
+    size = getattr(value, "size", None)
+    if size is not None and size > PORTRAIT_MAX_BYTES:
+        raise serializers.ValidationError("Image must be 2 MB or smaller.")
+    name = (getattr(value, "name", None) or "").strip().lower()
+    content_type = (getattr(value, "content_type", None) or "").strip().lower()
+    if content_type == "image/svg+xml" or name.endswith(".svg"):
+        raise serializers.ValidationError("SVG images are not allowed.")
+    ext_ok = any(name.endswith(ext) for ext in PORTRAIT_ALLOWED_EXTENSIONS)
+    type_ok = content_type in PORTRAIT_ALLOWED_CONTENT_TYPES if content_type else False
+    if content_type and not type_ok:
+        raise serializers.ValidationError(
+            "Use a JPEG, PNG, WebP, or GIF image."
+        )
+    if name and not ext_ok and not type_ok:
+        raise serializers.ValidationError(
+            "Use a JPEG, PNG, WebP, or GIF image."
+        )
+    if not content_type and name and not ext_ok:
+        raise serializers.ValidationError(
+            "Use a JPEG, PNG, WebP, or GIF image."
+        )
+    return value
+
+
+def apply_portrait_exclusivity(serializer, attrs, file_key="image", url_key="image_url"):
+    """New file clears URL; newly set non-empty URL clears stored file."""
+    if file_key in attrs and attrs.get(file_key) is not None:
+        attrs[url_key] = ""
+        return attrs
+    if url_key not in attrs:
+        return attrs
+    new_url = (attrs.get(url_key) or "").strip()
+    attrs[url_key] = new_url
+    if not new_url:
+        return attrs
+    old_url = ""
+    if serializer.instance is not None:
+        old_url = (getattr(serializer.instance, url_key, None) or "").strip()
+    if new_url != old_url:
+        attrs[file_key] = None
+    return attrs
+
+
 def _attach_or_create_party_crew_from_personal_name(character):
     """Realize the personal_crew_name text field into the campaign's party Crew.
 
@@ -253,17 +317,19 @@ class CrewSerializer(serializers.ModelSerializer):
     special_abilities = CrewSpecialAbilitySerializer(many=True, read_only=True)
     proposed_by = serializers.PrimaryKeyRelatedField(read_only=True)
     approved_by = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
-    image = serializers.FileField(required=False)
+    image = serializers.FileField(required=False, allow_null=True)
     faction_relationships = serializers.SerializerMethodField(read_only=True)
     active_session_crew_earned_xp = serializers.SerializerMethodField(read_only=True)
 
+    def validate_image(self, value):
+        return validate_portrait_upload(value)
+
     def validate_image_url(self, value):
-        s = (value or "").strip()
-        if not s:
-            return ""
-        if not s.startswith("https://"):
-            raise serializers.ValidationError("Use an HTTPS image URL.")
-        return s
+        return validate_https_image_url(value)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        return apply_portrait_exclusivity(self, attrs)
 
     # Allowed inner keys for each session-id row in session_xp_triggers; mirrors
     # frontend toggle keys + the server-side `credited` flag set by the crew XP
@@ -511,6 +577,7 @@ class CrewSerializer(serializers.ModelSerializer):
 
 class UserProfileSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source="user.username", read_only=True)
+    avatar = serializers.FileField(required=False, allow_null=True)
 
     class Meta:
         model = UserProfile
@@ -529,13 +596,17 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "notification_preferences",
         ]
 
+    def validate_avatar(self, value):
+        return validate_portrait_upload(value)
+
     def validate_avatar_url(self, value):
-        s = (value or "").strip()
-        if not s:
-            return ""
-        if not s.startswith("https://"):
-            raise serializers.ValidationError("Use an HTTPS image URL.")
-        return s
+        return validate_https_image_url(value)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        return apply_portrait_exclusivity(
+            self, attrs, file_key="avatar", url_key="avatar_url"
+        )
 
 class InvitableUserSerializer(serializers.ModelSerializer):
     """Lightweight serializer for invitable users list (id, username only)."""
@@ -1611,7 +1682,7 @@ def _apply_stand_identity_fields(stand, stand_data: dict) -> None:
         stand.type_custom = str(stand_data.get("type_custom") or "").strip()[:100]
 
 class CharacterSerializer(serializers.ModelSerializer):
-    image = serializers.FileField(required=False)
+    image = serializers.FileField(required=False, allow_null=True)
     heritage = FlexibleHeritagePrimaryKeyField(
         queryset=Heritage.objects.all(), allow_null=True, required=False
     )
@@ -2072,7 +2143,13 @@ class CharacterSerializer(serializers.ModelSerializer):
         if "inventory" in data:
             data["inventory"] = normalize_inventory_list(data.get("inventory"))
 
-        return data
+        return apply_portrait_exclusivity(self, data)
+
+    def validate_image(self, value):
+        return validate_portrait_upload(value)
+
+    def validate_image_url(self, value):
+        return validate_https_image_url(value)
 
     def create(self, validated_data):
         custom_vice = validated_data.pop("custom_vice", None)
@@ -2616,6 +2693,9 @@ class CampaignEquipmentAccessSerializer(serializers.ModelSerializer):
 class FactionSerializer(serializers.ModelSerializer):
     npcs = NPCSummarySerializer(many=True, read_only=True)
     image = serializers.FileField(required=False, allow_null=True)
+
+    def validate_image(self, value):
+        return validate_portrait_upload(value)
 
     class Meta:
         model = Faction
@@ -3165,6 +3245,16 @@ class NPCSerializer(serializers.ModelSerializer):
     selected_hamon_abilities = serializers.SerializerMethodField()
     selected_spin_abilities = serializers.SerializerMethodField()
     level = serializers.SerializerMethodField()
+
+    def validate_image(self, value):
+        return validate_portrait_upload(value)
+
+    def validate_image_url(self, value):
+        return validate_https_image_url(value)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        return apply_portrait_exclusivity(self, attrs)
 
     def get_level(self, obj):
         return _compute_npc_level(obj.stand_coin_stats)

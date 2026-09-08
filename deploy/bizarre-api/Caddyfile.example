@@ -2,11 +2,26 @@
 # Caddy obtains Let's Encrypt certs automatically for public DNS pointing at this host.
 
 api.example.com {
-	reverse_proxy 127.0.0.1:8000
+	# Serve uploaded portraits/avatars from Django MEDIA_ROOT before the API proxy.
+	# Path must match MEDIA_ROOT on the host (see settings_prod.py / deploy README).
+	handle_path /media/* {
+		root * /opt/bizarre/backend/src/media
+		file_server
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8000
+	}
 }
 
 # Optional: also listen on LAN for testing (replace IP if needed)
 # :443 {
 # 	tls internal
-# 	reverse_proxy 127.0.0.1:8000
+# 	handle_path /media/* {
+# 		root * /opt/bizarre/backend/src/media
+# 		file_server
+# 	}
+# 	handle {
+# 		reverse_proxy 127.0.0.1:8000
+# 	}
 # }
