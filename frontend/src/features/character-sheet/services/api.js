@@ -1189,6 +1189,8 @@ export const transformBackendToFrontend = (backendCharacter) => {
     // DRF returns vice as FK id (number); nested name is on vice_info (see CharacterSerializer)
     vice: backendCharacter.vice_info?.name || backendCharacter.vice?.name || "",
     viceDetails: backendCharacter.vice_details || "",
+    closeFriend: backendCharacter.close_friend || "",
+    rival: backendCharacter.rival || "",
     crew:
       backendCharacter.crew?.name || backendCharacter.personal_crew_name || "",
     crewId: backendCharacter.crew?.id ?? null,
@@ -1706,6 +1708,9 @@ export const transformFrontendToBackend = (frontendCharacter) => {
     ...vicePayload,
     vice_details:
       frontendCharacter.viceDetails ?? frontendCharacter.vice_details ?? "",
+    close_friend:
+      frontendCharacter.closeFriend ?? frontendCharacter.close_friend ?? "",
+    rival: frontendCharacter.rival ?? "",
     image_url: frontendCharacter.image_url ?? "",
     ...(frontendCharacter.image === null ? { image: null } : {}),
 

@@ -199,6 +199,31 @@ describe("transformFrontendToBackend playbook and playbook abilities", () => {
     ).toBe(null);
   });
 
+  test("maps closeFriend and rival to snake_case CharFields", () => {
+    const out = transformFrontendToBackend(
+      makeSheet({ closeFriend: "Buddy", rival: "Nemesis" }),
+    );
+    expect(out.close_friend).toBe("Buddy");
+    expect(out.rival).toBe("Nemesis");
+  });
+
+  test("round-trips close_friend and rival through transforms", () => {
+    const fe = transformBackendToFrontend({
+      id: 1,
+      true_name: "T",
+      stand_name: "",
+      close_friend: "Ally",
+      rival: "Foe",
+      action_dots: {},
+      stand: {},
+    });
+    expect(fe.closeFriend).toBe("Ally");
+    expect(fe.rival).toBe("Foe");
+    const be = transformFrontendToBackend(makeSheet(fe));
+    expect(be.close_friend).toBe("Ally");
+    expect(be.rival).toBe("Foe");
+  });
+
   test("emits spin_ability_ids and hamon_ability_ids from abilities array", () => {
     const out = transformFrontendToBackend(
       makeSheet({

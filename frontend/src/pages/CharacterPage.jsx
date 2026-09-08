@@ -172,6 +172,8 @@ function isUnsavedCharacterDirty(tab) {
     character.look,
     character.vice,
     character.viceDetails,
+    character.closeFriend,
+    character.rival,
     character.crew,
     character.personal_crew_name,
     character.playbook,
@@ -230,6 +232,8 @@ function normalizeSheetPayloadToFrontend(payload, traumasList = []) {
     look: payload.look ?? "",
     vice: payload.vice ?? "",
     viceDetails: payload.viceDetails ?? payload.vice_details ?? "",
+    closeFriend: payload.closeFriend ?? payload.close_friend ?? "",
+    rival: payload.rival ?? "",
     fed_today:
       typeof payload.fed_today === "boolean" ? payload.fed_today : null,
     disguised_as_human:
@@ -951,6 +955,11 @@ export default function CharacterPage({
             payload.viceDetails ??
             payload.vice_details ??
             savedFrontend.viceDetails,
+          closeFriend:
+            payload.closeFriend ??
+            payload.close_friend ??
+            savedFrontend.closeFriend,
+          rival: payload.rival ?? savedFrontend.rival,
           personal_crew_name:
             payload.personal_crew_name ??
             savedFrontend.personal_crew_name ??

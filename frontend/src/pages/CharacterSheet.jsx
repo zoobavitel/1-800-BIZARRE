@@ -839,6 +839,8 @@ function hasMeaningfulDraftChanges(payload) {
     payload.look,
     payload.vice,
     payload.viceDetails,
+    payload.closeFriend,
+    payload.rival,
     payload.crew,
     payload.image_url,
   ];
@@ -1272,6 +1274,9 @@ const CharacterSheetWrapper = ({
     look: character?.look || "",
     vice: character?.vice || "",
     viceDetails: character?.viceDetails ?? character?.vice_details ?? "",
+    closeFriend:
+      character?.closeFriend ?? character?.close_friend ?? "",
+    rival: character?.rival || "",
     crew: initialCrew.crew,
     crewId: initialCrew.crewId,
     sheetNotes: character?.sheetNotes ?? "",
@@ -1583,6 +1588,22 @@ const CharacterSheetWrapper = ({
     character?.vice,
     character?.viceDetails,
     character?.vice_details,
+  ]);
+
+  useEffect(() => {
+    const newCloseFriend =
+      character?.closeFriend ?? character?.close_friend ?? "";
+    const newRival = character?.rival ?? "";
+    setCharData((prev) =>
+      prev.closeFriend !== newCloseFriend || prev.rival !== newRival
+        ? { ...prev, closeFriend: newCloseFriend, rival: newRival }
+        : prev,
+    );
+  }, [
+    character?.id,
+    character?.closeFriend,
+    character?.close_friend,
+    character?.rival,
   ]);
 
   useEffect(() => {
@@ -11643,6 +11664,43 @@ const CharacterSheetWrapper = ({
                               setCharData((p) => ({
                                 ...p,
                                 viceDetails: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 1fr",
+                          gap: "8px",
+                          marginTop: "8px",
+                        }}
+                      >
+                        <div>
+                          <span style={S.lbl}>CLOSE FRIEND</span>
+                          <input
+                            style={S.inp}
+                            placeholder="Close friend"
+                            value={charData.closeFriend ?? ""}
+                            onChange={(e) =>
+                              setCharData((p) => ({
+                                ...p,
+                                closeFriend: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                        <div>
+                          <span style={S.lbl}>RIVAL</span>
+                          <input
+                            style={S.inp}
+                            placeholder="Rival"
+                            value={charData.rival ?? ""}
+                            onChange={(e) =>
+                              setCharData((p) => ({
+                                ...p,
+                                rival: e.target.value,
                               }))
                             }
                           />
