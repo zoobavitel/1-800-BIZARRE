@@ -20,7 +20,7 @@ _STAND_ARCH_KEYS = frozenset(
     }
 )
 _HAMON_ARCH_KEYS = frozenset(
-    {"CAESAR_STYLE", "CYBER_STYLE", "VAMPIRIC_STYLE"}
+    {"OVERDRIVE_STYLE", "CAESAR_STYLE", "CYBER_STYLE", "VAMPIRIC_STYLE"}
 )
 _SPIN_ARCH_KEYS = frozenset(
     {"CAVALIER", "EXECUTIONER", "MEDICO", "BALLBREAKER"}
@@ -101,6 +101,7 @@ _STAND_TYPE_DISPLAY = {
     "CONJOINED": "Conjoined",
 }
 _HAMON_DISPLAY = {
+    "OVERDRIVE_STYLE": "Overdrive Style",
     "CAESAR_STYLE": "Caesar Style",
     "CYBER_STYLE": "Cyber Style",
     "VAMPIRIC_STYLE": "Vampiric Style",
