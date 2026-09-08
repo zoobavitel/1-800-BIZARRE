@@ -43,6 +43,7 @@ ALWAYS_PATCH_REJECTED_FIELDS = frozenset(
 CHARGEN_ONLY_PATCH_FIELDS = frozenset(
     {
         "level",
+        "action_dots",
         "action_dice_gained",
     }
 )

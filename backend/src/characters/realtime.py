@@ -14,6 +14,7 @@ import logging
 import os
 import queue
 import threading
+import time
 from collections import defaultdict
 from typing import Any, DefaultDict, Dict, List, Optional
 
@@ -26,6 +27,10 @@ _redis_client = None
 _redis_init_attempted = False
 _redis_required = False
 CHANNEL_PREFIX = "bizarre:campaign:"
+
+_listener_threads: Dict[int, threading.Thread] = {}
+_listener_queues: DefaultDict[int, List[queue.Queue]] = defaultdict(list)
+_listener_stop: Dict[int, threading.Event] = {}
 
 
 def _redis_url() -> Optional[str]:
@@ -59,6 +64,26 @@ def _use_redis() -> bool:
     return bool(url)
 
 
+def _redis_publish_client():
+    """Short-timeout client for publish/ping only — not for blocking pub/sub."""
+    import redis  # type: ignore
+
+    url = _redis_url()
+    return redis.Redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
+
+
+def _redis_pubsub_client():
+    """Dedicated blocking client for pub/sub listen (no read timeout)."""
+    import redis  # type: ignore
+
+    url = _redis_url()
+    return redis.Redis.from_url(
+        url,
+        socket_connect_timeout=5,
+        socket_timeout=None,
+    )
+
+
 def get_redis_client():
     """Return a live Redis client or None when Redis is not configured."""
     global _redis_client, _redis_init_attempted, _redis_required
@@ -76,9 +101,7 @@ def get_redis_client():
     if not url:
         return None
     try:
-        import redis  # type: ignore
-
-        client = redis.Redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
+        client = _redis_publish_client()
         client.ping()
         _redis_client = client
         logger.info("Realtime pub/sub using Redis at %s", url.split("@")[-1])
@@ -98,57 +121,93 @@ def get_redis_client():
         return None
 
 
-def subscribe_campaign(campaign_id: int) -> queue.Queue:
-    q: queue.Queue = queue.Queue()
+def _fanout_to_listener_queues(campaign_id: int, payload: Dict[str, Any]) -> None:
     with _lock:
-        _subscribers[campaign_id].append(q)
-    # Also subscribe Redis → local queue in a background thread when configured.
-    client = get_redis_client()
-    if client is not None:
-        _ensure_redis_listener(campaign_id, q, client)
-    return q
+        targets = list(_listener_queues.get(campaign_id, []))
+    for target in targets:
+        try:
+            target.put_nowait(payload)
+        except queue.Full:
+            pass
 
 
-_listener_threads: Dict[int, threading.Thread] = {}
-_listener_queues: DefaultDict[int, List[queue.Queue]] = defaultdict(list)
-
-
-def _ensure_redis_listener(campaign_id: int, q: queue.Queue, client) -> None:
+def _ensure_redis_listener(campaign_id: int, q: queue.Queue) -> None:
     with _lock:
         _listener_queues[campaign_id].append(q)
-        if campaign_id in _listener_threads and _listener_threads[campaign_id].is_alive():
+        stop = _listener_stop.get(campaign_id)
+        if stop is not None:
+            stop.clear()
+        if (
+            campaign_id in _listener_threads
+            and _listener_threads[campaign_id].is_alive()
+        ):
             return
 
-        def _run():
-            pubsub = client.pubsub(ignore_subscribe_messages=True)
+        stop_event = threading.Event()
+        _listener_stop[campaign_id] = stop_event
+
+        def _run() -> None:
+            backoff = 1.0
             channel = f"{CHANNEL_PREFIX}{campaign_id}"
-            pubsub.subscribe(channel)
-            try:
-                for message in pubsub.listen():
-                    if message is None or message.get("type") != "message":
-                        continue
-                    raw = message.get("data")
-                    try:
-                        if isinstance(raw, bytes):
-                            raw = raw.decode("utf-8")
-                        payload = json.loads(raw)
-                    except Exception:
-                        payload = {
-                            "type": "campaign_update",
-                            "reason": "update",
-                        }
-                    with _lock:
-                        targets = list(_listener_queues.get(campaign_id, []))
-                    for target in targets:
-                        try:
-                            target.put_nowait(payload)
-                        except queue.Full:
-                            pass
-            finally:
+            while not stop_event.is_set():
+                with _lock:
+                    if not _listener_queues.get(campaign_id):
+                        break
+                ps_client = None
+                pubsub = None
                 try:
-                    pubsub.close()
-                except Exception:
-                    pass
+                    ps_client = _redis_pubsub_client()
+                    pubsub = ps_client.pubsub(ignore_subscribe_messages=True)
+                    pubsub.subscribe(channel)
+                    backoff = 1.0
+                    while not stop_event.is_set():
+                        with _lock:
+                            if not _listener_queues.get(campaign_id):
+                                return
+                        message = pubsub.get_message(
+                            ignore_subscribe_messages=True,
+                            timeout=1.0,
+                        )
+                        if message is None:
+                            continue
+                        if message.get("type") != "message":
+                            continue
+                        raw = message.get("data")
+                        try:
+                            if isinstance(raw, bytes):
+                                raw = raw.decode("utf-8")
+                            payload = json.loads(raw)
+                        except Exception:
+                            payload = {
+                                "type": "campaign_update",
+                                "reason": "update",
+                            }
+                        _fanout_to_listener_queues(campaign_id, payload)
+                except Exception as exc:
+                    if stop_event.is_set():
+                        return
+                    logger.warning(
+                        "Redis SSE listener campaign=%s error, reconnecting: %s",
+                        campaign_id,
+                        exc,
+                    )
+                    time.sleep(backoff)
+                    backoff = min(backoff * 2, 30.0)
+                finally:
+                    if pubsub is not None:
+                        try:
+                            pubsub.unsubscribe(channel)
+                            pubsub.close()
+                        except Exception:
+                            pass
+                    if ps_client is not None:
+                        try:
+                            ps_client.close()
+                        except Exception:
+                            pass
+            with _lock:
+                _listener_threads.pop(campaign_id, None)
+                _listener_stop.pop(campaign_id, None)
 
         t = threading.Thread(
             target=_run,
@@ -157,6 +216,16 @@ def _ensure_redis_listener(campaign_id: int, q: queue.Queue, client) -> None:
         )
         _listener_threads[campaign_id] = t
         t.start()
+
+
+def subscribe_campaign(campaign_id: int) -> queue.Queue:
+    q: queue.Queue = queue.Queue()
+    with _lock:
+        _subscribers[campaign_id].append(q)
+    # Also subscribe Redis → local queue in a background thread when configured.
+    if get_redis_client() is not None:
+        _ensure_redis_listener(campaign_id, q)
+    return q
 
 
 def unsubscribe_campaign(campaign_id: int, q: queue.Queue) -> None:
@@ -177,6 +246,9 @@ def unsubscribe_campaign(campaign_id: int, q: queue.Queue) -> None:
                 pass
             if not lq:
                 del _listener_queues[campaign_id]
+                stop = _listener_stop.get(campaign_id)
+                if stop is not None:
+                    stop.set()
 
 
 def broadcast_campaign_update(campaign_id: int, reason: str = "") -> None:
