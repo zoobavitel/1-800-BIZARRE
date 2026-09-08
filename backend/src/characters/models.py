@@ -216,12 +216,12 @@ class CampaignEquipmentAccess(models.Model):
 
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="profile")
-    avatar = models.ImageField(upload_to="avatars/", null=True, blank=True)
+    avatar = models.FileField(upload_to="avatars/", null=True, blank=True)
     avatar_url = models.URLField(
         max_length=500,
         blank=True,
         default="",
-        help_text="External image URL for profile picture (no file upload).",
+        help_text="Optional HTTPS URL for profile picture (fallback when no uploaded file).",
     )
     signature = models.TextField(blank=True, default="")
     display_title = models.CharField(max_length=100, blank=True, default="")
@@ -301,7 +301,7 @@ class Crew(models.Model):
         max_length=500,
         blank=True,
         default="",
-        help_text="Optional HTTPS URL for crew portrait (no file upload).",
+        help_text="Optional HTTPS URL for crew portrait (fallback when no uploaded file).",
     )
     xp = models.IntegerField(default=0)
     xp_track_size = models.IntegerField(default=8)

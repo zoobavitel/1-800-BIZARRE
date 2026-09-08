@@ -2,6 +2,7 @@ from django.db import models
 from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.parsers import JSONParser, MultiPartParser, FormParser
 
 from ..models import Campaign, Faction
 from ..serializers import FactionSerializer
@@ -11,6 +12,7 @@ class FactionViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Faction.objects.all()
     serializer_class = FactionSerializer
+    parser_classes = (JSONParser, MultiPartParser, FormParser)
 
     def get_queryset(self):
         user = self.request.user

@@ -1352,7 +1352,13 @@ const NPCSheet = ({
   const handleFileSelect = useCallback((e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      setSaveErrorDetail("Portrait must be 2 MB or smaller.");
+      setSaveStatus("error");
+      return;
+    }
     setImageFile(file);
+    setImageUrl("");
     setImagePreview(URL.createObjectURL(file));
   }, []);
 
@@ -1531,6 +1537,7 @@ const NPCSheet = ({
       faction_status: factionStatus,
       inventory,
       ...(imageFile ? { imageFile } : {}),
+      ...(!imageFile && imageUrl ? { image: null } : {}),
     }),
     [
       name,
@@ -1605,6 +1612,7 @@ const NPCSheet = ({
         );
       }
       lastSavedPayloadHashRef.current = payloadHash;
+      if (payload.imageFile) setImageFile(null);
       setSaveStatus("saved");
       setSaveErrorDetail(null);
       setTimeout(

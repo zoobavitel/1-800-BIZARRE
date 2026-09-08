@@ -739,24 +739,35 @@ export const crewAPI = {
   getCrew: (id) => apiRequest(`/crews/${id}/`),
 
   // Create crew
-  createCrew: (crewData) =>
-    apiRequest("/crews/", {
+  createCrew: (crewData) => {
+    const { multipart, body } = buildMultipartOrJson(crewData);
+    if (multipart) return apiRequestMultipart("/crews/", body, "POST");
+    return apiRequest("/crews/", {
       method: "POST",
-      body: JSON.stringify(crewData),
-    }),
+      body,
+    });
+  },
 
   // Update crew
-  updateCrew: (id, crewData) =>
-    apiRequest(`/crews/${id}/`, {
+  updateCrew: (id, crewData) => {
+    const { multipart, body } = buildMultipartOrJson(crewData);
+    if (multipart)
+      return apiRequestMultipart(`/crews/${id}/`, body, "PUT");
+    return apiRequest(`/crews/${id}/`, {
       method: "PUT",
-      body: JSON.stringify(crewData),
-    }),
-  // Partial update crew (e.g. coin only)
-  patchCrew: (id, crewData) =>
-    apiRequest(`/crews/${id}/`, {
+      body,
+    });
+  },
+  // Partial update crew (e.g. coin only, or image-only multipart)
+  patchCrew: (id, crewData) => {
+    const { multipart, body } = buildMultipartOrJson(crewData);
+    if (multipart)
+      return apiRequestMultipart(`/crews/${id}/`, body, "PATCH");
+    return apiRequest(`/crews/${id}/`, {
       method: "PATCH",
-      body: JSON.stringify(crewData),
-    }),
+      body,
+    });
+  },
 
   // Delete crew
   deleteCrew: (id) => apiRequest(`/crews/${id}/`, { method: "DELETE" }),
@@ -829,18 +840,28 @@ const apiRequestMultipart = async (
   return parsed;
 };
 
-/** Used by character/NPC multipart saves; exported for unit tests. */
-export function buildMultipartOrJson(data) {
-  const file = data?.imageFile;
+/** Used by character/NPC/crew/faction multipart saves; exported for unit tests. */
+export function buildMultipartOrJson(data, options = {}) {
+  const fileFieldName = options.fileFieldName || "image";
+  const file =
+    data?.imageFile ??
+    (fileFieldName === "avatar" ? data?.avatarFile : null);
   const hasFile =
     file != null &&
     (file instanceof File ||
       (typeof Blob !== "undefined" && file instanceof Blob));
   if (hasFile) {
     const fd = new FormData();
-    fd.append("image", file, portraitFilenameForUpload(file));
+    fd.append(fileFieldName, file, portraitFilenameForUpload(file));
     for (const [k, v] of Object.entries(data)) {
-      if (k === "imageFile" || k === "image") continue;
+      if (
+        k === "imageFile" ||
+        k === "avatarFile" ||
+        k === "image" ||
+        k === "avatar"
+      ) {
+        continue;
+      }
       if (v == null) continue;
       if (
         typeof v === "object" &&
@@ -856,13 +877,19 @@ export function buildMultipartOrJson(data) {
     return { multipart: true, body: fd };
   }
   const dataObj = data || {};
-  const { imageFile: _if, image, ...rest } = dataObj;
+  const { imageFile: _if, avatarFile: _af, image, avatar, ...rest } = dataObj;
   const jsonPayload = { ...rest };
   if (
     Object.prototype.hasOwnProperty.call(dataObj, "image") &&
     image === null
   ) {
     jsonPayload.image = null;
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(dataObj, "avatar") &&
+    avatar === null
+  ) {
+    jsonPayload.avatar = null;
   }
   return { multipart: false, body: JSON.stringify(jsonPayload) };
 }
@@ -887,11 +914,15 @@ export const npcAPI = {
     if (multipart) return apiRequestMultipart(`/npcs/${id}/`, body, "PUT");
     return apiRequest(`/npcs/${id}/`, { method: "PUT", body });
   },
-  patchNPC: (id, data) =>
-    apiRequest(`/npcs/${id}/`, {
+  patchNPC: (id, data) => {
+    const { multipart, body } = buildMultipartOrJson(data);
+    if (multipart)
+      return apiRequestMultipart(`/npcs/${id}/`, body, "PATCH");
+    return apiRequest(`/npcs/${id}/`, {
       method: "PATCH",
-      body: JSON.stringify(data),
-    }),
+      body,
+    });
+  },
   deleteNPC: (id) => apiRequest(`/npcs/${id}/`, { method: "DELETE" }),
   exportPdf: async (id, filename) => {
     const safeName =
