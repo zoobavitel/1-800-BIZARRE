@@ -45,6 +45,40 @@ class CharacterPortraitUploadTests(TestCase):
         self.assertEqual(self.character.image_url, "")
         self.assertIn("character_images/", self.character.image.name)
 
+    def test_multipart_with_json_m2m_and_jsonfields(self):
+        """Regression: M2M pk lists setlist; JSONField scalar arrays stay JSON strings."""
+        from characters.models import Ability
+
+        ability = Ability.objects.create(
+            name="Ambush Test",
+            type="standard",
+            category="aggression",
+            description="test",
+        )
+        upload = SimpleUploadedFile("face2.png", _PNG_1X1, content_type="image/png")
+        response = self.client.patch(
+            f"/api/characters/{self.character.id}/",
+            {
+                "image": upload,
+                "standard_abilities": f"[{ability.id}]",
+                "hamon_ability_ids": "[]",
+                "spin_ability_ids": "[]",
+                "extra_custom_abilities": "[]",
+                "inventory": "[]",
+                "playbook_xp_archetypes": '["HUNTER"]',
+                "coin_boxes": "[false, false, false, false]",
+            },
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.character.refresh_from_db()
+        self.assertTrue(bool(self.character.image))
+        self.assertEqual(
+            list(self.character.standard_abilities.values_list("id", flat=True)),
+            [ability.id],
+        )
+        self.assertEqual(self.character.coin_boxes, [False, False, False, False])
+
     def test_npc_multipart_upload_works(self):
         from characters.models import NPC
 

@@ -111,6 +111,16 @@
   },
   {
     "model": "characters.ability",
+    "pk": 19,
+    "fields": {
+      "name": "Swan Song",
+      "type": "standard",
+      "category": "endurance",
+      "description": "When you would be taken out by harm (Level 4), you may spend all remaining Stand armor charges (minimum 1) to remain standing for a short but heroic moment. You can take one last action before you collapse. If that action prevents or cancels the harm, you remain conscious."
+    }
+  },
+  {
+    "model": "characters.ability",
     "pk": 20,
     "fields": {
       "name": "Bizarre Step",

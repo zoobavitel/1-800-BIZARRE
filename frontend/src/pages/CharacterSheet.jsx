@@ -819,6 +819,17 @@ function inventorySyncFingerprint(inv) {
   );
 }
 
+/** Stable autosave dedupe key — File stringifies as {}, which falsely matched "already saved". */
+function sheetPayloadDedupeKey(payload, { ignorePendingImageFile = false } = {}) {
+  const { lastModified, _fieldTouches, ...rest } = payload || {};
+  const file = rest.imageFile;
+  let imageFileKey = null;
+  if (!ignorePendingImageFile && isImageUploadPayload(file)) {
+    imageFileKey = `pending:${file.name || "blob"}:${file.size}:${file.type || ""}`;
+  }
+  return JSON.stringify({ ...rest, imageFile: imageFileKey });
+}
+
 function hasMeaningfulDraftChanges(payload) {
   if (!payload || payload.id) return false;
   const textFields = [
@@ -1334,6 +1345,8 @@ const CharacterSheetWrapper = ({
     character?.image || character?.image_url || "",
   );
   const [imageFile, setImageFile] = useState(null);
+  const imageFileRef = useRef(null);
+  imageFileRef.current = imageFile;
   const [removeImageRequested, setRemoveImageRequested] = useState(false);
   const [portraitUrlModalOpen, setPortraitUrlModalOpen] = useState(false);
   const [portraitUrlDraft, setPortraitUrlDraft] = useState("");
@@ -1616,11 +1629,12 @@ const CharacterSheetWrapper = ({
 
   // Portrait: sync from server/merged character; do not clobber while a file upload is pending
   useEffect(() => {
+    const pending = isImageUploadPayload(imageFileRef.current);
+    if (pending) return;
     setImageUrl(character?.image_url || "");
     setImagePreview(
       resolveMediaUrl(character?.image || character?.image_url || ""),
     );
-    setImageFile(null);
     setRemoveImageRequested(false);
   }, [character?.id, character?.image, character?.image_url]);
 
@@ -8453,10 +8467,12 @@ const CharacterSheetWrapper = ({
   useEffect(() => {
     if (!onDraftMetaChange) return;
     const payload = buildPayload();
-    const { lastModified, _fieldTouches, ...rest } = payload;
-    const payloadKey = JSON.stringify(rest);
+    const payloadKey = sheetPayloadDedupeKey(payload);
     if (payload.id && lastSavedPayloadRef.current == null) {
-      lastSavedPayloadRef.current = payloadKey;
+      // Never baseline a pending upload as already-saved (poll resets lastSaved).
+      lastSavedPayloadRef.current = sheetPayloadDedupeKey(payload, {
+        ignorePendingImageFile: true,
+      });
     }
     const isDirty = !payload.id
       ? hasMeaningfulDraftChanges(payload)
@@ -8525,8 +8541,7 @@ const CharacterSheetWrapper = ({
           return;
         }
         // Skip save if payload matches last saved (prevents loop from server response overwriting fields)
-        const { lastModified, _fieldTouches, ...rest } = payload;
-        const payloadKey = JSON.stringify(rest);
+        const payloadKey = sheetPayloadDedupeKey(payload);
         if (lastSavedPayloadRef.current === payloadKey) {
           return;
         }
@@ -8590,12 +8605,16 @@ const CharacterSheetWrapper = ({
           // Ignore stale in-flight saves that finished after newer local edits
           // (e.g. trauma-clear while a max-stress PUT was still running).
           if (myGen === draftGenRef.current) {
-            lastSavedPayloadRef.current = payloadKey;
+            // After upload, local file will clear — baseline without pending file key.
+            lastSavedPayloadRef.current = sheetPayloadDedupeKey(payload, {
+              ignorePendingImageFile: true,
+            });
           } else {
             pendingResaveRef.current = true;
           }
           if (removeImageRequested) setRemoveImageRequested(false);
-          if (isImageUploadPayload(imageFile)) setImageFile(null);
+          // Only clear pending file if THIS save actually carried it.
+          if (isImageUploadPayload(payload.imageFile)) setImageFile(null);
           setSaveStatus("saved");
           setSaveErrorMessage(null);
           setTimeout(

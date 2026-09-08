@@ -20,16 +20,19 @@ class StandardAbilitiesSrdDevSyncTests(TestCase):
             Ability.objects.filter(type="standard").values_list("name", flat=True)
         )
         self.assertEqual(db_names, expected)
-        self.assertEqual(len(expected), 44)
+        self.assertEqual(len(expected), 45)
+        self.assertIn("Swan Song", expected)
 
     def test_retired_abilities_removed_from_catalog(self):
         retired = (
             "Spin-Boosted Blow",
             "Steady Barrage",
             "Battleborn",
-            "Swan Song",
             "Fortitude",
             "Rule of Cool",
         )
         for name in retired:
             self.assertFalse(Ability.objects.filter(name=name).exists())
+        self.assertTrue(
+            Ability.objects.filter(name="Swan Song", type="standard").exists()
+        )

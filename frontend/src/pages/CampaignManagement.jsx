@@ -18,6 +18,10 @@ import { useAuth } from "../features/auth";
 import { subscribeCampaignEvents } from "../features/character-sheet/services/campaignEvents";
 import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
+import {
+  getCharacterPortraitSrc,
+  getUserAvatarSrc,
+} from "../utils/homeAvatar";
 import SessionXpAllocationTable from "../features/campaign-management/SessionXpAllocationTable";
 import {
   buildSessionEndLivePreview,
@@ -32,27 +36,27 @@ const S = {
   page: {
     fontFamily: "monospace",
     fontSize: "13px",
-    background: "#000",
-    color: "#fff",
+    background: "var(--bg-page)",
+    color: "var(--text-primary)",
     minHeight: "100vh",
   },
   content: { padding: "16px", maxWidth: "1000px", margin: "0 auto" },
   card: {
-    background: "#111827",
-    border: "1px solid #374151",
+    background: "var(--bg-card)",
+    border: "1px solid var(--border)",
     borderRadius: "4px",
     padding: "16px",
     marginBottom: "12px",
   },
   lbl: {
-    color: "#f87171",
+    color: "var(--sheet-label)",
     fontSize: "11px",
     fontWeight: "bold",
     marginBottom: "4px",
     display: "block",
   },
   sectionLbl: {
-    color: "#60a5fa",
+    color: "var(--hftf-gold)",
     fontSize: "11px",
     fontWeight: "bold",
     marginBottom: "8px",
@@ -63,9 +67,9 @@ const S = {
   },
   inp: {
     background: "transparent",
-    color: "#fff",
+    color: "var(--text-primary)",
     border: "none",
-    borderBottom: "1px solid #4b5563",
+    borderBottom: "1px solid var(--border)",
     padding: "4px 6px",
     width: "100%",
     fontFamily: "monospace",
@@ -74,9 +78,9 @@ const S = {
     boxSizing: "border-box",
   },
   select: {
-    background: "#0d1117",
-    color: "#fff",
-    border: "1px solid #374151",
+    background: "var(--hftf-deep)",
+    color: "var(--text-primary)",
+    border: "1px solid var(--border)",
     borderRadius: "4px",
     padding: "4px 6px",
     fontFamily: "monospace",
@@ -98,7 +102,7 @@ const S = {
     cursor: "pointer",
     border: "none",
     fontFamily: "monospace",
-    background: "#7c3aed",
+    background: "var(--hftf-purple)",
     color: "#fff",
   },
   btnDanger: {
@@ -118,8 +122,8 @@ const S = {
     cursor: "pointer",
     border: "none",
     fontFamily: "monospace",
-    background: "#374151",
-    color: "#d1d5db",
+    background: "var(--border)",
+    color: "var(--hftf-text-cream)",
   },
   btnSuccess: {
     padding: "6px 14px",
@@ -131,7 +135,7 @@ const S = {
     background: "#16a34a",
     color: "#fff",
   },
-  emptyState: { textAlign: "center", padding: "48px 16px", color: "#6b7280" },
+  emptyState: { textAlign: "center", padding: "48px 16px", color: "var(--text-dim)" },
   badge: {
     fontSize: "10px",
     padding: "2px 8px",
@@ -139,7 +143,7 @@ const S = {
     fontWeight: "bold",
     display: "inline-block",
   },
-  divider: { borderTop: "1px solid #1f2937", margin: "12px 0" },
+  divider: { borderTop: "1px solid var(--bg-header)", margin: "12px 0" },
   err: {
     background: "#7f1d1d",
     border: "1px solid #b91c1c",
@@ -170,8 +174,8 @@ function PlaybookTag({ playbook }) {
     <span
       style={{
         ...S.tag,
-        background: PLAYBOOK_COLORS[playbook] || "#4b5563",
-        color: "#000",
+        background: PLAYBOOK_COLORS[playbook] || "var(--border)",
+        color: "var(--bg-page)",
       }}
     >
       {PLAYBOOK_LABELS[playbook] || playbook}
@@ -198,12 +202,370 @@ function RoleBadge({ role }) {
     <span
       style={{
         ...S.badge,
-        background: role === "GM" ? "#7c3aed" : "#1e40af",
+        background: role === "GM" ? "var(--hftf-purple)" : "var(--accent)",
         color: "#fff",
       }}
     >
       {role}
     </span>
+  );
+}
+
+function rosterUserInitial(user) {
+  const name = String(user?.username || "?").trim();
+  return (name[0] || "?").toUpperCase();
+}
+
+/** Flatten campaign GM/players + characters into one-card-per-character (or empty) rows. */
+function buildCampaignRosterCards(campaign) {
+  const campaignCharacters = campaign?.campaign_characters || [];
+  const gm = campaign?.gm;
+  const gmId = gm?.id;
+  const cards = [];
+
+  const gmChars = campaignCharacters.filter((ch) => ch.user_id === gmId);
+  if (gm) {
+    if (gmChars.length > 0) {
+      gmChars.forEach((ch) => {
+        cards.push({
+          key: `gm-ch-${ch.id}`,
+          user: gm,
+          role: "GM",
+          character: ch,
+        });
+      });
+    } else {
+      cards.push({
+        key: `gm-empty-${gmId}`,
+        user: gm,
+        role: "GM",
+        character: null,
+      });
+    }
+  }
+
+  const playerMap = {};
+  (campaign?.players || []).forEach((p) => {
+    playerMap[p.id] = { ...p, characters: [] };
+  });
+  campaignCharacters.forEach((ch) => {
+    if (ch.user_id === gmId) return;
+    if (!playerMap[ch.user_id]) {
+      playerMap[ch.user_id] = {
+        id: ch.user_id,
+        username: ch.username,
+        characters: [],
+      };
+    }
+    playerMap[ch.user_id].characters.push(ch);
+  });
+
+  Object.values(playerMap)
+    .filter((p) => p.id !== gmId)
+    .forEach((p) => {
+      if (p.characters.length === 0) {
+        cards.push({
+          key: `p-empty-${p.id}`,
+          user: p,
+          role: "Player",
+          character: null,
+        });
+      } else {
+        p.characters.forEach((ch) => {
+          cards.push({
+            key: `p-ch-${ch.id}`,
+            user: p,
+            role: "Player",
+            character: ch,
+          });
+        });
+      }
+    });
+
+  return cards;
+}
+
+function RosterMemberCard({
+  user,
+  role,
+  character,
+  campaign,
+  campaignCharacters,
+  isGM,
+  currentUser,
+  showRemoveFromCampaign,
+  myCharsNotInThisCampaign,
+  onNavigateToCharacter,
+  onUnassignCharacter,
+  onRemovePlayerFromCampaign,
+  onAssignOwnCharacterAndOpen,
+}) {
+  const avatarSrc = getUserAvatarSrc(user, { campaignCharacters });
+  const portraitSrc = character ? getCharacterPortraitSrc(character) : null;
+  const canUnassign =
+    character &&
+    ((role === "GM" && currentUser?.id === campaign.gm?.id) ||
+      (role === "Player" &&
+        ((isGM && user?.id !== campaign.gm?.id) ||
+          user?.id === currentUser?.id)));
+
+  return (
+    <div
+      style={{
+        background: "var(--hftf-deep)",
+        border: "1px solid var(--border)",
+        borderRadius: 6,
+        padding: 10,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        minWidth: 0,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: "50%",
+            border: "1px solid var(--border)",
+            background: "var(--bg-header)",
+            overflow: "hidden",
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 11,
+            fontWeight: "bold",
+            color: "var(--text-muted)",
+          }}
+          aria-hidden={!avatarSrc}
+        >
+          {avatarSrc ? (
+            <img
+              src={avatarSrc}
+              alt=""
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            rosterUserInitial(user)
+          )}
+        </div>
+        <span
+          style={{
+            fontWeight: "bold",
+            color: "var(--hftf-text-cream)",
+            fontSize: 12,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {user?.username || "Unknown"}
+        </span>
+        <RoleBadge role={role} />
+        {showRemoveFromCampaign && isGM && role === "Player" ? (
+          <button
+            type="button"
+            onClick={() =>
+              onRemovePlayerFromCampaign(user.id, user.username)
+            }
+            style={{
+              ...S.btn,
+              fontSize: "9px",
+              padding: "2px 6px",
+              background: "#7f1d1d",
+              color: "#fca5a5",
+              marginLeft: "auto",
+            }}
+          >
+            Remove from campaign
+          </button>
+        ) : null}
+      </div>
+
+      {character ? (
+        <>
+          <div
+            style={{
+              width: "100%",
+              aspectRatio: "1",
+              maxHeight: 160,
+              borderRadius: 6,
+              border: "1px solid var(--border)",
+              background: "var(--bg-header)",
+              overflow: "hidden",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              alignSelf: "center",
+            }}
+          >
+            {portraitSrc ? (
+              <img
+                src={portraitSrc}
+                alt=""
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <span style={{ color: "var(--border)", fontSize: 36 }}>?</span>
+            )}
+          </div>
+          <div style={{ fontSize: 13, fontWeight: "bold", color: "var(--text-primary)" }}>
+            {character.true_name || character.alias || "Unnamed"}
+          </div>
+          {character.stand_name ? (
+            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+              Stand: {character.stand_name}
+            </div>
+          ) : null}
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 6,
+              alignItems: "center",
+            }}
+          >
+            <PlaybookTag playbook={character.playbook} />
+            {character.heritage_name ? (
+              <span
+                style={{
+                  ...S.tag,
+                  background: "var(--border)",
+                  color: "var(--text-muted)",
+                }}
+              >
+                {character.heritage_name}
+              </span>
+            ) : null}
+          </div>
+          <div
+            style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 6,
+              marginTop: "auto",
+            }}
+          >
+            {typeof onNavigateToCharacter === "function" ? (
+              <a
+                href={buildRouteHref("character", {
+                  characterId: character.id,
+                })}
+                onClick={(e) =>
+                  handleSpaNavClick(e, () =>
+                    onNavigateToCharacter(character.id),
+                  )
+                }
+                style={{
+                  ...S.btn,
+                  fontSize: "10px",
+                  padding: "2px 6px",
+                  background: "var(--hftf-purple)",
+                  color: "var(--hftf-text-cream)",
+                  textDecoration: "none",
+                }}
+              >
+                View
+              </a>
+            ) : null}
+            {canUnassign ? (
+              <button
+                type="button"
+                onClick={() => onUnassignCharacter(character.id)}
+                style={{
+                  ...S.btn,
+                  fontSize: "10px",
+                  padding: "2px 6px",
+                  background: "#7f1d1d",
+                  color: "#fca5a5",
+                }}
+              >
+                Remove
+              </button>
+            ) : null}
+          </div>
+        </>
+      ) : (
+        <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
+          <div>No character assigned</div>
+          {user?.id === currentUser?.id ? (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                alignItems: "center",
+                gap: 6,
+                marginTop: 6,
+              }}
+            >
+              {typeof onNavigateToCharacter === "function" ? (
+                <a
+                  href={buildRouteHref("character", {
+                    campaignId: campaign.id,
+                  })}
+                  onClick={(e) =>
+                    handleSpaNavClick(e, () =>
+                      onNavigateToCharacter(null, {
+                        campaignId: campaign.id,
+                      }),
+                    )
+                  }
+                  style={{
+                    ...S.btn,
+                    fontSize: "10px",
+                    padding: "2px 6px",
+                    background: "var(--hftf-purple)",
+                    color: "var(--hftf-text-cream)",
+                    textDecoration: "none",
+                  }}
+                >
+                  Create new
+                </a>
+              ) : null}
+              {myCharsNotInThisCampaign.length > 0 ? (
+                <select
+                  style={{
+                    ...S.select,
+                    fontSize: "10px",
+                    padding: "2px 4px",
+                    width: "auto",
+                    maxWidth: "180px",
+                  }}
+                  defaultValue=""
+                  onChange={(e) => {
+                    const id = parseInt(e.target.value, 10);
+                    if (id) onAssignOwnCharacterAndOpen(id);
+                  }}
+                >
+                  <option value="" disabled>
+                    Assign existing…
+                  </option>
+                  {myCharsNotInThisCampaign.map((ch) => (
+                    <option key={ch.id} value={ch.id}>
+                      {ch.true_name ||
+                        ch.alias ||
+                        ch.name ||
+                        `Character #${ch.id}`}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -223,13 +585,13 @@ function PendingInvitations({ invitations, onAccept, onDecline }) {
             justifyContent: "space-between",
             alignItems: "center",
             padding: "6px 0",
-            borderBottom: "1px solid #1f2937",
+            borderBottom: "1px solid var(--bg-header)",
           }}
         >
           <div>
             <span style={{ fontWeight: "bold" }}>{inv.campaign_name}</span>
             <span
-              style={{ color: "#9ca3af", fontSize: "11px", marginLeft: "8px" }}
+              style={{ color: "var(--text-muted)", fontSize: "11px", marginLeft: "8px" }}
             >
               from {inv.invited_by?.username}
             </span>
@@ -354,15 +716,15 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
     <div style={S.card}>
       <span style={S.sectionLbl}>Equipment catalog</span>
       {error ? (
-        <div style={{ color: "#f87171", fontSize: "11px", marginBottom: "8px" }}>
+        <div style={{ color: "var(--sheet-label)", fontSize: "11px", marginBottom: "8px" }}>
           {error}
         </div>
       ) : null}
-      <div style={{ color: "#9ca3af", fontSize: "11px", marginBottom: "6px" }}>
+      <div style={{ color: "var(--text-muted)", fontSize: "11px", marginBottom: "6px" }}>
         Campaign library (this table only — not site catalog)
       </div>
       {campaignItems.length === 0 && !form ? (
-        <div style={{ color: "#6b7280", fontSize: "12px", marginBottom: "8px" }}>
+        <div style={{ color: "var(--text-dim)", fontSize: "12px", marginBottom: "8px" }}>
           No custom equipment yet.
         </div>
       ) : (
@@ -371,16 +733,16 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
             key={item.id}
             style={{
               padding: "6px 0",
-              borderBottom: "1px solid #1f2937",
+              borderBottom: "1px solid var(--bg-header)",
               fontSize: "12px",
             }}
           >
-            <strong style={{ color: "#e5e7eb" }}>{item.name}</strong>
-            <span style={{ color: "#6b7280", marginLeft: "8px" }}>
+            <strong style={{ color: "var(--text-primary)" }}>{item.name}</strong>
+            <span style={{ color: "var(--text-dim)", marginLeft: "8px" }}>
               {categoryLabel(item.category)} · load {item.load_slots} · Q
               {item.quality}
             </span>
-            <label style={{ marginLeft: "12px", color: "#9ca3af", fontSize: "11px" }}>
+            <label style={{ marginLeft: "12px", color: "var(--text-muted)", fontSize: "11px" }}>
               <input
                 type="checkbox"
                 checked={item.available_when_adding}
@@ -401,7 +763,7 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
                   ...S.btn,
                   marginLeft: "12px",
                   fontSize: "11px",
-                  color: "#f87171",
+                  color: "var(--sheet-label)",
                 }}
                 onClick={() => handleDelete(item)}
               >
@@ -413,7 +775,7 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
       )}
       {templates.length > 0 ? (
         <div style={{ marginTop: "10px" }}>
-          <div style={{ color: "#9ca3af", fontSize: "11px", marginBottom: "6px" }}>
+          <div style={{ color: "var(--text-muted)", fontSize: "11px", marginBottom: "6px" }}>
             SRD templates (on for this campaign unless you disable)
           </div>
           {templates.map((item) => (
@@ -424,7 +786,7 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
                 alignItems: "center",
                 gap: "8px",
                 fontSize: "11px",
-                color: "#d1d5db",
+                color: "var(--hftf-text-cream)",
                 marginBottom: "4px",
                 flexWrap: "wrap",
               }}
@@ -444,7 +806,7 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
                   style={{
                     ...S.btn,
                     fontSize: "10px",
-                    color: "#f87171",
+                    color: "var(--sheet-label)",
                     padding: "2px 6px",
                   }}
                   onClick={() => handleDelete(item)}
@@ -458,7 +820,7 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
       ) : null}
       {siteItems.length > 0 ? (
         <div style={{ marginTop: "10px" }}>
-          <div style={{ color: "#9ca3af", fontSize: "11px", marginBottom: "6px" }}>
+          <div style={{ color: "var(--text-muted)", fontSize: "11px", marginBottom: "6px" }}>
             Site catalog (hidden from add-item until you enable for this campaign)
           </div>
           {siteItems.map((item) => (
@@ -469,7 +831,7 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
                 alignItems: "center",
                 gap: "8px",
                 fontSize: "11px",
-                color: "#d1d5db",
+                color: "var(--hftf-text-cream)",
                 marginBottom: "4px",
                 flexWrap: "wrap",
               }}
@@ -489,7 +851,7 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
                   style={{
                     ...S.btn,
                     fontSize: "10px",
-                    color: "#f87171",
+                    color: "var(--sheet-label)",
                     padding: "2px 6px",
                   }}
                   onClick={() => handleDelete(item)}
@@ -519,7 +881,7 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
           />
           <div style={{ display: "flex", gap: "8px", marginTop: "6px", flexWrap: "wrap" }}>
             <div>
-              <span style={{ fontSize: "11px", color: "#9ca3af" }}>Category</span>
+              <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Category</span>
               <select
                 style={S.select}
                 value={form.category}
@@ -533,7 +895,7 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
               </select>
             </div>
             <div>
-              <span style={{ fontSize: "11px", color: "#9ca3af" }}>Load slots</span>
+              <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Load slots</span>
               <input
                 style={{ ...S.inp, width: "60px" }}
                 type="number"
@@ -547,7 +909,7 @@ function CampaignEquipmentPanel({ campaign, onRefresh }) {
               />
             </div>
             <div>
-              <span style={{ fontSize: "11px", color: "#9ca3af" }}>Quality (Q0–Q3)</span>
+              <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Quality (Q0–Q3)</span>
               <input
                 style={{ ...S.inp, width: "60px" }}
                 type="number"
@@ -1075,12 +1437,12 @@ function CampaignDetail({
       {actionError && <div style={S.err}>{actionError}</div>}
 
       {/* Header */}
-      <div style={{ ...S.card, border: "1px solid #4b5563" }}>
+      <div style={{ ...S.card, border: "1px solid var(--border)" }}>
         {editForm ? (
           <>
             <span style={S.lbl}>EDIT CAMPAIGN</span>
             <div style={{ marginBottom: "10px" }}>
-              <span style={{ fontSize: "11px", color: "#9ca3af" }}>Name</span>
+              <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Name</span>
               <input
                 style={S.inp}
                 value={editForm.name}
@@ -1091,7 +1453,7 @@ function CampaignDetail({
               />
             </div>
             <div style={{ marginBottom: "12px" }}>
-              <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+              <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                 Description
               </span>
               <textarea
@@ -1099,8 +1461,8 @@ function CampaignDetail({
                   ...S.inp,
                   height: "60px",
                   resize: "vertical",
-                  border: "1px solid #374151",
-                  background: "#0d1117",
+                  border: "1px solid var(--border)",
+                  background: "var(--hftf-deep)",
                   padding: "6px",
                 }}
                 value={editForm.description}
@@ -1141,7 +1503,7 @@ function CampaignDetail({
                   <div
                     style={{
                       fontSize: "12px",
-                      color: "#9ca3af",
+                      color: "var(--text-muted)",
                       marginBottom: "6px",
                     }}
                   >
@@ -1158,7 +1520,7 @@ function CampaignDetail({
                 >
                   <StatusBadge active={campaign.is_active} />
                   <RoleBadge role={isGM ? "GM" : "Player"} />
-                  <span style={{ fontSize: "11px", color: "#6b7280" }}>
+                  <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>
                     GM: {campaign.gm?.username} | Started{" "}
                     {campaign.created_at
                       ? new Date(campaign.created_at).toLocaleDateString()
@@ -1198,303 +1560,68 @@ function CampaignDetail({
       <div style={S.card}>
         <span style={S.sectionLbl}>Players &amp; Characters</span>
         {(campaign.campaign_characters || []).length === 0 &&
-        (campaign.players || []).length === 0 ? (
-          <div style={{ color: "#6b7280", fontSize: "12px" }}>
+        (campaign.players || []).length === 0 &&
+        !campaign.gm ? (
+          <div style={{ color: "var(--text-dim)", fontSize: "12px" }}>
             No players have joined yet.
           </div>
         ) : (
-          <>
-            {/* Show GM (and GM's assigned character when they have one) */}
-            {(() => {
-              const gmChars = (campaign.campaign_characters || []).filter(
-                (ch) => ch.user_id === campaign.gm?.id,
-              );
+          (() => {
+            const campaignCharacters = campaign.campaign_characters || [];
+            const rosterCards = buildCampaignRosterCards(campaign);
+            if (rosterCards.length === 0) {
               return (
-                <div
-                  style={{
-                    padding: "6px 0",
-                    borderBottom: "1px solid #1f2937",
-                  }}
-                >
-                  <div style={S.row}>
-                    <span style={{ fontWeight: "bold", color: "#d1d5db" }}>
-                      {campaign.gm?.username}
-                    </span>
-                    <RoleBadge role="GM" />
-                  </div>
-                  {gmChars.length > 0 &&
-                    gmChars.map((ch) => (
-                      <div
-                        key={ch.id}
-                        style={{
-                          paddingLeft: "12px",
-                          fontSize: "12px",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          marginTop: "2px",
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <span style={{ color: "#9ca3af" }}>PC:</span>
-                        <span style={{ color: "#e5e7eb" }}>
-                          {ch.true_name || ch.alias || "Unnamed"}
-                        </span>
-                        {ch.stand_name && (
-                          <span style={{ color: "#9ca3af" }}>
-                            Stand: {ch.stand_name}
-                          </span>
-                        )}
-                        <PlaybookTag playbook={ch.playbook} />
-                        {ch.heritage_name && (
-                          <span
-                            style={{
-                              ...S.tag,
-                              background: "#374151",
-                              color: "#9ca3af",
-                            }}
-                          >
-                            {ch.heritage_name}
-                          </span>
-                        )}
-                        {typeof onNavigateToCharacter === "function" && (
-                          <a
-                            href={buildRouteHref("character", { characterId: ch.id })}
-                            onClick={(e) =>
-                              handleSpaNavClick(e, () => onNavigateToCharacter(ch.id))
-                            }
-                            style={{
-                              ...S.btn,
-                              fontSize: "10px",
-                              padding: "2px 6px",
-                              background: "#1d4ed8",
-                              color: "#93c5fd",
-                            }}
-                          >
-                            View
-                          </a>
-                        )}
-                        {user?.id === campaign.gm?.id && (
-                          <button
-                            onClick={() => handleUnassignCharacter(ch.id)}
-                            style={{
-                              ...S.btn,
-                              fontSize: "10px",
-                              padding: "2px 6px",
-                              background: "#7f1d1d",
-                              color: "#fca5a5",
-                            }}
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                <div style={{ color: "var(--text-dim)", fontSize: "12px" }}>
+                  No players have joined yet.
                 </div>
               );
-            })()}
-            {/* Group characters by user */}
-            {(() => {
-              const playerMap = {};
-              (campaign.players || []).forEach((p) => {
-                playerMap[p.id] = { ...p, characters: [] };
-              });
-              (campaign.campaign_characters || []).forEach((ch) => {
-                if (!playerMap[ch.user_id])
-                  playerMap[ch.user_id] = {
-                    id: ch.user_id,
-                    username: ch.username,
-                    characters: [],
-                  };
-                playerMap[ch.user_id].characters.push(ch);
-              });
-              return Object.values(playerMap)
-                .filter((p) => p.id !== campaign.gm?.id)
-                .map((p) => (
-                  <div
-                    key={p.id}
-                    style={{
-                      padding: "6px 0",
-                      borderBottom: "1px solid #1f2937",
-                    }}
-                  >
-                    <div
-                      style={{
-                        ...S.row,
-                        marginBottom: "4px",
-                        flexWrap: "wrap",
-                        gap: "6px",
-                      }}
-                    >
-                      <span style={{ fontWeight: "bold", color: "#d1d5db" }}>
-                        {p.username}
-                      </span>
-                      <RoleBadge role="Player" />
-                      {isGM && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleRemovePlayerFromCampaign(p.id, p.username)
-                          }
-                          style={{
-                            ...S.btn,
-                            fontSize: "10px",
-                            padding: "2px 8px",
-                            background: "#7f1d1d",
-                            color: "#fca5a5",
-                          }}
-                        >
-                          Remove from campaign
-                        </button>
-                      )}
-                    </div>
-                    {p.characters.length === 0 ? (
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          color: "#6b7280",
-                          paddingLeft: "12px",
-                        }}
-                      >
-                        <div>No character assigned</div>
-                        {p.id === user?.id && (
-                          <div
-                            style={{
-                              display: "flex",
-                              flexWrap: "wrap",
-                              alignItems: "center",
-                              gap: "6px",
-                              marginTop: "4px",
-                            }}
-                          >
-                            {typeof onNavigateToCharacter === "function" && (
-                              <a
-                                href={buildRouteHref("character", {
-                                  campaignId: campaign.id,
-                                })}
-                                onClick={(e) =>
-                                  handleSpaNavClick(e, () =>
-                                    onNavigateToCharacter(null, {
-                                      campaignId: campaign.id,
-                                    }),
-                                  )
-                                }
-                                style={{
-                                  ...S.btn,
-                                  fontSize: "10px",
-                                  padding: "2px 6px",
-                                  background: "#1d4ed8",
-                                  color: "#93c5fd",
-                                  textDecoration: "none",
-                                }}
-                              >
-                                Create new
-                              </a>
-                            )}
-                            {myCharsNotInThisCampaign.length > 0 && (
-                              <select
-                                style={{
-                                  ...S.select,
-                                  fontSize: "10px",
-                                  padding: "2px 4px",
-                                  width: "auto",
-                                  maxWidth: "180px",
-                                }}
-                                defaultValue=""
-                                onChange={(e) => {
-                                  const id = parseInt(e.target.value, 10);
-                                  if (id) handleAssignOwnCharacterAndOpen(id);
-                                }}
-                              >
-                                <option value="" disabled>
-                                  Assign existing…
-                                </option>
-                                {myCharsNotInThisCampaign.map((ch) => (
-                                  <option key={ch.id} value={ch.id}>
-                                    {ch.true_name ||
-                                      ch.alias ||
-                                      ch.name ||
-                                      `Character #${ch.id}`}
-                                  </option>
-                                ))}
-                              </select>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      p.characters.map((ch) => (
-                        <div
-                          key={ch.id}
-                          style={{
-                            paddingLeft: "12px",
-                            fontSize: "12px",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "6px",
-                            marginTop: "2px",
-                            flexWrap: "wrap",
-                          }}
-                        >
-                          <span style={{ color: "#e5e7eb" }}>
-                            {ch.true_name || ch.alias || "Unnamed"}
-                          </span>
-                          {ch.stand_name && (
-                            <span style={{ color: "#9ca3af" }}>
-                              Stand: {ch.stand_name}
-                            </span>
-                          )}
-                          <PlaybookTag playbook={ch.playbook} />
-                          {ch.heritage_name && (
-                            <span
-                              style={{
-                                ...S.tag,
-                                background: "#374151",
-                                color: "#9ca3af",
-                              }}
-                            >
-                              {ch.heritage_name}
-                            </span>
-                          )}
-                          {typeof onNavigateToCharacter === "function" && (
-                            <a
-                              href={buildRouteHref("character", { characterId: ch.id })}
-                              onClick={(e) =>
-                                handleSpaNavClick(e, () => onNavigateToCharacter(ch.id))
-                              }
-                              style={{
-                                ...S.btn,
-                                fontSize: "10px",
-                                padding: "2px 6px",
-                                background: "#1d4ed8",
-                                color: "#93c5fd",
-                              }}
-                            >
-                              View
-                            </a>
-                          )}
-                          {((isGM && p.id !== campaign.gm?.id) ||
-                            p.id === user?.id) && (
-                            <button
-                              onClick={() => handleUnassignCharacter(ch.id)}
-                              style={{
-                                ...S.btn,
-                                fontSize: "10px",
-                                padding: "2px 6px",
-                                background: "#7f1d1d",
-                                color: "#fca5a5",
-                              }}
-                            >
-                              Remove
-                            </button>
-                          )}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                ));
-            })()}
-          </>
+            }
+            const seenRemoveForUser = new Set();
+            return (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                  gap: 12,
+                }}
+              >
+                {rosterCards.map((card) => {
+                  const uid = card.user?.id;
+                  let showRemoveFromCampaign = false;
+                  if (
+                    card.role === "Player" &&
+                    uid != null &&
+                    !seenRemoveForUser.has(uid)
+                  ) {
+                    seenRemoveForUser.add(uid);
+                    showRemoveFromCampaign = true;
+                  }
+                  return (
+                    <RosterMemberCard
+                      key={card.key}
+                      user={card.user}
+                      role={card.role}
+                      character={card.character}
+                      campaign={campaign}
+                      campaignCharacters={campaignCharacters}
+                      isGM={isGM}
+                      currentUser={user}
+                      showRemoveFromCampaign={showRemoveFromCampaign}
+                      myCharsNotInThisCampaign={myCharsNotInThisCampaign}
+                      onNavigateToCharacter={onNavigateToCharacter}
+                      onUnassignCharacter={handleUnassignCharacter}
+                      onRemovePlayerFromCampaign={
+                        handleRemovePlayerFromCampaign
+                      }
+                      onAssignOwnCharacterAndOpen={
+                        handleAssignOwnCharacterAndOpen
+                      }
+                    />
+                  );
+                })}
+              </div>
+            );
+          })()
         )}
 
         {/* Pending invitations (GM view) */}
@@ -1511,7 +1638,7 @@ function CampaignDetail({
                 key={inv.id}
                 style={{
                   fontSize: "12px",
-                  color: "#9ca3af",
+                  color: "var(--text-muted)",
                   paddingLeft: "12px",
                   marginTop: "6px",
                   display: "flex",
@@ -1587,7 +1714,7 @@ function CampaignDetail({
               <span
                 style={{
                   fontSize: "11px",
-                  color: "#9ca3af",
+                  color: "var(--text-muted)",
                   marginTop: "12px",
                   display: "block",
                 }}
@@ -1653,7 +1780,7 @@ function CampaignDetail({
           {(campaign.campaign_npcs || []).length === 0 ? (
             <div
               style={{
-                color: "#6b7280",
+                color: "var(--text-dim)",
                 fontSize: "12px",
                 display: "flex",
                 alignItems: "center",
@@ -1672,7 +1799,7 @@ function CampaignDetail({
                   justifyContent: "space-between",
                   alignItems: "center",
                   padding: "4px 0",
-                  borderBottom: "1px solid #1f2937",
+                  borderBottom: "1px solid var(--bg-header)",
                 }}
               >
                 <div
@@ -1684,12 +1811,12 @@ function CampaignDetail({
                     flexWrap: "wrap",
                   }}
                 >
-                  <span style={{ color: "#e5e7eb", fontWeight: "bold" }}>
+                  <span style={{ color: "var(--text-primary)", fontWeight: "bold" }}>
                     {npc.name}
                   </span>
-                  <span style={{ color: "#6b7280" }}>Lv.{npc.level}</span>
+                  <span style={{ color: "var(--text-dim)" }}>Lv.{npc.level}</span>
                   {npc.stand_name && (
-                    <span style={{ color: "#9ca3af" }}>
+                    <span style={{ color: "var(--text-muted)" }}>
                       Stand: {npc.stand_name}
                     </span>
                   )}
@@ -1698,8 +1825,8 @@ function CampaignDetail({
                     <span
                       style={{
                         ...S.tag,
-                        background: "#374151",
-                        color: "#9ca3af",
+                        background: "var(--border)",
+                        color: "var(--text-muted)",
                       }}
                     >
                       {npc.heritage_name}
@@ -1716,8 +1843,8 @@ function CampaignDetail({
                           ...S.btn,
                           fontSize: "10px",
                           padding: "2px 6px",
-                          background: "#1d4ed8",
-                          color: "#93c5fd",
+                          background: "var(--hftf-purple)",
+                          color: "var(--hftf-text-cream)",
                         }}
                       >
                         View
@@ -1732,8 +1859,8 @@ function CampaignDetail({
                           ...S.btn,
                           fontSize: "10px",
                           padding: "2px 6px",
-                          background: "#374151",
-                          color: "#9ca3af",
+                          background: "var(--border)",
+                          color: "var(--text-muted)",
                         }}
                         title="Copy link"
                       >
@@ -1748,7 +1875,7 @@ function CampaignDetail({
                         ...S.btn,
                         fontSize: "10px",
                         padding: "2px 6px",
-                        background: "#7c3aed",
+                        background: "var(--hftf-purple)",
                         color: "#c4b5fd",
                       }}
                     >
@@ -1762,8 +1889,8 @@ function CampaignDetail({
                     ...S.btn,
                     fontSize: "10px",
                     padding: "2px 6px",
-                    background: "#374151",
-                    color: "#9ca3af",
+                    background: "var(--border)",
+                    color: "var(--text-muted)",
                   }}
                 >
                   Remove
@@ -1837,7 +1964,7 @@ function CampaignDetail({
         <div style={S.card}>
           <span style={S.sectionLbl}>Showcased NPCs</span>
           <div
-            style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "8px" }}
+            style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "8px" }}
           >
             Share NPC clocks with the party when enabled.
           </div>
@@ -1849,17 +1976,17 @@ function CampaignDetail({
                 justifyContent: "space-between",
                 alignItems: "center",
                 padding: "6px 0",
-                borderBottom: "1px solid #1f2937",
+                borderBottom: "1px solid var(--bg-header)",
                 flexWrap: "wrap",
                 gap: "8px",
               }}
             >
               <div>
-                <span style={{ fontWeight: "bold", color: "#e5e7eb" }}>
+                <span style={{ fontWeight: "bold", color: "var(--text-primary)" }}>
                   {sn.npc?.name || "NPC"}
                 </span>
                 {sn.npc?.stand_name && (
-                  <span style={{ color: "#9ca3af", marginLeft: "6px" }}>
+                  <span style={{ color: "var(--text-muted)", marginLeft: "6px" }}>
                     Stand: {sn.npc.stand_name}
                   </span>
                 )}
@@ -1874,7 +2001,7 @@ function CampaignDetail({
                     gap: "4px",
                     cursor: "pointer",
                     fontSize: "12px",
-                    color: "#9ca3af",
+                    color: "var(--text-muted)",
                   }}
                 >
                   <input
@@ -1892,8 +2019,8 @@ function CampaignDetail({
                     ...S.btn,
                     fontSize: "10px",
                     padding: "2px 6px",
-                    background: "#374151",
-                    color: "#9ca3af",
+                    background: "var(--border)",
+                    color: "var(--text-muted)",
                   }}
                 >
                   Remove from showcase
@@ -1911,7 +2038,7 @@ function CampaignDetail({
           {(campaign.crews || []).length === 0 && !crewForm && (
             <div
               style={{
-                color: "#6b7280",
+                color: "var(--text-dim)",
                 fontSize: "12px",
                 marginBottom: "8px",
               }}
@@ -1929,7 +2056,7 @@ function CampaignDetail({
             return (
               <div
                 key={c.id}
-                style={{ padding: "8px 0", borderBottom: "1px solid #1f2937" }}
+                style={{ padding: "8px 0", borderBottom: "1px solid var(--bg-header)" }}
               >
                 <div
                   style={{
@@ -1939,7 +2066,7 @@ function CampaignDetail({
                   }}
                 >
                   <div>
-                    <span style={{ fontWeight: "bold", color: "#e5e7eb" }}>
+                    <span style={{ fontWeight: "bold", color: "var(--text-primary)" }}>
                       {c.name}
                     </span>
                     {c.proposed_name && (
@@ -1962,8 +2089,8 @@ function CampaignDetail({
                           ...S.btn,
                           fontSize: "10px",
                           padding: "2px 6px",
-                          background: "#374151",
-                          color: "#d1d5db",
+                          background: "var(--border)",
+                          color: "var(--hftf-text-cream)",
                         }}
                       >
                         Edit
@@ -1990,7 +2117,7 @@ function CampaignDetail({
                     display: "flex",
                     gap: "12px",
                     fontSize: "11px",
-                    color: "#9ca3af",
+                    color: "var(--text-muted)",
                     marginTop: "4px",
                     flexWrap: "wrap",
                   }}
@@ -2006,7 +2133,7 @@ function CampaignDetail({
                   <div
                     style={{
                       fontSize: "11px",
-                      color: "#6b7280",
+                      color: "var(--text-dim)",
                       marginTop: "4px",
                     }}
                   >
@@ -2017,7 +2144,7 @@ function CampaignDetail({
                   <div
                     style={{
                       fontSize: "11px",
-                      color: "#6b7280",
+                      color: "var(--text-dim)",
                       marginTop: "4px",
                     }}
                   >
@@ -2035,11 +2162,11 @@ function CampaignDetail({
           {crewForm && (
             <div
               style={{
-                border: "1px solid #7c3aed",
+                border: "1px solid var(--hftf-purple)",
                 borderRadius: "4px",
                 padding: "12px",
                 marginTop: "8px",
-                background: "#0d1117",
+                background: "var(--hftf-deep)",
               }}
             >
               <span style={S.lbl}>
@@ -2057,7 +2184,7 @@ function CampaignDetail({
                 }}
               >
                 <div style={{ gridColumn: "1 / -1" }}>
-                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                     Name
                   </span>
                   <input
@@ -2070,7 +2197,7 @@ function CampaignDetail({
                   />
                 </div>
                 <div>
-                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                     Tier
                   </span>
                   <input
@@ -2086,7 +2213,7 @@ function CampaignDetail({
                   />
                 </div>
                 <div>
-                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                     Hold
                   </span>
                   <select
@@ -2101,7 +2228,7 @@ function CampaignDetail({
                   </select>
                 </div>
                 <div>
-                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                     Rep
                   </span>
                   <input
@@ -2117,7 +2244,7 @@ function CampaignDetail({
                   />
                 </div>
                 <div>
-                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                     Coin
                   </span>
                   <input
@@ -2133,7 +2260,7 @@ function CampaignDetail({
                   />
                 </div>
                 <div>
-                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                     Wanted Level
                   </span>
                   <input
@@ -2150,7 +2277,7 @@ function CampaignDetail({
                 </div>
               </div>
               <div style={{ marginBottom: "8px" }}>
-                <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                   Description
                 </span>
                 <textarea
@@ -2158,8 +2285,8 @@ function CampaignDetail({
                     ...S.inp,
                     height: "50px",
                     resize: "vertical",
-                    border: "1px solid #374151",
-                    background: "#0d1117",
+                    border: "1px solid var(--border)",
+                    background: "var(--hftf-deep)",
                     padding: "6px",
                   }}
                   value={crewForm.description}
@@ -2202,7 +2329,7 @@ function CampaignDetail({
           {(campaign.factions || []).length === 0 && !factionForm && (
             <div
               style={{
-                color: "#6b7280",
+                color: "var(--text-dim)",
                 fontSize: "12px",
                 marginBottom: "8px",
               }}
@@ -2213,7 +2340,7 @@ function CampaignDetail({
           {(campaign.factions || []).map((f) => (
             <div
               key={f.id}
-              style={{ padding: "8px 0", borderBottom: "1px solid #1f2937" }}
+              style={{ padding: "8px 0", borderBottom: "1px solid var(--bg-header)" }}
             >
               <div
                 style={{
@@ -2233,19 +2360,19 @@ function CampaignDetail({
                         height: 40,
                         objectFit: "cover",
                         borderRadius: 4,
-                        border: "1px solid #374151",
+                        border: "1px solid var(--border)",
                         flexShrink: 0,
                       }}
                     />
                   ) : null}
                   <div>
-                    <span style={{ fontWeight: "bold", color: "#e5e7eb" }}>
+                    <span style={{ fontWeight: "bold", color: "var(--text-primary)" }}>
                       {f.name}
                     </span>
                     {f.faction_type && (
                       <span
                         style={{
-                          color: "#6b7280",
+                          color: "var(--text-dim)",
                           fontSize: "11px",
                           marginLeft: "8px",
                         }}
@@ -2262,8 +2389,8 @@ function CampaignDetail({
                       ...S.btn,
                       fontSize: "10px",
                       padding: "2px 6px",
-                      background: "#374151",
-                      color: "#d1d5db",
+                      background: "var(--border)",
+                      color: "var(--hftf-text-cream)",
                     }}
                   >
                     Edit
@@ -2287,7 +2414,7 @@ function CampaignDetail({
                   display: "flex",
                   gap: "12px",
                   fontSize: "11px",
-                  color: "#9ca3af",
+                  color: "var(--text-muted)",
                   marginTop: "4px",
                 }}
               >
@@ -2299,7 +2426,7 @@ function CampaignDetail({
                 <div
                   style={{
                     fontSize: "11px",
-                    color: "#6b7280",
+                    color: "var(--text-dim)",
                     marginTop: "4px",
                   }}
                 >
@@ -2313,7 +2440,7 @@ function CampaignDetail({
                 <div
                   style={{
                     fontSize: "11px",
-                    color: "#6b7280",
+                    color: "var(--text-dim)",
                     marginTop: "4px",
                   }}
                 >
@@ -2327,11 +2454,11 @@ function CampaignDetail({
           {factionForm && (
             <div
               style={{
-                border: "1px solid #7c3aed",
+                border: "1px solid var(--hftf-purple)",
                 borderRadius: "4px",
                 padding: "12px",
                 marginTop: "8px",
-                background: "#0d1117",
+                background: "var(--hftf-deep)",
               }}
             >
               <span style={S.lbl}>
@@ -2356,7 +2483,7 @@ function CampaignDetail({
                     <span
                       style={{
                         fontSize: "11px",
-                        color: "#9ca3af",
+                        color: "var(--text-muted)",
                         display: "block",
                         marginBottom: "4px",
                       }}
@@ -2374,8 +2501,8 @@ function CampaignDetail({
                         height: 96,
                         objectFit: "cover",
                         borderRadius: 6,
-                        border: "1px solid #374151",
-                        background: "#111",
+                        border: "1px solid var(--border)",
+                        background: "var(--hftf-deep)",
                       }}
                     />
                   </div>
@@ -2384,7 +2511,7 @@ function CampaignDetail({
                   <span
                     style={{
                       fontSize: "11px",
-                      color: "#9ca3af",
+                      color: "var(--text-muted)",
                       display: "block",
                       marginBottom: "4px",
                     }}
@@ -2394,7 +2521,7 @@ function CampaignDetail({
                   <input
                     type="file"
                     accept="image/*"
-                    style={{ fontSize: "11px", color: "#d1d5db", maxWidth: "100%" }}
+                    style={{ fontSize: "11px", color: "var(--hftf-text-cream)", maxWidth: "100%" }}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       setFactionForm((p) => ({
@@ -2435,7 +2562,7 @@ function CampaignDetail({
                 }}
               >
                 <div>
-                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                     Name
                   </span>
                   <input
@@ -2447,7 +2574,7 @@ function CampaignDetail({
                   />
                 </div>
                 <div>
-                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                     Type
                   </span>
                   <input
@@ -2463,7 +2590,7 @@ function CampaignDetail({
                   />
                 </div>
                 <div>
-                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                     Tier
                   </span>
                   <input
@@ -2479,7 +2606,7 @@ function CampaignDetail({
                   />
                 </div>
                 <div>
-                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                     Hold
                   </span>
                   <select
@@ -2494,7 +2621,7 @@ function CampaignDetail({
                   </select>
                 </div>
                 <div>
-                  <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                     Reputation
                   </span>
                   <input
@@ -2511,7 +2638,7 @@ function CampaignDetail({
                 </div>
               </div>
               <div style={{ marginBottom: "8px" }}>
-                <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                   Notes
                 </span>
                 <textarea
@@ -2519,8 +2646,8 @@ function CampaignDetail({
                     ...S.inp,
                     height: "50px",
                     resize: "vertical",
-                    border: "1px solid #374151",
-                    background: "#0d1117",
+                    border: "1px solid var(--border)",
+                    background: "var(--hftf-deep)",
                     padding: "6px",
                   }}
                   value={factionForm.notes}
@@ -2534,15 +2661,15 @@ function CampaignDetail({
                   style={{
                     marginBottom: "12px",
                     padding: "8px",
-                    background: "#0d1117",
+                    background: "var(--hftf-deep)",
                     borderRadius: "4px",
-                    border: "1px solid #374151",
+                    border: "1px solid var(--border)",
                   }}
                 >
                   <span
                     style={{
                       fontSize: "11px",
-                      color: "#9ca3af",
+                      color: "var(--text-muted)",
                       display: "block",
                       marginBottom: "6px",
                     }}
@@ -2713,17 +2840,17 @@ function ClockManager({
         ) : (
           <div
             style={{
-              background: "#0d1117",
+              background: "var(--hftf-deep)",
               padding: "12px",
               borderRadius: "4px",
-              border: "1px solid #374151",
+              border: "1px solid var(--border)",
             }}
           >
             <div style={{ marginBottom: "8px" }}>
               <span
                 style={{
                   fontSize: "11px",
-                  color: "#9ca3af",
+                  color: "var(--text-muted)",
                   display: "block",
                   marginBottom: "4px",
                 }}
@@ -2741,7 +2868,7 @@ function ClockManager({
               <span
                 style={{
                   fontSize: "11px",
-                  color: "#9ca3af",
+                  color: "var(--text-muted)",
                   display: "block",
                   marginBottom: "4px",
                 }}
@@ -2766,7 +2893,7 @@ function ClockManager({
               <span
                 style={{
                   fontSize: "11px",
-                  color: "#9ca3af",
+                  color: "var(--text-muted)",
                   display: "block",
                   marginBottom: "4px",
                 }}
@@ -2830,7 +2957,7 @@ function ClockManager({
             key={clk.id}
             style={{
               padding: "8px 0",
-              borderBottom: "1px solid #1f2937",
+              borderBottom: "1px solid var(--bg-header)",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
@@ -2842,8 +2969,8 @@ function ClockManager({
               <span
                 style={{
                   fontSize: "10px",
-                  color: "#6b7280",
-                  background: isGMClock ? "#374151" : "#1e3a5f",
+                  color: "var(--text-dim)",
+                  background: isGMClock ? "var(--border)" : "var(--hftf-panel)",
                   padding: "2px 6px",
                   borderRadius: "4px",
                 }}
@@ -2982,8 +3109,8 @@ function SessionRecordsModal({ sessionId, sessionName, onClose }) {
     >
       <div
         style={{
-          background: "#111827",
-          border: "1px solid #374151",
+          background: "var(--bg-card)",
+          border: "1px solid var(--border)",
           borderRadius: "8px",
           padding: "20px",
           maxWidth: "500px",
@@ -3006,15 +3133,15 @@ function SessionRecordsModal({ sessionId, sessionName, onClose }) {
           </span>
           <button
             onClick={onClose}
-            style={{ ...S.btn, background: "#374151", color: "#9ca3af" }}
+            style={{ ...S.btn, background: "var(--border)", color: "var(--text-muted)" }}
           >
             ✕
           </button>
         </div>
         {loading ? (
-          <div style={{ color: "#6b7280" }}>Loading...</div>
+          <div style={{ color: "var(--text-dim)" }}>Loading...</div>
         ) : !data ? (
-          <div style={{ color: "#f87171" }}>
+          <div style={{ color: "var(--sheet-label)" }}>
             Failed to load session records.
           </div>
         ) : (
@@ -3022,7 +3149,7 @@ function SessionRecordsModal({ sessionId, sessionName, onClose }) {
             {data.objective && (
               <div style={{ marginBottom: "12px" }}>
                 <span style={S.lbl}>Objective</span>
-                <div style={{ fontSize: "12px", color: "#d1d5db" }}>
+                <div style={{ fontSize: "12px", color: "var(--hftf-text-cream)" }}>
                   {data.objective}
                 </div>
               </div>
@@ -3030,7 +3157,7 @@ function SessionRecordsModal({ sessionId, sessionName, onClose }) {
             {data.proposed_score_target && (
               <div style={{ marginBottom: "12px" }}>
                 <span style={S.lbl}>Proposed score</span>
-                <div style={{ fontSize: "12px", color: "#d1d5db" }}>
+                <div style={{ fontSize: "12px", color: "var(--hftf-text-cream)" }}>
                   {data.proposed_score_target}:{" "}
                   {data.proposed_score_description || ""}
                 </div>
@@ -3055,12 +3182,12 @@ function SessionRecordsModal({ sessionId, sessionName, onClose }) {
                   Position & effect
                 </label>
               </div>
-              <div style={{ fontSize: "10px", color: "#6b7280", marginBottom: "6px" }}>
+              <div style={{ fontSize: "10px", color: "var(--text-dim)", marginBottom: "6px" }}>
                 Combat flow stays fiction-first. Relative Speed frames starting position;
                 no fixed initiative track.
               </div>
               {(data.rolls || []).length === 0 ? (
-                <div style={{ fontSize: "11px", color: "#6b7280" }}>
+                <div style={{ fontSize: "11px", color: "var(--text-dim)" }}>
                   No rolls.
                 </div>
               ) : (
@@ -3070,7 +3197,7 @@ function SessionRecordsModal({ sessionId, sessionName, onClose }) {
                     style={{
                       fontSize: "11px",
                       padding: "4px 0",
-                      borderBottom: "1px solid #1f2937",
+                      borderBottom: "1px solid var(--bg-header)",
                     }}
                   >
                     {formatSessionRecordsRollSummary(r, showPositionEffect)}
@@ -3088,7 +3215,7 @@ function SessionRecordsModal({ sessionId, sessionName, onClose }) {
                       style={{
                         fontSize: "11px",
                         padding: "4px 0",
-                        borderBottom: "1px solid #1f2937",
+                        borderBottom: "1px solid var(--bg-header)",
                       }}
                     >
                       {e.event_type}
@@ -3557,11 +3684,11 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
               maxWidth: "520px",
               maxHeight: "88vh",
               overflow: "auto",
-              background: "#111827",
-              border: "1px solid #4b5563",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
               borderRadius: "8px",
               padding: "20px",
-              color: "#e5e7eb",
+              color: "var(--text-primary)",
               fontSize: "13px",
               lineHeight: 1.45,
             }}
@@ -3569,20 +3696,20 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
           >
             <h2
               id="clear-active-session-title"
-              style={{ margin: "0 0 12px", fontSize: "18px", color: "#fff" }}
+              style={{ margin: "0 0 12px", fontSize: "18px", color: "var(--text-primary)" }}
             >
               End live session?
             </h2>
             {error ? (
               <div style={{ ...S.err, marginBottom: "12px" }}>{error}</div>
             ) : null}
-            <p style={{ margin: "0 0 8px", color: "#9ca3af", fontSize: "12px" }}>
+            <p style={{ margin: "0 0 8px", color: "var(--text-muted)", fontSize: "12px" }}>
               Session:{" "}
-              <strong style={{ color: "#e5e7eb" }}>
+              <strong style={{ color: "var(--text-primary)" }}>
                 {clearActiveModalSession.name || `Session ${clearActiveModalSession.id}`}
               </strong>
             </p>
-            <p style={{ margin: "0 0 12px", color: "#d1d5db" }}>
+            <p style={{ margin: "0 0 12px", color: "var(--hftf-text-cream)" }}>
               You are clearing the campaign&apos;s live slot (character sheets, clocks,
               etc.). <strong>End &amp; apply encoded XP</strong> runs the one-time encoded{" "}
               pass (STRUGGLE from the roll log, capped per session) <strong>and</strong> banks each PC&apos;s{" "}
@@ -3592,7 +3719,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
               encoded pass settled without granting that automatic STRUGGLE XP or
               banking Development→pool from this action. Use manual XP for off-roll
               awards.{" "}
-              <span style={{ color: "#9ca3af" }}>
+              <span style={{ color: "var(--text-muted)" }}>
                 Durability affects armor/resist only, not XP.
               </span>
             </p>
@@ -3614,7 +3741,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
               </div>
             ) : null}
             {!clearActivePreviewReady ? (
-              <div style={{ color: "#6b7280", marginBottom: "12px", fontSize: "12px" }}>
+              <div style={{ color: "var(--text-dim)", marginBottom: "12px", fontSize: "12px" }}>
                 Loading session summary…
               </div>
             ) : (
@@ -3624,20 +3751,20 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                     marginBottom: "10px",
                     fontSize: "12px",
                     fontWeight: 600,
-                    color: "#9ca3af",
+                    color: "var(--text-muted)",
                     textTransform: "uppercase",
                     letterSpacing: "0.06em",
                   }}
                 >
                   Session snapshot
                 </div>
-                <ul style={{ margin: "0 0 12px 18px", padding: 0, color: "#d1d5db" }}>
+                <ul style={{ margin: "0 0 12px 18px", padding: 0, color: "var(--hftf-text-cream)" }}>
                   <li>
                     <strong>{clearActiveEndLivePreview.rollCount}</strong> roll
                     {clearActiveEndLivePreview.rollCount === 1 ? "" : "s"} logged on this
                     session
                     {clearActiveEndLivePreview.rollCount > 0 ? (
-                      <span style={{ color: "#9ca3af" }}>
+                      <span style={{ color: "var(--text-muted)" }}>
                         {" "}
                         (
                         {Object.entries(clearActiveEndLivePreview.byType)
@@ -3668,7 +3795,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                     marginBottom: "8px",
                     fontSize: "12px",
                     fontWeight: 600,
-                    color: "#9ca3af",
+                    color: "var(--text-muted)",
                     textTransform: "uppercase",
                     letterSpacing: "0.06em",
                   }}
@@ -3677,14 +3804,14 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                 </div>
                 {clearActiveRowsWithScorecard.length === 0 ? (
                   <div
-                    style={{ color: "#9ca3af", marginBottom: "12px", fontSize: "12px" }}
+                    style={{ color: "var(--text-muted)", marginBottom: "12px", fontSize: "12px" }}
                   >
                     No PCs in this campaign roster — nothing to preview.
                   </div>
                 ) : (
                   <SessionXpAllocationTable rows={clearActiveRowsWithScorecard} />
                 )}
-                <p style={{ margin: "0 0 16px", fontSize: "11px", color: "#9ca3af" }}>
+                <p style={{ margin: "0 0 16px", fontSize: "11px", color: "var(--text-muted)" }}>
                   <strong>Total</strong> column = scorecard XP (BELIEFS / PLAYBOOK /
                   STRUGGLE → free pool) + Development end-session bonus (→ free
                   pool) + manual awards already on tracks. Allocate pool XP on
@@ -3739,7 +3866,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
         style={{
           marginTop: "14px",
           paddingTop: "14px",
-          borderTop: "1px solid #374151",
+          borderTop: "1px solid var(--border)",
         }}
       >
         <div
@@ -3763,11 +3890,11 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
           </button>
         </div>
         {loading ? (
-          <div style={{ color: "#6b7280", padding: "12px 0" }}>
+          <div style={{ color: "var(--text-dim)", padding: "12px 0" }}>
             Loading sessions...
           </div>
         ) : !sessions?.length ? (
-          <div style={{ color: "#6b7280", padding: "8px 0" }}>
+          <div style={{ color: "var(--text-dim)", padding: "8px 0" }}>
             No sessions yet. Create one to get started.
           </div>
         ) : (
@@ -3780,8 +3907,8 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
               <div
                 key={s.id}
                 style={{
-                  background: "#0d1117",
-                  border: "1px solid #374151",
+                  background: "var(--hftf-deep)",
+                  border: "1px solid var(--border)",
                   borderRadius: "4px",
                   padding: "10px",
                   marginBottom: "8px",
@@ -3824,7 +3951,7 @@ function CampaignSessionsPanel({ campaign, onOpenSession, onRefresh }) {
                         </span>
                       )}
                     </div>
-                    <div style={{ fontSize: "11px", color: "#9ca3af" }}>
+                    <div style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                       {sessionListPrimaryDate(s)} ·{" "}
                       {sessionListStatusCaption(s, activeId)}
                     </div>
@@ -4637,11 +4764,11 @@ function SessionDetail({
               maxWidth: "520px",
               maxHeight: "88vh",
               overflow: "auto",
-              background: "#111827",
-              border: "1px solid #4b5563",
+              background: "var(--bg-card)",
+              border: "1px solid var(--border)",
               borderRadius: "8px",
               padding: "20px",
-              color: "#e5e7eb",
+              color: "var(--text-primary)",
               fontSize: "13px",
               lineHeight: 1.45,
             }}
@@ -4649,11 +4776,11 @@ function SessionDetail({
           >
             <h2
               id="end-live-session-title"
-              style={{ margin: "0 0 12px", fontSize: "18px", color: "#fff" }}
+              style={{ margin: "0 0 12px", fontSize: "18px", color: "var(--text-primary)" }}
             >
               End live session?
             </h2>
-            <p style={{ margin: "0 0 12px", color: "#d1d5db" }}>
+            <p style={{ margin: "0 0 12px", color: "var(--hftf-text-cream)" }}>
               Review this session before you stop live character sheets for the
               campaign. <strong>End &amp; apply encoded XP</strong> runs the
               one-time encoded STRUGGLE pass (vice / trauma signals from the
@@ -4663,7 +4790,7 @@ function SessionDetail({
               <strong>session XP pool</strong> on the character sheet (players
               allocate pool XP to tracks). Use manual XP for anything not
               inferred from rolls (entanglements, brawls, etc.).{" "}
-              <span style={{ color: "#9ca3af" }}>
+              <span style={{ color: "var(--text-muted)" }}>
                 Durability affects armor/resist only, not XP.
               </span>
             </p>
@@ -4689,19 +4816,19 @@ function SessionDetail({
                 marginBottom: "10px",
                 fontSize: "12px",
                 fontWeight: 600,
-                color: "#9ca3af",
+                color: "var(--text-muted)",
                 textTransform: "uppercase",
                 letterSpacing: "0.06em",
               }}
             >
               Session snapshot
             </div>
-            <ul style={{ margin: "0 0 12px 18px", padding: 0, color: "#d1d5db" }}>
+            <ul style={{ margin: "0 0 12px 18px", padding: 0, color: "var(--hftf-text-cream)" }}>
               <li>
                 <strong>{endLivePreview.rollCount}</strong> roll
                 {endLivePreview.rollCount === 1 ? "" : "s"} logged on this session
                 {endLivePreview.rollCount > 0 ? (
-                  <span style={{ color: "#9ca3af" }}>
+                  <span style={{ color: "var(--text-muted)" }}>
                     {" "}
                     (
                     {Object.entries(endLivePreview.byType)
@@ -4731,7 +4858,7 @@ function SessionDetail({
                 marginBottom: "8px",
                 fontSize: "12px",
                 fontWeight: 600,
-                color: "#9ca3af",
+                color: "var(--text-muted)",
                 textTransform: "uppercase",
                 letterSpacing: "0.06em",
               }}
@@ -4739,13 +4866,13 @@ function SessionDetail({
               Per-PC XP preview (if you apply encoded pass)
             </div>
             {endLiveRowsWithManual.length === 0 ? (
-              <div style={{ color: "#9ca3af", marginBottom: "12px", fontSize: "12px" }}>
+              <div style={{ color: "var(--text-muted)", marginBottom: "12px", fontSize: "12px" }}>
                 No PCs in this campaign roster — nothing to preview.
               </div>
             ) : (
               <SessionXpAllocationTable rows={endLiveRowsWithBeliefs} />
             )}
-            <p style={{ margin: "0 0 16px", fontSize: "11px", color: "#9ca3af" }}>
+            <p style={{ margin: "0 0 16px", fontSize: "11px", color: "var(--text-muted)" }}>
               <strong>Total</strong> column = scorecard XP (BELIEFS / PLAYBOOK /
               STRUGGLE → free pool) + Development end-session bonus (→ free pool) +
               manual awards logged this session (already on tracks). Allocate pool
@@ -4756,13 +4883,13 @@ function SessionDetail({
                 style={{
                   marginBottom: "14px",
                   paddingTop: "12px",
-                  borderTop: "1px solid #374151",
+                  borderTop: "1px solid var(--border)",
                 }}
               >
                 <div
                   style={{
                     fontSize: "11px",
-                    color: "#9ca3af",
+                    color: "var(--text-muted)",
                     marginBottom: "6px",
                     fontWeight: "bold",
                   }}
@@ -4772,7 +4899,7 @@ function SessionDetail({
                 <div
                   style={{
                     fontSize: "10px",
-                    color: "#6b7280",
+                    color: "var(--text-dim)",
                     lineHeight: 1.45,
                   }}
                 >
@@ -4794,7 +4921,7 @@ function SessionDetail({
                         >
                           <div
                             style={{
-                              color: "#d1d5db",
+                              color: "var(--hftf-text-cream)",
                               fontWeight: 600,
                               marginBottom: "4px",
                             }}
@@ -4806,7 +4933,7 @@ function SessionDetail({
                               margin: 0,
                               padding: 0,
                               listStyle: "none",
-                              color: "#9ca3af",
+                              color: "var(--text-muted)",
                               display: "flex",
                               flexDirection: "column",
                               gap: 3,
@@ -4823,19 +4950,19 @@ function SessionDetail({
                                     alignItems: "flex-start",
                                     justifyContent: "space-between",
                                     gap: 6,
-                                    background: "#0b1220",
-                                    border: "1px solid #1f2937",
+                                    background: "var(--hftf-deep)",
+                                    border: "1px solid var(--bg-header)",
                                     borderRadius: 3,
                                     padding: "3px 6px",
                                   }}
                                 >
                                   <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ color: "#d1d5db" }}>
+                                    <div style={{ color: "var(--hftf-text-cream)" }}>
                                       {entry.label}
                                     </div>
                                     <div
                                       style={{
-                                        color: "#6b7280",
+                                        color: "var(--text-dim)",
                                         fontSize: 9,
                                         marginTop: 1,
                                       }}
@@ -4859,8 +4986,8 @@ function SessionDetail({
                                         borderRadius: 3,
                                         border: "1px solid #7f1d1d",
                                         background: busy
-                                          ? "#374151"
-                                          : "#1f2937",
+                                          ? "var(--border)"
+                                          : "var(--bg-header)",
                                         color: "#fca5a5",
                                         cursor: busy
                                           ? "not-allowed"
@@ -4966,9 +5093,9 @@ function SessionDetail({
                   minWidth: "160px",
                   fontFamily: "monospace",
                   fontSize: "12px",
-                  background: "#0d1117",
-                  color: "#fff",
-                  border: "1px solid #374151",
+                  background: "var(--hftf-deep)",
+                  color: "var(--text-primary)",
+                  border: "1px solid var(--border)",
                   borderRadius: "4px",
                   padding: "6px 8px",
                   outline: "none",
@@ -5019,7 +5146,7 @@ function SessionDetail({
                     width: "100%",
                     marginTop: "4px",
                     fontSize: "11px",
-                    color: "#9ca3af",
+                    color: "var(--text-muted)",
                     lineHeight: 1.45,
                     maxWidth: "560px",
                   }}
@@ -5036,7 +5163,7 @@ function SessionDetail({
                     width: "100%",
                     marginTop: "4px",
                     fontSize: "11px",
-                    color: "#6b7280",
+                    color: "var(--text-dim)",
                     lineHeight: 1.45,
                     maxWidth: "560px",
                   }}
@@ -5054,8 +5181,8 @@ function SessionDetail({
                   fontWeight: 600,
                   textTransform: "uppercase",
                   letterSpacing: "0.06em",
-                  color: "#d1d5db",
-                  border: "1px solid #6b7280",
+                  color: "var(--hftf-text-cream)",
+                  border: "1px solid var(--text-dim)",
                   borderRadius: "4px",
                   padding: "2px 6px",
                   fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
@@ -5067,7 +5194,7 @@ function SessionDetail({
               <span
                 style={{
                   fontSize: "11px",
-                  color: "#9ca3af",
+                  color: "var(--text-muted)",
                   fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
                   lineHeight: 1.45,
                   maxWidth: "560px",
@@ -5097,7 +5224,7 @@ function SessionDetail({
               Set as current session (enable for players)
             </button>
           ) : (
-            <span style={{ fontSize: "12px", color: "#6b7280" }}>
+            <span style={{ fontSize: "12px", color: "var(--text-dim)" }}>
               Only the GM can enable this session for players.
             </span>
           )}
@@ -5108,7 +5235,7 @@ function SessionDetail({
               width: "100%",
               marginTop: "12px",
               paddingTop: "12px",
-              borderTop: "1px solid #374151",
+              borderTop: "1px solid var(--border)",
             }}
           >
             <div
@@ -5116,7 +5243,7 @@ function SessionDetail({
                 marginBottom: "8px",
                 fontSize: "12px",
                 fontWeight: 600,
-                color: "#9ca3af",
+                color: "var(--text-muted)",
                 textTransform: "uppercase",
                 letterSpacing: "0.06em",
               }}
@@ -5132,7 +5259,7 @@ function SessionDetail({
                 style={{
                   marginBottom: "8px",
                   fontSize: "11px",
-                  color: "#9ca3af",
+                  color: "var(--text-muted)",
                   lineHeight: 1.45,
                 }}
               >
@@ -5158,7 +5285,7 @@ function SessionDetail({
                 style={{
                   marginBottom: "8px",
                   fontSize: "11px",
-                  color: "#9ca3af",
+                  color: "var(--text-muted)",
                   lineHeight: 1.45,
                 }}
               >
@@ -5168,17 +5295,17 @@ function SessionDetail({
               </div>
             ) : null}
             {sessionXpAllocationPanelMode === "no_roster" ? (
-              <div style={{ color: "#9ca3af", fontSize: "12px", marginBottom: "4px" }}>
+              <div style={{ color: "var(--text-muted)", fontSize: "12px", marginBottom: "4px" }}>
                 No PCs in this campaign roster.
               </div>
             ) : null}
             {sessionXpAllocationPanelMode === "loading" ? (
-              <div style={{ color: "#6b7280", fontSize: "12px", marginBottom: "4px" }}>
+              <div style={{ color: "var(--text-dim)", fontSize: "12px", marginBottom: "4px" }}>
                 Loading session XP summary…
               </div>
             ) : null}
             {sessionXpAllocationPanelMode === "empty_session" ? (
-              <div style={{ color: "#9ca3af", fontSize: "12px", marginBottom: "4px" }}>
+              <div style={{ color: "var(--text-muted)", fontSize: "12px", marginBottom: "4px" }}>
                 No rolls logged and no session XP (auto STRUGGLE, Development→pool,
                 or manual track awards) recorded for this session.
               </div>
@@ -5186,7 +5313,7 @@ function SessionDetail({
             {sessionXpAllocationPanelMode === "table" ? (
               <>
                 <SessionXpAllocationTable rows={endLiveRowsWithBeliefs} />
-                <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#9ca3af" }}>
+                <p style={{ margin: "4px 0 0", fontSize: "11px", color: "var(--text-muted)" }}>
                   <strong>Total</strong> = every XP record logged this session
                   (Beliefs/Playbook/Struggle toggles + heritage / vice / trauma /
                   desperate-roll auto + manual GM track grants + dev-pool entry on
@@ -5197,16 +5324,16 @@ function SessionDetail({
                   style={{
                     margin: "4px 0 0",
                     fontSize: "10px",
-                    color: "#6b7280",
+                    color: "var(--text-dim)",
                     lineHeight: 1.45,
                   }}
                 >
-                  <strong style={{ color: "#9ca3af" }}>BELIEFS</strong> = expressed
+                  <strong style={{ color: "var(--text-muted)" }}>BELIEFS</strong> = expressed
                   beliefs/drives/heritage/background ·{" "}
-                  <strong style={{ color: "#9ca3af" }}>PLAYBOOK</strong> =
+                  <strong style={{ color: "var(--text-muted)" }}>PLAYBOOK</strong> =
                   playbook-specific end-of-session marks (experience-tracker toggles;
                   no roll-log auto for this column) ·{" "}
-                  <strong style={{ color: "#9ca3af" }}>STRUGGLE</strong> = vice
+                  <strong style={{ color: "var(--text-muted)" }}>STRUGGLE</strong> = vice
                   overindulgence, trauma, or entanglements. Each capped at 2
                   XP/session. The headline number in each column is the
                   experience-tracker XP recorded for that trigger (the same rows
@@ -5233,7 +5360,7 @@ function SessionDetail({
                     sessionXpAllocationPanelMode === "table" ? "12px" : "0",
                   borderTop:
                     sessionXpAllocationPanelMode === "table"
-                      ? "1px solid #374151"
+                      ? "1px solid var(--border)"
                       : "none",
                 }}
               >
@@ -5248,7 +5375,7 @@ function SessionDetail({
                     alignItems: "center",
                     gap: 6,
                     fontSize: "11px",
-                    color: "#9ca3af",
+                    color: "var(--text-muted)",
                     marginBottom: "6px",
                     fontWeight: "bold",
                     background: "transparent",
@@ -5264,7 +5391,7 @@ function SessionDetail({
                     style={{
                       display: "inline-block",
                       width: 10,
-                      color: "#6b7280",
+                      color: "var(--text-dim)",
                     }}
                   >
                     {scorecardReqLoggedCollapsed ? "▸" : "▾"}
@@ -5274,7 +5401,7 @@ function SessionDetail({
                   scorecardHasAnyTrackerLines ? (
                     <span
                       style={{
-                        color: "#6b7280",
+                        color: "var(--text-dim)",
                         fontWeight: 400,
                         fontSize: 10,
                       }}
@@ -5287,7 +5414,7 @@ function SessionDetail({
                   hidden={scorecardReqLoggedCollapsed}
                   style={{
                     fontSize: "10px",
-                    color: "#6b7280",
+                    color: "var(--text-dim)",
                     marginBottom: "4px",
                     lineHeight: 1.45,
                   }}
@@ -5310,7 +5437,7 @@ function SessionDetail({
                         >
                           <div
                             style={{
-                              color: "#d1d5db",
+                              color: "var(--hftf-text-cream)",
                               fontWeight: 600,
                               marginBottom: "4px",
                             }}
@@ -5322,7 +5449,7 @@ function SessionDetail({
                               margin: 0,
                               padding: 0,
                               listStyle: "none",
-                              color: "#9ca3af",
+                              color: "var(--text-muted)",
                               display: "flex",
                               flexDirection: "column",
                               gap: 3,
@@ -5339,19 +5466,19 @@ function SessionDetail({
                                     alignItems: "flex-start",
                                     justifyContent: "space-between",
                                     gap: 6,
-                                    background: "#0b1220",
-                                    border: "1px solid #1f2937",
+                                    background: "var(--hftf-deep)",
+                                    border: "1px solid var(--bg-header)",
                                     borderRadius: 3,
                                     padding: "3px 6px",
                                   }}
                                 >
                                   <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ color: "#d1d5db" }}>
+                                    <div style={{ color: "var(--hftf-text-cream)" }}>
                                       {entry.label}
                                     </div>
                                     <div
                                       style={{
-                                        color: "#6b7280",
+                                        color: "var(--text-dim)",
                                         fontSize: 9,
                                         marginTop: 1,
                                       }}
@@ -5375,8 +5502,8 @@ function SessionDetail({
                                         borderRadius: 3,
                                         border: "1px solid #7f1d1d",
                                         background: busy
-                                          ? "#374151"
-                                          : "#1f2937",
+                                          ? "var(--border)"
+                                          : "var(--bg-header)",
                                         color: "#fca5a5",
                                         cursor: busy
                                           ? "not-allowed"
@@ -5412,10 +5539,10 @@ function SessionDetail({
           style={{
             marginTop: "12px",
             paddingTop: "12px",
-            borderTop: "1px solid #374151",
+            borderTop: "1px solid var(--border)",
           }}
         >
-          <div style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "6px" }}>
+          <div style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "6px" }}>
             Session date (editable)
           </div>
           <div
@@ -5433,9 +5560,9 @@ function SessionDetail({
               style={{
                 fontFamily: "monospace",
                 fontSize: "12px",
-                background: "#0d1117",
-                color: "#fff",
-                border: "1px solid #374151",
+                background: "var(--hftf-deep)",
+                color: "var(--text-primary)",
+                border: "1px solid var(--border)",
                 borderRadius: "4px",
                 padding: "6px 8px",
                 outline: "none",
@@ -5449,7 +5576,7 @@ function SessionDetail({
               Save date
             </button>
           </div>
-          <div style={{ fontSize: "10px", color: "#6b7280", marginTop: "6px" }}>
+          <div style={{ fontSize: "10px", color: "var(--text-dim)", marginTop: "6px" }}>
             Created at:{" "}
             {sessionData?.session_date
               ? new Date(sessionData.session_date).toLocaleString()
@@ -5459,7 +5586,7 @@ function SessionDetail({
             <p
               style={{
                 fontSize: "10px",
-                color: "#9ca3af",
+                color: "var(--text-muted)",
                 marginTop: "8px",
                 lineHeight: 1.45,
                 maxWidth: "560px",
@@ -5549,7 +5676,7 @@ function SessionDetail({
           style={{
             marginTop: "14px",
             paddingTop: "12px",
-            borderTop: "1px solid #374151",
+            borderTop: "1px solid var(--border)",
           }}
         >
           <span
@@ -5563,7 +5690,7 @@ function SessionDetail({
             Fortune roll history
           </span>
           {fortuneRolls.length === 0 ? (
-            <div style={{ fontSize: "12px", color: "#6b7280" }}>
+            <div style={{ fontSize: "12px", color: "var(--text-dim)" }}>
               No fortune rolls this session yet.
             </div>
           ) : (
@@ -5571,9 +5698,9 @@ function SessionDetail({
               style={{
                 maxHeight: 220,
                 overflowY: "auto",
-                border: "1px solid #374151",
+                border: "1px solid var(--border)",
                 borderRadius: 6,
-                background: "#0d1117",
+                background: "var(--hftf-deep)",
                 padding: "8px 10px",
               }}
             >
@@ -5595,11 +5722,11 @@ function SessionDetail({
                     style={{
                       fontSize: "11px",
                       padding: "6px 0",
-                      borderBottom: "1px solid #1f2937",
-                      color: "#d1d5db",
+                      borderBottom: "1px solid var(--bg-header)",
+                      color: "var(--hftf-text-cream)",
                     }}
                   >
-                    <div style={{ color: "#9ca3af", fontSize: "10px" }}>
+                    <div style={{ color: "var(--text-muted)", fontSize: "10px" }}>
                       {when}
                     </div>
                     <div
@@ -5612,8 +5739,8 @@ function SessionDetail({
                       }}
                     >
                       <div>
-                        <span style={{ color: "#e5e7eb" }}>{actor}</span>
-                        <span style={{ color: "#6b7280" }}> · GM Fortune</span>
+                        <span style={{ color: "var(--text-primary)" }}>{actor}</span>
+                        <span style={{ color: "var(--text-dim)" }}> · GM Fortune</span>
                         {label ? (
                           <span style={{ color: "#a78bfa" }}>
                             {" "}
@@ -5638,7 +5765,7 @@ function SessionDetail({
                     </div>
                     <div style={{ marginTop: 2 }}>
                       <span>{dice}</span>
-                      <span style={{ color: "#6b7280" }}> → </span>
+                      <span style={{ color: "var(--text-dim)" }}> → </span>
                       <span>{oc}</span>
                     </div>
                   </div>
@@ -5680,12 +5807,12 @@ function GoalsEditor({ sessionData, onSave }) {
     <div style={S.card}>
       <span style={S.sectionLbl}>Goals / Items</span>
       <div style={{ marginBottom: "8px" }}>
-        <span style={{ fontSize: "11px", color: "#9ca3af" }}>Objective</span>
+        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Objective</span>
         <textarea
           style={{
             ...S.inp,
             height: "50px",
-            border: "1px solid #374151",
+            border: "1px solid var(--border)",
             padding: "6px",
           }}
           value={form.objective}
@@ -5695,7 +5822,7 @@ function GoalsEditor({ sessionData, onSave }) {
         />
       </div>
       <div style={{ marginBottom: "8px" }}>
-        <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
           Proposed score target
         </span>
         <input
@@ -5707,14 +5834,14 @@ function GoalsEditor({ sessionData, onSave }) {
         />
       </div>
       <div style={{ marginBottom: "8px" }}>
-        <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+        <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
           Proposed score description
         </span>
         <textarea
           style={{
             ...S.inp,
             height: "40px",
-            border: "1px solid #374151",
+            border: "1px solid var(--border)",
             padding: "6px",
           }}
           value={form.proposed_score_description}
@@ -6076,10 +6203,10 @@ export default function CampaignManagement({
         />
 
         {editing != null && (
-          <div style={{ ...S.card, border: "1px solid #7c3aed" }}>
+          <div style={{ ...S.card, border: "1px solid var(--hftf-purple)" }}>
             <span style={S.lbl}>CREATE CAMPAIGN</span>
             <div style={{ marginBottom: "10px" }}>
-              <span style={{ fontSize: "11px", color: "#9ca3af" }}>Name</span>
+              <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Name</span>
               <input
                 style={S.inp}
                 value={form.name}
@@ -6091,7 +6218,7 @@ export default function CampaignManagement({
               />
             </div>
             <div style={{ marginBottom: "12px" }}>
-              <span style={{ fontSize: "11px", color: "#9ca3af" }}>
+              <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                 Description
               </span>
               <textarea
@@ -6099,8 +6226,8 @@ export default function CampaignManagement({
                   ...S.inp,
                   height: "60px",
                   resize: "vertical",
-                  border: "1px solid #374151",
-                  background: "#0d1117",
+                  border: "1px solid var(--border)",
+                  background: "var(--hftf-deep)",
                   padding: "6px",
                 }}
                 value={form.description}
@@ -6179,7 +6306,7 @@ export default function CampaignManagement({
                       <div
                         style={{
                           fontSize: "12px",
-                          color: "#9ca3af",
+                          color: "var(--text-muted)",
                           marginBottom: "6px",
                         }}
                       >
@@ -6196,7 +6323,7 @@ export default function CampaignManagement({
                     >
                       <StatusBadge active={c.is_active !== false} />
                       <RoleBadge role={isGM ? "GM" : "Player"} />
-                      <span style={{ fontSize: "11px", color: "#6b7280" }}>
+                      <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>
                         {playerCount} player{playerCount !== 1 ? "s" : ""} |{" "}
                         {charCount} character{charCount !== 1 ? "s" : ""}
                       </span>
@@ -6205,7 +6332,7 @@ export default function CampaignManagement({
                   <span
                     style={{
                       fontSize: "11px",
-                      color: "#4b5563",
+                      color: "var(--border)",
                       whiteSpace: "nowrap",
                     }}
                   >

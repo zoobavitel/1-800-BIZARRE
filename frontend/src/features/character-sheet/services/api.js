@@ -217,39 +217,12 @@ async function downloadBinaryExport(endpoint, filename) {
 }
 
 // Helper function for API requests
-let _dbgApiSeq = 0;
 const apiRequest = async (endpoint, options = {}) => {
   const token = localStorage.getItem("authToken");
 
   const base = requireApiBaseUrl();
   const path = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const url = `${base}${path}`;
-
-  const method = (options.method || "GET").toUpperCase();
-  if (
-    path.startsWith("/campaigns") ||
-    path.startsWith("/characters") ||
-    (path.startsWith("/sessions/") && method === "PATCH")
-  ) {
-    // #region agent log
-    fetch("http://127.0.0.1:7375/ingest/a7e247cd-73b3-4e22-b7b4-93518d0cbf34", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "ebf1a9",
-      },
-      body: JSON.stringify({
-        sessionId: "ebf1a9",
-        runId: "pre-fix",
-        hypothesisId: "H1",
-        location: "api.js:apiRequest",
-        message: "api request",
-        data: { method, path },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-  }
 
   const config = {
     headers: {
@@ -261,76 +234,10 @@ const apiRequest = async (endpoint, options = {}) => {
     ...options,
   };
 
-  // #region agent log
-  const _dbgT0 = Date.now();
-  const _dbgSeq = ++_dbgApiSeq;
-  const _dbgMethod = String(config.method || "GET").toUpperCase();
-  const _dbgHyp =
-    path.includes("/campaigns/") && _dbgMethod === "GET"
-      ? "C"
-      : _dbgMethod === "PATCH" || _dbgMethod === "PUT" || _dbgMethod === "POST"
-        ? "A"
-        : path.includes("experience")
-          ? "B"
-          : path.includes("/npcs")
-            ? "E"
-            : path.includes("/characters")
-              ? "A"
-              : "C";
-  fetch("http://127.0.0.1:7375/ingest/a7e247cd-73b3-4e22-b7b4-93518d0cbf34", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "ebf1a9",
-    },
-    body: JSON.stringify({
-      sessionId: "ebf1a9",
-      runId: "pre-fix",
-      hypothesisId: _dbgHyp,
-      location: "api.js:apiRequest:start",
-      message: "api request start",
-      data: {
-        seq: _dbgSeq,
-        method: _dbgMethod,
-        path,
-        hash: typeof window !== "undefined" ? window.location.hash : "",
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   try {
     const response = await fetch(url, config);
     const { parsed, invalidJson, textPreview } =
       await readFetchResponseBody(response);
-    // #region agent log
-    const _dbgBytes = textPreview != null ? String(textPreview).length : 0;
-    fetch("http://127.0.0.1:7375/ingest/a7e247cd-73b3-4e22-b7b4-93518d0cbf34", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "ebf1a9",
-      },
-      body: JSON.stringify({
-        sessionId: "ebf1a9",
-        runId: "pre-fix",
-        hypothesisId: _dbgHyp,
-        location: "api.js:apiRequest:end",
-        message: "api request end",
-        data: {
-          seq: _dbgSeq,
-          method: _dbgMethod,
-          path,
-          status: response.status,
-          ms: Date.now() - _dbgT0,
-          ok: response.ok,
-          bytesHint: _dbgBytes,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
 
     if (!response.ok) {
       const errorData =
