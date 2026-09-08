@@ -13,6 +13,10 @@ import {
   markNpcAutosaveBusyCollision,
   takeNpcAutosavePending,
 } from "../features/character-sheet/utils/npcAutosaveGate";
+import {
+  mergeNpcHeritageSelections,
+  npcHeritageDefaultsKey,
+} from "../features/character-sheet/utils/npcHeritageDefaults";
 import { HistoryBranchIcon } from "../components/position-effect/PositionEffectIndicators";
 import NpcsStandCoin from "../components/NpcsStandCoin";
 
@@ -1051,6 +1055,8 @@ const NPCSheet = ({
       ? npc.selected_detriments.map((x) => Number(x)).filter((n) => Number.isFinite(n))
       : [],
   );
+  /** Once per npc+heritage: seed required picks; later runs only prune invalid ids. */
+  const heritageDefaultsKeyRef = useRef(null);
   const [heritagesList, setHeritagesList] = useState([]);
   const [playbook, setPlaybook] = useState(npc?.playbook ?? "STAND");
 
@@ -1077,6 +1083,7 @@ const NPCSheet = ({
 
   // Sync heritage/playbook when NPC identity changes
   useEffect(() => {
+    heritageDefaultsKeyRef.current = null;
     setHeritage(npc?.heritage ?? npc?.heritage_id ?? null);
     setSelectedBenefitIds(
       Array.isArray(npc?.selected_benefits)
@@ -1108,35 +1115,41 @@ const NPCSheet = ({
     setClockDraftError("");
   }, [npc?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Drop heritage picks that do not belong to the current heritage catalog.
+  // Prune invalid heritage picks; first resolve per npc+heritage seeds required (GM may uncheck).
   useEffect(() => {
     if (heritage == null || heritage === "") {
+      heritageDefaultsKeyRef.current = null;
       setSelectedBenefitIds((prev) => (prev.length === 0 ? prev : []));
       setSelectedDetrimentIds((prev) => (prev.length === 0 ? prev : []));
       return;
     }
     if (!resolvedHeritageDetails) return;
-    const allowedB = new Set(
-      (resolvedHeritageDetails.benefits || []).map((b) => Number(b.id)),
-    );
-    const allowedD = new Set(
-      (resolvedHeritageDetails.detriments || []).map((d) => Number(d.id)),
-    );
+    const key = npcHeritageDefaultsKey(npc?.id, heritage);
+    const seedRequired = heritageDefaultsKeyRef.current !== key;
+    const benefitCatalog = {
+      benefits: resolvedHeritageDetails.benefits || [],
+      detriments: [],
+    };
+    const detrimentCatalog = {
+      benefits: [],
+      detriments: resolvedHeritageDetails.detriments || [],
+    };
     setSelectedBenefitIds((prev) => {
-      const next = prev.filter((id) => allowedB.has(Number(id)));
-      const contentChanged =
-        prev.length !== next.length ||
-        prev.some((id, i) => Number(id) !== Number(next[i]));
-      return contentChanged ? next : prev;
+      const merged = mergeNpcHeritageSelections(prev, [], benefitCatalog, {
+        seedRequired,
+      });
+      return merged.changed ? merged.benefits : prev;
     });
     setSelectedDetrimentIds((prev) => {
-      const next = prev.filter((id) => allowedD.has(Number(id)));
-      const contentChanged =
-        prev.length !== next.length ||
-        prev.some((id, i) => Number(id) !== Number(next[i]));
-      return contentChanged ? next : prev;
+      const merged = mergeNpcHeritageSelections([], prev, detrimentCatalog, {
+        seedRequired,
+      });
+      return merged.changed ? merged.detriments : prev;
     });
-  }, [heritage, resolvedHeritageDetails]);
+    if (seedRequired && key) {
+      heritageDefaultsKeyRef.current = key;
+    }
+  }, [heritage, resolvedHeritageDetails, npc?.id]);
 
   // Hamon / Spin playbook abilities
   const [hamonAbilitiesList, setHamonAbilitiesList] = useState([]);
@@ -2758,7 +2771,8 @@ const NPCSheet = ({
                             }}
                           >
                             Check what is in play for this NPC (GM notes — no HP
-                            budget).
+                            budget). Required picks start checked; uncheck if
+                            not in play.
                           </div>
                           <div
                             style={{
