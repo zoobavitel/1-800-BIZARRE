@@ -1688,6 +1688,7 @@ class HamonAbility(models.Model):
 
     HAMON_TYPE_CHOICES = [
         ("FOUNDATION", "Ripple Foundations"),
+        ("OVERDRIVE_STYLE", "Overdrive Style"),
         ("CAESAR_STYLE", "Caesar Style"),
         ("CYBER_STYLE", "Cyber Style"),
         ("VAMPIRIC_STYLE", "Vampiric Style"),

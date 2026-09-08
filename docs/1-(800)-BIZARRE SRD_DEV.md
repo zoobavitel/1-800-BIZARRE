@@ -2517,7 +2517,7 @@ When you take a playbook advancement, you may select a special ability from the 
 
 Spend 10XP to gain a Stand. Your stand coin starts with D in each category (6 points starting total) \- you may reallocate your stand coin stats similar to a new stand user, where F \= 0, D \= 1, C \= 2, B \= 3, A \= 4\. You gain the stand dice action ratings as well as a number of stand armor uses according to your durability. The stand does not have to be related to your character's hamon or spin abilities. Your stand gains 1 unique ability (see stand playbook section for examples), and each A grade gives you 2 standard abilities or 2 unique abilities and 1 standard ability. To advance a stand coin stat, fill in the 10 boxes of your playbook track to advance a grade. 
 
-You may take a playbook advancement (10xp) to gain a spin ability. Mark 10 boxes in your playbook to learn a feature from a spin playbook. Learn more features to gain higher quality features.
+You may take a playbook advancement (10xp) to gain a spin ability. Mark 10 boxes in your playbook to learn a feature one level higher or of equal level from a spin playbook. 
 
 ---
 
@@ -2552,6 +2552,8 @@ Starting Equipment:
 *Steel Ball* \- a polished, steel ball used by beginners and experts. Can be used for spin related actions in or out of combat, up to 65ft. 
 
 Steel Darts \- sharpened throwing darts, used by beginners and experts. 
+
+Chakram \- sharpened hunting circlets 
 
 ---
 
@@ -2709,9 +2711,9 @@ Core techniques known to all Ripple users. Every Hamon practitioner begins with 
 
 **Ripple Breathing** \+1d to resist poison, fatigue, or fear. Once per score, push yourself with no stress cost.
 
-**Ripple Infusion** Spend 1 stress to imbue an object with Ripple energy for the scene. Gains \+1 effect vs vampires and pillarmen.
+**Sendō Overdrive** Strike targets through walls or barriers up to 65ft. Cannot conduct Hamon through metallic objects. 
 
-**Scarlet Overdrive** Ignite a weapon or limb. Inflicts a fire-based secondary effect. Foes must resist or catch fire.
+**Scarlet Overdrive** Ignite a weapon or limb. Inflicts a fire-based secondary effect. Foes must resist or catch fire. Gains \+1 effect vs vampires and pillarmen.
 
 **Zoom Punch** Make a melee strike up to 15ft. \+1d when attacking from unexpected angles or cover.
 
@@ -2725,15 +2727,7 @@ Core techniques known to all Ripple users. Every Hamon practitioner begins with 
 
 **Ripple Locator** \- Using the environment around you (dust, water in a container, etc.), you gain **\+1d** to locate objects or entities. 
 
-**Sendō Overdrive** Strike targets through walls or barriers within your operational Range.
-
-**Metal Silver Overdrive** Ripple conducts through metallic objects.
-
 **Age Resistance** Once per session, ignore 1 fatigue, aging, or time-based consequence.
-
-**Life Magnetism Overdrive** Your expertise with Hamon allows you to manipulate faint magnetic fields that originate from organic life. Spend 1 stress to stick/shape organic matter together. Example: shape plant matter into a glider, cloak, or shield. \+1 effect on movement or defensive action rolls.
-
-**Tornado Overdrive** Your expertise in hamon allows you to jump up to 20ft mid air, and up to 30ft horizontally. While in air, perform a high-speed rotational dive. The impact causes a shockwave of Hamon to scar the area. 
 
 **Aura Lock** Spend 2 stress to suppress an opponent’s ability activation within your range until the target pushes themselves or the fiction shifts.
 
@@ -2743,15 +2737,7 @@ Core techniques known to all Ripple users. Every Hamon practitioner begins with 
 
 **Ripple Cutter** \- Transfer hamon into liquids; attacks using hamon infused liquid gain **\+1** **effect** towards steel structures.  
 
-**Sunlight Yellow Overdrive** \- Sacrifice all remaining stress to oneshot an undead entity. The undead entity explodes with a surging hamon shockwave, affecting foes up to 20ft radius. 
-
-**Deep Pass Overdrive** If your character dies, you have the opportunity to sacrifice all remaining stress to fully heal an ally, as well as transferring all of your knowledge (including hamon techniques) to them. They gain **\+1d** to all actions and **\+1 effect** to hamon based actions until the end of the session. 
-
-**Turquoise Blue Overdrive** \- Attacking with hamon while in a body of water may create a tempest/giant waves. The body of water loses half of its water for each use.
-
 **Time Ripple** \- Once a day, you may roll two d6’s. You may substitute the outcome of any roll with these dice. 
-
-**Guided Overdrive** Ripple arcs from your primary target to a second target within your operational Range. The second target takes splash damage.
 
 Hamon Equipment:
 
@@ -2760,6 +2746,32 @@ Hamon Equipment:
 *Scarlet Shield* Expend your Hamon armor. Enemies who make physical contact are harmed unless they resist.
 
 *Sword of Pluck* A sword from the Victorian era. \+1 effect towards undead. Gain \+1d to an action rating with 0 dots \- choose again on a new day. 
+
+---
+
+## **Overdrive Style**
+
+Level 1:
+
+**Guided Overdrive** Ripple arcs from your primary target to a second target within 30ft. The second target takes splash damage.
+
+**Tornado Overdrive** Your expertise in hamon allows you to jump up to 20ft mid air, and up to 30ft horizontally. While in air, perform a high-speed rotational dive. The impact causes a shockwave of Hamon to scar the area. 
+
+Level 2:
+
+**Life Magnetism Overdrive** Your expertise with Hamon allows you to manipulate faint magnetic fields that originate from organic life. Spend 1 stress to stick/shape organic matter together. Example: shape plant matter into a glider, cloak, or shield. \+1 effect on movement or defensive action rolls.
+
+**Turquoise Blue Overdrive** \- Attacking with hamon while in a body of water may create a tempest/giant waves. The body of water loses half of its water for each use.
+
+Level 3:
+
+**Sunlight Yellow Overdrive** \- Sacrifice all remaining stress to oneshot an undead entity. The undead entity explodes with a surging hamon shockwave, affecting foes up to 20ft radius. 
+
+**Metal Silver Overdrive** Ripple conducts through metallic objects (Sendo Overdrive upgrade)
+
+Level 4:
+
+**Deep Pass Overdrive** If your character dies, you have the opportunity to sacrifice all remaining stress to fully heal an ally, as well as transferring all of your knowledge (including hamon techniques) to them. They gain **\+1d** to all actions and **\+1 effect** to hamon based actions until the end of the session. 
 
 ---
 
@@ -2860,7 +2872,8 @@ Inverted, chilling, and parasitic. The Ripple repurposed for undeath.
 * **Tough as Nails:** Penalties from harm are one level less severe (though level 4 harm is still fatal)  
 * **Overdrive:** While wearing non-Stand armor, gain an extra **\+1 armor**.  
 * **Masochist:** When your Stand takes harm, reduce the user's damage by 1 level. If the Stand hits Level 4 harm with no way to reduce, both die.  
-* **Undying Will:** When taking Level 3 harm, you can act normally for one round. Afterwards, actions cost **2 stress**.
+* **Undying Will:** When taking Level 3 harm, you can act normally for one round. Afterwards, actions cost **2 stress**.  
+* **Swan Song:** When you would be taken out by harm (Level 4), you may spend all remaining Stand armor charges (minimum 1\) to remain standing for a short but heroic moment. You can take one last action before you collapse. If that action prevents or cancels the harm, you remain conscious.
 
 **Cunning**
 

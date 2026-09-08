@@ -543,10 +543,9 @@ class HamonAbilityModelTest(TestCase):
         self.assertEqual(str(hamon_ability), 'Ripple Breathing (Ripple Foundations)')
     
     def test_hamon_foundation_abilities(self):
-        """SRD Ripple Foundations are seeded (migration 0098); extra FOUNDATION rows can still be created."""
+        """SRD Ripple Foundations are seeded; Overdrive Style is separate (SRD_DEV)."""
         seeded_names = [
             "Ripple Breathing",
-            "Ripple Infusion",
             "Scarlet Overdrive",
             "Zoom Punch",
             "Acrobatic Pulse",
@@ -555,24 +554,23 @@ class HamonAbilityModelTest(TestCase):
             "Ripple Deflect",
             "Ripple Locator",
             "Sendō Overdrive",
-            "Metal Silver Overdrive",
             "Age Resistance",
-            "Life Magnetism Overdrive",
-            "Tornado Overdrive",
             "Aura Lock",
             "Final Flame",
             "Pulse Detonation",
             "Ripple Cutter",
-            "Sunlight Yellow Overdrive",
-            "Deep Pass Overdrive",
-            "Turquoise Blue Overdrive",
             "Time Ripple",
-            "Guided Overdrive",
         ]
         seeded = HamonAbility.objects.filter(hamon_type="FOUNDATION")
-        self.assertEqual(seeded.count(), 23)
+        self.assertEqual(seeded.count(), 15)
         for name in seeded_names:
             self.assertTrue(seeded.filter(name=name).exists(), name)
+        self.assertFalse(
+            HamonAbility.objects.filter(name="Ripple Infusion").exists()
+        )
+        overdrive = HamonAbility.objects.filter(hamon_type="OVERDRIVE_STYLE")
+        self.assertEqual(overdrive.count(), 7)
+        self.assertTrue(overdrive.filter(name="Guided Overdrive").exists())
 
         HamonAbility.objects.create(
             name="Overdrive",
@@ -580,7 +578,7 @@ class HamonAbilityModelTest(TestCase):
             description="Spend 1 stress to charge a strike. +1 effect and +1 harm vs bizarre, undead, or inorganic targets.",
             stress_cost=1,
         )
-        self.assertEqual(HamonAbility.objects.filter(hamon_type="FOUNDATION").count(), 24)
+        self.assertEqual(HamonAbility.objects.filter(hamon_type="FOUNDATION").count(), 16)
 
 
 class SpinAbilityModelTest(TestCase):

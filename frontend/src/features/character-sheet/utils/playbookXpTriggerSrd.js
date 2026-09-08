@@ -94,6 +94,12 @@ export const SPIN_ARCHETYPE_ROWS = Object.freeze([
 /** @type {readonly ArchetypeRow[]} */
 export const HAMON_ARCHETYPE_ROWS = Object.freeze([
   {
+    key: "OVERDRIVE_STYLE",
+    label: "Overdrive Style",
+    trigger:
+      "Address a challenge with classic Ripple Overdrive techniques or martial Hamon force.",
+  },
+  {
     key: "CAESAR_STYLE",
     label: "Caesar Style",
     trigger:
