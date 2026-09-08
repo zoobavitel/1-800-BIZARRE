@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { authAPI, useAuth } from "../features/auth";
 import { useTheme } from "../features/theme/ThemeContext";
 import { resolveMediaUrl } from "../features/character-sheet/services/api";
+import AvatarCropModal from "../components/AvatarCropModal";
 
 const S = {
   page: {
@@ -125,6 +126,7 @@ export default function AccountSettingsPage() {
   const [displayTitle, setDisplayTitle] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
+  const [cropOpen, setCropOpen] = useState(false);
   const avatarFileInputRef = useRef(null);
 
   useEffect(() => {
@@ -204,6 +206,23 @@ export default function AccountSettingsPage() {
 
   const previewSrc = avatarPreview || resolveMediaUrl(avatarPath || avatarUrl);
 
+  const handleCropApply = (file) => {
+    if (avatarPreview && String(avatarPreview).startsWith("blob:")) {
+      try {
+        URL.revokeObjectURL(avatarPreview);
+      } catch {
+        /* ignore */
+      }
+    }
+    setAvatarFile(file);
+    setAvatarUrl("");
+    setRemoveAvatarRequested(false);
+    setAvatarPreview(URL.createObjectURL(file));
+    setAvatarPreviewError(false);
+    setCropOpen(false);
+    setSaveMessage(null);
+  };
+
   return (
     <div style={S.page}>
       <div style={S.content}>
@@ -276,6 +295,7 @@ export default function AccountSettingsPage() {
                 alignItems: "center",
                 gap: "14px",
                 marginTop: "12px",
+                flexWrap: "wrap",
               }}
             >
               <div
@@ -315,10 +335,45 @@ export default function AccountSettingsPage() {
                   "Preview"
                 )}
               </div>
-              <span style={{ color: "var(--text-muted)", fontSize: "11px" }}>
-                Preview updates from upload or URL.
-              </span>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px",
+                  minWidth: 0,
+                  flex: "1 1 160px",
+                }}
+              >
+                <span style={{ color: "var(--text-muted)", fontSize: "11px" }}>
+                  Preview updates from upload or URL. Use Adjust to crop and zoom
+                  before saving.
+                </span>
+                <button
+                  type="button"
+                  style={{
+                    ...S.btn,
+                    alignSelf: "flex-start",
+                    opacity:
+                      previewSrc && !avatarPreviewError ? 1 : 0.5,
+                    cursor:
+                      previewSrc && !avatarPreviewError
+                        ? "pointer"
+                        : "not-allowed",
+                  }}
+                  disabled={!previewSrc || avatarPreviewError}
+                  onClick={() => setCropOpen(true)}
+                >
+                  Adjust
+                </button>
+              </div>
             </div>
+            {cropOpen && previewSrc && !avatarPreviewError ? (
+              <AvatarCropModal
+                imageSrc={previewSrc}
+                onCancel={() => setCropOpen(false)}
+                onApply={handleCropApply}
+              />
+            ) : null}
           </div>
           <div style={S.card}>
             <label style={S.lbl}>Signature</label>
