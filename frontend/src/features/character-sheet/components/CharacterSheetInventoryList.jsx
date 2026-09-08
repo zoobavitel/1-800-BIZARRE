@@ -411,6 +411,8 @@ export default function CharacterSheetInventoryList({
 
   const [addDraft, setAddDraft] = useState(null);
   const [addMode, setAddMode] = useState(null);
+  const [editingIndex, setEditingIndex] = useState(null);
+  const [editDraft, setEditDraft] = useState(null);
   const [catalogItems, setCatalogItems] = useState([]);
   const [catalogError, setCatalogError] = useState(null);
 
@@ -500,6 +502,49 @@ export default function CharacterSheetInventoryList({
   const cancelAdd = () => {
     setAddDraft(null);
     setAddMode(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingIndex(null);
+    setEditDraft(null);
+  };
+
+  const startEdit = (index) => {
+    cancelAdd();
+    const item = inv[index];
+    if (!item) return;
+    setEditingIndex(index);
+    setEditDraft({ ...item });
+  };
+
+  const saveEditedItem = () => {
+    if (editingIndex == null || !editDraft) return;
+    const armorKind = normalizeArmorKind(editDraft);
+    const dedicatedArmor = Boolean(armorKind) && editDraft.is_armor;
+    let name = String(editDraft?.name || "").trim();
+    if (!name && dedicatedArmor && armorKind) {
+      name = armorKindLabel(armorKind);
+    }
+    if (!name) return;
+    const row = armorKind
+      ? {
+          ...editDraft,
+          name,
+          load: dedicatedArmor ? 0 : Number(editDraft.load) || 0,
+          is_armor: armorKind === "standard" || armorKind === "heavy",
+          armor_kind: armorKind,
+        }
+      : {
+          ...editDraft,
+          name,
+          load: Number(editDraft.load) || 1,
+          quality: Number(editDraft.quality) || 1,
+          is_armor: false,
+          armor_kind: "",
+        };
+    onInventoryTouch?.();
+    onChange(inv.map((item, i) => (i === editingIndex ? row : item)));
+    cancelEdit();
   };
 
   const addFromCatalog = (cat) => {
@@ -596,8 +641,42 @@ export default function CharacterSheetInventoryList({
       ) : (
         inv.map((item, index) => {
           const itemId = String(item.id || index);
+          const isEditing = editingIndex === index;
           const armorKind = normalizeArmorKind(item);
           const noLoad = !armorKind && Number(item.load) === 0;
+          if (isEditing && editDraft) {
+            const editArmorKind = normalizeArmorKind(editDraft);
+            return (
+              <div
+                key={`inv-row-${itemId}`}
+                role="listitem"
+                style={{
+                  marginBottom: index < inv.length - 1 ? "10px" : 0,
+                  paddingBottom: index < inv.length - 1 ? "10px" : 0,
+                  borderBottom:
+                    index < inv.length - 1 ? "1px solid var(--border)" : "none",
+                }}
+              >
+                {editArmorKind ? (
+                  <ArmorEditorCard
+                    draft={editDraft}
+                    readOnly={readOnly}
+                    onChange={setEditDraft}
+                    onSave={saveEditedItem}
+                    onCancel={cancelEdit}
+                  />
+                ) : (
+                  <CustomItemEditorCard
+                    draft={editDraft}
+                    readOnly={readOnly}
+                    onChange={setEditDraft}
+                    onSave={saveEditedItem}
+                    onCancel={cancelEdit}
+                  />
+                )}
+              </div>
+            );
+          }
           return (
             <div
               key={`inv-row-${itemId}`}
@@ -628,14 +707,24 @@ export default function CharacterSheetInventoryList({
                   {item.coin_value != null ? ` · ${item.coin_value}c` : null}
                 </span>
                 {!readOnly ? (
-                  <button
-                    type="button"
-                    style={{ ...btnStyle, color: "#f85149" }}
-                    onClick={() => removeAt(index)}
-                    aria-label={`Remove ${item.name}`}
-                  >
-                    Del
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      style={btnStyle}
+                      onClick={() => startEdit(index)}
+                      aria-label={`Edit ${item.name}`}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      style={{ ...btnStyle, color: "#f85149" }}
+                      onClick={() => removeAt(index)}
+                      aria-label={`Remove ${item.name}`}
+                    >
+                      Del
+                    </button>
+                  </>
                 ) : null}
               </div>
               {item.detail ? (
@@ -703,7 +792,7 @@ export default function CharacterSheetInventoryList({
         />
       ) : null}
 
-      {!readOnly && !addMode ? (
+      {!readOnly && !addMode && editingIndex == null ? (
         <div
           style={{
             display: "flex",
@@ -716,6 +805,7 @@ export default function CharacterSheetInventoryList({
             type="button"
             style={btnStyle}
             onClick={() => {
+              cancelEdit();
               setAddMode("catalog");
               setAddDraft(null);
             }}
@@ -726,6 +816,7 @@ export default function CharacterSheetInventoryList({
             type="button"
             style={btnStyle}
             onClick={() => {
+              cancelEdit();
               setAddMode("custom");
               setAddDraft(newInventoryItemDraft());
             }}
@@ -736,6 +827,7 @@ export default function CharacterSheetInventoryList({
             type="button"
             style={btnStyle}
             onClick={() => {
+              cancelEdit();
               setAddMode("armor");
               setAddDraft(newArmorItemDraft());
             }}
