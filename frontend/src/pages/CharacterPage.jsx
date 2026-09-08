@@ -943,7 +943,9 @@ export default function CharacterPage({
           crew: payload.crew ?? savedFrontend.crew,
           crewId: payload.crewId ?? savedFrontend.crewId,
           image: savedFrontend.image,
-          image_url: payload.image_url ?? savedFrontend.image_url,
+          image_url: isImageUploadPayload(payload.imageFile)
+            ? savedFrontend.image_url || ""
+            : (payload.image_url ?? savedFrontend.image_url),
           vice: payload.vice ?? savedFrontend.vice,
           viceDetails:
             payload.viceDetails ??

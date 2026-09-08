@@ -153,6 +153,7 @@ export const standardAbilities = [
   "Overdrive",
   "Masochist",
   "Undying Will",
+  "Swan Song",
   "Bizarre Step",
   "Cloak & Dagger",
   "Mesmeriser",
