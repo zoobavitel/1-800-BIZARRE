@@ -64,9 +64,9 @@ Use with `DJANGO_SETTINGS_MODULE=app.settings_prod` ([deploy-prod.sh](../../scri
 - **`admin/`** — Django admin.
 - **`api/`** — All `router.register(...)` resources (characters, campaigns, sessions, rolls, etc.). See router block in file for path names (`user-profiles`, `characters`, `sessions`, …).
 - **Custom API paths:** `api/search/`, `api/get_available_playbook_abilities/`, `api/docs/`, `api/accounts/login/`, `api/accounts/signup/`, `api/accounts/me/`.
-- **`static(MEDIA_URL, ...)`** — Serves media in development when `DEBUG` uses Django static helper.
+- **Media URLs** — Dev: `static(MEDIA_URL, ...)` when `DEBUG`. Prod: explicit `django.views.static.serve` for `/media/` (needed when ngrok/gunicorn hit Django without a reverse-proxy `file_server`). Prefer Caddy `handle_path /media/*` when available.
 
-**Note:** Imports duplicate `from django.contrib import admin` once; harmless. Nested routers are imported but router usage here is flat `DefaultRouter` only.
+**Note:** Nested routers are imported but router usage here is flat `DefaultRouter` only.
 
 ---
 

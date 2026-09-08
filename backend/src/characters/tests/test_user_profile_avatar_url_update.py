@@ -34,3 +34,19 @@ class UserProfileAvatarUrlUpdateTests(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("avatar_url", response.data)
+
+    def test_rejects_expiring_discord_cdn_avatar_url(self):
+        discord = (
+            "https://media.discordapp.net/attachments/1/2/a.png"
+            "?ex=abcdef01&is=abcdef00&hm=deadbeef"
+        )
+        response = self.client.put(
+            "/api/user-profiles/update/",
+            {"avatar_url": discord, "theme": "dark"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("avatar_url", response.data)
+        self.assertIn("Discord CDN", str(response.data["avatar_url"]))
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.profile.avatar_url, "")

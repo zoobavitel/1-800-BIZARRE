@@ -66,6 +66,8 @@ sudo systemctl reload caddy
 
 The example Caddyfile serves **`/media/*`** from `/opt/bizarre/backend/src/media` (Django `MEDIA_ROOT`) so uploaded PC/NPC/crew/faction/user portraits are reachable when `DEBUG=False`. Include that `media/` directory in backups alongside the database — Postgres dumps do not contain uploaded files.
 
+**Ngrok note:** If ngrok tunnels straight to gunicorn `:8000` (not through Caddy), Django itself must serve `/media/` — `app/urls.py` mounts `django.views.static.serve` when `DEBUG=False` for that path. Prefer Caddy (or another reverse proxy) `file_server` when the public URL goes through it.
+
 ## 5. Firewall (example, ufw)
 
 ```bash

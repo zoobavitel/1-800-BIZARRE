@@ -1,12 +1,12 @@
 # backend/src/urls.py - Fix
 
 from django.contrib import admin
-from django.contrib import admin
-from django.urls import path, include
+from django.urls import path, include, re_path
 from rest_framework import routers
 from rest_framework_nested import routers as nested_routers
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.static import serve
 from characters.views_sse import campaign_events_stream
 from characters.views import (
     UserProfileViewSet, HeritageViewSet, ViceViewSet, AbilityViewSet,
@@ -81,4 +81,18 @@ urlpatterns = [
     path('api/accounts/login/', LoginView.as_view(), name='login'),
     path('api/accounts/signup/', RegisterView.as_view(), name='signup'),
     path('api/accounts/me/', CurrentUserView.as_view(), name='current_user'),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+]
+
+# django.conf.urls.static.static() only mounts when DEBUG=True. Prod often hits
+# gunicorn directly (e.g. ngrok → :8000), so serve MEDIA_ROOT explicitly too.
+# Prefer reverse-proxy file_server when available (see deploy Caddyfile.example).
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+else:
+    urlpatterns += [
+        re_path(
+            r"^media/(?P<path>.*)$",
+            serve,
+            {"document_root": settings.MEDIA_ROOT},
+        ),
+    ]
