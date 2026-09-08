@@ -80,6 +80,20 @@ PORTRAIT_ALLOWED_CONTENT_TYPES = frozenset(
 PORTRAIT_ALLOWED_EXTENSIONS = frozenset({".jpg", ".jpeg", ".png", ".webp", ".gif"})
 
 
+def _is_expiring_discord_cdn_url(url: str) -> bool:
+    """True for Discord attachment CDN URLs with signed ?ex= expiry (they die)."""
+    lower = url.lower()
+    host_ok = (
+        "cdn.discordapp.com/" in lower
+        or "media.discordapp.net/" in lower
+        or "cdn.discord.com/" in lower
+    )
+    if not host_ok:
+        return False
+    # Signed links use ex=<hex unix>; plain stable CDN paths are rare / still fragile.
+    return "?ex=" in lower or "&ex=" in lower
+
+
 def validate_https_image_url(value):
     """Normalize blank URLs; require https:// when non-empty."""
     s = (value or "").strip()
@@ -87,6 +101,11 @@ def validate_https_image_url(value):
         return ""
     if not s.startswith("https://"):
         raise serializers.ValidationError("Use an HTTPS image URL.")
+    if _is_expiring_discord_cdn_url(s):
+        raise serializers.ValidationError(
+            "Discord CDN links expire and break portraits. "
+            "Upload the image file, or use a permanent HTTPS URL."
+        )
     return s
 
 

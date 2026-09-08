@@ -134,6 +134,23 @@ class CharacterPortraitUploadTests(TestCase):
         )
         self.assertFalse(bool(self.character.image))
 
+    def test_rejects_expiring_discord_cdn_image_url(self):
+        discord = (
+            "https://cdn.discordapp.com/attachments/1/2/image.jpg"
+            "?ex=6a03c87f&is=6a0276ff&hm=abc"
+        )
+        response = self.client.patch(
+            f"/api/characters/{self.character.id}/",
+            {"image_url": discord},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("image_url", response.data)
+        err = str(response.data["image_url"])
+        self.assertIn("Discord CDN", err)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.image_url, "https://example.com/old.png")
+
     def test_rejects_oversized_upload(self):
         big = SimpleUploadedFile(
             "big.png",
