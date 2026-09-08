@@ -5,6 +5,7 @@ After=network.target postgresql.service redis-server.service
 [Service]
 User=root
 Group=root
+LimitNOFILE=65536
 WorkingDirectory=/opt/bizarre/backend/src
 Environment="PATH=/opt/bizarre/.venv/bin"
 Environment="DJANGO_SETTINGS_MODULE=app.settings_prod"

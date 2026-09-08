@@ -7,7 +7,11 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from characters.models import Character, Heritage, Stand
-from characters.services.xp_allocation import apply_level_up, undo_allocation
+from characters.services.xp_allocation import (
+    apply_level_up,
+    apply_minor_advance,
+    undo_allocation,
+)
 
 
 def _make_stand_character(**kwargs):
@@ -133,6 +137,41 @@ class AdvanceAutosaveGuardTests(TestCase):
 
         self.character.refresh_from_db()
         self.assertEqual(self.character.total_xp_spent, 10)
+
+    def test_stale_patch_cannot_revert_action_dots_after_minor_advance(self):
+        self.character.xp_clocks = {
+            "insight": 0,
+            "prowess": 5,
+            "resolve": 0,
+            "heritage": 0,
+            "playbook": 0,
+        }
+        self.character.save(update_fields=["xp_clocks"])
+        apply_minor_advance(
+            self.character,
+            xp_track="prowess",
+            action="finesse",
+        )
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.action_dots.get("finesse"), 2)
+
+        response = self._patch(
+            {
+                "action_dots": dict(self.character.action_dots, finesse=1),
+                "total_xp_spent": 0,
+                "action_dice_gained": 0,
+            }
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        rejected = response.data.get("rejected_fields", {})
+        self.assertIn("action_dots", rejected)
+        self.assertIn("total_xp_spent", rejected)
+        self.assertIn("action_dice_gained", rejected)
+
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.action_dots.get("finesse"), 2)
+        self.assertEqual(self.character.total_xp_spent, 5)
+        self.assertEqual(self.character.action_dice_gained, 1)
 
     def test_stale_patch_cannot_wipe_advancement_grants(self):
         apply_level_up(
