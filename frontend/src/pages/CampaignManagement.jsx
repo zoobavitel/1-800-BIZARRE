@@ -17,6 +17,7 @@ import { isGmManagedProgressClock } from "../features/character-sheet/utils/prog
 import { useAuth } from "../features/auth";
 import { subscribeCampaignEvents } from "../features/character-sheet/services/campaignEvents";
 import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
+import ProgressClock from "../components/ProgressClock";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 import {
   getCharacterPortraitSrc,
@@ -2977,6 +2978,13 @@ function ClockManager({
               >
                 {isGMClock ? "GM" : "Player"}
               </span>
+              <ProgressClock
+                size={28}
+                segments={clk.max_segments}
+                filled={clk.filled_segments || 0}
+                interactive
+                onClick={(f) => updateClock({ filled_segments: f })}
+              />
               <span>
                 {clk.name} ({clk.filled_segments}/{clk.max_segments})
               </span>

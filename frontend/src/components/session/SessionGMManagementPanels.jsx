@@ -28,6 +28,7 @@ import {
   STAND_ROLL_KEYS_ALL,
 } from "../../features/character-sheet/constants/srd";
 import NpcsStandCoin from "../NpcsStandCoin";
+import ProgressClock from "../ProgressClock";
 import { PositionStack, EffectShapes } from "../position-effect/PositionEffectIndicators";
 import {
   getPositionEffectModifierHints,
@@ -2895,6 +2896,12 @@ export default function SessionGMManagementPanels({
           >
             {npcClks.map((c) => {
               const clkBusy = npcUiBusyKey === `clk:${c.id}`;
+              const canTick =
+                !saving &&
+                !busy &&
+                !clkBusy &&
+                canEditStand &&
+                (Number(c.max_segments) || 0) > 0;
               return (
                 <li
                   key={c.id}
@@ -2906,6 +2913,20 @@ export default function SessionGMManagementPanels({
                     marginBottom: 4,
                   }}
                 >
+                  <ProgressClock
+                    size={28}
+                    segments={c.max_segments}
+                    filled={c.filled_segments || 0}
+                    interactive={canTick}
+                    onClick={
+                      canTick
+                        ? (f) => {
+                            const cur = Number(c.filled_segments) || 0;
+                            bumpNpcSessionProgressClock(npc, c, f - cur);
+                          }
+                        : undefined
+                    }
+                  />
                   <span style={{ flex: "1 1 120px" }}>
                     {c.name} ({c.filled_segments}/{c.max_segments})
                     {progressClockShowsPlayersBadge(c, campaign?.gm) ? (
@@ -4814,6 +4835,35 @@ export default function SessionGMManagementPanels({
                             marginBottom: 4,
                           }}
                         >
+                          <ProgressClock
+                            size={28}
+                            segments={c.max_segments}
+                            filled={c.filled_segments || 0}
+                            interactive={
+                              pcSessionClockBusyCharId !== full.id &&
+                              (Number(c.max_segments) || 0) > 0
+                            }
+                            onClick={
+                              pcSessionClockBusyCharId === full.id
+                                ? undefined
+                                : async (f) => {
+                                    setPcSessionClockBusyCharId(full.id);
+                                    try {
+                                      await progressClockAPI.updateProgressClock(
+                                        c.id,
+                                        { filled_segments: f },
+                                      );
+                                      await refreshSessionClocks();
+                                    } catch (e) {
+                                      setError(
+                                        e?.message || "Could not update clock.",
+                                      );
+                                    } finally {
+                                      setPcSessionClockBusyCharId(null);
+                                    }
+                                  }
+                            }
+                          />
                           <span style={{ flex: "1 1 120px" }}>
                             {c.name} ({c.filled_segments}/{c.max_segments})
                             {progressClockShowsPlayersBadge(c, campaign?.gm) ? (
