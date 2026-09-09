@@ -62,7 +62,9 @@ For the full local-dev walkthrough, CI parity, and deploy notes, see [`docs/deve
 | `npm run dev` | Concurrently runs Django (`:8000`) + React (`:3000`). |
 | `npm test` | Unit + integration suites (frontend Jest + backend Django). |
 | `npm run test:automated-ui` | Playwright E2E (in `frontend/e2e/`). |
-| `npm run test:performance` | Backend latency probe + Lighthouse budget check. |
+| `npm run test:performance` | Full A suite: latency + hot-path p95 + SSE gauge + Lighthouse. |
+| `npm run test:performance:budget` | Blocking merge budgets (no Lighthouse). |
+| `npm run test:load:saturday` | Staging Saturday capacity gate (target 10 concurrent). |
 | `npm run lint` / `npm run lint:fix` | ESLint over `frontend/src/`. |
 | `npm run format` / `format:check` | Prettier across the repo. |
 | `npm run build` | Production frontend bundle (`frontend/build/`). |
