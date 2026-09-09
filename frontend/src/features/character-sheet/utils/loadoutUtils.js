@@ -1,5 +1,16 @@
 /** SRD load bands and load math (mirrors backend loadout service). */
 
+/**
+ * Coerce inventory item load slots. Preserves explicit 0 (unlike `n || 1`).
+ * Empty / NaN / negative → fallback (default 1 for normal kit items).
+ */
+export function coerceItemLoad(value, fallback = 1) {
+  if (value === "" || value == null) return fallback;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return fallback;
+  return n;
+}
+
 export const LOAD_BANDS = [
   { value: "light", label: "Light", range: "1–3" },
   { value: "normal", label: "Normal", range: "4–5" },
@@ -331,7 +342,7 @@ export function catalogItemToKitRow(catalogItem) {
     name: catalogItem.name || "",
     detail: catalogItem.description || "",
     category: catalogItem.category || "other",
-    load: Number(catalogItem.load_slots) || 1,
+    load: coerceItemLoad(catalogItem.load_slots, 1),
     quality: Number(catalogItem.quality) || 1,
     coin_value: catalogItem.coin_value ?? null,
     catalog_id: catalogItem.id ?? null,
