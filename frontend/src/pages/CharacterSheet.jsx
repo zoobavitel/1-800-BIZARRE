@@ -221,7 +221,7 @@ function upgradesToProgress(upgrades) {
 function progressToUpgrades(progress) {
   const base = {
     lair: {
-      carriage: false,
+      garage: false,
       boat: false,
       hidden: false,
       quarters: false,
@@ -243,7 +243,10 @@ function progressToUpgrades(progress) {
     if (parts.length >= 2) {
       const group = parts[0];
       const rest = parts.slice(1).join("_");
-      if (group === "lair" && rest in base.lair) base.lair[rest] = !!val;
+      if (group === "lair") {
+        const slot = rest === "carriage" ? "garage" : rest;
+        if (slot in base.lair) base.lair[slot] = !!val;
+      }
       if (group === "training" && rest in base.training)
         base.training[rest] = !!val;
     }
@@ -2902,7 +2905,7 @@ const CharacterSheetWrapper = ({
     specialAbilities: [],
     upgrades: {
       lair: {
-        carriage: false,
+        garage: false,
         boat: false,
         hidden: false,
         quarters: false,
