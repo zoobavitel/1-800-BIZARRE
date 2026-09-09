@@ -316,6 +316,62 @@ class AdvanceAutosaveGuardTests(TestCase):
         self.character.refresh_from_db()
         self.assertEqual(self.character.stand.development, "D")
 
+    def test_gm_force_stand_stat_decrease_undoes_tip_raise(self):
+        self.character.xp_clocks = {"playbook": 10}
+        self.character.save(update_fields=["xp_clocks"])
+        gm = User.objects.create_user(username="gm_down", password="x", is_staff=True)
+        self.client.force_authenticate(user=gm)
+
+        up = self.client.post(
+            f"/api/characters/{self.character.id}/gm-force-stand-stat/",
+            {"stand_stat": "development", "direction": "up"},
+            format="json",
+        )
+        self.assertEqual(up.status_code, 200, up.data)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.stand.development, "D")
+
+        down = self.client.post(
+            f"/api/characters/{self.character.id}/gm-force-stand-stat/",
+            {"stand_stat": "development", "direction": "down"},
+            format="json",
+        )
+        self.assertEqual(down.status_code, 200, down.data)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.stand.development, "F")
+
+    def test_gm_force_stand_stat_decrease_chargen_origin_grade(self):
+        """Post-chargen PATCH cannot lower stand; GM direction=down can."""
+        apply_level_up(
+            self.character,
+            xp_track="playbook",
+            choice="stat",
+            stand_stat="development",
+        )
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.stand.power, "A")
+
+        rejected = self.client.patch(
+            f"/api/characters/{self.character.id}/",
+            {"stand": {"power": "B"}},
+            format="json",
+        )
+        self.assertEqual(rejected.status_code, 200, rejected.data)
+        self.assertIn("stand", rejected.data.get("rejected_fields", {}))
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.stand.power, "A")
+
+        gm = User.objects.create_user(username="gm_chargen_down", password="x", is_staff=True)
+        self.client.force_authenticate(user=gm)
+        down = self.client.post(
+            f"/api/characters/{self.character.id}/gm-force-stand-stat/",
+            {"stand_stat": "power", "direction": "down"},
+            format="json",
+        )
+        self.assertEqual(down.status_code, 200, down.data)
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.stand.power, "B")
+
 
 class AdvanceAutosaveRaceTests(TestCase):
     def setUp(self):
