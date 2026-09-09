@@ -1,6 +1,7 @@
 import {
   computeInventoryLoadUsed,
   computeLoadUsed,
+  coerceItemLoad,
   armorChargesForItem,
   inventoryHasPhysicalArmor,
   inventoryPhysicalArmorCharges,
@@ -17,6 +18,18 @@ import {
 } from "./loadoutUtils";
 
 describe("loadoutUtils", () => {
+  test("coerceItemLoad preserves explicit zero", () => {
+    expect(coerceItemLoad(0)).toBe(0);
+    expect(coerceItemLoad("0")).toBe(0);
+    expect(coerceItemLoad(1)).toBe(1);
+    expect(coerceItemLoad(2)).toBe(2);
+    expect(coerceItemLoad("")).toBe(1);
+    expect(coerceItemLoad(null)).toBe(1);
+    expect(coerceItemLoad(undefined, 0)).toBe(0);
+    expect(coerceItemLoad(-1)).toBe(1);
+    expect(coerceItemLoad(NaN)).toBe(1);
+  });
+
   test("normalizeLoadoutEntry defaults", () => {
     const e = normalizeLoadoutEntry(null);
     expect(e.band).toBe("");

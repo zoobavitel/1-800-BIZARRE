@@ -7,6 +7,7 @@ import {
   bandLabel,
   catalogItemToKitRow,
   categoryLabel,
+  coerceItemLoad,
   computeInventoryLoadUsed,
   characterHasAbility,
   EQUIPMENT_CATEGORY_OPTIONS,
@@ -481,14 +482,14 @@ export default function CharacterSheetInventoryList({
       ? {
           ...addDraft,
           name,
-          load: dedicatedArmor ? 0 : Number(addDraft.load) || 0,
+          load: dedicatedArmor ? 0 : coerceItemLoad(addDraft.load, 0),
           is_armor: armorKind === "standard" || armorKind === "heavy",
           armor_kind: armorKind,
         }
       : {
           ...addDraft,
           name,
-          load: Number(addDraft.load) || 1,
+          load: coerceItemLoad(addDraft.load, 1),
           quality: Number(addDraft.quality) || 1,
           is_armor: false,
           armor_kind: "",
@@ -530,14 +531,14 @@ export default function CharacterSheetInventoryList({
       ? {
           ...editDraft,
           name,
-          load: dedicatedArmor ? 0 : Number(editDraft.load) || 0,
+          load: dedicatedArmor ? 0 : coerceItemLoad(editDraft.load, 0),
           is_armor: armorKind === "standard" || armorKind === "heavy",
           armor_kind: armorKind,
         }
       : {
           ...editDraft,
           name,
-          load: Number(editDraft.load) || 1,
+          load: coerceItemLoad(editDraft.load, 1),
           quality: Number(editDraft.quality) || 1,
           is_armor: false,
           armor_kind: "",
