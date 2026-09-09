@@ -2357,26 +2357,19 @@ export default function SessionGMManagementPanels({
       const nextLetter = stepGrade(grades[key], delta);
       if (nextLetter === grades[key]) return;
       if (delta < 0) {
-        setSaving(true);
+        // Post-chargen sheet PATCH strips stand grades — use GM force endpoint.
+        setPcStandForceBusyId(full.id);
         setError(null);
-        const next = { ...grades, [key]: nextLetter };
         try {
-          await characterAPI.patchCharacter(full.id, {
-            stand: {
-              ...stand,
-              power: next.power,
-              speed: next.speed,
-              range: next.range,
-              durability: next.durability,
-              precision: next.precision,
-              development: next.development,
-            },
+          await characterAPI.gmForceStandStat(full.id, {
+            stand_stat: key,
+            direction: "down",
           });
           await refreshAfterPcSheetChange();
         } catch (e) {
           setError(e?.message || "Could not lower Stand Coin grade.");
         } finally {
-          setSaving(false);
+          setPcStandForceBusyId(null);
         }
         return;
       }
