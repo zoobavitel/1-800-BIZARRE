@@ -57,7 +57,7 @@ echo "□ Caching configured properly"
 echo -e "\n${YELLOW}🧪 Testing Verification${NC}"
 echo "□ All manual tests pass"
 echo "□ Automated tests implemented"
-echo "□ Load testing completed"
+echo "□ Load testing completed (npm run test:load:saturday on staging gunicorn twin; floor5/target10/stretch18)"
 echo "□ User acceptance testing done"
 
 echo -e "\n${BLUE}🔧 Deployment Commands${NC}"
