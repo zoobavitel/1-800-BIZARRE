@@ -20,6 +20,10 @@ import {
   buildSessionScatterPoints,
   buildBarChartRows,
 } from "../utils/homeChartData";
+import {
+  visibleCampaignsForHome,
+  visibleCharactersForHome,
+} from "../utils/homeCampaignSort";
 import HomeSessionScatterChart from "../components/home/HomeSessionScatterChart";
 import HomeStatsBarChart from "../components/home/HomeStatsBarChart";
 import HomeStandCoin from "../components/home/HomeStandCoin";
@@ -150,6 +154,8 @@ const HomePage = ({
   const [siteStats, setSiteStats] = useState(null);
   const [openHeroPill, setOpenHeroPill] = useState(null);
   const [expandedFactionId, setExpandedFactionId] = useState(null);
+  const [showAllCharacters, setShowAllCharacters] = useState(false);
+  const [showAllCampaigns, setShowAllCampaigns] = useState(false);
 
   const loadCharacters = useCallback(async () => {
     setLoading(true);
@@ -265,6 +271,20 @@ const HomePage = ({
     () => buildSessionScatterPoints(campaigns),
     [campaigns],
   );
+  const { visible: visibleCampaigns, hiddenCount: hiddenCampaignCount } =
+    useMemo(
+      () =>
+        visibleCampaignsForHome(campaigns, { expanded: showAllCampaigns }),
+      [campaigns, showAllCampaigns],
+    );
+  const { visible: visibleCharacters, hiddenCount: hiddenCharacterCount } =
+    useMemo(
+      () =>
+        visibleCharactersForHome(characters, campaigns, {
+          expanded: showAllCharacters,
+        }),
+      [characters, campaigns, showAllCharacters],
+    );
   const barChartRows = useMemo(() => buildBarChartRows(heroStats), [heroStats]);
   const chartsLoading = loading || campaignsLoading || npcsLoading;
 
@@ -543,62 +563,74 @@ const HomePage = ({
                 Retry
               </button>
             </p>
-          ) : (
-            characters.map((character) => (
-              <div
-                key={character.id}
-                className="p-card"
-                role="button"
-                tabIndex={0}
-                onClick={() => handleEditCharacter(character)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    handleEditCharacter(character);
-                  }
-                }}
-              >
-                <div className="p-card-stripe" />
-                <div className="p-card-body">
-                  <div className="p-card-info">
-                    <div className="p-card-name">{character.name || "—"}</div>
-                    <div className="p-card-stand">
-                      「{character.standName || "—"}」
+          ) : characters.length === 0 ? null : (
+            <>
+              {visibleCharacters.map((character) => (
+                <div
+                  key={character.id}
+                  className="p-card"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleEditCharacter(character)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleEditCharacter(character);
+                    }
+                  }}
+                >
+                  <div className="p-card-stripe" />
+                  <div className="p-card-body">
+                    <div className="p-card-info">
+                      <div className="p-card-name">{character.name || "—"}</div>
+                      <div className="p-card-stand">
+                        「{character.standName || "—"}」
+                      </div>
+                      <div className="p-card-tags">
+                        <span className="p-tag">
+                          {character.heritageName || character.heritage || "—"}
+                        </span>
+                        <span className="p-tag">{character.playbook || "—"}</span>
+                        <span className="p-tag">Lv {character.level ?? "—"}</span>
+                      </div>
                     </div>
-                    <div className="p-card-tags">
-                      <span className="p-tag">
-                        {character.heritageName || character.heritage || "—"}
-                      </span>
-                      <span className="p-tag">{character.playbook || "—"}</span>
-                      <span className="p-tag">Lv {character.level ?? "—"}</span>
+                    <div className="p-card-actions">
+                      <a
+                        href={buildRouteHref("character", { characterId: character.id })}
+                        className="p-card-btn p-card-btn-primary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSpaNavClick(e, () => handleEditCharacter(character));
+                        }}
+                      >
+                        Edit
+                      </a>
+                      <button
+                        type="button"
+                        className="p-card-btn p-card-btn-delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCharacter(character.id);
+                        }}
+                        aria-label="Delete character"
+                      >
+                        ×
+                      </button>
                     </div>
-                  </div>
-                  <div className="p-card-actions">
-                    <a
-                      href={buildRouteHref("character", { characterId: character.id })}
-                      className="p-card-btn p-card-btn-primary"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSpaNavClick(e, () => handleEditCharacter(character));
-                      }}
-                    >
-                      Edit
-                    </a>
-                    <button
-                      type="button"
-                      className="p-card-btn p-card-btn-delete"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteCharacter(character.id);
-                      }}
-                      aria-label="Delete character"
-                    >
-                      ×
-                    </button>
                   </div>
                 </div>
-              </div>
-            ))
+              ))}
+              {(hiddenCharacterCount > 0 || showAllCharacters) && (
+                <button
+                  type="button"
+                  className="home-show-more home-show-more-light"
+                  onClick={() => setShowAllCharacters((v) => !v)}
+                  aria-expanded={showAllCharacters}
+                >
+                  {showAllCharacters ? "- show less -" : "- show more -"}
+                </button>
+              )}
+            </>
           )}
 
           {!loading && !error && characters.length === 0 && (
@@ -790,7 +822,8 @@ const HomePage = ({
           ) : campaigns.length === 0 ? (
             <p className="home-muted-dark">No campaigns yet.</p>
           ) : (
-            campaigns.map((campaign) => {
+            <>
+              {visibleCampaigns.map((campaign) => {
               const isGm = user && campaign.gm?.id === user.id;
               const playerCount = Array.isArray(campaign.players)
                 ? campaign.players.length
@@ -905,7 +938,18 @@ const HomePage = ({
                   </div>
                 </a>
               );
-            })
+              })}
+              {(hiddenCampaignCount > 0 || showAllCampaigns) && (
+                <button
+                  type="button"
+                  className="home-show-more home-show-more-dark"
+                  onClick={() => setShowAllCampaigns((v) => !v)}
+                  aria-expanded={showAllCampaigns}
+                >
+                  {showAllCampaigns ? "- show less -" : "- show more -"}
+                </button>
+              )}
+            </>
           )}
 
           <div className="split-divider">
