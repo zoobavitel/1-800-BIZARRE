@@ -15,8 +15,13 @@ Shell + Python + Node helper scripts for the 1-800-BIZARRE monorepo: setup, loca
 | [`production-deployment-checklist.sh`](production-deployment-checklist.sh) | Prints a release checklist; no side effects. |
 | [`manual-release-signoff.sh`](manual-release-signoff.sh) | Walks an operator through manual release sign-off (called by `npm run test:manual` / `npm run test:acceptance`). |
 | [`daily_critical_bug_review.py`](daily_critical_bug_review.py) | Cron-style daily review of recent commits / changes; consumed by [`.github/workflows/daily-critical-bug-review.yml`](../.github/workflows/daily-critical-bug-review.yml). |
-| [`perf/api-latency-check.mjs`](perf/api-latency-check.mjs) | Hits a list of API endpoints, asserts latency budget. Run via `npm run test:performance`. |
+| [`perf/api-latency-check.mjs`](perf/api-latency-check.mjs) | Root `GET /` latency smoke. Part of `npm run test:performance:budget`. |
+| [`perf/hot-path-latency-check.mjs`](perf/hot-path-latency-check.mjs) | Authenticated roll-action + session GET p95 budgets. Needs `PERF_SEED_JSON`. |
+| [`perf/sse-concurrency-check.mjs`](perf/sse-concurrency-check.mjs) | Hold ≥5 SSE streams; gauge open count + median lifetime; roll under load. |
+| [`perf/saturday-table.mjs`](perf/saturday-table.mjs) | Staging capacity gate: realistic idle+burst with live SSE (floor/target/stretch). |
+| [`perf/k6/saturday-table.js`](perf/k6/saturday-table.js) | Optional k6 roll-burst twin (no SSE hold); prefer `saturday-table.mjs`. |
 | [`perf/lighthouse-budget-check.mjs`](perf/lighthouse-budget-check.mjs) | Lighthouse run against the built frontend with budget assertions defined in [`perf/lighthouse-budget.json`](perf/lighthouse-budget.json). |
+| [`perf/perf-common.mjs`](perf/perf-common.mjs) | Shared helpers; refuses prod/Pages hosts unless `PERF_ALLOW_REMOTE=1`. |
 
 ## ⚠ Venv path inconsistency
 

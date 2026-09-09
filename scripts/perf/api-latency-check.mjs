@@ -1,6 +1,8 @@
 import { performance } from "node:perf_hooks";
+import { assertSafePerfTarget } from "./perf-common.mjs";
 
 const base = process.env.PERF_API_BASE_URL || "http://127.0.0.1:8000";
+assertSafePerfTarget(base);
 const target = `${base.replace(/\/$/, "")}/`;
 const budgetMs = Number(process.env.PERF_API_BUDGET_MS || 400);
 
