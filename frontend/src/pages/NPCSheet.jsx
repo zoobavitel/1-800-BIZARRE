@@ -19,6 +19,7 @@ import {
 } from "../features/character-sheet/utils/npcHeritageDefaults";
 import { HistoryBranchIcon } from "../components/position-effect/PositionEffectIndicators";
 import NpcsStandCoin from "../components/NpcsStandCoin";
+import { clockWedgeFillColor } from "../features/character-sheet/utils/progressClockSegments";
 
 // ─── SRD Data Tables ──────────────────────────────────────────────────────────
 
@@ -286,7 +287,6 @@ const ProgressClock = ({
   onClick,
   label,
   sublabel,
-  color = "#dc2626",
 }) => {
   if (segments === 0) return null;
   const r = size / 2 - 4,
@@ -306,7 +306,7 @@ const ProgressClock = ({
           <path
             key={i}
             d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${sa > 180 ? 1 : 0} 1 ${x2} ${y2} Z`}
-            fill={i < filled ? color : "transparent"}
+            fill={i < filled ? clockWedgeFillColor(i, segments) : "transparent"}
             stroke="#4b5563"
             strokeWidth="1.5"
             style={{ cursor: onClick ? "pointer" : "default" }}
@@ -3431,7 +3431,6 @@ const NPCSheet = ({
                               segments={clk.segments}
                               filled={clk.filled}
                               onClick={(f) => updateAltClock(clk.id, f)}
-                              color="#16a34a"
                               label={clk.name}
                               sublabel={`${clk.segments}-segment clock`}
                             />
@@ -3579,7 +3578,6 @@ const NPCSheet = ({
                                 size={100}
                                 segments={vulnSegs}
                                 filled={vulnFilled}
-                                color={isDefeated ? "#991b1b" : "#dc2626"}
                                 label="Vulnerability"
                                 sublabel={`${vulnFilled}/${vulnSegs}`}
                                 onClick={(newFilled) =>
@@ -3778,7 +3776,6 @@ const NPCSheet = ({
                             segments={clk.segments}
                             filled={clk.filled}
                             onClick={(f) => updateConflictClock(clk.id, f)}
-                            color={isComplete ? "#16a34a" : "#7c3aed"}
                             label={clk.name}
                             sublabel={`${clk.segments}-seg`}
                           />

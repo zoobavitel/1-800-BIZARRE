@@ -2,6 +2,7 @@ import {
   clampClockFilled,
   clampClockSegments,
   clockWedgeCount,
+  clockWedgeFillColor,
   isPersistedProgressClockId,
   serializeSheetProgressClocks,
 } from "./progressClockSegments";
@@ -23,6 +24,20 @@ describe("clampClockFilled", () => {
   test("shrinks fill when max drops", () => {
     expect(clampClockFilled(6, 4)).toBe(4);
     expect(clampClockFilled(-1, 7)).toBe(0);
+  });
+});
+
+describe("clockWedgeFillColor", () => {
+  test("first wedge of 8-segment clock is red", () => {
+    expect(clockWedgeFillColor(0, 8)).toBe("#dc2626");
+  });
+
+  test("last wedge band of 8-segment clock is green", () => {
+    expect(clockWedgeFillColor(7, 8)).toBe("#16a34a");
+  });
+
+  test("1-segment clock is red", () => {
+    expect(clockWedgeFillColor(0, 1)).toBe("#dc2626");
   });
 });
 

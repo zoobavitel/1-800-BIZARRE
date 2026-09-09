@@ -29,6 +29,23 @@ export function clockWedgeCount(segments) {
   return clampClockSegments(segments);
 }
 
+/** Filled wedges: early = red → orange → yellow → late = green. */
+export const CLOCK_WEDGE_FILL_STOPS = [
+  "#dc2626",
+  "#ea580c",
+  "#ca8a04",
+  "#16a34a",
+];
+
+export function clockWedgeFillColor(wedgeIndex, totalSegments) {
+  const n = Math.max(1, totalSegments);
+  const band = Math.min(
+    CLOCK_WEDGE_FILL_STOPS.length - 1,
+    Math.floor((wedgeIndex / n) * CLOCK_WEDGE_FILL_STOPS.length),
+  );
+  return CLOCK_WEDGE_FILL_STOPS[band];
+}
+
 export function isPersistedProgressClockId(id) {
   if (typeof id === "string" && id.trim() !== "" && !/^\d+$/.test(id.trim())) {
     return false;
