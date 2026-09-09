@@ -54,6 +54,7 @@ from ..services.xp_allocation import (
     allocation_summary,
     apply_buy_hp,
     apply_gm_forced_stand_stat,
+    apply_gm_forced_stand_stat_decrease,
     apply_level_up,
     apply_minor_advance,
     apply_unlock_second_playbook,
@@ -1920,11 +1921,16 @@ class CharacterViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="gm-force-stand-stat")
     def gm_force_stand_stat_action(self, request, pk=None):
         """
-        GM-only: +1 Stand Coin grade as a playbook advance.
+        GM-only: ±1 Stand Coin grade.
 
-        Tops up playbook XP when short, then spends 10 XP / bumps
-        stand_coin_points_gained. B→A without a reward payload defers
-        ability picks to the player sheet (pending_stand_a_reward).
+        direction=up (default): +1 as a playbook advance. Tops up playbook XP
+        when short, then spends 10 XP / bumps stand_coin_points_gained.
+        B→A without a reward payload defers ability picks to the player sheet
+        (pending_stand_a_reward).
+
+        direction=down: −1 grade. Undoes tip-of-stack LEVEL_UP_STAT for that
+        axis when possible; otherwise drops a chargen-origin grade. Generic
+        sheet PATCH cannot write stand grades post-chargen.
         """
         character = self.get_object()
         user = request.user
@@ -1935,6 +1941,35 @@ class CharacterViewSet(viewsets.ModelViewSet):
             raise PermissionDenied(
                 "Only the campaign GM can force a Stand Coin advance."
             )
+
+        direction = str(request.data.get("direction") or "up").strip().lower()
+        if direction in ("down", "lower", "-1", "decrease"):
+            try:
+                allocation = apply_gm_forced_stand_stat_decrease(
+                    character,
+                    stand_stat=request.data.get("stand_stat"),
+                    user=user,
+                )
+            except XPAllocationError as exc:
+                return Response(
+                    {"error": exc.message}, status=status.HTTP_400_BAD_REQUEST
+                )
+            character.refresh_from_db()
+            payload = {
+                "success": True,
+                "direction": "down",
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+                "pending_stand_a_reward": get_pending_stand_a_reward(character),
+            }
+            if allocation is not None:
+                payload["allocation"] = CharacterXPAllocationSerializer(
+                    allocation,
+                    context={
+                        "latest_undoable_allocation_id": allocation.id,
+                    },
+                ).data
+            return Response(payload)
 
         try:
             allocation = apply_gm_forced_stand_stat(
@@ -1950,6 +1985,7 @@ class CharacterViewSet(viewsets.ModelViewSet):
         return Response(
             {
                 "success": True,
+                "direction": "up",
                 "allocation": CharacterXPAllocationSerializer(
                     allocation,
                     context={

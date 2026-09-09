@@ -803,6 +803,70 @@ def apply_gm_forced_stand_stat(
 
 
 @transaction.atomic
+def apply_gm_forced_stand_stat_decrease(character, *, stand_stat, user=None):
+    """
+    GM force −1 Stand Coin grade on the session/campaign coin.
+
+    Prefer undoing the tip-of-stack LEVEL_UP_STAT for this axis (clean XP
+    reverse). Otherwise drop the grade directly for chargen-origin stats
+    (no XP refund). Sheet PATCH cannot write stand grades post-chargen.
+    """
+    stat = _normalize_stand_stat(stand_stat)
+    old_grade = _get_stand_grades(character).get(stat, "D")
+    if _grade_index(old_grade) <= 0:
+        raise XPAllocationError(f"{stat} is already F-rank.")
+
+    latest = (
+        CharacterXPAllocation.objects.filter(
+            character=character, undone_at__isnull=True
+        )
+        .order_by("-created_at", "-id")
+        .first()
+    )
+    if (
+        latest
+        and latest.allocation_type == "LEVEL_UP_STAT"
+        and str((latest.metadata or {}).get("stand_stat") or "").lower() == stat
+    ):
+        return undo_allocation(character, latest, user=user)
+
+    # Older LEVEL_UP_STAT for this axis exists but is blocked by newer spends.
+    for alloc in CharacterXPAllocation.objects.filter(
+        character=character,
+        undone_at__isnull=True,
+        allocation_type="LEVEL_UP_STAT",
+    ).order_by("-created_at", "-id"):
+        if str((alloc.metadata or {}).get("stand_stat") or "").lower() == stat:
+            tip = latest.allocation_type if latest else "unknown"
+            raise XPAllocationError(
+                f"Cannot lower {stat}: undo newer XP spends first "
+                f"(latest is {tip}), then lower again — or undo from the sheet."
+            )
+
+    # Chargen-origin grade (never raised via LEVEL_UP_STAT): direct drop.
+    new_grade = _lower_grade(old_grade)
+    _set_stand_grade(character, stat, new_grade)
+    if old_grade == "A":
+        for alloc in list_allocations(character):
+            meta = dict(alloc.metadata or {})
+            if (
+                alloc.allocation_type == "LEVEL_UP_STAT"
+                and str(meta.get("stand_stat") or "").lower() == stat
+                and meta.get("reward_pending")
+            ):
+                meta["reward_pending"] = False
+                meta["gm_cleared_pending_on_decrease"] = True
+                alloc.metadata = meta
+                alloc.save(update_fields=["metadata"])
+                break
+    try:
+        character.save()
+    except ValidationError as exc:
+        raise XPAllocationError(validation_error_message(exc)) from exc
+    return None
+
+
+@transaction.atomic
 def apply_minor_advance(character, *, xp_track, action, from_pool=False):
     """Redeem an attribute-track pending (or legacy 5 marks) for +1 action dot."""
     action_key = _normalize_action(action)
