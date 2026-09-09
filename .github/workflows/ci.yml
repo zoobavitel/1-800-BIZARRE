@@ -213,7 +213,6 @@ jobs:
   performance-budget:
     needs: [automated-ui-smoke]
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v5
 
@@ -236,13 +235,37 @@ jobs:
           npm ci
           pip install -r backend/requirements.txt
 
-      - name: Run performance budget checks (warn-only)
+      - name: API + SSE performance budgets (blocking)
         env:
           DJANGO_SETTINGS_MODULE: app.settings
           PERF_API_BASE_URL: "http://127.0.0.1:8000"
-          # Must match CRA homepage/PUBLIC_URL (/1-800-BIZARRE); dev server masked low Lighthouse scores.
+          PERF_SEED_JSON: "/tmp/bizarre-perf-seed-floor.json"
+          PERF_SSE_HOLD_MS: "15000"
+          PERF_HOTPATH_SAMPLES: "3"
+        run: |
+          set -e
+          cd backend/src
+          python manage.py migrate --noinput
+          python manage.py seed_perf_tables --tier floor --reset --output /tmp/bizarre-perf-seed-floor.json
+          python manage.py runserver 127.0.0.1:8000 --noreload &
+          BACKEND_PID=$!
+          trap 'kill $BACKEND_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl -sf "http://127.0.0.1:8000/" >/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          curl -sf "http://127.0.0.1:8000/" >/dev/null
+          cd ../..
+          npm run test:performance:budget
+
+      - name: Lighthouse budget (warn-only)
+        continue-on-error: true
+        env:
+          DJANGO_SETTINGS_MODULE: app.settings
+          PERF_API_BASE_URL: "http://127.0.0.1:8000"
           PERF_FRONTEND_URL: "http://127.0.0.1:3000/1-800-BIZARRE"
-          # Default Lighthouse (mobile emulation) is harsh and noisy on ubuntu-latest; desktop is stable for regression checks.
           PERF_LIGHTHOUSE_PRESET: "desktop"
           GENERATE_SOURCEMAP: "false"
         run: |
@@ -256,7 +279,6 @@ jobs:
             fi
             sleep 1
           done
-          curl -sf "http://127.0.0.1:8000/" >/dev/null
           cd ../../frontend
           npm run build
           PERF_SITE="$(mktemp -d)"
@@ -272,9 +294,7 @@ jobs:
             fi
             sleep 1
           done
-          curl -sf "http://127.0.0.1:3000/1-800-BIZARRE/" >/dev/null
-          node scripts/perf/api-latency-check.mjs
-          node scripts/perf/lighthouse-budget-check.mjs
+          npm run test:performance:lighthouse
 
   deploy-github-pages:
     needs: [automated-ui-smoke]
