@@ -1101,13 +1101,6 @@ const CharacterSheetWrapper = ({
     },
     [markDirtyIntent],
   );
-  const ownerUsername =
-    character?.creator_username || character?.user_username || character?.username || "";
-  const ownerLabel = ownerUsername
-    ? `Created by ${ownerUsername}`
-    : character?.user_id
-      ? `Created by user #${character.user_id}`
-      : "Created by unknown";
   const canEditSheet = !character?.id || isGM || character?.user_id === user?.id;
   const canEditPlan = canEditSheet;
   const canCreateManualHistoryRecord = isGM || character?.user_id === user?.id;
@@ -9151,2143 +9144,6 @@ const CharacterSheetWrapper = ({
                   : null),
               }}
             >
-            {/* Character bar */}
-            <div
-              style={{
-                ...S.card,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                flexWrap: "wrap",
-                gap: "8px",
-                marginBottom: "16px",
-              }}
-            >
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "12px" }}
-              >
-                <span
-                  style={{
-                    color: "#9ca3af",
-                    fontSize: "11px",
-                    fontWeight: "bold",
-                  }}
-                >
-                  CURRENT CHARACTER
-                </span>
-                <span style={{ fontWeight: "bold" }}>
-                  {charData.name || "New Character"}
-                </span>
-                {charData.standName && (
-                  <span style={{ color: "#a78bfa" }}>
-                    「{charData.standName}」
-                  </span>
-                )}
-                <span style={{ color: "#9ca3af", fontSize: "11px" }}>
-                  {ownerLabel}
-                </span>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  gap: "12px",
-                  alignItems: "flex-start",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "flex-end",
-                    gap: 6,
-                  }}
-                >
-                  <div
-                    style={{ display: "flex", alignItems: "center", gap: 8 }}
-                  >
-                    {characterId && (
-                      <button
-                        type="button"
-                        onClick={() => setShowHistoryPanelPersist((x) => !x)}
-                        title={
-                          showHistoryPanel
-                            ? "Hide history"
-                            : "Show character/session history"
-                        }
-                        style={{
-                          background: showHistoryPanel
-                            ? "#312e81"
-                            : "#1f2937",
-                          border: "1px solid #4b5563",
-                          borderRadius: 6,
-                          padding: "6px 8px",
-                          cursor: "pointer",
-                          lineHeight: 0,
-                        }}
-                      >
-                        <HistoryBranchIcon />
-                      </button>
-                    )}
-                    <div
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => characterId && setShowXpHistoryModal(true)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && characterId)
-                          setShowXpHistoryModal(true);
-                      }}
-                      title="XP history"
-                      style={{
-                        background: "#1e1b4b",
-                        border: "1px solid #4338ca",
-                        borderRadius: "4px",
-                        padding: "4px 10px",
-                        textAlign: "center",
-                        cursor: characterId ? "pointer" : "default",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          color: "#818cf8",
-                          fontWeight: "bold",
-                          letterSpacing: "0.05em",
-                        }}
-                      >
-                        LEVEL
-                      </div>
-                      <div
-                        style={{
-                          fontSize: isChargenIncomplete ? "9px" : "20px",
-                          fontWeight: "bold",
-                          lineHeight: 1.2,
-                          color: isChargenIncomplete
-                            ? "#818cf8"
-                            : pcLevel >= 7
-                              ? "#f87171"
-                              : pcLevel >= 4
-                                ? "#fbbf24"
-                                : "#a5b4fc",
-                          whiteSpace: isChargenIncomplete ? "normal" : undefined,
-                          wordBreak: isChargenIncomplete ? "break-word" : undefined,
-                        }}
-                      >
-                        {isChargenIncomplete ? CHARGEN_LEVEL_PROMPT : pcLevel}
-                      </div>
-                      {characterId && (
-                        <div
-                          style={{
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            gap: 3,
-                            marginTop: "2px",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              flexDirection: "column",
-                              alignItems: "center",
-                              gap: 1,
-                            }}
-                          >
-                            <span
-                              style={{
-                                fontSize: 8,
-                                color: "#a5b4fc",
-                                fontWeight: 700,
-                                letterSpacing: "0.04em",
-                                lineHeight: 1,
-                              }}
-                            >
-                              XP
-                            </span>
-                            <div
-                              style={{
-                                display: "flex",
-                                gap: 4,
-                                justifyContent: "center",
-                              }}
-                            >
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleUndoLatestAllocation();
-                                }}
-                                disabled={
-                                  xpAllocationUndoBusy ||
-                                  !xpAllocationRows.some(
-                                    (a) => !a.undone_at && a.can_undo,
-                                  )
-                                }
-                                title="Undo your most recent XP spend (stand coin / dots). Refunds only that spend; does not remove GM session XP."
-                                style={{
-                                  background: "#312e81",
-                                  border: "1px solid #6366f1",
-                                  borderRadius: 6,
-                                  padding: "2px 6px",
-                                  cursor: xpAllocationUndoBusy
-                                    ? "wait"
-                                    : "pointer",
-                                  color: "#c7d2fe",
-                                  fontSize: 12,
-                                  lineHeight: 1,
-                                  opacity: xpAllocationRows.some(
-                                    (a) => !a.undone_at && a.can_undo,
-                                  )
-                                    ? 1
-                                    : 0.45,
-                                }}
-                              >
-                                ↩
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRedoLatestAllocation();
-                                }}
-                                disabled={
-                                  xpAllocationUndoBusy ||
-                                  !xpAllocationRows.some(
-                                    (a) => a.undone_at && a.can_redo,
-                                  )
-                                }
-                                title="Redo your most recently undone XP spend"
-                                style={{
-                                  background: "#312e81",
-                                  border: "1px solid #6366f1",
-                                  borderRadius: 6,
-                                  padding: "2px 6px",
-                                  cursor: xpAllocationUndoBusy
-                                    ? "wait"
-                                    : "pointer",
-                                  color: "#c7d2fe",
-                                  fontSize: 12,
-                                  lineHeight: 1,
-                                  opacity: xpAllocationRows.some(
-                                    (a) => a.undone_at && a.can_redo,
-                                  )
-                                    ? 1
-                                    : 0.45,
-                                }}
-                              >
-                                ↪
-                              </button>
-                            </div>
-                          </div>
-                          {isGmViewingPc && (
-                            <div
-                              style={{
-                                display: "flex",
-                                flexDirection: "column",
-                                alignItems: "center",
-                                gap: 1,
-                              }}
-                            >
-                              <span
-                                style={{
-                                  fontSize: 8,
-                                  color: "#fdba74",
-                                  fontWeight: 700,
-                                  letterSpacing: "0.04em",
-                                  lineHeight: 1,
-                                }}
-                              >
-                                GM XP
-                              </span>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  gap: 4,
-                                  justifyContent: "center",
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleUndoLatestGmChange(e);
-                                  }}
-                                  disabled={
-                                    gmUndoBusy || !gmUndoStatus?.available
-                                  }
-                                  title={
-                                    gmUndoStatus?.available
-                                      ? `Undo your last GM XP award on this PC${gmUndoStatus.summary ? `: ${gmUndoStatus.summary}` : ""}`
-                                      : "No GM XP awards to undo on this character"
-                                  }
-                                  style={{
-                                    background: "#431407",
-                                    border: "1px solid #ea580c",
-                                    borderRadius: 6,
-                                    padding: "2px 6px",
-                                    cursor: gmUndoBusy ? "wait" : "pointer",
-                                    color: "#fed7aa",
-                                    fontSize: 12,
-                                    lineHeight: 1,
-                                    opacity: gmUndoStatus?.available ? 1 : 0.45,
-                                  }}
-                                >
-                                  {gmUndoBusy ? "…" : "↩"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleRedoLatestGmChange(e);
-                                  }}
-                                  disabled={
-                                    gmRedoBusy || !gmRedoStatus?.available
-                                  }
-                                  title={
-                                    gmRedoStatus?.available
-                                      ? `Redo your last undone GM XP award${gmRedoStatus.summary ? `: ${gmRedoStatus.summary}` : ""}`
-                                      : "No GM XP awards to redo"
-                                  }
-                                  style={{
-                                    background: "#431407",
-                                    border: "1px solid #ea580c",
-                                    borderRadius: 6,
-                                    padding: "2px 6px",
-                                    cursor: gmRedoBusy ? "wait" : "pointer",
-                                    color: "#fed7aa",
-                                    fontSize: 12,
-                                    lineHeight: 1,
-                                    opacity: gmRedoStatus?.available ? 1 : 0.45,
-                                  }}
-                                >
-                                  {gmRedoBusy ? "…" : "↪"}
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {isGmViewingPc && (gmUndoError || gmRedoError) && (
-                        <div
-                          style={{
-                            fontSize: 9,
-                            color: "#fca5a5",
-                            marginTop: 2,
-                            maxWidth: 140,
-                            lineHeight: 1.2,
-                          }}
-                        >
-                          {gmUndoError || gmRedoError}
-                        </div>
-                      )}
-                      {!isChargenIncomplete && (
-                        <div
-                          style={{
-                            fontSize: "9px",
-                            color: "#4b5563",
-                            marginTop: "1px",
-                          }}
-                        >
-                          {totalSpentXP} XP spent
-                        </div>
-                      )}
-                      {characterId && canEditSheet && (
-                        <button
-                          type="button"
-                          onClick={handleResetCharacterSheet}
-                          disabled={resetSheetBusy}
-                          title="Reset character sheet. Keeps name, crew, look, vice, heritage, and campaign."
-                          style={{
-                            marginTop: 4,
-                            width: "100%",
-                            background: "#3f1d1d",
-                            border: "1px solid #b91c1c",
-                            borderRadius: 4,
-                            padding: "3px 4px",
-                            cursor: resetSheetBusy ? "wait" : "pointer",
-                            color: "#fecaca",
-                            fontSize: 8,
-                            fontWeight: 700,
-                            letterSpacing: "0.03em",
-                            lineHeight: 1.15,
-                            textTransform: "uppercase",
-                          }}
-                        >
-                          {resetSheetBusy ? "…" : "reset character"}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  {showHistoryPanel && (
-                    <div
-                      style={{
-                        position: "fixed",
-                        inset: 0,
-                        background: "rgba(0,0,0,0.62)",
-                        zIndex: 125,
-                        display: "flex",
-                        alignItems: "flex-start",
-                        justifyContent: "center",
-                        paddingTop: "80px",
-                      }}
-                      onClick={() => setShowHistoryPanelPersist(false)}
-                    >
-                    <div
-                      onClick={(e) => e.stopPropagation()}
-                      style={{
-                        background: "#111827",
-                        border: "1px solid #374151",
-                        borderRadius: 8,
-                        padding: 10,
-                        width: "min(680px, 92vw)",
-                        maxHeight: "70vh",
-                        overflowY: "auto",
-                        fontSize: 11,
-                        boxShadow: "0 14px 40px rgba(0,0,0,0.55)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          marginBottom: 8,
-                        }}
-                      >
-                        <div style={{ color: "#a78bfa", fontWeight: "bold" }}>
-                          History
-                        </div>
-                        <div
-                          style={{
-                            display: "flex",
-                            gap: 8,
-                            alignItems: "center",
-                          }}
-                        >
-                          <span style={{ fontSize: 10, color: "#9ca3af" }}>
-                            Press Esc to exit view
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setShowHistoryPanelPersist(false)}
-                            style={{ ...S.btn, padding: "2px 8px", fontSize: 10 }}
-                          >
-                            Close
-                          </button>
-                        </div>
-                      </div>
-                        <>
-                          <div
-                            style={{
-                              display: "flex",
-                              gap: 6,
-                              marginBottom: 8,
-                            }}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => setHistoryMode("sheet")}
-                              style={{
-                                ...S.btn,
-                                fontSize: 10,
-                                padding: "4px 8px",
-                                background:
-                                  historyMode === "sheet" ? "#4338ca" : "#1f2937",
-                                color:
-                                  historyMode === "sheet" ? "#f9fafb" : "#d1d5db",
-                                border:
-                                  historyMode === "sheet"
-                                    ? "1px solid #818cf8"
-                                    : "1px solid #374151",
-                              }}
-                            >
-                              Character Sheet History
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setHistoryMode("session")}
-                              style={{
-                                ...S.btn,
-                                fontSize: 10,
-                                padding: "4px 8px",
-                                background:
-                                  historyMode === "session" ? "#4338ca" : "#1f2937",
-                                color:
-                                  historyMode === "session" ? "#f9fafb" : "#d1d5db",
-                                border:
-                                  historyMode === "session"
-                                    ? "1px solid #818cf8"
-                                    : "1px solid #374151",
-                              }}
-                            >
-                              Session History
-                            </button>
-                          </div>
-                          <p
-                            style={{
-                              margin: "0 0 8px",
-                              fontSize: 10,
-                              color: "#6b7280",
-                              lineHeight: 1.45,
-                            }}
-                          >
-                            Sheet tab: field edits and XP notes over time. Session tab:
-                            rolls (incl. fortune when revealed to you), clocks, stress
-                            changes, session XP — plus{" "}
-                            <strong style={{ color: "#9ca3af" }}>Manual record</strong>{" "}
-                            for table rolls.
-                          </p>
-                          {historyMode === "session" && (
-                            <>
-                              <div
-                                style={{
-                                  marginBottom: 8,
-                                }}
-                              >
-                                <select
-                                  value={
-                                    historySessionId == null
-                                      ? ""
-                                      : String(historySessionId)
-                                  }
-                                  onChange={(e) => {
-                                    const v = e.target.value;
-                                    if (v === "") setHistorySessionId(null);
-                                    else if (v === "all")
-                                      setHistorySessionId("all");
-                                    else setHistorySessionId(Number(v));
-                                  }}
-                                  style={{ ...S.sel, fontSize: 10, padding: "2px 6px", width: "100%" }}
-                                >
-                                  <option value="">No session</option>
-                                  <option value="all">All sessions</option>
-                                  {(charCampaign?.sessions || []).map((s) => (
-                                    <option key={s.id} value={s.id}>
-                                      {s.name || `Session ${s.id}`}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                              <div
-                                style={{
-                                  marginBottom: 8,
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (!canCreateManualHistoryRecord) return;
-                                    setHistoryOutcomeBandGmUnlock(false);
-                                    if (showHistoryManualModal) {
-                                      setShowHistoryManualModal(false);
-                                    } else {
-                                      openHistoryManualModal();
-                                    }
-                                  }}
-                                  style={{
-                                    ...S.btn,
-                                    fontSize: 10,
-                                    background: "#4338ca",
-                                    color: "#fff",
-                                    opacity: canCreateManualHistoryRecord ? 1 : 0.45,
-                                    cursor: canCreateManualHistoryRecord
-                                      ? "pointer"
-                                      : "not-allowed",
-                                  }}
-                                  disabled={!canCreateManualHistoryRecord}
-                                  title={
-                                    canCreateManualHistoryRecord
-                                      ? "Add an offline/manual history entry."
-                                      : "Only the GM or this character's owner can add manual records."
-                                  }
-                                >
-                                  Manual record…
-                                </button>
-                                {showHistoryManualModal && (
-                                  <div
-                                    style={{
-                                      marginTop: 8,
-                                      background: "#0d1117",
-                                      border: "1px solid #374151",
-                                      borderRadius: 8,
-                                      padding: 10,
-                                    }}
-                                  >
-                                    <div
-                                      style={{
-                                        color: "#a78bfa",
-                                        fontWeight: "bold",
-                                        fontSize: 12,
-                                        marginBottom: 8,
-                                      }}
-                                    >
-                                      Manual history, roll, or XP award
-                                    </div>
-                                    <div
-                                      style={{
-                                        display: "flex",
-                                        flexDirection: "column",
-                                        gap: 6,
-                                      }}
-                                    >
-                                      <select
-                                        value={historyManual.sessionId}
-                                        onChange={(e) =>
-                                          setHistoryManual((p) => ({
-                                            ...p,
-                                            sessionId: e.target.value,
-                                          }))
-                                        }
-                                        style={{
-                                          ...S.sel,
-                                          fontSize: 10,
-                                          padding: "2px 6px",
-                                          width: "100%",
-                                          boxSizing: "border-box",
-                                        }}
-                                      >
-                                        <option value="">Session</option>
-                                        {(charCampaign?.sessions || []).map((s) => (
-                                          <option
-                                            key={s.id}
-                                            value={String(s.id)}
-                                          >
-                                            {s.name || `Session ${s.id}`}
-                                          </option>
-                                        ))}
-                                      </select>
-                                      <select
-                                        value={historyManual.rollType}
-                                        onChange={(e) =>
-                                          setHistoryManual((p) => ({
-                                            ...p,
-                                            rollType: e.target.value,
-                                            viceOverindulge: "",
-                                          }))
-                                        }
-                                        style={{
-                                          ...S.sel,
-                                          fontSize: 10,
-                                          padding: "2px 6px",
-                                          width: "100%",
-                                          boxSizing: "border-box",
-                                        }}
-                                      >
-                                        <option value="ACTION">Action</option>
-                                        <option value="RESISTANCE">
-                                          Resistance
-                                        </option>
-                                        <option value="VICE">Vice roll</option>
-                                        <option value="FORTUNE">Fortune roll</option>
-                                        <option value="XP">XP award</option>
-                                      </select>
-                                      {historyManual.rollType === "XP" ? (
-                                        <>
-                                          <select
-                                            value={historyManual.xpTrack}
-                                            onChange={(e) =>
-                                              setHistoryManual((p) => ({
-                                                ...p,
-                                                xpTrack: e.target.value,
-                                              }))
-                                            }
-                                            style={{
-                                              ...S.sel,
-                                              fontSize: 10,
-                                              padding: "2px 6px",
-                                              width: "100%",
-                                              boxSizing: "border-box",
-                                            }}
-                                          >
-                                            <option value="playbook">Playbook</option>
-                                            <option value="insight">Insight</option>
-                                            <option value="prowess">Prowess</option>
-                                            <option value="resolve">Resolve</option>
-                                            <option value="heritage">Heritage</option>
-                                            <option value="pool">
-                                              Free pool
-                                            </option>
-                                          </select>
-                                          <input
-                                            type="number"
-                                            min={1}
-                                            value={historyManual.xpAmount}
-                                            onChange={(e) =>
-                                              setHistoryManual((p) => ({
-                                                ...p,
-                                                xpAmount: e.target.value,
-                                              }))
-                                            }
-                                            style={{
-                                              ...S.inp,
-                                              fontSize: 10,
-                                              padding: "2px 6px",
-                                              width: "100%",
-                                              boxSizing: "border-box",
-                                            }}
-                                            title="XP to add"
-                                          />
-                                          <textarea
-                                            value={historyManual.xpReason}
-                                            onChange={(e) =>
-                                              setHistoryManual((p) => ({
-                                                ...p,
-                                                xpReason: e.target.value,
-                                              }))
-                                            }
-                                            style={{
-                                              ...S.inp,
-                                              fontSize: 10,
-                                              padding: "6px",
-                                              minHeight: 52,
-                                              resize: "vertical",
-                                              fontFamily: "inherit",
-                                              width: "100%",
-                                              boxSizing: "border-box",
-                                            }}
-                                            placeholder="Explain what this XP was for (appears in session history and XP log)."
-                                            rows={3}
-                                          />
-                                        </>
-                                      ) : historyManual.rollType === "RESISTANCE" ? (
-                                        <select
-                                          value={historyManual.action}
-                                          onChange={(e) =>
-                                            setHistoryManual((p) => ({
-                                              ...p,
-                                              action: e.target.value,
-                                            }))
-                                          }
-                                          style={{
-                                            ...S.sel,
-                                            fontSize: 10,
-                                            padding: "2px 6px",
-                                            width: "100%",
-                                            boxSizing: "border-box",
-                                          }}
-                                        >
-                                          {HISTORY_MANUAL_RESISTANCE_ATTR_OPTIONS.map(
-                                            (opt) => (
-                                              <option
-                                                key={opt.value}
-                                                value={opt.value}
-                                              >
-                                                {opt.label}
-                                              </option>
-                                            ),
-                                          )}
-                                        </select>
-                                      ) : historyManual.rollType === "VICE" ? (
-                                        <div
-                                          style={{
-                                            ...S.inp,
-                                            fontSize: 10,
-                                            padding: "2px 6px",
-                                            color: "#9ca3af",
-                                            display: "flex",
-                                            alignItems: "center",
-                                          }}
-                                        >
-                                          Vice (downtime indulgence)
-                                        </div>
-                                      ) : historyManual.rollType === "FORTUNE" ? (
-                                        <div
-                                          style={{
-                                            ...S.inp,
-                                            fontSize: 10,
-                                            padding: "2px 6px",
-                                            color: "#9ca3af",
-                                            display: "flex",
-                                            alignItems: "center",
-                                          }}
-                                        >
-                                          Fortune (highest die)
-                                        </div>
-                                      ) : (
-                                        <input
-                                          value={historyManual.action}
-                                          onChange={(e) =>
-                                            setHistoryManual((p) => ({
-                                              ...p,
-                                              action: e.target.value,
-                                            }))
-                                          }
-                                          style={{
-                                            ...S.inp,
-                                            fontSize: 10,
-                                            padding: "2px 6px",
-                                            width: "100%",
-                                            boxSizing: "border-box",
-                                          }}
-                                          placeholder="Action"
-                                        />
-                                      )}
-                                      {historyManual.rollType !== "XP" ? (
-                                        <input
-                                          value={historyManual.dice}
-                                          onChange={(e) =>
-                                            setHistoryManual((p) => ({
-                                              ...p,
-                                              dice: e.target.value,
-                                            }))
-                                          }
-                                          style={{
-                                            ...S.inp,
-                                            fontSize: 10,
-                                            padding: "2px 6px",
-                                            width: "100%",
-                                            boxSizing: "border-box",
-                                          }}
-                                          placeholder="Dice e.g. 6,4"
-                                        />
-                                      ) : null}
-                                      {historyManual.rollType === "FORTUNE" ? (
-                                        <>
-                                          <textarea
-                                            value={historyManual.fortunePublicLabel}
-                                            onChange={(e) =>
-                                              setHistoryManual((p) => ({
-                                                ...p,
-                                                fortunePublicLabel: e.target.value,
-                                              }))
-                                            }
-                                            style={{
-                                              ...S.inp,
-                                              fontSize: 10,
-                                              padding: "6px",
-                                              minHeight: 44,
-                                              resize: "vertical",
-                                              fontFamily: "inherit",
-                                              width: "100%",
-                                              boxSizing: "border-box",
-                                            }}
-                                            placeholder="What this fortune resolves (shown in session history)."
-                                            rows={2}
-                                          />
-                                          <label
-                                            style={{
-                                              fontSize: 10,
-                                              color: "#d1d5db",
-                                              display: "flex",
-                                              gap: 6,
-                                              alignItems: "center",
-                                            }}
-                                          >
-                                            <input
-                                              type="checkbox"
-                                              checked={
-                                                !!historyManual.fortuneRevealPlayers
-                                              }
-                                              onChange={(e) =>
-                                                setHistoryManual((p) => ({
-                                                  ...p,
-                                                  fortuneRevealPlayers:
-                                                    e.target.checked,
-                                                }))
-                                              }
-                                            />
-                                            Show dice and outcome to players
-                                          </label>
-                                        </>
-                                      ) : null}
-                                      {historyManual.rollType === "XP" ? null : historyManual.rollType ===
-                                      "RESISTANCE" ? (
-                                        <>
-                                          <select
-                                            value={historyManual.resistanceHarmTarget}
-                                            onChange={(e) =>
-                                              setHistoryManual((p) => ({
-                                                ...p,
-                                                resistanceHarmTarget:
-                                                  e.target.value,
-                                              }))
-                                            }
-                                            style={{
-                                              ...S.sel,
-                                              fontSize: 10,
-                                              padding: "2px 6px",
-                                              width: "100%",
-                                              boxSizing: "border-box",
-                                            }}
-                                          >
-                                            <option value="">
-                                              Harm to reduce…
-                                            </option>
-                                            {filledHarmOptions.map((opt) => (
-                                              <option
-                                                key={opt.value}
-                                                value={opt.value}
-                                              >
-                                                {opt.label}
-                                              </option>
-                                            ))}
-                                          </select>
-                                          <div
-                                            style={{
-                                              ...S.inp,
-                                              fontSize: 10,
-                                              padding: "2px 6px",
-                                              color: "#d1d5db",
-                                              display: "flex",
-                                              alignItems: "center",
-                                            }}
-                                          >
-                                            Stress = 6 - highest die
-                                          </div>
-                                        </>
-                                      ) : historyManual.rollType === "VICE" ? (
-                                        <>
-                                          <div
-                                            style={{
-                                              ...S.inp,
-                                              fontSize: 10,
-                                              padding: "2px 6px",
-                                              color: "#d1d5db",
-                                              display: "flex",
-                                              alignItems: "center",
-                                            }}
-                                          >
-                                            Pool = lowest Insight / Prowess / Resolve
-                                            rating · stress cleared = highest die
-                                          </div>
-                                        </>
-                                      ) : historyManual.rollType === "FORTUNE" ? (
-                                          <div
-                                            style={{
-                                              ...S.inp,
-                                              fontSize: 10,
-                                              padding: "6px 8px",
-                                              color: "#d1d5db",
-                                              display: "flex",
-                                              flexDirection: "column",
-                                              gap: 6,
-                                            }}
-                                          >
-                                          <div>
-                                            Outcome:{" "}
-                                            <strong style={{ color: "#e5e7eb" }}>
-                                              {historyManualDerivedOutcomeApi
-                                                ? OUTCOME_BAND_SHORT_LABEL[
-                                                    historyManualDerivedOutcomeApi
-                                                  ]
-                                                : "— enter dice"}
-                                            </strong>
-                                          </div>
-                                          {isGM && historyOutcomeBandGmUnlock ? (
-                                            <select
-                                              value={historyManual.outcome}
-                                              onChange={(e) =>
-                                                setHistoryManual((p) => ({
-                                                  ...p,
-                                                  outcome: e.target.value,
-                                                }))
-                                              }
-                                              style={{
-                                                ...S.sel,
-                                                fontSize: 10,
-                                                padding: "2px 6px",
-                                                width: "100%",
-                                                boxSizing: "border-box",
-                                              }}
-                                            >
-                                              <option value="CRITICAL_SUCCESS">
-                                                Critical
-                                              </option>
-                                              <option value="FULL_SUCCESS">
-                                                Full
-                                              </option>
-                                              <option value="PARTIAL_SUCCESS">
-                                                Partial
-                                              </option>
-                                              <option value="FAILURE">
-                                                Failure
-                                              </option>
-                                            </select>
-                                          ) : null}
-                                          {isGM && !historyOutcomeBandGmUnlock ? (
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                setHistoryOutcomeBandGmUnlock(true);
-                                                if (historyManualDerivedOutcomeApi) {
-                                                  setHistoryManual((p) => ({
-                                                    ...p,
-                                                    outcome:
-                                                      historyManualDerivedOutcomeApi,
-                                                  }));
-                                                }
-                                              }}
-                                              style={{
-                                                ...S.btn,
-                                                fontSize: 9,
-                                                alignSelf: "flex-start",
-                                                padding: "2px 8px",
-                                              }}
-                                            >
-                                              Unlock outcome override (GM)
-                                            </button>
-                                          ) : null}
-                                        </div>
-                                      ) : (
-                                        <>
-                                          <div
-                                            style={{
-                                              ...S.inp,
-                                              fontSize: 10,
-                                              padding: "6px 8px",
-                                              color: "#d1d5db",
-                                              display: "flex",
-                                              flexDirection: "column",
-                                              gap: 6,
-                                            }}
-                                          >
-                                            <div>
-                                              Outcome:{" "}
-                                              <strong style={{ color: "#e5e7eb" }}>
-                                                {historyManualDerivedOutcomeApi
-                                                  ? OUTCOME_BAND_SHORT_LABEL[
-                                                      historyManualDerivedOutcomeApi
-                                                    ]
-                                                  : "— enter dice"}
-                                              </strong>
-                                            </div>
-                                            {isGM && historyOutcomeBandGmUnlock ? (
-                                              <select
-                                                value={historyManual.outcome}
-                                                onChange={(e) =>
-                                                  setHistoryManual((p) => ({
-                                                    ...p,
-                                                    outcome: e.target.value,
-                                                  }))
-                                                }
-                                                style={{
-                                                  ...S.sel,
-                                                  fontSize: 10,
-                                                  padding: "2px 6px",
-                                                  width: "100%",
-                                                  boxSizing: "border-box",
-                                                }}
-                                              >
-                                                <option value="CRITICAL_SUCCESS">
-                                                  Critical
-                                                </option>
-                                                <option value="FULL_SUCCESS">
-                                                  Full
-                                                </option>
-                                                <option value="PARTIAL_SUCCESS">
-                                                  Partial
-                                                </option>
-                                                <option value="FAILURE">
-                                                  Failure
-                                                </option>
-                                              </select>
-                                            ) : null}
-                                            {isGM && !historyOutcomeBandGmUnlock ? (
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setHistoryOutcomeBandGmUnlock(true);
-                                                  if (historyManualDerivedOutcomeApi) {
-                                                    setHistoryManual((p) => ({
-                                                      ...p,
-                                                      outcome:
-                                                        historyManualDerivedOutcomeApi,
-                                                    }));
-                                                  }
-                                                }}
-                                                style={{
-                                                  ...S.btn,
-                                                  fontSize: 9,
-                                                  alignSelf: "flex-start",
-                                                  padding: "2px 8px",
-                                                }}
-                                              >
-                                                Unlock outcome override (GM)
-                                              </button>
-                                            ) : null}
-                                          </div>
-                                          <div
-                                            style={{
-                                              display: "flex",
-                                              gap: 14,
-                                              flexWrap: "wrap",
-                                              alignItems: "flex-start",
-                                              marginTop: 2,
-                                            }}
-                                          >
-                                            <PositionStack
-                                              activePosition={
-                                                historyManual.position || "risky"
-                                              }
-                                              readOnly={false}
-                                              onSelect={(value) =>
-                                                setHistoryManual((p) => ({
-                                                  ...p,
-                                                  position: value,
-                                                }))
-                                              }
-                                            />
-                                            <EffectShapes
-                                              activeEffect={
-                                                historyManual.effect || "standard"
-                                              }
-                                              readOnly={false}
-                                              onSelect={(tier) =>
-                                                setHistoryManual((p) => ({
-                                                  ...p,
-                                                  effect: tier,
-                                                }))
-                                              }
-                                            />
-                                          </div>
-                                          <div
-                                            style={{
-                                              fontSize: 9,
-                                              color: "#6b7280",
-                                              lineHeight: 1.35,
-                                              marginTop: 2,
-                                            }}
-                                          >
-                                            Click position squares or L/S/E to override this
-                                            offline record. Highlighted effect is the chosen base;
-                                            stored{" "}
-                                            <code style={{ color: "#9ca3af" }}>effect</code> still
-                                            adds push / +1 effect (now {manualHistoryEffectPreview}).
-                                            Defaults from GM session row (
-                                            <code style={{ color: "#9ca3af" }}>
-                                              active_session_detail.position_effect_by_character
-                                            </code>
-                                            ) then{" "}
-                                            <code style={{ color: "#9ca3af" }}>
-                                              default_position
-                                            </code>
-                                            /
-                                            <code style={{ color: "#9ca3af" }}>
-                                              default_effect
-                                            </code>
-                                            . Online{" "}
-                                            <code style={{ color: "#9ca3af" }}>rollAction</code>{" "}
-                                            still resolves P/E from the same session map on the server
-                                            (no client-sent position override).
-                                          </div>
-                                          {manualHistorySuggestedDice != null ? (
-                                            <div
-                                              style={{
-                                                fontSize: 9,
-                                                color: "#a78bfa",
-                                                marginTop: 4,
-                                                lineHeight: 1.35,
-                                              }}
-                                            >
-                                              Suggested dice count (action rating + push/devil/help
-                                              + toggles below):{" "}
-                                              <strong>{manualHistorySuggestedDice}</strong> — enter
-                                              the dice you actually rolled.
-                                            </div>
-                                          ) : null}
-                                        </>
-                                      )}
-                                    </div>
-                                    {historyManual.rollType !== "RESISTANCE" &&
-                                      historyManual.rollType !== "VICE" &&
-                                      historyManual.rollType !== "XP" &&
-                                      historyManual.rollType !== "FORTUNE" && (
-                                      <div
-                                        style={{
-                                          marginTop: 6,
-                                          display: "flex",
-                                          gap: 8,
-                                          flexWrap: "wrap",
-                                          fontSize: 10,
-                                        }}
-                                      >
-                                        {[
-                                          ["pushDice", "Push +1d"],
-                                          ["pushEffect", "Push +effect"],
-                                          ["devil", "Devil's bargain"],
-                                          ["helpDie", "Help +1d"],
-                                          ["groupAction", "Group action"],
-                                        ].map(([k, label]) => (
-                                          <label
-                                            key={k}
-                                            style={{ display: "flex", gap: 4 }}
-                                          >
-                                            <input
-                                              type="checkbox"
-                                              checked={!!historyManual[k]}
-                                              onChange={(e) =>
-                                                setHistoryManual((p) => ({
-                                                  ...p,
-                                                  [k]: e.target.checked,
-                                                }))
-                                              }
-                                            />
-                                            <span>{label}</span>
-                                          </label>
-                                        ))}
-                                      </div>
-                                    )}
-                                    {historyManual.rollType !== "RESISTANCE" &&
-                                    historyManual.rollType !== "VICE" &&
-                                    historyManual.rollType !== "XP" &&
-                                    historyManual.rollType !== "FORTUNE" &&
-                                    (abilityRollBonusOptions.length > 0 ||
-                                      heritageRollBonusOptions.length > 0) ? (
-                                      <div
-                                        style={{
-                                          marginTop: 8,
-                                          padding: "8px",
-                                          borderRadius: 8,
-                                          border: "1px solid #374151",
-                                          background: "#0d1117",
-                                        }}
-                                      >
-                                        <div
-                                          style={{
-                                            fontSize: 10,
-                                            color: "#a78bfa",
-                                            marginBottom: 6,
-                                            fontWeight: "bold",
-                                          }}
-                                        >
-                                          Abilities / heritage (+1d, +1 effect)
-                                        </div>
-                                        <div
-                                          style={{
-                                            fontSize: 9,
-                                            color: "#6b7280",
-                                            marginBottom: 6,
-                                            lineHeight: 1.35,
-                                          }}
-                                        >
-                                          Same rules as the action roll modal; tallies feed{" "}
-                                          <code style={{ color: "#9ca3af" }}>pool_bonus_dice</code>,{" "}
-                                          stored effect tier, and modifier rows on the saved roll.
-                                        </div>
-                                        {abilityRollBonusOptions.length > 0 ? (
-                                          <div
-                                            style={{
-                                              display: "flex",
-                                              flexDirection: "column",
-                                              gap: 4,
-                                              maxHeight: 100,
-                                              overflow: "auto",
-                                              marginBottom: 6,
-                                            }}
-                                          >
-                                            {abilityRollBonusOptions.map((ab) => {
-                                              const id = ab.id ?? ab.name;
-                                              const b = historyManualAbilityBoost[id] || {};
-                                              return (
-                                                <div
-                                                  key={String(id)}
-                                                  style={{
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    justifyContent: "space-between",
-                                                    gap: 6,
-                                                    fontSize: 10,
-                                                    flexWrap: "wrap",
-                                                  }}
-                                                >
-                                                  <span
-                                                    style={{
-                                                      color: "#d1d5db",
-                                                      flex: "1 1 100px",
-                                                    }}
-                                                    title={
-                                                      ab.rollBonusResolvedDescription
-                                                        ? String(
-                                                            ab.rollBonusResolvedDescription,
-                                                          ).slice(0, 500)
-                                                        : undefined
-                                                    }
-                                                  >
-                                                    {ab.name}
-                                                  </span>
-                                                  {ab.supportsDice ? (
-                                                    <label
-                                                      style={{
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        gap: 3,
-                                                        cursor: "pointer",
-                                                      }}
-                                                    >
-                                                      <input
-                                                        type="checkbox"
-                                                        checked={!!b.dice}
-                                                        onChange={(e) =>
-                                                          setHistoryManualAbilityBoost(
-                                                            (p) => ({
-                                                              ...p,
-                                                              [id]: {
-                                                                ...p[id],
-                                                                dice: e.target.checked,
-                                                                effect: !!p[id]?.effect,
-                                                              },
-                                                            }),
-                                                          )
-                                                        }
-                                                      />
-                                                      +1d
-                                                    </label>
-                                                  ) : null}
-                                                  {ab.supportsEffect ? (
-                                                    <label
-                                                      style={{
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        gap: 3,
-                                                        cursor: "pointer",
-                                                      }}
-                                                    >
-                                                      <input
-                                                        type="checkbox"
-                                                        checked={!!b.effect}
-                                                        onChange={(e) =>
-                                                          setHistoryManualAbilityBoost(
-                                                            (p) => ({
-                                                              ...p,
-                                                              [id]: {
-                                                                ...p[id],
-                                                                effect: e.target.checked,
-                                                                dice: !!p[id]?.dice,
-                                                              },
-                                                            }),
-                                                          )
-                                                        }
-                                                      />
-                                                      +1 effect
-                                                    </label>
-                                                  ) : null}
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
-                                        ) : null}
-                                        {heritageRollBonusOptions.length > 0 ? (
-                                          <div
-                                            style={{
-                                              display: "flex",
-                                              flexDirection: "column",
-                                              gap: 4,
-                                              maxHeight: 80,
-                                              overflow: "auto",
-                                            }}
-                                          >
-                                            {heritageRollBonusOptions.map((hb) => {
-                                              const id = hb.id ?? hb.name;
-                                              const b = historyManualHeritageBoost[id] || {};
-                                              return (
-                                                <div
-                                                  key={String(id)}
-                                                  style={{
-                                                    display: "flex",
-                                                    alignItems: "center",
-                                                    justifyContent: "space-between",
-                                                    gap: 6,
-                                                    fontSize: 10,
-                                                    flexWrap: "wrap",
-                                                  }}
-                                                >
-                                                  <span
-                                                    style={{ color: "#d1d5db", flex: "1 1 100px" }}
-                                                    title={String(hb.description || "").slice(
-                                                      0,
-                                                      400,
-                                                    )}
-                                                  >
-                                                    {hb.name}{" "}
-                                                    <span style={{ color: "#6b7280" }}>
-                                                      (heritage)
-                                                    </span>
-                                                  </span>
-                                                  {hb.supportsDice ? (
-                                                    <label
-                                                      style={{
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        gap: 3,
-                                                        cursor: "pointer",
-                                                      }}
-                                                    >
-                                                      <input
-                                                        type="checkbox"
-                                                        checked={!!b.dice}
-                                                        onChange={(e) =>
-                                                          setHistoryManualHeritageBoost(
-                                                            (p) => ({
-                                                              ...p,
-                                                              [id]: {
-                                                                ...p[id],
-                                                                dice: e.target.checked,
-                                                                effect: !!p[id]?.effect,
-                                                              },
-                                                            }),
-                                                          )
-                                                        }
-                                                      />
-                                                      +1d
-                                                    </label>
-                                                  ) : null}
-                                                  {hb.supportsEffect ? (
-                                                    <label
-                                                      style={{
-                                                        display: "flex",
-                                                        alignItems: "center",
-                                                        gap: 3,
-                                                        cursor: "pointer",
-                                                      }}
-                                                    >
-                                                      <input
-                                                        type="checkbox"
-                                                        checked={!!b.effect}
-                                                        onChange={(e) =>
-                                                          setHistoryManualHeritageBoost(
-                                                            (p) => ({
-                                                              ...p,
-                                                              [id]: {
-                                                                ...p[id],
-                                                                effect: e.target.checked,
-                                                                dice: !!p[id]?.dice,
-                                                              },
-                                                            }),
-                                                          )
-                                                        }
-                                                      />
-                                                      +1 effect
-                                                    </label>
-                                                  ) : null}
-                                                </div>
-                                              );
-                                            })}
-                                          </div>
-                                        ) : null}
-                                      </div>
-                                    ) : null}
-                                    {historyManual.rollType !== "RESISTANCE" &&
-                                    historyManual.rollType !== "VICE" &&
-                                    historyManual.rollType !== "XP" &&
-                                    historyManual.rollType !== "FORTUNE" &&
-                                    historyManual.groupAction ? (
-                                      <input
-                                        value={historyManual.groupActionId}
-                                        onChange={(e) =>
-                                          setHistoryManual((p) => ({
-                                            ...p,
-                                            groupActionId: e.target.value,
-                                          }))
-                                        }
-                                        style={{
-                                          ...S.inp,
-                                          marginTop: 6,
-                                          fontSize: 10,
-                                          padding: "2px 6px",
-                                          width: 120,
-                                        }}
-                                        placeholder="Group action id"
-                                      />
-                                    ) : null}
-                                    {historyManual.rollType === "VICE" &&
-                                    viceManualWouldOverindulge ? (
-                                      <div style={{ marginTop: 6 }}>
-                                        <div
-                                          style={{
-                                            fontSize: 10,
-                                            color: "#fbbf24",
-                                            marginBottom: 4,
-                                            fontWeight: "bold",
-                                          }}
-                                        >
-                                          Overindulgence (highest die exceeds stress marked) — pick
-                                          consequence:
-                                        </div>
-                                        <select
-                                          value={historyManual.viceOverindulge || ""}
-                                          onChange={(e) =>
-                                            setHistoryManual((p) => ({
-                                              ...p,
-                                              viceOverindulge: e.target.value,
-                                            }))
-                                          }
-                                          style={{
-                                            ...S.sel,
-                                            fontSize: 10,
-                                            padding: "2px 6px",
-                                            width: "100%",
-                                            maxWidth: "100%",
-                                          }}
-                                        >
-                                          {VICE_OVERINDULGE_CHOICES.map((o) => (
-                                            <option key={o.value || "none"} value={o.value}>
-                                              {o.label}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      </div>
-                                    ) : null}
-                                    <div
-                                      style={{
-                                        marginTop: 8,
-                                        display: "flex",
-                                        gap: 8,
-                                        alignItems: "center",
-                                      }}
-                                    >
-                                      <button
-                                        type="button"
-                                        disabled={historyManualSaving}
-                                        onClick={async () => {
-                                          if (!canCreateManualHistoryRecord) {
-                                            setHistoryWriteError(
-                                              "Only the GM or this character's owner can add manual records.",
-                                            );
-                                            return;
-                                          }
-                                          try {
-                                            setHistoryWriteError(null);
-                                            const rt0 = String(
-                                              historyManual.rollType || "ACTION",
-                                            ).toUpperCase();
-                                            if (rt0 === "XP") {
-                                              if (!characterId) return;
-                                              const sessions =
-                                                charCampaign?.sessions || [];
-                                              const sidStr = String(
-                                                historyManual.sessionId || "",
-                                              ).trim();
-                                              const trackPreview =
-                                                String(
-                                                  historyManual.xpTrack ||
-                                                    "playbook",
-                                                ).toLowerCase();
-                                              if (
-                                                sessions.length > 0 &&
-                                                trackPreview !== "pool" &&
-                                                !sidStr
-                                              ) {
-                                                setHistoryWriteError(
-                                                  "Select a session for this XP award.",
-                                                );
-                                                return;
-                                              }
-                                              let sessionIdPayload = null;
-                                              if (sidStr) {
-                                                const sidNum = parseInt(sidStr, 10);
-                                                if (
-                                                  !Number.isFinite(sidNum) ||
-                                                  sidNum < 1
-                                                ) {
-                                                  setHistoryWriteError(
-                                                    "Invalid session.",
-                                                  );
-                                                  return;
-                                                }
-                                                sessionIdPayload = sidNum;
-                                              }
-                                              const amt = parseInt(
-                                                String(historyManual.xpAmount || "1"),
-                                                10,
-                                              );
-                                              if (!Number.isFinite(amt) || amt < 1) {
-                                                setHistoryWriteError(
-                                                  "XP amount must be at least 1.",
-                                                );
-                                                return;
-                                              }
-                                              const reason = String(
-                                                historyManual.xpReason || "",
-                                              ).trim();
-                                              if (reason.length < 3) {
-                                                setHistoryWriteError(
-                                                  "Enter at least 3 characters explaining this XP award.",
-                                                );
-                                                return;
-                                              }
-                                              const track = trackPreview;
-                                              setHistoryManualSaving(true);
-                                              const res = await characterAPI.addXP(
-                                                characterId,
-                                                {
-                                                  xp_type: track,
-                                                  amount: amt,
-                                                  reason,
-                                                  ...(sessionIdPayload != null
-                                                    ? {
-                                                        session_id:
-                                                          sessionIdPayload,
-                                                      }
-                                                    : {}),
-                                                },
-                                              );
-                                              if (
-                                                res?.xp_clocks &&
-                                                typeof res.xp_clocks === "object"
-                                              ) {
-                                                setXp((prev) => ({
-                                                  ...prev,
-                                                  ...res.xp_clocks,
-                                                }));
-                                              } else if (
-                                                res?.new_total != null &&
-                                                track
-                                              ) {
-                                                setXp((p) => ({
-                                                  ...p,
-                                                  [track]: res.new_total,
-                                                }));
-                                              }
-                                              if (
-                                                track === "pool" &&
-                                                typeof res?.unallocated_xp ===
-                                                  "number"
-                                              ) {
-                                                setUnallocatedXp(
-                                                  Math.max(
-                                                    0,
-                                                    Math.floor(res.unallocated_xp),
-                                                  ),
-                                                );
-                                              }
-                                              setHistoryRefreshTick((v) => v + 1);
-                                              setHistoryOutcomeBandGmUnlock(false);
-                                              setShowHistoryManualModal(false);
-                                              return;
-                                            }
-                                            const sid = parseInt(
-                                              String(historyManual.sessionId || ""),
-                                              10,
-                                            );
-                                            if (!sid || !characterId) return;
-                                            const diceResults = String(
-                                              historyManual.dice || "",
-                                            )
-                                              .split(/[\s,]+/)
-                                              .map((n) => parseInt(n.trim(), 10))
-                                              .filter(
-                                                (n) =>
-                                                  Number.isFinite(n) &&
-                                                  n >= 1 &&
-                                                  n <= 6,
-                                              );
-                                            if (!diceResults.length) {
-                                              setHistoryWriteError(
-                                                "Enter at least one die result (1-6).",
-                                              );
-                                              return;
-                                            }
-                                            const rt = String(
-                                              historyManual.rollType || "ACTION",
-                                            ).toUpperCase();
-                                            const isResistanceManual =
-                                              rt === "RESISTANCE";
-                                            const isViceManual = rt === "VICE";
-                                            const isFortuneManual = rt === "FORTUNE";
-                                            const actionRatingForManual =
-                                              !isResistanceManual &&
-                                              !isViceManual &&
-                                              !isFortuneManual
-                                                ? computeActionPoolBreakdown(
-                                                    historyManual.action,
-                                                    actionRatings,
-                                                  ).action_rating
-                                                : 0;
-                                            const actionPoolBeforeManual =
-                                              !isResistanceManual &&
-                                              !isViceManual &&
-                                              !isFortuneManual
-                                                ? Math.max(
-                                                    0,
-                                                    actionRatingForManual +
-                                                      (historyManual.pushDice
-                                                        ? 1
-                                                        : 0) +
-                                                      (historyManual.devil
-                                                        ? 1
-                                                        : 0) +
-                                                      (historyManual.helpDie
-                                                        ? 1
-                                                        : 0),
-                                                  )
-                                                : 0;
-                                            const mhBon =
-                                              computeAbilityHeritageRollBonuses({
-                                                abilityRollBonusOptions,
-                                                heritageRollBonusOptions,
-                                                abilityBoostMap:
-                                                  historyManualAbilityBoost,
-                                                heritageBoostMap:
-                                                  historyManualHeritageBoost,
-                                                healingTreatmentBonusContext: false,
-                                                standRoll: false,
-                                                reflexCtx: {
-                                                  rollPending: null,
-                                                  healingTreatmentBonusContext: false,
-                                                },
-                                              });
-                                            const abilityBonusDiceManual =
-                                              mhBon.bonusDiceFromAbilities +
-                                              mhBon.bonusDiceFromHeritage;
-                                            const actionPoolForOutcome =
-                                              actionPoolBeforeManual +
-                                              abilityBonusDiceManual;
-                                            const manualStoredEffect =
-                                              !isResistanceManual &&
-                                              !isViceManual &&
-                                              !isFortuneManual
-                                                ? bumpEffectTier(
-                                                    normalizeEffectTier(
-                                                      historyManual.effect,
-                                                    ),
-                                                    (historyManual.pushEffect
-                                                      ? 1
-                                                      : 0) +
-                                                      mhBon.abilityEffectSteps +
-                                                      mhBon.heritageEffectSteps,
-                                                  )
-                                                : historyManual.effect;
-                                            const manualModifierSources = [
-                                              ...mhBon.abilityBonusAudit.map(
-                                                (t) => ({
-                                                  kind: "ability",
-                                                  name: String(t).slice(0, 160),
-                                                  category: "ability",
-                                                }),
-                                              ),
-                                              ...mhBon.heritageBonusAudit.map(
-                                                (t) => ({
-                                                  kind: "ability",
-                                                  name: String(t).slice(0, 160),
-                                                  category: "heritage",
-                                                }),
-                                              ),
-                                            ];
-                                            const manualPositionEffectSources = [];
-                                            if (
-                                              !isResistanceManual &&
-                                              !isViceManual &&
-                                              !isFortuneManual &&
-                                              historyManual.pushEffect
-                                            ) {
-                                              manualPositionEffectSources.push({
-                                                kind: "push",
-                                                name: "Push for effect",
-                                                delta: "+1 effect",
-                                                category: "system",
-                                              });
-                                            }
-                                            if (
-                                              !isResistanceManual &&
-                                              !isViceManual &&
-                                              !isFortuneManual
-                                            ) {
-                                              [
-                                                ...mhBon.abilityBonusAudit,
-                                                ...mhBon.heritageBonusAudit,
-                                              ].forEach((line) => {
-                                                if (!String(line).includes("+1 effect"))
-                                                  return;
-                                                const name =
-                                                  String(line).split(":")[0]?.trim() ||
-                                                  "Effect boost";
-                                                manualPositionEffectSources.push({
-                                                  kind: "ability",
-                                                  name: name.slice(0, 120),
-                                                  delta: "+1 effect",
-                                                  category: "ability",
-                                                });
-                                              });
-                                            }
-                                            const resistanceSummary =
-                                              computeResistanceSummary(
-                                                diceResults,
-                                              );
-                                            const viceSummary =
-                                              computeViceManualSummary(
-                                                diceResults,
-                                              );
-                                            if (
-                                              isResistanceManual &&
-                                              !historyManual.resistanceHarmTarget
-                                            ) {
-                                              setHistoryWriteError(
-                                                "Choose which harm slot this resistance roll reduces.",
-                                              );
-                                              return;
-                                            }
-                                            const viceOverAtSave =
-                                              isViceManual &&
-                                              viceSummary.highest >
-                                                (Number(stressFilled) || 0);
-                                            if (
-                                              viceOverAtSave &&
-                                              !String(
-                                                historyManual.viceOverindulge ||
-                                                  "",
-                                              ).trim()
-                                            ) {
-                                              setHistoryWriteError(
-                                                "Overindulgence: choose which consequence applies (highest die exceeds marked stress).",
-                                              );
-                                              return;
-                                            }
-                                            if (isFortuneManual) {
-                                              const lbl = String(
-                                                historyManual.fortunePublicLabel ||
-                                                  "",
-                                              ).trim();
-                                              if (lbl.length < 3) {
-                                                setHistoryWriteError(
-                                                  "Enter at least 3 characters describing what this fortune roll was for.",
-                                                );
-                                                return;
-                                              }
-                                            }
-                                            setHistoryManualSaving(true);
-                                            if (isResistanceManual) {
-                                              const reduced = clearHarmSlot(
-                                                historyManual.resistanceHarmTarget,
-                                              );
-                                              if (!reduced) {
-                                                setHistoryWriteError(
-                                                  "Selected harm slot is empty or invalid.",
-                                                );
-                                                setHistoryManualSaving(false);
-                                                return;
-                                              }
-                                              if (resistanceSummary.stressCost > 0)
-                                                applyStressCost(
-                                                  resistanceSummary.stressCost,
-                                                );
-                                            }
-                                            if (isViceManual) {
-                                              setStressFilled((prev) =>
-                                                Math.max(
-                                                  0,
-                                                  (Number(prev) || 0) -
-                                                    viceSummary.highest,
-                                                ),
-                                              );
-                                            }
-                                            if (isFortuneManual) {
-                                              const lbl = String(
-                                                historyManual.fortunePublicLabel ||
-                                                  "",
-                                              )
-                                                .trim()
-                                                .slice(0, 120);
-                                              await rollAPI.createRoll({
-                                                character: characterId,
-                                                session: sid,
-                                                roll_type: "FORTUNE",
-                                                action_name: "fortune",
-                                                dice_pool: diceResults.length,
-                                                results: diceResults,
-                                                outcome:
-                                                  historyOutcomeBandGmUnlock &&
-                                                  isGM
-                                                    ? historyManual.outcome
-                                                    : outcomeFromFortuneDiceResults(
-                                                        diceResults,
-                                                      ),
-                                                fortune_public_label: lbl,
-                                                fortune_reveal_outcome:
-                                                  !!historyManual.fortuneRevealPlayers,
-                                                description:
-                                                  "Manual fortune record from history panel",
-                                              });
-                                            } else {
-                                              await rollAPI.createRoll({
-                                                character: characterId,
-                                                session: sid,
-                                                roll_type: isResistanceManual
-                                                  ? "RESISTANCE"
-                                                  : isViceManual
-                                                    ? "CLEAR_STRESS"
-                                                    : "ACTION",
-                                                action_name: isViceManual
-                                                  ? "vice"
-                                                  : isResistanceManual
-                                                    ? historyManualResistanceActionName(
-                                                        historyManual.action,
-                                                      )
-                                                    : String(
-                                                        historyManual.action ||
-                                                          "action",
-                                                      ).toLowerCase(),
-                                                ...(isResistanceManual || isViceManual
-                                                  ? {}
-                                                  : {
-                                                      position:
-                                                        historyManual.position,
-                                                      effect: manualStoredEffect,
-                                                    }),
-                                                dice_pool:
-                                                  isResistanceManual ||
-                                                  isViceManual
-                                                    ? diceResults.length
-                                                    : actionPoolForOutcome,
-                                                results: diceResults,
-                                                outcome: isResistanceManual
-                                                  ? resistanceSummary.outcome
-                                                  : isViceManual
-                                                    ? viceSummary.outcome
-                                                    : historyOutcomeBandGmUnlock &&
-                                                        isGM
-                                                      ? historyManual.outcome
-                                                      : outcomeFromActionRoll(
-                                                          diceResults,
-                                                          actionPoolForOutcome,
-                                                          actionRatingForManual,
-                                                        ),
-                                                ...(!isResistanceManual &&
-                                                !isViceManual &&
-                                                !isFortuneManual
-                                                  ? {
-                                                      pool_action_rating:
-                                                        actionRatingForManual,
-                                                    }
-                                                  : {}),
-                                                ...(isResistanceManual
-                                                  ? {
-                                                      roller_stress_spent:
-                                                        resistanceSummary.stressCost >
-                                                        0
-                                                          ? resistanceSummary.stressCost
-                                                          : 0,
-                                                    }
-                                                  : isViceManual
-                                                    ? { roller_stress_spent: 0 }
-                                                    : {
-                                                        push_for_dice:
-                                                          !!historyManual.pushDice,
-                                                        push_for_effect:
-                                                          !!historyManual.pushEffect,
-                                                        uses_devil_bargain:
-                                                          !!historyManual.devil,
-                                                        pool_assist_dice:
-                                                          historyManual.helpDie
-                                                            ? 1
-                                                            : 0,
-                                                        group_action:
-                                                          historyManual.groupAction &&
-                                                          historyManual.groupActionId
-                                                            ? parseInt(
-                                                                String(
-                                                                  historyManual.groupActionId,
-                                                                ),
-                                                                10,
-                                                              )
-                                                            : undefined,
-                                                        ...(abilityBonusDiceManual > 0
-                                                          ? {
-                                                              pool_bonus_dice:
-                                                                abilityBonusDiceManual,
-                                                            }
-                                                          : {}),
-                                                        ...(manualModifierSources.length >
-                                                        0
-                                                          ? {
-                                                              modifier_sources:
-                                                                manualModifierSources,
-                                                            }
-                                                          : {}),
-                                                        ...(manualPositionEffectSources.length >
-                                                        0
-                                                          ? {
-                                                              position_effect_sources:
-                                                                manualPositionEffectSources,
-                                                            }
-                                                          : {}),
-                                                      }),
-                                                description:
-                                                  isResistanceManual
-                                                    ? `Manual resistance record from history panel. Reduced harm slot ${historyManual.resistanceHarmTarget}. Stress marked: ${Math.max(0, resistanceSummary.stressCost)}.`
-                                                    : isViceManual
-                                                      ? `Manual vice record from history panel. Stress cleared (highest die): ${viceSummary.highest}.${viceOverAtSave && String(historyManual.viceOverindulge || "").trim() ? ` Overindulgence: ${viceOverindulgeLabel(historyManual.viceOverindulge)}` : ""}`
-                                                      : "Manual record from history panel",
-                                              });
-                                            }
-                                            setHistoryRefreshTick((v) => v + 1);
-                                            setHistoryOutcomeBandGmUnlock(false);
-                                            setShowHistoryManualModal(false);
-                                          } catch (e) {
-                                            setHistoryWriteError(
-                                              e.message ||
-                                                "Failed to create manual history record.",
-                                            );
-                                          } finally {
-                                            setHistoryManualSaving(false);
-                                          }
-                                        }}
-                                        style={{
-                                          ...S.btn,
-                                          fontSize: 10,
-                                          background: "#4338ca",
-                                          color: "#fff",
-                                        }}
-                                      >
-                                        {historyManualSaving
-                                          ? "Saving…"
-                                          : historyManual.rollType === "XP"
-                                            ? "Add XP award"
-                                            : historyManual.rollType === "FORTUNE"
-                                              ? "Add fortune record"
-                                              : "Add manual record"}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setHistoryOutcomeBandGmUnlock(false);
-                                          setShowHistoryManualModal(false);
-                                        }}
-                                        style={{ ...S.btn, fontSize: 10 }}
-                                      >
-                                        Cancel
-                                      </button>
-                                      {historyWriteError ? (
-                                        <span
-                                          style={{
-                                            color: "#f87171",
-                                            fontSize: 10,
-                                          }}
-                                        >
-                                          {historyWriteError}
-                                        </span>
-                                      ) : null}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </>
-                          )}
-                          {historyLoading ? (
-                            <div style={{ color: "#6b7280" }}>Loading history…</div>
-                          ) : historyError ? (
-                            <div style={{ color: "#fca5a5" }}>{historyError}</div>
-                          ) : historyRows.length === 0 ? (
-                            <div style={{ color: "#6b7280", lineHeight: 1.45 }}>
-                              {historyMode === "session" && !historySessionId
-                                ? "No XP log for this filter. Choose a campaign session for rolls, stress, and session-tied XP, or stay on “No session” for full tracker + ledger + advancement edits (all time)."
-                                : "No history entries."}
-                            </div>
-                          ) : (
-                            <>
-                              {historyUndoError && (
-                                <div
-                                  style={{
-                                    color: "#fca5a5",
-                                    fontSize: 10,
-                                    marginBottom: 8,
-                                  }}
-                                >
-                                  {historyUndoError}
-                                </div>
-                              )}
-                              {historyRows.slice(0, 200).map((row) => {
-                                const undoBusy = historyUndoBusy === row.key;
-                                const showUndo =
-                                  historyMode === "sheet" &&
-                                  (row.type === "sheet_edit" ||
-                                    row.type === "xp_tracker") &&
-                                  !row.revertedAt;
-                                return (
-                              <div
-                                key={row.key}
-                                style={{
-                                  padding: "6px 0",
-                                  borderBottom: "1px solid #1f2937",
-                                  opacity: row.revertedAt ? 0.55 : 1,
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    display: "flex",
-                                    justifyContent: "space-between",
-                                    gap: 8,
-                                    alignItems: "flex-start",
-                                  }}
-                                >
-                                  <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ color: "#9ca3af", fontSize: 10 }}>
-                                  {row.timestamp
-                                    ? new Date(row.timestamp).toLocaleString()
-                                    : "No timestamp"}{" "}
-                                  · {row.actor || "unknown"}
-                                  {row.revertedAt ? " · undone" : ""}
-                                </div>
-                                {row.text ? (
-                                  <div style={{ color: "#d1d5db" }}>{row.text}</div>
-                                ) : null}
-                                {Array.isArray(row.details) &&
-                                  row.details.map((d) => (
-                                    <div
-                                      key={`${row.key}-${d.key}`}
-                                      style={{ fontSize: 10, color: "#d1d5db" }}
-                                    >
-                                      <strong>{d.label}</strong>:{" "}
-                                      <span style={{ color: "#fca5a5" }}>
-                                        {d.oldValue || "∅"}
-                                      </span>{" "}
-                                      →{" "}
-                                      <span style={{ color: "#86efac" }}>
-                                        {d.newValue || "∅"}
-                                      </span>
-                                    </div>
-                                  ))}
-                                {row.modifiers?.length ? (
-                                  <div style={{ fontSize: 10, color: "#a78bfa" }}>
-                                    {row.modifiers.join(" · ")}
-                                  </div>
-                                ) : null}
-                                  </div>
-                                  {showUndo && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleHistoryRowUndo(row)}
-                                      disabled={
-                                        undoBusy || row.canUndo === false
-                                      }
-                                      title={
-                                        row.canUndo === false
-                                          ? row.undoBlockReason ||
-                                            "Cannot undo this entry"
-                                          : "Undo this change"
-                                      }
-                                      style={{
-                                        flexShrink: 0,
-                                        background: "#312e81",
-                                        border: "1px solid #6366f1",
-                                        borderRadius: 6,
-                                        padding: "2px 6px",
-                                        cursor:
-                                          undoBusy || row.canUndo === false
-                                            ? "not-allowed"
-                                            : "pointer",
-                                        color: "#c7d2fe",
-                                        fontSize: 12,
-                                        lineHeight: 1,
-                                        opacity:
-                                          row.canUndo === false ? 0.45 : 1,
-                                      }}
-                                    >
-                                      {undoBusy ? "…" : "↩"}
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                                );
-                              })}
-                            </>
-                          )}
-                        </>
-                    </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
             <div style={S.g2}>
               {/* ══ LEFT COLUMN ══ */}
               <div>
@@ -11307,7 +9163,7 @@ const CharacterSheetWrapper = ({
                         display: "flex",
                         flexDirection: "column",
                         alignItems: "center",
-                        gap: "4px",
+                        gap: "8px",
                         flexShrink: 0,
                       }}
                     >
@@ -11315,7 +9171,7 @@ const CharacterSheetWrapper = ({
                         style={{
                           width: "80px",
                           height: "80px",
-                          borderRadius: "50%",
+                          borderRadius: "4px",
                           border: "2px solid #4b5563",
                           background: "#1f2937",
                           overflow: "hidden",
@@ -11390,6 +9246,2109 @@ const CharacterSheetWrapper = ({
                         >
                           Remove
                         </button>
+                      </div>
+                      {/* Level / XP / history */}
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: 8,
+                          width: "100%",
+                          minWidth: 100,
+                          marginTop: 4,
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            gap: 8,
+                            width: "100%",
+                          }}
+                        >
+                          {characterId && (
+                            <button
+                              type="button"
+                              onClick={() => setShowHistoryPanelPersist((x) => !x)}
+                              title={
+                                showHistoryPanel
+                                  ? "Hide history"
+                                  : "Show character/session history"
+                              }
+                              style={{
+                                background: showHistoryPanel
+                                  ? "#312e81"
+                                  : "#1f2937",
+                                border: "1px solid #4b5563",
+                                borderRadius: 6,
+                                padding: "6px 8px",
+                                cursor: "pointer",
+                                lineHeight: 0,
+                              }}
+                            >
+                              <HistoryBranchIcon />
+                            </button>
+                          )}
+                          <div
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => characterId && setShowXpHistoryModal(true)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && characterId)
+                                setShowXpHistoryModal(true);
+                            }}
+                            title="XP history"
+                            style={{
+                              background: "#1e1b4b",
+                              border: "1px solid #4338ca",
+                              borderRadius: "4px",
+                              padding: "6px 10px",
+                              textAlign: "center",
+                              cursor: characterId ? "pointer" : "default",
+                              width: "100%",
+                              boxSizing: "border-box",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: "12px",
+                                color: "#818cf8",
+                                fontWeight: "bold",
+                                letterSpacing: "0.05em",
+                              }}
+                            >
+                              LEVEL
+                            </div>
+                            <div
+                              style={{
+                                fontSize: isChargenIncomplete ? "10px" : "28px",
+                                fontWeight: "bold",
+                                lineHeight: 1.2,
+                                color: isChargenIncomplete
+                                  ? "#818cf8"
+                                  : pcLevel >= 7
+                                    ? "#f87171"
+                                    : pcLevel >= 4
+                                      ? "#fbbf24"
+                                      : "#a5b4fc",
+                                whiteSpace: isChargenIncomplete ? "normal" : undefined,
+                                wordBreak: isChargenIncomplete ? "break-word" : undefined,
+                              }}
+                            >
+                              {isChargenIncomplete ? CHARGEN_LEVEL_PROMPT : pcLevel}
+                            </div>
+                            {characterId && (
+                              <div
+                                style={{
+                                  display: "flex",
+                                  flexDirection: "column",
+                                  alignItems: "center",
+                                  gap: 3,
+                                  marginTop: "2px",
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    alignItems: "center",
+                                    gap: 1,
+                                  }}
+                                >
+                                  <span
+                                    style={{
+                                      fontSize: 8,
+                                      color: "#a5b4fc",
+                                      fontWeight: 700,
+                                      letterSpacing: "0.04em",
+                                      lineHeight: 1,
+                                    }}
+                                  >
+                                    XP
+                                  </span>
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      gap: 4,
+                                      justifyContent: "center",
+                                    }}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleUndoLatestAllocation();
+                                      }}
+                                      disabled={
+                                        xpAllocationUndoBusy ||
+                                        !xpAllocationRows.some(
+                                          (a) => !a.undone_at && a.can_undo,
+                                        )
+                                      }
+                                      title="Undo your most recent XP spend (stand coin / dots). Refunds only that spend; does not remove GM session XP."
+                                      style={{
+                                        background: "#312e81",
+                                        border: "1px solid #6366f1",
+                                        borderRadius: 6,
+                                        padding: "2px 6px",
+                                        cursor: xpAllocationUndoBusy
+                                          ? "wait"
+                                          : "pointer",
+                                        color: "#c7d2fe",
+                                        fontSize: 12,
+                                        lineHeight: 1,
+                                        opacity: xpAllocationRows.some(
+                                          (a) => !a.undone_at && a.can_undo,
+                                        )
+                                          ? 1
+                                          : 0.45,
+                                      }}
+                                    >
+                                      ↩
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleRedoLatestAllocation();
+                                      }}
+                                      disabled={
+                                        xpAllocationUndoBusy ||
+                                        !xpAllocationRows.some(
+                                          (a) => a.undone_at && a.can_redo,
+                                        )
+                                      }
+                                      title="Redo your most recently undone XP spend"
+                                      style={{
+                                        background: "#312e81",
+                                        border: "1px solid #6366f1",
+                                        borderRadius: 6,
+                                        padding: "2px 6px",
+                                        cursor: xpAllocationUndoBusy
+                                          ? "wait"
+                                          : "pointer",
+                                        color: "#c7d2fe",
+                                        fontSize: 12,
+                                        lineHeight: 1,
+                                        opacity: xpAllocationRows.some(
+                                          (a) => a.undone_at && a.can_redo,
+                                        )
+                                          ? 1
+                                          : 0.45,
+                                      }}
+                                    >
+                                      ↪
+                                    </button>
+                                  </div>
+                                </div>
+                                {isGmViewingPc && (
+                                  <div
+                                    style={{
+                                      display: "flex",
+                                      flexDirection: "column",
+                                      alignItems: "center",
+                                      gap: 1,
+                                    }}
+                                  >
+                                    <span
+                                      style={{
+                                        fontSize: 8,
+                                        color: "#fdba74",
+                                        fontWeight: 700,
+                                        letterSpacing: "0.04em",
+                                        lineHeight: 1,
+                                      }}
+                                    >
+                                      GM XP
+                                    </span>
+                                    <div
+                                      style={{
+                                        display: "flex",
+                                        gap: 4,
+                                        justifyContent: "center",
+                                      }}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleUndoLatestGmChange(e);
+                                        }}
+                                        disabled={
+                                          gmUndoBusy || !gmUndoStatus?.available
+                                        }
+                                        title={
+                                          gmUndoStatus?.available
+                                            ? `Undo your last GM XP award on this PC${gmUndoStatus.summary ? `: ${gmUndoStatus.summary}` : ""}`
+                                            : "No GM XP awards to undo on this character"
+                                        }
+                                        style={{
+                                          background: "#431407",
+                                          border: "1px solid #ea580c",
+                                          borderRadius: 6,
+                                          padding: "2px 6px",
+                                          cursor: gmUndoBusy ? "wait" : "pointer",
+                                          color: "#fed7aa",
+                                          fontSize: 12,
+                                          lineHeight: 1,
+                                          opacity: gmUndoStatus?.available ? 1 : 0.45,
+                                        }}
+                                      >
+                                        {gmUndoBusy ? "…" : "↩"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleRedoLatestGmChange(e);
+                                        }}
+                                        disabled={
+                                          gmRedoBusy || !gmRedoStatus?.available
+                                        }
+                                        title={
+                                          gmRedoStatus?.available
+                                            ? `Redo your last undone GM XP award${gmRedoStatus.summary ? `: ${gmRedoStatus.summary}` : ""}`
+                                            : "No GM XP awards to redo"
+                                        }
+                                        style={{
+                                          background: "#431407",
+                                          border: "1px solid #ea580c",
+                                          borderRadius: 6,
+                                          padding: "2px 6px",
+                                          cursor: gmRedoBusy ? "wait" : "pointer",
+                                          color: "#fed7aa",
+                                          fontSize: 12,
+                                          lineHeight: 1,
+                                          opacity: gmRedoStatus?.available ? 1 : 0.45,
+                                        }}
+                                      >
+                                        {gmRedoBusy ? "…" : "↪"}
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {isGmViewingPc && (gmUndoError || gmRedoError) && (
+                              <div
+                                style={{
+                                  fontSize: 9,
+                                  color: "#fca5a5",
+                                  marginTop: 2,
+                                  maxWidth: 140,
+                                  lineHeight: 1.2,
+                                }}
+                              >
+                                {gmUndoError || gmRedoError}
+                              </div>
+                            )}
+                            {!isChargenIncomplete && (
+                              <div
+                                style={{
+                                  fontSize: "9px",
+                                  color: "#a5b4fc",
+                                  marginTop: "1px",
+                                }}
+                              >
+                                {totalSpentXP} XP spent
+                              </div>
+                            )}
+                            {characterId && canEditSheet && (
+                              <button
+                                type="button"
+                                onClick={handleResetCharacterSheet}
+                                disabled={resetSheetBusy}
+                                title="Reset character sheet. Keeps name, crew, look, vice, heritage, and campaign."
+                                style={{
+                                  marginTop: 4,
+                                  width: "100%",
+                                  background: "#3f1d1d",
+                                  border: "1px solid #b91c1c",
+                                  borderRadius: 4,
+                                  padding: "3px 4px",
+                                  cursor: resetSheetBusy ? "wait" : "pointer",
+                                  color: "#fecaca",
+                                  fontSize: 8,
+                                  fontWeight: 700,
+                                  letterSpacing: "0.03em",
+                                  lineHeight: 1.15,
+                                  textTransform: "uppercase",
+                                }}
+                              >
+                                {resetSheetBusy ? "…" : "reset character"}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {showHistoryPanel && (
+                          <div
+                            style={{
+                              position: "fixed",
+                              inset: 0,
+                              background: "rgba(0,0,0,0.62)",
+                              zIndex: 125,
+                              display: "flex",
+                              alignItems: "flex-start",
+                              justifyContent: "center",
+                              paddingTop: "80px",
+                            }}
+                            onClick={() => setShowHistoryPanelPersist(false)}
+                          >
+                          <div
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                              background: "#111827",
+                              border: "1px solid #374151",
+                              borderRadius: 8,
+                              padding: 10,
+                              width: "min(680px, 92vw)",
+                              maxHeight: "70vh",
+                              overflowY: "auto",
+                              fontSize: 11,
+                              boxShadow: "0 14px 40px rgba(0,0,0,0.55)",
+                            }}
+                          >
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                marginBottom: 8,
+                              }}
+                            >
+                              <div style={{ color: "#a78bfa", fontWeight: "bold" }}>
+                                History
+                              </div>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 8,
+                                  alignItems: "center",
+                                }}
+                              >
+                                <span style={{ fontSize: 10, color: "#9ca3af" }}>
+                                  Press Esc to exit view
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setShowHistoryPanelPersist(false)}
+                                  style={{ ...S.btn, padding: "2px 8px", fontSize: 10 }}
+                                >
+                                  Close
+                                </button>
+                              </div>
+                            </div>
+                              <>
+                                <div
+                                  style={{
+                                    display: "flex",
+                                    gap: 6,
+                                    marginBottom: 8,
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => setHistoryMode("sheet")}
+                                    style={{
+                                      ...S.btn,
+                                      fontSize: 10,
+                                      padding: "4px 8px",
+                                      background:
+                                        historyMode === "sheet" ? "#4338ca" : "#1f2937",
+                                      color:
+                                        historyMode === "sheet" ? "#f9fafb" : "#d1d5db",
+                                      border:
+                                        historyMode === "sheet"
+                                          ? "1px solid #818cf8"
+                                          : "1px solid #374151",
+                                    }}
+                                  >
+                                    Character Sheet History
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setHistoryMode("session")}
+                                    style={{
+                                      ...S.btn,
+                                      fontSize: 10,
+                                      padding: "4px 8px",
+                                      background:
+                                        historyMode === "session" ? "#4338ca" : "#1f2937",
+                                      color:
+                                        historyMode === "session" ? "#f9fafb" : "#d1d5db",
+                                      border:
+                                        historyMode === "session"
+                                          ? "1px solid #818cf8"
+                                          : "1px solid #374151",
+                                    }}
+                                  >
+                                    Session History
+                                  </button>
+                                </div>
+                                <p
+                                  style={{
+                                    margin: "0 0 8px",
+                                    fontSize: 10,
+                                    color: "#6b7280",
+                                    lineHeight: 1.45,
+                                  }}
+                                >
+                                  Sheet tab: field edits and XP notes over time. Session tab:
+                                  rolls (incl. fortune when revealed to you), clocks, stress
+                                  changes, session XP — plus{" "}
+                                  <strong style={{ color: "#9ca3af" }}>Manual record</strong>{" "}
+                                  for table rolls.
+                                </p>
+                                {historyMode === "session" && (
+                                  <>
+                                    <div
+                                      style={{
+                                        marginBottom: 8,
+                                      }}
+                                    >
+                                      <select
+                                        value={
+                                          historySessionId == null
+                                            ? ""
+                                            : String(historySessionId)
+                                        }
+                                        onChange={(e) => {
+                                          const v = e.target.value;
+                                          if (v === "") setHistorySessionId(null);
+                                          else if (v === "all")
+                                            setHistorySessionId("all");
+                                          else setHistorySessionId(Number(v));
+                                        }}
+                                        style={{ ...S.sel, fontSize: 10, padding: "2px 6px", width: "100%" }}
+                                      >
+                                        <option value="">No session</option>
+                                        <option value="all">All sessions</option>
+                                        {(charCampaign?.sessions || []).map((s) => (
+                                          <option key={s.id} value={s.id}>
+                                            {s.name || `Session ${s.id}`}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                    <div
+                                      style={{
+                                        marginBottom: 8,
+                                      }}
+                                    >
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (!canCreateManualHistoryRecord) return;
+                                          setHistoryOutcomeBandGmUnlock(false);
+                                          if (showHistoryManualModal) {
+                                            setShowHistoryManualModal(false);
+                                          } else {
+                                            openHistoryManualModal();
+                                          }
+                                        }}
+                                        style={{
+                                          ...S.btn,
+                                          fontSize: 10,
+                                          background: "#4338ca",
+                                          color: "#fff",
+                                          opacity: canCreateManualHistoryRecord ? 1 : 0.45,
+                                          cursor: canCreateManualHistoryRecord
+                                            ? "pointer"
+                                            : "not-allowed",
+                                        }}
+                                        disabled={!canCreateManualHistoryRecord}
+                                        title={
+                                          canCreateManualHistoryRecord
+                                            ? "Add an offline/manual history entry."
+                                            : "Only the GM or this character's owner can add manual records."
+                                        }
+                                      >
+                                        Manual record…
+                                      </button>
+                                      {showHistoryManualModal && (
+                                        <div
+                                          style={{
+                                            marginTop: 8,
+                                            background: "#0d1117",
+                                            border: "1px solid #374151",
+                                            borderRadius: 8,
+                                            padding: 10,
+                                          }}
+                                        >
+                                          <div
+                                            style={{
+                                              color: "#a78bfa",
+                                              fontWeight: "bold",
+                                              fontSize: 12,
+                                              marginBottom: 8,
+                                            }}
+                                          >
+                                            Manual history, roll, or XP award
+                                          </div>
+                                          <div
+                                            style={{
+                                              display: "flex",
+                                              flexDirection: "column",
+                                              gap: 6,
+                                            }}
+                                          >
+                                            <select
+                                              value={historyManual.sessionId}
+                                              onChange={(e) =>
+                                                setHistoryManual((p) => ({
+                                                  ...p,
+                                                  sessionId: e.target.value,
+                                                }))
+                                              }
+                                              style={{
+                                                ...S.sel,
+                                                fontSize: 10,
+                                                padding: "2px 6px",
+                                                width: "100%",
+                                                boxSizing: "border-box",
+                                              }}
+                                            >
+                                              <option value="">Session</option>
+                                              {(charCampaign?.sessions || []).map((s) => (
+                                                <option
+                                                  key={s.id}
+                                                  value={String(s.id)}
+                                                >
+                                                  {s.name || `Session ${s.id}`}
+                                                </option>
+                                              ))}
+                                            </select>
+                                            <select
+                                              value={historyManual.rollType}
+                                              onChange={(e) =>
+                                                setHistoryManual((p) => ({
+                                                  ...p,
+                                                  rollType: e.target.value,
+                                                  viceOverindulge: "",
+                                                }))
+                                              }
+                                              style={{
+                                                ...S.sel,
+                                                fontSize: 10,
+                                                padding: "2px 6px",
+                                                width: "100%",
+                                                boxSizing: "border-box",
+                                              }}
+                                            >
+                                              <option value="ACTION">Action</option>
+                                              <option value="RESISTANCE">
+                                                Resistance
+                                              </option>
+                                              <option value="VICE">Vice roll</option>
+                                              <option value="FORTUNE">Fortune roll</option>
+                                              <option value="XP">XP award</option>
+                                            </select>
+                                            {historyManual.rollType === "XP" ? (
+                                              <>
+                                                <select
+                                                  value={historyManual.xpTrack}
+                                                  onChange={(e) =>
+                                                    setHistoryManual((p) => ({
+                                                      ...p,
+                                                      xpTrack: e.target.value,
+                                                    }))
+                                                  }
+                                                  style={{
+                                                    ...S.sel,
+                                                    fontSize: 10,
+                                                    padding: "2px 6px",
+                                                    width: "100%",
+                                                    boxSizing: "border-box",
+                                                  }}
+                                                >
+                                                  <option value="playbook">Playbook</option>
+                                                  <option value="insight">Insight</option>
+                                                  <option value="prowess">Prowess</option>
+                                                  <option value="resolve">Resolve</option>
+                                                  <option value="heritage">Heritage</option>
+                                                  <option value="pool">
+                                                    Free pool
+                                                  </option>
+                                                </select>
+                                                <input
+                                                  type="number"
+                                                  min={1}
+                                                  value={historyManual.xpAmount}
+                                                  onChange={(e) =>
+                                                    setHistoryManual((p) => ({
+                                                      ...p,
+                                                      xpAmount: e.target.value,
+                                                    }))
+                                                  }
+                                                  style={{
+                                                    ...S.inp,
+                                                    fontSize: 10,
+                                                    padding: "2px 6px",
+                                                    width: "100%",
+                                                    boxSizing: "border-box",
+                                                  }}
+                                                  title="XP to add"
+                                                />
+                                                <textarea
+                                                  value={historyManual.xpReason}
+                                                  onChange={(e) =>
+                                                    setHistoryManual((p) => ({
+                                                      ...p,
+                                                      xpReason: e.target.value,
+                                                    }))
+                                                  }
+                                                  style={{
+                                                    ...S.inp,
+                                                    fontSize: 10,
+                                                    padding: "6px",
+                                                    minHeight: 52,
+                                                    resize: "vertical",
+                                                    fontFamily: "inherit",
+                                                    width: "100%",
+                                                    boxSizing: "border-box",
+                                                  }}
+                                                  placeholder="Explain what this XP was for (appears in session history and XP log)."
+                                                  rows={3}
+                                                />
+                                              </>
+                                            ) : historyManual.rollType === "RESISTANCE" ? (
+                                              <select
+                                                value={historyManual.action}
+                                                onChange={(e) =>
+                                                  setHistoryManual((p) => ({
+                                                    ...p,
+                                                    action: e.target.value,
+                                                  }))
+                                                }
+                                                style={{
+                                                  ...S.sel,
+                                                  fontSize: 10,
+                                                  padding: "2px 6px",
+                                                  width: "100%",
+                                                  boxSizing: "border-box",
+                                                }}
+                                              >
+                                                {HISTORY_MANUAL_RESISTANCE_ATTR_OPTIONS.map(
+                                                  (opt) => (
+                                                    <option
+                                                      key={opt.value}
+                                                      value={opt.value}
+                                                    >
+                                                      {opt.label}
+                                                    </option>
+                                                  ),
+                                                )}
+                                              </select>
+                                            ) : historyManual.rollType === "VICE" ? (
+                                              <div
+                                                style={{
+                                                  ...S.inp,
+                                                  fontSize: 10,
+                                                  padding: "2px 6px",
+                                                  color: "#9ca3af",
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                }}
+                                              >
+                                                Vice (downtime indulgence)
+                                              </div>
+                                            ) : historyManual.rollType === "FORTUNE" ? (
+                                              <div
+                                                style={{
+                                                  ...S.inp,
+                                                  fontSize: 10,
+                                                  padding: "2px 6px",
+                                                  color: "#9ca3af",
+                                                  display: "flex",
+                                                  alignItems: "center",
+                                                }}
+                                              >
+                                                Fortune (highest die)
+                                              </div>
+                                            ) : (
+                                              <input
+                                                value={historyManual.action}
+                                                onChange={(e) =>
+                                                  setHistoryManual((p) => ({
+                                                    ...p,
+                                                    action: e.target.value,
+                                                  }))
+                                                }
+                                                style={{
+                                                  ...S.inp,
+                                                  fontSize: 10,
+                                                  padding: "2px 6px",
+                                                  width: "100%",
+                                                  boxSizing: "border-box",
+                                                }}
+                                                placeholder="Action"
+                                              />
+                                            )}
+                                            {historyManual.rollType !== "XP" ? (
+                                              <input
+                                                value={historyManual.dice}
+                                                onChange={(e) =>
+                                                  setHistoryManual((p) => ({
+                                                    ...p,
+                                                    dice: e.target.value,
+                                                  }))
+                                                }
+                                                style={{
+                                                  ...S.inp,
+                                                  fontSize: 10,
+                                                  padding: "2px 6px",
+                                                  width: "100%",
+                                                  boxSizing: "border-box",
+                                                }}
+                                                placeholder="Dice e.g. 6,4"
+                                              />
+                                            ) : null}
+                                            {historyManual.rollType === "FORTUNE" ? (
+                                              <>
+                                                <textarea
+                                                  value={historyManual.fortunePublicLabel}
+                                                  onChange={(e) =>
+                                                    setHistoryManual((p) => ({
+                                                      ...p,
+                                                      fortunePublicLabel: e.target.value,
+                                                    }))
+                                                  }
+                                                  style={{
+                                                    ...S.inp,
+                                                    fontSize: 10,
+                                                    padding: "6px",
+                                                    minHeight: 44,
+                                                    resize: "vertical",
+                                                    fontFamily: "inherit",
+                                                    width: "100%",
+                                                    boxSizing: "border-box",
+                                                  }}
+                                                  placeholder="What this fortune resolves (shown in session history)."
+                                                  rows={2}
+                                                />
+                                                <label
+                                                  style={{
+                                                    fontSize: 10,
+                                                    color: "#d1d5db",
+                                                    display: "flex",
+                                                    gap: 6,
+                                                    alignItems: "center",
+                                                  }}
+                                                >
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={
+                                                      !!historyManual.fortuneRevealPlayers
+                                                    }
+                                                    onChange={(e) =>
+                                                      setHistoryManual((p) => ({
+                                                        ...p,
+                                                        fortuneRevealPlayers:
+                                                          e.target.checked,
+                                                      }))
+                                                    }
+                                                  />
+                                                  Show dice and outcome to players
+                                                </label>
+                                              </>
+                                            ) : null}
+                                            {historyManual.rollType === "XP" ? null : historyManual.rollType ===
+                                            "RESISTANCE" ? (
+                                              <>
+                                                <select
+                                                  value={historyManual.resistanceHarmTarget}
+                                                  onChange={(e) =>
+                                                    setHistoryManual((p) => ({
+                                                      ...p,
+                                                      resistanceHarmTarget:
+                                                        e.target.value,
+                                                    }))
+                                                  }
+                                                  style={{
+                                                    ...S.sel,
+                                                    fontSize: 10,
+                                                    padding: "2px 6px",
+                                                    width: "100%",
+                                                    boxSizing: "border-box",
+                                                  }}
+                                                >
+                                                  <option value="">
+                                                    Harm to reduce…
+                                                  </option>
+                                                  {filledHarmOptions.map((opt) => (
+                                                    <option
+                                                      key={opt.value}
+                                                      value={opt.value}
+                                                    >
+                                                      {opt.label}
+                                                    </option>
+                                                  ))}
+                                                </select>
+                                                <div
+                                                  style={{
+                                                    ...S.inp,
+                                                    fontSize: 10,
+                                                    padding: "2px 6px",
+                                                    color: "#d1d5db",
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                  }}
+                                                >
+                                                  Stress = 6 - highest die
+                                                </div>
+                                              </>
+                                            ) : historyManual.rollType === "VICE" ? (
+                                              <>
+                                                <div
+                                                  style={{
+                                                    ...S.inp,
+                                                    fontSize: 10,
+                                                    padding: "2px 6px",
+                                                    color: "#d1d5db",
+                                                    display: "flex",
+                                                    alignItems: "center",
+                                                  }}
+                                                >
+                                                  Pool = lowest Insight / Prowess / Resolve
+                                                  rating · stress cleared = highest die
+                                                </div>
+                                              </>
+                                            ) : historyManual.rollType === "FORTUNE" ? (
+                                                <div
+                                                  style={{
+                                                    ...S.inp,
+                                                    fontSize: 10,
+                                                    padding: "6px 8px",
+                                                    color: "#d1d5db",
+                                                    display: "flex",
+                                                    flexDirection: "column",
+                                                    gap: 6,
+                                                  }}
+                                                >
+                                                <div>
+                                                  Outcome:{" "}
+                                                  <strong style={{ color: "#e5e7eb" }}>
+                                                    {historyManualDerivedOutcomeApi
+                                                      ? OUTCOME_BAND_SHORT_LABEL[
+                                                          historyManualDerivedOutcomeApi
+                                                        ]
+                                                      : "— enter dice"}
+                                                  </strong>
+                                                </div>
+                                                {isGM && historyOutcomeBandGmUnlock ? (
+                                                  <select
+                                                    value={historyManual.outcome}
+                                                    onChange={(e) =>
+                                                      setHistoryManual((p) => ({
+                                                        ...p,
+                                                        outcome: e.target.value,
+                                                      }))
+                                                    }
+                                                    style={{
+                                                      ...S.sel,
+                                                      fontSize: 10,
+                                                      padding: "2px 6px",
+                                                      width: "100%",
+                                                      boxSizing: "border-box",
+                                                    }}
+                                                  >
+                                                    <option value="CRITICAL_SUCCESS">
+                                                      Critical
+                                                    </option>
+                                                    <option value="FULL_SUCCESS">
+                                                      Full
+                                                    </option>
+                                                    <option value="PARTIAL_SUCCESS">
+                                                      Partial
+                                                    </option>
+                                                    <option value="FAILURE">
+                                                      Failure
+                                                    </option>
+                                                  </select>
+                                                ) : null}
+                                                {isGM && !historyOutcomeBandGmUnlock ? (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setHistoryOutcomeBandGmUnlock(true);
+                                                      if (historyManualDerivedOutcomeApi) {
+                                                        setHistoryManual((p) => ({
+                                                          ...p,
+                                                          outcome:
+                                                            historyManualDerivedOutcomeApi,
+                                                        }));
+                                                      }
+                                                    }}
+                                                    style={{
+                                                      ...S.btn,
+                                                      fontSize: 9,
+                                                      alignSelf: "flex-start",
+                                                      padding: "2px 8px",
+                                                    }}
+                                                  >
+                                                    Unlock outcome override (GM)
+                                                  </button>
+                                                ) : null}
+                                              </div>
+                                            ) : (
+                                              <>
+                                                <div
+                                                  style={{
+                                                    ...S.inp,
+                                                    fontSize: 10,
+                                                    padding: "6px 8px",
+                                                    color: "#d1d5db",
+                                                    display: "flex",
+                                                    flexDirection: "column",
+                                                    gap: 6,
+                                                  }}
+                                                >
+                                                  <div>
+                                                    Outcome:{" "}
+                                                    <strong style={{ color: "#e5e7eb" }}>
+                                                      {historyManualDerivedOutcomeApi
+                                                        ? OUTCOME_BAND_SHORT_LABEL[
+                                                            historyManualDerivedOutcomeApi
+                                                          ]
+                                                        : "— enter dice"}
+                                                    </strong>
+                                                  </div>
+                                                  {isGM && historyOutcomeBandGmUnlock ? (
+                                                    <select
+                                                      value={historyManual.outcome}
+                                                      onChange={(e) =>
+                                                        setHistoryManual((p) => ({
+                                                          ...p,
+                                                          outcome: e.target.value,
+                                                        }))
+                                                      }
+                                                      style={{
+                                                        ...S.sel,
+                                                        fontSize: 10,
+                                                        padding: "2px 6px",
+                                                        width: "100%",
+                                                        boxSizing: "border-box",
+                                                      }}
+                                                    >
+                                                      <option value="CRITICAL_SUCCESS">
+                                                        Critical
+                                                      </option>
+                                                      <option value="FULL_SUCCESS">
+                                                        Full
+                                                      </option>
+                                                      <option value="PARTIAL_SUCCESS">
+                                                        Partial
+                                                      </option>
+                                                      <option value="FAILURE">
+                                                        Failure
+                                                      </option>
+                                                    </select>
+                                                  ) : null}
+                                                  {isGM && !historyOutcomeBandGmUnlock ? (
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => {
+                                                        setHistoryOutcomeBandGmUnlock(true);
+                                                        if (historyManualDerivedOutcomeApi) {
+                                                          setHistoryManual((p) => ({
+                                                            ...p,
+                                                            outcome:
+                                                              historyManualDerivedOutcomeApi,
+                                                          }));
+                                                        }
+                                                      }}
+                                                      style={{
+                                                        ...S.btn,
+                                                        fontSize: 9,
+                                                        alignSelf: "flex-start",
+                                                        padding: "2px 8px",
+                                                      }}
+                                                    >
+                                                      Unlock outcome override (GM)
+                                                    </button>
+                                                  ) : null}
+                                                </div>
+                                                <div
+                                                  style={{
+                                                    display: "flex",
+                                                    gap: 14,
+                                                    flexWrap: "wrap",
+                                                    alignItems: "flex-start",
+                                                    marginTop: 2,
+                                                  }}
+                                                >
+                                                  <PositionStack
+                                                    activePosition={
+                                                      historyManual.position || "risky"
+                                                    }
+                                                    readOnly={false}
+                                                    onSelect={(value) =>
+                                                      setHistoryManual((p) => ({
+                                                        ...p,
+                                                        position: value,
+                                                      }))
+                                                    }
+                                                  />
+                                                  <EffectShapes
+                                                    activeEffect={
+                                                      historyManual.effect || "standard"
+                                                    }
+                                                    readOnly={false}
+                                                    onSelect={(tier) =>
+                                                      setHistoryManual((p) => ({
+                                                        ...p,
+                                                        effect: tier,
+                                                      }))
+                                                    }
+                                                  />
+                                                </div>
+                                                <div
+                                                  style={{
+                                                    fontSize: 9,
+                                                    color: "#6b7280",
+                                                    lineHeight: 1.35,
+                                                    marginTop: 2,
+                                                  }}
+                                                >
+                                                  Click position squares or L/S/E to override this
+                                                  offline record. Highlighted effect is the chosen base;
+                                                  stored{" "}
+                                                  <code style={{ color: "#9ca3af" }}>effect</code> still
+                                                  adds push / +1 effect (now {manualHistoryEffectPreview}).
+                                                  Defaults from GM session row (
+                                                  <code style={{ color: "#9ca3af" }}>
+                                                    active_session_detail.position_effect_by_character
+                                                  </code>
+                                                  ) then{" "}
+                                                  <code style={{ color: "#9ca3af" }}>
+                                                    default_position
+                                                  </code>
+                                                  /
+                                                  <code style={{ color: "#9ca3af" }}>
+                                                    default_effect
+                                                  </code>
+                                                  . Online{" "}
+                                                  <code style={{ color: "#9ca3af" }}>rollAction</code>{" "}
+                                                  still resolves P/E from the same session map on the server
+                                                  (no client-sent position override).
+                                                </div>
+                                                {manualHistorySuggestedDice != null ? (
+                                                  <div
+                                                    style={{
+                                                      fontSize: 9,
+                                                      color: "#a78bfa",
+                                                      marginTop: 4,
+                                                      lineHeight: 1.35,
+                                                    }}
+                                                  >
+                                                    Suggested dice count (action rating + push/devil/help
+                                                    + toggles below):{" "}
+                                                    <strong>{manualHistorySuggestedDice}</strong> — enter
+                                                    the dice you actually rolled.
+                                                  </div>
+                                                ) : null}
+                                              </>
+                                            )}
+                                          </div>
+                                          {historyManual.rollType !== "RESISTANCE" &&
+                                            historyManual.rollType !== "VICE" &&
+                                            historyManual.rollType !== "XP" &&
+                                            historyManual.rollType !== "FORTUNE" && (
+                                            <div
+                                              style={{
+                                                marginTop: 6,
+                                                display: "flex",
+                                                gap: 8,
+                                                flexWrap: "wrap",
+                                                fontSize: 10,
+                                              }}
+                                            >
+                                              {[
+                                                ["pushDice", "Push +1d"],
+                                                ["pushEffect", "Push +effect"],
+                                                ["devil", "Devil's bargain"],
+                                                ["helpDie", "Help +1d"],
+                                                ["groupAction", "Group action"],
+                                              ].map(([k, label]) => (
+                                                <label
+                                                  key={k}
+                                                  style={{ display: "flex", gap: 4 }}
+                                                >
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={!!historyManual[k]}
+                                                    onChange={(e) =>
+                                                      setHistoryManual((p) => ({
+                                                        ...p,
+                                                        [k]: e.target.checked,
+                                                      }))
+                                                    }
+                                                  />
+                                                  <span>{label}</span>
+                                                </label>
+                                              ))}
+                                            </div>
+                                          )}
+                                          {historyManual.rollType !== "RESISTANCE" &&
+                                          historyManual.rollType !== "VICE" &&
+                                          historyManual.rollType !== "XP" &&
+                                          historyManual.rollType !== "FORTUNE" &&
+                                          (abilityRollBonusOptions.length > 0 ||
+                                            heritageRollBonusOptions.length > 0) ? (
+                                            <div
+                                              style={{
+                                                marginTop: 8,
+                                                padding: "8px",
+                                                borderRadius: 8,
+                                                border: "1px solid #374151",
+                                                background: "#0d1117",
+                                              }}
+                                            >
+                                              <div
+                                                style={{
+                                                  fontSize: 10,
+                                                  color: "#a78bfa",
+                                                  marginBottom: 6,
+                                                  fontWeight: "bold",
+                                                }}
+                                              >
+                                                Abilities / heritage (+1d, +1 effect)
+                                              </div>
+                                              <div
+                                                style={{
+                                                  fontSize: 9,
+                                                  color: "#6b7280",
+                                                  marginBottom: 6,
+                                                  lineHeight: 1.35,
+                                                }}
+                                              >
+                                                Same rules as the action roll modal; tallies feed{" "}
+                                                <code style={{ color: "#9ca3af" }}>pool_bonus_dice</code>,{" "}
+                                                stored effect tier, and modifier rows on the saved roll.
+                                              </div>
+                                              {abilityRollBonusOptions.length > 0 ? (
+                                                <div
+                                                  style={{
+                                                    display: "flex",
+                                                    flexDirection: "column",
+                                                    gap: 4,
+                                                    maxHeight: 100,
+                                                    overflow: "auto",
+                                                    marginBottom: 6,
+                                                  }}
+                                                >
+                                                  {abilityRollBonusOptions.map((ab) => {
+                                                    const id = ab.id ?? ab.name;
+                                                    const b = historyManualAbilityBoost[id] || {};
+                                                    return (
+                                                      <div
+                                                        key={String(id)}
+                                                        style={{
+                                                          display: "flex",
+                                                          alignItems: "center",
+                                                          justifyContent: "space-between",
+                                                          gap: 6,
+                                                          fontSize: 10,
+                                                          flexWrap: "wrap",
+                                                        }}
+                                                      >
+                                                        <span
+                                                          style={{
+                                                            color: "#d1d5db",
+                                                            flex: "1 1 100px",
+                                                          }}
+                                                          title={
+                                                            ab.rollBonusResolvedDescription
+                                                              ? String(
+                                                                  ab.rollBonusResolvedDescription,
+                                                                ).slice(0, 500)
+                                                              : undefined
+                                                          }
+                                                        >
+                                                          {ab.name}
+                                                        </span>
+                                                        {ab.supportsDice ? (
+                                                          <label
+                                                            style={{
+                                                              display: "flex",
+                                                              alignItems: "center",
+                                                              gap: 3,
+                                                              cursor: "pointer",
+                                                            }}
+                                                          >
+                                                            <input
+                                                              type="checkbox"
+                                                              checked={!!b.dice}
+                                                              onChange={(e) =>
+                                                                setHistoryManualAbilityBoost(
+                                                                  (p) => ({
+                                                                    ...p,
+                                                                    [id]: {
+                                                                      ...p[id],
+                                                                      dice: e.target.checked,
+                                                                      effect: !!p[id]?.effect,
+                                                                    },
+                                                                  }),
+                                                                )
+                                                              }
+                                                            />
+                                                            +1d
+                                                          </label>
+                                                        ) : null}
+                                                        {ab.supportsEffect ? (
+                                                          <label
+                                                            style={{
+                                                              display: "flex",
+                                                              alignItems: "center",
+                                                              gap: 3,
+                                                              cursor: "pointer",
+                                                            }}
+                                                          >
+                                                            <input
+                                                              type="checkbox"
+                                                              checked={!!b.effect}
+                                                              onChange={(e) =>
+                                                                setHistoryManualAbilityBoost(
+                                                                  (p) => ({
+                                                                    ...p,
+                                                                    [id]: {
+                                                                      ...p[id],
+                                                                      effect: e.target.checked,
+                                                                      dice: !!p[id]?.dice,
+                                                                    },
+                                                                  }),
+                                                                )
+                                                              }
+                                                            />
+                                                            +1 effect
+                                                          </label>
+                                                        ) : null}
+                                                      </div>
+                                                    );
+                                                  })}
+                                                </div>
+                                              ) : null}
+                                              {heritageRollBonusOptions.length > 0 ? (
+                                                <div
+                                                  style={{
+                                                    display: "flex",
+                                                    flexDirection: "column",
+                                                    gap: 4,
+                                                    maxHeight: 80,
+                                                    overflow: "auto",
+                                                  }}
+                                                >
+                                                  {heritageRollBonusOptions.map((hb) => {
+                                                    const id = hb.id ?? hb.name;
+                                                    const b = historyManualHeritageBoost[id] || {};
+                                                    return (
+                                                      <div
+                                                        key={String(id)}
+                                                        style={{
+                                                          display: "flex",
+                                                          alignItems: "center",
+                                                          justifyContent: "space-between",
+                                                          gap: 6,
+                                                          fontSize: 10,
+                                                          flexWrap: "wrap",
+                                                        }}
+                                                      >
+                                                        <span
+                                                          style={{ color: "#d1d5db", flex: "1 1 100px" }}
+                                                          title={String(hb.description || "").slice(
+                                                            0,
+                                                            400,
+                                                          )}
+                                                        >
+                                                          {hb.name}{" "}
+                                                          <span style={{ color: "#6b7280" }}>
+                                                            (heritage)
+                                                          </span>
+                                                        </span>
+                                                        {hb.supportsDice ? (
+                                                          <label
+                                                            style={{
+                                                              display: "flex",
+                                                              alignItems: "center",
+                                                              gap: 3,
+                                                              cursor: "pointer",
+                                                            }}
+                                                          >
+                                                            <input
+                                                              type="checkbox"
+                                                              checked={!!b.dice}
+                                                              onChange={(e) =>
+                                                                setHistoryManualHeritageBoost(
+                                                                  (p) => ({
+                                                                    ...p,
+                                                                    [id]: {
+                                                                      ...p[id],
+                                                                      dice: e.target.checked,
+                                                                      effect: !!p[id]?.effect,
+                                                                    },
+                                                                  }),
+                                                                )
+                                                              }
+                                                            />
+                                                            +1d
+                                                          </label>
+                                                        ) : null}
+                                                        {hb.supportsEffect ? (
+                                                          <label
+                                                            style={{
+                                                              display: "flex",
+                                                              alignItems: "center",
+                                                              gap: 3,
+                                                              cursor: "pointer",
+                                                            }}
+                                                          >
+                                                            <input
+                                                              type="checkbox"
+                                                              checked={!!b.effect}
+                                                              onChange={(e) =>
+                                                                setHistoryManualHeritageBoost(
+                                                                  (p) => ({
+                                                                    ...p,
+                                                                    [id]: {
+                                                                      ...p[id],
+                                                                      effect: e.target.checked,
+                                                                      dice: !!p[id]?.dice,
+                                                                    },
+                                                                  }),
+                                                                )
+                                                              }
+                                                            />
+                                                            +1 effect
+                                                          </label>
+                                                        ) : null}
+                                                      </div>
+                                                    );
+                                                  })}
+                                                </div>
+                                              ) : null}
+                                            </div>
+                                          ) : null}
+                                          {historyManual.rollType !== "RESISTANCE" &&
+                                          historyManual.rollType !== "VICE" &&
+                                          historyManual.rollType !== "XP" &&
+                                          historyManual.rollType !== "FORTUNE" &&
+                                          historyManual.groupAction ? (
+                                            <input
+                                              value={historyManual.groupActionId}
+                                              onChange={(e) =>
+                                                setHistoryManual((p) => ({
+                                                  ...p,
+                                                  groupActionId: e.target.value,
+                                                }))
+                                              }
+                                              style={{
+                                                ...S.inp,
+                                                marginTop: 6,
+                                                fontSize: 10,
+                                                padding: "2px 6px",
+                                                width: 120,
+                                              }}
+                                              placeholder="Group action id"
+                                            />
+                                          ) : null}
+                                          {historyManual.rollType === "VICE" &&
+                                          viceManualWouldOverindulge ? (
+                                            <div style={{ marginTop: 6 }}>
+                                              <div
+                                                style={{
+                                                  fontSize: 10,
+                                                  color: "#fbbf24",
+                                                  marginBottom: 4,
+                                                  fontWeight: "bold",
+                                                }}
+                                              >
+                                                Overindulgence (highest die exceeds stress marked) — pick
+                                                consequence:
+                                              </div>
+                                              <select
+                                                value={historyManual.viceOverindulge || ""}
+                                                onChange={(e) =>
+                                                  setHistoryManual((p) => ({
+                                                    ...p,
+                                                    viceOverindulge: e.target.value,
+                                                  }))
+                                                }
+                                                style={{
+                                                  ...S.sel,
+                                                  fontSize: 10,
+                                                  padding: "2px 6px",
+                                                  width: "100%",
+                                                  maxWidth: "100%",
+                                                }}
+                                              >
+                                                {VICE_OVERINDULGE_CHOICES.map((o) => (
+                                                  <option key={o.value || "none"} value={o.value}>
+                                                    {o.label}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            </div>
+                                          ) : null}
+                                          <div
+                                            style={{
+                                              marginTop: 8,
+                                              display: "flex",
+                                              gap: 8,
+                                              alignItems: "center",
+                                            }}
+                                          >
+                                            <button
+                                              type="button"
+                                              disabled={historyManualSaving}
+                                              onClick={async () => {
+                                                if (!canCreateManualHistoryRecord) {
+                                                  setHistoryWriteError(
+                                                    "Only the GM or this character's owner can add manual records.",
+                                                  );
+                                                  return;
+                                                }
+                                                try {
+                                                  setHistoryWriteError(null);
+                                                  const rt0 = String(
+                                                    historyManual.rollType || "ACTION",
+                                                  ).toUpperCase();
+                                                  if (rt0 === "XP") {
+                                                    if (!characterId) return;
+                                                    const sessions =
+                                                      charCampaign?.sessions || [];
+                                                    const sidStr = String(
+                                                      historyManual.sessionId || "",
+                                                    ).trim();
+                                                    const trackPreview =
+                                                      String(
+                                                        historyManual.xpTrack ||
+                                                          "playbook",
+                                                      ).toLowerCase();
+                                                    if (
+                                                      sessions.length > 0 &&
+                                                      trackPreview !== "pool" &&
+                                                      !sidStr
+                                                    ) {
+                                                      setHistoryWriteError(
+                                                        "Select a session for this XP award.",
+                                                      );
+                                                      return;
+                                                    }
+                                                    let sessionIdPayload = null;
+                                                    if (sidStr) {
+                                                      const sidNum = parseInt(sidStr, 10);
+                                                      if (
+                                                        !Number.isFinite(sidNum) ||
+                                                        sidNum < 1
+                                                      ) {
+                                                        setHistoryWriteError(
+                                                          "Invalid session.",
+                                                        );
+                                                        return;
+                                                      }
+                                                      sessionIdPayload = sidNum;
+                                                    }
+                                                    const amt = parseInt(
+                                                      String(historyManual.xpAmount || "1"),
+                                                      10,
+                                                    );
+                                                    if (!Number.isFinite(amt) || amt < 1) {
+                                                      setHistoryWriteError(
+                                                        "XP amount must be at least 1.",
+                                                      );
+                                                      return;
+                                                    }
+                                                    const reason = String(
+                                                      historyManual.xpReason || "",
+                                                    ).trim();
+                                                    if (reason.length < 3) {
+                                                      setHistoryWriteError(
+                                                        "Enter at least 3 characters explaining this XP award.",
+                                                      );
+                                                      return;
+                                                    }
+                                                    const track = trackPreview;
+                                                    setHistoryManualSaving(true);
+                                                    const res = await characterAPI.addXP(
+                                                      characterId,
+                                                      {
+                                                        xp_type: track,
+                                                        amount: amt,
+                                                        reason,
+                                                        ...(sessionIdPayload != null
+                                                          ? {
+                                                              session_id:
+                                                                sessionIdPayload,
+                                                            }
+                                                          : {}),
+                                                      },
+                                                    );
+                                                    if (
+                                                      res?.xp_clocks &&
+                                                      typeof res.xp_clocks === "object"
+                                                    ) {
+                                                      setXp((prev) => ({
+                                                        ...prev,
+                                                        ...res.xp_clocks,
+                                                      }));
+                                                    } else if (
+                                                      res?.new_total != null &&
+                                                      track
+                                                    ) {
+                                                      setXp((p) => ({
+                                                        ...p,
+                                                        [track]: res.new_total,
+                                                      }));
+                                                    }
+                                                    if (
+                                                      track === "pool" &&
+                                                      typeof res?.unallocated_xp ===
+                                                        "number"
+                                                    ) {
+                                                      setUnallocatedXp(
+                                                        Math.max(
+                                                          0,
+                                                          Math.floor(res.unallocated_xp),
+                                                        ),
+                                                      );
+                                                    }
+                                                    setHistoryRefreshTick((v) => v + 1);
+                                                    setHistoryOutcomeBandGmUnlock(false);
+                                                    setShowHistoryManualModal(false);
+                                                    return;
+                                                  }
+                                                  const sid = parseInt(
+                                                    String(historyManual.sessionId || ""),
+                                                    10,
+                                                  );
+                                                  if (!sid || !characterId) return;
+                                                  const diceResults = String(
+                                                    historyManual.dice || "",
+                                                  )
+                                                    .split(/[\s,]+/)
+                                                    .map((n) => parseInt(n.trim(), 10))
+                                                    .filter(
+                                                      (n) =>
+                                                        Number.isFinite(n) &&
+                                                        n >= 1 &&
+                                                        n <= 6,
+                                                    );
+                                                  if (!diceResults.length) {
+                                                    setHistoryWriteError(
+                                                      "Enter at least one die result (1-6).",
+                                                    );
+                                                    return;
+                                                  }
+                                                  const rt = String(
+                                                    historyManual.rollType || "ACTION",
+                                                  ).toUpperCase();
+                                                  const isResistanceManual =
+                                                    rt === "RESISTANCE";
+                                                  const isViceManual = rt === "VICE";
+                                                  const isFortuneManual = rt === "FORTUNE";
+                                                  const actionRatingForManual =
+                                                    !isResistanceManual &&
+                                                    !isViceManual &&
+                                                    !isFortuneManual
+                                                      ? computeActionPoolBreakdown(
+                                                          historyManual.action,
+                                                          actionRatings,
+                                                        ).action_rating
+                                                      : 0;
+                                                  const actionPoolBeforeManual =
+                                                    !isResistanceManual &&
+                                                    !isViceManual &&
+                                                    !isFortuneManual
+                                                      ? Math.max(
+                                                          0,
+                                                          actionRatingForManual +
+                                                            (historyManual.pushDice
+                                                              ? 1
+                                                              : 0) +
+                                                            (historyManual.devil
+                                                              ? 1
+                                                              : 0) +
+                                                            (historyManual.helpDie
+                                                              ? 1
+                                                              : 0),
+                                                        )
+                                                      : 0;
+                                                  const mhBon =
+                                                    computeAbilityHeritageRollBonuses({
+                                                      abilityRollBonusOptions,
+                                                      heritageRollBonusOptions,
+                                                      abilityBoostMap:
+                                                        historyManualAbilityBoost,
+                                                      heritageBoostMap:
+                                                        historyManualHeritageBoost,
+                                                      healingTreatmentBonusContext: false,
+                                                      standRoll: false,
+                                                      reflexCtx: {
+                                                        rollPending: null,
+                                                        healingTreatmentBonusContext: false,
+                                                      },
+                                                    });
+                                                  const abilityBonusDiceManual =
+                                                    mhBon.bonusDiceFromAbilities +
+                                                    mhBon.bonusDiceFromHeritage;
+                                                  const actionPoolForOutcome =
+                                                    actionPoolBeforeManual +
+                                                    abilityBonusDiceManual;
+                                                  const manualStoredEffect =
+                                                    !isResistanceManual &&
+                                                    !isViceManual &&
+                                                    !isFortuneManual
+                                                      ? bumpEffectTier(
+                                                          normalizeEffectTier(
+                                                            historyManual.effect,
+                                                          ),
+                                                          (historyManual.pushEffect
+                                                            ? 1
+                                                            : 0) +
+                                                            mhBon.abilityEffectSteps +
+                                                            mhBon.heritageEffectSteps,
+                                                        )
+                                                      : historyManual.effect;
+                                                  const manualModifierSources = [
+                                                    ...mhBon.abilityBonusAudit.map(
+                                                      (t) => ({
+                                                        kind: "ability",
+                                                        name: String(t).slice(0, 160),
+                                                        category: "ability",
+                                                      }),
+                                                    ),
+                                                    ...mhBon.heritageBonusAudit.map(
+                                                      (t) => ({
+                                                        kind: "ability",
+                                                        name: String(t).slice(0, 160),
+                                                        category: "heritage",
+                                                      }),
+                                                    ),
+                                                  ];
+                                                  const manualPositionEffectSources = [];
+                                                  if (
+                                                    !isResistanceManual &&
+                                                    !isViceManual &&
+                                                    !isFortuneManual &&
+                                                    historyManual.pushEffect
+                                                  ) {
+                                                    manualPositionEffectSources.push({
+                                                      kind: "push",
+                                                      name: "Push for effect",
+                                                      delta: "+1 effect",
+                                                      category: "system",
+                                                    });
+                                                  }
+                                                  if (
+                                                    !isResistanceManual &&
+                                                    !isViceManual &&
+                                                    !isFortuneManual
+                                                  ) {
+                                                    [
+                                                      ...mhBon.abilityBonusAudit,
+                                                      ...mhBon.heritageBonusAudit,
+                                                    ].forEach((line) => {
+                                                      if (!String(line).includes("+1 effect"))
+                                                        return;
+                                                      const name =
+                                                        String(line).split(":")[0]?.trim() ||
+                                                        "Effect boost";
+                                                      manualPositionEffectSources.push({
+                                                        kind: "ability",
+                                                        name: name.slice(0, 120),
+                                                        delta: "+1 effect",
+                                                        category: "ability",
+                                                      });
+                                                    });
+                                                  }
+                                                  const resistanceSummary =
+                                                    computeResistanceSummary(
+                                                      diceResults,
+                                                    );
+                                                  const viceSummary =
+                                                    computeViceManualSummary(
+                                                      diceResults,
+                                                    );
+                                                  if (
+                                                    isResistanceManual &&
+                                                    !historyManual.resistanceHarmTarget
+                                                  ) {
+                                                    setHistoryWriteError(
+                                                      "Choose which harm slot this resistance roll reduces.",
+                                                    );
+                                                    return;
+                                                  }
+                                                  const viceOverAtSave =
+                                                    isViceManual &&
+                                                    viceSummary.highest >
+                                                      (Number(stressFilled) || 0);
+                                                  if (
+                                                    viceOverAtSave &&
+                                                    !String(
+                                                      historyManual.viceOverindulge ||
+                                                        "",
+                                                    ).trim()
+                                                  ) {
+                                                    setHistoryWriteError(
+                                                      "Overindulgence: choose which consequence applies (highest die exceeds marked stress).",
+                                                    );
+                                                    return;
+                                                  }
+                                                  if (isFortuneManual) {
+                                                    const lbl = String(
+                                                      historyManual.fortunePublicLabel ||
+                                                        "",
+                                                    ).trim();
+                                                    if (lbl.length < 3) {
+                                                      setHistoryWriteError(
+                                                        "Enter at least 3 characters describing what this fortune roll was for.",
+                                                      );
+                                                      return;
+                                                    }
+                                                  }
+                                                  setHistoryManualSaving(true);
+                                                  if (isResistanceManual) {
+                                                    const reduced = clearHarmSlot(
+                                                      historyManual.resistanceHarmTarget,
+                                                    );
+                                                    if (!reduced) {
+                                                      setHistoryWriteError(
+                                                        "Selected harm slot is empty or invalid.",
+                                                      );
+                                                      setHistoryManualSaving(false);
+                                                      return;
+                                                    }
+                                                    if (resistanceSummary.stressCost > 0)
+                                                      applyStressCost(
+                                                        resistanceSummary.stressCost,
+                                                      );
+                                                  }
+                                                  if (isViceManual) {
+                                                    setStressFilled((prev) =>
+                                                      Math.max(
+                                                        0,
+                                                        (Number(prev) || 0) -
+                                                          viceSummary.highest,
+                                                      ),
+                                                    );
+                                                  }
+                                                  if (isFortuneManual) {
+                                                    const lbl = String(
+                                                      historyManual.fortunePublicLabel ||
+                                                        "",
+                                                    )
+                                                      .trim()
+                                                      .slice(0, 120);
+                                                    await rollAPI.createRoll({
+                                                      character: characterId,
+                                                      session: sid,
+                                                      roll_type: "FORTUNE",
+                                                      action_name: "fortune",
+                                                      dice_pool: diceResults.length,
+                                                      results: diceResults,
+                                                      outcome:
+                                                        historyOutcomeBandGmUnlock &&
+                                                        isGM
+                                                          ? historyManual.outcome
+                                                          : outcomeFromFortuneDiceResults(
+                                                              diceResults,
+                                                            ),
+                                                      fortune_public_label: lbl,
+                                                      fortune_reveal_outcome:
+                                                        !!historyManual.fortuneRevealPlayers,
+                                                      description:
+                                                        "Manual fortune record from history panel",
+                                                    });
+                                                  } else {
+                                                    await rollAPI.createRoll({
+                                                      character: characterId,
+                                                      session: sid,
+                                                      roll_type: isResistanceManual
+                                                        ? "RESISTANCE"
+                                                        : isViceManual
+                                                          ? "CLEAR_STRESS"
+                                                          : "ACTION",
+                                                      action_name: isViceManual
+                                                        ? "vice"
+                                                        : isResistanceManual
+                                                          ? historyManualResistanceActionName(
+                                                              historyManual.action,
+                                                            )
+                                                          : String(
+                                                              historyManual.action ||
+                                                                "action",
+                                                            ).toLowerCase(),
+                                                      ...(isResistanceManual || isViceManual
+                                                        ? {}
+                                                        : {
+                                                            position:
+                                                              historyManual.position,
+                                                            effect: manualStoredEffect,
+                                                          }),
+                                                      dice_pool:
+                                                        isResistanceManual ||
+                                                        isViceManual
+                                                          ? diceResults.length
+                                                          : actionPoolForOutcome,
+                                                      results: diceResults,
+                                                      outcome: isResistanceManual
+                                                        ? resistanceSummary.outcome
+                                                        : isViceManual
+                                                          ? viceSummary.outcome
+                                                          : historyOutcomeBandGmUnlock &&
+                                                              isGM
+                                                            ? historyManual.outcome
+                                                            : outcomeFromActionRoll(
+                                                                diceResults,
+                                                                actionPoolForOutcome,
+                                                                actionRatingForManual,
+                                                              ),
+                                                      ...(!isResistanceManual &&
+                                                      !isViceManual &&
+                                                      !isFortuneManual
+                                                        ? {
+                                                            pool_action_rating:
+                                                              actionRatingForManual,
+                                                          }
+                                                        : {}),
+                                                      ...(isResistanceManual
+                                                        ? {
+                                                            roller_stress_spent:
+                                                              resistanceSummary.stressCost >
+                                                              0
+                                                                ? resistanceSummary.stressCost
+                                                                : 0,
+                                                          }
+                                                        : isViceManual
+                                                          ? { roller_stress_spent: 0 }
+                                                          : {
+                                                              push_for_dice:
+                                                                !!historyManual.pushDice,
+                                                              push_for_effect:
+                                                                !!historyManual.pushEffect,
+                                                              uses_devil_bargain:
+                                                                !!historyManual.devil,
+                                                              pool_assist_dice:
+                                                                historyManual.helpDie
+                                                                  ? 1
+                                                                  : 0,
+                                                              group_action:
+                                                                historyManual.groupAction &&
+                                                                historyManual.groupActionId
+                                                                  ? parseInt(
+                                                                      String(
+                                                                        historyManual.groupActionId,
+                                                                      ),
+                                                                      10,
+                                                                    )
+                                                                  : undefined,
+                                                              ...(abilityBonusDiceManual > 0
+                                                                ? {
+                                                                    pool_bonus_dice:
+                                                                      abilityBonusDiceManual,
+                                                                  }
+                                                                : {}),
+                                                              ...(manualModifierSources.length >
+                                                              0
+                                                                ? {
+                                                                    modifier_sources:
+                                                                      manualModifierSources,
+                                                                  }
+                                                                : {}),
+                                                              ...(manualPositionEffectSources.length >
+                                                              0
+                                                                ? {
+                                                                    position_effect_sources:
+                                                                      manualPositionEffectSources,
+                                                                  }
+                                                                : {}),
+                                                            }),
+                                                      description:
+                                                        isResistanceManual
+                                                          ? `Manual resistance record from history panel. Reduced harm slot ${historyManual.resistanceHarmTarget}. Stress marked: ${Math.max(0, resistanceSummary.stressCost)}.`
+                                                          : isViceManual
+                                                            ? `Manual vice record from history panel. Stress cleared (highest die): ${viceSummary.highest}.${viceOverAtSave && String(historyManual.viceOverindulge || "").trim() ? ` Overindulgence: ${viceOverindulgeLabel(historyManual.viceOverindulge)}` : ""}`
+                                                            : "Manual record from history panel",
+                                                    });
+                                                  }
+                                                  setHistoryRefreshTick((v) => v + 1);
+                                                  setHistoryOutcomeBandGmUnlock(false);
+                                                  setShowHistoryManualModal(false);
+                                                } catch (e) {
+                                                  setHistoryWriteError(
+                                                    e.message ||
+                                                      "Failed to create manual history record.",
+                                                  );
+                                                } finally {
+                                                  setHistoryManualSaving(false);
+                                                }
+                                              }}
+                                              style={{
+                                                ...S.btn,
+                                                fontSize: 10,
+                                                background: "#4338ca",
+                                                color: "#fff",
+                                              }}
+                                            >
+                                              {historyManualSaving
+                                                ? "Saving…"
+                                                : historyManual.rollType === "XP"
+                                                  ? "Add XP award"
+                                                  : historyManual.rollType === "FORTUNE"
+                                                    ? "Add fortune record"
+                                                    : "Add manual record"}
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setHistoryOutcomeBandGmUnlock(false);
+                                                setShowHistoryManualModal(false);
+                                              }}
+                                              style={{ ...S.btn, fontSize: 10 }}
+                                            >
+                                              Cancel
+                                            </button>
+                                            {historyWriteError ? (
+                                              <span
+                                                style={{
+                                                  color: "#f87171",
+                                                  fontSize: 10,
+                                                }}
+                                              >
+                                                {historyWriteError}
+                                              </span>
+                                            ) : null}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+                                {historyLoading ? (
+                                  <div style={{ color: "#6b7280" }}>Loading history…</div>
+                                ) : historyError ? (
+                                  <div style={{ color: "#fca5a5" }}>{historyError}</div>
+                                ) : historyRows.length === 0 ? (
+                                  <div style={{ color: "#6b7280", lineHeight: 1.45 }}>
+                                    {historyMode === "session" && !historySessionId
+                                      ? "No XP log for this filter. Choose a campaign session for rolls, stress, and session-tied XP, or stay on “No session” for full tracker + ledger + advancement edits (all time)."
+                                      : "No history entries."}
+                                  </div>
+                                ) : (
+                                  <>
+                                    {historyUndoError && (
+                                      <div
+                                        style={{
+                                          color: "#fca5a5",
+                                          fontSize: 10,
+                                          marginBottom: 8,
+                                        }}
+                                      >
+                                        {historyUndoError}
+                                      </div>
+                                    )}
+                                    {historyRows.slice(0, 200).map((row) => {
+                                      const undoBusy = historyUndoBusy === row.key;
+                                      const showUndo =
+                                        historyMode === "sheet" &&
+                                        (row.type === "sheet_edit" ||
+                                          row.type === "xp_tracker") &&
+                                        !row.revertedAt;
+                                      return (
+                                    <div
+                                      key={row.key}
+                                      style={{
+                                        padding: "6px 0",
+                                        borderBottom: "1px solid #1f2937",
+                                        opacity: row.revertedAt ? 0.55 : 1,
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: "flex",
+                                          justifyContent: "space-between",
+                                          gap: 8,
+                                          alignItems: "flex-start",
+                                        }}
+                                      >
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                      <div style={{ color: "#9ca3af", fontSize: 10 }}>
+                                        {row.timestamp
+                                          ? new Date(row.timestamp).toLocaleString()
+                                          : "No timestamp"}{" "}
+                                        · {row.actor || "unknown"}
+                                        {row.revertedAt ? " · undone" : ""}
+                                      </div>
+                                      {row.text ? (
+                                        <div style={{ color: "#d1d5db" }}>{row.text}</div>
+                                      ) : null}
+                                      {Array.isArray(row.details) &&
+                                        row.details.map((d) => (
+                                          <div
+                                            key={`${row.key}-${d.key}`}
+                                            style={{ fontSize: 10, color: "#d1d5db" }}
+                                          >
+                                            <strong>{d.label}</strong>:{" "}
+                                            <span style={{ color: "#fca5a5" }}>
+                                              {d.oldValue || "∅"}
+                                            </span>{" "}
+                                            →{" "}
+                                            <span style={{ color: "#86efac" }}>
+                                              {d.newValue || "∅"}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      {row.modifiers?.length ? (
+                                        <div style={{ fontSize: 10, color: "#a78bfa" }}>
+                                          {row.modifiers.join(" · ")}
+                                        </div>
+                                      ) : null}
+                                        </div>
+                                        {showUndo && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleHistoryRowUndo(row)}
+                                            disabled={
+                                              undoBusy || row.canUndo === false
+                                            }
+                                            title={
+                                              row.canUndo === false
+                                                ? row.undoBlockReason ||
+                                                  "Cannot undo this entry"
+                                                : "Undo this change"
+                                            }
+                                            style={{
+                                              flexShrink: 0,
+                                              background: "#312e81",
+                                              border: "1px solid #6366f1",
+                                              borderRadius: 6,
+                                              padding: "2px 6px",
+                                              cursor:
+                                                undoBusy || row.canUndo === false
+                                                  ? "not-allowed"
+                                                  : "pointer",
+                                              color: "#c7d2fe",
+                                              fontSize: 12,
+                                              lineHeight: 1,
+                                              opacity:
+                                                row.canUndo === false ? 0.45 : 1,
+                                            }}
+                                          >
+                                            {undoBusy ? "…" : "↩"}
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                      );
+                                    })}
+                                  </>
+                                )}
+                              </>
+                          </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                     {/* Identity fields */}
