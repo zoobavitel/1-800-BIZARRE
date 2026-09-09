@@ -851,6 +851,33 @@
   color: var(--dark-text-3);
 }
 
+.home-poc .home-show-more {
+  display: block;
+  width: 100%;
+  margin: 4px 0 12px;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: lowercase;
+  text-align: center;
+}
+.home-poc .home-show-more-light {
+  color: var(--light-text-3);
+}
+.home-poc .home-show-more-light:hover {
+  color: var(--p1);
+}
+.home-poc .home-show-more-dark {
+  color: var(--dark-text-3);
+}
+.home-poc .home-show-more-dark:hover {
+  color: var(--g1, #4ade80);
+}
+
 .home-poc .p-card {
   display: flex;
   background: var(--light-bg-card);
