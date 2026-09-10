@@ -23,6 +23,9 @@ import {
 import {
   visibleCampaignsForHome,
   visibleCharactersForHome,
+  visibleNpcsForHome,
+  buildGmFactionGroupsForHome,
+  visibleFactionGroupsForHome,
 } from "../utils/homeCampaignSort";
 import HomeSessionScatterChart from "../components/home/HomeSessionScatterChart";
 import HomeStatsBarChart from "../components/home/HomeStatsBarChart";
@@ -156,6 +159,8 @@ const HomePage = ({
   const [expandedFactionId, setExpandedFactionId] = useState(null);
   const [showAllCharacters, setShowAllCharacters] = useState(false);
   const [showAllCampaigns, setShowAllCampaigns] = useState(false);
+  const [showAllNpcs, setShowAllNpcs] = useState(false);
+  const [showAllFactions, setShowAllFactions] = useState(false);
 
   const loadCharacters = useCallback(async () => {
     setLoading(true);
@@ -285,6 +290,13 @@ const HomePage = ({
         }),
       [characters, campaigns, showAllCharacters],
     );
+  const { visible: visibleNpcs, hiddenCount: hiddenNpcCount } = useMemo(
+    () =>
+      visibleNpcsForHome(npcs, campaigns, {
+        expanded: showAllNpcs,
+      }),
+    [npcs, campaigns, showAllNpcs],
+  );
   const barChartRows = useMemo(() => buildBarChartRows(heroStats), [heroStats]);
   const chartsLoading = loading || campaignsLoading || npcsLoading;
 
@@ -300,16 +312,18 @@ const HomePage = ({
     return list.map((h) => `${h.name} (${h.count})`).join(", ");
   }, [siteStats]);
 
-  const gmFactionGroups = useMemo(() => {
-    if (!user) return [];
-    return (campaigns || [])
-      .filter((c) => c.gm?.id === user.id)
-      .map((c) => ({
-        campaign: c,
-        factions: Array.isArray(c.factions) ? c.factions : [],
-      }))
-      .filter((g) => g.factions.length > 0);
-  }, [campaigns, user]);
+  const gmFactionGroups = useMemo(
+    () => buildGmFactionGroupsForHome(campaigns, user?.id),
+    [campaigns, user?.id],
+  );
+  const { visible: visibleFactionGroups, hiddenCount: hiddenFactionCount } =
+    useMemo(
+      () =>
+        visibleFactionGroupsForHome(gmFactionGroups, {
+          expanded: showAllFactions,
+        }),
+      [gmFactionGroups, showAllFactions],
+    );
 
   const firstGmCampaignId = useMemo(() => {
     if (!user) return null;
@@ -565,6 +579,16 @@ const HomePage = ({
             </p>
           ) : characters.length === 0 ? null : (
             <>
+              {showAllCharacters ? (
+                <button
+                  type="button"
+                  className="home-show-more home-show-more-light"
+                  onClick={() => setShowAllCharacters(false)}
+                  aria-expanded={true}
+                >
+                  - show less -
+                </button>
+              ) : null}
               {visibleCharacters.map((character) => (
                 <div
                   key={character.id}
@@ -658,59 +682,81 @@ const HomePage = ({
           ) : npcs.length === 0 ? (
             <p className="home-muted">No NPCs yet.</p>
           ) : (
-            npcs.slice(0, 8).map((npc) => (
-              <div
-                key={npc.id}
-                className="npc-card"
-                role="button"
-                tabIndex={0}
-                onClick={() => handleEditNpc(npc.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    handleEditNpc(npc.id);
-                  }
-                }}
-              >
-                <div className="npc-card-stripe" />
-                <div className="npc-card-body">
-                  <div className="npc-card-info">
-                    <div className="npc-card-name">{npc.name || "—"}</div>
-                    <div className="npc-card-stand">
-                      「{npc.stand_name || "—"}」
+            <>
+              {showAllNpcs ? (
+                <button
+                  type="button"
+                  className="home-show-more home-show-more-light"
+                  onClick={() => setShowAllNpcs(false)}
+                  aria-expanded={true}
+                >
+                  - show less -
+                </button>
+              ) : null}
+              {visibleNpcs.map((npc) => (
+                <div
+                  key={npc.id}
+                  className="npc-card"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleEditNpc(npc.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleEditNpc(npc.id);
+                    }
+                  }}
+                >
+                  <div className="npc-card-stripe" />
+                  <div className="npc-card-body">
+                    <div className="npc-card-info">
+                      <div className="npc-card-name">{npc.name || "—"}</div>
+                      <div className="npc-card-stand">
+                        「{npc.stand_name || "—"}」
+                      </div>
+                      <div className="npc-card-meta">
+                        <span>Lv {npc.level ?? "—"}</span>
+                        <span>·</span>
+                        <span>{npc.role || "NPC"}</span>
+                      </div>
                     </div>
-                    <div className="npc-card-meta">
-                      <span>Lv {npc.level ?? "—"}</span>
-                      <span>·</span>
-                      <span>{npc.role || "NPC"}</span>
+                    <div className="p-card-actions">
+                      <a
+                        href={buildRouteHref("npcs", { npcId: npc.id })}
+                        className="p-card-btn p-card-btn-primary p-card-btn-npc"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSpaNavClick(e, () => handleEditNpc(npc.id));
+                        }}
+                      >
+                        Edit
+                      </a>
+                      <button
+                        type="button"
+                        className="p-card-btn p-card-btn-delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteNpc(npc.id);
+                        }}
+                        aria-label="Delete NPC"
+                      >
+                        ×
+                      </button>
                     </div>
-                  </div>
-                  <div className="p-card-actions">
-                    <a
-                      href={buildRouteHref("npcs", { npcId: npc.id })}
-                      className="p-card-btn p-card-btn-primary p-card-btn-npc"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSpaNavClick(e, () => handleEditNpc(npc.id));
-                      }}
-                    >
-                      Edit
-                    </a>
-                    <button
-                      type="button"
-                      className="p-card-btn p-card-btn-delete"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteNpc(npc.id);
-                      }}
-                      aria-label="Delete NPC"
-                    >
-                      ×
-                    </button>
                   </div>
                 </div>
-              </div>
-            ))
+              ))}
+              {(hiddenNpcCount > 0 || showAllNpcs) && (
+                <button
+                  type="button"
+                  className="home-show-more home-show-more-light"
+                  onClick={() => setShowAllNpcs((v) => !v)}
+                  aria-expanded={showAllNpcs}
+                >
+                  {showAllNpcs ? "- show less -" : "- show more -"}
+                </button>
+              )}
+            </>
           )}
         </div>
 
@@ -823,6 +869,16 @@ const HomePage = ({
             <p className="home-muted-dark">No campaigns yet.</p>
           ) : (
             <>
+              {showAllCampaigns ? (
+                <button
+                  type="button"
+                  className="home-show-more home-show-more-dark"
+                  onClick={() => setShowAllCampaigns(false)}
+                  aria-expanded={true}
+                >
+                  - show less -
+                </button>
+              ) : null}
               {visibleCampaigns.map((campaign) => {
               const isGm = user && campaign.gm?.id === user.id;
               const playerCount = Array.isArray(campaign.players)
@@ -975,7 +1031,18 @@ const HomePage = ({
               <p className="home-muted-dark">No factions yet.</p>
             </>
           ) : (
-            gmFactionGroups.map(({ campaign, factions }) => (
+            <>
+              {showAllFactions ? (
+                <button
+                  type="button"
+                  className="home-show-more home-show-more-dark"
+                  onClick={() => setShowAllFactions(false)}
+                  aria-expanded={true}
+                >
+                  - show less -
+                </button>
+              ) : null}
+              {visibleFactionGroups.map(({ campaign, factions }) => (
               <React.Fragment key={campaign.id}>
                 <div className="split-npc-row">
                   <div>
@@ -1081,7 +1148,18 @@ const HomePage = ({
                   );
                 })}
               </React.Fragment>
-            ))
+              ))}
+              {(hiddenFactionCount > 0 || showAllFactions) && (
+                <button
+                  type="button"
+                  className="home-show-more home-show-more-dark"
+                  onClick={() => setShowAllFactions((v) => !v)}
+                  aria-expanded={showAllFactions}
+                >
+                  {showAllFactions ? "- show less -" : "- show more -"}
+                </button>
+              )}
+            </>
           )}
         </div>
       </section>
