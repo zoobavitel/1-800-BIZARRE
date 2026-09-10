@@ -73,6 +73,7 @@ const BG2 = "var(--hftf-deep)";
  * @param {Record<string, string>} props.readouts — per-stat summary under the coin
  * @param {(statKey: string, delta: 1 | -1) => void} props.onStep
  * @param {boolean} [props.readOnly=false] — when true, wedges do not change grades (view-only).
+ * @param {(statKey: string) => boolean} [props.canStepUp] — when readOnly, still allow +1 clicks for fundable stats.
  * @param {"npc" | "pc"} [props.variant="npc"] — PC adjusts default copy (grade cap A vs S).
  * @param {"A" | "S"} [props.pcMaxGrade="A"] — when variant is "pc", hints and aria use this as top grade.
  * @param {Record<string, string | { grade: string, blocked?: boolean }>} [props.plannedGrades] — plan-mode ghost grade per axis.
@@ -82,6 +83,7 @@ export default function NpcsStandCoin({
   readouts,
   onStep,
   readOnly = false,
+  canStepUp = null,
   variant = "npc",
   pcMaxGrade = "A",
   plannedGrades = null,
@@ -145,11 +147,14 @@ export default function NpcsStandCoin({
 
   const bump = useCallback(
     (key, delta) => {
-      if (readOnly) return;
+      const allowUp =
+        typeof canStepUp === "function" ? !!canStepUp(key) : false;
+      if (readOnly && !(delta === 1 && allowUp)) return;
+      if (readOnly && delta === -1) return;
       onStep(key, delta);
       setPinned(key);
     },
-    [onStep, readOnly],
+    [onStep, readOnly, canStepUp],
   );
 
   const onWedgeClick = useCallback(
@@ -206,6 +211,11 @@ export default function NpcsStandCoin({
     ? `${activeMeta.label}, grade ${activeGrade}. ${activeBlurb}`
     : idleAnnounce;
 
+  const anyStepUp =
+    typeof canStepUp === "function" &&
+    STAT_ORDER.some((s) => !!canStepUp(s.key));
+  const blockPointer = readOnly && !anyStepUp;
+
   return (
     <div
       ref={rootRef}
@@ -218,8 +228,8 @@ export default function NpcsStandCoin({
         maxWidth: "280px",
         margin: "0 auto 4px",
         userSelect: "none",
-        pointerEvents: readOnly ? "none" : "auto",
-        opacity: readOnly ? 0.92 : 1,
+        pointerEvents: blockPointer ? "none" : "auto",
+        opacity: readOnly && !anyStepUp ? 0.92 : 1,
       }}
     >
       <span style={SR_ONLY} role="status" aria-live="polite" aria-atomic="true">
@@ -459,29 +469,42 @@ export default function NpcsStandCoin({
         {STAT_ORDER.map((s, i) => {
           const isHot = hovered === s.key || pinned === s.key;
           const g = grades[s.key] ?? "D";
+          const allowUp =
+            typeof canStepUp === "function" ? !!canStepUp(s.key) : false;
+          const interactive = !readOnly || allowUp;
           return (
             <path
               key={`hit-${s.key}`}
               d={wedgePath(i)}
               fill={isHot ? P1 : "var(--hftf-deep)"}
               fillOpacity={isHot ? 0.28 : 0.001}
-              stroke="none"
-              style={{ cursor: readOnly ? "default" : "pointer" }}
-              role={readOnly ? "presentation" : "button"}
-              tabIndex={readOnly ? -1 : 0}
+              stroke={allowUp && readOnly ? "var(--hftf-gold)" : "none"}
+              strokeWidth={allowUp && readOnly ? 1.25 : 0}
+              strokeDasharray={allowUp && readOnly ? "3 2" : undefined}
+              style={{ cursor: interactive ? "pointer" : "default" }}
+              role={interactive ? "button" : "presentation"}
+              tabIndex={interactive ? 0 : -1}
               aria-label={
-                readOnly
+                !interactive
                   ? `${s.label}, grade ${g} (read-only)`
-                  : `${s.label}, grade ${g}. Left-click to raise, right-click or Shift-click to lower.${wedgeSuffix}`
+                  : allowUp && readOnly
+                    ? `${s.label}, grade ${g}. Click to spend XP for +1 grade.${wedgeSuffix}`
+                    : `${s.label}, grade ${g}. Left-click to raise, right-click or Shift-click to lower.${wedgeSuffix}`
               }
-              aria-disabled={readOnly ? "true" : undefined}
-              onMouseEnter={() => !readOnly && setHovered(s.key)}
-              onMouseLeave={() => !readOnly && setHovered(null)}
-              onFocus={() => !readOnly && setHovered(s.key)}
-              onBlur={() => !readOnly && setHovered(null)}
-              onClick={(e) => !readOnly && onWedgeClick(e, s.key)}
-              onContextMenu={(e) => !readOnly && onWedgeContext(e, s.key)}
-              onKeyDown={(e) => !readOnly && onWedgeKey(e, s.key)}
+              aria-disabled={!interactive ? "true" : undefined}
+              onMouseEnter={() => interactive && setHovered(s.key)}
+              onMouseLeave={() => interactive && setHovered(null)}
+              onFocus={() => interactive && setHovered(s.key)}
+              onBlur={() => interactive && setHovered(null)}
+              onClick={(e) => interactive && onWedgeClick(e, s.key)}
+              onContextMenu={(e) => {
+                if (readOnly) {
+                  e.preventDefault();
+                  return;
+                }
+                onWedgeContext(e, s.key);
+              }}
+              onKeyDown={(e) => interactive && onWedgeKey(e, s.key)}
             />
           );
         })}
