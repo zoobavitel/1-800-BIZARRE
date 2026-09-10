@@ -112,6 +112,12 @@ import {
   schedulePcPendingResaveDrain,
 } from "../features/character-sheet/utils/pcAutosaveQueue";
 import {
+  canDirectStandUpgrade,
+  canFundTrackAdvance,
+  poolMarksNeededToMint,
+  standCoinChargenHasFreeRoom,
+} from "../features/character-sheet/utils/directAdvance";
+import {
   HISTORY_MANUAL_RESISTANCE_ATTR_OPTIONS,
   historyManualResistanceActionName,
 } from "../features/character-sheet/utils/historyManualResistance";
@@ -939,6 +945,8 @@ const CharacterSheetWrapper = ({
   const autosaveAbortRef = useRef(null);
   /** Sync guard so Confirm cannot double-fire before levelUpBusy re-renders. */
   const levelUpInFlightRef = useRef(false);
+  /** Block poll/hydrate snap-back after XP allocation APIs (coin). */
+  const allocationHydrateGuardUntilRef = useRef(0);
   const pendingResaveRef = useRef(false);
   /**
    * Same-tick protect before meta effect computes isDirty.
@@ -1629,6 +1637,7 @@ const CharacterSheetWrapper = ({
   // Sync standStats when character changes (e.g. switching tabs)
   useEffect(() => {
     if (sheetDraftIsDirty) return;
+    if (Date.now() < allocationHydrateGuardUntilRef.current) return;
     const next = character?.standStats;
     if (next && typeof next === "object") {
       setStandStats((prev) => {
@@ -1816,6 +1825,7 @@ const CharacterSheetWrapper = ({
     ...(character?.pendingAdvanceCounts || {}),
   }));
   const [poolAllocateBusy, setPoolAllocateBusy] = useState(false);
+  const [directAdvanceBusy, setDirectAdvanceBusy] = useState(false);
   const [poolTickError, setPoolTickError] = useState(null);
 
   // Abort in-flight autosave when SSE says character / XP / pending advanced.
@@ -3291,6 +3301,32 @@ const CharacterSheetWrapper = ({
   );
   const canAffordLevelUp =
     Number(pendingAdvanceCounts?.playbook || 0) > 0;
+  const directAdvanceFunding = useMemo(
+    () => ({
+      xpMarks: xp,
+      unallocatedXp,
+      pendingAdvanceCounts,
+    }),
+    [xp, unallocatedXp, pendingAdvanceCounts],
+  );
+  const canFundPlaybookAdvance = useMemo(
+    () =>
+      canFundTrackAdvance({
+        track: "playbook",
+        ...directAdvanceFunding,
+      }),
+    [directAdvanceFunding],
+  );
+  /** Free chargen coin room left (budget 6). False once full or after first XP-bought rank. */
+  const standCoinHasChargenRoom = useMemo(
+    () =>
+      standCoinChargenHasFreeRoom({
+        standCoinPointsGained: character?.standCoinPointsGained,
+        totalStandPoints,
+        creationBudget: STAND_COIN_CREATION_POINT_SUM,
+      }),
+    [character?.standCoinPointsGained, totalStandPoints],
+  );
   // XP expenditure accounting
   // Each stand coin grade = 10 XP (cost of one level-up stat advance)
   // Each action dot = 5 XP (cost of one minor advance)
@@ -3519,6 +3555,7 @@ const CharacterSheetWrapper = ({
         autosaveAbortRef.current = null;
       }
       draftGenRef.current += 1;
+      allocationHydrateGuardUntilRef.current = Date.now() + 1500;
       applyBackendCharacter(backendChar);
     },
     [applyBackendCharacter],
@@ -3875,69 +3912,6 @@ const CharacterSheetWrapper = ({
     planBADraft?.stat,
   ]);
 
-  const bumpStandCoinGrade = useCallback(
-    async (key, delta) => {
-      if (planMode && isPostChargen && canEditPlan) {
-        if (delta === -1) return;
-        if (delta !== 1 || !characterId || planBusy) return;
-
-        const effective = effectiveCoinGradeWithPlanQueue(key);
-        const fromIdx = GRADE_INDEX[effective] ?? 0;
-        const toGrade = GRADE[Math.min(fromIdx + 1, GRADE.length - 1)];
-        const landsOnA = effective === "B" && toGrade === "A";
-        if (landsOnA) {
-          setPlanBASuppressed(false);
-          setPlanBADraft({ stat: key });
-          setPlanBAError(null);
-          setPlanBABranch("two_standard");
-          setAbilitiesSectionExpanded(true);
-          setXpActionToast({
-            kind: "ok",
-            message: `${key.toUpperCase()} B→A needs an A-grant — pick 2 standards or 2 unique + 1 standard below.`,
-          });
-          return;
-        }
-
-        setPlanBusy(true);
-        try {
-          const res = await characterAPI.addAdvancementPlanItem(characterId, {
-            track: "playbook",
-            kind: "coin_grade",
-            payload: { stat: key },
-          });
-          if (Array.isArray(res?.items)) {
-            setAdvancementPlan(res.items);
-          }
-        } catch (err) {
-          const msg =
-            err?.message || "Failed to queue Stand Coin grade (plan).";
-          if (/a_grant/i.test(msg)) {
-            setPlanBASuppressed(false);
-            setPlanBADraft({ stat: key });
-            setPlanBAError(null);
-            setAbilitiesSectionExpanded(true);
-          }
-          setXpActionToast({ kind: "err", message: msg });
-        } finally {
-          setPlanBusy(false);
-        }
-        return;
-      }
-      if (delta === 1) incrementStat(key);
-      else if (delta === -1) decrementStat(key);
-    },
-    [
-      planMode,
-      isPostChargen,
-      canEditPlan,
-      characterId,
-      planBusy,
-      effectiveCoinGradeWithPlanQueue,
-      incrementStat,
-      decrementStat,
-    ],
-  );
-
   const confirmPlanBAGrant = useCallback(async () => {
     if (!characterId || !planBADraft?.stat || planBusy) return;
     let a_grant;
@@ -4245,6 +4219,239 @@ const CharacterSheetWrapper = ({
       setMinorAdvanceBusy(false);
     }
   };
+
+  const ensureTrackPendingForDirectAdvance = useCallback(
+    async (track) => {
+      const need = poolMarksNeededToMint({
+        track,
+        ...directAdvanceFunding,
+      });
+      if (need == null) {
+        throw new Error(
+          `Not enough XP to take a ${XP_TRACK_SPEND_LABELS[track] || track} advance. Bank free pool onto that track or earn a pending first.`,
+        );
+      }
+      if (need <= 0) return { funded: 0 };
+      if (poolAllocateBusy) {
+        throw new Error("XP allocation in progress — try again in a moment.");
+      }
+      const res = await characterAPI.allocatePoolXp(characterId, {
+        track,
+        amount: need,
+      });
+      if (res?.character) applyAllocationBackendCharacter(res.character);
+      return { funded: need };
+    },
+    [
+      characterId,
+      directAdvanceFunding,
+      poolAllocateBusy,
+      applyAllocationBackendCharacter,
+    ],
+  );
+
+  const openStandDirectBtoAModal = useCallback((statKey) => {
+    setLevelUpLockTrack("playbook");
+    setLevelUpSpendTrack("playbook");
+    setLevelUpChoice("stat");
+    setLevelUpStat(statKey);
+    setLevelUpError(null);
+    setLevelUpBtoARewardBranch("two_standard");
+    setLevelUpRewardStandardIds(["", ""]);
+    setLevelUpRewardUniques([
+      { name: "", use: "" },
+      { name: "", use: "" },
+    ]);
+    setLevelUpRewardStandardId("");
+    setAbilitiesSectionExpanded(true);
+    setShowLevelUp(true);
+  }, []);
+
+  const directUpgradeStandStat = useCallback(
+    async (statKey) => {
+      if (
+        !characterId ||
+        !canEditSheet ||
+        directAdvanceBusy ||
+        levelUpInFlightRef.current
+      ) {
+        return;
+      }
+      const gradeIdx = Math.max(0, Number(standStats[statKey]) || 0);
+      if (
+        !canDirectStandUpgrade({
+          stat: statKey,
+          standGradeIndex: gradeIdx,
+          maxStandGradeIndex,
+          canEditSheet,
+          hasStandPlaybook: showStandCoinActionColumn,
+          ...directAdvanceFunding,
+        })
+      ) {
+        setXpActionToast({
+          kind: "err",
+          message:
+            "Need a playbook pending (fill playbook track or bank 10 from Available XP).",
+        });
+        return;
+      }
+      const bIdx = GRADE.indexOf("B");
+      const aIdx = GRADE.indexOf("A");
+      if (gradeIdx === bIdx && maxStandGradeIndex >= aIdx) {
+        openStandDirectBtoAModal(statKey);
+        setXpActionToast({
+          kind: "ok",
+          message: `${String(statKey).toUpperCase()} B→A — pick your ability reward, then confirm.`,
+        });
+        return;
+      }
+
+      levelUpInFlightRef.current = true;
+      setDirectAdvanceBusy(true);
+      if (autosaveAbortRef.current) {
+        autosaveAbortRef.current.abort();
+        autosaveAbortRef.current = null;
+      }
+      draftGenRef.current += 1;
+      try {
+        const fund = await ensureTrackPendingForDirectAdvance("playbook");
+        const res = await characterAPI.applyLevelUp(characterId, {
+          xp_track: "playbook",
+          choice: "stat",
+          stand_stat: statKey,
+        });
+        if (res?.character) applyAllocationBackendCharacter(res.character);
+        if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
+        setXpActionToast({
+          kind: "ok",
+          message: `${String(statKey).toUpperCase()} +1 grade${
+            fund.funded ? ` (banked ${fund.funded} playbook XP first)` : ""
+          }.`,
+        });
+      } catch (err) {
+        setXpActionToast({
+          kind: "err",
+          message: err?.message || "Stand Coin advance failed.",
+        });
+      } finally {
+        levelUpInFlightRef.current = false;
+        setDirectAdvanceBusy(false);
+      }
+    },
+    [
+      characterId,
+      canEditSheet,
+      directAdvanceBusy,
+      standStats,
+      maxStandGradeIndex,
+      showStandCoinActionColumn,
+      directAdvanceFunding,
+      openStandDirectBtoAModal,
+      ensureTrackPendingForDirectAdvance,
+      applyAllocationBackendCharacter,
+    ],
+  );
+
+  const bumpStandCoinGrade = useCallback(
+    async (key, delta) => {
+      if (delta === -1) {
+        // After first XP spend (allocation history), coin grades are advance-owned.
+        if (isPostChargen) return;
+        if (planMode) return;
+        decrementStat(key);
+        return;
+      }
+      if (delta !== 1) return;
+
+      // Free chargen bumps while creation budget remains.
+      if (standCoinHasChargenRoom && isStandCoinChargenEditable) {
+        incrementStat(key);
+        return;
+      }
+
+      // Funded click spends immediately (even before first allocation row exists).
+      // Plan ON still queues only when unfunded.
+      if (
+        canEditSheet &&
+        showStandCoinActionColumn &&
+        canFundPlaybookAdvance
+      ) {
+        await directUpgradeStandStat(key);
+        return;
+      }
+
+      if (planMode && isPostChargen && canEditPlan) {
+        if (!characterId || planBusy) return;
+
+        const effective = effectiveCoinGradeWithPlanQueue(key);
+        const fromIdx = GRADE_INDEX[effective] ?? 0;
+        const toGrade = GRADE[Math.min(fromIdx + 1, GRADE.length - 1)];
+        const landsOnA = effective === "B" && toGrade === "A";
+        if (landsOnA) {
+          setPlanBASuppressed(false);
+          setPlanBADraft({ stat: key });
+          setPlanBAError(null);
+          setPlanBABranch("two_standard");
+          setAbilitiesSectionExpanded(true);
+          setXpActionToast({
+            kind: "ok",
+            message: `${key.toUpperCase()} B→A needs an A-grant — pick 2 standards or 2 unique + 1 standard below.`,
+          });
+          return;
+        }
+
+        setPlanBusy(true);
+        try {
+          const res = await characterAPI.addAdvancementPlanItem(characterId, {
+            track: "playbook",
+            kind: "coin_grade",
+            payload: { stat: key },
+          });
+          if (Array.isArray(res?.items)) {
+            setAdvancementPlan(res.items);
+          }
+        } catch (err) {
+          const msg =
+            err?.message || "Failed to queue Stand Coin grade (plan).";
+          if (/a_grant/i.test(msg)) {
+            setPlanBASuppressed(false);
+            setPlanBADraft({ stat: key });
+            setPlanBAError(null);
+            setAbilitiesSectionExpanded(true);
+          }
+          setXpActionToast({ kind: "err", message: msg });
+        } finally {
+          setPlanBusy(false);
+        }
+        return;
+      }
+
+      if (canEditSheet && showStandCoinActionColumn) {
+        await directUpgradeStandStat(key);
+        return;
+      }
+
+      if (isStandCoinChargenEditable) {
+        incrementStat(key);
+      }
+    },
+    [
+      planMode,
+      isPostChargen,
+      canEditSheet,
+      canEditPlan,
+      showStandCoinActionColumn,
+      canFundPlaybookAdvance,
+      standCoinHasChargenRoom,
+      characterId,
+      planBusy,
+      isStandCoinChargenEditable,
+      effectiveCoinGradeWithPlanQueue,
+      directUpgradeStandStat,
+      incrementStat,
+      decrementStat,
+    ],
+  );
 
   // Roll modal for campaign/session context (position, effect, push)
   const [rollPending, setRollPending] = useState(null);
@@ -14057,10 +14264,30 @@ const CharacterSheetWrapper = ({
                         readouts={pcStandCoinReadouts}
                         onStep={bumpStandCoinGrade}
                         plannedGrades={plannedCoinGrades}
+                        canStepUp={(statKey) =>
+                          !standCoinHasChargenRoom &&
+                          canEditSheet &&
+                          showStandCoinActionColumn &&
+                          canDirectStandUpgrade({
+                            stat: statKey,
+                            standGradeIndex: Math.max(
+                              0,
+                              Number(standStats[statKey]) || 0,
+                            ),
+                            maxStandGradeIndex,
+                            canEditSheet,
+                            hasStandPlaybook: showStandCoinActionColumn,
+                            ...directAdvanceFunding,
+                          })
+                        }
                         readOnly={
                           !(
                             isStandCoinChargenEditable ||
-                            (planMode && isPostChargen && canEditPlan)
+                            (planMode && isPostChargen && canEditPlan) ||
+                            (!standCoinHasChargenRoom &&
+                              canEditSheet &&
+                              showStandCoinActionColumn &&
+                              canFundPlaybookAdvance)
                           )
                         }
                       />
@@ -14073,11 +14300,13 @@ const CharacterSheetWrapper = ({
                           lineHeight: 1.45,
                         }}
                       >
-                        {isStandCoinChargenEditable
+                        {standCoinHasChargenRoom && isStandCoinChargenEditable
                           ? "Chargen: click a wedge to raise one grade if leftover pts remain (budget 6). Right-click or Shift-click to lower and refund. This is not an advance."
-                          : canAffordLevelUp
-                            ? "Stand coin is locked here. Redeem a playbook pending via Take advance for +1 Stand Coin grade."
-                            : "Stand coin is locked after chargen. Fill playbook (10) to mint a pending, then Take advance for +1 grade."}
+                          : planMode && !canFundPlaybookAdvance
+                            ? "Plan ON: click a wedge to queue +1 grade on the playbook track. Turn Plan off or fund playbook XP to spend immediately."
+                            : canFundPlaybookAdvance || canAffordLevelUp
+                              ? "Click a wedge to spend a playbook advance on that stat (+1 grade). Banks from Available XP if needed. B→A opens the reward picker."
+                              : "Click a wedge to +1 grade when you bank enough playbook XP (10 per pending) or earn a playbook pending."}
                         {" "}
                         {maxStandGradeIndex >= 5
                           ? "S-rank is enabled for this character by the GM."
