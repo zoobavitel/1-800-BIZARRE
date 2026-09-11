@@ -23,6 +23,12 @@ class Campaign(models.Model):
     gm = models.ForeignKey(User, on_delete=models.CASCADE, related_name="campaigns_led")
     players = models.ManyToManyField(User, related_name="campaigns_joined", blank=True)
     description = models.TextField(blank=True)
+    image = models.FileField(
+        upload_to="campaign_images/",
+        null=True,
+        blank=True,
+        help_text="Optional emblem or photo for this campaign.",
+    )
     wanted_stars = models.IntegerField(default=0)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(default=timezone.now)
