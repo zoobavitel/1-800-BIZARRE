@@ -929,7 +929,7 @@ function RosterMemberCard({
   onNavigateToCharacter,
   onUnassignCharacter,
   onRemovePlayerFromCampaign,
-  onAssignOwnCharacterAndOpen,
+  onAssignOwnCharacter,
 }) {
   const avatarSrc = getUserAvatarSrc(user, { campaignCharacters });
   const portraitSrc = character ? getCharacterPortraitSrc(character) : null;
@@ -939,9 +939,25 @@ function RosterMemberCard({
       (role === "Player" &&
         ((isGM && user?.id !== campaign.gm?.id) ||
           user?.id === currentUser?.id)));
+  const isCharacterNavigable =
+    Boolean(character) && typeof onNavigateToCharacter === "function";
+  const openCharacter = () => onNavigateToCharacter(character.id);
 
   return (
     <div
+      role={isCharacterNavigable ? "button" : undefined}
+      tabIndex={isCharacterNavigable ? 0 : undefined}
+      onClick={isCharacterNavigable ? openCharacter : undefined}
+      onKeyDown={
+        isCharacterNavigable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                openCharacter();
+              }
+            }
+          : undefined
+      }
       style={{
         background: "var(--hftf-deep)",
         border: "1px solid var(--border)",
@@ -951,6 +967,7 @@ function RosterMemberCard({
         flexDirection: "column",
         gap: 8,
         minWidth: 0,
+        cursor: isCharacterNavigable ? "pointer" : undefined,
       }}
     >
       <div
@@ -1006,9 +1023,10 @@ function RosterMemberCard({
         {showRemoveFromCampaign && isGM && role === "Player" ? (
           <button
             type="button"
-            onClick={() =>
-              onRemovePlayerFromCampaign(user.id, user.username)
-            }
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemovePlayerFromCampaign(user.id, user.username);
+            }}
             style={{
               ...S.btn,
               fontSize: "9px",
@@ -1080,40 +1098,21 @@ function RosterMemberCard({
               </span>
             ) : null}
           </div>
-          <div
-            style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 6,
-              marginTop: "auto",
-            }}
-          >
-            {typeof onNavigateToCharacter === "function" ? (
-              <a
-                href={buildRouteHref("character", {
-                  characterId: character.id,
-                })}
-                onClick={(e) =>
-                  handleSpaNavClick(e, () =>
-                    onNavigateToCharacter(character.id),
-                  )
-                }
-                style={{
-                  ...S.btn,
-                  fontSize: "10px",
-                  padding: "2px 6px",
-                  background: "var(--hftf-purple)",
-                  color: "var(--hftf-text-cream)",
-                  textDecoration: "none",
-                }}
-              >
-                View
-              </a>
-            ) : null}
-            {canUnassign ? (
+          {canUnassign ? (
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 6,
+                marginTop: "auto",
+              }}
+            >
               <button
                 type="button"
-                onClick={() => onUnassignCharacter(character.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUnassignCharacter(character.id);
+                }}
                 style={{
                   ...S.btn,
                   fontSize: "10px",
@@ -1124,8 +1123,8 @@ function RosterMemberCard({
               >
                 Remove
               </button>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
         </>
       ) : (
         <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
@@ -1145,13 +1144,14 @@ function RosterMemberCard({
                   href={buildRouteHref("character", {
                     campaignId: campaign.id,
                   })}
-                  onClick={(e) =>
+                  onClick={(e) => {
+                    e.stopPropagation();
                     handleSpaNavClick(e, () =>
                       onNavigateToCharacter(null, {
                         campaignId: campaign.id,
                       }),
-                    )
-                  }
+                    );
+                  }}
                   style={{
                     ...S.btn,
                     fontSize: "10px",
@@ -1175,9 +1175,11 @@ function RosterMemberCard({
                   }}
                   defaultValue=""
                   onChange={(e) => {
+                    e.stopPropagation();
                     const id = parseInt(e.target.value, 10);
-                    if (id) onAssignOwnCharacterAndOpen(id);
+                    if (id) onAssignOwnCharacter(id);
                   }}
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <option value="" disabled>
                     Assign existing…
