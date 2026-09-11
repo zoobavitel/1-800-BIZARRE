@@ -7,8 +7,9 @@ import {
   npcAPI,
   siteStatsAPI,
   transformBackendToFrontend,
+  resolveMediaUrl,
 } from "../features/character-sheet";
-import { getUserAvatarSrc } from "../utils/homeAvatar";
+import { getCharacterPortraitSrc, getUserAvatarSrc } from "../utils/homeAvatar";
 import { useAuth } from "../features/auth";
 import { PATCH_NOTES } from "../data/patchNotes";
 import {
@@ -24,6 +25,7 @@ import {
   visibleCharactersForHome,
   visibleNpcsForHome,
   buildGmFactionGroupsForHome,
+  isCampaignGmForUser,
   visibleFactionGroupsForHome,
 } from "../utils/homeCampaignSort";
 import HomeSessionScatterChart from "../components/home/HomeSessionScatterChart";
@@ -31,6 +33,32 @@ import HomeStatsBarChart from "../components/home/HomeStatsBarChart";
 import HomeStandCoin from "../components/home/HomeStandCoin";
 import HomeFactionInlineEditor from "../components/home/HomeFactionInlineEditor";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
+
+/** Fixed-size card portrait slot; placeholder when missing/broken. */
+function HomeCardThumb({ src, label, className }) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => {
+    setBroken(false);
+  }, [src]);
+  const show = Boolean(src) && !broken;
+  const initial = String(label || "?").trim().charAt(0).toUpperCase() || "?";
+  return (
+    <div className={className} aria-hidden="true">
+      {show ? (
+        <img
+          src={src}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        <span className={`${className}-ph`}>{initial}</span>
+      )}
+    </div>
+  );
+}
 
 /** Hero “tradition” pills: short blurbs for home only (not rules text). */
 const HERO_PILLS = [
@@ -283,7 +311,9 @@ const HomePage = ({
 
   const firstGmCampaignId = useMemo(() => {
     if (!user) return null;
-    const gm = (campaigns || []).find((c) => c.gm?.id === user.id);
+    const gm = (campaigns || []).find((c) =>
+      isCampaignGmForUser(c, user.id),
+    );
     return gm?.id ?? null;
   }, [campaigns, user]);
 
@@ -560,6 +590,11 @@ const HomePage = ({
                   }}
                 >
                   <div className="p-card-stripe" />
+                  <HomeCardThumb
+                    className="p-card-thumb"
+                    src={getCharacterPortraitSrc(character)}
+                    label={character.name}
+                  />
                   <div className="p-card-body">
                     <div className="p-card-info">
                       <div className="p-card-name">{character.name || "—"}</div>
@@ -664,6 +699,11 @@ const HomePage = ({
                   }}
                 >
                   <div className="npc-card-stripe" />
+                  <HomeCardThumb
+                    className="npc-card-thumb"
+                    src={getCharacterPortraitSrc(npc)}
+                    label={npc.name}
+                  />
                   <div className="npc-card-body">
                     <div className="npc-card-info">
                       <div className="npc-card-name">{npc.name || "—"}</div>
@@ -836,7 +876,7 @@ const HomePage = ({
                 </button>
               ) : null}
               {visibleCampaigns.map((campaign) => {
-              const isGm = user && campaign.gm?.id === user.id;
+              const isGm = user && isCampaignGmForUser(campaign, user.id);
               const playerCount = Array.isArray(campaign.players)
                 ? campaign.players.length
                 : 0;
@@ -869,6 +909,11 @@ const HomePage = ({
                   style={{ textDecoration: "none", color: "inherit" }}
                 >
                   <div className="g-card-stripe" />
+                  <HomeCardThumb
+                    className="g-card-thumb"
+                    src={campaign.image ? resolveMediaUrl(campaign.image) : null}
+                    label={campaign.name}
+                  />
                   <div className="g-card-body">
                     <div className="g-card-info">
                       <div className="g-card-header">
@@ -976,13 +1021,15 @@ const HomePage = ({
                 <div>
                   <div className="split-label">Factions</div>
                 </div>
-                <button
-                  type="button"
-                  className="split-btn split-btn-amber"
-                  onClick={() => onNavigateToCampaign?.(firstGmCampaignId)}
-                >
-                  + New Faction
-                </button>
+                {firstGmCampaignId != null ? (
+                  <button
+                    type="button"
+                    className="split-btn split-btn-amber"
+                    onClick={() => onNavigateToCampaign?.(firstGmCampaignId)}
+                  >
+                    + New Faction
+                  </button>
+                ) : null}
               </div>
               <p className="home-muted-dark">No factions yet.</p>
             </>
@@ -1034,6 +1081,11 @@ const HomePage = ({
                           }
                         }}
                       >
+                        <HomeCardThumb
+                          className="f-card-thumb"
+                          src={f.image ? resolveMediaUrl(f.image) : null}
+                          label={f.name}
+                        />
                         <div className="f-card-info">
                           <div className="f-card-name">{f.name}</div>
                           <div className="f-card-meta">

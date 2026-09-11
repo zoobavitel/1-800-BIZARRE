@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   factionAPI,
   npcAPI,
   progressClockAPI,
+  resolveMediaUrl,
 } from "../../features/character-sheet";
+import AvatarCropModal from "../AvatarCropModal";
 
 const TIER_OPTIONS = [0, 1, 2, 3, 4, 5, 6];
 const TIER_LABEL = ["—", "I", "II", "III", "IV", "V", "VI"];
@@ -40,6 +42,10 @@ const HomeFactionInlineEditor = ({
     visible_to_players: faction.visible_to_players !== false,
     notes: faction.notes || "",
   });
+  const [imageFile, setImageFile] = useState(null);
+  const [clearImage, setClearImage] = useState(false);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [previewError, setPreviewError] = useState(false);
   const [npcList, setNpcList] = useState(
     Array.isArray(faction.npcs) ? faction.npcs : [],
   );
@@ -52,6 +58,24 @@ const HomeFactionInlineEditor = ({
   const [newClockType, setNewClockType] = useState("CUSTOM");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+
+  const blobPreview = useMemo(() => {
+    if (!imageFile) return null;
+    return URL.createObjectURL(imageFile);
+  }, [imageFile]);
+
+  useEffect(() => {
+    if (!blobPreview) return undefined;
+    return () => URL.revokeObjectURL(blobPreview);
+  }, [blobPreview]);
+
+  const imagePreview =
+    blobPreview ||
+    (!clearImage && faction.image ? resolveMediaUrl(faction.image) : null);
+
+  useEffect(() => {
+    setPreviewError(false);
+  }, [imagePreview]);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,6 +108,29 @@ const HomeFactionInlineEditor = ({
     (n) => !npcList.some((existing) => existing.id === n.id),
   );
 
+  const handlePickImage = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setClearImage(false);
+    setImageFile(file);
+    setPreviewError(false);
+  };
+
+  const handleClearImage = () => {
+    setImageFile(null);
+    setClearImage(true);
+    setCropOpen(false);
+    setPreviewError(false);
+  };
+
+  const handleCropApply = (file) => {
+    setClearImage(false);
+    setImageFile(file);
+    setPreviewError(false);
+    setCropOpen(false);
+  };
+
   const handleSave = async () => {
     setError(null);
     if (!form.name.trim()) {
@@ -101,6 +148,11 @@ const HomeFactionInlineEditor = ({
         visible_to_players: !!form.visible_to_players,
         notes: form.notes || "",
       };
+      if (imageFile) {
+        payload.imageFile = imageFile;
+      } else if (clearImage) {
+        payload.image = null;
+      }
       const updated = await factionAPI.patchFaction(faction.id, payload);
       onSaved?.({ ...updated, npcs: npcList });
     } catch (e) {
@@ -211,6 +263,57 @@ const HomeFactionInlineEditor = ({
   return (
     <div className="f-edit-panel" onClick={(e) => e.stopPropagation()}>
       {error && <div className="f-edit-error">{error}</div>}
+
+      <div className="f-edit-photo">
+        {imagePreview && !previewError ? (
+          <img
+            className="f-edit-photo-preview"
+            src={imagePreview}
+            alt=""
+            crossOrigin="anonymous"
+            onError={() => setPreviewError(true)}
+            onLoad={() => setPreviewError(false)}
+          />
+        ) : (
+          <div className="f-edit-photo-empty" aria-hidden="true">
+            {(form.name || "F").trim().charAt(0).toUpperCase()}
+          </div>
+        )}
+        <div className="f-edit-photo-actions">
+          <label className="f-edit-photo-btn">
+            Upload photo
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              hidden
+              onChange={handlePickImage}
+            />
+          </label>
+          <button
+            type="button"
+            className="f-edit-photo-btn"
+            disabled={!imagePreview || previewError}
+            onClick={() => setCropOpen(true)}
+          >
+            Crop
+          </button>
+          <button
+            type="button"
+            className="f-edit-photo-btn f-edit-photo-btn-clear"
+            disabled={!imagePreview && !clearImage}
+            onClick={handleClearImage}
+          >
+            Clear
+          </button>
+        </div>
+        {cropOpen && imagePreview && !previewError ? (
+          <AvatarCropModal
+            imageSrc={imagePreview}
+            onCancel={() => setCropOpen(false)}
+            onApply={handleCropApply}
+          />
+        ) : null}
+      </div>
 
       <div className="f-edit-grid">
         <label className="f-edit-field f-edit-field-wide">
