@@ -254,6 +254,12 @@ function CampaignListCard({ campaign: c, user, onSelect }) {
   const playerCount = (c.players || []).length;
   const imageSrc = resolveMediaUrl(c.image);
   const myPortrait = myChar ? getCharacterPortraitSrc(myChar) : null;
+  const handleCardKeyDown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onSelect(c.id);
+    }
+  };
 
   return (
     <div
@@ -270,7 +276,7 @@ function CampaignListCard({ campaign: c, user, onSelect }) {
       onClick={() => onSelect(c.id)}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && onSelect(c.id)}
+      onKeyDown={handleCardKeyDown}
     >
       <HomeCardThumb
         src={imageSrc}
@@ -328,6 +334,23 @@ function CampaignListCard({ campaign: c, user, onSelect }) {
           <StatusBadge active={c.is_active !== false} />
           <RoleBadge role={isGM ? "GM" : "Player"} />
         </div>
+
+        {c.description ? (
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--text-muted)",
+              lineHeight: 1.4,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+            title={c.description}
+          >
+            {c.description}
+          </div>
+        ) : null}
 
         {isGM ? (
           <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
