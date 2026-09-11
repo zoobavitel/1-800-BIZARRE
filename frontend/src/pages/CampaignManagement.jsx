@@ -167,8 +167,18 @@ const PLAYBOOK_LABELS = {
   STAND: "Stand User",
   HAMON: "Hamon User",
   SPIN: "Spin User",
+  NON_BIZARRE: "Non-Bizarre",
 };
-const PLAYBOOK_COLORS = { STAND: "#a78bfa", HAMON: "#fbbf24", SPIN: "#34d399" };
+const PLAYBOOK_COLORS = {
+  STAND: "#a78bfa",
+  HAMON: "#fbbf24",
+  SPIN: "#34d399",
+  NON_BIZARRE: "#9ca3af",
+};
+
+const NPC_DRAG_MIME = "application/x-hftf-npc-id";
+const NPC_DRAG_SOURCE_MIME = "application/x-hftf-npc-source-faction";
+const NO_FACTION_DROP_KEY = "none";
 
 function PlaybookTag({ playbook }) {
   return (
@@ -284,6 +294,626 @@ function buildCampaignRosterCards(campaign) {
     });
 
   return cards;
+}
+
+/** Group campaign NPCs under factions (sorted by name) + unaffiliated bucket. */
+function groupCampaignNpcsByFaction(campaign) {
+  const factions = [...(campaign?.factions || [])].sort((a, b) =>
+    String(a.name ?? "").localeCompare(String(b.name ?? ""), undefined, {
+      sensitivity: "base",
+    }),
+  );
+  const allCampaignNpcIds = new Set(
+    (campaign?.campaign_npcs || []).map((n) => n.id),
+  );
+  const assignedIds = new Set();
+  const factionGroups = factions.map((f) => {
+    const npcs = (f.npcs || []).filter((n) => allCampaignNpcIds.has(n.id));
+    npcs.forEach((n) => assignedIds.add(n.id));
+    return { faction: f, npcs };
+  });
+  const unaffiliated = (campaign?.campaign_npcs || []).filter(
+    (n) => !assignedIds.has(n.id),
+  );
+  return { factionGroups, unaffiliated };
+}
+
+function CampaignNpcCard({
+  npc,
+  inFaction,
+  onNavigateToNPC,
+  onUnassignFromCampaign,
+  onLeaveFaction,
+  draggable = false,
+  sourceFactionKey = NO_FACTION_DROP_KEY,
+  onDragEnd,
+}) {
+  const portraitSrc = getCharacterPortraitSrc(npc);
+  const canOpen = typeof onNavigateToNPC === "function";
+  const openNpc = () => onNavigateToNPC(npc.id);
+
+  const onDragStart = (e) => {
+    if (!draggable) return;
+    if (e.target.closest?.("a, button, select, input, textarea")) {
+      e.preventDefault();
+      return;
+    }
+    e.dataTransfer.setData(NPC_DRAG_MIME, String(npc.id));
+    e.dataTransfer.setData(NPC_DRAG_SOURCE_MIME, String(sourceFactionKey));
+    e.dataTransfer.setData("text/plain", String(npc.id));
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  return (
+    <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragEnd={() => onDragEnd?.()}
+      style={{
+        backgroundColor: "var(--hftf-deep)",
+        border: draggable
+          ? "2px dotted var(--border)"
+          : "1px solid var(--border)",
+        borderRadius: 6,
+        padding: 10,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        minWidth: 0,
+        cursor: draggable ? "grab" : undefined,
+        backgroundImage: draggable
+          ? "radial-gradient(circle, rgba(148,163,184,0.22) 1px, transparent 1px)"
+          : undefined,
+        backgroundSize: draggable ? "8px 8px" : undefined,
+      }}
+      title={draggable ? "Drag to another faction" : undefined}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        <span
+          style={{
+            fontWeight: "bold",
+            color: "var(--hftf-text-cream)",
+            fontSize: 12,
+            minWidth: 0,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {npc.name || "Unnamed"}
+        </span>
+        <span style={{ color: "var(--text-dim)", fontSize: 11 }}>
+          Lv.{npc.level ?? 0}
+        </span>
+      </div>
+      {canOpen ? (
+        <a
+          href={buildRouteHref("npcs", { npcId: npc.id })}
+          onClick={(e) => handleSpaNavClick(e, openNpc)}
+          onMouseDown={(e) => e.stopPropagation()}
+          title={`Open ${npc.name || "NPC"}`}
+          style={{
+            width: "100%",
+            aspectRatio: "1",
+            maxHeight: 160,
+            borderRadius: 6,
+            border: "1px solid var(--border)",
+            background: "var(--bg-header)",
+            overflow: "hidden",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            alignSelf: "center",
+            cursor: "pointer",
+            textDecoration: "none",
+          }}
+        >
+          {portraitSrc ? (
+            <img
+              src={portraitSrc}
+              alt=""
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              referrerPolicy="no-referrer"
+              draggable={false}
+            />
+          ) : (
+            <span style={{ color: "var(--border)", fontSize: 36 }}>?</span>
+          )}
+        </a>
+      ) : (
+        <div
+          style={{
+            width: "100%",
+            aspectRatio: "1",
+            maxHeight: 160,
+            borderRadius: 6,
+            border: "1px solid var(--border)",
+            background: "var(--bg-header)",
+            overflow: "hidden",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            alignSelf: "center",
+          }}
+        >
+          {portraitSrc ? (
+            <img
+              src={portraitSrc}
+              alt=""
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              referrerPolicy="no-referrer"
+              draggable={false}
+            />
+          ) : (
+            <span style={{ color: "var(--border)", fontSize: 36 }}>?</span>
+          )}
+        </div>
+      )}
+      {npc.stand_name ? (
+        <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+          Stand: {npc.stand_name}
+        </div>
+      ) : null}
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 6,
+          alignItems: "center",
+        }}
+      >
+        <PlaybookTag playbook={npc.playbook} />
+        {npc.heritage_name ? (
+          <span
+            style={{
+              ...S.tag,
+              background: "var(--border)",
+              color: "var(--text-muted)",
+            }}
+          >
+            {npc.heritage_name}
+          </span>
+        ) : null}
+      </div>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 6,
+          marginTop: "auto",
+        }}
+      >
+        {inFaction && typeof onLeaveFaction === "function" ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onLeaveFaction(npc.id);
+            }}
+            style={{
+              ...S.btn,
+              fontSize: "10px",
+              padding: "2px 6px",
+              background: "var(--border)",
+              color: "var(--text-muted)",
+            }}
+          >
+            Leave faction
+          </button>
+        ) : null}
+        {typeof onUnassignFromCampaign === "function" ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onUnassignFromCampaign(npc.id);
+            }}
+            style={{
+              ...S.btn,
+              fontSize: "10px",
+              padding: "2px 6px",
+              background: "#7f1d1d",
+              color: "#fca5a5",
+            }}
+          >
+            Remove from campaign
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function CampaignCrewCard({
+  crew,
+  isGM,
+  currentUser,
+  onEdit,
+  onDelete,
+}) {
+  const isCrewMember = (crew.members || []).some(
+    (m) => m.user_id === currentUser?.id,
+  );
+  const canEdit = isGM || isCrewMember;
+
+  return (
+    <div
+      style={{
+        background: "var(--hftf-deep)",
+        border: "1px solid var(--border)",
+        borderRadius: 6,
+        padding: 10,
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
+        minWidth: 0,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ minWidth: 0 }}>
+          <span
+            style={{
+              fontWeight: "bold",
+              color: "var(--text-primary)",
+              fontSize: 13,
+            }}
+          >
+            {crew.name}
+          </span>
+          {crew.proposed_name ? (
+            <span
+              style={{
+                color: "#f59e0b",
+                fontSize: "11px",
+                marginLeft: "8px",
+              }}
+            >
+              (proposed: {crew.proposed_name})
+            </span>
+          ) : null}
+        </div>
+        <div style={S.row}>
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={() => onEdit(crew)}
+              style={{
+                ...S.btn,
+                fontSize: "10px",
+                padding: "2px 6px",
+                background: "var(--border)",
+                color: "var(--hftf-text-cream)",
+              }}
+            >
+              Edit
+            </button>
+          ) : null}
+          {isGM ? (
+            <button
+              type="button"
+              onClick={() => onDelete(crew.id)}
+              style={{
+                ...S.btn,
+                fontSize: "10px",
+                padding: "2px 6px",
+                background: "#7f1d1d",
+                color: "#fca5a5",
+              }}
+            >
+              Del
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <div
+        style={{
+          display: "flex",
+          gap: "12px",
+          fontSize: "11px",
+          color: "var(--text-muted)",
+          flexWrap: "wrap",
+        }}
+      >
+        <span>Tier {crew.level}</span>
+        <span>Hold: {crew.hold === "strong" ? "Strong" : "Weak"}</span>
+        <span>Rep: {crew.rep}</span>
+        <span>Coin: {crew.coin}</span>
+        <span>Wanted: {crew.wanted_level}</span>
+        <span>XP: {crew.xp}</span>
+      </div>
+      {crew.description ? (
+        <div
+          style={{
+            fontSize: "11px",
+            color: "var(--text-dim)",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+          title={crew.description}
+        >
+          {crew.description}
+        </div>
+      ) : null}
+      {(crew.members || []).length > 0 ? (
+        <div style={{ fontSize: "11px", color: "var(--text-dim)" }}>
+          Members:{" "}
+          {(crew.members || [])
+            .map((m) => m.true_name || m.alias || `#${m.id}`)
+            .join(", ")}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CampaignFactionPanel({
+  faction,
+  npcs,
+  dropKey,
+  campaignNpcs,
+  isDragOver,
+  collapsed,
+  onToggleCollapsed,
+  addNpcId,
+  onAddNpcIdChange,
+  onAddNpcToFaction,
+  onEdit,
+  onDelete,
+  onNavigateToNPC,
+  onUnassignFromCampaign,
+  onLeaveFaction,
+  onDragOverPanel,
+  onDragLeavePanel,
+  onDropOnPanel,
+  onNpcDragEnd,
+}) {
+  const factionId = faction?.id;
+  const title = faction ? faction.name : "No faction";
+  const npcIdsInPanel = new Set((npcs || []).map((n) => n.id));
+  const addableNpcs = (campaignNpcs || []).filter(
+    (n) => !npcIdsInPanel.has(n.id),
+  );
+  const factionImageSrc = faction?.image
+    ? resolveMediaUrl(faction.image)
+    : null;
+
+  return (
+    <div
+      id={factionId != null ? `faction-panel-${factionId}` : "faction-panel-none"}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        onDragOverPanel?.(dropKey);
+      }}
+      onDragLeave={() => onDragLeavePanel?.(dropKey)}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDropOnPanel?.(e, dropKey);
+      }}
+      style={{
+        border: isDragOver
+          ? "1px solid var(--hftf-purple)"
+          : "1px solid var(--border)",
+        borderRadius: 6,
+        padding: 12,
+        background: isDragOver ? "rgba(124, 58, 237, 0.12)" : "var(--hftf-deep)",
+        marginBottom: 12,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: 10,
+          flexWrap: "wrap",
+          marginBottom: collapsed ? 0 : 10,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          {factionImageSrc ? (
+            <img
+              src={factionImageSrc}
+              alt=""
+              style={{
+                width: 40,
+                height: 40,
+                objectFit: "cover",
+                borderRadius: 4,
+                border: "1px solid var(--border)",
+                flexShrink: 0,
+              }}
+            />
+          ) : null}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span
+                style={{
+                  fontWeight: "bold",
+                  color: faction ? "var(--text-primary)" : "#a78bfa",
+                  fontSize: 13,
+                }}
+              >
+                {title}
+              </span>
+              <span style={{ color: "var(--text-muted)", fontSize: 11 }}>
+                ({(npcs || []).length} NPC{(npcs || []).length === 1 ? "" : "s"})
+              </span>
+              {faction?.faction_type ? (
+                <span style={{ color: "var(--text-dim)", fontSize: 11 }}>
+                  ({faction.faction_type})
+                </span>
+              ) : null}
+            </div>
+            {faction ? (
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  fontSize: 11,
+                  color: "var(--text-muted)",
+                  marginTop: 4,
+                  flexWrap: "wrap",
+                }}
+              >
+                <span>Tier {faction.level}</span>
+                <span>
+                  Hold: {faction.hold === "strong" ? "Strong" : "Weak"}
+                </span>
+                <span>Rep: {faction.reputation}</span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div style={S.row}>
+          {(npcs || []).length === 0 && typeof onToggleCollapsed === "function" ? (
+            <button
+              type="button"
+              onClick={onToggleCollapsed}
+              style={{ ...S.btnGhost, fontSize: 10, padding: "2px 8px" }}
+            >
+              {collapsed ? "Expand" : "Collapse"}
+            </button>
+          ) : null}
+          {faction && typeof onEdit === "function" ? (
+            <button
+              type="button"
+              onClick={() => onEdit(faction)}
+              style={{
+                ...S.btn,
+                fontSize: "10px",
+                padding: "2px 6px",
+                background: "var(--border)",
+                color: "var(--hftf-text-cream)",
+              }}
+            >
+              Edit
+            </button>
+          ) : null}
+          {faction && typeof onDelete === "function" ? (
+            <button
+              type="button"
+              onClick={() => onDelete(faction)}
+              style={{
+                ...S.btn,
+                fontSize: "10px",
+                padding: "2px 6px",
+                background: "#7f1d1d",
+                color: "#fca5a5",
+              }}
+            >
+              Del
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {!collapsed ? (
+        <>
+          {faction?.notes ? (
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--text-dim)",
+                marginBottom: 8,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={faction.notes}
+            >
+              {faction.notes}
+            </div>
+          ) : null}
+
+          {(npcs || []).length === 0 ? (
+            <div
+              style={{
+                color: "var(--text-dim)",
+                fontSize: 12,
+                marginBottom: faction ? 8 : 0,
+              }}
+            >
+              {faction
+                ? "No NPCs in this faction."
+                : "No unaffiliated NPCs."}
+            </div>
+          ) : (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                gap: 12,
+                marginBottom: faction ? 8 : 0,
+              }}
+            >
+              {(npcs || []).map((npc) => (
+                <CampaignNpcCard
+                  key={npc.id}
+                  npc={npc}
+                  inFaction={Boolean(faction)}
+                  onNavigateToNPC={onNavigateToNPC}
+                  onUnassignFromCampaign={onUnassignFromCampaign}
+                  onLeaveFaction={onLeaveFaction}
+                  draggable
+                  sourceFactionKey={dropKey}
+                  onDragEnd={onNpcDragEnd}
+                />
+              ))}
+            </div>
+          )}
+
+          {faction && typeof onAddNpcToFaction === "function" ? (
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              <select
+                style={{ ...S.select, flex: 1, minWidth: 140 }}
+                value={addNpcId || ""}
+                onChange={(e) => onAddNpcIdChange?.(e.target.value)}
+              >
+                <option value="">Add NPC to this faction…</option>
+                {addableNpcs.map((n) => (
+                  <option key={n.id} value={n.id}>
+                    {n.name || n.stand_name || `NPC ${n.id}`}
+                    {n.level != null ? ` (Lv.${n.level})` : ""}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => onAddNpcToFaction(faction.id)}
+                style={S.btnPrimary}
+                disabled={!addNpcId}
+              >
+                Add
+              </button>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  );
 }
 
 function RosterMemberCard({
@@ -973,6 +1603,9 @@ function CampaignDetail({
   const [editForm, setEditForm] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [assignNpcId, setAssignNpcId] = useState("");
+  const [factionAddNpcIdByFaction, setFactionAddNpcIdByFaction] = useState({});
+  const [dragOverFactionKey, setDragOverFactionKey] = useState(null);
+  const [emptyFactionExpanded, setEmptyFactionExpanded] = useState({});
 
   const factionEditFiredRef = useRef(false);
   useEffect(() => {
@@ -987,6 +1620,11 @@ function CampaignDetail({
       if (f) {
         factionEditFiredRef.current = true;
         startFactionEdit(f);
+        requestAnimationFrame(() => {
+          document
+            .getElementById(`faction-panel-${f.id}`)
+            ?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1172,16 +1810,6 @@ function CampaignDetail({
     }
   };
 
-  const handleShowcaseNpc = async (npcId) => {
-    setActionError(null);
-    try {
-      await campaignAPI.showcaseNpc(campaign.id, npcId);
-      onRefresh();
-    } catch (err) {
-      setActionError(err.message);
-    }
-  };
-
   const handleToggleShowClocks = async (showcasedId, showClocks) => {
     setActionError(null);
     try {
@@ -1203,10 +1831,6 @@ function CampaignDetail({
       setActionError(err.message);
     }
   };
-
-  const showcasedNpcIds = (campaign.showcased_npcs || [])
-    .map((s) => s.npc?.id)
-    .filter(Boolean);
 
   const startFactionCreate = () =>
     setFactionForm({
@@ -1259,14 +1883,90 @@ function CampaignDetail({
     setFactionError(null);
     try {
       await npcAPI.patchNPC(npcId, { faction: null });
-      setFactionForm((p) => ({
-        ...p,
-        npcs: (p.npcs || []).filter((n) => n.id !== npcId),
-      }));
+      setFactionForm((p) =>
+        p
+          ? {
+              ...p,
+              npcs: (p.npcs || []).filter((n) => n.id !== npcId),
+            }
+          : p,
+      );
       onRefresh();
     } catch (err) {
       setFactionError(err.message);
     }
+  };
+
+  const applyFactionFormNpcMove = (npcId, targetFactionId) => {
+    setFactionForm((p) => {
+      if (!p?.id) return p;
+      const npc =
+        (campaign.campaign_npcs || []).find((n) => n.id === npcId) ||
+        campaignNPCs.find((n) => n.id === npcId) ||
+        (p.npcs || []).find((n) => n.id === npcId) ||
+        { id: npcId, name: "NPC" };
+      if (targetFactionId == null) {
+        return {
+          ...p,
+          npcs: (p.npcs || []).filter((n) => n.id !== npcId),
+        };
+      }
+      if (p.id === targetFactionId) {
+        return {
+          ...p,
+          npcs: [...(p.npcs || []), npc].filter(
+            (n, i, a) => a.findIndex((x) => x.id === n.id) === i,
+          ),
+        };
+      }
+      return {
+        ...p,
+        npcs: (p.npcs || []).filter((n) => n.id !== npcId),
+      };
+    });
+  };
+
+  const handleMoveNpcToFaction = async (npcId, targetFactionId) => {
+    setActionError(null);
+    try {
+      await npcAPI.patchNPC(npcId, {
+        faction: targetFactionId == null ? null : targetFactionId,
+      });
+      applyFactionFormNpcMove(npcId, targetFactionId);
+      onRefresh();
+    } catch (err) {
+      setActionError(err.message);
+    }
+  };
+
+  const handlePanelAddNpcToFaction = async (factionId) => {
+    const raw = factionAddNpcIdByFaction[factionId];
+    if (!raw) return;
+    const npcId = parseInt(raw, 10);
+    if (!Number.isFinite(npcId)) return;
+    await handleMoveNpcToFaction(npcId, factionId);
+    setFactionAddNpcIdByFaction((prev) => ({ ...prev, [factionId]: "" }));
+  };
+
+  const handleNpcFactionDrop = async (e, targetDropKey) => {
+    e.preventDefault();
+    setDragOverFactionKey(null);
+    const raw =
+      e.dataTransfer.getData(NPC_DRAG_MIME) ||
+      e.dataTransfer.getData("text/plain");
+    const npcId = parseInt(raw, 10);
+    if (!Number.isFinite(npcId)) return;
+    const sourceKey =
+      e.dataTransfer.getData(NPC_DRAG_SOURCE_MIME) || NO_FACTION_DROP_KEY;
+    if (String(sourceKey) === String(targetDropKey)) return;
+    const targetFactionId =
+      targetDropKey === NO_FACTION_DROP_KEY
+        ? null
+        : parseInt(String(targetDropKey), 10);
+    if (targetDropKey !== NO_FACTION_DROP_KEY && !Number.isFinite(targetFactionId)) {
+      return;
+    }
+    await handleMoveNpcToFaction(npcId, targetFactionId);
   };
 
   const buildFactionSavePayload = () => {
@@ -1313,9 +2013,14 @@ function CampaignDetail({
     }
   };
 
-  const handleFactionDelete = async (factionId) => {
+  const handleFactionDelete = async (faction) => {
+    const name = faction?.name || "this faction";
+    const ok = window.confirm(
+      `Delete faction "${name}"? NPCs will become unaffiliated. This permanently deletes the faction's progress clocks, faction relationships, and crew reputation links.`,
+    );
+    if (!ok) return;
     try {
-      await factionAPI.deleteFaction(factionId);
+      await factionAPI.deleteFaction(faction.id);
       onRefresh();
     } catch (err) {
       setActionError(err.message);
@@ -1557,9 +2262,213 @@ function CampaignDetail({
         )}
       </div>
 
-      {/* Players & Characters */}
+      {/* Players, Crew & Characters */}
       <div style={S.card}>
-        <span style={S.sectionLbl}>Players &amp; Characters</span>
+        <span style={S.sectionLbl}>Players, Crew &amp; Characters</span>
+
+        {(isGM || campaign.players?.some((p) => p.id === user?.id)) && (
+          <>
+            <span style={{ ...S.sectionLbl, marginTop: 0 }}>Crew</span>
+            {(campaign.crews || []).length === 0 && !crewForm && (
+              <div
+                style={{
+                  color: "var(--text-dim)",
+                  fontSize: "12px",
+                  marginBottom: "8px",
+                }}
+              >
+                No crew created yet. Any player or the GM can create one — once
+                it exists, every campaign member can edit the shared crew sheet.
+              </div>
+            )}
+            {(campaign.crews || []).length > 0 && (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                  gap: 12,
+                  marginBottom: 8,
+                }}
+              >
+                {(campaign.crews || []).map((c) => (
+                  <CampaignCrewCard
+                    key={c.id}
+                    crew={c}
+                    isGM={isGM}
+                    currentUser={user}
+                    onEdit={startCrewEdit}
+                    onDelete={handleCrewDelete}
+                  />
+                ))}
+              </div>
+            )}
+            {crewForm && (
+              <div
+                style={{
+                  border: "1px solid var(--hftf-purple)",
+                  borderRadius: "4px",
+                  padding: "12px",
+                  marginTop: "8px",
+                  background: "var(--hftf-deep)",
+                }}
+              >
+                <span style={S.lbl}>
+                  {crewForm.id ? "EDIT CREW" : "CREATE CREW"}
+                </span>
+                {crewError && (
+                  <div style={{ ...S.err, marginBottom: "8px" }}>{crewError}</div>
+                )}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "8px",
+                    marginBottom: "8px",
+                  }}
+                >
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                      Name
+                    </span>
+                    <input
+                      style={S.inp}
+                      value={crewForm.name}
+                      onChange={(e) =>
+                        setCrewForm((p) => ({ ...p, name: e.target.value }))
+                      }
+                      placeholder="Crew name"
+                    />
+                  </div>
+                  <div>
+                    <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                      Tier
+                    </span>
+                    <input
+                      style={{ ...S.inp, width: "80px" }}
+                      type="number"
+                      value={crewForm.level}
+                      onChange={(e) =>
+                        setCrewForm((p) => ({
+                          ...p,
+                          level: parseInt(e.target.value, 10) || 0,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                      Hold
+                    </span>
+                    <select
+                      style={S.select}
+                      value={crewForm.hold}
+                      onChange={(e) =>
+                        setCrewForm((p) => ({ ...p, hold: e.target.value }))
+                      }
+                    >
+                      <option value="weak">Weak</option>
+                      <option value="strong">Strong</option>
+                    </select>
+                  </div>
+                  <div>
+                    <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                      Rep
+                    </span>
+                    <input
+                      style={{ ...S.inp, width: "80px" }}
+                      type="number"
+                      value={crewForm.rep}
+                      onChange={(e) =>
+                        setCrewForm((p) => ({
+                          ...p,
+                          rep: parseInt(e.target.value, 10) || 0,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                      Coin
+                    </span>
+                    <input
+                      style={{ ...S.inp, width: "80px" }}
+                      type="number"
+                      value={crewForm.coin}
+                      onChange={(e) =>
+                        setCrewForm((p) => ({
+                          ...p,
+                          coin: parseInt(e.target.value, 10) || 0,
+                        }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                      Wanted Level
+                    </span>
+                    <input
+                      style={{ ...S.inp, width: "80px" }}
+                      type="number"
+                      value={crewForm.wanted_level}
+                      onChange={(e) =>
+                        setCrewForm((p) => ({
+                          ...p,
+                          wanted_level: parseInt(e.target.value, 10) || 0,
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+                <div style={{ marginBottom: "8px" }}>
+                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+                    Description
+                  </span>
+                  <textarea
+                    style={{
+                      ...S.inp,
+                      height: "50px",
+                      resize: "vertical",
+                      border: "1px solid var(--border)",
+                      background: "var(--hftf-deep)",
+                      padding: "6px",
+                    }}
+                    value={crewForm.description}
+                    onChange={(e) =>
+                      setCrewForm((p) => ({ ...p, description: e.target.value }))
+                    }
+                  />
+                </div>
+                <div style={S.row}>
+                  <button onClick={handleCrewSave} style={S.btnPrimary}>
+                    Save
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCrewForm(null);
+                      setCrewError(null);
+                    }}
+                    style={S.btnGhost}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            {!crewForm && (campaign.crews || []).length === 0 && (
+              <button
+                onClick={startCrewCreate}
+                style={{ ...S.btnPrimary, marginTop: "8px" }}
+              >
+                + New Crew
+              </button>
+            )}
+            <div style={{ ...S.divider }} />
+          </>
+        )}
+
+        <span style={{ ...S.sectionLbl, marginTop: 0 }}>
+          Players &amp; Characters
+        </span>
         {(campaign.campaign_characters || []).length === 0 &&
         (campaign.players || []).length === 0 &&
         !campaign.gm ? (
@@ -1614,9 +2523,7 @@ function CampaignDetail({
                       onRemovePlayerFromCampaign={
                         handleRemovePlayerFromCampaign
                       }
-                      onAssignOwnCharacterAndOpen={
-                        handleAssignOwnCharacterAndOpen
-                      }
+                      onAssignOwnCharacter={handleAssignOwnCharacterAndOpen}
                     />
                   );
                 })}
@@ -1774,685 +2681,104 @@ function CampaignDetail({
           </div>
         )}
 
-      {/* NPCs (GM only) */}
-      {isGM && (
-        <div style={S.card}>
-          <span style={S.sectionLbl}>Campaign NPCs</span>
-          {(campaign.campaign_npcs || []).length === 0 ? (
-            <div
-              style={{
-                color: "var(--text-dim)",
-                fontSize: "12px",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                flexWrap: "wrap",
-              }}
-            >
-              <span>No NPCs assigned to this campaign.</span>
-            </div>
-          ) : (
-            (campaign.campaign_npcs || []).map((npc) => (
-              <div
-                key={npc.id}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "4px 0",
-                  borderBottom: "1px solid var(--bg-header)",
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    fontSize: "12px",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <span style={{ color: "var(--text-primary)", fontWeight: "bold" }}>
-                    {npc.name}
-                  </span>
-                  <span style={{ color: "var(--text-dim)" }}>Lv.{npc.level}</span>
-                  {npc.stand_name && (
-                    <span style={{ color: "var(--text-muted)" }}>
-                      Stand: {npc.stand_name}
-                    </span>
-                  )}
-                  <PlaybookTag playbook={npc.playbook} />
-                  {npc.heritage_name && (
-                    <span
-                      style={{
-                        ...S.tag,
-                        background: "var(--border)",
-                        color: "var(--text-muted)",
-                      }}
-                    >
-                      {npc.heritage_name}
-                    </span>
-                  )}
-                  {typeof onNavigateToNPC === "function" && (
-                    <>
-                      <a
-                        href={buildRouteHref("npcs", { npcId: npc.id })}
-                        onClick={(e) =>
-                          handleSpaNavClick(e, () => onNavigateToNPC(npc.id))
-                        }
-                        style={{
-                          ...S.btn,
-                          fontSize: "10px",
-                          padding: "2px 6px",
-                          background: "var(--hftf-purple)",
-                          color: "var(--hftf-text-cream)",
-                        }}
-                      >
-                        View
-                      </a>
-                      <button
-                        onClick={() => {
-                          const url = `${window.location.origin}${window.location.pathname}#npcs/${npc.id}`;
-                          navigator.clipboard?.writeText(url);
-                          alert("Link copied to clipboard");
-                        }}
-                        style={{
-                          ...S.btn,
-                          fontSize: "10px",
-                          padding: "2px 6px",
-                          background: "var(--border)",
-                          color: "var(--text-muted)",
-                        }}
-                        title="Copy link"
-                      >
-                        Link
-                      </button>
-                    </>
-                  )}
-                  {!showcasedNpcIds.includes(npc.id) && (
-                    <button
-                      onClick={() => handleShowcaseNpc(npc.id)}
-                      style={{
-                        ...S.btn,
-                        fontSize: "10px",
-                        padding: "2px 6px",
-                        background: "var(--hftf-purple)",
-                        color: "#c4b5fd",
-                      }}
-                    >
-                      Showcase
-                    </button>
-                  )}
-                </div>
-                <button
-                  onClick={() => handleUnassignNPC(npc.id)}
-                  style={{
-                    ...S.btn,
-                    fontSize: "10px",
-                    padding: "2px 6px",
-                    background: "var(--border)",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  Remove
-                </button>
-              </div>
-            ))
-          )}
-          {npcsThatCanBeAdded.length > 0 && (
-            <div
-              style={{
-                display: "flex",
-                gap: "8px",
-                marginTop: "8px",
-                alignItems: "center",
-              }}
-            >
-              <select
-                style={{ ...S.select, flex: 1 }}
-                value={assignNpcId}
-                onChange={(e) => setAssignNpcId(e.target.value)}
-              >
-                <option value="">Add an NPC...</option>
-                {npcsThatCanBeAdded.map((n) => (
-                  <option key={n.id} value={n.id}>
-                    {n.name} (Lv.{n.level})
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={handleAssignNPC}
-                style={S.btnPrimary}
-                disabled={!assignNpcId}
-              >
-                Add
-              </button>
-            </div>
-          )}
-          {typeof onNavigateToNPC === "function" && (
-            <div
-              style={{
-                display: "flex",
-                justifyContent: "flex-end",
-                marginTop: "8px",
-              }}
-            >
-              <a
-                href={buildRouteHref("npcs", { campaignId: campaign.id })}
-                onClick={(e) =>
-                  handleSpaNavClick(e, () =>
-                    onNavigateToNPC(null, { campaignId: campaign.id }),
-                  )
-                }
-                style={{
-                  ...S.btn,
-                  fontSize: "10px",
-                  padding: "2px 6px",
-                  background: "#15803d",
-                  color: "#bbf7d0",
-                  textDecoration: "none",
-                }}
-              >
-                Create NPC for this campaign
-              </a>
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* Showcased NPCs (GM only) — opposition in Entanglement/All-Out-Brawl; GM can share clocks with party */}
-      {isGM && (campaign.showcased_npcs || []).length > 0 && (
-        <div style={S.card}>
-          <span style={S.sectionLbl}>Showcased NPCs</span>
-          <div
-            style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "8px" }}
-          >
-            Share NPC clocks with the party when enabled.
-          </div>
-          {(campaign.showcased_npcs || []).map((sn) => (
+      {/* Factions & NPCs (GM only) */}
+      {isGM && (() => {
+        const { factionGroups, unaffiliated } = groupCampaignNpcsByFaction(campaign);
+        const rosterNpcs = campaign.campaign_npcs || [];
+        return (
+          <div style={S.card}>
+            <span style={S.sectionLbl}>Factions &amp; NPCs</span>
             <div
-              key={sn.id}
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "6px 0",
-                borderBottom: "1px solid var(--bg-header)",
-                flexWrap: "wrap",
-                gap: "8px",
+                fontSize: "11px",
+                color: "var(--text-muted)",
+                marginBottom: "10px",
               }}
             >
-              <div>
-                <span style={{ fontWeight: "bold", color: "var(--text-primary)" }}>
-                  {sn.npc?.name || "NPC"}
-                </span>
-                {sn.npc?.stand_name && (
-                  <span style={{ color: "var(--text-muted)", marginLeft: "6px" }}>
-                    Stand: {sn.npc.stand_name}
-                  </span>
-                )}
-              </div>
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "8px" }}
-              >
-                <label
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    cursor: "pointer",
-                    fontSize: "12px",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={sn.show_clocks_to_party || false}
-                    onChange={(e) =>
-                      handleToggleShowClocks(sn.id, e.target.checked)
-                    }
-                  />
-                  <span>Show clocks to party</span>
-                </label>
-                <button
-                  onClick={() => handleUnshowcaseNpc(sn.id)}
-                  style={{
-                    ...S.btn,
-                    fontSize: "10px",
-                    padding: "2px 6px",
-                    background: "var(--border)",
-                    color: "var(--text-muted)",
-                  }}
-                >
-                  Remove from showcase
-                </button>
-              </div>
+              Drag NPC cards between factions, or use the dropdown.
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Crews (GM and campaign players) */}
-      {(isGM || campaign.players?.some((p) => p.id === user?.id)) && (
-        <div style={S.card}>
-          <span style={S.sectionLbl}>Crew</span>
-          {(campaign.crews || []).length === 0 && !crewForm && (
-            <div
-              style={{
-                color: "var(--text-dim)",
-                fontSize: "12px",
-                marginBottom: "8px",
-              }}
-            >
-              No crew created yet.{" "}
-              Any player or the GM can create one — once it exists, every
-              campaign member can edit the shared crew sheet.
-            </div>
-          )}
-          {(campaign.crews || []).map((c) => {
-            const isCrewMember = (c.members || []).some(
-              (m) => m.user_id === user?.id,
-            );
-            const canEdit = isGM || isCrewMember;
-            return (
-              <div
-                key={c.id}
-                style={{ padding: "8px 0", borderBottom: "1px solid var(--bg-header)" }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <div>
-                    <span style={{ fontWeight: "bold", color: "var(--text-primary)" }}>
-                      {c.name}
-                    </span>
-                    {c.proposed_name && (
-                      <span
-                        style={{
-                          color: "#f59e0b",
-                          fontSize: "11px",
-                          marginLeft: "8px",
-                        }}
-                      >
-                        (proposed: {c.proposed_name})
-                      </span>
-                    )}
-                  </div>
-                  <div style={S.row}>
-                    {canEdit && (
-                      <button
-                        onClick={() => startCrewEdit(c)}
-                        style={{
-                          ...S.btn,
-                          fontSize: "10px",
-                          padding: "2px 6px",
-                          background: "var(--border)",
-                          color: "var(--hftf-text-cream)",
-                        }}
-                      >
-                        Edit
-                      </button>
-                    )}
-                    {isGM && (
-                      <button
-                        onClick={() => handleCrewDelete(c.id)}
-                        style={{
-                          ...S.btn,
-                          fontSize: "10px",
-                          padding: "2px 6px",
-                          background: "#7f1d1d",
-                          color: "#fca5a5",
-                        }}
-                      >
-                        Del
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "12px",
-                    fontSize: "11px",
-                    color: "var(--text-muted)",
-                    marginTop: "4px",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <span>Tier {c.level}</span>
-                  <span>Hold: {c.hold === "strong" ? "Strong" : "Weak"}</span>
-                  <span>Rep: {c.rep}</span>
-                  <span>Coin: {c.coin}</span>
-                  <span>Wanted: {c.wanted_level}</span>
-                  <span>XP: {c.xp}</span>
-                </div>
-                {c.description && (
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--text-dim)",
-                      marginTop: "4px",
-                    }}
-                  >
-                    {c.description}
-                  </div>
-                )}
-                {(c.members || []).length > 0 && (
-                  <div
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--text-dim)",
-                      marginTop: "4px",
-                    }}
-                  >
-                    Members:{" "}
-                    {(c.members || [])
-                      .map((m) => m.true_name || m.alias || `#${m.id}`)
-                      .join(", ")}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {/* Crew form */}
-          {crewForm && (
-            <div
-              style={{
-                border: "1px solid var(--hftf-purple)",
-                borderRadius: "4px",
-                padding: "12px",
-                marginTop: "8px",
-                background: "var(--hftf-deep)",
-              }}
-            >
-              <span style={S.lbl}>
-                {crewForm.id ? "EDIT CREW" : "CREATE CREW"}
-              </span>
-              {crewError && (
-                <div style={{ ...S.err, marginBottom: "8px" }}>{crewError}</div>
-              )}
+            {factionGroups.length === 0 &&
+              unaffiliated.length === 0 &&
+              !factionForm && (
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr 1fr",
-                  gap: "8px",
+                  color: "var(--text-dim)",
+                  fontSize: "12px",
                   marginBottom: "8px",
                 }}
               >
-                <div style={{ gridColumn: "1 / -1" }}>
-                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                    Name
-                  </span>
-                  <input
-                    style={S.inp}
-                    value={crewForm.name}
-                    onChange={(e) =>
-                      setCrewForm((p) => ({ ...p, name: e.target.value }))
-                    }
-                    placeholder="Crew name"
-                  />
-                </div>
-                <div>
-                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                    Tier
-                  </span>
-                  <input
-                    style={{ ...S.inp, width: "80px" }}
-                    type="number"
-                    value={crewForm.level}
-                    onChange={(e) =>
-                      setCrewForm((p) => ({
-                        ...p,
-                        level: parseInt(e.target.value, 10) || 0,
-                      }))
-                    }
-                  />
-                </div>
-                <div>
-                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                    Hold
-                  </span>
-                  <select
-                    style={S.select}
-                    value={crewForm.hold}
-                    onChange={(e) =>
-                      setCrewForm((p) => ({ ...p, hold: e.target.value }))
-                    }
-                  >
-                    <option value="weak">Weak</option>
-                    <option value="strong">Strong</option>
-                  </select>
-                </div>
-                <div>
-                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                    Rep
-                  </span>
-                  <input
-                    style={{ ...S.inp, width: "80px" }}
-                    type="number"
-                    value={crewForm.rep}
-                    onChange={(e) =>
-                      setCrewForm((p) => ({
-                        ...p,
-                        rep: parseInt(e.target.value, 10) || 0,
-                      }))
-                    }
-                  />
-                </div>
-                <div>
-                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                    Coin
-                  </span>
-                  <input
-                    style={{ ...S.inp, width: "80px" }}
-                    type="number"
-                    value={crewForm.coin}
-                    onChange={(e) =>
-                      setCrewForm((p) => ({
-                        ...p,
-                        coin: parseInt(e.target.value, 10) || 0,
-                      }))
-                    }
-                  />
-                </div>
-                <div>
-                  <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                    Wanted Level
-                  </span>
-                  <input
-                    style={{ ...S.inp, width: "80px" }}
-                    type="number"
-                    value={crewForm.wanted_level}
-                    onChange={(e) =>
-                      setCrewForm((p) => ({
-                        ...p,
-                        wanted_level: parseInt(e.target.value, 10) || 0,
-                      }))
-                    }
-                  />
-                </div>
+                No factions or campaign NPCs yet.
               </div>
-              <div style={{ marginBottom: "8px" }}>
-                <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                  Description
-                </span>
-                <textarea
-                  style={{
-                    ...S.inp,
-                    height: "50px",
-                    resize: "vertical",
-                    border: "1px solid var(--border)",
-                    background: "var(--hftf-deep)",
-                    padding: "6px",
-                  }}
-                  value={crewForm.description}
-                  onChange={(e) =>
-                    setCrewForm((p) => ({ ...p, description: e.target.value }))
+            )}
+            {factionGroups.map(({ faction, npcs: groupNpcs }) => {
+              const npcs =
+                factionForm?.id === faction.id
+                  ? factionForm.npcs || []
+                  : groupNpcs;
+              const dropKey = String(faction.id);
+              const collapsed =
+                npcs.length === 0 && !emptyFactionExpanded[faction.id];
+              return (
+                <CampaignFactionPanel
+                  key={faction.id}
+                  faction={faction}
+                  npcs={npcs}
+                  dropKey={dropKey}
+                  campaignNpcs={rosterNpcs}
+                  isDragOver={dragOverFactionKey === dropKey}
+                  collapsed={collapsed}
+                  onToggleCollapsed={() =>
+                    setEmptyFactionExpanded((prev) => ({
+                      ...prev,
+                      [faction.id]: !prev[faction.id],
+                    }))
                   }
+                  addNpcId={factionAddNpcIdByFaction[faction.id] || ""}
+                  onAddNpcIdChange={(value) =>
+                    setFactionAddNpcIdByFaction((prev) => ({
+                      ...prev,
+                      [faction.id]: value,
+                    }))
+                  }
+                  onAddNpcToFaction={handlePanelAddNpcToFaction}
+                  onEdit={startFactionEdit}
+                  onDelete={handleFactionDelete}
+                  onNavigateToNPC={onNavigateToNPC}
+                  onUnassignFromCampaign={handleUnassignNPC}
+                  onLeaveFaction={(npcId) =>
+                    handleMoveNpcToFaction(npcId, null)
+                  }
+                  onDragOverPanel={setDragOverFactionKey}
+                  onDragLeavePanel={(key) =>
+                    setDragOverFactionKey((cur) => (cur === key ? null : cur))
+                  }
+                  onDropOnPanel={handleNpcFactionDrop}
+                  onNpcDragEnd={() => setDragOverFactionKey(null)}
                 />
-              </div>
-              <div style={S.row}>
-                <button onClick={handleCrewSave} style={S.btnPrimary}>
-                  Save
-                </button>
-                <button
-                  onClick={() => {
-                    setCrewForm(null);
-                    setCrewError(null);
-                  }}
-                  style={S.btnGhost}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-          {!crewForm && (campaign.crews || []).length === 0 && (
-            <button
-              onClick={startCrewCreate}
-              style={{ ...S.btnPrimary, marginTop: "8px" }}
-            >
-              + New Crew
-            </button>
-          )}
-        </div>
-      )}
+              );
+            })}
+            {(unaffiliated.length > 0 || factionGroups.length > 0) && (
+              <CampaignFactionPanel
+                faction={null}
+                npcs={unaffiliated}
+                dropKey={NO_FACTION_DROP_KEY}
+                campaignNpcs={rosterNpcs}
+                isDragOver={dragOverFactionKey === NO_FACTION_DROP_KEY}
+                collapsed={false}
+                onNavigateToNPC={onNavigateToNPC}
+                onUnassignFromCampaign={handleUnassignNPC}
+                onDragOverPanel={setDragOverFactionKey}
+                onDragLeavePanel={(key) =>
+                  setDragOverFactionKey((cur) => (cur === key ? null : cur))
+                }
+                onDropOnPanel={handleNpcFactionDrop}
+                onNpcDragEnd={() => setDragOverFactionKey(null)}
+              />
+            )}
 
-      {/* Factions (GM only) */}
-      {isGM && (
-        <div style={S.card}>
-          <span style={S.sectionLbl}>Factions</span>
-          {(campaign.factions || []).length === 0 && !factionForm && (
-            <div
-              style={{
-                color: "var(--text-dim)",
-                fontSize: "12px",
-                marginBottom: "8px",
-              }}
-            >
-              No factions created yet.
-            </div>
-          )}
-          {(campaign.factions || []).map((f) => (
-            <div
-              key={f.id}
-              style={{ padding: "8px 0", borderBottom: "1px solid var(--bg-header)" }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 10,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  {f.image ? (
-                    <img
-                      src={resolveMediaUrl(f.image)}
-                      alt=""
-                      style={{
-                        width: 40,
-                        height: 40,
-                        objectFit: "cover",
-                        borderRadius: 4,
-                        border: "1px solid var(--border)",
-                        flexShrink: 0,
-                      }}
-                    />
-                  ) : null}
-                  <div>
-                    <span style={{ fontWeight: "bold", color: "var(--text-primary)" }}>
-                      {f.name}
-                    </span>
-                    {f.faction_type && (
-                      <span
-                        style={{
-                          color: "var(--text-dim)",
-                          fontSize: "11px",
-                          marginLeft: "8px",
-                        }}
-                      >
-                        ({f.faction_type})
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div style={S.row}>
-                  <button
-                    onClick={() => startFactionEdit(f)}
-                    style={{
-                      ...S.btn,
-                      fontSize: "10px",
-                      padding: "2px 6px",
-                      background: "var(--border)",
-                      color: "var(--hftf-text-cream)",
-                    }}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleFactionDelete(f.id)}
-                    style={{
-                      ...S.btn,
-                      fontSize: "10px",
-                      padding: "2px 6px",
-                      background: "#7f1d1d",
-                      color: "#fca5a5",
-                    }}
-                  >
-                    Del
-                  </button>
-                </div>
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  gap: "12px",
-                  fontSize: "11px",
-                  color: "var(--text-muted)",
-                  marginTop: "4px",
-                }}
-              >
-                <span>Tier {f.level}</span>
-                <span>Hold: {f.hold === "strong" ? "Strong" : "Weak"}</span>
-                <span>Rep: {f.reputation}</span>
-              </div>
-              {(f.npcs || []).length > 0 && (
-                <div
-                  style={{
-                    fontSize: "11px",
-                    color: "var(--text-dim)",
-                    marginTop: "4px",
-                  }}
-                >
-                  NPCs:{" "}
-                  {(f.npcs || [])
-                    .map((n) => n.name || n.stand_name || `#${n.id}`)
-                    .join(", ")}
-                </div>
-              )}
-              {f.notes && (
-                <div
-                  style={{
-                    fontSize: "11px",
-                    color: "var(--text-dim)",
-                    marginTop: "4px",
-                  }}
-                >
-                  {f.notes}
-                </div>
-              )}
-            </div>
-          ))}
-
-          {/* Faction form */}
-          {factionForm && (
+            {/* Faction form */}
+            {factionForm && (
             <div
               style={{
                 border: "1px solid var(--hftf-purple)",
@@ -2757,14 +3083,146 @@ function CampaignDetail({
               </div>
             </div>
           )}
-          {!factionForm && (
-            <button
-              onClick={startFactionCreate}
-              style={{ ...S.btnPrimary, marginTop: "8px" }}
+
+            {npcsThatCanBeAdded.length > 0 && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: "8px",
+                  marginTop: "8px",
+                  alignItems: "center",
+                }}
+              >
+                <select
+                  style={{ ...S.select, flex: 1 }}
+                  value={assignNpcId}
+                  onChange={(e) => setAssignNpcId(e.target.value)}
+                >
+                  <option value="">Add NPC to campaign…</option>
+                  {npcsThatCanBeAdded.map((n) => (
+                    <option key={n.id} value={n.id}>
+                      {n.name} (Lv.{n.level})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleAssignNPC}
+                  style={S.btnPrimary}
+                  disabled={!assignNpcId}
+                >
+                  Add
+                </button>
+              </div>
+            )}
+            {typeof onNavigateToNPC === "function" && (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  marginTop: "8px",
+                }}
+              >
+                <a
+                  href={buildRouteHref("npcs", { campaignId: campaign.id })}
+                  onClick={(e) =>
+                    handleSpaNavClick(e, () =>
+                      onNavigateToNPC(null, { campaignId: campaign.id }),
+                    )
+                  }
+                  style={{
+                    ...S.btn,
+                    fontSize: "10px",
+                    padding: "2px 6px",
+                    background: "#15803d",
+                    color: "#bbf7d0",
+                    textDecoration: "none",
+                  }}
+                >
+                  Create NPC for this campaign
+                </a>
+              </div>
+            )}
+            {!factionForm && (
+              <button
+                onClick={startFactionCreate}
+                style={{ ...S.btnPrimary, marginTop: "8px" }}
+              >
+                + New Faction
+              </button>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Showcased NPCs (GM only) — opposition in Entanglement/All-Out-Brawl; GM can share clocks with party */}
+      {isGM && (campaign.showcased_npcs || []).length > 0 && (
+        <div style={S.card}>
+          <span style={S.sectionLbl}>Showcased NPCs</span>
+          <div
+            style={{ fontSize: "11px", color: "var(--text-muted)", marginBottom: "8px" }}
+          >
+            Share NPC clocks with the party when enabled.
+          </div>
+          {(campaign.showcased_npcs || []).map((sn) => (
+            <div
+              key={sn.id}
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "6px 0",
+                borderBottom: "1px solid var(--bg-header)",
+                flexWrap: "wrap",
+                gap: "8px",
+              }}
             >
-              + New Faction
-            </button>
-          )}
+              <div>
+                <span style={{ fontWeight: "bold", color: "var(--text-primary)" }}>
+                  {sn.npc?.name || "NPC"}
+                </span>
+                {sn.npc?.stand_name && (
+                  <span style={{ color: "var(--text-muted)", marginLeft: "6px" }}>
+                    Stand: {sn.npc.stand_name}
+                  </span>
+                )}
+              </div>
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "8px" }}
+              >
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    cursor: "pointer",
+                    fontSize: "12px",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={sn.show_clocks_to_party || false}
+                    onChange={(e) =>
+                      handleToggleShowClocks(sn.id, e.target.checked)
+                    }
+                  />
+                  <span>Show clocks to party</span>
+                </label>
+                <button
+                  onClick={() => handleUnshowcaseNpc(sn.id)}
+                  style={{
+                    ...S.btn,
+                    fontSize: "10px",
+                    padding: "2px 6px",
+                    background: "var(--border)",
+                    color: "var(--text-muted)",
+                  }}
+                >
+                  Remove from showcase
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
