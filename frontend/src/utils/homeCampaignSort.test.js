@@ -6,6 +6,11 @@ import {
   characterHomeSortTier,
   sortCharactersForHome,
   visibleCharactersForHome,
+  npcHomeSortTier,
+  sortNpcsForHome,
+  visibleNpcsForHome,
+  buildGmFactionGroupsForHome,
+  visibleFactionGroupsForHome,
 } from "./homeCampaignSort";
 
 describe("campaignHomeSortTier", () => {
@@ -112,10 +117,26 @@ describe("visibleCampaignsForHome", () => {
     },
   ];
 
-  test("collapsed shows only live-session campaigns", () => {
-    const { visible, hiddenCount } = visibleCampaignsForHome(campaigns);
-    expect(visible.map((c) => c.id)).toEqual([3]);
+  test("collapsed shows first three in priority order", () => {
+    const more = [
+      ...campaigns,
+      { id: 4, name: "Zebra Idle", is_active: true },
+      {
+        id: 5,
+        name: "Alpha Live",
+        is_active: true,
+        active_session: 2,
+      },
+    ];
+    const { visible, hiddenCount } = visibleCampaignsForHome(more);
+    expect(visible.map((c) => c.id)).toEqual([5, 3, 1]);
     expect(hiddenCount).toBe(2);
+  });
+
+  test("collapsed shows all when fewer than limit", () => {
+    const { visible, hiddenCount } = visibleCampaignsForHome(campaigns);
+    expect(visible.map((c) => c.id)).toEqual([3, 1, 2]);
+    expect(hiddenCount).toBe(0);
   });
 
   test("expanded shows full sorted list", () => {
@@ -187,12 +208,38 @@ describe("visibleCharactersForHome", () => {
     ]);
   });
 
-  test("collapsed hides characters not on active campaigns", () => {
+  test("collapsed shows first three in priority order including unassigned", () => {
+    const more = [
+      ...characters,
+      { id: 4, name: "Zed" },
+      { id: 5, name: "Amy" },
+    ];
+    const { visible, hiddenCount } = visibleCharactersForHome(more, campaigns);
+    expect(visible.map((c) => c.id)).toEqual([1, 2, 5]);
+    expect(hiddenCount).toBe(2);
+  });
+
+  test("collapsed shows all when fewer than limit", () => {
     const { visible, hiddenCount } = visibleCharactersForHome(
       characters,
       campaigns,
     );
-    expect(visible.map((c) => c.id)).toEqual([1, 2]);
+    expect(visible.map((c) => c.id)).toEqual([1, 2, 3]);
+    expect(hiddenCount).toBe(0);
+  });
+
+  test("collapsed still shows unassigned when no campaign roster hits", () => {
+    const onlyUnassigned = [
+      { id: 9, name: "Toto" },
+      { id: 8, name: "Beta" },
+      { id: 7, name: "Alpha" },
+      { id: 6, name: "Gamma" },
+    ];
+    const { visible, hiddenCount } = visibleCharactersForHome(
+      onlyUnassigned,
+      [],
+    );
+    expect(visible.map((c) => c.id)).toEqual([7, 8, 6]);
     expect(hiddenCount).toBe(1);
   });
 
@@ -203,6 +250,167 @@ describe("visibleCharactersForHome", () => {
       { expanded: true },
     );
     expect(visible.map((c) => c.id)).toEqual([1, 2, 3]);
+    expect(hiddenCount).toBe(0);
+  });
+});
+
+describe("npcHomeSortTier", () => {
+  const campaigns = [
+    {
+      id: 10,
+      is_active: true,
+      active_session: 1,
+      campaign_npcs: [{ id: 1 }],
+    },
+    {
+      id: 11,
+      is_active: true,
+      campaign_npcs: [{ id: 2 }],
+    },
+    {
+      id: 12,
+      is_active: false,
+      campaign_npcs: [{ id: 3 }],
+    },
+  ];
+
+  test("live campaign npc is tier 0", () => {
+    expect(npcHomeSortTier({ id: 1 }, campaigns)).toBe(0);
+  });
+
+  test("active idle campaign npc is tier 1", () => {
+    expect(npcHomeSortTier({ id: 2 }, campaigns)).toBe(1);
+  });
+
+  test("inactive-only or unassigned is tier 2", () => {
+    expect(npcHomeSortTier({ id: 3 }, campaigns)).toBe(2);
+    expect(npcHomeSortTier({ id: 99 }, campaigns)).toBe(2);
+  });
+
+  test("npc.campaign id matches campaign without roster entry", () => {
+    expect(
+      npcHomeSortTier(
+        { id: 50, campaign: 10 },
+        [
+          {
+            id: 10,
+            is_active: true,
+            active_session_detail: { id: 1 },
+            campaign_npcs: [],
+          },
+        ],
+      ),
+    ).toBe(0);
+  });
+});
+
+describe("visibleNpcsForHome", () => {
+  const campaigns = [
+    {
+      id: 10,
+      is_active: true,
+      active_session_detail: { id: 1 },
+      campaign_npcs: [{ id: 1 }],
+    },
+    {
+      id: 11,
+      is_active: true,
+      campaign_npcs: [{ id: 2 }],
+    },
+  ];
+  const npcs = [
+    { id: 3, name: "Old" },
+    { id: 2, name: "ActiveIdle" },
+    { id: 1, name: "LiveNPC" },
+  ];
+
+  test("sorts live then active then older", () => {
+    expect(sortNpcsForHome(npcs, campaigns).map((n) => n.id)).toEqual([
+      1, 2, 3,
+    ]);
+  });
+
+  test("collapsed shows first three in priority order including unassigned", () => {
+    const more = [
+      ...npcs,
+      { id: 4, name: "Zed" },
+      { id: 5, name: "Amy" },
+    ];
+    const { visible, hiddenCount } = visibleNpcsForHome(more, campaigns);
+    expect(visible.map((n) => n.id)).toEqual([1, 2, 5]);
+    expect(hiddenCount).toBe(2);
+  });
+
+  test("collapsed shows all when fewer than limit", () => {
+    const { visible, hiddenCount } = visibleNpcsForHome(npcs, campaigns);
+    expect(visible.map((n) => n.id)).toEqual([1, 2, 3]);
+    expect(hiddenCount).toBe(0);
+  });
+
+  test("expanded shows all sorted", () => {
+    const { visible, hiddenCount } = visibleNpcsForHome(npcs, campaigns, {
+      expanded: true,
+    });
+    expect(visible.map((n) => n.id)).toEqual([1, 2, 3]);
+    expect(hiddenCount).toBe(0);
+  });
+});
+
+describe("visibleFactionGroupsForHome", () => {
+  const gm = { id: 1 };
+  const campaigns = [
+    {
+      id: 11,
+      name: "Idle Camp",
+      is_active: true,
+      gm,
+      factions: [
+        { id: 20, name: "Zebra" },
+        { id: 21, name: "Alpha" },
+      ],
+    },
+    {
+      id: 10,
+      name: "Live Camp",
+      is_active: true,
+      active_session_detail: { id: 1 },
+      gm,
+      factions: [
+        { id: 10, name: "Beta" },
+        { id: 11, name: "Gamma" },
+        { id: 12, name: "Delta" },
+      ],
+    },
+    {
+      id: 12,
+      name: "Other GM",
+      is_active: true,
+      gm: { id: 99 },
+      factions: [{ id: 99, name: "Skip" }],
+    },
+  ];
+
+  test("buildGmFactionGroupsForHome orders live campaigns first and sorts factions", () => {
+    const groups = buildGmFactionGroupsForHome(campaigns, 1);
+    expect(groups.map((g) => g.campaign.id)).toEqual([10, 11]);
+    expect(groups[0].factions.map((f) => f.id)).toEqual([10, 12, 11]);
+    expect(groups[1].factions.map((f) => f.id)).toEqual([21, 20]);
+  });
+
+  test("collapsed shows first three factions across groups", () => {
+    const groups = buildGmFactionGroupsForHome(campaigns, 1);
+    const { visible, hiddenCount } = visibleFactionGroupsForHome(groups);
+    expect(visible.map((g) => g.campaign.id)).toEqual([10]);
+    expect(visible[0].factions.map((f) => f.id)).toEqual([10, 12, 11]);
+    expect(hiddenCount).toBe(2);
+  });
+
+  test("expanded shows all groups", () => {
+    const groups = buildGmFactionGroupsForHome(campaigns, 1);
+    const { visible, hiddenCount } = visibleFactionGroupsForHome(groups, {
+      expanded: true,
+    });
+    expect(visible.map((g) => g.campaign.id)).toEqual([10, 11]);
     expect(hiddenCount).toBe(0);
   });
 });
