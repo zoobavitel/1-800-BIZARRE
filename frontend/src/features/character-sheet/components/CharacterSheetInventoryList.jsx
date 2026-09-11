@@ -157,6 +157,7 @@ function CustomItemEditorCard({
   onChange,
   onSave,
   onCancel,
+  allowArmor = true,
 }) {
   const d = draft || newInventoryItemDraft();
   return (
@@ -239,34 +240,36 @@ function CustomItemEditorCard({
           }}
           style={{ ...rowInputStyle, width: "72px" }}
         />
-        <select
-          aria-label="Armor type"
-          disabled={readOnly}
-          value={normalizeArmorKind(d) || ""}
-          onChange={(e) => {
-            const nextKind = e.target.value;
-            if (!nextKind) {
-              onChange({ ...d, armor_kind: "", is_armor: false });
-              return;
-            }
-            onChange({
-              ...d,
-              armor_kind: nextKind,
-              is_armor: nextKind === "standard" || nextKind === "heavy",
-            });
-          }}
-          style={{ ...rowInputStyle, flex: "1 1 140px" }}
-        >
-          <option value="">No armor</option>
-          {ARMOR_KIND_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
-              {o.pool === "physical"
-                ? ` (${o.charges} chg)`
-                : " (1 use)"}
-            </option>
-          ))}
-        </select>
+        {allowArmor ? (
+          <select
+            aria-label="Armor type"
+            disabled={readOnly}
+            value={normalizeArmorKind(d) || ""}
+            onChange={(e) => {
+              const nextKind = e.target.value;
+              if (!nextKind) {
+                onChange({ ...d, armor_kind: "", is_armor: false });
+                return;
+              }
+              onChange({
+                ...d,
+                armor_kind: nextKind,
+                is_armor: nextKind === "standard" || nextKind === "heavy",
+              });
+            }}
+            style={{ ...rowInputStyle, flex: "1 1 140px" }}
+          >
+            <option value="">No armor</option>
+            {ARMOR_KIND_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+                {o.pool === "physical"
+                  ? ` (${o.charges} chg)`
+                  : " (1 use)"}
+              </option>
+            ))}
+          </select>
+        ) : null}
       </div>
       {!readOnly ? (
         <div style={{ display: "flex", gap: "6px" }}>
@@ -387,6 +390,7 @@ export default function CharacterSheetInventoryList({
   isGM = false,
   onPromoteToCampaign,
   onPublishToSite,
+  allowArmor = true,
 }) {
   const inv = normalizeCharacterInventory(inventory);
   const loadout = normalizeLoadoutEntry(loadoutEntry);
@@ -658,7 +662,7 @@ export default function CharacterSheetInventoryList({
                     index < inv.length - 1 ? "1px solid var(--border)" : "none",
                 }}
               >
-                {editArmorKind ? (
+                {editArmorKind && allowArmor ? (
                   <ArmorEditorCard
                     draft={editDraft}
                     readOnly={readOnly}
@@ -673,6 +677,7 @@ export default function CharacterSheetInventoryList({
                     onChange={setEditDraft}
                     onSave={saveEditedItem}
                     onCancel={cancelEdit}
+                    allowArmor={allowArmor}
                   />
                 )}
               </div>
@@ -766,7 +771,7 @@ export default function CharacterSheetInventoryList({
         })
       )}
 
-      {addingArmor && addDraft ? (
+      {addingArmor && allowArmor && addDraft ? (
         <ArmorEditorCard
           draft={addDraft}
           readOnly={readOnly}
@@ -782,6 +787,7 @@ export default function CharacterSheetInventoryList({
           onChange={setAddDraft}
           onSave={saveNewItem}
           onCancel={cancelAdd}
+          allowArmor={allowArmor}
         />
       ) : null}
       {addingCatalog ? (
@@ -824,17 +830,19 @@ export default function CharacterSheetInventoryList({
           >
             Add Custom Item
           </button>
-          <button
-            type="button"
-            style={btnStyle}
-            onClick={() => {
-              cancelEdit();
-              setAddMode("armor");
-              setAddDraft(newArmorItemDraft());
-            }}
-          >
-            Add armor
-          </button>
+          {allowArmor ? (
+            <button
+              type="button"
+              style={btnStyle}
+              onClick={() => {
+                cancelEdit();
+                setAddMode("armor");
+                setAddDraft(newArmorItemDraft());
+              }}
+            >
+              Add armor
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>
