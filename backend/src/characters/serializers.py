@@ -2128,6 +2128,8 @@ class CharacterSerializer(serializers.ModelSerializer):
                                     "The GM cannot assign a player character "
                                     "to this campaign."
                                 )
+                            }
+                        )
 
         if "crew" in data:
             if (
