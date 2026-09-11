@@ -2099,6 +2099,38 @@ class CharacterSerializer(serializers.ModelSerializer):
 
         # Crew assignment (client sends crew_id; internal key is crew)
         request = self.context.get("request")
+        # GM cannot attach their own PC to a campaign they run (player roster).
+        if "campaign" in data:
+            new_campaign = data.get("campaign")
+            if new_campaign is not None:
+                if not hasattr(new_campaign, "gm_id"):
+                    try:
+                        new_campaign = Campaign.objects.get(pk=new_campaign)
+                    except Campaign.DoesNotExist:
+                        new_campaign = None
+                if new_campaign is not None and request and getattr(
+                    request, "user", None
+                ):
+                    u = request.user
+                    char_user_id = (
+                        self.instance.user_id
+                        if self.instance is not None
+                        else getattr(u, "id", None)
+                    )
+                    if (
+                        new_campaign.gm_id == u.id
+                        and char_user_id == u.id
+                        and not getattr(u, "is_staff", False)
+                    ):
+                        raise serializers.ValidationError(
+                            {
+                                "campaign": (
+                                    "The GM cannot assign a player character "
+                                    "to this campaign."
+                                )
+                            }
+                        )
+
         if "crew" in data:
             if (
                 not request
@@ -2616,6 +2648,7 @@ class CrewCampaignSerializer(serializers.ModelSerializer):
     """Lightweight Crew serializer used inside CampaignSerializer."""
 
     members = CharacterSummarySerializer(many=True, read_only=True)
+    npc_members = serializers.SerializerMethodField()
     class Meta:
         model = Crew
         fields = [
@@ -2630,8 +2663,31 @@ class CrewCampaignSerializer(serializers.ModelSerializer):
             "xp",
             "advancement_points",
             "members",
+            "npc_members",
             "proposed_name",
         ]
+
+    def get_npc_members(self, obj):
+        """GM-only: hide crew-affiliated NPCs from players (ShowcasedNPC reveal)."""
+        request = self.context.get("request")
+        user = getattr(request, "user", None) if request else None
+        campaign = getattr(obj, "campaign", None)
+        is_gm = bool(
+            user
+            and getattr(user, "is_authenticated", False)
+            and (
+                getattr(user, "is_staff", False)
+                or (campaign and campaign.gm_id == user.id)
+            )
+        )
+        if not is_gm:
+            return []
+        npcs = getattr(obj, "npc_members", None)
+        if npcs is None:
+            return []
+        qs = npcs.all() if hasattr(npcs, "all") else npcs
+        return NPCSummarySerializer(qs, many=True, context=self.context).data
+
 
 class EquipmentItemSerializer(serializers.ModelSerializer):
     enabled_for_campaign = serializers.SerializerMethodField()

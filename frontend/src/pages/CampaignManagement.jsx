@@ -230,37 +230,16 @@ function rosterUserInitial(user) {
 /** Flatten campaign GM/players + characters into one-card-per-character (or empty) rows. */
 function buildCampaignRosterCards(campaign) {
   const campaignCharacters = campaign?.campaign_characters || [];
-  const gm = campaign?.gm;
-  const gmId = gm?.id;
+  const gmId = campaign?.gm?.id;
   const cards = [];
-
-  const gmChars = campaignCharacters.filter((ch) => ch.user_id === gmId);
-  if (gm) {
-    if (gmChars.length > 0) {
-      gmChars.forEach((ch) => {
-        cards.push({
-          key: `gm-ch-${ch.id}`,
-          user: gm,
-          role: "GM",
-          character: ch,
-        });
-      });
-    } else {
-      cards.push({
-        key: `gm-empty-${gmId}`,
-        user: gm,
-        role: "GM",
-        character: null,
-      });
-    }
-  }
 
   const playerMap = {};
   (campaign?.players || []).forEach((p) => {
+    if (gmId != null && p.id === gmId) return;
     playerMap[p.id] = { ...p, characters: [] };
   });
   campaignCharacters.forEach((ch) => {
-    if (ch.user_id === gmId) return;
+    if (gmId != null && ch.user_id === gmId) return;
     if (!playerMap[ch.user_id]) {
       playerMap[ch.user_id] = {
         id: ch.user_id,
@@ -271,29 +250,143 @@ function buildCampaignRosterCards(campaign) {
     playerMap[ch.user_id].characters.push(ch);
   });
 
-  Object.values(playerMap)
-    .filter((p) => p.id !== gmId)
-    .forEach((p) => {
-      if (p.characters.length === 0) {
+  Object.values(playerMap).forEach((p) => {
+    if (p.characters.length === 0) {
+      cards.push({
+        key: `p-empty-${p.id}`,
+        user: p,
+        role: "Player",
+        character: null,
+      });
+    } else {
+      p.characters.forEach((ch) => {
         cards.push({
-          key: `p-empty-${p.id}`,
+          key: `p-ch-${ch.id}`,
           user: p,
           role: "Player",
-          character: null,
+          character: ch,
         });
-      } else {
-        p.characters.forEach((ch) => {
-          cards.push({
-            key: `p-ch-${ch.id}`,
-            user: p,
-            role: "Player",
-            character: ch,
-          });
-        });
-      }
-    });
+      });
+    }
+  });
 
   return cards;
+}
+
+function CampaignGmRow({
+  campaign,
+  isGM,
+  currentUser,
+  onUnassignCharacter,
+}) {
+  const gm = campaign?.gm;
+  if (!gm) return null;
+  const gmId = gm.id;
+  const legacyChars = (campaign?.campaign_characters || []).filter(
+    (ch) => ch.user_id === gmId,
+  );
+  const avatarSrc = getUserAvatarSrc(gm, {
+    campaignCharacters: campaign?.campaign_characters || [],
+  });
+
+  return (
+    <div
+      style={{
+        background: "var(--hftf-deep)",
+        border: "1px solid var(--border)",
+        borderRadius: 6,
+        padding: 10,
+        marginBottom: 12,
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          flexWrap: "wrap",
+        }}
+      >
+        <div
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: "50%",
+            border: "1px solid var(--border)",
+            background: "var(--bg-header)",
+            overflow: "hidden",
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 11,
+            fontWeight: "bold",
+            color: "var(--text-muted)",
+          }}
+        >
+          {avatarSrc ? (
+            <img
+              src={avatarSrc}
+              alt=""
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            rosterUserInitial(gm)
+          )}
+        </div>
+        <span
+          style={{
+            fontWeight: "bold",
+            color: "var(--hftf-text-cream)",
+            fontSize: 12,
+          }}
+        >
+          {gm.username || "Unknown"}
+        </span>
+        <RoleBadge role="GM" />
+        <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
+          Runs this campaign
+        </span>
+      </div>
+      {legacyChars.length > 0 ? (
+        <div style={{ fontSize: 11, color: "#fbbf24" }}>
+          Legacy GM character(s) still assigned — remove from campaign:
+          {legacyChars.map((ch) => (
+            <div
+              key={ch.id}
+              style={{
+                display: "flex",
+                gap: 8,
+                alignItems: "center",
+                marginTop: 4,
+              }}
+            >
+              <span>{ch.true_name || ch.alias || `#${ch.id}`}</span>
+              {isGM || currentUser?.id === gmId ? (
+                <button
+                  type="button"
+                  onClick={() => onUnassignCharacter?.(ch.id)}
+                  style={{
+                    ...S.btn,
+                    fontSize: "10px",
+                    padding: "2px 6px",
+                    background: "#7f1d1d",
+                    color: "#fca5a5",
+                  }}
+                >
+                  Remove from campaign
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 /** Group campaign NPCs under factions (sorted by name) + unaffiliated bucket. */
@@ -532,21 +625,51 @@ function CampaignNpcCard({
 
 function CampaignCrewCard({
   crew,
+  campaign,
   isGM,
   currentUser,
   onEdit,
   onDelete,
+  onNavigateToNPC,
+  onNpcCrewDrop,
+  onAssignNpcToCrew,
+  onRemoveNpcFromCrew,
+  isDragOver,
+  onDragOverCrew,
+  onDragLeaveCrew,
+  addNpcId,
+  onAddNpcIdChange,
 }) {
+  const gmId = campaign?.gm?.id;
   const isCrewMember = (crew.members || []).some(
     (m) => m.user_id === currentUser?.id,
   );
   const canEdit = isGM || isCrewMember;
+  const pcMembers = (crew.members || []).filter(
+    (m) => gmId == null || m.user_id !== gmId,
+  );
+  const npcMembers = Array.isArray(crew.npc_members) ? crew.npc_members : [];
+  const assignedNpcIds = new Set(npcMembers.map((n) => n.id));
+  const addableNpcs = (campaign?.campaign_npcs || []).filter(
+    (n) => !assignedNpcIds.has(n.id),
+  );
 
   return (
     <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        onDragOverCrew?.(crew.id);
+      }}
+      onDragLeave={() => onDragLeaveCrew?.(crew.id)}
+      onDrop={(e) => {
+        e.preventDefault();
+        onNpcCrewDrop?.(e, crew.id);
+      }}
       style={{
         background: "var(--hftf-deep)",
-        border: "1px solid var(--border)",
+        border: isDragOver
+          ? "2px solid var(--hftf-purple)"
+          : "1px solid var(--border)",
         borderRadius: 6,
         padding: 10,
         display: "flex",
@@ -649,12 +772,104 @@ function CampaignCrewCard({
           {crew.description}
         </div>
       ) : null}
-      {(crew.members || []).length > 0 ? (
+      {pcMembers.length > 0 ? (
         <div style={{ fontSize: "11px", color: "var(--text-dim)" }}>
-          Members:{" "}
-          {(crew.members || [])
+          Characters:{" "}
+          {pcMembers
             .map((m) => m.true_name || m.alias || `#${m.id}`)
             .join(", ")}
+        </div>
+      ) : null}
+      {npcMembers.length > 0 ? (
+        <div style={{ fontSize: "11px", color: "var(--text-dim)" }}>
+          NPCs:{" "}
+          {npcMembers.map((n, idx) => (
+            <span key={n.id}>
+              {idx > 0 ? ", " : null}
+              {typeof onNavigateToNPC === "function" ? (
+                <a
+                  href={buildRouteHref("npcs", { npcId: n.id })}
+                  onClick={(e) =>
+                    handleSpaNavClick(e, () => onNavigateToNPC(n.id))
+                  }
+                  style={{ color: "var(--hftf-text-cream)" }}
+                >
+                  {n.name || `NPC #${n.id}`}
+                </a>
+              ) : (
+                n.name || `NPC #${n.id}`
+              )}
+              <span
+                style={{
+                  marginLeft: 4,
+                  fontSize: 9,
+                  padding: "1px 5px",
+                  borderRadius: 3,
+                  background: "#78350f",
+                  color: "#fcd34d",
+                }}
+              >
+                NPC
+              </span>
+              {isGM ? (
+                <button
+                  type="button"
+                  aria-label={`Remove ${n.name} from crew`}
+                  onClick={() => onRemoveNpcFromCrew?.(n.id)}
+                  style={{
+                    marginLeft: 4,
+                    color: "#f87171",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: 11,
+                    padding: 0,
+                  }}
+                >
+                  ×
+                </button>
+              ) : null}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {isGM && addableNpcs.length > 0 ? (
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <select
+            style={{ ...S.select, flex: 1, fontSize: 10, padding: "2px 4px" }}
+            value={addNpcId || ""}
+            onChange={(e) => onAddNpcIdChange?.(e.target.value)}
+          >
+            <option value="">Add NPC…</option>
+            {addableNpcs.map((n) => (
+              <option key={n.id} value={n.id}>
+                {n.name || `NPC #${n.id}`}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            disabled={!addNpcId}
+            onClick={() => {
+              const id = parseInt(String(addNpcId), 10);
+              if (Number.isFinite(id)) onAssignNpcToCrew?.(id, crew.id);
+            }}
+            style={{
+              ...S.btn,
+              fontSize: "10px",
+              padding: "2px 6px",
+              background: "var(--hftf-purple)",
+              color: "#fff",
+              opacity: addNpcId ? 1 : 0.5,
+            }}
+          >
+            Add
+          </button>
+        </div>
+      ) : null}
+      {isDragOver ? (
+        <div style={{ fontSize: 10, color: "#a78bfa" }}>
+          Drop NPC here to join this crew
         </div>
       ) : null}
     </div>
@@ -1129,7 +1344,9 @@ function RosterMemberCard({
       ) : (
         <div style={{ fontSize: 11, color: "var(--text-dim)" }}>
           <div>No character assigned</div>
-          {user?.id === currentUser?.id ? (
+          {user?.id === currentUser?.id &&
+          role !== "GM" &&
+          user?.id !== campaign?.gm?.id ? (
             <div
               style={{
                 display: "flex",
@@ -1607,7 +1824,10 @@ function CampaignDetail({
   const [assignNpcId, setAssignNpcId] = useState("");
   const [factionAddNpcIdByFaction, setFactionAddNpcIdByFaction] = useState({});
   const [dragOverFactionKey, setDragOverFactionKey] = useState(null);
+  const [dragOverCrewId, setDragOverCrewId] = useState(null);
   const [emptyFactionExpanded, setEmptyFactionExpanded] = useState({});
+  const [showInvitePanel, setShowInvitePanel] = useState(false);
+  const [crewAddNpcIdByCrew, setCrewAddNpcIdByCrew] = useState({});
 
   const factionEditFiredRef = useRef(false);
   useEffect(() => {
@@ -1654,14 +1874,9 @@ function CampaignDetail({
     }
   }, [isGM, campaign?.id]);
 
-  const availableToAssign = isGM
-    ? myCharacters.filter(
-        (ch) =>
-          ch.id &&
-          ch.campaign !== campaign?.id &&
-          ch.campaign?.id !== campaign?.id,
-      )
-    : myCharacters.filter((ch) => !ch.campaign && ch.id);
+  const availableToAssign = !isGM
+    ? myCharacters.filter((ch) => !ch.campaign && ch.id)
+    : [];
   const myCharsNotInThisCampaign = myCharacters.filter(
     (ch) =>
       ch.id &&
@@ -1971,6 +2186,38 @@ function CampaignDetail({
     await handleMoveNpcToFaction(npcId, targetFactionId);
   };
 
+  const handleAssignNpcToCrew = async (npcId, crewId) => {
+    setActionError(null);
+    try {
+      await npcAPI.patchNPC(npcId, { crew: crewId });
+      setCrewAddNpcIdByCrew((prev) => ({ ...prev, [crewId]: "" }));
+      onRefresh();
+    } catch (err) {
+      setActionError(err.message);
+    }
+  };
+
+  const handleRemoveNpcFromCrew = async (npcId) => {
+    setActionError(null);
+    try {
+      await npcAPI.patchNPC(npcId, { crew: null });
+      onRefresh();
+    } catch (err) {
+      setActionError(err.message);
+    }
+  };
+
+  const handleNpcCrewDrop = async (e, crewId) => {
+    e.preventDefault();
+    setDragOverCrewId(null);
+    const raw =
+      e.dataTransfer.getData(NPC_DRAG_MIME) ||
+      e.dataTransfer.getData("text/plain");
+    const npcId = parseInt(raw, 10);
+    if (!Number.isFinite(npcId)) return;
+    await handleAssignNpcToCrew(npcId, crewId);
+  };
+
   const buildFactionSavePayload = () => {
     const f = factionForm;
     const payload = {
@@ -2266,7 +2513,110 @@ function CampaignDetail({
 
       {/* Players, Crew & Characters */}
       <div style={S.card}>
-        <span style={S.sectionLbl}>Players, Crew &amp; Characters</span>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+            marginBottom: 8,
+          }}
+        >
+          <span style={{ ...S.sectionLbl, margin: 0 }}>
+            Players, Crew &amp; Characters
+          </span>
+          {isGM ? (
+            <button
+              type="button"
+              onClick={() => setShowInvitePanel((v) => !v)}
+              style={{
+                ...S.btnPrimary,
+                fontSize: "11px",
+                padding: "4px 10px",
+              }}
+            >
+              {showInvitePanel ? "Hide invite" : "+ Invite player"}
+            </button>
+          ) : null}
+        </div>
+
+        {isGM && showInvitePanel ? (
+          <div
+            style={{
+              border: "1px solid var(--border)",
+              borderRadius: 4,
+              padding: 10,
+              marginBottom: 12,
+              background: "var(--hftf-deep)",
+            }}
+          >
+            {inviteError && (
+              <div style={{ ...S.err, marginBottom: "8px" }}>{inviteError}</div>
+            )}
+            {inviteSuccess && (
+              <div
+                style={{
+                  background: "#064e3b",
+                  border: "1px solid #059669",
+                  borderRadius: "4px",
+                  padding: "8px 12px",
+                  fontSize: "12px",
+                  color: "#6ee7b7",
+                  marginBottom: "8px",
+                }}
+              >
+                {inviteSuccess}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "8px" }}>
+              <input
+                style={{ ...S.inp, flex: 1 }}
+                value={inviteUsername}
+                onChange={(e) => setInviteUsername(e.target.value)}
+                placeholder="Enter username"
+                onKeyDown={(e) => e.key === "Enter" && handleInvite()}
+              />
+              <button onClick={handleInvite} style={S.btnPrimary}>
+                Invite
+              </button>
+            </div>
+            {invitableUsers.length > 0 && (
+              <>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--text-muted)",
+                    marginTop: "12px",
+                    display: "block",
+                  }}
+                >
+                  Or select from registered users
+                </span>
+                <select
+                  style={{ ...S.select, marginTop: "6px", flex: 1 }}
+                  value=""
+                  onChange={(e) => {
+                    const u = invitableUsers.find(
+                      (u) => String(u.id) === e.target.value,
+                    );
+                    if (u) setInviteUsername(u.username);
+                    e.target.value = "";
+                  }}
+                >
+                  <option value="" disabled>
+                    Select a user to invite...
+                  </option>
+                  {invitableUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.username}
+                    </option>
+                  ))}
+                </select>
+              </>
+            )}
+          </div>
+        ) : null}
 
         {(isGM || campaign.players?.some((p) => p.id === user?.id)) && (
           <>
@@ -2296,10 +2646,27 @@ function CampaignDetail({
                   <CampaignCrewCard
                     key={c.id}
                     crew={c}
+                    campaign={campaign}
                     isGM={isGM}
                     currentUser={user}
                     onEdit={startCrewEdit}
                     onDelete={handleCrewDelete}
+                    onNavigateToNPC={onNavigateToNPC}
+                    onNpcCrewDrop={handleNpcCrewDrop}
+                    onAssignNpcToCrew={handleAssignNpcToCrew}
+                    onRemoveNpcFromCrew={handleRemoveNpcFromCrew}
+                    isDragOver={dragOverCrewId === c.id}
+                    onDragOverCrew={setDragOverCrewId}
+                    onDragLeaveCrew={(id) =>
+                      setDragOverCrewId((cur) => (cur === id ? null : cur))
+                    }
+                    addNpcId={crewAddNpcIdByCrew[c.id] || ""}
+                    onAddNpcIdChange={(value) =>
+                      setCrewAddNpcIdByCrew((prev) => ({
+                        ...prev,
+                        [c.id]: value,
+                      }))
+                    }
                   />
                 ))}
               </div>
@@ -2468,6 +2835,13 @@ function CampaignDetail({
           </>
         )}
 
+        <CampaignGmRow
+          campaign={campaign}
+          isGM={isGM}
+          currentUser={user}
+          onUnassignCharacter={handleUnassignCharacter}
+        />
+
         <span style={{ ...S.sectionLbl, marginTop: 0 }}>
           Players &amp; Characters
         </span>
@@ -2585,79 +2959,9 @@ function CampaignDetail({
         )}
       </div>
 
-      {/* Invite Player (GM only) */}
-      {isGM && (
-        <div style={S.card}>
-          <span style={S.sectionLbl}>Invite Player</span>
-          {inviteError && (
-            <div style={{ ...S.err, marginBottom: "8px" }}>{inviteError}</div>
-          )}
-          {inviteSuccess && (
-            <div
-              style={{
-                background: "#064e3b",
-                border: "1px solid #059669",
-                borderRadius: "4px",
-                padding: "8px 12px",
-                fontSize: "12px",
-                color: "#6ee7b7",
-                marginBottom: "8px",
-              }}
-            >
-              {inviteSuccess}
-            </div>
-          )}
-          <div style={{ display: "flex", gap: "8px" }}>
-            <input
-              style={{ ...S.inp, flex: 1 }}
-              value={inviteUsername}
-              onChange={(e) => setInviteUsername(e.target.value)}
-              placeholder="Enter username"
-              onKeyDown={(e) => e.key === "Enter" && handleInvite()}
-            />
-            <button onClick={handleInvite} style={S.btnPrimary}>
-              Invite
-            </button>
-          </div>
-          {invitableUsers.length > 0 && (
-            <>
-              <span
-                style={{
-                  fontSize: "11px",
-                  color: "var(--text-muted)",
-                  marginTop: "12px",
-                  display: "block",
-                }}
-              >
-                Or select from registered users
-              </span>
-              <select
-                style={{ ...S.select, marginTop: "6px", flex: 1 }}
-                value=""
-                onChange={(e) => {
-                  const u = invitableUsers.find(
-                    (u) => String(u.id) === e.target.value,
-                  );
-                  if (u) setInviteUsername(u.username);
-                  e.target.value = "";
-                }}
-              >
-                <option value="" disabled>
-                  Select a user to invite...
-                </option>
-                {invitableUsers.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.username}
-                  </option>
-                ))}
-              </select>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Assign Character (GM or player who is in the campaign) */}
-      {(isGM || campaign.players?.some((p) => p.id === user?.id)) &&
+      {/* Assign Character (players only — GM cannot self-assign a PC) */}
+      {!isGM &&
+        campaign.players?.some((p) => p.id === user?.id) &&
         availableToAssign.length > 0 && (
           <div style={S.card}>
             <span style={S.sectionLbl}>Assign a Character</span>
