@@ -10,6 +10,7 @@ import {
   sortNpcsForHome,
   visibleNpcsForHome,
   buildGmFactionGroupsForHome,
+  isCampaignGmForUser,
   visibleFactionGroupsForHome,
 } from "./homeCampaignSort";
 
@@ -395,6 +396,23 @@ describe("visibleFactionGroupsForHome", () => {
     expect(groups.map((g) => g.campaign.id)).toEqual([10, 11]);
     expect(groups[0].factions.map((f) => f.id)).toEqual([10, 12, 11]);
     expect(groups[1].factions.map((f) => f.id)).toEqual([21, 20]);
+  });
+
+  test("excludes player-only campaigns even when they nest factions", () => {
+    const groups = buildGmFactionGroupsForHome(campaigns, 1);
+    expect(groups.some((g) => g.campaign.id === 12)).toBe(false);
+    expect(groups.flatMap((g) => g.factions.map((f) => f.id))).not.toContain(99);
+  });
+
+  test("matches gm id when user id is a string", () => {
+    const groups = buildGmFactionGroupsForHome(campaigns, "1");
+    expect(groups.map((g) => g.campaign.id)).toEqual([10, 11]);
+  });
+
+  test("isCampaignGmForUser accepts bare gm id", () => {
+    expect(isCampaignGmForUser({ gm: 7 }, 7)).toBe(true);
+    expect(isCampaignGmForUser({ gm: 7 }, "7")).toBe(true);
+    expect(isCampaignGmForUser({ gm: 7 }, 8)).toBe(false);
   });
 
   test("collapsed shows first three factions across groups", () => {
