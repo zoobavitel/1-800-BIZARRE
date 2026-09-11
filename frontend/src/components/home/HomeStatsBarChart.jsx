@@ -49,7 +49,7 @@ export default function HomeStatsBarChart({ data = [], loading = false }) {
 
   return (
     <div className="home-chart home-chart-bar" role="img" aria-label={aria}>
-      <div className="home-chart-title">Your counts</div>
+      <div className="home-chart-title">Site counts</div>
       {loading ? (
         <div className="home-chart-placeholder">Loading…</div>
       ) : (
