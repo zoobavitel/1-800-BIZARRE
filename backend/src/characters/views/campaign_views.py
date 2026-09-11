@@ -71,11 +71,16 @@ class CampaignViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        if user.is_staff:
-            return Campaign.objects.all()
-        return Campaign.objects.filter(
+        qs = Campaign.objects.all() if user.is_staff else Campaign.objects.filter(
             models.Q(gm=user) | models.Q(characters__user=user) | models.Q(players=user)
         ).distinct()
+        return qs.prefetch_related(
+            "crews__members",
+            "crews__npc_members",
+            "factions",
+            "players",
+            "players__profile",
+        )
 
     def perform_create(self, serializer):
         serializer.save(gm=self.request.user)
@@ -400,6 +405,11 @@ class CampaignViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="assign-character")
     def assign_character(self, request, pk=None):
         campaign = self.get_object()
+        if campaign.gm_id == request.user.id:
+            return Response(
+                {"error": "The GM cannot assign a player character to this campaign."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         character_id = request.data.get("character_id")
         if not character_id:
             return Response(
@@ -415,10 +425,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        if (
-            not campaign.players.filter(id=request.user.id).exists()
-            and campaign.gm != request.user
-        ):
+        if not campaign.players.filter(id=request.user.id).exists():
             return Response(
                 {"error": "You must be a member of this campaign."},
                 status=status.HTTP_403_FORBIDDEN,
