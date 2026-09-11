@@ -19,6 +19,7 @@ import { subscribeCampaignEvents } from "../features/character-sheet/services/ca
 import SessionGMManagementPanels from "../components/session/SessionGMManagementPanels";
 import ProgressClock from "../components/ProgressClock";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
+import AvatarCropModal from "../components/AvatarCropModal";
 import {
   getCharacterPortraitSrc,
   getUserAvatarSrc,
@@ -1600,9 +1601,37 @@ function CampaignDetail({
     if (!factionImageBlobPreview) return undefined;
     return () => URL.revokeObjectURL(factionImageBlobPreview);
   }, [factionImageBlobPreview]);
+  const [factionCropOpen, setFactionCropOpen] = useState(false);
+  const [factionPreviewError, setFactionPreviewError] = useState(false);
+  const factionImagePreview =
+    factionImageBlobPreview ||
+    (factionForm?.image ? resolveMediaUrl(factionForm.image) : null);
+  useEffect(() => {
+    setFactionPreviewError(false);
+    setFactionCropOpen(false);
+  }, [factionImagePreview, factionForm?.id]);
   const [crewForm, setCrewForm] = useState(null);
   const [crewError, setCrewError] = useState(null);
   const [editForm, setEditForm] = useState(null);
+  const [campaignCropOpen, setCampaignCropOpen] = useState(false);
+  const [campaignPreviewError, setCampaignPreviewError] = useState(false);
+  const campaignImageBlobPreview = useMemo(() => {
+    if (!editForm?.imageFile) return null;
+    return URL.createObjectURL(editForm.imageFile);
+  }, [editForm?.imageFile]);
+  useEffect(() => {
+    if (!campaignImageBlobPreview) return undefined;
+    return () => URL.revokeObjectURL(campaignImageBlobPreview);
+  }, [campaignImageBlobPreview]);
+  const campaignEditImagePreview =
+    campaignImageBlobPreview ||
+    (editForm && !editForm.clearImage && editForm.image
+      ? resolveMediaUrl(editForm.image)
+      : null);
+  useEffect(() => {
+    setCampaignPreviewError(false);
+    setCampaignCropOpen(false);
+  }, [campaignEditImagePreview]);
   const [actionError, setActionError] = useState(null);
   const [assignNpcId, setAssignNpcId] = useState("");
   const [factionAddNpcIdByFaction, setFactionAddNpcIdByFaction] = useState({});
@@ -2001,7 +2030,7 @@ function CampaignDetail({
     }
     try {
       if (factionForm.id) {
-        await factionAPI.updateFaction(
+        await factionAPI.patchFaction(
           factionForm.id,
           buildFactionSavePayload(),
         );
@@ -2122,12 +2151,24 @@ function CampaignDetail({
     setEditForm({
       name: campaign.name,
       description: campaign.description || "",
+      image: campaign.image || null,
+      imageFile: null,
+      clearImage: false,
     });
 
   const handleCampaignEditSave = async () => {
     if (!editForm.name.trim()) return;
     try {
-      await campaignAPI.updateCampaign(campaign.id, editForm);
+      const payload = {
+        name: editForm.name.trim(),
+        description: editForm.description || "",
+      };
+      if (editForm.imageFile) {
+        payload.imageFile = editForm.imageFile;
+      } else if (editForm.clearImage) {
+        payload.image = null;
+      }
+      await campaignAPI.patchCampaign(campaign.id, payload);
       setEditForm(null);
       onRefresh();
     } catch (err) {
@@ -2149,6 +2190,133 @@ function CampaignDetail({
         {editForm ? (
           <>
             <span style={S.lbl}>EDIT CAMPAIGN</span>
+            <div
+              style={{
+                display: "flex",
+                flexWrap: "wrap",
+                gap: 12,
+                alignItems: "flex-start",
+                marginBottom: 12,
+              }}
+            >
+              <div style={{ flexShrink: 0 }}>
+                {campaignEditImagePreview && !campaignPreviewError ? (
+                  <img
+                    src={campaignEditImagePreview}
+                    alt=""
+                    crossOrigin="anonymous"
+                    onError={() => setCampaignPreviewError(true)}
+                    onLoad={() => setCampaignPreviewError(false)}
+                    style={{
+                      width: 96,
+                      height: 96,
+                      objectFit: "cover",
+                      borderRadius: 6,
+                      border: "1px solid var(--border)",
+                      background: "var(--hftf-deep)",
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 96,
+                      height: 96,
+                      borderRadius: 6,
+                      border: "1px solid var(--border)",
+                      background: "var(--hftf-deep)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "var(--text-dim)",
+                      fontSize: 28,
+                      fontWeight: "bold",
+                    }}
+                    aria-hidden="true"
+                  >
+                    {(editForm.name || "C").trim().charAt(0).toUpperCase()}
+                  </div>
+                )}
+              </div>
+              <div style={{ flex: "1 1 200px", minWidth: 0 }}>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--text-muted)",
+                    display: "block",
+                    marginBottom: 4,
+                  }}
+                >
+                  Campaign photo
+                </span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  style={{
+                    fontSize: "11px",
+                    color: "var(--hftf-text-cream)",
+                    maxWidth: "100%",
+                  }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!file) return;
+                    setEditForm((p) => ({
+                      ...p,
+                      imageFile: file,
+                      clearImage: false,
+                    }));
+                  }}
+                />
+                <div style={{ ...S.row, marginTop: 6, gap: 6 }}>
+                  <button
+                    type="button"
+                    disabled={!campaignEditImagePreview || campaignPreviewError}
+                    onClick={() => setCampaignCropOpen(true)}
+                    style={{
+                      ...S.btnGhost,
+                      fontSize: "10px",
+                      opacity:
+                        !campaignEditImagePreview || campaignPreviewError
+                          ? 0.5
+                          : 1,
+                    }}
+                  >
+                    Crop
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setEditForm((p) => ({
+                        ...p,
+                        image: null,
+                        imageFile: null,
+                        clearImage: true,
+                      }))
+                    }
+                    style={{ ...S.btnGhost, fontSize: "10px" }}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+            </div>
+            {campaignCropOpen &&
+            campaignEditImagePreview &&
+            !campaignPreviewError ? (
+              <AvatarCropModal
+                imageSrc={campaignEditImagePreview}
+                onCancel={() => setCampaignCropOpen(false)}
+                onApply={(file) => {
+                  setEditForm((p) => ({
+                    ...p,
+                    imageFile: file,
+                    clearImage: false,
+                  }));
+                  setCampaignCropOpen(false);
+                  setCampaignPreviewError(false);
+                }}
+              />
+            ) : null}
             <div style={{ marginBottom: "10px" }}>
               <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>Name</span>
               <input
@@ -2197,7 +2365,42 @@ function CampaignDetail({
                 alignItems: "flex-start",
               }}
             >
-              <div>
+              <div style={{ display: "flex", gap: 12, minWidth: 0, flex: 1 }}>
+                <div
+                  style={{
+                    width: 48,
+                    height: 48,
+                    flexShrink: 0,
+                    borderRadius: 6,
+                    border: "1px solid var(--border)",
+                    background: "var(--hftf-deep)",
+                    overflow: "hidden",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "var(--text-dim)",
+                    fontSize: 18,
+                    fontWeight: "bold",
+                  }}
+                  aria-hidden="true"
+                >
+                  {campaign.image ? (
+                    <img
+                      src={resolveMediaUrl(campaign.image)}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  ) : (
+                    (campaign.name || "C").trim().charAt(0).toUpperCase()
+                  )}
+                </div>
+                <div style={{ minWidth: 0 }}>
                 <div
                   style={{
                     fontSize: "18px",
@@ -2234,6 +2437,7 @@ function CampaignDetail({
                       ? new Date(campaign.created_at).toLocaleDateString()
                       : "N/A"}
                   </span>
+                </div>
                 </div>
               </div>
               {isGM && (
@@ -2807,8 +3011,7 @@ function CampaignDetail({
                   marginBottom: "10px",
                 }}
               >
-                {(factionImageBlobPreview || resolveMediaUrl(factionForm.image)) && (
-                  <div style={{ flexShrink: 0 }}>
+                <div style={{ flexShrink: 0 }}>
                     <span
                       style={{
                         fontSize: "11px",
@@ -2819,23 +3022,43 @@ function CampaignDetail({
                     >
                       Preview
                     </span>
-                    <img
-                      src={
-                        factionImageBlobPreview ||
-                        resolveMediaUrl(factionForm.image)
-                      }
-                      alt=""
-                      style={{
-                        width: 96,
-                        height: 96,
-                        objectFit: "cover",
-                        borderRadius: 6,
-                        border: "1px solid var(--border)",
-                        background: "var(--hftf-deep)",
-                      }}
-                    />
+                    {factionImagePreview && !factionPreviewError ? (
+                      <img
+                        src={factionImagePreview}
+                        alt=""
+                        crossOrigin="anonymous"
+                        onError={() => setFactionPreviewError(true)}
+                        onLoad={() => setFactionPreviewError(false)}
+                        style={{
+                          width: 96,
+                          height: 96,
+                          objectFit: "cover",
+                          borderRadius: 6,
+                          border: "1px solid var(--border)",
+                          background: "var(--hftf-deep)",
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: 96,
+                          height: 96,
+                          borderRadius: 6,
+                          border: "1px solid var(--border)",
+                          background: "var(--hftf-deep)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: "var(--text-dim)",
+                          fontSize: 28,
+                          fontWeight: "bold",
+                        }}
+                        aria-hidden="true"
+                      >
+                        {(factionForm.name || "F").trim().charAt(0).toUpperCase()}
+                      </div>
+                    )}
                   </div>
-                )}
                 <div style={{ flex: "1 1 200px", minWidth: 0 }}>
                   <span
                     style={{
@@ -2849,37 +3072,68 @@ function CampaignDetail({
                   </span>
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
                     style={{ fontSize: "11px", color: "var(--hftf-text-cream)", maxWidth: "100%" }}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!file) return;
                       setFactionForm((p) => ({
                         ...p,
-                        imageFile: file || null,
+                        imageFile: file,
                       }));
-                      e.target.value = "";
+                      setFactionPreviewError(false);
                     }}
                   />
-                  {(factionForm.image || factionForm.imageFile) && (
+                  <div style={{ ...S.row, marginTop: 6, gap: 6 }}>
                     <button
                       type="button"
-                      onClick={() =>
-                        setFactionForm((p) => ({
-                          ...p,
-                          image: null,
-                          imageFile: null,
-                        }))
-                      }
+                      disabled={!factionImagePreview || factionPreviewError}
+                      onClick={() => setFactionCropOpen(true)}
                       style={{
                         ...S.btnGhost,
                         fontSize: "10px",
-                        marginTop: "6px",
-                        display: "block",
+                        opacity:
+                          !factionImagePreview || factionPreviewError ? 0.5 : 1,
                       }}
                     >
-                      Clear image (local)
+                      Crop
                     </button>
-                  )}
+                    {(factionForm.image || factionForm.imageFile) && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFactionForm((p) => ({
+                            ...p,
+                            image: null,
+                            imageFile: null,
+                          }))
+                        }
+                        style={{
+                          ...S.btnGhost,
+                          fontSize: "10px",
+                        }}
+                      >
+                        Clear image
+                      </button>
+                    )}
+                  </div>
+                  {factionCropOpen &&
+                  factionImagePreview &&
+                  !factionPreviewError ? (
+                    <AvatarCropModal
+                      imageSrc={factionImagePreview}
+                      onCancel={() => setFactionCropOpen(false)}
+                      onApply={(file) => {
+                        setFactionForm((p) => ({
+                          ...p,
+                          imageFile: file,
+                        }));
+                        setFactionCropOpen(false);
+                        setFactionPreviewError(false);
+                      }}
+                    />
+                  ) : null}
                 </div>
               </div>
               <div

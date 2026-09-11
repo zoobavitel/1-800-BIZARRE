@@ -591,16 +591,24 @@ export const campaignAPI = {
       method: "POST",
       body: JSON.stringify(campaignData),
     }),
-  updateCampaign: (id, campaignData) =>
-    apiRequest(`/campaigns/${id}/`, {
+  updateCampaign: (id, campaignData) => {
+    const { multipart, body } = buildMultipartOrJson(campaignData);
+    if (multipart)
+      return apiRequestMultipart(`/campaigns/${id}/`, body, "PUT");
+    return apiRequest(`/campaigns/${id}/`, {
       method: "PUT",
-      body: JSON.stringify(campaignData),
-    }),
-  patchCampaign: (id, campaignData) =>
-    apiRequest(`/campaigns/${id}/`, {
+      body,
+    });
+  },
+  patchCampaign: (id, campaignData) => {
+    const { multipart, body } = buildMultipartOrJson(campaignData);
+    if (multipart)
+      return apiRequestMultipart(`/campaigns/${id}/`, body, "PATCH");
+    return apiRequest(`/campaigns/${id}/`, {
       method: "PATCH",
-      body: JSON.stringify(campaignData),
-    }),
+      body,
+    });
+  },
   /** Campaign members: rules-triggered wanted (e.g. vice brag +2); GM-only PATCH unchanged. */
   incrementCampaignWanted: (campaignId, { amount = 2, cap = 5 } = {}) =>
     apiRequest(`/campaigns/${campaignId}/increment-wanted/`, {
@@ -686,11 +694,15 @@ export const factionAPI = {
       body,
     });
   },
-  patchFaction: (id, data) =>
-    apiRequest(`/factions/${id}/`, {
+  patchFaction: (id, data) => {
+    const { multipart, body } = buildMultipartOrJson(data);
+    if (multipart)
+      return apiRequestMultipart(`/factions/${id}/`, body, "PATCH");
+    return apiRequest(`/factions/${id}/`, {
       method: "PATCH",
-      body: JSON.stringify(data),
-    }),
+      body,
+    });
+  },
   deleteFaction: (id) => apiRequest(`/factions/${id}/`, { method: "DELETE" }),
 };
 

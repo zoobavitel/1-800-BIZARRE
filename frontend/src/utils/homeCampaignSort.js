@@ -238,17 +238,38 @@ export function visibleNpcsForHome(
 export const HOME_FACTION_PREVIEW_LIMIT = HOME_CHARACTER_PREVIEW_LIMIT;
 
 /**
+ * Home "Your Factions" ownership: Faction has no creator FK; only the
+ * campaign GM can create factions, so "created by me" ≡ campaign.gm.
+ * Accepts gm as `{ id }` or bare id; coerces string/number ids.
+ *
+ * @param {object | null | undefined} campaign
+ * @param {number | string | null | undefined} userId
+ * @returns {boolean}
+ */
+export function isCampaignGmForUser(campaign, userId) {
+  if (userId == null || userId === "") return false;
+  const gm = campaign?.gm;
+  const gmId =
+    gm != null && typeof gm === "object" && !Array.isArray(gm) ? gm.id : gm;
+  if (gmId == null || gmId === "") return false;
+  const a = Number(gmId);
+  const b = Number(userId);
+  return Number.isFinite(a) && Number.isFinite(b) && a === b;
+}
+
+/**
  * GM-owned campaigns with factions, ordered like campaign Home cards.
  * Factions within a campaign are alphabetical by name.
+ * Player-only campaigns (and their nested factions) are excluded.
  *
  * @param {object[] | null | undefined} campaigns
  * @param {number | string | null | undefined} gmUserId
  * @returns {{ campaign: object, factions: object[] }[]}
  */
 export function buildGmFactionGroupsForHome(campaigns, gmUserId) {
-  if (gmUserId == null) return [];
+  if (gmUserId == null || gmUserId === "") return [];
   const gmCampaigns = sortCampaignsForHome(
-    (campaigns || []).filter((c) => c?.gm?.id === gmUserId),
+    (campaigns || []).filter((c) => isCampaignGmForUser(c, gmUserId)),
   );
   return gmCampaigns
     .map((c) => ({

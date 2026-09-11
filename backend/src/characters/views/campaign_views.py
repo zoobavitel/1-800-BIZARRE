@@ -6,6 +6,7 @@ from django.contrib.auth.models import User
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -68,6 +69,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Campaign.objects.all()
     serializer_class = CampaignSerializer
+    parser_classes = (JSONParser, MultiPartParser, FormParser)
 
     def get_queryset(self):
         user = self.request.user
