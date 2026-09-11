@@ -1,10 +1,10 @@
-"""GET /api/site-stats/ aggregates playbooks and heritages (PCs + NPCs)."""
+"""GET /api/site-stats/ aggregates site-wide counts, playbooks, and heritages."""
 from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from characters.models import Campaign, Character, Heritage
+from characters.models import Campaign, Character, Crew, Heritage, NPC, Session
 
 
 class SiteStatsTests(TestCase):
@@ -54,6 +54,20 @@ class SiteStatsTests(TestCase):
             playbook='SPIN',
             action_dots=dots,
         )
+        Character.objects.create(
+            user=self.user,
+            true_name='New Character',
+            playbook='STAND',
+            action_dots=dots,
+        )
+        Session.objects.create(campaign=self.campaign, name='Session One')
+        Crew.objects.create(name='Test Crew', campaign=self.campaign)
+        NPC.objects.create(
+            campaign=self.campaign,
+            name='Test NPC',
+            playbook='STAND',
+            creator=self.gm,
+        )
 
     def test_site_stats_requires_auth(self):
         r = self.client.get('/api/site-stats/')
@@ -65,8 +79,14 @@ class SiteStatsTests(TestCase):
         self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
         self.assertEqual(
             r.data['playbook_counts'],
-            {'STAND': 2, 'HAMON': 1, 'SPIN': 1},
+            {'STAND': 4, 'HAMON': 1, 'SPIN': 1},
         )
         names = [h['name'] for h in r.data['top_heritages']]
         self.assertEqual(names, ['Human', 'Rock Human', 'Vampire'])
         self.assertEqual(r.data['top_heritages'][0]['count'], 2)
+        self.assertEqual(r.data['active_campaigns'], 1)
+        self.assertEqual(r.data['session_count'], 1)
+        self.assertEqual(r.data['crew_count'], 1)
+        self.assertEqual(r.data['npc_count'], 1)
+        # Blank "New Character" shells with no sheet progress are excluded.
+        self.assertEqual(r.data['pc_count'], 4)

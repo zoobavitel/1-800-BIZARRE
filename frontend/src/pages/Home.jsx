@@ -5,7 +5,6 @@ import {
   campaignAPI,
   factionAPI,
   npcAPI,
-  crewAPI,
   siteStatsAPI,
   transformBackendToFrontend,
 } from "../features/character-sheet";
@@ -88,40 +87,6 @@ function factionStatusLabel(rep) {
   return "Friendly";
 }
 
-function isPlaceholderNewCharacter(character) {
-  if (!character) return false;
-  const name = String(character.name || "").trim().toLowerCase();
-  if (name !== "new character") return false;
-
-  const hasStandName = String(character.standName || "").trim() !== "";
-  const hasHeritage = character.heritage != null && String(character.heritage) !== "";
-  const hasBackground = String(character.background || "").trim() !== "";
-  const hasLook = String(character.look || "").trim() !== "";
-  const hasVice = String(character.vice || "").trim() !== "";
-  const hasCrew = String(character.crew || "").trim() !== "";
-  const hasAbilities = Array.isArray(character.abilities) && character.abilities.length > 0;
-  const hasClocks = Array.isArray(character.clocks) && character.clocks.length > 0;
-  const hasActionDots = Object.values(character.actionRatings || {}).some(
-    (v) => Number(v) > 0,
-  );
-  const hasStress = Number(character.stressFilled || 0) > 0;
-  const hasXp = Object.values(character.xp || {}).some((v) => Number(v) > 0);
-
-  return !(
-    hasStandName ||
-    hasHeritage ||
-    hasBackground ||
-    hasLook ||
-    hasVice ||
-    hasCrew ||
-    hasAbilities ||
-    hasClocks ||
-    hasActionDots ||
-    hasStress ||
-    hasXp
-  );
-}
-
 function getUserDisplayName(person) {
   const username = person?.username;
   return typeof username === "string" && username.trim()
@@ -153,8 +118,8 @@ const HomePage = ({
   const [invitationError, setInvitationError] = useState(null);
   const [npcs, setNpcs] = useState([]);
   const [npcsLoading, setNpcsLoading] = useState(true);
-  const [crewCount, setCrewCount] = useState(0);
   const [siteStats, setSiteStats] = useState(null);
+  const [siteStatsLoading, setSiteStatsLoading] = useState(true);
   const [openHeroPill, setOpenHeroPill] = useState(null);
   const [expandedFactionId, setExpandedFactionId] = useState(null);
   const [showAllCharacters, setShowAllCharacters] = useState(false);
@@ -193,9 +158,11 @@ const HomePage = ({
   useEffect(() => {
     if (!user) {
       setSiteStats(null);
+      setSiteStatsLoading(false);
       return undefined;
     }
     let cancelled = false;
+    setSiteStatsLoading(true);
     siteStatsAPI
       .getSiteStats()
       .then((data) => {
@@ -203,6 +170,9 @@ const HomePage = ({
       })
       .catch(() => {
         if (!cancelled) setSiteStats(null);
+      })
+      .finally(() => {
+        if (!cancelled) setSiteStatsLoading(false);
       });
     return () => {
       cancelled = true;
@@ -218,7 +188,6 @@ const HomePage = ({
       setInvitationError(null);
       setNpcs([]);
       setNpcsLoading(false);
-      setCrewCount(0);
       return;
     }
     setCampaignsLoading(true);
@@ -241,11 +210,6 @@ const HomePage = ({
       .then((list) => setNpcs(Array.isArray(list) ? list : []))
       .catch(() => setNpcs([]))
       .finally(() => setNpcsLoading(false));
-
-    crewAPI
-      .getCrews()
-      .then((list) => setCrewCount(Array.isArray(list) ? list.length : 0))
-      .catch(() => setCrewCount(0));
   }, [user]);
 
   const patchRows = useMemo(
@@ -253,24 +217,16 @@ const HomePage = ({
     [],
   );
 
-  const heroStats = useMemo(() => {
-    const activeCampaigns = (campaigns || []).filter(
-      (c) => c.is_active !== false,
-    ).length;
-    const sessionCount = (campaigns || []).reduce(
-      (acc, c) => acc + (Array.isArray(c.sessions) ? c.sessions.length : 0),
-      0,
-    );
-    const pcCount = characters.filter((c) => !isPlaceholderNewCharacter(c)).length;
-    const npcCount = npcs.length;
-    return {
-      activeCampaigns,
-      sessionCount,
-      crewCount,
-      pcCount,
-      npcCount,
-    };
-  }, [campaigns, characters, npcs.length, crewCount]);
+  const liveStats = useMemo(
+    () => ({
+      activeCampaigns: siteStats?.active_campaigns ?? 0,
+      sessionCount: siteStats?.session_count ?? 0,
+      crewCount: siteStats?.crew_count ?? 0,
+      pcCount: siteStats?.pc_count ?? 0,
+      npcCount: siteStats?.npc_count ?? 0,
+    }),
+    [siteStats],
+  );
 
   const sessionScatter = useMemo(
     () => buildSessionScatterPoints(campaigns),
@@ -297,8 +253,8 @@ const HomePage = ({
       }),
     [npcs, campaigns, showAllNpcs],
   );
-  const barChartRows = useMemo(() => buildBarChartRows(heroStats), [heroStats]);
-  const chartsLoading = loading || campaignsLoading || npcsLoading;
+  const barChartRows = useMemo(() => buildBarChartRows(liveStats), [liveStats]);
+  const barChartLoading = siteStatsLoading;
 
   const playbookLine = useMemo(() => {
     const pc = siteStats?.playbook_counts;
@@ -1223,7 +1179,7 @@ const HomePage = ({
                   Campaigns
                 </span>
                 <span className="hero-stat-value">
-                  {heroStats.activeCampaigns} active
+                  {liveStats.activeCampaigns} active
                 </span>
               </div>
               <div className="hero-stat-row">
@@ -1232,7 +1188,7 @@ const HomePage = ({
                   PCs / NPCs
                 </span>
                 <span className="hero-stat-value">
-                  {heroStats.pcCount} / {heroStats.npcCount}
+                  {liveStats.pcCount} / {liveStats.npcCount}
                 </span>
               </div>
               <div className="hero-stat-row hero-stat-row-tall">
@@ -1250,9 +1206,9 @@ const HomePage = ({
             </div>
             <HomeSessionScatterChart
               data={sessionScatter}
-              loading={chartsLoading}
+              loading={campaignsLoading}
             />
-            <HomeStatsBarChart data={barChartRows} loading={chartsLoading} />
+            <HomeStatsBarChart data={barChartRows} loading={barChartLoading} />
             <div className="hero-art-label">
               <div className="hero-art-label-title">STAND USERS</div>
               <div className="hero-art-label-sub">
