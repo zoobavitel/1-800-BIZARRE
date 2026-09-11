@@ -24,11 +24,12 @@ export default function HomeCardThumb({ src, label, className, style }) {
   const show = Boolean(safeSrc) && !broken;
   const initial = String(label || "?").trim().charAt(0).toUpperCase() || "?";
   return (
-    <div className={className} style={style} aria-hidden="true">
+    <div className={className} style={style}>
       {show ? (
         <img
           src={safeSrc}
           alt=""
+          aria-hidden="true"
           loading="lazy"
           decoding="async"
           referrerPolicy="no-referrer"
@@ -40,12 +41,21 @@ export default function HomeCardThumb({ src, label, className, style }) {
           }
         />
       ) : (
-        <span className={className ? `${className}-ph` : undefined} style={!className ? {
-          fontSize: 28,
-          fontWeight: "bold",
-          color: "var(--text-dim)",
-          lineHeight: 1,
-        } : undefined}>
+        <span
+          className={className ? `${className}-ph` : undefined}
+          role="img"
+          aria-label={String(label || initial).trim() || "?"}
+          style={
+            !className
+              ? {
+                  fontSize: 28,
+                  fontWeight: "bold",
+                  color: "var(--text-dim)",
+                  lineHeight: 1,
+                }
+              : undefined
+          }
+        >
           {initial}
         </span>
       )}

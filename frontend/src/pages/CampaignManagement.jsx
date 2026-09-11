@@ -252,6 +252,7 @@ function CampaignListCard({ campaign: c, user, onSelect }) {
   const visibleOthers = others.slice(0, 5);
   const overflow = Math.max(0, others.length - visibleOthers.length);
   const playerCount = (c.players || []).length;
+  const characterCount = roster.length;
   const imageSrc = resolveMediaUrl(c.image);
   const myPortrait = myChar ? getCharacterPortraitSrc(myChar) : null;
   const handleCardKeyDown = (e) => {
@@ -454,7 +455,8 @@ function CampaignListCard({ campaign: c, user, onSelect }) {
             <span />
           )}
           <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
-            {playerCount} player{playerCount !== 1 ? "s" : ""}
+            {playerCount} player{playerCount !== 1 ? "s" : ""} • {characterCount}{" "}
+            character{characterCount !== 1 ? "s" : ""}
           </span>
         </div>
       </div>
