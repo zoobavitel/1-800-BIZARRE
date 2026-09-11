@@ -32,33 +32,8 @@ import HomeSessionScatterChart from "../components/home/HomeSessionScatterChart"
 import HomeStatsBarChart from "../components/home/HomeStatsBarChart";
 import HomeStandCoin from "../components/home/HomeStandCoin";
 import HomeFactionInlineEditor from "../components/home/HomeFactionInlineEditor";
+import HomeCardThumb from "../components/home/HomeCardThumb";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
-
-/** Fixed-size card portrait slot; placeholder when missing/broken. */
-function HomeCardThumb({ src, label, className }) {
-  const [broken, setBroken] = useState(false);
-  useEffect(() => {
-    setBroken(false);
-  }, [src]);
-  const show = Boolean(src) && !broken;
-  const initial = String(label || "?").trim().charAt(0).toUpperCase() || "?";
-  return (
-    <div className={className} aria-hidden="true">
-      {show ? (
-        <img
-          src={src}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          referrerPolicy="no-referrer"
-          onError={() => setBroken(true)}
-        />
-      ) : (
-        <span className={`${className}-ph`}>{initial}</span>
-      )}
-    </div>
-  );
-}
 
 /** Hero “tradition” pills: short blurbs for home only (not rules text). */
 const HERO_PILLS = [
