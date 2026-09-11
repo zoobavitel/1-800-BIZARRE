@@ -11,7 +11,7 @@ from django.db.models import Q, Count
 
 from ..models import (
     Character, Campaign, NPC, Crew, Heritage, Vice, Ability,
-    StandAbility, HamonAbility, SpinAbility,
+    StandAbility, HamonAbility, SpinAbility, Session,
 )
 from .character_views import _character_queryset_for_user
 
@@ -30,10 +30,60 @@ def _merge_playbook_counts(queryset):
     return out
 
 
+def _character_has_any_progress(character):
+    """True when a sheet has content beyond a blank 'New Character' shell."""
+    if (character.stand_name or '').strip():
+        return True
+    if character.heritage_id:
+        return True
+    if (character.background_note or '').strip():
+        return True
+    if (character.appearance or '').strip():
+        return True
+    if character.vice_id:
+        return True
+    if character.crew_id or (character.personal_crew_name or '').strip():
+        return True
+    if (character.stress or 0) > 0:
+        return True
+    if (character.total_xp_spent or 0) > 0:
+        return True
+    dots = character.action_dots or {}
+    if any(int(v or 0) > 0 for v in dots.values()):
+        return True
+    if character.standard_abilities.exists():
+        return True
+    if character.hamon_abilities.exists():
+        return True
+    if character.spin_abilities.exists():
+        return True
+    extra = character.extra_custom_abilities or []
+    if isinstance(extra, list) and len(extra) > 0:
+        return True
+    if character.progress_clocks.exists():
+        return True
+    xp_clocks = character.xp_clocks or {}
+    if isinstance(xp_clocks, dict) and any(int(v or 0) > 0 for v in xp_clocks.values()):
+        return True
+    return False
+
+
+def _is_placeholder_pc(character):
+    if (character.true_name or '').strip().lower() != 'new character':
+        return False
+    return not _character_has_any_progress(character)
+
+
+def _count_real_pcs():
+    return sum(
+        1 for c in Character.objects.all().iterator() if not _is_placeholder_pc(c)
+    )
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def site_stats(request):
-    """Aggregate site-wide stats: playbooks (PCs + NPCs) and top heritages."""
+    """Aggregate site-wide stats: counts, playbooks (PCs + NPCs), top heritages."""
     playbook_counts = _merge_playbook_counts(Character.objects.all())
     npc_pb = _merge_playbook_counts(NPC.objects.all())
     for k in playbook_counts:
@@ -62,6 +112,11 @@ def site_stats(request):
 
     return Response(
         {
+            'active_campaigns': Campaign.objects.filter(is_active=True).count(),
+            'session_count': Session.objects.count(),
+            'crew_count': Crew.objects.count(),
+            'pc_count': _count_real_pcs(),
+            'npc_count': NPC.objects.count(),
             'playbook_counts': playbook_counts,
             'top_heritages': top_heritages,
         }
