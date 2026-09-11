@@ -2,7 +2,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
-from django.db.models.signals import post_save, pre_save
+from django.db.models.signals import post_save, pre_save, post_delete
 from django.dispatch import receiver
 from django.utils import timezone
 import json
@@ -474,6 +474,14 @@ class NPC(models.Model):
     faction = models.ForeignKey(
         Faction, on_delete=models.SET_NULL, null=True, blank=True, related_name="npcs"
     )
+    crew = models.ForeignKey(
+        "Crew",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="npc_members",
+        help_text="Optional player crew this NPC belongs to (independent of faction).",
+    )
     image = models.FileField(upload_to="npc_images/", null=True, blank=True)
     image_url = models.URLField(max_length=500, blank=True, default="")
 
@@ -492,6 +500,14 @@ class NPC(models.Model):
     contacts = models.JSONField(default=list, blank=True)
     faction_status = models.JSONField(default=dict, blank=True)
     inventory = models.JSONField(default=list, blank=True)
+    crew_standing = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "This NPC's personal standing toward player crews (-3 to +3), "
+            "keyed by crew id string."
+        ),
+    )
 
     # Stand abilities (narrative descriptions; frontend sends array of {id, name, type, description})
     abilities = models.JSONField(default=list, blank=True)
@@ -1613,6 +1629,18 @@ def log_crew_changes(sender, instance, created, **kwargs):
 
     if hasattr(instance, "_crew_history_prev_snapshot"):
         del instance._crew_history_prev_snapshot
+
+
+@receiver(post_delete, sender=Crew)
+def prune_npc_crew_standing_on_crew_delete(sender, instance, **kwargs):
+    """Drop stale crew_standing keys when a crew is deleted."""
+    key = str(instance.pk)
+    for npc in NPC.objects.filter(campaign_id=instance.campaign_id).iterator():
+        standing = npc.crew_standing if isinstance(npc.crew_standing, dict) else {}
+        if key not in standing:
+            continue
+        next_standing = {k: v for k, v in standing.items() if k != key}
+        NPC.objects.filter(pk=npc.pk).update(crew_standing=next_standing)
 
 
 class Stand(models.Model):

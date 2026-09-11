@@ -8,7 +8,10 @@ import {
   experienceTrackerAPI,
   xpHistoryAPI,
   npcAPI,
+  equipmentAPI,
+  normalizeCharacterInventory,
 } from "../features/character-sheet";
+import CharacterSheetInventoryList from "../features/character-sheet/components/CharacterSheetInventoryList";
 import {
   markNpcAutosaveBusyCollision,
   takeNpcAutosavePending,
@@ -19,7 +22,26 @@ import {
 } from "../features/character-sheet/utils/npcHeritageDefaults";
 import { HistoryBranchIcon } from "../components/position-effect/PositionEffectIndicators";
 import NpcsStandCoin from "../components/NpcsStandCoin";
+import AvatarCropModal from "../components/AvatarCropModal";
 import { clockWedgeFillColor } from "../features/character-sheet/utils/progressClockSegments";
+import "./NPCSheet.css";
+
+function clampCrewStandingValue(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return 0;
+  return Math.max(-3, Math.min(3, Math.trunc(v)));
+}
+
+function normalizeCrewStandingLocal(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [k, v] of Object.entries(raw)) {
+    const sk = String(k).trim();
+    if (!sk || !/^\d+$/.test(sk)) continue;
+    out[sk] = clampCrewStandingValue(v);
+  }
+  return out;
+}
 
 // ─── SRD Data Tables ──────────────────────────────────────────────────────────
 
@@ -607,20 +629,28 @@ const NPCSheet = ({
   }, [npc?.id, npc?.name]);
   const [role, setRole] = useState(npc?.role || "");
   const [notes, setNotes] = useState(npc?.notes || "");
-  const [inventoryNotes, setInventoryNotes] = useState(
-    npc?.inventory_notes ?? "",
-  );
   const [campaign, setCampaign] = useState(npc?.campaign || "");
   const [faction, setFaction] = useState(npc?.faction ?? npc?.faction_id ?? "");
+  const [crew, setCrew] = useState(npc?.crew ?? npc?.crew_id ?? "");
+  const [crewStanding, setCrewStanding] = useState(() =>
+    normalizeCrewStandingLocal(npc?.crew_standing),
+  );
 
   useEffect(() => {
     setFaction(npc?.faction ?? npc?.faction_id ?? "");
   }, [npc?.id, npc?.faction, npc?.faction_id]);
 
   useEffect(() => {
+    setCrew(npc?.crew ?? npc?.crew_id ?? "");
+  }, [npc?.id, npc?.crew, npc?.crew_id]);
+
+  useEffect(() => {
     setNotes(npc?.notes || "");
-    setInventoryNotes(npc?.inventory_notes ?? "");
-  }, [npc?.id, npc?.notes, npc?.inventory_notes]);
+  }, [npc?.id, npc?.notes]);
+
+  useEffect(() => {
+    setCrewStanding(normalizeCrewStandingLocal(npc?.crew_standing));
+  }, [npc?.id, npc?.crew_standing]);
 
   const campaignId = typeof campaign === "object" ? campaign?.id : campaign;
   const activeCampaign = useMemo(
@@ -630,6 +660,29 @@ const NPCSheet = ({
         : null,
     [campaigns, campaignId],
   );
+
+  const campaignCrews = useMemo(
+    () => (Array.isArray(activeCampaign?.crews) ? activeCampaign.crews : []),
+    [activeCampaign?.crews],
+  );
+
+  const currentCrewId = useMemo(() => {
+    if (crew === "" || crew == null) return null;
+    if (typeof crew === "object") return crew?.id ?? null;
+    const n = Number(crew);
+    return Number.isFinite(n) ? n : null;
+  }, [crew]);
+
+  // Drop crew if campaign changed and crew is not in the new campaign.
+  useEffect(() => {
+    if (currentCrewId == null) return;
+    if (campaignId == null || campaignId === "") {
+      setCrew("");
+      return;
+    }
+    const ok = campaignCrews.some((c) => Number(c.id) === Number(currentCrewId));
+    if (!ok) setCrew("");
+  }, [campaignId, campaignCrews, currentCrewId]);
 
   const currentFactionId = useMemo(() => {
     if (faction === "" || faction == null) return null;
@@ -969,7 +1022,16 @@ const NPCSheet = ({
   const [factionStatus, setFactionStatus] = useState(
     npc?.faction_status || npc?.factionStatus || {},
   );
-  const [inventory, setInventory] = useState(npc?.inventory || []);
+  const [inventory, setInventory] = useState(() =>
+    normalizeCharacterInventory(npc?.inventory),
+  );
+
+  // Sync inventory only when switching NPCs (not after every autosave — avoids wiping mid-edit drafts).
+  useEffect(() => {
+    setInventory(normalizeCharacterInventory(npc?.inventory));
+    // Intentionally omit npc.inventory: mid-edit autosave must not reset local drafts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- npc?.id only
+  }, [npc?.id]);
 
   const [stats, setStats] = useState(() => {
     const scs = npc?.stand_coin_stats ?? npc?.stats;
@@ -1188,7 +1250,66 @@ const NPCSheet = ({
   const [imagePreview, setImagePreview] = useState(
     npc?.image || npc?.image_url || "",
   );
+  const [cropOpen, setCropOpen] = useState(false);
+  const [portraitPreviewError, setPortraitPreviewError] = useState(false);
   const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    setPortraitPreviewError(false);
+  }, [imagePreview]);
+
+  const handlePromoteItemToCampaign = useCallback(
+    async (item) => {
+      const cid =
+        campaignId != null && campaignId !== ""
+          ? parseInt(String(campaignId), 10)
+          : NaN;
+      if (!Number.isFinite(cid)) return;
+      if (!String(item?.name || "").trim()) return;
+      try {
+        await equipmentAPI.fromKitItem({
+          campaign: cid,
+          name: item.name,
+          detail: item.detail,
+          category: item.category,
+          load: item.load,
+          quality: item.quality,
+          coin_value: item.coin_value,
+        });
+      } catch (err) {
+        console.error("Promote to campaign library failed:", err);
+      }
+    },
+    [campaignId],
+  );
+
+  const handlePublishItemToSite = useCallback(
+    async (item) => {
+      const cid =
+        campaignId != null && campaignId !== ""
+          ? parseInt(String(campaignId), 10)
+          : NaN;
+      if (!Number.isFinite(cid)) return;
+      if (!String(item?.name || "").trim()) return;
+      try {
+        const created = await equipmentAPI.fromKitItem({
+          campaign: cid,
+          name: item.name,
+          detail: item.detail,
+          category: item.category,
+          load: item.load,
+          quality: item.quality,
+          coin_value: item.coin_value,
+        });
+        const scope = String(created?.scope || "").toUpperCase();
+        if (scope === "TEMPLATE" || scope === "SITE") return;
+        if (created?.id) await equipmentAPI.publishToSite(created.id);
+      } catch (err) {
+        console.error("Publish to site catalog failed:", err);
+      }
+    },
+    [campaignId],
+  );
 
   // Auto-save state
   const [saveStatus, setSaveStatus] = useState(null);
@@ -1384,6 +1505,21 @@ const NPCSheet = ({
     }
   }, []);
 
+  const handleCropApply = useCallback((file) => {
+    if (imagePreview && String(imagePreview).startsWith("blob:")) {
+      try {
+        URL.revokeObjectURL(imagePreview);
+      } catch {
+        /* ignore */
+      }
+    }
+    setImageFile(file);
+    setImageUrl("");
+    setImagePreview(URL.createObjectURL(file));
+    setPortraitPreviewError(false);
+    setCropOpen(false);
+  }, [imagePreview]);
+
   // ── Derived ──────────────────────────────────────────────────────────────────
 
   const totalPoints = Object.values(stats).reduce(
@@ -1521,7 +1657,6 @@ const NPCSheet = ({
       stand_name: standName,
       role,
       notes,
-      inventory_notes: inventoryNotes,
       heritage: heritage || null,
       playbook,
       stand_coin_stats: {
@@ -1545,10 +1680,12 @@ const NPCSheet = ({
       selected_detriments: selectedDetrimentIds,
       campaign: campaign || null,
       faction: faction || null,
+      crew: crew || null,
       image_url: imageUrl,
       contacts,
       faction_status: factionStatus,
       inventory,
+      crew_standing: normalizeCrewStandingLocal(crewStanding),
       ...(imageFile ? { imageFile } : {}),
       ...(!imageFile && imageUrl ? { image: null } : {}),
     }),
@@ -1557,7 +1694,6 @@ const NPCSheet = ({
       standName,
       role,
       notes,
-      inventoryNotes,
       heritage,
       playbook,
       stats,
@@ -1574,11 +1710,13 @@ const NPCSheet = ({
       selectedDetrimentIds,
       campaign,
       faction,
+      crew,
       imageUrl,
       imageFile,
       contacts,
       factionStatus,
       inventory,
+      crewStanding,
     ],
   );
 
@@ -1672,7 +1810,6 @@ const NPCSheet = ({
     standName,
     role,
     notes,
-    inventoryNotes,
     heritage,
     playbook,
     stats,
@@ -1689,11 +1826,13 @@ const NPCSheet = ({
     selectedDetrimentIds,
     campaign,
     faction,
+    crew,
     imageUrl,
     imageFile,
     contacts,
     factionStatus,
     inventory,
+    crewStanding,
     runNpcAutosave,
   ]);
 
@@ -1764,8 +1903,8 @@ const NPCSheet = ({
       border: "none",
       fontFamily: "monospace",
     },
-    g2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "12px" },
-    g3: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "12px" },
+    g2: { display: "grid", gap: "12px" },
+    g3: { display: "grid", gap: "12px" },
     ref: {
       background: "#0a0a14",
       border: "1px solid #1f1f3a",
@@ -1817,7 +1956,7 @@ const NPCSheet = ({
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div style={S.page}>
+    <div className="npc-sheet" style={S.page}>
       {/* ── Header ── */}
       <div style={S.hdr}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -2243,7 +2382,7 @@ const NPCSheet = ({
         ))}
       </div>
 
-      <div style={{ padding: "16px", maxWidth: "1400px", margin: "0 auto" }}>
+      <div className="npc-sheet-body">
         {activeMode === "NPC" && (
           <>
             {/* ── Identity Bar ── */}
@@ -2276,6 +2415,9 @@ const NPCSheet = ({
                       <img
                         src={imagePreview}
                         alt=""
+                        crossOrigin="anonymous"
+                        onError={() => setPortraitPreviewError(true)}
+                        onLoad={() => setPortraitPreviewError(false)}
                         style={{
                           width: "100%",
                           height: "100%",
@@ -2288,7 +2430,7 @@ const NPCSheet = ({
                       </span>
                     )}
                   </div>
-                  <div style={{ display: "flex", gap: "4px" }}>
+                  <div style={{ display: "flex", gap: "4px", flexWrap: "wrap", justifyContent: "center" }}>
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -2320,19 +2462,36 @@ const NPCSheet = ({
                     >
                       URL
                     </button>
+                    <button
+                      type="button"
+                      disabled={!imagePreview || portraitPreviewError}
+                      onClick={() => setCropOpen(true)}
+                      style={{
+                        ...S.btn,
+                        fontSize: "9px",
+                        padding: "2px 6px",
+                        background: "#1f1035",
+                        color: "#a78bfa",
+                        opacity: !imagePreview || portraitPreviewError ? 0.5 : 1,
+                        cursor:
+                          !imagePreview || portraitPreviewError
+                            ? "not-allowed"
+                            : "pointer",
+                      }}
+                    >
+                      Crop
+                    </button>
                   </div>
+                  {cropOpen && imagePreview && !portraitPreviewError ? (
+                    <AvatarCropModal
+                      imageSrc={imagePreview}
+                      onCancel={() => setCropOpen(false)}
+                      onApply={handleCropApply}
+                    />
+                  ) : null}
                 </div>
                 {/* Fields */}
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
-                    gap: "16px",
-                    alignItems: "end",
-                    flex: 1,
-                    minWidth: 0,
-                  }}
-                >
+                <div className="npc-sheet-fields-grid">
                   <div>
                     <span style={S.lbl}>NPC Name / User Name</span>
                     <input
@@ -2382,7 +2541,7 @@ const NPCSheet = ({
                     </select>
                   </div>
                   <div>
-                    <span style={S.lbl}>Crew / Faction</span>
+                    <span style={S.lbl}>Faction</span>
                     <select
                       style={{ ...S.sel, width: "100%" }}
                       value={faction || ""}
@@ -2470,6 +2629,27 @@ const NPCSheet = ({
                       </div>
                     )}
                   </div>
+                  {campaignId != null && campaignId !== "" ? (
+                    <div>
+                      <span style={S.lbl}>Player Crew</span>
+                      <select
+                        style={{ ...S.sel, width: "100%" }}
+                        value={crew || ""}
+                        onChange={(e) =>
+                          setCrew(
+                            e.target.value ? parseInt(e.target.value, 10) : "",
+                          )
+                        }
+                      >
+                        <option value="">— None —</option>
+                        {campaignCrews.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
                   <div style={{ textAlign: "center", minWidth: "100px" }}>
                     <span style={S.lbl}>NPC LEVEL</span>
                     <div
@@ -2508,14 +2688,7 @@ const NPCSheet = ({
                   </div>
                 </div>
                 {/* Heritage + NPC Type row */}
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: "16px",
-                    marginTop: "12px",
-                  }}
-                >
+                <div className="npc-sheet-two-col">
                   <div>
                     <span style={S.lbl}>Heritage</span>
                     <select
@@ -2554,7 +2727,7 @@ const NPCSheet = ({
               </div>
             </div>
 
-            <div style={S.g2}>
+            <div className="npc-sheet-g2" style={S.g2}>
               {/* ════ LEFT — Stats + Reference ════ */}
               <div>
                 {/* Stand Coin Stats — Stand-playbook NPCs only */}
@@ -3918,6 +4091,125 @@ const NPCSheet = ({
                   </div>
                 </div>
 
+                {campaignId != null &&
+                campaignId !== "" &&
+                campaignCrews.length > 0 ? (
+                  <div style={S.card}>
+                    <span style={S.lbl}>Player Crew Standing</span>
+                    <div style={{ marginBottom: "8px" }}>
+                      {campaignCrews.map((c) => {
+                        const key = String(c.id);
+                        const value = clampCrewStandingValue(
+                          crewStanding[key] ?? 0,
+                        );
+                        const isMember = Number(currentCrewId) === Number(c.id);
+                        return (
+                          <div
+                            key={c.id}
+                            style={{
+                              display: "flex",
+                              gap: "6px",
+                              marginBottom: "6px",
+                              alignItems: "center",
+                            }}
+                          >
+                            <span
+                              style={{
+                                flex: 1,
+                                fontSize: "12px",
+                                color: "#d1d5db",
+                              }}
+                            >
+                              {c.name}
+                              {isMember ? (
+                                <span
+                                  style={{
+                                    marginLeft: "6px",
+                                    fontSize: "10px",
+                                    color: "#a78bfa",
+                                    border: "1px solid #4b2d8f",
+                                    borderRadius: "4px",
+                                    padding: "1px 6px",
+                                  }}
+                                >
+                                  Crew member
+                                </span>
+                              ) : null}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCrewStanding((p) => ({
+                                  ...p,
+                                  [key]: clampCrewStandingValue(
+                                    (p[key] ?? 0) - 1,
+                                  ),
+                                }))
+                              }
+                              style={{
+                                ...S.btn,
+                                padding: "1px 6px",
+                                background: "#7f1d1d",
+                                color: "#fca5a5",
+                                fontSize: "11px",
+                              }}
+                            >
+                              −
+                            </button>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                width: "28px",
+                                textAlign: "center",
+                                fontWeight: "bold",
+                                fontSize: "13px",
+                                color:
+                                  value > 0
+                                    ? "#34d399"
+                                    : value < 0
+                                      ? "#f87171"
+                                      : "#9ca3af",
+                              }}
+                            >
+                              {value > 0 ? `+${value}` : value}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCrewStanding((p) => ({
+                                  ...p,
+                                  [key]: clampCrewStandingValue(
+                                    (p[key] ?? 0) + 1,
+                                  ),
+                                }))
+                              }
+                              style={{
+                                ...S.btn,
+                                padding: "1px 6px",
+                                background: "#14532d",
+                                color: "#86efac",
+                                fontSize: "11px",
+                              }}
+                            >
+                              +
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div
+                      style={{
+                        marginTop: "6px",
+                        fontSize: "10px",
+                        color: "#6b7280",
+                      }}
+                    >
+                      −3 War · −2 Hostile · −1 Interfering · 0 Neutral · +1
+                      Helpful · +2 Friendly · +3 Allied
+                    </div>
+                  </div>
+                ) : null}
+
                 {/* Healing and Recovery — GM reference (no PC-style dice pool on NPCs) */}
                 <div style={S.card}>
                   <span style={S.lbl}>Healing and recovery</span>
@@ -4617,27 +4909,26 @@ const NPCSheet = ({
                     }}
                   />
                 </div>
-                {/* Inventory (free text) */}
+                {/* Inventory — structured kit (same field as CREW mode when no faction) */}
                 <div style={S.card}>
                   <span style={S.lbl}>INVENTORY</span>
-                  <textarea
-                    value={inventoryNotes}
-                    onChange={(e) => setInventoryNotes(e.target.value)}
-                    placeholder="Gear, valuables, evidence, vehicles, anything they carry…"
-                    style={{
-                      width: "100%",
-                      height: "120px",
-                      background: "#0a0a14",
-                      color: "#d1d5db",
-                      border: "1px solid #2d1f52",
-                      padding: "8px",
-                      fontFamily: "monospace",
-                      fontSize: "12px",
-                      resize: "vertical",
-                      boxSizing: "border-box",
-                      outline: "none",
-                    }}
-                  />
+                  <div style={{ minWidth: 0 }}>
+                    <CharacterSheetInventoryList
+                      panelId="npc-sheet-inventory-panel"
+                      inventory={inventory}
+                      readOnly={false}
+                      allowArmor={false}
+                      campaignId={campaignId}
+                      isGM={isGM}
+                      onChange={setInventory}
+                      onPromoteToCampaign={
+                        isGM ? handlePromoteItemToCampaign : undefined
+                      }
+                      onPublishToSite={
+                        isGM ? handlePublishItemToSite : undefined
+                      }
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -4681,7 +4972,7 @@ const NPCSheet = ({
                 )}
               </div>
               <div style={{ marginTop: "8px" }}>
-                <span style={S.lbl}>CREW / FACTION</span>
+                <span style={S.lbl}>Faction</span>
                 <select
                   style={{ ...S.sel, width: "100%" }}
                   value={faction || ""}
@@ -4778,6 +5069,27 @@ const NPCSheet = ({
                   management)
                 </div>
               </div>
+              {campaignId != null && campaignId !== "" ? (
+                <div style={{ marginTop: "8px" }}>
+                  <span style={S.lbl}>Player Crew</span>
+                  <select
+                    style={{ ...S.sel, width: "100%" }}
+                    value={crew || ""}
+                    onChange={(e) =>
+                      setCrew(
+                        e.target.value ? parseInt(e.target.value, 10) : "",
+                      )
+                    }
+                  >
+                    <option value="">— None —</option>
+                    {campaignCrews.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
             </div>
 
             {/* Faction Identity Panel — only shown when a faction is selected */}
@@ -4794,7 +5106,7 @@ const NPCSheet = ({
                     </span>
                   )}
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 2fr 1fr 1fr 1fr", gap: "12px" }}>
+                <div className="npc-sheet-crew-faction-grid">
                   <div>
                     <span style={S.lbl}>Faction Name</span>
                     <input
@@ -4869,7 +5181,7 @@ const NPCSheet = ({
               </div>
             )}
 
-            <div style={S.g2}>
+            <div className="npc-sheet-g2" style={S.g2}>
               {/* Contacts */}
               <div style={S.card}>
                 <span style={S.lbl}>CONTACTS / ASSOCIATES</span>
@@ -5148,61 +5460,74 @@ const NPCSheet = ({
               </div>
             </div>
 
-            {/* Inventory */}
+            {/* Inventory — NPC.inventory when no faction; Faction.inventory when faction selected */}
             <div style={S.card}>
               <span style={S.lbl}>INVENTORY</span>
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "6px",
-                  marginBottom: "8px",
-                }}
-              >
-                {(faction ? factionInventory : inventory).map((item, i) => (
+              {!faction ? (
+                <div style={{ minWidth: 0 }}>
+                  <CharacterSheetInventoryList
+                    panelId="npc-sheet-crew-mode-inventory-panel"
+                    inventory={inventory}
+                    readOnly={false}
+                    allowArmor={false}
+                    campaignId={campaignId}
+                    isGM={isGM}
+                    onChange={setInventory}
+                    onPromoteToCampaign={
+                      isGM ? handlePromoteItemToCampaign : undefined
+                    }
+                    onPublishToSite={
+                      isGM ? handlePublishItemToSite : undefined
+                    }
+                  />
+                </div>
+              ) : (
+                <>
                   <div
-                    key={i}
                     style={{
                       display: "flex",
-                      gap: "4px",
-                      alignItems: "center",
-                      background: "#1f1035",
-                      padding: "4px 8px",
-                      borderRadius: "4px",
-                      border: "1px solid #2d1f52",
+                      flexWrap: "wrap",
+                      gap: "6px",
+                      marginBottom: "8px",
                     }}
                   >
-                    <input
-                      value={item.name}
-                      placeholder="Item"
-                      onChange={(e) =>
-                        faction
-                          ? setFactionInventory((p) =>
+                    {factionInventory.map((item, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          display: "flex",
+                          gap: "4px",
+                          alignItems: "center",
+                          background: "#1f1035",
+                          padding: "4px 8px",
+                          borderRadius: "4px",
+                          border: "1px solid #2d1f52",
+                        }}
+                      >
+                        <input
+                          value={item.name}
+                          placeholder="Item"
+                          onChange={(e) =>
+                            setFactionInventory((p) =>
                               p.map((x, j) =>
                                 j === i ? { ...x, name: e.target.value } : x,
                               ),
                             )
-                          : setInventory((p) =>
-                              p.map((x, j) =>
-                                j === i ? { ...x, name: e.target.value } : x,
-                              ),
-                            )
-                      }
-                      style={{
-                        ...S.inp,
-                        width: "120px",
-                        borderBottom: "none",
-                        fontSize: "12px",
-                      }}
-                    />
-                    <input
-                      value={item.qty != null ? item.qty : ""}
-                      placeholder="#"
-                      type="number"
-                      min="0"
-                      onChange={(e) =>
-                        faction
-                          ? setFactionInventory((p) =>
+                          }
+                          style={{
+                            ...S.inp,
+                            width: "120px",
+                            borderBottom: "none",
+                            fontSize: "12px",
+                          }}
+                        />
+                        <input
+                          value={item.qty != null ? item.qty : ""}
+                          placeholder="#"
+                          type="number"
+                          min="0"
+                          onChange={(e) =>
+                            setFactionInventory((p) =>
                               p.map((x, j) =>
                                 j === i
                                   ? {
@@ -5215,74 +5540,51 @@ const NPCSheet = ({
                                   : x,
                               ),
                             )
-                          : setInventory((p) =>
-                              p.map((x, j) =>
-                                j === i
-                                  ? {
-                                      ...x,
-                                      qty:
-                                        e.target.value === ""
-                                          ? null
-                                          : Number(e.target.value),
-                                    }
-                                  : x,
-                              ),
+                          }
+                          style={{
+                            ...S.inp,
+                            width: "36px",
+                            borderBottom: "none",
+                            fontSize: "12px",
+                            textAlign: "center",
+                          }}
+                        />
+                        <button
+                          onClick={() =>
+                            setFactionInventory((p) =>
+                              p.filter((_, j) => j !== i),
                             )
-                      }
-                      style={{
-                        ...S.inp,
-                        width: "36px",
-                        borderBottom: "none",
-                        fontSize: "12px",
-                        textAlign: "center",
-                      }}
-                    />
-                    <button
-                      onClick={() =>
-                        faction
-                          ? setFactionInventory((p) => p.filter((_, j) => j !== i))
-                          : setInventory((p) => p.filter((_, j) => j !== i))
-                      }
-                      style={{
-                        color: "#f87171",
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                      }}
-                    >
-                      ✕
-                    </button>
+                          }
+                          style={{
+                            color: "#f87171",
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              <button
-                onClick={() =>
-                  faction
-                    ? setFactionInventory((p) => [...p, { name: "", qty: 1 }])
-                    : setInventory((p) => [
-                        ...p,
-                        {
-                          name: "",
-                          qty: 1,
-                          load: 1,
-                          quality: 1,
-                          category: "other",
-                          detail: "",
-                        },
-                      ])
-                }
-                style={{
-                  ...S.btn,
-                  border: "2px dashed #374151",
-                  background: "transparent",
-                  color: "#6b7280",
-                  width: "100%",
-                  padding: "6px",
-                }}
-              >
-                + Add Item
-              </button>
+                  <button
+                    onClick={() =>
+                      setFactionInventory((p) => [...p, { name: "", qty: 1 }])
+                    }
+                    style={{
+                      ...S.btn,
+                      border: "2px dashed #374151",
+                      background: "transparent",
+                      color: "#6b7280",
+                      width: "100%",
+                      padding: "6px",
+                    }}
+                  >
+                    + Add Item
+                  </button>
+                </>
+              )}
             </div>
 
             {/* Crew Notes */}

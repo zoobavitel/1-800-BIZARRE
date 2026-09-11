@@ -52,6 +52,7 @@ from .models import (
 
 from .services.playbook_xp_archetype import normalize_playbook_xp_archetypes
 from .services.inventory import normalize_inventory_list
+from .services.crew_standing import normalize_crew_standing
 from .services.loadout import (
     apply_loadout_side_effects,
     merge_loadout_map,
@@ -2615,7 +2616,6 @@ class CrewCampaignSerializer(serializers.ModelSerializer):
     """Lightweight Crew serializer used inside CampaignSerializer."""
 
     members = CharacterSummarySerializer(many=True, read_only=True)
-
     class Meta:
         model = Crew
         fields = [
@@ -3278,7 +3278,81 @@ class NPCSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
-        return apply_portrait_exclusivity(self, attrs)
+        attrs = apply_portrait_exclusivity(self, attrs)
+
+        campaign = attrs.get("campaign", serializers.empty)
+        if campaign is serializers.empty:
+            campaign = self.instance.campaign if self.instance else None
+        elif campaign is not None and not hasattr(campaign, "id"):
+            try:
+                campaign = Campaign.objects.get(pk=campaign)
+            except Campaign.DoesNotExist:
+                campaign = None
+
+        crew_provided = "crew" in attrs
+        crew = attrs.get("crew", serializers.empty)
+        if crew is serializers.empty:
+            crew = self.instance.crew if self.instance else None
+        elif crew is not None and not hasattr(crew, "id"):
+            try:
+                crew = Crew.objects.get(pk=crew)
+            except Crew.DoesNotExist:
+                crew = None
+
+        # Crew must belong to the same campaign (partial PATCH falls back to instance).
+        if crew is not None:
+            if campaign is None:
+                if crew_provided:
+                    raise serializers.ValidationError(
+                        {
+                            "crew": (
+                                "Assign the NPC to a campaign before joining a crew."
+                            )
+                        }
+                    )
+                # Campaign cleared without an explicit crew — drop prior crew.
+                attrs["crew"] = None
+            else:
+                c_id = campaign.id if hasattr(campaign, "id") else campaign
+                if crew.campaign_id != c_id:
+                    if crew_provided:
+                        raise serializers.ValidationError(
+                            {
+                                "crew": (
+                                    "Crew must belong to the same campaign as the NPC."
+                                )
+                            }
+                        )
+                    # Campaign changed; prior crew no longer valid — clear it.
+                    attrs["crew"] = None
+                else:
+                    attrs["crew"] = crew
+        elif crew_provided:
+            attrs["crew"] = None
+
+        # Prune / clamp crew_standing to campaign crews.
+        valid_ids = None
+        if campaign is not None:
+            c_id = campaign.id if hasattr(campaign, "id") else campaign
+            valid_ids = list(
+                Crew.objects.filter(campaign_id=c_id).values_list("id", flat=True)
+            )
+        elif campaign is None and ("campaign" in attrs or "crew_standing" in attrs):
+            valid_ids = []
+
+        if "crew_standing" in attrs:
+            attrs["crew_standing"] = normalize_crew_standing(
+                attrs.get("crew_standing"), valid_crew_ids=valid_ids
+            )
+        elif valid_ids is not None and self.instance is not None:
+            # Campaign change: drop standing keys for crews not in the new campaign.
+            pruned = normalize_crew_standing(
+                self.instance.crew_standing or {}, valid_crew_ids=valid_ids
+            )
+            if pruned != (self.instance.crew_standing or {}):
+                attrs["crew_standing"] = pruned
+
+        return attrs
 
     def get_level(self, obj):
         return _compute_npc_level(obj.stand_coin_stats)
@@ -3322,6 +3396,7 @@ class NPCSerializer(serializers.ModelSerializer):
             "creator",
             "campaign",
             "faction",
+            "crew",
             "image",
             "image_url",
             "stand_description",
@@ -3336,6 +3411,7 @@ class NPCSerializer(serializers.ModelSerializer):
             "contacts",
             "faction_status",
             "inventory",
+            "crew_standing",
             "conflict_clocks",
             "alt_clocks",
             "heal_quality_fortune_dice",
@@ -3349,6 +3425,20 @@ class NPCSerializer(serializers.ModelSerializer):
         if "inventory" in validated_data:
             validated_data["inventory"] = normalize_inventory_list(
                 validated_data.get("inventory")
+            )
+        if "crew_standing" in validated_data:
+            campaign = validated_data.get("campaign")
+            valid_ids = (
+                list(
+                    Crew.objects.filter(campaign_id=campaign.id).values_list(
+                        "id", flat=True
+                    )
+                )
+                if campaign is not None
+                else []
+            )
+            validated_data["crew_standing"] = normalize_crew_standing(
+                validated_data.get("crew_standing"), valid_crew_ids=valid_ids
             )
         if "creator" not in validated_data:
             validated_data["creator"] = self.context["request"].user
