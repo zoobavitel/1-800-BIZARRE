@@ -1,0 +1,72 @@
+/* NPCSheet responsive layout — grid columns live here so media queries win. */
+
+.npc-sheet {
+  overflow-x: clip;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.npc-sheet-body {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.npc-sheet-g2 {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+}
+
+.npc-sheet-g2 > * {
+  min-width: 0;
+}
+
+.npc-sheet-g3 {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+}
+
+.npc-sheet-fields-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 110px), 1fr));
+  gap: 16px;
+  align-items: end;
+  flex: 1;
+  min-width: 0;
+}
+
+.npc-sheet-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.npc-sheet-crew-faction-grid {
+  display: grid;
+  grid-template-columns: 2fr 2fr 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 720px) {
+  .npc-sheet-body {
+    padding: 12px;
+  }
+
+  .npc-sheet-g2,
+  .npc-sheet-g3 {
+    grid-template-columns: 1fr;
+  }
+
+  .npc-sheet-two-col,
+  .npc-sheet-crew-faction-grid,
+  .npc-sheet-fields-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .npc-sheet-body {
+    padding: 8px;
+  }
+}
