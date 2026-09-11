@@ -2889,6 +2889,7 @@ class CampaignSerializer(serializers.ModelSerializer):
     gm = UserSerializer(read_only=True)
     players = UserSerializer(many=True, read_only=True)
     wanted_stars = serializers.IntegerField(required=False, default=0)
+    image = serializers.FileField(required=False, allow_null=True)
     factions = FactionSerializer(many=True, read_only=True)
     crews = CrewCampaignSerializer(many=True, read_only=True)
     campaign_characters = serializers.SerializerMethodField()
@@ -2917,6 +2918,9 @@ class CampaignSerializer(serializers.ModelSerializer):
     )
     progress_clocks = serializers.SerializerMethodField()
 
+    def validate_image(self, value):
+        return validate_portrait_upload(value)
+
     class Meta:
         model = Campaign
         fields = [
@@ -2925,6 +2929,7 @@ class CampaignSerializer(serializers.ModelSerializer):
             "gm",
             "players",
             "description",
+            "image",
             "wanted_stars",
             "is_active",
             "created_at",
