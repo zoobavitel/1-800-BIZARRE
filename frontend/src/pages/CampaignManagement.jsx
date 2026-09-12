@@ -20,6 +20,7 @@ import SessionGMManagementPanels from "../components/session/SessionGMManagement
 import ProgressClock from "../components/ProgressClock";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 import AvatarCropModal from "../components/AvatarCropModal";
+import HomeCardThumb from "../components/home/HomeCardThumb";
 import {
   getCharacterPortraitSrc,
   getUserAvatarSrc,
@@ -220,6 +221,246 @@ function RoleBadge({ role }) {
     >
       {role}
     </span>
+  );
+}
+
+const CAMPAIGN_LIST_THUMB = {
+  width: "100%",
+  aspectRatio: "16 / 9",
+  flexShrink: 0,
+  overflow: "hidden",
+  background: "rgba(255,255,255,0.06)",
+  borderBottom: "1px solid var(--border)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+};
+
+function CampaignListCard({ campaign: c, user, onSelect }) {
+  const isGM = c.gm?.id === user?.id;
+  const roster = c.campaign_characters || [];
+  const myChar = roster.find((cc) => cc.user_id === user?.id);
+  const others = [
+    ...(c.gm ? [c.gm] : []),
+    ...(c.players || []),
+  ].filter(
+    (p, i, arr) =>
+      p?.id != null &&
+      p.id !== user?.id &&
+      arr.findIndex((x) => x.id === p.id) === i,
+  );
+  const visibleOthers = others.slice(0, 5);
+  const overflow = Math.max(0, others.length - visibleOthers.length);
+  const playerCount = (c.players || []).length;
+  const characterCount = roster.length;
+  const imageSrc = resolveMediaUrl(c.image);
+  const myPortrait = myChar ? getCharacterPortraitSrc(myChar) : null;
+  const handleCardKeyDown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onSelect(c.id);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        ...S.card,
+        cursor: "pointer",
+        padding: 0,
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        marginBottom: 0,
+        height: "100%",
+      }}
+      onClick={() => onSelect(c.id)}
+      role="button"
+      tabIndex={0}
+      onKeyDown={handleCardKeyDown}
+    >
+      <HomeCardThumb
+        src={imageSrc}
+        label={c.name}
+        style={CAMPAIGN_LIST_THUMB}
+      />
+      <div
+        style={{
+          padding: "12px 14px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          flex: 1,
+          minWidth: 0,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 8,
+          }}
+        >
+          <div
+            style={{
+              fontWeight: "bold",
+              fontSize: 14,
+              lineHeight: 1.25,
+              minWidth: 0,
+            }}
+          >
+            {c.name || "Unnamed Campaign"}
+          </div>
+          <span
+            style={{
+              fontSize: 11,
+              color: "var(--border)",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            {c.created_at ? new Date(c.created_at).toLocaleDateString() : ""}
+          </span>
+        </div>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 6,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <StatusBadge active={c.is_active !== false} />
+          <RoleBadge role={isGM ? "GM" : "Player"} />
+        </div>
+
+        {c.description ? (
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--text-muted)",
+              lineHeight: 1.4,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+            title={c.description}
+          >
+            {c.description}
+          </div>
+        ) : null}
+
+        {isGM ? (
+          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+            Runs this campaign
+          </div>
+        ) : myChar ? (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              minWidth: 0,
+            }}
+          >
+            <HomeCardThumb
+              src={myPortrait}
+              label={myChar.true_name}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 4,
+                overflow: "hidden",
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid var(--border)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 10, color: "var(--text-dim)" }}>
+                Playing as
+              </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "var(--text-muted)",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {myChar.true_name || "Character"}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: "var(--text-dim)" }}>
+            No character assigned
+          </div>
+        )}
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 8,
+            marginTop: "auto",
+            paddingTop: 4,
+          }}
+        >
+          {visibleOthers.length > 0 ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              {visibleOthers.map((p) => {
+                const src = getUserAvatarSrc(p, {
+                  campaignCharacters: roster,
+                });
+                const initial = rosterUserInitial(p);
+                return (
+                  <HomeCardThumb
+                    key={p.id}
+                    src={src}
+                    label={p.username || initial}
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: "50%",
+                      overflow: "hidden",
+                      border: "1px solid var(--border)",
+                      background: "rgba(108,57,137,0.35)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: "#fff",
+                      flexShrink: 0,
+                    }}
+                  />
+                );
+              })}
+              {overflow > 0 && (
+                <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
+                  +{overflow}
+                </span>
+              )}
+            </div>
+          ) : (
+            <span />
+          )}
+          <span style={{ fontSize: 11, color: "var(--text-dim)" }}>
+            {playerCount} player{playerCount !== 1 ? "s" : ""} • {characterCount}{" "}
+            character{characterCount !== 1 ? "s" : ""}
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -6988,84 +7229,26 @@ export default function CampaignManagement({
             </button>
           </div>
         ) : (
-          campaigns.map((c) => {
-            const isGM = c.gm?.id === user?.id;
-            const charCount = (c.campaign_characters || []).length;
-            const playerCount = (c.players || []).length;
-            return (
-              <div
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns:
+                "repeat(auto-fill, minmax(min(100%, 260px), 1fr))",
+              gap: 12,
+            }}
+          >
+            {campaigns.map((c) => (
+              <CampaignListCard
                 key={c.id}
-                style={{ ...S.card, cursor: "pointer" }}
-                onClick={() => {
-                  setSelectedCampaignId(c.id);
-                  onCampaignSelect?.(c.id);
+                campaign={c}
+                user={user}
+                onSelect={(id) => {
+                  setSelectedCampaignId(id);
+                  onCampaignSelect?.(id);
                 }}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) =>
-                  e.key === "Enter" &&
-                  (setSelectedCampaignId(c.id), onCampaignSelect?.(c.id))
-                }
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                  }}
-                >
-                  <div>
-                    <div
-                      style={{
-                        fontWeight: "bold",
-                        fontSize: "14px",
-                        marginBottom: "4px",
-                      }}
-                    >
-                      {c.name || "Unnamed Campaign"}
-                    </div>
-                    {c.description && (
-                      <div
-                        style={{
-                          fontSize: "12px",
-                          color: "var(--text-muted)",
-                          marginBottom: "6px",
-                        }}
-                      >
-                        {c.description}
-                      </div>
-                    )}
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: "6px",
-                        alignItems: "center",
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <StatusBadge active={c.is_active !== false} />
-                      <RoleBadge role={isGM ? "GM" : "Player"} />
-                      <span style={{ fontSize: "11px", color: "var(--text-dim)" }}>
-                        {playerCount} player{playerCount !== 1 ? "s" : ""} |{" "}
-                        {charCount} character{charCount !== 1 ? "s" : ""}
-                      </span>
-                    </div>
-                  </div>
-                  <span
-                    style={{
-                      fontSize: "11px",
-                      color: "var(--border)",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {c.created_at
-                      ? new Date(c.created_at).toLocaleDateString()
-                      : ""}
-                  </span>
-                </div>
-              </div>
-            );
-          })
+              />
+            ))}
+          </div>
         )}
       </div>
     </div>
