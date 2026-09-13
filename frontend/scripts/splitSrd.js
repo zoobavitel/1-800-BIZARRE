@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Splits docs/1-(800)-BIZARRE SRD.md on top-level (#) headings into public/srd/<slug>.md
+ * Splits docs/1-(800)-BIZARRE SRD_DEV.md on top-level (#) headings into public/srd/<slug>.md
  * for per-section rules pages. Run from prebuild/prestart (via copySrd.js).
  */
 
@@ -8,7 +8,11 @@ const fs = require("fs");
 const path = require("path");
 
 const REPO_ROOT = path.resolve(__dirname, "../..");
-const SRD_SOURCE = path.join(REPO_ROOT, "docs", "1-(800)-BIZARRE SRD.md");
+const SRD_SOURCE = path.join(
+  REPO_ROOT,
+  "docs",
+  "1-(800)-BIZARRE SRD_DEV.md",
+);
 const OUT_DIR = path.join(__dirname, "../public/srd");
 const LEGACY_MONOLITH = path.join(__dirname, "../public/game-rules-srd.md");
 const RULES_NAV_PATH = path.join(__dirname, "../src/data/rulesNav.js");
@@ -16,6 +20,7 @@ const RULES_NAV_PATH = path.join(__dirname, "../src/data/rulesNav.js");
 /** Consecutive H1 subtitles or Resources/Downloads — fold into the previous section file. */
 const MERGE_INTO_PREVIOUS = new Set([
   "downloads",
+  "planning-equipment",
   "spin-mastery-the-playbooks-of-the-perfect-spin",
   "hamon-mastery-the-pulse-of-life",
 ]);
@@ -47,7 +52,7 @@ function splitIntoChunks(content) {
 
 function navSlugsFromSource(navSrc) {
   const slugs = [];
-  const re = /\bslug:\s*'([^']*)'/g;
+  const re = /\bslug:\s*["']([^"']*)["']/g;
   let m;
   while ((m = re.exec(navSrc)) !== null) {
     slugs.push(m[1]);
