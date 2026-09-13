@@ -8,6 +8,7 @@ import {
   catalogItemToKitRow,
   categoryLabel,
   coerceItemLoad,
+  coinLoadContribution,
   computeInventoryLoadUsed,
   characterHasAbility,
   EQUIPMENT_CATEGORY_OPTIONS,
@@ -404,6 +405,7 @@ export default function CharacterSheetInventoryList({
   });
   const derivedBand = loadBandForUsed(used);
   const bandMax = derivedBand ? loadCapForBand(derivedBand, hasMule) : null;
+  const coinLoad = coinLoadContribution(coinFilled);
   const loadedItemIds = useMemo(
     () =>
       inv
@@ -601,6 +603,18 @@ export default function CharacterSheetInventoryList({
             </strong>
             {derivedBand ? ` · ${bandLabel(derivedBand)}` : null}
           </span>
+          {coinLoad > 0 ? (
+            <div
+              style={{
+                marginTop: "4px",
+                color: "var(--text-dim)",
+                fontSize: "10px",
+                lineHeight: 1.35,
+              }}
+            >
+              Includes {coinLoad} from coin carried above
+            </div>
+          ) : null}
         </div>
         {sessionActive && onLoadoutChange && hasRigging && !readOnly ? (
           <div style={{ marginTop: "6px" }}>
