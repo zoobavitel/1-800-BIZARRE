@@ -188,3 +188,31 @@
 .rules-error {
   color: #e57373;
 }
+
+@media (max-width: 768px) {
+  .rules-layout {
+    flex-direction: column;
+    min-height: auto;
+  }
+
+  .rules-sidebar {
+    width: 100%;
+    min-width: 0;
+    max-height: 40vh;
+    border-right: none;
+    border-bottom: 1px solid #374151;
+  }
+
+  .rules-main {
+    width: 100%;
+    max-width: none;
+    padding: 16px;
+    box-sizing: border-box;
+  }
+
+  .rules-main table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
