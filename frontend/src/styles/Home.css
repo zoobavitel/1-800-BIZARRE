@@ -878,40 +878,98 @@
   color: var(--g1, #4ade80);
 }
 
-.home-poc .p-card {
+/* Character / NPC token grid */
+.home-poc .home-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 180px));
+  justify-content: start;
+  align-items: start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.home-poc .p-card,
+.home-poc .npc-card {
   display: flex;
+  flex-direction: column;
   background: var(--light-bg-card);
-  margin-bottom: 10px;
   overflow: hidden;
   transition:
     transform 0.15s,
-    box-shadow 0.15s;
+    box-shadow 0.15s,
+    border-color 0.15s;
   cursor: pointer;
   border: 1px solid transparent;
+  border-radius: 4px;
   position: relative;
   isolation: isolate;
-  min-height: 88px;
+  align-self: start;
 }
-.home-poc .p-card:hover {
+.home-poc .p-card:hover,
+.home-poc .npc-card:hover {
   transform: translateY(-1px);
   border-color: var(--p1);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
-.home-poc .p-card-stripe {
-  width: 4px;
+.home-poc .p-card:focus-visible,
+.home-poc .npc-card:focus-visible {
+  outline: 2px solid var(--p1);
+  outline-offset: 2px;
+}
+
+.home-poc .p-card-stripe,
+.home-poc .npc-card-stripe {
+  width: 100%;
+  height: 3px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+.home-poc .p-card-stripe {
   background: linear-gradient(
-    to bottom,
+    to right,
     var(--stripe-1) 0% 25%,
     var(--stripe-2) 25% 50%,
     var(--stripe-3) 50% 75%,
     var(--stripe-4) 75% 100%
   );
-  position: relative;
-  z-index: 1;
 }
+.home-poc .npc-card-stripe {
+  background: linear-gradient(
+    to right,
+    var(--stripe-4) 0% 50%,
+    var(--stripe-3) 50% 100%
+  );
+}
+
+.home-poc .p-card-media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  flex-shrink: 0;
+  z-index: 1;
+  overflow: hidden;
+  background: linear-gradient(
+    145deg,
+    rgba(0, 0, 0, 0.04) 0%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
+}
+
 .home-poc .p-card-thumb,
-.home-poc .npc-card-thumb,
+.home-poc .npc-card-thumb {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+}
+
 .home-poc .g-card-thumb {
   width: 48px;
   height: 48px;
@@ -920,16 +978,13 @@
   margin-left: 10px;
   border-radius: 4px;
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.06);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--dark-border);
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.home-poc .g-card-thumb {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--dark-border);
-}
+
 .home-poc .p-card-thumb img,
 .home-poc .npc-card-thumb img,
 .home-poc .g-card-thumb img,
@@ -939,18 +994,23 @@
   object-fit: cover;
   display: block;
 }
+
 .home-poc .p-card-thumb-ph,
-.home-poc .npc-card-thumb-ph,
+.home-poc .npc-card-thumb-ph {
+  font-family: var(--font-display);
+  font-size: 28px;
+  color: var(--light-text);
+  opacity: 0.35;
+  line-height: 1;
+  letter-spacing: 0.04em;
+}
 .home-poc .g-card-thumb-ph,
 .home-poc .f-card-thumb-ph {
   font-family: var(--font-display);
   font-size: 16px;
-  color: var(--light-text);
+  color: var(--dark-text, #e8e0d0);
   opacity: 0.45;
   line-height: 1;
-}
-.home-poc .g-card-thumb-ph {
-  color: var(--dark-text, #e8e0d0);
 }
 .home-poc .f-card-thumb {
   width: 40px;
@@ -969,38 +1029,56 @@
   opacity: 0.4;
   font-size: 14px;
 }
-.home-poc .p-card-body {
-  flex: 1;
-  padding: 12px 14px;
+
+.home-poc .p-card-body,
+.home-poc .npc-card-body {
+  padding: 10px 10px 12px;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
   position: relative;
   z-index: 1;
 }
-.home-poc .p-card-info {
-  flex: 1;
+.home-poc .p-card-info,
+.home-poc .npc-card-info {
+  min-width: 0;
 }
-.home-poc .p-card-name {
+.home-poc .p-card-name,
+.home-poc .npc-card-name {
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: 15px;
   color: var(--light-text);
   letter-spacing: 0.03em;
-  line-height: 1;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
 }
-.home-poc .p-card-stand {
+.home-poc .p-card-stand,
+.home-poc .npc-card-stand {
   font-family: var(--font-heading);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 400;
   color: var(--purple);
-  margin-top: 2px;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.home-poc .p-card-tags {
+.home-poc .p-card-tags,
+.home-poc .npc-card-meta {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   margin-top: 6px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  min-width: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  letter-spacing: normal;
 }
 .home-poc .p-tag {
   font-size: 9px;
@@ -1009,32 +1087,72 @@
   padding: 2px 6px;
   border: 1px solid var(--light-border);
   color: var(--light-text-2);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
 }
-.home-poc .p-card-actions {
-  display: flex;
-  gap: 6px;
+.home-poc .p-card-tags .p-tag:last-child,
+.home-poc .npc-card-meta .p-tag:last-child {
   flex-shrink: 0;
+}
+
+.home-poc .p-card-actions {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+  z-index: 2;
+}
+.home-poc .p-card:hover .p-card-actions,
+.home-poc .p-card:focus-within .p-card-actions,
+.home-poc .npc-card:hover .p-card-actions,
+.home-poc .npc-card:focus-within .p-card-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+@media (hover: none) {
+  .home-poc .p-card-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 .home-poc .p-card-btn {
   font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 6px 12px;
+  font-size: 14px;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: none;
+  text-decoration: none;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   transition: all 0.15s;
-  border: 1px solid var(--light-border);
-  background: transparent;
-  color: var(--light-text-2);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--light-text);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
 }
 .home-poc .p-card-btn:hover {
   border-color: var(--p1);
   color: var(--light-text);
+  background: #fff;
 }
 .home-poc .p-card-btn-delete:hover {
   border-color: #c84040;
   color: #c84040;
-  background: rgba(200, 64, 64, 0.08);
+  background: rgba(255, 245, 245, 0.95);
 }
 .home-poc .p-card-btn-primary {
   background: var(--light-text);
@@ -1047,7 +1165,7 @@
   color: #000;
 }
 .home-poc .p-card-btn-npc {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.92);
   border: 1px solid var(--p3);
   color: var(--p3);
 }
@@ -1055,70 +1173,6 @@
   background: var(--p3);
   border-color: var(--p3);
   color: #fff;
-}
-
-.home-poc .npc-card {
-  display: flex;
-  background: var(--light-bg-card);
-  margin-bottom: 10px;
-  overflow: hidden;
-  transition: transform 0.15s;
-  cursor: pointer;
-  border: 1px solid transparent;
-  position: relative;
-  isolation: isolate;
-  min-height: 80px;
-}
-.home-poc .npc-card:hover {
-  transform: translateY(-1px);
-  border-color: var(--p1);
-}
-.home-poc .npc-card-stripe {
-  width: 4px;
-  flex-shrink: 0;
-  background: linear-gradient(
-    to bottom,
-    var(--stripe-4) 0% 50%,
-    var(--stripe-3) 50% 100%
-  );
-  position: relative;
-  z-index: 1;
-}
-.home-poc .npc-card-body {
-  flex: 1;
-  padding: 10px 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  position: relative;
-  z-index: 1;
-}
-.home-poc .npc-card-info {
-  flex: 1;
-}
-.home-poc .npc-card-name {
-  font-family: var(--font-display);
-  font-size: 18px;
-  color: var(--light-text);
-  letter-spacing: 0.03em;
-  line-height: 1;
-}
-.home-poc .npc-card-stand {
-  font-family: var(--font-heading);
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--purple);
-  margin-top: 2px;
-}
-.home-poc .npc-card-meta {
-  display: flex;
-  gap: 8px;
-  margin-top: 4px;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  color: #666;
-  letter-spacing: 0.04em;
 }
 
 .home-poc .g-card {
@@ -1210,6 +1264,10 @@
 .home-poc .npc-card-has-image {
   background: #0d0b10;
   border-color: rgba(255, 255, 255, 0.08);
+}
+.home-poc .p-card-has-image .p-card-media,
+.home-poc .npc-card-has-image .p-card-media {
+  background: transparent;
 }
 .home-poc .p-card-has-image .p-card-name,
 .home-poc .npc-card-has-image .npc-card-name {
