@@ -1,15 +1,5 @@
 import React, { useEffect, useState } from "react";
-
-const SAFE_DATA_IMAGE_SRC =
-  /^data:image\/(?:avif|gif|jpe?g|png|webp);base64,[a-z0-9+/=\s]+$/i;
-
-function sanitizeImageSrc(src) {
-  const value = typeof src === "string" ? src.trim() : "";
-  if (!value) return "";
-  if (/^https?:\/\//i.test(value) || value.startsWith("blob:")) return value;
-  if (SAFE_DATA_IMAGE_SRC.test(value)) return value;
-  return "";
-}
+import { sanitizeHomeImageSrc } from "../../utils/sanitizeHomeImageSrc";
 
 /**
  * Fixed-size portrait slot; placeholder initial when missing/broken.
@@ -17,7 +7,7 @@ function sanitizeImageSrc(src) {
  */
 export default function HomeCardThumb({ src, label, className, style }) {
   const [broken, setBroken] = useState(false);
-  const safeSrc = sanitizeImageSrc(src);
+  const safeSrc = sanitizeHomeImageSrc(src);
   useEffect(() => {
     setBroken(false);
   }, [src]);
