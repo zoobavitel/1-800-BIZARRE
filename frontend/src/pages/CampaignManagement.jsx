@@ -21,6 +21,7 @@ import ProgressClock from "../components/ProgressClock";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 import AvatarCropModal from "../components/AvatarCropModal";
 import HomeCardThumb from "../components/home/HomeCardThumb";
+import { compressImageForUpload } from "../utils/compressImageForUpload";
 import {
   getCharacterPortraitSrc,
   getUserAvatarSrc,
@@ -2270,13 +2271,14 @@ function CampaignDetail({
       return;
     }
     try {
+      const payload = buildFactionSavePayload();
+      if (payload.imageFile) {
+        payload.imageFile = await compressImageForUpload(payload.imageFile);
+      }
       if (factionForm.id) {
-        await factionAPI.patchFaction(
-          factionForm.id,
-          buildFactionSavePayload(),
-        );
+        await factionAPI.patchFaction(factionForm.id, payload);
       } else {
-        await factionAPI.createFaction(buildFactionSavePayload());
+        await factionAPI.createFaction(payload);
       }
       setFactionForm(null);
       onRefresh();
@@ -2405,7 +2407,7 @@ function CampaignDetail({
         description: editForm.description || "",
       };
       if (editForm.imageFile) {
-        payload.imageFile = editForm.imageFile;
+        payload.imageFile = await compressImageForUpload(editForm.imageFile);
       } else if (editForm.clearImage) {
         payload.image = null;
       }

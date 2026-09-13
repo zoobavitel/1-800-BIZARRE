@@ -8,6 +8,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from characters.models import Campaign, Character, Faction, Heritage
+from characters.serializers import CARD_IMAGE_MAX_BYTES, PORTRAIT_MAX_BYTES
 
 # Minimal valid 1x1 PNG
 _PNG_1X1 = (
@@ -81,6 +82,27 @@ class CampaignImageUploadTest(TestCase):
         )
         r = self.client.patch(self.url, {"image": upload}, format="multipart")
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+        self.campaign.refresh_from_db()
+        self.assertFalse(bool(self.campaign.image))
+
+    def test_accepts_three_mb_campaign_art(self):
+        self.client.force_authenticate(self.gm)
+        big = _PNG_1X1 * ((3 * 1024 * 1024 // len(_PNG_1X1)) + 1)
+        self.assertGreater(len(big), PORTRAIT_MAX_BYTES)
+        self.assertLessEqual(len(big), CARD_IMAGE_MAX_BYTES)
+        upload = SimpleUploadedFile("camp.png", big, content_type="image/png")
+        r = self.client.patch(self.url, {"image": upload}, format="multipart")
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.campaign.refresh_from_db()
+        self.assertTrue(bool(self.campaign.image))
+
+    def test_rejects_over_card_limit(self):
+        self.client.force_authenticate(self.gm)
+        huge = _PNG_1X1 * ((CARD_IMAGE_MAX_BYTES // len(_PNG_1X1)) + 2)
+        upload = SimpleUploadedFile("huge.png", huge, content_type="image/png")
+        r = self.client.patch(self.url, {"image": upload}, format="multipart")
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("image", r.data)
         self.campaign.refresh_from_db()
         self.assertFalse(bool(self.campaign.image))
 
