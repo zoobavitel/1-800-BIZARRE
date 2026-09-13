@@ -75,6 +75,8 @@ _NPC_LEVEL_OFFSET = 9
 _PC_CLOCK_TYPES = {c[0] for c in ProgressClock.CLOCK_TYPE_CHOICES}
 
 PORTRAIT_MAX_BYTES = 2 * 1024 * 1024
+# Campaign/faction card art (not tiny avatars) — phone photos and game art often exceed 2 MB.
+CARD_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 PORTRAIT_ALLOWED_CONTENT_TYPES = frozenset(
     {"image/jpeg", "image/png", "image/webp", "image/gif"}
 )
@@ -110,13 +112,17 @@ def validate_https_image_url(value):
     return s
 
 
-def validate_portrait_upload(value):
-    """Reject oversized or non-raster portrait uploads (SVG disallowed)."""
+def validate_image_upload(value, max_bytes=PORTRAIT_MAX_BYTES):
+    """Reject oversized or non-raster image uploads (SVG disallowed)."""
     if value is None:
         return value
     size = getattr(value, "size", None)
-    if size is not None and size > PORTRAIT_MAX_BYTES:
-        raise serializers.ValidationError("Image must be 2 MB or smaller.")
+    if size is not None and size > max_bytes:
+        mb = max_bytes / (1024 * 1024)
+        mb_label = int(mb) if mb == int(mb) else mb
+        raise serializers.ValidationError(
+            f"Image must be {mb_label} MB or smaller."
+        )
     name = (getattr(value, "name", None) or "").strip().lower()
     content_type = (getattr(value, "content_type", None) or "").strip().lower()
     if content_type == "image/svg+xml" or name.endswith(".svg"):
@@ -136,6 +142,14 @@ def validate_portrait_upload(value):
             "Use a JPEG, PNG, WebP, or GIF image."
         )
     return value
+
+
+def validate_portrait_upload(value):
+    return validate_image_upload(value, PORTRAIT_MAX_BYTES)
+
+
+def validate_card_image_upload(value):
+    return validate_image_upload(value, CARD_IMAGE_MAX_BYTES)
 
 
 def apply_portrait_exclusivity(serializer, attrs, file_key="image", url_key="image_url"):
@@ -2714,7 +2728,7 @@ class FactionSerializer(serializers.ModelSerializer):
     image = serializers.FileField(required=False, allow_null=True)
 
     def validate_image(self, value):
-        return validate_portrait_upload(value)
+        return validate_card_image_upload(value)
 
     class Meta:
         model = Faction
@@ -2919,7 +2933,7 @@ class CampaignSerializer(serializers.ModelSerializer):
     progress_clocks = serializers.SerializerMethodField()
 
     def validate_image(self, value):
-        return validate_portrait_upload(value)
+        return validate_card_image_upload(value)
 
     class Meta:
         model = Campaign
