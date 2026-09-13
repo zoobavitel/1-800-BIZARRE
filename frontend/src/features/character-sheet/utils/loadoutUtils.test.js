@@ -1,4 +1,5 @@
 import {
+  coinLoadContribution,
   computeInventoryLoadUsed,
   computeLoadUsed,
   coerceItemLoad,
@@ -47,6 +48,13 @@ describe("loadoutUtils", () => {
     expect(loadBandForUsed(4)).toBe("normal");
     expect(loadBandForUsed(6)).toBe("heavy");
     expect(loadBandForUsed(8)).toBe("encumbered");
+  });
+
+  test("coinLoadContribution", () => {
+    expect(coinLoadContribution(0)).toBe(0);
+    expect(coinLoadContribution(4)).toBe(4);
+    expect(coinLoadContribution("2")).toBe(2);
+    expect(coinLoadContribution(-1)).toBe(0);
   });
 
   test("computeLoadUsed counts carried and coin", () => {

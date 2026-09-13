@@ -82,6 +82,12 @@ export function inventoryItemsWithLoad(inventory = []) {
   return (inventory || []).filter((item) => (Number(item?.load) || 0) > 0);
 }
 
+/** Load slots from personal coin boxes (each filled box = 1 load). */
+export function coinLoadContribution(coinFilled = 0) {
+  const n = Math.max(0, Math.floor(Number(coinFilled) || 0));
+  return n > 0 ? n : 0;
+}
+
 export function computeInventoryLoadUsed({
   inventory = [],
   coinFilled = 0,
