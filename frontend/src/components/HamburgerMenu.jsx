@@ -12,7 +12,7 @@ const RULES_MECHANICS = [
   },
   { label: "Vice", slug: "vice" },
   { label: "Trauma & Stress", slug: "stress-trauma" },
-  { label: "Action Ratings", slug: "skill-checks" },
+  { label: "Action Ratings", slug: "action-roll" },
   { label: "Devil's Bargain", slug: "consequences-harm" },
 ];
 
