@@ -14,7 +14,7 @@ export const RULES_NAV = [
       { label: "Heritage", slug: "heritage" },
       { label: "Stand Coin Stats", slug: "stand-coin-stats" },
       { label: "Stress & Trauma", slug: "stress-trauma" },
-      { label: "Skill Checks", slug: "skill-checks" },
+      { label: "Skill Checks", slug: "action-roll" },
       { label: "Position & Effect", slug: "position-effect" },
       { label: "Consequences & Harm", slug: "consequences-harm" },
       { label: "Resistance & Armor", slug: "resistance-armor" },
@@ -32,8 +32,8 @@ export const RULES_NAV = [
     expanded: true,
     items: [
       { label: "The Mission", slug: "the-mission" },
+      { label: "Actions in Combat", slug: "taking-an-action" },
       { label: "Combat & Initiative", slug: "combat-initiative" },
-      { label: "Actions in Combat", slug: "actions-in-combat" },
       { label: "Teamwork", slug: "teamwork" },
       { label: "Claims", slug: "claims" },
     ],
@@ -71,7 +71,6 @@ export const RULES_NAV = [
       { label: "STANDARD ABILITIES", slug: "standard-abilities" },
       { label: "Resources", slug: "resources" },
       { label: "GM Cheat Sheet", slug: "gm-cheat-sheet" },
-      { label: "Da Bay sicks", slug: "da-bay-sicks" },
     ],
   },
 ];
