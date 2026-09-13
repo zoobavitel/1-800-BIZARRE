@@ -522,14 +522,16 @@ const HomePage = ({
                   - show less -
                 </button>
               ) : null}
-              {visibleCharacters.map((character) => (
-                <HomeCharacterCard
-                  key={character.id}
-                  character={character}
-                  onEdit={handleEditCharacter}
-                  onDelete={handleDeleteCharacter}
-                />
-              ))}
+              <div className="home-card-grid">
+                {visibleCharacters.map((character) => (
+                  <HomeCharacterCard
+                    key={character.id}
+                    character={character}
+                    onEdit={handleEditCharacter}
+                    onDelete={handleDeleteCharacter}
+                  />
+                ))}
+              </div>
               {(hiddenCharacterCount > 0 || showAllCharacters) && (
                 <button
                   type="button"
@@ -579,14 +581,16 @@ const HomePage = ({
                   - show less -
                 </button>
               ) : null}
-              {visibleNpcs.map((npc) => (
-                <HomeNpcCard
-                  key={npc.id}
-                  npc={npc}
-                  onEdit={handleEditNpc}
-                  onDelete={handleDeleteNpc}
-                />
-              ))}
+              <div className="home-card-grid">
+                {visibleNpcs.map((npc) => (
+                  <HomeNpcCard
+                    key={npc.id}
+                    npc={npc}
+                    onEdit={handleEditNpc}
+                    onDelete={handleDeleteNpc}
+                  />
+                ))}
+              </div>
               {(hiddenNpcCount > 0 || showAllNpcs) && (
                 <button
                   type="button"
