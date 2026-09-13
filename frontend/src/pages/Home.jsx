@@ -7,9 +7,8 @@ import {
   npcAPI,
   siteStatsAPI,
   transformBackendToFrontend,
-  resolveMediaUrl,
 } from "../features/character-sheet";
-import { getCharacterPortraitSrc, getUserAvatarSrc } from "../utils/homeAvatar";
+import { getUserAvatarSrc } from "../utils/homeAvatar";
 import { useAuth } from "../features/auth";
 import { PATCH_NOTES } from "../data/patchNotes";
 import {
@@ -32,8 +31,10 @@ import HomeSessionScatterChart from "../components/home/HomeSessionScatterChart"
 import HomeStatsBarChart from "../components/home/HomeStatsBarChart";
 import HomeStandCoin from "../components/home/HomeStandCoin";
 import HomeFactionInlineEditor from "../components/home/HomeFactionInlineEditor";
-import HomeCardThumb from "../components/home/HomeCardThumb";
 import HomeCampaignCard from "../components/home/HomeCampaignCard";
+import HomeCharacterCard from "../components/home/HomeCharacterCard";
+import HomeNpcCard from "../components/home/HomeNpcCard";
+import HomeFactionCard from "../components/home/HomeFactionCard";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 
 /** Hero “tradition” pills: short blurbs for home only (not rules text). */
@@ -60,36 +61,6 @@ const HERO_PILLS = [
       "Spin users apply the Golden Rectangle through Steel Balls and similar tools: mastered rotation bends trajectories and wounds until geometry itself becomes the weapon.",
   },
 ];
-
-function tierRoman(level) {
-  const n = Number(level);
-  if (!Number.isFinite(n) || n <= 0) return "—";
-  const map = ["I", "II", "III", "IV", "V", "VI"];
-  return map[Math.min(n - 1, map.length - 1)] || String(n);
-}
-
-function holdLabel(hold) {
-  if (!hold) return "—";
-  return hold.charAt(0).toUpperCase() + hold.slice(1);
-}
-
-function factionStatusClass(rep) {
-  const r = Number(rep);
-  if (r <= -4) return "f-status-war";
-  if (r < 0) return "f-status-hostile";
-  if (r === 0) return "f-status-neutral";
-  if (r >= 2) return "f-status-allied";
-  return "f-status-neutral";
-}
-
-function factionStatusLabel(rep) {
-  const r = Number(rep);
-  if (r <= -4) return "WAR";
-  if (r < 0) return "Hostile";
-  if (r === 0) return "Neutral";
-  if (r >= 2) return "Allied";
-  return "Friendly";
-}
 
 function getUserDisplayName(person) {
   const username = person?.username;
@@ -552,64 +523,12 @@ const HomePage = ({
                 </button>
               ) : null}
               {visibleCharacters.map((character) => (
-                <div
+                <HomeCharacterCard
                   key={character.id}
-                  className="p-card"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handleEditCharacter(character)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      handleEditCharacter(character);
-                    }
-                  }}
-                >
-                  <div className="p-card-stripe" />
-                  <HomeCardThumb
-                    className="p-card-thumb"
-                    src={getCharacterPortraitSrc(character)}
-                    label={character.name}
-                  />
-                  <div className="p-card-body">
-                    <div className="p-card-info">
-                      <div className="p-card-name">{character.name || "—"}</div>
-                      <div className="p-card-stand">
-                        「{character.standName || "—"}」
-                      </div>
-                      <div className="p-card-tags">
-                        <span className="p-tag">
-                          {character.heritageName || character.heritage || "—"}
-                        </span>
-                        <span className="p-tag">{character.playbook || "—"}</span>
-                        <span className="p-tag">Lv {character.level ?? "—"}</span>
-                      </div>
-                    </div>
-                    <div className="p-card-actions">
-                      <a
-                        href={buildRouteHref("character", { characterId: character.id })}
-                        className="p-card-btn p-card-btn-primary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSpaNavClick(e, () => handleEditCharacter(character));
-                        }}
-                      >
-                        Edit
-                      </a>
-                      <button
-                        type="button"
-                        className="p-card-btn p-card-btn-delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteCharacter(character.id);
-                        }}
-                        aria-label="Delete character"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                  character={character}
+                  onEdit={handleEditCharacter}
+                  onDelete={handleDeleteCharacter}
+                />
               ))}
               {(hiddenCharacterCount > 0 || showAllCharacters) && (
                 <button
@@ -661,62 +580,12 @@ const HomePage = ({
                 </button>
               ) : null}
               {visibleNpcs.map((npc) => (
-                <div
+                <HomeNpcCard
                   key={npc.id}
-                  className="npc-card"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handleEditNpc(npc.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      handleEditNpc(npc.id);
-                    }
-                  }}
-                >
-                  <div className="npc-card-stripe" />
-                  <HomeCardThumb
-                    className="npc-card-thumb"
-                    src={getCharacterPortraitSrc(npc)}
-                    label={npc.name}
-                  />
-                  <div className="npc-card-body">
-                    <div className="npc-card-info">
-                      <div className="npc-card-name">{npc.name || "—"}</div>
-                      <div className="npc-card-stand">
-                        「{npc.stand_name || "—"}」
-                      </div>
-                      <div className="npc-card-meta">
-                        <span>Lv {npc.level ?? "—"}</span>
-                        <span>·</span>
-                        <span>{npc.role || "NPC"}</span>
-                      </div>
-                    </div>
-                    <div className="p-card-actions">
-                      <a
-                        href={buildRouteHref("npcs", { npcId: npc.id })}
-                        className="p-card-btn p-card-btn-primary p-card-btn-npc"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleSpaNavClick(e, () => handleEditNpc(npc.id));
-                        }}
-                      >
-                        Edit
-                      </a>
-                      <button
-                        type="button"
-                        className="p-card-btn p-card-btn-delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteNpc(npc.id);
-                        }}
-                        aria-label="Delete NPC"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                  npc={npc}
+                  onEdit={handleEditNpc}
+                  onDelete={handleDeleteNpc}
+                />
               ))}
               {(hiddenNpcCount > 0 || showAllNpcs) && (
                 <button
@@ -939,81 +808,12 @@ const HomePage = ({
                       key={f.id}
                       className={`f-card-wrap${isExpanded ? " is-expanded" : ""}`}
                     >
-                      <div
-                        className="f-card"
-                        role="button"
-                        tabIndex={0}
-                        aria-expanded={isExpanded}
-                        onClick={toggleExpanded}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault();
-                            toggleExpanded();
-                          }
-                        }}
-                      >
-                        <HomeCardThumb
-                          className="f-card-thumb"
-                          src={f.image ? resolveMediaUrl(f.image) : null}
-                          label={f.name}
-                        />
-                        <div className="f-card-info">
-                          <div className="f-card-name">{f.name}</div>
-                          <div className="f-card-meta">
-                            <span>
-                              Tier
-                              <span className="f-card-meta-val">
-                                {" "}
-                                {tierRoman(f.level)}
-                              </span>
-                            </span>
-                            <span>
-                              Hold
-                              <span className="f-card-meta-val">
-                                {" "}
-                                {holdLabel(f.hold)}
-                              </span>
-                            </span>
-                            <span>
-                              Rep
-                              <span className="f-card-meta-val">
-                                {" "}
-                                {(f.reputation ?? 0) > 0 ? "+" : ""}
-                                {f.reputation ?? 0}
-                              </span>
-                            </span>
-                          </div>
-                        </div>
-                        <div className="f-card-right">
-                          <div
-                            className={`f-card-status ${factionStatusClass(f.reputation)}`}
-                          >
-                            {factionStatusLabel(f.reputation)}
-                          </div>
-                          <div className="f-card-actions">
-                            <button
-                              type="button"
-                              className="f-card-btn f-card-btn-edit"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleExpanded();
-                              }}
-                            >
-                              {isExpanded ? "Close" : "Edit"}
-                            </button>
-                            <button
-                              type="button"
-                              className="f-card-btn f-card-btn-delete"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteFaction(f.id);
-                              }}
-                            >
-                              Delete
-                            </button>
-                          </div>
-                        </div>
-                      </div>
+                      <HomeFactionCard
+                        faction={f}
+                        isExpanded={isExpanded}
+                        onToggle={toggleExpanded}
+                        onDelete={handleDeleteFaction}
+                      />
                       {isExpanded && (
                         <HomeFactionInlineEditor
                           faction={f}

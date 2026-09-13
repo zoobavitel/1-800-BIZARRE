@@ -1,17 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { resolveMediaUrl } from "../../features/character-sheet";
 import { getUserAvatarSrc } from "../../utils/homeAvatar";
-
-const SAFE_DATA_IMAGE_SRC =
-  /^data:image\/(?:avif|gif|jpe?g|png|webp);base64,[a-z0-9+/=\s]+$/i;
-
-function sanitizeImageSrc(src) {
-  const value = typeof src === "string" ? src.trim() : "";
-  if (!value) return "";
-  if (/^https?:\/\//i.test(value) || value.startsWith("blob:")) return value;
-  if (SAFE_DATA_IMAGE_SRC.test(value)) return value;
-  return "";
-}
+import HomeFullBleedBg, { useHomeCardImage } from "./HomeFullBleedBg";
 
 export function getUserDisplayName(person) {
   const username = person?.username;
@@ -31,17 +21,10 @@ export default function HomeCampaignCard({
   isGm = false,
   user = null,
 }) {
-  const [imageBroken, setImageBroken] = useState(false);
-
   const rawImage = campaign?.image;
   const resolvedSrc = rawImage ? resolveMediaUrl(rawImage) : "";
-  const safeSrc = sanitizeImageSrc(resolvedSrc);
+  const { hasImage, safeSrc, onError } = useHomeCardImage(resolvedSrc);
 
-  useEffect(() => {
-    setImageBroken(false);
-  }, [rawImage]);
-
-  const hasImage = Boolean(safeSrc) && !imageBroken;
   const inactive = campaign?.is_active === false;
 
   const roster = campaign?.campaign_characters || [];
@@ -75,20 +58,7 @@ export default function HomeCampaignCard({
       onClick={onClick}
       style={{ textDecoration: "none", color: "inherit" }}
     >
-      {hasImage && (
-        <div className="g-card-bg" aria-hidden="true">
-          <img
-            src={safeSrc}
-            alt=""
-            aria-hidden="true"
-            loading="lazy"
-            decoding="async"
-            referrerPolicy="no-referrer"
-            onError={() => setImageBroken(true)}
-          />
-        </div>
-      )}
-      {hasImage && <div className="g-card-scrim" aria-hidden="true" />}
+      {hasImage && <HomeFullBleedBg src={safeSrc} onError={onError} />}
       <div className="g-card-stripe" />
       <div className="g-card-body">
         <div className="g-card-info">
