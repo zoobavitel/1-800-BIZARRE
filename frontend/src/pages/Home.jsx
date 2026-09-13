@@ -33,6 +33,7 @@ import HomeStatsBarChart from "../components/home/HomeStatsBarChart";
 import HomeStandCoin from "../components/home/HomeStandCoin";
 import HomeFactionInlineEditor from "../components/home/HomeFactionInlineEditor";
 import HomeCardThumb from "../components/home/HomeCardThumb";
+import HomeCampaignCard from "../components/home/HomeCampaignCard";
 import { buildRouteHref, handleSpaNavClick } from "../utils/spaNavigation";
 
 /** Hero “tradition” pills: short blurbs for home only (not rules text). */
@@ -850,127 +851,22 @@ const HomePage = ({
                   - show less -
                 </button>
               ) : null}
-              {visibleCampaigns.map((campaign) => {
-              const isGm = user && isCampaignGmForUser(campaign, user.id);
-              const playerCount = Array.isArray(campaign.players)
-                ? campaign.players.length
-                : 0;
-              const players = Array.isArray(campaign.players) ? campaign.players : [];
-              const gmName = getUserDisplayName(campaign.gm);
-              const roster = campaign.campaign_characters || [];
-              const gmAvatarSrc = getUserAvatarSrc(campaign.gm, {
-                campaignCharacters: roster,
-              });
-              const myChar = roster.find(
-                (cc) => cc.user_id === user?.id,
-              );
-              const playingAs = myChar?.true_name || null;
-              const sessionCount = Array.isArray(campaign.sessions)
-                ? campaign.sessions.length
-                : 0;
-              const visiblePlayers = players.slice(0, 5);
-              const extraPlayers = Math.max(players.length - visiblePlayers.length, 0);
-              const live = campaign.active_session_detail;
-              const inactive = campaign.is_active === false;
-
-              return (
-                <a
+              {visibleCampaigns.map((campaign) => (
+                <HomeCampaignCard
                   key={campaign.id}
-                  href={buildRouteHref("campaigns", { campaignId: campaign.id })}
-                  className={`g-card${inactive ? " g-card-inactive" : ""}`}
+                  campaign={campaign}
+                  href={buildRouteHref("campaigns", {
+                    campaignId: campaign.id,
+                  })}
                   onClick={(e) =>
-                    handleSpaNavClick(e, () => handleManageCampaign(campaign.id))
+                    handleSpaNavClick(e, () =>
+                      handleManageCampaign(campaign.id),
+                    )
                   }
-                  style={{ textDecoration: "none", color: "inherit" }}
-                >
-                  <div className="g-card-stripe" />
-                  <HomeCardThumb
-                    className="g-card-thumb"
-                    src={campaign.image ? resolveMediaUrl(campaign.image) : null}
-                    label={campaign.name}
-                  />
-                  <div className="g-card-body">
-                    <div className="g-card-info">
-                      <div className="g-card-header">
-                        <div className="g-card-name">{campaign.name || "—"}</div>
-                        <div className="g-card-badges">
-                          <span
-                            className={`g-badge ${inactive ? "g-badge-inactive" : "g-badge-active"}`}
-                          >
-                            {inactive ? "Inactive" : "Active"}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="g-card-gm-row">
-                        <span className="g-card-gm-label">GM</span>
-                        <div className={`g-card-gm-chip${isGm ? " is-self" : ""}`}>
-                          {gmAvatarSrc ? (
-                            <span className="g-card-user-avatar" aria-hidden="true">
-                              <img src={gmAvatarSrc} alt="" />
-                            </span>
-                          ) : null}
-                          <span className="g-card-user-name">{gmName}</span>
-                        </div>
-                      </div>
-                      <div className="g-card-desc">
-                        {campaign.description || "—"}
-                      </div>
-                      <div className="g-card-stats">
-                        <span>
-                          Players
-                          <span className="g-card-stat-val">{playerCount}</span>
-                        </span>
-                        <span>
-                          Sessions
-                          <span className="g-card-stat-val">{sessionCount}</span>
-                        </span>
-                        {playingAs && (
-                          <span>
-                            Playing as
-                            <span className="g-card-stat-val g-card-stat-accent">
-                              {playingAs}
-                            </span>
-                          </span>
-                        )}
-                      </div>
-                      <div className="g-card-player-list">
-                        {visiblePlayers.length === 0 ? (
-                          <span className="g-card-player-empty">No players yet</span>
-                        ) : (
-                          visiblePlayers.map((player) => {
-                            const playerName = getUserDisplayName(player);
-                            const playerAvatarSrc = getUserAvatarSrc(player, {
-                              campaignCharacters: roster,
-                            });
-                            return (
-                              <span key={player.id || playerName} className="g-card-player-chip">
-                                {playerAvatarSrc ? (
-                                  <span className="g-card-user-avatar" aria-hidden="true">
-                                    <img src={playerAvatarSrc} alt="" />
-                                  </span>
-                                ) : null}
-                                <span className="g-card-user-name">{playerName}</span>
-                              </span>
-                            );
-                          })
-                        )}
-                        {extraPlayers > 0 && (
-                          <span className="g-card-player-chip g-card-player-chip-more">
-                            +{extraPlayers} more
-                          </span>
-                        )}
-                      </div>
-                      {live && !inactive && (
-                        <div className="g-session-live">
-                          {live.name ? `Session: ${live.name}` : "Session active"} —
-                          open campaign to join
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </a>
-              );
-              })}
+                  isGm={Boolean(user && isCampaignGmForUser(campaign, user.id))}
+                  user={user}
+                />
+              ))}
               {(hiddenCampaignCount > 0 || showAllCampaigns) && (
                 <button
                   type="button"
