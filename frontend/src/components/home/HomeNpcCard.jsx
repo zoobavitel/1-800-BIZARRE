@@ -5,11 +5,12 @@ import HomeCardThumb from "./HomeCardThumb";
 import HomeFullBleedBg, { useHomeCardImage } from "./HomeFullBleedBg";
 
 /**
- * Home page NPC card — full-bleed portrait when available, else thumb slot.
+ * Home page NPC token card — 3:4 portrait slot; full-bleed when art exists.
  */
 export default function HomeNpcCard({ npc, onEdit, onDelete }) {
   const portraitSrc = getCharacterPortraitSrc(npc);
   const { hasImage, safeSrc, onError } = useHomeCardImage(portraitSrc);
+  const name = npc?.name || "NPC";
 
   const cardClasses = ["npc-card", hasImage ? "npc-card-has-image" : ""]
     .filter(Boolean)
@@ -30,23 +31,14 @@ export default function HomeNpcCard({ npc, onEdit, onDelete }) {
     >
       {hasImage && <HomeFullBleedBg src={safeSrc} onError={onError} />}
       <div className="npc-card-stripe" />
-      {!hasImage && (
-        <HomeCardThumb
-          className="npc-card-thumb"
-          src={portraitSrc}
-          label={npc?.name}
-        />
-      )}
-      <div className="npc-card-body">
-        <div className="npc-card-info">
-          <div className="npc-card-name">{npc?.name || "—"}</div>
-          <div className="npc-card-stand">「{npc?.stand_name || "—"}」</div>
-          <div className="npc-card-meta">
-            <span>Lv {npc?.level ?? "—"}</span>
-            <span>·</span>
-            <span>{npc?.role || "NPC"}</span>
-          </div>
-        </div>
+      <div className="p-card-media">
+        {!hasImage && (
+          <HomeCardThumb
+            className="npc-card-thumb"
+            src={portraitSrc}
+            label={npc?.name}
+          />
+        )}
         <div className="p-card-actions">
           <a
             href={buildRouteHref("npcs", { npcId: npc?.id })}
@@ -55,8 +47,10 @@ export default function HomeNpcCard({ npc, onEdit, onDelete }) {
               e.stopPropagation();
               handleSpaNavClick(e, () => onEdit?.(npc?.id));
             }}
+            aria-label={`Edit ${name}`}
+            title="Edit"
           >
-            Edit
+            ✎
           </a>
           <button
             type="button"
@@ -65,10 +59,21 @@ export default function HomeNpcCard({ npc, onEdit, onDelete }) {
               e.stopPropagation();
               onDelete?.(npc?.id);
             }}
-            aria-label="Delete NPC"
+            aria-label={`Delete ${name}`}
+            title="Delete"
           >
             ×
           </button>
+        </div>
+      </div>
+      <div className="npc-card-body">
+        <div className="npc-card-info">
+          <div className="npc-card-name">{npc?.name || "—"}</div>
+          <div className="npc-card-stand">「{npc?.stand_name || "—"}」</div>
+          <div className="npc-card-meta">
+            <span className="p-tag">Lv {npc?.level ?? "—"}</span>
+            <span className="p-tag">{npc?.role || "NPC"}</span>
+          </div>
         </div>
       </div>
     </div>
