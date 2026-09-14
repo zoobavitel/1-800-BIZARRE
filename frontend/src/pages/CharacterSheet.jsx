@@ -1428,8 +1428,8 @@ const CharacterSheetWrapper = ({
   const handlePortraitFileSelect = useCallback((e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      setSaveErrorMessage("Portrait must be 2 MB or smaller.");
+    if (file.size > 10 * 1024 * 1024) {
+      setSaveErrorMessage("Portrait must be 10 MB or smaller.");
       setSaveStatus("error");
       return;
     }
@@ -22158,10 +22158,10 @@ const CharacterSheetWrapper = ({
                           const file = e.target.files?.[0];
                           e.target.value = "";
                           if (!file || !charData.crewId) return;
-                          if (file.size > 2 * 1024 * 1024) {
+                          if (file.size > 10 * 1024 * 1024) {
                             setCrewPortraitMsg({
                               ok: false,
-                              text: "Portrait must be 2 MB or smaller.",
+                              text: "Portrait must be 10 MB or smaller.",
                             });
                             return;
                           }
