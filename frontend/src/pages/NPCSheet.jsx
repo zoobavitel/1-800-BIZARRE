@@ -137,6 +137,23 @@ function npcAutosavePayloadFingerprint(payload) {
   }
 }
 
+export function getNpcPortraitReplacementFailureState(persistedPreview = "") {
+  return {
+    imageFile: null,
+    imagePreview: persistedPreview || "",
+    portraitPreviewError: false,
+  };
+}
+
+export function getNpcPortraitSavedState(result, fallbackPersisted = "") {
+  const persisted = result?.image_url || result?.image || fallbackPersisted || "";
+  return {
+    imageFile: null,
+    imageUrl: persisted,
+    imagePreview: persisted,
+  };
+}
+
 /** Session rolls where a PC spent coin on NPC heal fortune — match healer to this NPC by display name. */
 function rollIsNpcHealFortuneForThisNpc(roll, npcDisplayName) {
   const ctx = String(
@@ -1266,10 +1283,17 @@ const NPCSheet = ({
   const [cropOpen, setCropOpen] = useState(false);
   const [portraitPreviewError, setPortraitPreviewError] = useState(false);
   const fileInputRef = useRef(null);
+  const imagePreviewRef = useRef(npc?.image || npc?.image_url || "");
+  const lastPersistedImageRef = useRef(npc?.image || npc?.image_url || "");
 
   useEffect(() => {
+    imagePreviewRef.current = imagePreview;
     setPortraitPreviewError(false);
   }, [imagePreview]);
+
+  useEffect(() => {
+    lastPersistedImageRef.current = npc?.image || npc?.image_url || "";
+  }, [npc?.id, npc?.image, npc?.image_url]);
 
   const handlePromoteItemToCampaign = useCallback(
     async (item) => {
@@ -1508,9 +1532,12 @@ const NPCSheet = ({
           /* ignore */
         }
       }
-      setImageFile(null);
-      setImagePreview(imageUrl || "");
-      setPortraitPreviewError(false);
+      const restored = getNpcPortraitReplacementFailureState(
+        lastPersistedImageRef.current,
+      );
+      setImageFile(restored.imageFile);
+      setImagePreview(restored.imagePreview);
+      setPortraitPreviewError(restored.portraitPreviewError);
     };
     try {
       const prepared = await compressImageForUpload(file, {
@@ -1542,7 +1569,7 @@ const NPCSheet = ({
       );
       setSaveStatus("error");
     }
-  }, [imagePreview, imageUrl]);
+  }, [imagePreview]);
 
   const handleImageUrlPrompt = useCallback(() => {
     const url = prompt("Paste image URL:");
@@ -1811,13 +1838,28 @@ const NPCSheet = ({
         );
       }
       lastSavedPayloadHashRef.current = payloadHash;
+      if (!payload.imageFile && ("image" in (result || {}) || "image_url" in (result || {}))) {
+        lastPersistedImageRef.current = result?.image_url || result?.image || "";
+      }
       if (payload.imageFile) {
-        setImageFile(null);
-        const persisted = result?.image_url || result?.image || "";
-        if (persisted) {
-          setImagePreview(persisted);
-          setImageUrl(persisted);
+        if (
+          imagePreviewRef.current &&
+          String(imagePreviewRef.current).startsWith("blob:")
+        ) {
+          try {
+            URL.revokeObjectURL(imagePreviewRef.current);
+          } catch {
+            /* ignore */
+          }
         }
+        const savedPortrait = getNpcPortraitSavedState(
+          result,
+          lastPersistedImageRef.current,
+        );
+        lastPersistedImageRef.current = savedPortrait.imageUrl;
+        setImageFile(savedPortrait.imageFile);
+        setImagePreview(savedPortrait.imagePreview);
+        setImageUrl(savedPortrait.imageUrl);
       }
       setSaveStatus("saved");
       setSaveErrorDetail(null);
