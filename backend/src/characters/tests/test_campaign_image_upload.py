@@ -142,6 +142,42 @@ class FactionImagePatchTest(TestCase):
         self.faction.refresh_from_db()
         self.assertTrue(bool(self.faction.image))
 
+    def test_gm_patch_sets_image_url_and_clears_file(self):
+        self.client.force_authenticate(self.gm)
+        upload = SimpleUploadedFile(
+            "fac.png", _PNG_1X1, content_type="image/png"
+        )
+        r = self.client.patch(
+            self.url,
+            {"name": "Canaries", "image": upload},
+            format="multipart",
+        )
+        self.assertEqual(r.status_code, status.HTTP_200_OK, r.data)
+        self.faction.refresh_from_db()
+        self.assertTrue(bool(self.faction.image))
+
+        r2 = self.client.patch(
+            self.url,
+            {"image_url": "https://example.com/faction.png"},
+            format="json",
+        )
+        self.assertEqual(r2.status_code, status.HTTP_200_OK, r2.data)
+        self.faction.refresh_from_db()
+        self.assertEqual(
+            self.faction.image_url, "https://example.com/faction.png"
+        )
+        self.assertFalse(bool(self.faction.image))
+
+    def test_rejects_http_image_url(self):
+        self.client.force_authenticate(self.gm)
+        r = self.client.patch(
+            self.url,
+            {"image_url": "http://example.com/a.png"},
+            format="json",
+        )
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("image_url", r.data)
+
     def test_non_gm_patch_403(self):
         self.client.force_authenticate(self.player)
         upload = SimpleUploadedFile(

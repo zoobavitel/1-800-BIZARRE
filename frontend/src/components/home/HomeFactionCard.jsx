@@ -34,7 +34,8 @@ function factionStatusLabel(rep) {
 }
 
 /**
- * Home page faction card — full-bleed image when available, else thumb slot.
+ * Home page faction card — vertical token (matches PC/NPC cards).
+ * EDIT expands inline editor; DELETE removes. Actions live in body footer.
  */
 export default function HomeFactionCard({
   faction,
@@ -42,10 +43,17 @@ export default function HomeFactionCard({
   onToggle,
   onDelete,
 }) {
-  const resolved = faction?.image ? resolveMediaUrl(faction.image) : "";
+  const resolved = resolveMediaUrl(faction?.image || faction?.image_url || "");
   const { hasImage, safeSrc, onError } = useHomeCardImage(resolved);
+  const name = faction?.name || "faction";
+  const rep = faction?.reputation ?? 0;
+  const typeLabel = String(faction?.faction_type || "").trim() || "—";
 
-  const cardClasses = ["f-card", hasImage ? "f-card-has-image" : ""]
+  const cardClasses = [
+    "f-card",
+    hasImage ? "f-card-has-image" : "",
+    isExpanded ? "is-expanded" : "",
+  ]
     .filter(Boolean)
     .join(" ");
 
@@ -64,35 +72,27 @@ export default function HomeFactionCard({
       }}
     >
       {hasImage && <HomeFullBleedBg src={safeSrc} onError={onError} />}
-      {!hasImage && (
-        <HomeCardThumb
-          className="f-card-thumb"
-          src={resolved || null}
-          label={faction?.name}
-        />
-      )}
-      <div className="f-card-info">
-        <div className="f-card-name">{faction?.name}</div>
-        <div className="f-card-meta">
-          <span>
-            Tier
-            <span className="f-card-meta-val"> {tierRoman(faction?.level)}</span>
-          </span>
-          <span>
-            Hold
-            <span className="f-card-meta-val"> {holdLabel(faction?.hold)}</span>
-          </span>
-          <span>
-            Rep
-            <span className="f-card-meta-val">
-              {" "}
-              {(faction?.reputation ?? 0) > 0 ? "+" : ""}
-              {faction?.reputation ?? 0}
-            </span>
+      <div className="f-card-stripe" />
+      <div className="f-card-media">
+        {!hasImage && (
+          <HomeCardThumb
+            className="f-card-thumb"
+            src={resolved || null}
+            label={faction?.name}
+          />
+        )}
+      </div>
+      <div className="f-card-body">
+        <div className="f-card-name">{faction?.name || "—"}</div>
+        <div className="f-card-type">{typeLabel}</div>
+        <div className="f-card-tags">
+          <span className="p-tag">Tier {tierRoman(faction?.level)}</span>
+          <span className="p-tag">{holdLabel(faction?.hold)}</span>
+          <span className="p-tag">
+            Rep {rep > 0 ? "+" : ""}
+            {rep}
           </span>
         </div>
-      </div>
-      <div className="f-card-right">
         <div
           className={`f-card-status ${factionStatusClass(faction?.reputation)}`}
         >
@@ -116,6 +116,7 @@ export default function HomeFactionCard({
               e.stopPropagation();
               onDelete?.(faction?.id);
             }}
+            aria-label={`Delete ${name}`}
           >
             Delete
           </button>

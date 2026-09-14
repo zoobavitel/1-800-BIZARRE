@@ -281,9 +281,18 @@ const HomePage = ({
       () =>
         visibleFactionGroupsForHome(gmFactionGroups, {
           expanded: showAllFactions,
+          limit: cardPreviewLimit,
         }),
-      [gmFactionGroups, showAllFactions],
+      [gmFactionGroups, showAllFactions, cardPreviewLimit],
     );
+
+  useEffect(() => {
+    if (expandedFactionId == null) return;
+    const stillVisible = visibleFactionGroups.some((g) =>
+      g.factions.some((f) => f.id === expandedFactionId),
+    );
+    if (!stillVisible) setExpandedFactionId(null);
+  }, [visibleFactionGroups, expandedFactionId]);
 
   const firstGmCampaignId = useMemo(() => {
     if (!user) return null;
@@ -832,33 +841,34 @@ const HomePage = ({
                     + New Faction
                   </button>
                 </div>
-                {factions.map((f) => {
-                  const isExpanded = expandedFactionId === f.id;
-                  const toggleExpanded = () =>
-                    setExpandedFactionId(isExpanded ? null : f.id);
-                  return (
-                    <div
-                      key={f.id}
-                      className={`f-card-wrap${isExpanded ? " is-expanded" : ""}`}
-                    >
-                      <HomeFactionCard
-                        faction={f}
-                        isExpanded={isExpanded}
-                        onToggle={toggleExpanded}
-                        onDelete={handleDeleteFaction}
-                      />
-                      {isExpanded && (
-                        <HomeFactionInlineEditor
+                <div className="home-card-grid home-faction-grid">
+                  {factions.map((f) => {
+                    const isExpanded = expandedFactionId === f.id;
+                    const toggleExpanded = () =>
+                      setExpandedFactionId(isExpanded ? null : f.id);
+                    return (
+                      <React.Fragment key={f.id}>
+                        <HomeFactionCard
                           faction={f}
-                          campaign={campaign}
-                          onCancel={() => setExpandedFactionId(null)}
-                          onSaved={handleFactionEditorSaved}
-                          onDeleted={handleFactionEditorDeleted}
+                          isExpanded={isExpanded}
+                          onToggle={toggleExpanded}
+                          onDelete={handleDeleteFaction}
                         />
-                      )}
-                    </div>
-                  );
-                })}
+                        {isExpanded ? (
+                          <div className="f-edit-span">
+                            <HomeFactionInlineEditor
+                              faction={f}
+                              campaign={campaign}
+                              onCancel={() => setExpandedFactionId(null)}
+                              onSaved={handleFactionEditorSaved}
+                              onDeleted={handleFactionEditorDeleted}
+                            />
+                          </div>
+                        ) : null}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
               </React.Fragment>
               ))}
               {(hiddenFactionCount > 0 || showAllFactions) && (

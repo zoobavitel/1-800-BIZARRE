@@ -2786,6 +2786,13 @@ class FactionSerializer(serializers.ModelSerializer):
     def validate_image(self, value):
         return validate_card_image_upload(value)
 
+    def validate_image_url(self, value):
+        return validate_https_image_url(value)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        return apply_portrait_exclusivity(self, attrs)
+
     class Meta:
         model = Faction
         fields = [
@@ -2803,6 +2810,7 @@ class FactionSerializer(serializers.ModelSerializer):
             "crew_notes",
             "visible_to_players",
             "image",
+            "image_url",
             "npcs",
         ]
 
