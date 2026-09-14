@@ -85,6 +85,44 @@ class XPAllocationServiceTests(TestCase):
         }
         self.character.save()
 
+    def test_bizarre_minor_advance_writes_attune_key(self):
+        """Sheet hydrate reads attune; XP must not write orphan bizarre."""
+        self.character.xp_clocks = {
+            **self.character.xp_clocks,
+            "resolve": 5,
+        }
+        dots = dict(self.character.action_dots or {})
+        dots.pop("bizarre", None)
+        dots["attune"] = 1
+        self.character.action_dots = dots
+        self.character.save(update_fields=["xp_clocks", "action_dots"])
+
+        apply_minor_advance(
+            self.character, xp_track="resolve", action="BIZARRE"
+        )
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.action_dots.get("attune"), 2)
+        self.assertNotIn("bizarre", self.character.action_dots)
+
+    def test_legacy_bizarre_dots_merged_on_advance(self):
+        """Orphan bizarre from older XP path folds into attune before bump."""
+        self.character.xp_clocks = {
+            **self.character.xp_clocks,
+            "resolve": 5,
+        }
+        dots = dict(self.character.action_dots or {})
+        dots["attune"] = 1
+        dots["bizarre"] = 2
+        self.character.action_dots = dots
+        self.character.save(update_fields=["xp_clocks", "action_dots"])
+
+        apply_minor_advance(
+            self.character, xp_track="resolve", action="bizarre"
+        )
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.action_dots.get("attune"), 3)
+        self.assertNotIn("bizarre", self.character.action_dots)
+
     def test_level_up_stat_from_heritage_track(self):
         alloc = apply_level_up(
             self.character,
