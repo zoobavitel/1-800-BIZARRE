@@ -866,6 +866,27 @@ class Character(models.Model):
     )
     stand_coin_points_gained = models.IntegerField(default=0)
     action_dice_gained = models.IntegerField(default=0)
+    chargen_baseline = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Frozen sheet snapshot at end of chargen / before first XP allocation. "
+            "Respec rebuilds derived state from this + active allocations."
+        ),
+    )
+    ledger_reconcile_ok = models.BooleanField(
+        default=True,
+        help_text=(
+            "False when fold(chargen_baseline, allocations) disagrees with live sheet. "
+            "Respec mode is blocked until a GM repairs the ledger."
+        ),
+    )
+    last_respec_commit_token = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Idempotency token for the most recent successful respec-commit.",
+    )
     inventory = models.JSONField(
         default=list, blank=True, help_text="List of items the character possesses"
     )
@@ -1144,28 +1165,43 @@ class Character(models.Model):
         pass
 
     def _validate_xp_advancements(self):
-        # Ensure total_xp_spent is a multiple of 10
-        if self.total_xp_spent % 10 != 0:
-            raise ValidationError(
-                {
-                    "total_xp_spent": "Total XP spent must be a multiple of 10 for advancements."
-                }
-            )
+        # Prefer live allocation ledger when present (covers BUY_HP 5 XP and
+        # playbook-ability / acquire-stand spends that lack dedicated counters).
+        if self.pk:
+            from django.db.models import Sum
 
-        # Calculate expected total XP from advancements
-        expected_xp_from_advancements = (
-            self.heritage_points_gained * 10  # 10 XP per heritage ability
-            + self.bonus_hp_from_xp * 5  # 5 XP per bonus HP
-            + self.stand_coin_points_gained * 10  # 10 XP per stand coin point
-            + self.action_dice_gained * 5  # 5 XP per action die
-        )
-
-        if self.total_xp_spent != expected_xp_from_advancements:
-            raise ValidationError(
-                {
-                    "total_xp_spent": f"Total XP spent ({self.total_xp_spent}) does not match XP calculated from advancements ({expected_xp_from_advancements})."
-                }
+            ledger_total = (
+                CharacterXPAllocation.objects.filter(
+                    character_id=self.pk, undone_at__isnull=True
+                ).aggregate(total=Sum("xp_cost"))["total"]
+                or 0
             )
+            if int(self.total_xp_spent or 0) != int(ledger_total):
+                raise ValidationError(
+                    {
+                        "total_xp_spent": (
+                            f"Total XP spent ({self.total_xp_spent}) does not match "
+                            f"active allocation ledger ({ledger_total})."
+                        )
+                    }
+                )
+        else:
+            expected_xp_from_advancements = (
+                self.heritage_points_gained * 10
+                + self.bonus_hp_from_xp * 5
+                + self.stand_coin_points_gained * 10
+                + self.action_dice_gained * 5
+            )
+            if self.total_xp_spent != expected_xp_from_advancements:
+                raise ValidationError(
+                    {
+                        "total_xp_spent": (
+                            f"Total XP spent ({self.total_xp_spent}) does not match "
+                            f"XP calculated from advancements "
+                            f"({expected_xp_from_advancements})."
+                        )
+                    }
+                )
 
         # Ensure gained values are non-negative
         if self.action_dice_gained < 0:

@@ -24,7 +24,16 @@ STAND_GRADE_FIELDS = frozenset(
     }
 )
 
-# Never writable via generic sheet update once the character row exists.
+# Writable only during chargen (before any CharacterXPAllocation row exists).
+CHARGEN_ONLY_PATCH_FIELDS = frozenset(
+    {
+        "level",
+        "action_dots",
+        "action_dice_gained",
+    }
+)
+
+# Never client-writable (Respec / allocation APIs own these).
 ALWAYS_PATCH_REJECTED_FIELDS = frozenset(
     {
         "xp_clocks",
@@ -36,15 +45,9 @@ ALWAYS_PATCH_REJECTED_FIELDS = frozenset(
         "coin_stats",
         "bonus_hp_from_xp",
         "secondary_playbook",
-    }
-)
-
-# Writable only during chargen (before any CharacterXPAllocation row exists).
-CHARGEN_ONLY_PATCH_FIELDS = frozenset(
-    {
-        "level",
-        "action_dots",
-        "action_dice_gained",
+        "chargen_baseline",
+        "ledger_reconcile_ok",
+        "last_respec_commit_token",
     }
 )
 

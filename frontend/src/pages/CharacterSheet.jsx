@@ -6,6 +6,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   GRADE,
   GRADE_INDEX,
@@ -113,6 +114,8 @@ import {
 } from "../features/character-sheet/utils/pcAutosaveQueue";
 import {
   canDirectStandUpgrade,
+  canDirectActionDotUpgrade,
+  canAffordActionDotSteps,
   canFundTrackAdvance,
   poolMarksNeededToMint,
   standCoinChargenHasFreeRoom,
@@ -690,6 +693,118 @@ function buildHealRollBoostPresetFromSelections(
   return { abilities: abilitiesPreset, heritage: heritagePreset };
 }
 
+/** Fixed popover style clamped to the visible viewport (incl. embedded preview). */
+function getVisibleViewportBox() {
+  const vv = typeof window !== "undefined" ? window.visualViewport : null;
+  const docEl =
+    typeof document !== "undefined" ? document.documentElement : null;
+  const width = Math.min(
+    window.innerWidth || Infinity,
+    docEl?.clientWidth || Infinity,
+    vv?.width || Infinity,
+  );
+  const height = Math.min(
+    window.innerHeight || Infinity,
+    docEl?.clientHeight || Infinity,
+    vv?.height || Infinity,
+  );
+  const offsetLeft = vv?.offsetLeft || 0;
+  const offsetTop = vv?.offsetTop || 0;
+  return {
+    width: Number.isFinite(width) ? width : window.innerWidth,
+    height: Number.isFinite(height) ? height : window.innerHeight,
+    offsetLeft,
+    offsetTop,
+  };
+}
+
+function computeAbilityPickerFixedStyle(anchorEl) {
+  const pad = 8;
+  const vp = getVisibleViewportBox();
+  const maxRight = vp.offsetLeft + vp.width - pad;
+  const maxBottom = vp.offsetTop + vp.height - pad;
+  const minLeft = vp.offsetLeft + pad;
+  const minTop = vp.offsetTop + pad;
+  const width = Math.min(320, Math.max(200, vp.width - pad * 2));
+  const base = {
+    position: "fixed",
+    zIndex: 400,
+    width,
+    maxWidth: width,
+    padding: "8px",
+    background: "#111827",
+    border: "1px solid #374151",
+    borderRadius: "4px",
+    boxShadow: "0 8px 24px rgba(0,0,0,0.55)",
+    boxSizing: "border-box",
+    // Outer does not scroll — inner list owns overflow (avoids double scrollbar).
+    overflow: "hidden",
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+  };
+  if (!anchorEl || typeof window === "undefined") {
+    return {
+      ...base,
+      top: minTop,
+      left: minLeft,
+      maxHeight: Math.max(160, vp.height - pad * 2),
+    };
+  }
+  const r = anchorEl.getBoundingClientRect();
+  const spaceBelow = maxBottom - (r.bottom + 4);
+  const spaceAbove = r.top - 4 - minTop;
+  const openDown = spaceBelow >= 180 || spaceBelow >= spaceAbove;
+  let maxHeight = Math.max(
+    140,
+    Math.min(400, openDown ? spaceBelow : spaceAbove),
+  );
+  // Prefer align-left with trigger; if that overflows right, shift left.
+  let left = r.left;
+  if (left + width > maxRight) left = maxRight - width;
+  if (left < minLeft) left = minLeft;
+  // If still wider than viewport, shrink already handled via width = vp - pads.
+  let top = openDown ? r.bottom + 4 : r.top - 4 - maxHeight;
+  if (top < minTop) top = minTop;
+  if (top + maxHeight > maxBottom) {
+    maxHeight = Math.max(140, maxBottom - top);
+  }
+  return { ...base, top, left, maxHeight };
+}
+
+function AbilityPickerPopover({ open, anchorRef, children }) {
+  const [style, setStyle] = useState(null);
+  useLayoutEffect(() => {
+    if (!open) {
+      setStyle(null);
+      return undefined;
+    }
+    const update = () => {
+      const wrap = anchorRef?.current;
+      const anchor = wrap?.querySelector?.("button") || wrap || null;
+      setStyle(computeAbilityPickerFixedStyle(anchor));
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    window.visualViewport?.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("scroll", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+      window.visualViewport?.removeEventListener("resize", update);
+      window.visualViewport?.removeEventListener("scroll", update);
+    };
+  }, [open, anchorRef]);
+  if (!open || !style || typeof document === "undefined") return null;
+  return createPortal(
+    <div data-ability-picker-popover="" style={style}>
+      {children}
+    </div>,
+    document.body,
+  );
+}
+
 // ─── CharacterSheetWrapper ────────────────────────────────────────────────────
 
 const CATEGORY_LABELS = {
@@ -947,6 +1062,11 @@ const CharacterSheetWrapper = ({
   const levelUpInFlightRef = useRef(false);
   /** Block poll/hydrate snap-back after XP allocation APIs (coin). */
   const allocationHydrateGuardUntilRef = useRef(0);
+  /** Same class as clocksHydrateGuard — chargen dots/coin vs stale save/poll echo. */
+  const sheetPlacementHydrateGuardUntilRef = useRef(0);
+  const bumpPlacementHydrateGuard = useCallback(() => {
+    sheetPlacementHydrateGuardUntilRef.current = Date.now() + 2500;
+  }, []);
   const pendingResaveRef = useRef(false);
   /**
    * Same-tick protect before meta effect computes isDirty.
@@ -1073,6 +1193,14 @@ const CharacterSheetWrapper = ({
   );
   const [activeMode, setActiveMode] = useState("CHARACTER MODE");
   const [planMode, setPlanMode] = useState(false);
+  /** Marked XP spends for refund commit — draft lives under Plan (no separate Respec pill). */
+  const [respecDroppedIds, setRespecDroppedIds] = useState([]);
+  const respecDroppedIdsRef = useRef(respecDroppedIds);
+  respecDroppedIdsRef.current = respecDroppedIds;
+  const [respecBusy, setRespecBusy] = useState(false);
+  const [respecAllowed, setRespecAllowed] = useState(true);
+  const [respecBlockMessage, setRespecBlockMessage] = useState(null);
+  const [respecConfirmOpen, setRespecConfirmOpen] = useState(false);
   const [planPanelOpen, setPlanPanelOpen] = useState(false);
   const [advancementPlan, setAdvancementPlan] = useState(
     () => character?.advancementPlan || [],
@@ -1636,8 +1764,14 @@ const CharacterSheetWrapper = ({
 
   // Sync standStats when character changes (e.g. switching tabs)
   useEffect(() => {
-    if (sheetDraftIsDirty) return;
-    if (Date.now() < allocationHydrateGuardUntilRef.current) return;
+    const guarded =
+      sheetDraftIsDirty ||
+      dirtyIntentRef.current ||
+      savingRef.current ||
+      Date.now() < sheetPlacementHydrateGuardUntilRef.current ||
+      respecDroppedIds.length > 0 ||
+      Date.now() < allocationHydrateGuardUntilRef.current;
+    if (guarded) return;
     const next = character?.standStats;
     if (next && typeof next === "object") {
       setStandStats((prev) => {
@@ -1653,7 +1787,12 @@ const CharacterSheetWrapper = ({
         return changed ? { ...prev, ...next } : prev;
       });
     }
-  }, [character?.id, character?.standStats, sheetDraftIsDirty]);
+  }, [
+    character?.id,
+    character?.standStats,
+    sheetDraftIsDirty,
+    respecDroppedIds,
+  ]);
 
   // FIX 1: Action ratings — creation enforces 7 total / max 2 per action
   const [actionRatings, setActionRatings] = useState(
@@ -1675,7 +1814,14 @@ const CharacterSheetWrapper = ({
 
   // Sync action dots when loaded character arrives (missing sync caused blank action_dots on save)
   useEffect(() => {
-    if (sheetDraftIsDirty) return;
+    const guarded =
+      sheetDraftIsDirty ||
+      dirtyIntentRef.current ||
+      savingRef.current ||
+      Date.now() < sheetPlacementHydrateGuardUntilRef.current ||
+      respecDroppedIds.length > 0 ||
+      Date.now() < allocationHydrateGuardUntilRef.current;
+    if (guarded) return;
     const next = character?.actionRatings;
     if (!next || typeof next !== "object") return;
     setActionRatings((prev) => {
@@ -1685,7 +1831,7 @@ const CharacterSheetWrapper = ({
       );
       return changed ? { ...prev, ...next } : prev;
     });
-  }, [character?.id, character?.actionRatings, sheetDraftIsDirty]);
+  }, [character?.id, character?.actionRatings, sheetDraftIsDirty, respecDroppedIds]);
 
   // Stress — tracked as filled count; max derived from Durability
   const [stressFilled, setStressFilled] = useState(
@@ -2747,6 +2893,7 @@ const CharacterSheetWrapper = ({
   // Close standard / spin / hamon ability pickers when clicking outside
   useEffect(() => {
     const handleClickOutside = (e) => {
+      if (e.target?.closest?.("[data-ability-picker-popover]")) return;
       if (
         standardAbilityPickerRef.current &&
         !standardAbilityPickerRef.current.contains(e.target)
@@ -3317,6 +3464,12 @@ const CharacterSheetWrapper = ({
       }),
     [directAdvanceFunding],
   );
+  /** Pending already open, or Available XP can bank enough to mint one. */
+  const canConfirmPlaybookLevelUp = useMemo(
+    () =>
+      Number(pendingAdvanceCounts?.playbook || 0) >= 1 || canFundPlaybookAdvance,
+    [pendingAdvanceCounts?.playbook, canFundPlaybookAdvance],
+  );
   /** Free chargen coin room left (budget 6). False once full or after first XP-bought rank. */
   const standCoinHasChargenRoom = useMemo(
     () =>
@@ -3499,13 +3652,36 @@ const CharacterSheetWrapper = ({
           typeof fe.unallocatedXp === "number"
             ? Math.max(0, Math.floor(fe.unallocatedXp))
             : null,
+        ...(fe.actionRatings ? { actionRatings: { ...fe.actionRatings } } : {}),
+        ...(fe.standStats ? { standStats: { ...fe.standStats } } : {}),
+        ...(typeof fe.actionDiceGained === "number"
+          ? { actionDiceGained: fe.actionDiceGained }
+          : {}),
       };
       if (truth.xp && typeof truth.unallocatedXp === "number") {
         xpClocksTruthRef.current = truth;
         onCharacterXpSync?.(truth);
+      } else if (
+        truth.actionRatings ||
+        truth.standStats ||
+        typeof truth.actionDiceGained === "number"
+      ) {
+        onCharacterXpSync?.(truth);
       }
       // Allocate/deallocate included XP — clear xp field touch.
       fieldTouchRef.current = { ...fieldTouchRef.current, xp: false };
+    } else if (
+      fe.actionRatings ||
+      fe.standStats ||
+      typeof fe.actionDiceGained === "number"
+    ) {
+      onCharacterXpSync?.({
+        ...(fe.actionRatings ? { actionRatings: { ...fe.actionRatings } } : {}),
+        ...(fe.standStats ? { standStats: { ...fe.standStats } } : {}),
+        ...(typeof fe.actionDiceGained === "number"
+          ? { actionDiceGained: fe.actionDiceGained }
+          : {}),
+      });
     }
     if (fe.standStats) setStandStats(fe.standStats);
     if (fe.actionRatings) setActionRatings(fe.actionRatings);
@@ -3555,7 +3731,7 @@ const CharacterSheetWrapper = ({
         autosaveAbortRef.current = null;
       }
       draftGenRef.current += 1;
-      allocationHydrateGuardUntilRef.current = Date.now() + 1500;
+      allocationHydrateGuardUntilRef.current = Date.now() + 2500;
       applyBackendCharacter(backendChar);
     },
     [applyBackendCharacter],
@@ -3626,7 +3802,7 @@ const CharacterSheetWrapper = ({
   const refreshXpAllocations = useCallback(async () => {
     if (!characterId) {
       setXpAllocationRows([]);
-      return;
+      return [];
     }
     try {
       const res = await characterAPI.getXpAllocations(characterId, {
@@ -3634,8 +3810,10 @@ const CharacterSheetWrapper = ({
       });
       const rows = Array.isArray(res) ? res : res?.results || [];
       setXpAllocationRows(rows);
+      return rows;
     } catch {
       setXpAllocationRows([]);
+      return [];
     }
   }, [characterId]);
 
@@ -3783,6 +3961,200 @@ const CharacterSheetWrapper = ({
     ],
   );
 
+  const refreshRespecStatus = useCallback(async () => {
+    if (!characterId || !isPostChargen) {
+      setRespecAllowed(true);
+      setRespecBlockMessage(null);
+      return;
+    }
+    try {
+      const res = await characterAPI.respecStatus(characterId);
+      setRespecAllowed(Boolean(res?.allowed));
+      setRespecBlockMessage(res?.message || null);
+    } catch {
+      setRespecAllowed(true);
+      setRespecBlockMessage(null);
+    }
+  }, [characterId, isPostChargen]);
+
+  useEffect(() => {
+    if (planMode && isPostChargen) refreshRespecStatus();
+  }, [planMode, isPostChargen, refreshRespecStatus]);
+
+  const toggleRespecDrop = useCallback((allocationId) => {
+    setRespecDroppedIds((prev) =>
+      prev.includes(allocationId)
+        ? prev.filter((id) => id !== allocationId)
+        : [...prev, allocationId],
+    );
+  }, [planMode]);
+
+  /** Active LEVEL_UP_STAT spends for one coin axis (newest first). */
+  const respecStatAllocations = useCallback(
+    (statKey) => {
+      const want = String(statKey || "").toLowerCase();
+      return (xpAllocationRows || [])
+        .filter(
+          (a) =>
+            !a.undone_at &&
+            a.allocation_type === "LEVEL_UP_STAT" &&
+            String(a.metadata?.stand_stat || "").toLowerCase() === want,
+        )
+        .sort((a, b) => Number(b.id) - Number(a.id));
+    },
+    [xpAllocationRows],
+  );
+
+  /** Preview grades after marked LEVEL_UP_STAT drops (before Commit). */
+  const respecPreviewStandStats = useMemo(() => {
+    if (!planMode || respecDroppedIds.length === 0) return standStats;
+    const next = { ...standStats };
+    const dropped = new Set(respecDroppedIds);
+    for (const a of xpAllocationRows || []) {
+      if (a.undone_at || !dropped.has(a.id)) continue;
+      if (a.allocation_type !== "LEVEL_UP_STAT") continue;
+      const stat = String(a.metadata?.stand_stat || "").toLowerCase();
+      if (!stat || next[stat] == null) continue;
+      next[stat] = Math.max(0, (Number(next[stat]) || 0) - 1);
+    }
+    return next;
+  }, [planMode, standStats, respecDroppedIds, xpAllocationRows]);
+
+  const displayStandPoints = useMemo(() => {
+    if (!planMode || respecDroppedIds.length === 0) return totalStandPoints;
+    return Object.values(respecPreviewStandStats).reduce(
+      (s, v) => s + (Number(v) || 0),
+      0,
+    );
+  }, [planMode, respecDroppedIds.length, totalStandPoints, respecPreviewStandStats]);
+
+  const respecNetPreview = useMemo(() => {
+    const active = (xpAllocationRows || []).filter((a) => !a.undone_at);
+    const dropped = active.filter((a) => respecDroppedIds.includes(a.id));
+    const refund = dropped.reduce((s, a) => s + (Number(a.xp_cost) || 0), 0);
+    return { refund, count: dropped.length, dropped };
+  }, [xpAllocationRows, respecDroppedIds]);
+
+  const handleRespecCommit = useCallback(async () => {
+    if (!characterId || respecBusy || respecDroppedIds.length === 0) return;
+    setRespecBusy(true);
+    try {
+      const token =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `respec-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const res = await characterAPI.respecCommit(characterId, {
+        commit_token: token,
+        draft: {
+          dropped_allocation_ids: respecDroppedIds,
+          added: [],
+        },
+      });
+      if (res?.character) applyAllocationBackendCharacter(res.character);
+      if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
+      else await refreshXpAllocations();
+      setRespecDroppedIds([]);
+      setRespecConfirmOpen(false);
+      setXpActionToast({
+        kind: "ok",
+        message:
+          res?.summary ||
+          `Refund committed — +${res?.net_xp ?? 0} Available XP`,
+      });
+    } catch (err) {
+      setXpActionToast({
+        kind: "err",
+        message: err?.message || "Refund commit failed",
+      });
+    } finally {
+      setRespecBusy(false);
+    }
+  }, [
+    characterId,
+    respecBusy,
+    respecDroppedIds,
+    applyAllocationBackendCharacter,
+    refreshXpAllocations,
+  ]);
+
+  /** Right-click Stand Coin: drop newest LEVEL_UP_STAT for that axis + refund XP now. */
+  const refundStandStatGrade = useCallback(
+    async (statKey) => {
+      if (!characterId || !canEditSheet || respecBusy || levelUpInFlightRef.current) {
+        return;
+      }
+      const want = String(statKey || "").toLowerCase();
+      const pickNewest = (list) =>
+        (list || [])
+          .filter(
+            (a) =>
+              !a.undone_at &&
+              a.allocation_type === "LEVEL_UP_STAT" &&
+              String(a.metadata?.stand_stat || "").toLowerCase() === want,
+          )
+          .sort((a, b) => Number(b.id) - Number(a.id))[0];
+      let target = pickNewest(xpAllocationRows);
+      if (!target) {
+        const fresh = await refreshXpAllocations();
+        target = pickNewest(fresh);
+      }
+      if (!target) {
+        setXpActionToast({
+          kind: "err",
+          message:
+            "No XP-bought grade to refund on this stat (chargen ranks stay).",
+        });
+        return;
+      }
+      await refreshRespecStatus();
+      setRespecBusy(true);
+      levelUpInFlightRef.current = true;
+      try {
+        const token =
+          typeof crypto !== "undefined" && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `respec-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const res = await characterAPI.respecCommit(characterId, {
+          commit_token: token,
+          draft: {
+            dropped_allocation_ids: [target.id],
+            added: [],
+          },
+        });
+        if (res?.character) applyAllocationBackendCharacter(res.character);
+        if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
+        else await refreshXpAllocations();
+        setRespecDroppedIds((prev) => prev.filter((id) => id !== target.id));
+        allocationHydrateGuardUntilRef.current = Date.now() + 2000;
+        bumpPlacementHydrateGuard();
+        setXpActionToast({
+          kind: "ok",
+          message:
+            res?.summary ||
+            `${String(statKey).toUpperCase()} −1 grade — +${res?.net_xp ?? target.xp_cost ?? 0} Available XP`,
+        });
+      } catch (err) {
+        setXpActionToast({
+          kind: "err",
+          message: err?.message || "Could not refund that Stand Coin grade.",
+        });
+      } finally {
+        setRespecBusy(false);
+        levelUpInFlightRef.current = false;
+      }
+    },
+    [
+      characterId,
+      canEditSheet,
+      respecBusy,
+      xpAllocationRows,
+      refreshXpAllocations,
+      refreshRespecStatus,
+      applyAllocationBackendCharacter,
+      bumpPlacementHydrateGuard,
+    ],
+  );
+
   // FIX 1: Creation-mode dot clicks — hard cap 7 total / max 2 per action (3 with Skilled From Birth)
   const updateActionRating = (action, newVal) => {
     const maxDots = maxDotsPerActionAtCreation({
@@ -3793,12 +4165,16 @@ const CharacterSheetWrapper = ({
     if (newVal < 0 || newVal > maxDots) return;
     const delta = newVal - actionRatings[action];
     if (delta > 0 && totalActionDots + delta > maxActionDotsBudget) return;
+    markDirtyIntent();
+    bumpPlacementHydrateGuard();
     setActionRatings((p) => ({ ...p, [action]: newVal }));
   };
 
   // FIX 2: Hard cap at A by default; S only when gm_can_have_s_rank_stand_stats
   const incrementStat = useCallback(
     (stat) => {
+      markDirtyIntent();
+      bumpPlacementHydrateGuard();
       setStandStats((p) => {
         if (p[stat] >= maxStandGradeIndex) return p;
         const currentTotal = Object.values(p).reduce((s, v) => s + v, 0);
@@ -3806,37 +4182,61 @@ const CharacterSheetWrapper = ({
         return { ...p, [stat]: p[stat] + 1 };
       });
     },
-    [maxStandGradeIndex, standCoinIndexBudget],
+    [
+      maxStandGradeIndex,
+      standCoinIndexBudget,
+      markDirtyIntent,
+      bumpPlacementHydrateGuard,
+    ],
   );
 
   // FIX 3: Prevent all-F — at least one stat must stay D or higher
-  const decrementStat = useCallback((stat) => {
-    setStandStats((p) => {
-      if (p[stat] <= 0) return p;
-      const allWouldBeF = Object.entries(p).every(([k, v]) =>
-        k === stat ? v - 1 === 0 : v === 0,
-      );
-      if (allWouldBeF) return p;
-      return { ...p, [stat]: p[stat] - 1 };
-    });
-  }, []);
+  const decrementStat = useCallback(
+    (stat) => {
+      markDirtyIntent();
+      bumpPlacementHydrateGuard();
+      setStandStats((p) => {
+        if (p[stat] <= 0) return p;
+        const allWouldBeF = Object.entries(p).every(([k, v]) =>
+          k === stat ? v - 1 === 0 : v === 0,
+        );
+        if (allWouldBeF) return p;
+        return { ...p, [stat]: p[stat] - 1 };
+      });
+    },
+    [markDirtyIntent, bumpPlacementHydrateGuard],
+  );
 
   const standCoinGrades = useMemo(() => {
+    const source =
+      planMode && respecDroppedIds.length > 0
+        ? respecPreviewStandStats
+        : standStats;
     const out = {};
     for (const k of STAND_STAT_KEYS) {
       const raw = Math.max(
         0,
-        Math.min(maxStandGradeIndex, Number(standStats[k]) || 0),
+        Math.min(maxStandGradeIndex, Number(source[k]) || 0),
       );
       out[k] = INDEX_TO_GRADE(raw);
     }
     return out;
-  }, [standStats, maxStandGradeIndex]);
+  }, [
+    standStats,
+    respecPreviewStandStats,
+    planMode,
+    respecDroppedIds.length,
+    maxStandGradeIndex,
+  ]);
 
   const pcStandCoinReadouts = useMemo(() => {
+    const source =
+      planMode && respecDroppedIds.length > 0
+        ? respecPreviewStandStats
+        : standStats;
     const out = {};
     for (const k of STAND_STAT_KEYS) {
-      const val = Math.max(0, Number(standStats[k]) || 0);
+      const val = Math.max(0, Number(source[k]) || 0);
       const rows = PC_STAT_DESC[k] || [];
       const safeIdx = Math.min(val, Math.max(0, rows.length - 1));
       let text = rows[safeIdx] ?? "";
@@ -3849,7 +4249,7 @@ const CharacterSheetWrapper = ({
       out[k] = text;
     }
     return out;
-  }, [standStats]);
+  }, [standStats, respecPreviewStandStats, planMode, respecDroppedIds.length]);
 
   /** Owned Coin grade + queued plan bumps for one stat (plan-mode effective). */
   const effectiveCoinGradeWithPlanQueue = useCallback(
@@ -4107,12 +4507,21 @@ const CharacterSheetWrapper = ({
     [levelUpChoice, levelUpStat, standStats],
   );
 
-  // FIX 6: Confirm level-up — redeem open PendingAdvance (no second XP deduct).
+  // FIX 6: Confirm level-up — redeem open PendingAdvance (bank from Available XP if needed).
   const confirmLevelUp = async () => {
     if (levelUpInFlightRef.current) return;
     const track = levelUpLockTrack || levelUpSpendTrack || "playbook";
     const pendingCount = Number(pendingAdvanceCounts?.[track] || 0);
-    if (pendingCount < 1 || !characterId) return;
+    const canFund = canFundTrackAdvance({
+      track,
+      ...directAdvanceFunding,
+    });
+    if ((!pendingCount && !canFund) || !characterId) {
+      setLevelUpError(
+        `Need a ${XP_TRACK_SPEND_LABELS[track] || track} pending, or enough Available XP to fill that track first.`,
+      );
+      return;
+    }
 
     if (levelUpChoice === "stat" && levelUpIsBtoA) {
       if (levelUpBtoARewardBranch === "two_unique_plus_one_standard") {
@@ -4174,6 +4583,7 @@ const CharacterSheetWrapper = ({
     }
 
     try {
+      const fund = await ensureTrackPendingForDirectAdvance(track);
       const res = await characterAPI.applyLevelUp(characterId, body);
       if (res?.character) applyAllocationBackendCharacter(res.character);
       if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
@@ -4220,18 +4630,35 @@ const CharacterSheetWrapper = ({
     }
   };
 
+  const fundingFromBackendCharacter = useCallback((backendChar) => {
+    if (!backendChar) return null;
+    return {
+      xpMarks: backendChar.xp_clocks || {},
+      unallocatedXp: Math.max(
+        0,
+        Math.floor(Number(backendChar.unallocated_xp) || 0),
+      ),
+      pendingAdvanceCounts:
+        backendChar.pending_advance_counts &&
+        typeof backendChar.pending_advance_counts === "object"
+          ? { ...backendChar.pending_advance_counts }
+          : {},
+    };
+  }, []);
+
   const ensureTrackPendingForDirectAdvance = useCallback(
-    async (track) => {
+    async (track, fundingOverride) => {
+      const funding = fundingOverride || directAdvanceFunding;
       const need = poolMarksNeededToMint({
         track,
-        ...directAdvanceFunding,
+        ...funding,
       });
       if (need == null) {
         throw new Error(
           `Not enough XP to take a ${XP_TRACK_SPEND_LABELS[track] || track} advance. Bank free pool onto that track or earn a pending first.`,
         );
       }
-      if (need <= 0) return { funded: 0 };
+      if (need <= 0) return { funded: 0, character: null };
       if (poolAllocateBusy) {
         throw new Error("XP allocation in progress — try again in a moment.");
       }
@@ -4240,12 +4667,111 @@ const CharacterSheetWrapper = ({
         amount: need,
       });
       if (res?.character) applyAllocationBackendCharacter(res.character);
-      return { funded: need };
+      return { funded: need, character: res?.character || null };
     },
     [
       characterId,
       directAdvanceFunding,
       poolAllocateBusy,
+      applyAllocationBackendCharacter,
+    ],
+  );
+
+  const directUpgradeActionDot = useCallback(
+    async (action, targetDot) => {
+      if (
+        !characterId ||
+        !canEditSheet ||
+        directAdvanceBusy ||
+        levelUpInFlightRef.current
+      ) {
+        return;
+      }
+      const track = ACTION_ATTR[action];
+      if (!track) return;
+      const rating = Math.max(
+        0,
+        Math.floor(Number(actionRatings[action]) || 0),
+      );
+      const target = Math.min(
+        4,
+        Math.max(rating + 1, Math.floor(Number(targetDot) || rating + 1)),
+      );
+      const steps = target - rating;
+      if (steps <= 0 || rating >= 4) return;
+
+      let funding = { ...directAdvanceFunding };
+      if (
+        !canAffordActionDotSteps({
+          steps,
+          track,
+          ...funding,
+        })
+      ) {
+        setXpActionToast({
+          kind: "err",
+          message: `Need ${
+            XP_TRACK_SPEND_LABELS[track] || track
+          } fill(s) or enough Available XP to bank onto that track (5 XP per +1 ${action} dot).`,
+        });
+        return;
+      }
+
+
+      levelUpInFlightRef.current = true;
+      setDirectAdvanceBusy(true);
+      if (autosaveAbortRef.current) {
+        autosaveAbortRef.current.abort();
+        autosaveAbortRef.current = null;
+      }
+      draftGenRef.current += 1;
+      try {
+        let fundedTotal = 0;
+        for (let i = 0; i < steps; i += 1) {
+          const fund = await ensureTrackPendingForDirectAdvance(track, funding);
+          fundedTotal += Number(fund.funded) || 0;
+          const afterFund = fundingFromBackendCharacter(fund.character);
+          if (afterFund) funding = afterFund;
+
+          const res = await characterAPI.applyMinorAdvance(characterId, {
+            xp_track: track,
+            action,
+          });
+          if (res?.character) {
+            applyAllocationBackendCharacter(res.character);
+            const afterAdv = fundingFromBackendCharacter(res.character);
+            if (afterAdv) funding = afterAdv;
+          }
+          if (Array.isArray(res?.allocations)) {
+            setXpAllocationRows(res.allocations);
+          }
+        }
+        setXpActionToast({
+          kind: "ok",
+          message: `${action} +${steps} dot${steps > 1 ? "s" : ""}${
+            fundedTotal
+              ? ` (banked ${fundedTotal} ${track} XP first)`
+              : ""
+          }.`,
+        });
+      } catch (err) {
+        setXpActionToast({
+          kind: "err",
+          message: err?.message || "Action dot advance failed.",
+        });
+      } finally {
+        levelUpInFlightRef.current = false;
+        setDirectAdvanceBusy(false);
+      }
+    },
+    [
+      characterId,
+      canEditSheet,
+      directAdvanceBusy,
+      actionRatings,
+      directAdvanceFunding,
+      ensureTrackPendingForDirectAdvance,
+      fundingFromBackendCharacter,
       applyAllocationBackendCharacter,
     ],
   );
@@ -4354,9 +4880,52 @@ const CharacterSheetWrapper = ({
 
   const bumpStandCoinGrade = useCallback(
     async (key, delta) => {
+      // Plan mode: right/Shift-click marks LEVEL_UP_STAT refunds; left-click unmarks first, else queues plan / spend.
+      if (planMode && isPostChargen) {
+        if (!canEditSheet) return;
+        const rows = respecStatAllocations(key);
+        if (delta === -1) {
+          if (!respecAllowed) {
+            setXpActionToast({
+              kind: "err",
+              message:
+                respecBlockMessage ||
+                "Ledger mismatch — refunds blocked. Ask a GM to repair.",
+            });
+            return;
+          }
+          const unmarked = rows.find((a) => !respecDroppedIds.includes(a.id));
+          if (!unmarked) {
+            setXpActionToast({
+              kind: "err",
+              message:
+                "No XP-bought grade left to refund on this stat (chargen ranks stay).",
+            });
+            return;
+          }
+          toggleRespecDrop(unmarked.id);
+          return;
+        }
+        if (delta === 1) {
+          const marked = rows.find((a) => respecDroppedIds.includes(a.id));
+          if (marked) {
+            toggleRespecDrop(marked.id);
+            return;
+          }
+          // fall through to plan queue / funded spend below
+        }
+      }
+
       if (delta === -1) {
-        // After first XP spend (allocation history), coin grades are advance-owned.
-        if (isPostChargen) return;
+        // Chargen: free lower. Post-chargen: refund newest XP-bought grade on this axis.
+        if (isPostChargen) {
+          if (planMode) {
+            // Plan path above already handled mark; should not reach here.
+            return;
+          }
+          await refundStandStatGrade(key);
+          return;
+        }
         if (planMode) return;
         decrementStat(key);
         return;
@@ -4374,7 +4943,8 @@ const CharacterSheetWrapper = ({
       if (
         canEditSheet &&
         showStandCoinActionColumn &&
-        canFundPlaybookAdvance
+        canFundPlaybookAdvance &&
+        !(planMode && isPostChargen)
       ) {
         await directUpgradeStandStat(key);
         return;
@@ -4436,6 +5006,12 @@ const CharacterSheetWrapper = ({
       }
     },
     [
+      respecAllowed,
+      respecBlockMessage,
+      respecStatAllocations,
+      respecDroppedIds,
+      toggleRespecDrop,
+      refundStandStatGrade,
       planMode,
       isPostChargen,
       canEditSheet,
@@ -4450,6 +5026,7 @@ const CharacterSheetWrapper = ({
       directUpgradeStandStat,
       incrementStat,
       decrementStat,
+      standStats,
     ],
   );
 
@@ -4497,6 +5074,7 @@ const CharacterSheetWrapper = ({
   const [historySessionId, setHistorySessionId] = useState(null);
   const [historyCharacterFilter, setHistoryCharacterFilter] = useState("all");
   const [historyRefreshTick, setHistoryRefreshTick] = useState(0);
+  const historyListHydratedRef = useRef(false);
   const [historyUndoBusy, setHistoryUndoBusy] = useState(null);
   const [historyUndoError, setHistoryUndoError] = useState(null);
   const [showHistoryManualModal, setShowHistoryManualModal] = useState(false);
@@ -5630,14 +6208,30 @@ const CharacterSheetWrapper = ({
   }, [showXpHistoryModal, characterId]);
 
   useEffect(() => {
-    if (!showHistoryPanel) return;
+    // Filter/mode change: allow one loading flash for the new query.
+    historyListHydratedRef.current = false;
+  }, [historyMode, historySessionId, historyCharacterFilter]);
+
+  useEffect(() => {
+    if (!showHistoryPanel) {
+      historyListHydratedRef.current = false;
+      return;
+    }
     if (!characterId) {
       setHistoryRows([]);
       return;
     }
-    setHistoryLoading(true);
+    const isBackgroundRefresh = historyListHydratedRef.current;
+    if (!isBackgroundRefresh) {
+      setHistoryLoading(true);
+    } else {
+    }
     setHistoryError(null);
     const asArray = (res) => (Array.isArray(res) ? res : res?.results || []);
+    const applyHistoryRows = (rows) => {
+      historyListHydratedRef.current = true;
+      setHistoryRows(rows);
+    };
     if (historyMode === "sheet") {
       Promise.all([
         characterHistoryAPI.list({ character: characterId }),
@@ -5699,7 +6293,7 @@ const CharacterSheetWrapper = ({
             });
           });
           rows.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          setHistoryRows(rows);
+          applyHistoryRows(rows);
         })
         .catch((e) => setHistoryError(e.message))
         .finally(() => setHistoryLoading(false));
@@ -5719,7 +6313,7 @@ const CharacterSheetWrapper = ({
         if (Number.isFinite(tid)) targetIds = [tid];
       }
       if (!targetIds.length) {
-        setHistoryRows([]);
+        applyHistoryRows([]);
         setHistoryLoading(false);
         return;
       }
@@ -5788,7 +6382,7 @@ const CharacterSheetWrapper = ({
             });
           }
           rows.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          setHistoryRows(rows);
+          applyHistoryRows(rows);
         })
         .catch((e) => setHistoryError(e.message))
         .finally(() => setHistoryLoading(false));
@@ -5800,7 +6394,7 @@ const CharacterSheetWrapper = ({
         sessions.map((s) => [Number(s.id), s.name || `Session ${s.id}`]),
       );
       if (!sessions.length) {
-        setHistoryRows([]);
+        applyHistoryRows([]);
         setHistoryLoading(false);
         return;
       }
@@ -5942,7 +6536,7 @@ const CharacterSheetWrapper = ({
             });
           }
           rows.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-          setHistoryRows(rows);
+          applyHistoryRows(rows);
         })
         .catch((e) => setHistoryError(e.message))
         .finally(() => setHistoryLoading(false));
@@ -6149,7 +6743,7 @@ const CharacterSheetWrapper = ({
                     String(historyCharacterFilter),
               );
         filtered.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-        setHistoryRows(filtered);
+        applyHistoryRows(filtered);
       })
       .catch((e) => setHistoryError(e.message))
       .finally(() => setHistoryLoading(false));
@@ -6160,8 +6754,9 @@ const CharacterSheetWrapper = ({
     historyCharacterFilter,
     characterId,
     charCampaign?.id,
-    charCampaign?.campaign_characters,
-    charCampaign?.sessions,
+    // Stable fingerprints — avoid refetch flicker when poll replaces array identity.
+    (charCampaign?.sessions || []).map((s) => s?.id).join(","),
+    (charCampaign?.campaign_characters || []).map((c) => c?.id).join(","),
     isGM,
     historyRefreshTick,
   ]);
@@ -8616,8 +9211,17 @@ const CharacterSheetWrapper = ({
     }
     draftGenRef.current += 1;
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    // Abort in-flight sheet PATCH immediately on newer local edits so a late
+    // STUDY:2 echo cannot overwrite STUDY:0 via updateActiveCharTab→hydrate.
+    if (autosaveAbortRef.current) {
+      autosaveAbortRef.current.abort();
+      autosaveAbortRef.current = null;
+    }
     debounceRef.current = setTimeout(async () => {
       if (!onSave || !canEditSheet) return;
+      if (respecDroppedIdsRef.current.length > 0) {
+        return;
+      }
       if (levelUpInFlightRef.current) return;
       if (markPcAutosaveBusyCollision(savingRef.current, pendingResaveRef)) {
         return;
@@ -8830,6 +9434,10 @@ const CharacterSheetWrapper = ({
       borderRadius: "4px",
       padding: "12px",
       marginBottom: "12px",
+      minWidth: 0,
+      maxWidth: "100%",
+      boxSizing: "border-box",
+      // Do not set overflow:hidden — ability pickers are absolute/fixed children.
     },
     lbl: {
       color: "var(--sheet-label)",
@@ -8898,7 +9506,14 @@ const CharacterSheetWrapper = ({
       background: "var(--hftf-panel)",
       color: "var(--hftf-text-dim)",
     },
-    g2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" },
+    g2: {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(min(280px, 100%), 1fr))",
+      gap: "16px",
+      minWidth: 0,
+      width: "100%",
+      boxSizing: "border-box",
+    },
     g3: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px" },
     warn: {
       background: "#7f1d1d",
@@ -9142,7 +9757,7 @@ const CharacterSheetWrapper = ({
                   ? "Plan mode off during an active session"
                   : planMode
                     ? "Turn off plan mode"
-                    : "Turn on plan mode — queue coin grades & advances";
+                    : "Turn on plan mode — queue advances or mark spends to refund";
             return (
               <button
                 type="button"
@@ -9150,7 +9765,18 @@ const CharacterSheetWrapper = ({
                 title={planTitle}
                 onClick={() => {
                   if (planDisabled) return;
-                  setPlanMode((v) => !v);
+                  setPlanMode((v) => {
+                    const next = !v;
+                    if (!next) {
+                      setRespecDroppedIds([]);
+                      setRespecConfirmOpen(false);
+                    } else {
+                      setRespecDroppedIds([]);
+                      setRespecConfirmOpen(false);
+                      void refreshRespecStatus();
+                    }
+                    return next;
+                  });
                 }}
                 style={{
                   padding: "4px 14px",
@@ -9190,6 +9816,146 @@ const CharacterSheetWrapper = ({
           }}
         >
           {planSessionHint}
+        </div>
+      ) : null}
+
+      {planMode ? (
+        <div
+          style={{
+            padding: "10px 16px",
+            background: "#1e1b4b",
+            borderBottom: "1px solid #7c3aed",
+            fontSize: 12,
+            color: "#e9d5ff",
+          }}
+        >
+          {!respecAllowed ? (
+            <div style={{ color: "#fca5a5", marginBottom: 8 }}>
+              {respecBlockMessage ||
+                "Ledger mismatch — refund commit blocked. Ask a GM to repair."}
+            </div>
+          ) : null}
+          <div style={{ fontWeight: "bold", marginBottom: 6 }}>
+            Plan ON — queue new advances, or mark XP spends to refund to Available
+            XP, then Commit refund.
+          </div>
+          <div style={{ color: "#a5b4fc", marginBottom: 8 }}>
+            Refund preview: +{respecNetPreview.refund} XP (
+            {respecNetPreview.count} spend
+            {respecNetPreview.count === 1 ? "" : "s"})
+          </div>
+          <ul
+            style={{
+              margin: "0 0 10px",
+              paddingLeft: 18,
+              maxHeight: 160,
+              overflow: "auto",
+            }}
+          >
+            {(xpAllocationRows || [])
+              .filter((a) => !a.undone_at)
+              .map((a) => {
+                const marked = respecDroppedIds.includes(a.id);
+                const acquire =
+                  a.allocation_type === "LEVEL_UP_ACQUIRE_STAND";
+                return (
+                  <li key={a.id} style={{ marginBottom: 4 }}>
+                    <label
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "flex-start",
+                        cursor: acquire ? "not-allowed" : "pointer",
+                        opacity: acquire ? 0.5 : 1,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        disabled={acquire || !respecAllowed}
+                        checked={marked}
+                        onChange={() => toggleRespecDrop(a.id)}
+                      />
+                      <span>
+                        {a.summary || a.allocation_type_display || a.allocation_type}
+                        {a.metadata?.reversal ? " (already reversed)" : ""}
+                        {acquire ? " — drop not allowed (phase 1)" : ""}
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+          </ul>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              disabled={
+                respecBusy ||
+                !respecAllowed ||
+                respecDroppedIds.length === 0
+              }
+              onClick={() => setRespecConfirmOpen(true)}
+              style={{
+                ...S.btn,
+                background: "#7c3aed",
+                color: "#fff",
+                fontWeight: "bold",
+              }}
+            >
+              Commit refund…
+            </button>
+            <button
+              type="button"
+              disabled={respecBusy || respecDroppedIds.length === 0}
+              onClick={() => {
+                setRespecDroppedIds([]);
+                setRespecConfirmOpen(false);
+              }}
+              style={{ ...S.btn, background: "#374151", color: "#fff" }}
+            >
+              Clear marks
+            </button>
+          </div>
+          {respecConfirmOpen ? (
+            <div
+              style={{
+                marginTop: 10,
+                padding: 10,
+                background: "#0f172a",
+                border: "1px solid #a78bfa",
+                borderRadius: 6,
+              }}
+            >
+              <div style={{ marginBottom: 8 }}>
+                Confirm refund of {respecNetPreview.count} spend
+                {respecNetPreview.count === 1 ? "" : "s"} (+
+                {respecNetPreview.refund} Available XP). Sheet rebuilds from
+                remaining advancements.
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  type="button"
+                  disabled={respecBusy}
+                  onClick={handleRespecCommit}
+                  style={{
+                    ...S.btn,
+                    background: "#7c3aed",
+                    color: "#fff",
+                    fontWeight: "bold",
+                  }}
+                >
+                  {respecBusy ? "Committing…" : "Confirm"}
+                </button>
+                <button
+                  type="button"
+                  disabled={respecBusy}
+                  onClick={() => setRespecConfirmOpen(false)}
+                  style={{ ...S.btn, background: "#374151", color: "#fff" }}
+                >
+                  Back
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -9254,6 +10020,9 @@ const CharacterSheetWrapper = ({
                       gap: "16px",
                       alignItems: "start",
                       flexWrap: "wrap",
+                      minWidth: 0,
+                      width: "100%",
+                      boxSizing: "border-box",
                     }}
                   >
                     {/* Portrait */}
@@ -9263,7 +10032,10 @@ const CharacterSheetWrapper = ({
                         flexDirection: "column",
                         alignItems: "center",
                         gap: "8px",
-                        flexShrink: 0,
+                        flex: "1 1 200px",
+                        minWidth: 0,
+                        maxWidth: "100%",
+                        boxSizing: "border-box",
                       }}
                     >
                       <div
@@ -9354,8 +10126,10 @@ const CharacterSheetWrapper = ({
                           alignItems: "center",
                           gap: 8,
                           width: "100%",
-                          minWidth: 100,
+                          maxWidth: "100%",
+                          minWidth: 0,
                           marginTop: 4,
+                          boxSizing: "border-box",
                         }}
                       >
                         <div
@@ -9365,6 +10139,9 @@ const CharacterSheetWrapper = ({
                             alignItems: "center",
                             gap: 8,
                             width: "100%",
+                            maxWidth: "100%",
+                            minWidth: 0,
+                            boxSizing: "border-box",
                           }}
                         >
                           {characterId && (
@@ -9407,7 +10184,10 @@ const CharacterSheetWrapper = ({
                               textAlign: "center",
                               cursor: characterId ? "pointer" : "default",
                               width: "100%",
+                              maxWidth: "100%",
+                              minWidth: 0,
                               boxSizing: "border-box",
+                              overflow: "hidden",
                             }}
                           >
                             <div
@@ -9432,8 +10212,12 @@ const CharacterSheetWrapper = ({
                                     : pcLevel >= 4
                                       ? "#fbbf24"
                                       : "#a5b4fc",
-                                whiteSpace: isChargenIncomplete ? "normal" : undefined,
-                                wordBreak: isChargenIncomplete ? "break-word" : undefined,
+                                whiteSpace: isChargenIncomplete
+                                  ? "normal"
+                                  : undefined,
+                                overflowWrap: "anywhere",
+                                wordBreak: "break-word",
+                                maxWidth: "100%",
                               }}
                             >
                               {isChargenIncomplete ? CHARGEN_LEVEL_PROMPT : pcLevel}
@@ -14226,7 +15010,7 @@ const CharacterSheetWrapper = ({
                           }}
                           title={`SRD grade-value sum across six stats (${STAND_COIN_CREATION_POINT_SUM} at chargen, +${Number(character?.standCoinPointsGained) || 0} from XP on record).`}
                         >
-                          {totalStandPoints}/{standCoinIndexBudget} pts
+                          {displayStandPoints}/{standCoinIndexBudget} pts
                         </span>
                       </div>
                       <div
@@ -14264,30 +15048,40 @@ const CharacterSheetWrapper = ({
                         readouts={pcStandCoinReadouts}
                         onStep={bumpStandCoinGrade}
                         plannedGrades={plannedCoinGrades}
-                        canStepUp={(statKey) =>
-                          !standCoinHasChargenRoom &&
-                          canEditSheet &&
-                          showStandCoinActionColumn &&
-                          canDirectStandUpgrade({
-                            stat: statKey,
-                            standGradeIndex: Math.max(
-                              0,
-                              Number(standStats[statKey]) || 0,
-                            ),
-                            maxStandGradeIndex,
-                            canEditSheet,
-                            hasStandPlaybook: showStandCoinActionColumn,
-                            ...directAdvanceFunding,
-                          })
-                        }
+                        canStepUp={(statKey) => {
+                          if (planMode && isPostChargen) {
+                            return (
+                              canEditSheet &&
+                              respecAllowed &&
+                              respecStatAllocations(statKey).some((a) =>
+                                respecDroppedIds.includes(a.id),
+                              )
+                            );
+                          }
+                          return (
+                            !standCoinHasChargenRoom &&
+                            canEditSheet &&
+                            showStandCoinActionColumn &&
+                            canDirectStandUpgrade({
+                              stat: statKey,
+                              standGradeIndex: Math.max(
+                                0,
+                                Number(standStats[statKey]) || 0,
+                              ),
+                              maxStandGradeIndex,
+                              canEditSheet,
+                              hasStandPlaybook: showStandCoinActionColumn,
+                              ...directAdvanceFunding,
+                            })
+                          );
+                        }}
                         readOnly={
                           !(
                             isStandCoinChargenEditable ||
-                            (planMode && isPostChargen && canEditPlan) ||
-                            (!standCoinHasChargenRoom &&
+                            (isPostChargen &&
                               canEditSheet &&
-                              showStandCoinActionColumn &&
-                              canFundPlaybookAdvance)
+                              showStandCoinActionColumn) ||
+                            (planMode && isPostChargen && canEditPlan)
                           )
                         }
                       />
@@ -14300,8 +15094,12 @@ const CharacterSheetWrapper = ({
                           lineHeight: 1.45,
                         }}
                       >
-                        {standCoinHasChargenRoom && isStandCoinChargenEditable
+                        {planMode && isPostChargen
+                          ? "Plan ON: right-click / Shift-click a wedge to mark that XP grade for refund (preview updates). Click a marked wedge to unmark. Otherwise click queues a plan advance."
+                          : standCoinHasChargenRoom && isStandCoinChargenEditable
                           ? "Chargen: click a wedge to raise one grade if leftover pts remain (budget 6). Right-click or Shift-click to lower and refund. This is not an advance."
+                          : isPostChargen && canEditSheet
+                            ? "Right-click / Shift-click a wedge to lower one XP-bought grade and refund that spend to Available XP. Left-click spends a playbook advance when funded."
                           : planMode && !canFundPlaybookAdvance
                             ? "Plan ON: click a wedge to queue +1 grade on the playbook track. Turn Plan off or fund playbook XP to spend immediately."
                             : canFundPlaybookAdvance || canAffordLevelUp
@@ -14328,9 +15126,9 @@ const CharacterSheetWrapper = ({
                       }}
                     >
                       <span style={{ color: "#6b7280" }}>
-                        Coin: {totalStandPoints} pts × 10 ={" "}
+                        Coin: {displayStandPoints} pts × 10 ={" "}
                         <span style={{ color: "#a78bfa" }}>
-                          {totalStandPoints * 10} XP
+                          {displayStandPoints * 10} XP
                         </span>
                       </span>
                       <span style={{ color: "#6b7280" }}>
@@ -15161,7 +15959,22 @@ const CharacterSheetWrapper = ({
                                             ) {
                                               return;
                                             }
-                                            if (isAdvDot) return;
+                                            if (isPostChargen) {
+                                              if (filled) {
+                                                return;
+                                              }
+                                              if (d > rating && d <= 4) {
+                                                void directUpgradeActionDot(
+                                                  action,
+                                                  d,
+                                                );
+                                                return;
+                                              }
+                                              return;
+                                            }
+                                            if (isAdvDot) {
+                                              return;
+                                            }
                                             updateActionRating(
                                               action,
                                               d <= rating ? d - 1 : d,
@@ -15172,14 +15985,27 @@ const CharacterSheetWrapper = ({
                                               ? `Plan: queue +1 ${action} (next ${ACTION_ATTR[action] || "attribute"} fill)`
                                               : plannedGhost
                                                 ? `Dot ${d} — planned (not owned yet)`
-                                                : isAdvDot
-                                                  ? filled
-                                                    ? `Dot ${d} — gained via advancement`
-                                                    : `Dot ${d} — unlock via attribute XP / plan`
-                                                  : dotsRemaining === 0 &&
-                                                      !filled
-                                                    ? "No action dots remaining"
-                                                    : ""
+                                                : isPostChargen &&
+                                                    !filled &&
+                                                    d > rating
+                                                  ? canDirectActionDotUpgrade({
+                                                      actionRating: rating,
+                                                      canEditSheet,
+                                                      isPostChargen,
+                                                      track:
+                                                        ACTION_ATTR[action],
+                                                      ...directAdvanceFunding,
+                                                    })
+                                                    ? `Spend XP: raise ${action} to ${d} (${d - rating}×5 XP via ${ACTION_ATTR[action] || "attribute"})`
+                                                    : `Need ${ACTION_ATTR[action] || "attribute"} XP / pending (or bank Available XP) to raise ${action}`
+                                                  : isAdvDot
+                                                    ? filled
+                                                      ? `Dot ${d} — gained via advancement`
+                                                      : `Dot ${d} — unlock via attribute XP / plan`
+                                                    : dotsRemaining === 0 &&
+                                                        !filled
+                                                      ? "No action dots remaining"
+                                                      : ""
                                           }
                                           style={{
                                             width: "12px",
@@ -15196,10 +16022,15 @@ const CharacterSheetWrapper = ({
                                                 }`,
                                             cursor: planClickable
                                               ? "pointer"
-                                              : isAdvDot ||
-                                                  (planMode && isPostChargen)
-                                                ? "default"
-                                                : "pointer",
+                                              : isPostChargen &&
+                                                  !filled &&
+                                                  d > rating &&
+                                                  !(planMode && isPostChargen)
+                                                ? "pointer"
+                                                : isAdvDot ||
+                                                    (planMode && isPostChargen)
+                                                  ? "default"
+                                                  : "pointer",
                                             background: filled
                                               ? isAdvDot
                                                 ? "var(--sheet-ghost-text)"
@@ -18672,9 +19503,14 @@ const CharacterSheetWrapper = ({
                                     fontSize: "10px",
                                     color: "#6b7280",
                                     marginTop: 2,
+                                    textDecoration: row.allocation?.metadata?.reversal
+                                      ? "line-through"
+                                      : undefined,
                                   }}
                                 >
-                                  Undone
+                                  {row.allocation?.metadata?.reversal
+                                    ? "Reversed (respec)"
+                                    : "Undone"}
                                 </div>
                               )}
                             </li>
@@ -19026,6 +19862,35 @@ const CharacterSheetWrapper = ({
                               type="button"
                               aria-label={`Remove ${ab.name || "ability"}`}
                               onClick={() => {
+                                if (isPostChargen && !planMode) {
+                                  setXpActionToast({
+                                    kind: "err",
+                                    message:
+                                      "Turn Plan ON, mark the XP spend to refund, then Commit refund.",
+                                  });
+                                  return;
+                                }
+                                if (isPostChargen && planMode) {
+                                  const match = (xpAllocationRows || []).find(
+                                    (a) =>
+                                      !a.undone_at &&
+                                      a.allocation_type ===
+                                        "LEVEL_UP_PLAYBOOK_ABILITY" &&
+                                      (a.metadata?.picked?.id === ab.id ||
+                                        a.metadata?.picked?.name === ab.name ||
+                                        a.summary?.includes?.(ab.name)),
+                                  );
+                                  if (match) {
+                                    toggleRespecDrop(match.id);
+                                    return;
+                                  }
+                                  setXpActionToast({
+                                    kind: "err",
+                                    message:
+                                      "No matching XP spend found — mark it in the Plan refund list.",
+                                  });
+                                  return;
+                                }
                                 markDirtyIntent();
                                 setAbilities((p) =>
                                   p.filter((_, i) => i !== ab._uiIndex),
@@ -19087,21 +19952,9 @@ const CharacterSheetWrapper = ({
                           + Standard
                         </button>
                         {standardAbilityPickerOpen && (
-                          <div
-                            style={{
-                              position: "absolute",
-                              top: "100%",
-                              left: 0,
-                              marginTop: "4px",
-                              zIndex: 101,
-                              minWidth: "280px",
-                              maxWidth: "min(92vw, 320px)",
-                              padding: "8px",
-                              background: "#111827",
-                              border: "1px solid #374151",
-                              borderRadius: "4px",
-                              boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
-                            }}
+                          <AbilityPickerPopover
+                            open={standardAbilityPickerOpen}
+                            anchorRef={standardAbilityPickerRef}
                           >
                             <input
                               style={{
@@ -19122,8 +19975,9 @@ const CharacterSheetWrapper = ({
                             />
                             <div
                               style={{
-                                marginTop: "6px",
-                                maxHeight: "180px",
+                                marginTop: "0",
+                                flex: "1 1 auto",
+                                minHeight: 0,
                                 overflowY: "auto",
                                 background: "#0f1419",
                                 border: "1px solid #1f2937",
@@ -19305,7 +20159,7 @@ const CharacterSheetWrapper = ({
                                 </button>
                               </div>
                             )}
-                          </div>
+                          </AbilityPickerPopover>
                         )}
                       </div>
                       ) : null}
@@ -19341,21 +20195,9 @@ const CharacterSheetWrapper = ({
                             + Spin ability
                           </button>
                           {spinAbilityPickerOpen && (
-                            <div
-                              style={{
-                                position: "absolute",
-                                top: "100%",
-                                left: 0,
-                                marginTop: "4px",
-                                zIndex: 101,
-                                minWidth: "280px",
-                                maxWidth: "min(92vw, 320px)",
-                                padding: "8px",
-                                background: "#111827",
-                                border: "1px solid #6d28d9",
-                                borderRadius: "4px",
-                                boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
-                              }}
+                            <AbilityPickerPopover
+                              open={spinAbilityPickerOpen}
+                              anchorRef={spinAbilityPickerRef}
                             >
                               <input
                                 style={{
@@ -19376,8 +20218,8 @@ const CharacterSheetWrapper = ({
                               />
                               <div
                                 style={{
-                                  marginTop: "6px",
-                                  maxHeight: "180px",
+                                  flex: "1 1 auto",
+                                  minHeight: 0,
                                   overflowY: "auto",
                                   background: "#0f1419",
                                   border: "1px solid #4c1d95",
@@ -19633,7 +20475,7 @@ const CharacterSheetWrapper = ({
                                   })()}
                                 </div>
                               )}
-                            </div>
+                            </AbilityPickerPopover>
                           )}
                         </div>
                       )}
@@ -19669,21 +20511,9 @@ const CharacterSheetWrapper = ({
                             + Hamon ability
                           </button>
                           {hamonAbilityPickerOpen && (
-                            <div
-                              style={{
-                                position: "absolute",
-                                top: "100%",
-                                left: 0,
-                                marginTop: "4px",
-                                zIndex: 101,
-                                minWidth: "280px",
-                                maxWidth: "min(92vw, 320px)",
-                                padding: "8px",
-                                background: "#111827",
-                                border: "1px solid #b45309",
-                                borderRadius: "4px",
-                                boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
-                              }}
+                            <AbilityPickerPopover
+                              open={hamonAbilityPickerOpen}
+                              anchorRef={hamonAbilityPickerRef}
                             >
                               <input
                                 style={{
@@ -19704,8 +20534,8 @@ const CharacterSheetWrapper = ({
                               />
                               <div
                                 style={{
-                                  marginTop: "6px",
-                                  maxHeight: "180px",
+                                  flex: "1 1 auto",
+                                  minHeight: 0,
                                   overflowY: "auto",
                                   background: "#0f1419",
                                   border: "1px solid #78350f",
@@ -19961,7 +20791,7 @@ const CharacterSheetWrapper = ({
                                   })()}
                                 </div>
                               )}
-                            </div>
+                            </AbilityPickerPopover>
                           )}
                         </div>
                       )}
@@ -22438,6 +23268,15 @@ const CharacterSheetWrapper = ({
                 Playbook track ({Number(xp.playbook) || 0}/10) ·{" "}
                 {Number(pendingAdvanceCounts?.playbook || 0)} open pending
                 {Number(pendingAdvanceCounts?.playbook || 0) === 1 ? "" : "s"}
+                {Number(pendingAdvanceCounts?.playbook || 0) < 1 &&
+                canFundPlaybookAdvance
+                  ? ` · Confirm will bank ${
+                      poolMarksNeededToMint({
+                        track: "playbook",
+                        ...directAdvanceFunding,
+                      }) || 10
+                    } from Available XP (${unallocatedXp})`
+                  : ""}
               </div>
             </div>
 
@@ -22452,29 +23291,27 @@ const CharacterSheetWrapper = ({
                 type="button"
                 onClick={confirmLevelUp}
                 disabled={
-                  levelUpBusy ||
-                  !characterId ||
-                  Number(pendingAdvanceCounts?.playbook || 0) < 1
+                  levelUpBusy || !characterId || !canConfirmPlaybookLevelUp
                 }
                 style={{
                   ...S.btn,
                   background:
-                    !levelUpBusy &&
-                    characterId &&
-                    Number(pendingAdvanceCounts?.playbook || 0) >= 1
+                    !levelUpBusy && characterId && canConfirmPlaybookLevelUp
                       ? "#7c3aed"
                       : "#374151",
                   color:
-                    !levelUpBusy &&
-                    characterId &&
-                    Number(pendingAdvanceCounts?.playbook || 0) >= 1
+                    !levelUpBusy && characterId && canConfirmPlaybookLevelUp
                       ? "#fff"
                       : "#6b7280",
                   flex: 1,
                   fontWeight: "bold",
                 }}
               >
-                {levelUpBusy ? "Applying…" : "Confirm (redeem pending)"}
+                {levelUpBusy
+                  ? "Applying…"
+                  : Number(pendingAdvanceCounts?.playbook || 0) >= 1
+                    ? "Confirm (redeem pending)"
+                    : "Confirm (bank Available XP → redeem)"}
               </button>
               <button
                 type="button"

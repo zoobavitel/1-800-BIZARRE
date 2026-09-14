@@ -2167,6 +2167,106 @@ class CharacterViewSet(viewsets.ModelViewSet):
             }
         )
 
+    @action(detail=True, methods=["get"], url_path="respec-status")
+    def respec_status(self, request, pk=None):
+        """Whether Respec mode is allowed for this character."""
+        from characters.services.respec import diff_fold_vs_live, ensure_chargen_baseline
+
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot respec this character.")
+
+        if CharacterXPAllocation.objects.filter(character=character).exists():
+            if not character.chargen_baseline:
+                ensure_chargen_baseline(character)
+                character.refresh_from_db()
+        diffs = {}
+        if character.chargen_baseline:
+            diffs = diff_fold_vs_live(character)
+            ok = not diffs
+            if character.ledger_reconcile_ok != ok:
+                character.ledger_reconcile_ok = ok
+                character.save(update_fields=["ledger_reconcile_ok"])
+        else:
+            ok = True
+
+        return Response(
+            {
+                "success": True,
+                "allowed": bool(ok),
+                "ledger_reconcile_ok": bool(character.ledger_reconcile_ok),
+                "has_baseline": bool(character.chargen_baseline),
+                "diffs": diffs,
+                "message": (
+                    None
+                    if ok
+                    else (
+                        "XP ledger does not match the sheet. "
+                        "Ask a GM to run verify_allocation_ledger / repair."
+                    )
+                ),
+            }
+        )
+
+    @action(detail=True, methods=["post"], url_path="respec-commit")
+    def respec_commit_action(self, request, pk=None):
+        """Commit a Respec draft: reverse dropped spends, mint adds, refund to pool."""
+        from characters.services.respec import RespecError, commit_respec
+
+        character = self.get_object()
+        if not _user_may_edit_character(request.user, character):
+            raise PermissionDenied("You cannot respec this character.")
+
+        draft = request.data.get("draft")
+        if not isinstance(draft, dict):
+            return Response(
+                {"error": "draft object is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        token = request.data.get("commit_token")
+        allow_acquire = bool(request.data.get("allow_acquire_stand_drop"))
+        if allow_acquire and not (
+            request.user.is_staff
+            or (
+                character.campaign_id
+                and character.campaign.gm_id == request.user.id
+            )
+        ):
+            return Response(
+                {"error": "Only the campaign GM may drop Acquire Stand."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            result = commit_respec(
+                character,
+                draft=draft,
+                commit_token=str(token or ""),
+                user=request.user,
+                allow_acquire_stand_drop=allow_acquire,
+            )
+        except RespecError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+        except XPAllocationError as exc:
+            return Response({"error": exc.message}, status=status.HTTP_400_BAD_REQUEST)
+
+        character = result["character"]
+        character.refresh_from_db()
+        return Response(
+            {
+                "success": True,
+                "idempotent": result.get("idempotent", False),
+                "summary": result.get("summary"),
+                "net_xp": result.get("net_xp"),
+                "refunded": result.get("refunded"),
+                "spent": result.get("spent"),
+                "dropped_ids": result.get("dropped_ids"),
+                "minted_ids": result.get("minted_ids"),
+                "character": _character_response(character),
+                "allocations": _allocation_list_response(character),
+            }
+        )
+
     @action(detail=True, methods=["get"], url_path="gm-undo-status")
     def gm_undo_status_action(self, request, pk=None):
         """Whether this GM can undo their most recent XP award on a player's PC."""

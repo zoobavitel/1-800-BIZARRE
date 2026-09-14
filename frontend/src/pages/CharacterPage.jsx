@@ -74,16 +74,61 @@ const PAGE_STYLES = {
     background: "#000",
     color: "#fff",
     minHeight: "100vh",
+    overflowX: "clip",
+    maxWidth: "100vw",
+    boxSizing: "border-box",
   },
-  content: { padding: "16px", maxWidth: "1400px", margin: "0 auto" },
+  content: {
+    padding: "16px",
+    maxWidth: "1400px",
+    margin: "0 auto",
+    width: "100%",
+    boxSizing: "border-box",
+    minWidth: 0,
+  },
   modeBar: {
     display: "flex",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     padding: "8px 16px",
     borderBottom: "1px solid #374151",
     flexWrap: "wrap",
-    gap: "6px",
+    gap: "8px",
+    width: "100%",
+    maxWidth: "100%",
+    boxSizing: "border-box",
+    minWidth: 0,
+  },
+  modeBarLeft: {
+    display: "flex",
+    gap: "4px",
+    alignItems: "center",
+    flexWrap: "wrap",
+    flex: "1 1 280px",
+    minWidth: 0,
+    maxWidth: "100%",
+  },
+  modeBarRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    flexWrap: "wrap",
+    flex: "1 1 220px",
+    minWidth: 0,
+    maxWidth: "100%",
+    justifyContent: "flex-end",
+  },
+  modeSelect: {
+    background: "#1f2937",
+    color: "#9ca3af",
+    border: "1px solid #4b5563",
+    padding: "4px 8px",
+    fontSize: "11px",
+    fontFamily: "monospace",
+    borderRadius: "4px",
+    maxWidth: "100%",
+    minWidth: 0,
+    flex: "1 1 140px",
   },
   modeBtn: (active) => ({
     padding: "6px 12px",
@@ -94,6 +139,7 @@ const PAGE_STYLES = {
     cursor: "pointer",
     fontFamily: "monospace",
     fontSize: "12px",
+    flexShrink: 0,
   }),
 };
 
@@ -895,6 +941,12 @@ export default function CharacterPage({
             saved.rejected_fields,
           );
         }
+        // Aborted by a newer local edit — do not write tab character (stale echo).
+        if (options?.signal?.aborted) {
+          const abortErr = new Error("Save aborted");
+          abortErr.name = "AbortError";
+          throw abortErr;
+        }
         if (!payload.id && saved.id && typeof window !== "undefined")
           window.location.hash = characterHashFromIdAndName(
             saved.id,
@@ -944,6 +996,11 @@ export default function CharacterPage({
         // Without this merge, character.crew becomes '' after save, causing a perceived "change" and save loop.
         const merged = {
           ...savedFrontend,
+          // Prefer the draft we just sent for chargen placements — a late older
+          // PATCH echo must not snap action dots / Stand Coin back.
+          actionRatings:
+            frontend.actionRatings ?? savedFrontend.actionRatings,
+          standStats: frontend.standStats ?? savedFrontend.standStats,
           crew: payload.crew ?? savedFrontend.crew,
           crewId: payload.crewId ?? savedFrontend.crewId,
           image: savedFrontend.image,
@@ -1045,6 +1102,11 @@ export default function CharacterPage({
             { emptyPreferredClearsCustoms: true },
           ),
         };
+        if (options?.signal?.aborted) {
+          const abortErr = new Error("Save aborted");
+          abortErr.name = "AbortError";
+          throw abortErr;
+        }
         updateActiveCharTab(merged.id, merged);
         await loadCharacters();
       } catch (err) {
@@ -1577,15 +1639,8 @@ export default function CharacterPage({
   return (
     <div style={PAGE_STYLES.page}>
       {/* ── Top bar ── */}
-      <div style={PAGE_STYLES.modeBar}>
-        <nav
-          style={{
-            display: "flex",
-            gap: "4px",
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
+      <div style={PAGE_STYLES.modeBar} className="character-page-mode-bar">
+        <nav style={PAGE_STYLES.modeBarLeft}>
           <button
             type="button"
             onClick={() => {
@@ -1703,7 +1758,7 @@ export default function CharacterPage({
         </nav>
 
         {/* Right side: error banner + "Open…" dropdowns */}
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <div style={PAGE_STYLES.modeBarRight}>
           {charactersError && (
             <span style={{ fontSize: "12px", color: "#fca5a5" }}>
               {charactersError}
@@ -1714,15 +1769,7 @@ export default function CharacterPage({
             <>
               {characters.length > 0 && (
                 <select
-                  style={{
-                    background: "#1f2937",
-                    color: "#9ca3af",
-                    border: "1px solid #4b5563",
-                    padding: "4px 8px",
-                    fontSize: "11px",
-                    fontFamily: "monospace",
-                    borderRadius: "4px",
-                  }}
+                  style={PAGE_STYLES.modeSelect}
                   value=""
                   onChange={(e) => {
                     const char = characters.find(
@@ -1744,15 +1791,7 @@ export default function CharacterPage({
                 </select>
               )}
               <select
-                style={{
-                  background: "#1f2937",
-                  color: "#9ca3af",
-                  border: "1px solid #4b5563",
-                  padding: "4px 8px",
-                  fontSize: "11px",
-                  fontFamily: "monospace",
-                  borderRadius: "4px",
-                }}
+                style={PAGE_STYLES.modeSelect}
                 value=""
                 onChange={(e) => {
                   const npc = npcs.find(
@@ -1783,6 +1822,7 @@ export default function CharacterPage({
                     borderRadius: "4px",
                     cursor: "pointer",
                     whiteSpace: "nowrap",
+                    flexShrink: 0,
                   }}
                 >
                   Delete character
@@ -1795,15 +1835,7 @@ export default function CharacterPage({
             <>
               {characters.length > 0 && (
                 <select
-                  style={{
-                    background: "#1f2937",
-                    color: "#9ca3af",
-                    border: "1px solid #4b5563",
-                    padding: "4px 8px",
-                    fontSize: "11px",
-                    fontFamily: "monospace",
-                    borderRadius: "4px",
-                  }}
+                  style={PAGE_STYLES.modeSelect}
                   value=""
                   onChange={(e) => {
                     const char = characters.find(
@@ -1832,15 +1864,7 @@ export default function CharacterPage({
                 </select>
               )}
               <select
-                style={{
-                  background: "#1f2937",
-                  color: "#9ca3af",
-                  border: "1px solid #4b5563",
-                  padding: "4px 8px",
-                  fontSize: "11px",
-                  fontFamily: "monospace",
-                  borderRadius: "4px",
-                }}
+                style={PAGE_STYLES.modeSelect}
                 value=""
                 onChange={(e) => {
                   const npc = npcs.find(
@@ -1870,6 +1894,7 @@ export default function CharacterPage({
                   borderRadius: "4px",
                   cursor: "pointer",
                   whiteSpace: "nowrap",
+                  flexShrink: 0,
                 }}
               >
                 Delete NPC
@@ -1943,6 +1968,15 @@ export default function CharacterPage({
                       ...(patch.xp ? { xp: patch.xp } : {}),
                       ...(typeof patch.unallocatedXp === "number"
                         ? { unallocatedXp: patch.unallocatedXp }
+                        : {}),
+                      ...(patch.actionRatings
+                        ? { actionRatings: patch.actionRatings }
+                        : {}),
+                      ...(patch.standStats
+                        ? { standStats: patch.standStats }
+                        : {}),
+                      ...(typeof patch.actionDiceGained === "number"
+                        ? { actionDiceGained: patch.actionDiceGained }
                         : {}),
                     },
                   };
