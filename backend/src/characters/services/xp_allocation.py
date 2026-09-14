@@ -40,10 +40,18 @@ FRONTEND_ACTION_TO_BACKEND = {
     "PROWL": "prowl",
     "SKIRMISH": "skirmish",
     "WRECK": "wreck",
-    "BIZARRE": "bizarre",
+    # Sheet + PATCH use BitD key ``attune``; clients label it BIZARRE.
+    "BIZARRE": "attune",
+    "ATTUNE": "attune",
     "COMMAND": "command",
     "CONSORT": "consort",
     "SWAY": "sway",
+}
+
+# Legacy XP spends wrote ``bizarre``; sheet reads ``attune``. Treat as one pool.
+_ACTION_DOT_ALIASES = {
+    "attune": ("attune", "bizarre"),
+    "bizarre": ("attune", "bizarre"),
 }
 
 
@@ -96,6 +104,9 @@ def _normalize_action(action):
     if upper in FRONTEND_ACTION_TO_BACKEND:
         return FRONTEND_ACTION_TO_BACKEND[upper]
     lower = raw.lower()
+    # Accept legacy DB / plan payloads that still say ``bizarre``.
+    if lower in ("bizarre", "attune"):
+        return "attune"
     if lower in FRONTEND_ACTION_TO_BACKEND.values():
         return lower
     raise XPAllocationError(f"Unknown action: {action}")
@@ -270,15 +281,27 @@ def _refund_xp_for_undo(character, track, cost):
     character.xp_clocks = clocks
 
 
+def _action_dot_keys(action_key):
+    return _ACTION_DOT_ALIASES.get(action_key, (action_key,))
+
+
+def _read_action_dot(dots, action_key):
+    return max(int(dots.get(k, 0) or 0) for k in _action_dot_keys(action_key))
+
+
 def _bump_action_dot(character, action_key, delta=1):
     dots = dict(character.action_dots or {})
-    cur = int(dots.get(action_key, 0) or 0)
+    # Canonical key matches sheet hydrate / PATCH (BitD ``attune`` for BIZARRE).
+    canonical = "attune" if action_key in ("attune", "bizarre") else action_key
+    cur = _read_action_dot(dots, canonical)
     new_val = cur + delta
     if new_val < 0:
-        raise XPAllocationError(f"Cannot reduce {action_key} below 0.")
+        raise XPAllocationError(f"Cannot reduce {canonical} below 0.")
     if new_val > 4:
-        raise XPAllocationError(f"Action {action_key} cannot exceed 4 dots.")
-    dots[action_key] = new_val
+        raise XPAllocationError(f"Action {canonical} cannot exceed 4 dots.")
+    dots[canonical] = new_val
+    if canonical == "attune":
+        dots.pop("bizarre", None)
     character.action_dots = dots
 
 

@@ -1234,7 +1234,11 @@ export const transformBackendToFrontend = (backendCharacter) => {
       SKIRMISH: backendCharacter.action_dots?.skirmish || 0,
       WRECK: backendCharacter.action_dots?.wreck || 0,
       // BitD ATTUNE key in DB; roll_action resolves bizarre↔attune (roll_helpers.action_rating_from_action_dots)
-      BIZARRE: backendCharacter.action_dots?.attune || 0,
+      // Canonical key is attune; legacy XP spends wrote bizarre — take max so sheet matches ledger.
+      BIZARRE: Math.max(
+        Number(backendCharacter.action_dots?.attune) || 0,
+        Number(backendCharacter.action_dots?.bizarre) || 0,
+      ),
       COMMAND: backendCharacter.action_dots?.command || 0,
       CONSORT: backendCharacter.action_dots?.consort || 0,
       SWAY: backendCharacter.action_dots?.sway || 0,
