@@ -33,13 +33,20 @@ def track_cap(track: str) -> int:
 
 
 @transaction.atomic
-def credit_xp(character, track: str, amount: int, *, save: bool = True) -> dict:
+def credit_xp(
+    character, track: str, amount: int, *, save: bool = True, walk_plan: bool = True
+) -> dict:
     """
     Add marks to an XP track. While filled, subtract cap, mint PendingAdvance,
     leftover stays. Loops so overflow stacks open pendings.
 
     Does not create ExperienceTracker rows — callers own award ledger.
     Caller should set skip_sheet_patch_guard when persisting via serializer.
+
+    ``walk_plan`` (default True): after minting, drain open pendings via the
+    advancement plan queue. Pass False when the caller will immediately redeem
+    a pending manually (direct sheet click) so a queued plan item cannot steal
+    that fill.
     """
     if character is None or not getattr(character, "pk", None):
         raise AdvancementError("Character is required.")
@@ -73,7 +80,7 @@ def credit_xp(character, track: str, amount: int, *, save: bool = True) -> dict:
         character.save(update_fields=["xp_clocks"])
 
     walk_result = None
-    if minted:
+    if minted and walk_plan:
         # Plan B: drain open pendings via first-legal queue walk.
         # Never let walk failure roll back the mint+clear.
         try:

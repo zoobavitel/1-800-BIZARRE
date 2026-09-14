@@ -2500,6 +2500,13 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Direct sheet spends bank then redeem immediately — do not let the plan
+        # queue steal the newly minted pending before that redeem.
+        defer_plan_walk = bool(
+            request.data.get("defer_plan_walk")
+            or request.data.get("walk_plan") is False
+        )
+
         with transaction.atomic():
             locked = Character.objects.select_for_update().get(pk=character.pk)
             pool = int(getattr(locked, "unallocated_xp", 0) or 0)
@@ -2514,7 +2521,13 @@ class CharacterViewSet(viewsets.ModelViewSet):
             locked.save(update_fields=["unallocated_xp"])
             token = bind_character_history_editor(user)
             try:
-                credited = credit_xp(locked, track, amount, save=True)
+                credited = credit_xp(
+                    locked,
+                    track,
+                    amount,
+                    save=True,
+                    walk_plan=not defer_plan_walk,
+                )
             finally:
                 reset_character_history_editor(token)
             ExperienceTracker.objects.create(

@@ -380,3 +380,52 @@ class PlanWalkTests(TestCase):
         self.character.refresh_from_db()
         self.stand.refresh_from_db()
         self.assertEqual(self.stand.power, "B")
+
+    def test_credit_xp_walk_plan_false_leaves_pending_for_manual(self):
+        """Direct spends bank XP without letting the plan queue steal the fill."""
+        from characters.models import PendingAdvance
+        from characters.services.advancement import credit_xp
+        from characters.services.xp_allocation import apply_minor_advance
+
+        create_plan_item(
+            self.character,
+            track="insight",
+            kind="action_dot",
+            payload={"action": "hunt"},
+        )
+        result = credit_xp(self.character, "insight", 5, walk_plan=False)
+        self.character.refresh_from_db()
+        self.assertEqual(result["pendings_minted"], 1)
+        self.assertIsNone(result["plan_walk"])
+        self.assertEqual(
+            PendingAdvance.objects.filter(
+                character=self.character, track="insight", status="open"
+            ).count(),
+            1,
+        )
+        self.assertEqual(self.character.action_dots.get("hunt"), 1)
+        self.assertEqual(
+            AdvancementPlanItem.objects.filter(
+                character=self.character, status="queued"
+            ).count(),
+            1,
+        )
+
+        apply_minor_advance(
+            self.character, xp_track="insight", action="study"
+        )
+        self.character.refresh_from_db()
+        self.assertEqual(self.character.action_dots.get("study"), 2)
+        self.assertEqual(self.character.action_dots.get("hunt"), 1)
+        self.assertEqual(
+            AdvancementPlanItem.objects.filter(
+                character=self.character, status="queued"
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            AdvancementPlanItem.objects.filter(
+                character=self.character, status="applied"
+            ).count(),
+            0,
+        )
