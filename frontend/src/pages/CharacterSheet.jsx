@@ -6231,6 +6231,7 @@ const CharacterSheetWrapper = ({
     }
     if (!characterId) {
       setHistoryRows([]);
+      setHistoryLoading(false);
       return;
     }
     const isBackgroundRefresh = historyListHydratedRef.current;
