@@ -3987,7 +3987,7 @@ const CharacterSheetWrapper = ({
         ? prev.filter((id) => id !== allocationId)
         : [...prev, allocationId],
     );
-  }, [planMode]);
+  }, []);
 
   /** Active LEVEL_UP_STAT spends for one coin axis (newest first). */
   const respecStatAllocations = useCallback(
@@ -4583,7 +4583,7 @@ const CharacterSheetWrapper = ({
     }
 
     try {
-      const fund = await ensureTrackPendingForDirectAdvance(track);
+      await ensureTrackPendingForDirectAdvance(track);
       const res = await characterAPI.applyLevelUp(characterId, body);
       if (res?.character) applyAllocationBackendCharacter(res.character);
       if (Array.isArray(res?.allocations)) setXpAllocationRows(res.allocations);
@@ -5026,7 +5026,6 @@ const CharacterSheetWrapper = ({
       directUpgradeStandStat,
       incrementStat,
       decrementStat,
-      standStats,
     ],
   );
 
@@ -5075,6 +5074,19 @@ const CharacterSheetWrapper = ({
   const [historyCharacterFilter, setHistoryCharacterFilter] = useState("all");
   const [historyRefreshTick, setHistoryRefreshTick] = useState(0);
   const historyListHydratedRef = useRef(false);
+  const historySessionsRef = useRef([]);
+  const historyRosterRef = useRef([]);
+  const historySessionIds = useMemo(
+    () => (charCampaign?.sessions || []).map((s) => s?.id).join(","),
+    [charCampaign?.sessions],
+  );
+  const historyRosterIds = useMemo(
+    () =>
+      (charCampaign?.campaign_characters || []).map((c) => c?.id).join(","),
+    [charCampaign?.campaign_characters],
+  );
+  historySessionsRef.current = charCampaign?.sessions || [];
+  historyRosterRef.current = charCampaign?.campaign_characters || [];
   const [historyUndoBusy, setHistoryUndoBusy] = useState(null);
   const [historyUndoError, setHistoryUndoError] = useState(null);
   const [showHistoryManualModal, setShowHistoryManualModal] = useState(false);
@@ -6301,7 +6313,7 @@ const CharacterSheetWrapper = ({
     }
 
     if (!historySessionId) {
-      const roster = charCampaign?.campaign_characters || [];
+      const roster = historyRosterRef.current;
       let targetIds = [];
       if (historyCharacterFilter === "all" && isGM && roster.length) {
         targetIds = roster.map((c) => c.id).filter((id) => id != null);
@@ -6389,7 +6401,7 @@ const CharacterSheetWrapper = ({
       return;
     }
     if (historySessionId === "all") {
-      const sessions = charCampaign?.sessions || [];
+      const sessions = historySessionsRef.current;
       const sessionNameById = new Map(
         sessions.map((s) => [Number(s.id), s.name || `Session ${s.id}`]),
       );
@@ -6754,9 +6766,8 @@ const CharacterSheetWrapper = ({
     historyCharacterFilter,
     characterId,
     charCampaign?.id,
-    // Stable fingerprints — avoid refetch flicker when poll replaces array identity.
-    (charCampaign?.sessions || []).map((s) => s?.id).join(","),
-    (charCampaign?.campaign_characters || []).map((c) => c?.id).join(","),
+    historySessionIds,
+    historyRosterIds,
     isGM,
     historyRefreshTick,
   ]);
