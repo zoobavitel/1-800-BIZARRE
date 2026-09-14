@@ -158,8 +158,8 @@ export default function AccountSettingsPage() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      setSaveMessage("Avatar must be 2 MB or smaller.");
+    if (file.size > 10 * 1024 * 1024) {
+      setSaveMessage("Avatar must be 10 MB or smaller.");
       return;
     }
     setAvatarFile(file);
@@ -243,7 +243,7 @@ export default function AccountSettingsPage() {
           <div style={S.card}>
             <label style={S.lbl}>Profile picture</label>
             <p style={{ ...S.mutedSmall, margin: "0 0 8px" }}>
-              Upload a JPEG, PNG, WebP, or GIF (max 2 MB), or paste an HTTPS image
+              Upload a JPEG, PNG, WebP, or GIF (max 10 MB), or paste an HTTPS image
               URL. Recommended: square image (1:1), best at 256×256.
             </p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "10px" }}>

@@ -1,3 +1,5 @@
+/** Match backend PORTRAIT_MAX_BYTES / CARD_IMAGE_MAX_BYTES. */
+export const PORTRAIT_MAX_BYTES = 10 * 1024 * 1024;
 /** Match backend CARD_IMAGE_MAX_BYTES (campaign/faction card art). */
 export const CARD_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 
