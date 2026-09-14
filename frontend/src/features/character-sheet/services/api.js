@@ -442,6 +442,17 @@ export const characterAPI = {
       body: JSON.stringify({}),
     }),
 
+  /** Respec: whether ledger reconciles (gate for Respec mode). */
+  respecStatus: (id) =>
+    apiRequest(`/characters/${id}/respec-status/`, { method: "GET" }),
+
+  /** Respec: reverse dropped spends, mint adds, refund net to Available XP. */
+  respecCommit: (id, body) =>
+    apiRequest(`/characters/${id}/respec-commit/`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   /** Reset mechanics to a blank sheet. Keeps campaign, name, crew, look, vice, heritage. */
   resetCharacterSheet: (id) =>
     apiRequest(`/characters/${id}/reset-sheet/`, {

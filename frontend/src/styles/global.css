@@ -136,10 +136,14 @@ body {
   background: var(--bg-page);
   color: var(--text-primary);
   font-family: var(--font-body);
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 #root {
   min-height: 100vh;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 button,
@@ -219,4 +223,17 @@ textarea {
   background: var(--hftf-purple-hover);
   border-color: var(--hftf-purple-hover);
   color: #fff;
+}
+
+/* Narrow viewports: keep AppBar + character toolbar inside the page */
+@media (max-width: 720px) {
+  .app-bar {
+    padding: 8px 12px !important;
+  }
+  .app-bar a {
+    font-size: 18px !important;
+  }
+  .character-page-mode-bar {
+    padding: 8px 10px !important;
+  }
 }
