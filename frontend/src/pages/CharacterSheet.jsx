@@ -1206,7 +1206,6 @@ const CharacterSheetWrapper = ({
     () => character?.advancementPlan || [],
   );
   const [planBusy, setPlanBusy] = useState(false);
-  const [planSessionHint, setPlanSessionHint] = useState(null);
   /** When Coin plan click would land B→A — pick a_grant before POST. */
   const [planBADraft, setPlanBADraft] = useState(null); // { stat }
   const [planBABranch, setPlanBABranch] = useState("two_standard");
@@ -4696,6 +4695,7 @@ const CharacterSheetWrapper = ({
       const res = await characterAPI.allocatePoolXp(characterId, {
         track,
         amount: need,
+        defer_plan_walk: true,
       });
       if (res?.character) applyAllocationBackendCharacter(res.character);
       return { funded: need, character: res?.character || null };
@@ -4748,7 +4748,6 @@ const CharacterSheetWrapper = ({
         return;
       }
 
-
       levelUpInFlightRef.current = true;
       setDirectAdvanceBusy(true);
       if (autosaveAbortRef.current) {
@@ -4785,6 +4784,17 @@ const CharacterSheetWrapper = ({
               : ""
           }.`,
         });
+        try {
+          const planRes = await characterAPI.getAdvancementPlan(characterId);
+          const items = Array.isArray(planRes?.items)
+            ? planRes.items
+            : Array.isArray(planRes)
+              ? planRes
+              : null;
+          if (items) setAdvancementPlan(items);
+        } catch (_) {
+          /* plan refresh optional after direct spend */
+        }
       } catch (err) {
         setXpActionToast({
           kind: "err",
@@ -5701,20 +5711,6 @@ const CharacterSheetWrapper = ({
       }),
     [activeSessionId, characterId, xpReqTracker, xpReqRolls],
   );
-
-  const planSessionHadRef = useRef(false);
-  useEffect(() => {
-    const hasSession = Boolean(
-      xpReqSnapshot.hasActiveSession || activeSessionId,
-    );
-    const rising = hasSession && !planSessionHadRef.current;
-    planSessionHadRef.current = hasSession;
-    if (!rising || isGM || !planMode) return undefined;
-    setPlanMode(false);
-    setPlanSessionHint("Plan mode off — active session.");
-    const t = window.setTimeout(() => setPlanSessionHint(null), 4000);
-    return () => window.clearTimeout(t);
-  }, [xpReqSnapshot.hasActiveSession, activeSessionId, planMode, isGM]);
 
   useEffect(() => {
     if (!planMode) {
@@ -9787,20 +9783,15 @@ const CharacterSheetWrapper = ({
         </button>
         {activeMode === "CHARACTER MODE" &&
           (() => {
-            const hasSession = Boolean(
-              xpReqSnapshot.hasActiveSession || activeSessionId,
-            );
-            const planDisabled =
-              !canEditPlan || !isPostChargen || (hasSession && !isGM);
+            // Plan works with or without an active session (queue advances / mark refunds).
+            const planDisabled = !canEditPlan || !isPostChargen;
             const planTitle = !canEditPlan
               ? "Only the owner or GM can edit the advancement plan"
               : !isPostChargen
                 ? "Plan mode unlocks after chargen (first XP spend)"
-                : hasSession && !isGM
-                  ? "Plan mode off during an active session"
-                  : planMode
-                    ? "Turn off plan mode"
-                    : "Turn on plan mode — queue advances or mark spends to refund";
+                : planMode
+                  ? "Turn off plan mode"
+                  : "Turn on plan mode — queue advances or mark spends to refund";
             return (
               <button
                 type="button"
@@ -9844,23 +9835,6 @@ const CharacterSheetWrapper = ({
             );
           })()}
       </div>
-
-      {planSessionHint ? (
-        <div
-          role="status"
-          style={{
-            textAlign: "center",
-            padding: "6px 12px",
-            fontSize: 11,
-            fontFamily: "var(--font-mono, monospace)",
-            color: "var(--hftf-gold)",
-            background: "var(--hftf-deep)",
-            borderBottom: "1px solid var(--hftf-orange)",
-          }}
-        >
-          {planSessionHint}
-        </div>
-      ) : null}
 
       {planMode ? (
         <div
