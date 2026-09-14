@@ -881,8 +881,7 @@
 /* Character / NPC token grid */
 .home-poc .home-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 180px));
-  justify-content: start;
+  grid-template-columns: repeat(auto-fill, minmax(min(160px, 100%), 1fr));
   align-items: start;
   gap: 10px;
   margin-bottom: 8px;
