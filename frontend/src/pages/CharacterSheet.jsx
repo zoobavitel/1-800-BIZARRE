@@ -3968,7 +3968,7 @@ const CharacterSheetWrapper = ({
     if (!characterId || !isPostChargen) {
       setRespecAllowed(true);
       setRespecBlockMessage(null);
-      return;
+      return { allowed: true, message: null };
     }
     const requestId = respecStatusRequestIdRef.current + 1;
     respecStatusRequestIdRef.current = requestId;
@@ -3979,19 +3979,25 @@ const CharacterSheetWrapper = ({
         respecStatusRequestIdRef.current !== requestId ||
         activeRespecCharacterIdRef.current !== requestCharacterId
       ) {
-        return;
+        return { allowed: false, message: null };
       }
-      setRespecAllowed(Boolean(res?.allowed));
-      setRespecBlockMessage(res?.message || null);
+      const allowed = Boolean(res?.allowed);
+      const message = res?.message || null;
+      setRespecAllowed(allowed);
+      setRespecBlockMessage(message);
+      return { allowed, message };
     } catch {
       if (
         respecStatusRequestIdRef.current !== requestId ||
         activeRespecCharacterIdRef.current !== requestCharacterId
       ) {
-        return;
+        return { allowed: false, message: null };
       }
-      setRespecAllowed(true);
-      setRespecBlockMessage(null);
+      const message =
+        "Could not verify respec status. Please try again in a moment.";
+      setRespecAllowed(false);
+      setRespecBlockMessage(message);
+      return { allowed: false, message };
     }
   }, [characterId, isPostChargen]);
 
@@ -4124,7 +4130,14 @@ const CharacterSheetWrapper = ({
         });
         return;
       }
-      await refreshRespecStatus();
+      const status = await refreshRespecStatus();
+      if (!status?.allowed) {
+        setXpActionToast({
+          kind: "err",
+          message: status?.message || "Respec is currently unavailable.",
+        });
+        return;
+      }
       setRespecBusy(true);
       levelUpInFlightRef.current = true;
       try {
@@ -9886,8 +9899,7 @@ const CharacterSheetWrapper = ({
               .filter((a) => !a.undone_at)
               .map((a) => {
                 const marked = respecDroppedIds.includes(a.id);
-                const acquire =
-                  a.allocation_type === "LEVEL_UP_ACQUIRE_STAND";
+                const refundable = a.allocation_type === "LEVEL_UP_STAT";
                 return (
                   <li key={a.id} style={{ marginBottom: 4 }}>
                     <label
@@ -9895,20 +9907,22 @@ const CharacterSheetWrapper = ({
                         display: "flex",
                         gap: 8,
                         alignItems: "flex-start",
-                        cursor: acquire ? "not-allowed" : "pointer",
-                        opacity: acquire ? 0.5 : 1,
+                        cursor: refundable ? "pointer" : "not-allowed",
+                        opacity: refundable ? 1 : 0.5,
                       }}
                     >
                       <input
                         type="checkbox"
-                        disabled={acquire || !respecAllowed}
+                        disabled={!refundable || !respecAllowed}
                         checked={marked}
                         onChange={() => toggleRespecDrop(a.id)}
                       />
                       <span>
                         {a.summary || a.allocation_type_display || a.allocation_type}
                         {a.metadata?.reversal ? " (already reversed)" : ""}
-                        {acquire ? " — drop not allowed (phase 1)" : ""}
+                        {!refundable
+                          ? " — drop preview unavailable for this spend type"
+                          : ""}
                       </span>
                     </label>
                   </li>
@@ -19901,23 +19915,10 @@ const CharacterSheetWrapper = ({
                                   return;
                                 }
                                 if (isPostChargen && planMode) {
-                                  const match = (xpAllocationRows || []).find(
-                                    (a) =>
-                                      !a.undone_at &&
-                                      a.allocation_type ===
-                                        "LEVEL_UP_PLAYBOOK_ABILITY" &&
-                                      (a.metadata?.picked?.id === ab.id ||
-                                        a.metadata?.picked?.name === ab.name ||
-                                        a.summary?.includes?.(ab.name)),
-                                  );
-                                  if (match) {
-                                    toggleRespecDrop(match.id);
-                                    return;
-                                  }
                                   setXpActionToast({
                                     kind: "err",
                                     message:
-                                      "No matching XP spend found — mark it in the Plan refund list.",
+                                      "Ability refund preview is not supported yet. Only Stand Coin grade spends can be marked for refund.",
                                   });
                                   return;
                                 }
