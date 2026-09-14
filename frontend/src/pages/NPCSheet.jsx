@@ -1500,28 +1500,49 @@ const NPCSheet = ({
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    const resetPendingSelection = () => {
+      if (imagePreview && String(imagePreview).startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(imagePreview);
+        } catch {
+          /* ignore */
+        }
+      }
+      setImageFile(null);
+      setImagePreview(imageUrl || "");
+      setPortraitPreviewError(false);
+    };
     try {
       const prepared = await compressImageForUpload(file, {
         maxBytes: PORTRAIT_MAX_BYTES,
       });
       if (prepared.size > PORTRAIT_MAX_BYTES) {
+        resetPendingSelection();
         setSaveErrorDetail(
           `Portrait must be ${PORTRAIT_MAX_BYTES / (1024 * 1024)} MB or smaller.`,
         );
         setSaveStatus("error");
         return;
       }
+      if (imagePreview && String(imagePreview).startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(imagePreview);
+        } catch {
+          /* ignore */
+        }
+      }
       setImageFile(prepared);
       setImageUrl("");
       setImagePreview(URL.createObjectURL(prepared));
       setPortraitPreviewError(false);
     } catch (err) {
+      resetPendingSelection();
       setSaveErrorDetail(
         err?.message || "Could not prepare portrait for upload.",
       );
       setSaveStatus("error");
     }
-  }, []);
+  }, [imagePreview, imageUrl]);
 
   const handleImageUrlPrompt = useCallback(() => {
     const url = prompt("Paste image URL:");
