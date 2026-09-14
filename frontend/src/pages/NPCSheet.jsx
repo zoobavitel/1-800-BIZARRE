@@ -24,6 +24,10 @@ import { HistoryBranchIcon } from "../components/position-effect/PositionEffectI
 import NpcsStandCoin from "../components/NpcsStandCoin";
 import AvatarCropModal from "../components/AvatarCropModal";
 import { clockWedgeFillColor } from "../features/character-sheet/utils/progressClockSegments";
+import {
+  compressImageForUpload,
+  PORTRAIT_MAX_BYTES,
+} from "../utils/compressImageForUpload";
 import "./NPCSheet.css";
 
 function clampCrewStandingValue(n) {
@@ -113,15 +117,41 @@ function npcClockIdsMatch(a, b) {
   return a === b || (a != null && b != null && Number(a) === Number(b));
 }
 
-/** Stable JSON fingerprint for NPC autosave dedupe (skip imageFile). */
+/** Stable JSON fingerprint for NPC autosave dedupe (File must affect the hash). */
 function npcAutosavePayloadFingerprint(payload) {
   try {
     const clone = { ...(payload || {}) };
-    delete clone.imageFile;
+    const file = clone.imageFile;
+    if (
+      file != null &&
+      (file instanceof File ||
+        (typeof Blob !== "undefined" && file instanceof Blob))
+    ) {
+      clone.imageFile = `pending:${file.name || "blob"}:${file.size}:${file.type || ""}`;
+    } else {
+      delete clone.imageFile;
+    }
     return JSON.stringify(clone);
   } catch {
     return `err-${Date.now()}`;
   }
+}
+
+export function getNpcPortraitReplacementFailureState(persistedPreview = "") {
+  return {
+    imageFile: null,
+    imagePreview: persistedPreview || "",
+    portraitPreviewError: false,
+  };
+}
+
+export function getNpcPortraitSavedState(result, fallbackPersisted = "") {
+  const persisted = result?.image_url || result?.image || fallbackPersisted || "";
+  return {
+    imageFile: null,
+    imageUrl: persisted,
+    imagePreview: persisted,
+  };
 }
 
 /** Session rolls where a PC spent coin on NPC heal fortune — match healer to this NPC by display name. */
@@ -1253,10 +1283,17 @@ const NPCSheet = ({
   const [cropOpen, setCropOpen] = useState(false);
   const [portraitPreviewError, setPortraitPreviewError] = useState(false);
   const fileInputRef = useRef(null);
+  const imagePreviewRef = useRef(npc?.image || npc?.image_url || "");
+  const lastPersistedImageRef = useRef(npc?.image || npc?.image_url || "");
 
   useEffect(() => {
+    imagePreviewRef.current = imagePreview;
     setPortraitPreviewError(false);
   }, [imagePreview]);
+
+  useEffect(() => {
+    lastPersistedImageRef.current = npc?.image || npc?.image_url || "";
+  }, [npc?.id, npc?.image, npc?.image_url]);
 
   const handlePromoteItemToCampaign = useCallback(
     async (item) => {
@@ -1483,18 +1520,56 @@ const NPCSheet = ({
     };
   }, [showNpcTrackingPanel, npcTrackingTab, campaignId, trackingSessionPick, name]);
 
-  const handleFileSelect = useCallback((e) => {
+  const handleFileSelect = useCallback(async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = "";
     if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      setSaveErrorDetail("Portrait must be 2 MB or smaller.");
+    const resetPendingSelection = () => {
+      if (imagePreview && String(imagePreview).startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(imagePreview);
+        } catch {
+          /* ignore */
+        }
+      }
+      const restored = getNpcPortraitReplacementFailureState(
+        lastPersistedImageRef.current,
+      );
+      setImageFile(restored.imageFile);
+      setImagePreview(restored.imagePreview);
+      setPortraitPreviewError(restored.portraitPreviewError);
+    };
+    try {
+      const prepared = await compressImageForUpload(file, {
+        maxBytes: PORTRAIT_MAX_BYTES,
+      });
+      if (prepared.size > PORTRAIT_MAX_BYTES) {
+        resetPendingSelection();
+        setSaveErrorDetail(
+          `Portrait must be ${PORTRAIT_MAX_BYTES / (1024 * 1024)} MB or smaller.`,
+        );
+        setSaveStatus("error");
+        return;
+      }
+      if (imagePreview && String(imagePreview).startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(imagePreview);
+        } catch {
+          /* ignore */
+        }
+      }
+      setImageFile(prepared);
+      setImageUrl("");
+      setImagePreview(URL.createObjectURL(prepared));
+      setPortraitPreviewError(false);
+    } catch (err) {
+      resetPendingSelection();
+      setSaveErrorDetail(
+        err?.message || "Could not prepare portrait for upload.",
+      );
       setSaveStatus("error");
-      return;
     }
-    setImageFile(file);
-    setImageUrl("");
-    setImagePreview(URL.createObjectURL(file));
-  }, []);
+  }, [imagePreview]);
 
   const handleImageUrlPrompt = useCallback(() => {
     const url = prompt("Paste image URL:");
@@ -1732,11 +1807,11 @@ const NPCSheet = ({
     }
     const payload = buildPayloadRef.current();
     const payloadHash = npcAutosavePayloadFingerprint(payload);
-    // Skip no-op PUTs (save→parent prop churn→heritage filter refs used to loop).
-    if (
+    const hashSkip =
       lastSavedPayloadHashRef.current != null &&
-      lastSavedPayloadHashRef.current === payloadHash
-    ) {
+      lastSavedPayloadHashRef.current === payloadHash;
+    // Skip no-op PUTs (save→parent prop churn→heritage filter refs used to loop).
+    if (hashSkip) {
       return;
     }
     // Don't auto-save a brand-new NPC that has never been persisted and
@@ -1763,7 +1838,29 @@ const NPCSheet = ({
         );
       }
       lastSavedPayloadHashRef.current = payloadHash;
-      if (payload.imageFile) setImageFile(null);
+      if (!payload.imageFile && ("image" in (result || {}) || "image_url" in (result || {}))) {
+        lastPersistedImageRef.current = result?.image_url || result?.image || "";
+      }
+      if (payload.imageFile) {
+        if (
+          imagePreviewRef.current &&
+          String(imagePreviewRef.current).startsWith("blob:")
+        ) {
+          try {
+            URL.revokeObjectURL(imagePreviewRef.current);
+          } catch {
+            /* ignore */
+          }
+        }
+        const savedPortrait = getNpcPortraitSavedState(
+          result,
+          lastPersistedImageRef.current,
+        );
+        lastPersistedImageRef.current = savedPortrait.imageUrl;
+        setImageFile(savedPortrait.imageFile);
+        setImagePreview(savedPortrait.imagePreview);
+        setImageUrl(savedPortrait.imageUrl);
+      }
       setSaveStatus("saved");
       setSaveErrorDetail(null);
       setTimeout(

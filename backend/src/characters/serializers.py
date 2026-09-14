@@ -74,8 +74,9 @@ _NPC_LEVEL_OFFSET = 9
 
 _PC_CLOCK_TYPES = {c[0] for c in ProgressClock.CLOCK_TYPE_CHOICES}
 
-PORTRAIT_MAX_BYTES = 2 * 1024 * 1024
+PORTRAIT_MAX_BYTES = 10 * 1024 * 1024
 # Campaign/faction card art (not tiny avatars) — phone photos and game art often exceed 2 MB.
+# Portraits share the same cap so phone camera shots can upload without a client reject.
 CARD_IMAGE_MAX_BYTES = 10 * 1024 * 1024
 PORTRAIT_ALLOWED_CONTENT_TYPES = frozenset(
     {"image/jpeg", "image/png", "image/webp", "image/gif"}

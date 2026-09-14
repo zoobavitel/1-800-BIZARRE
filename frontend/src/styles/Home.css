@@ -1279,11 +1279,13 @@
   color: #c4a0e8;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
 }
-.home-poc .p-card-has-image .p-tag {
-  border-color: rgba(255, 255, 255, 0.22);
-  color: rgba(232, 224, 208, 0.88);
-  background: rgba(18, 16, 22, 0.45);
-  backdrop-filter: blur(4px);
+.home-poc .p-card-has-image .p-tag,
+.home-poc .npc-card-has-image .p-tag {
+  border-color: rgba(255, 255, 255, 0.28);
+  color: rgba(245, 238, 225, 0.95);
+  background: rgba(10, 8, 14, 0.62);
+  backdrop-filter: blur(5px);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
 }
 .home-poc .npc-card-has-image .npc-card-meta {
   color: rgba(232, 224, 208, 0.72);
