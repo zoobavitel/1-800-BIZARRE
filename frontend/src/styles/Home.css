@@ -1003,8 +1003,7 @@
   line-height: 1;
   letter-spacing: 0.04em;
 }
-.home-poc .g-card-thumb-ph,
-.home-poc .f-card-thumb-ph {
+.home-poc .g-card-thumb-ph {
   font-family: var(--font-display);
   font-size: 16px;
   color: var(--dark-text, #e8e0d0);
@@ -1012,21 +1011,24 @@
   line-height: 1;
 }
 .home-poc .f-card-thumb {
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  border-radius: 4px;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--dark-border);
+  background: transparent;
+  border: none;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  margin: 0;
 }
 .home-poc .f-card-thumb-ph {
+  font-family: var(--font-display);
+  font-size: 28px;
   color: var(--cream);
-  opacity: 0.4;
-  font-size: 14px;
+  opacity: 0.35;
+  line-height: 1;
+  letter-spacing: 0.04em;
 }
 
 .home-poc .p-card-body,
@@ -1324,17 +1326,39 @@
 }
 .home-poc .f-card-has-image {
   background: #0d0b10;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.home-poc .f-card-has-image .f-card-media {
+  background: transparent;
 }
 .home-poc .f-card-has-image .f-card-name {
+  color: var(--cream);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
 }
-.home-poc .f-card-has-image .f-card-meta {
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+.home-poc .f-card-has-image .f-card-type {
+  color: #c4a0e8;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.75);
 }
-.home-poc .f-card-has-image .f-card-status,
-.home-poc .f-card-has-image .f-card-btn {
-  background: rgba(18, 16, 22, 0.55);
+.home-poc .f-card-has-image .p-tag {
+  border-color: rgba(255, 255, 255, 0.28);
+  color: rgba(245, 238, 225, 0.95);
+  background: rgba(10, 8, 14, 0.62);
+  backdrop-filter: blur(5px);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+.home-poc .f-card-has-image .f-card-status {
   backdrop-filter: blur(4px);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+.home-poc .f-card-has-image .f-card-btn {
+  border-color: rgba(255, 255, 255, 0.22);
+  color: rgba(232, 224, 208, 0.88);
+  background: rgba(18, 16, 22, 0.45);
+  backdrop-filter: blur(4px);
+}
+.home-poc .f-card-has-image .f-card-btn:hover {
+  border-color: var(--p1);
+  color: var(--cream);
 }
 .home-poc .g-card-stripe {
   width: 4px;
@@ -1601,56 +1625,149 @@
   cursor: not-allowed;
 }
 
+/* Faction token cards — dark HFTF panel (same column as campaigns) */
+.home-poc .home-faction-grid .f-edit-span {
+  grid-column: 1 / -1;
+}
+
 .home-poc .f-card {
-  background: var(--dark-bg-card);
-  border: 1px solid var(--dark-border);
-  padding: 12px 14px;
-  margin-bottom: 8px;
-  transition: border-color 0.2s;
-  cursor: pointer;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  position: relative;
+  flex-direction: column;
+  background: var(--dark-bg-card);
   overflow: hidden;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s,
+    border-color 0.15s;
+  cursor: pointer;
+  border: 1px solid var(--dark-border);
+  border-radius: 4px;
+  position: relative;
   isolation: isolate;
-  min-height: 72px;
+  align-self: start;
 }
 .home-poc .f-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--p1);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.22);
+}
+.home-poc .f-card:focus-visible {
+  outline: 2px solid var(--p1);
+  outline-offset: 2px;
+}
+.home-poc .f-card.is-expanded {
   border-color: var(--p1);
 }
-.home-poc .f-card-info {
-  flex: 1;
+
+.home-poc .f-card-stripe {
+  width: 100%;
+  height: 3px;
+  flex-shrink: 0;
   position: relative;
   z-index: 1;
-  min-width: 0;
+  background: linear-gradient(
+    to right,
+    var(--p2) 0% 50%,
+    var(--p4) 50% 100%
+  );
 }
+
+.home-poc .f-card-media {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  flex-shrink: 0;
+  z-index: 1;
+  overflow: hidden;
+  background: linear-gradient(
+    145deg,
+    rgba(108, 57, 137, 0.12) 0%,
+    rgba(0, 0, 0, 0.35) 100%
+  );
+}
+
+.home-poc .f-card-body {
+  padding: 10px 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
 .home-poc .f-card-name {
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: 15px;
   color: var(--cream);
   letter-spacing: 0.03em;
-  line-height: 1;
+  line-height: 1.2;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
 }
-.home-poc .f-card-meta {
+
+.home-poc .f-card-type {
+  font-family: var(--font-heading);
+  font-size: 11px;
+  font-weight: 400;
+  color: #c4a0e8;
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-poc .f-card-tags {
   display: flex;
-  gap: 10px;
-  margin-top: 4px;
-  font-size: 9px;
-  color: var(--cream-dim);
-  letter-spacing: 0.04em;
+  gap: 4px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
-.home-poc .f-card-meta-val {
+
+.home-poc .f-card .p-tag {
+  border-color: var(--dark-border);
   color: var(--dark-text-2);
+  background: rgba(255, 255, 255, 0.03);
 }
+
 .home-poc .f-card-status {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: 9px;
   padding: 3px 8px;
   letter-spacing: 0.04em;
+  text-transform: uppercase;
   flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 6px;
 }
+
+/* Status on dark faction cards */
+.home-poc .f-card .f-status-allied {
+  background: rgba(22, 163, 74, 0.15);
+  color: var(--green);
+  border: 1px solid rgba(22, 163, 74, 0.3);
+}
+.home-poc .f-card .f-status-neutral {
+  background: rgba(138, 126, 110, 0.1);
+  color: var(--dark-text-2);
+  border: 1px solid var(--dark-border);
+}
+.home-poc .f-card .f-status-hostile {
+  background: rgba(192, 57, 43, 0.12);
+  color: var(--red);
+  border: 1px solid rgba(192, 57, 43, 0.3);
+}
+.home-poc .f-card .f-status-war {
+  background: rgba(192, 57, 43, 0.2);
+  color: var(--red);
+  border: 1px solid var(--red);
+  font-weight: bold;
+}
+
 .home-poc .f-status-allied {
   background: rgba(22, 163, 74, 0.15);
   color: var(--green);
@@ -1672,19 +1789,40 @@
   border: 1px solid var(--red);
   font-weight: bold;
 }
-.home-poc .f-card-right {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  flex-shrink: 0;
-  position: relative;
-  z-index: 1;
-}
+
 .home-poc .f-card-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
 }
+
+/* Faction card footer — dark HFTF, touch-sized */
+.home-poc .f-card .f-card-btn {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 6px 12px;
+  min-height: 36px;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: 1px solid var(--bg3);
+  background: transparent;
+  color: var(--cream-dim);
+  border-radius: 4px;
+}
+.home-poc .f-card .f-card-btn:hover {
+  border-color: var(--p1);
+  color: var(--cream);
+}
+.home-poc .f-card .f-card-btn-delete:hover {
+  border-color: #c84040;
+  color: #c84040;
+  background: rgba(200, 64, 64, 0.08);
+}
+
+/* Inline editor + other dark consumers */
 .home-poc .f-card-btn {
   font-family: var(--font-mono);
   font-size: 9px;
@@ -1713,15 +1851,6 @@
 }
 .home-poc .f-card-btn-primary:hover {
   background: rgba(108, 57, 137, 0.35);
-}
-
-.home-poc .f-card-wrap {
-  margin-bottom: 8px;
-}
-.home-poc .f-card-wrap.is-expanded > .f-card {
-  margin-bottom: 0;
-  border-color: var(--p1);
-  border-bottom-color: transparent;
 }
 
 .home-poc .f-edit-panel {
