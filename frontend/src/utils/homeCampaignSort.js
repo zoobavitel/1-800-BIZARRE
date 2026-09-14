@@ -234,7 +234,7 @@ export function visibleNpcsForHome(
   };
 }
 
-/** Max faction cards shown on Home before "show more". */
+/** Max active-campaign faction cards shown on Home before "show more". */
 export const HOME_FACTION_PREVIEW_LIMIT = HOME_CHARACTER_PREVIEW_LIMIT;
 
 /**
@@ -287,8 +287,11 @@ export function buildGmFactionGroupsForHome(campaigns, gmUserId) {
 }
 
 /**
- * Collapsed: first N factions across priority-sorted campaign groups
- * (re-grouped for headers). Expanded: full groups.
+ * Collapsed: factions from active campaigns only (live session first, then
+ * idle active — same tiers as campaign Home cards). Deactivated campaign
+ * factions stay hidden until expanded. Also capped by `limit` across the
+ * priority-sorted active list (re-grouped for headers).
+ * Expanded: full groups.
  *
  * @param {{ campaign: object, factions: object[] }[] | null | undefined} groups
  * @param {{ expanded?: boolean, limit?: number }} [opts]
@@ -308,8 +311,11 @@ export function visibleFactionGroupsForHome(
       flat.push({ campaign: g.campaign, faction: f });
     }
   }
+  const activeFlat = flat.filter(
+    (row) => campaignHomeSortTier(row.campaign) < 2,
+  );
   const previewLimit = Math.max(0, Number(limit) || 0);
-  const slice = flat.slice(0, previewLimit);
+  const slice = activeFlat.slice(0, previewLimit);
   const hiddenCount = Math.max(0, flat.length - slice.length);
   const byCampaignId = new Map();
   const order = [];

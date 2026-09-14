@@ -121,6 +121,12 @@ class Faction(models.Model):
         blank=True,
         help_text="Optional emblem or photo for this faction.",
     )
+    image_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text="Optional HTTPS URL for faction emblem (fallback when no uploaded file).",
+    )
 
     class Meta:
         unique_together = [("campaign", "name")]

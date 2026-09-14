@@ -281,8 +281,9 @@ const HomePage = ({
       () =>
         visibleFactionGroupsForHome(gmFactionGroups, {
           expanded: showAllFactions,
+          limit: cardPreviewLimit,
         }),
-      [gmFactionGroups, showAllFactions],
+      [gmFactionGroups, showAllFactions, cardPreviewLimit],
     );
 
   useEffect(() => {

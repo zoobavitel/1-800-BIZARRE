@@ -389,11 +389,21 @@ describe("visibleFactionGroupsForHome", () => {
       gm: { id: 99 },
       factions: [{ id: 99, name: "Skip" }],
     },
+    {
+      id: 13,
+      name: "Dead Camp",
+      is_active: false,
+      gm,
+      factions: [
+        { id: 30, name: "Old Guard" },
+        { id: 31, name: "Archived" },
+      ],
+    },
   ];
 
   test("buildGmFactionGroupsForHome orders live campaigns first and sorts factions", () => {
     const groups = buildGmFactionGroupsForHome(campaigns, 1);
-    expect(groups.map((g) => g.campaign.id)).toEqual([10, 11]);
+    expect(groups.map((g) => g.campaign.id)).toEqual([10, 11, 13]);
     expect(groups[0].factions.map((f) => f.id)).toEqual([10, 12, 11]);
     expect(groups[1].factions.map((f) => f.id)).toEqual([21, 20]);
   });
@@ -406,7 +416,7 @@ describe("visibleFactionGroupsForHome", () => {
 
   test("matches gm id when user id is a string", () => {
     const groups = buildGmFactionGroupsForHome(campaigns, "1");
-    expect(groups.map((g) => g.campaign.id)).toEqual([10, 11]);
+    expect(groups.map((g) => g.campaign.id)).toEqual([10, 11, 13]);
   });
 
   test("isCampaignGmForUser accepts bare gm id", () => {
@@ -415,20 +425,36 @@ describe("visibleFactionGroupsForHome", () => {
     expect(isCampaignGmForUser({ gm: 7 }, 8)).toBe(false);
   });
 
-  test("collapsed shows first three factions across groups", () => {
+  test("collapsed shows first N active-campaign factions; skips deactivated", () => {
     const groups = buildGmFactionGroupsForHome(campaigns, 1);
     const { visible, hiddenCount } = visibleFactionGroupsForHome(groups);
     expect(visible.map((g) => g.campaign.id)).toEqual([10]);
     expect(visible[0].factions.map((f) => f.id)).toEqual([10, 12, 11]);
+    // 2 idle active + 2 deactivated left hidden
+    expect(hiddenCount).toBe(4);
+    expect(
+      visible.flatMap((g) => g.factions.map((f) => f.id)),
+    ).not.toContain(30);
+  });
+
+  test("collapsed with higher limit still omits deactivated campaign factions", () => {
+    const groups = buildGmFactionGroupsForHome(campaigns, 1);
+    const { visible, hiddenCount } = visibleFactionGroupsForHome(groups, {
+      limit: 50,
+    });
+    expect(visible.map((g) => g.campaign.id)).toEqual([10, 11]);
+    expect(visible.flatMap((g) => g.factions).map((f) => f.id)).toEqual([
+      10, 12, 11, 21, 20,
+    ]);
     expect(hiddenCount).toBe(2);
   });
 
-  test("expanded shows all groups", () => {
+  test("expanded shows all groups including deactivated", () => {
     const groups = buildGmFactionGroupsForHome(campaigns, 1);
     const { visible, hiddenCount } = visibleFactionGroupsForHome(groups, {
       expanded: true,
     });
-    expect(visible.map((g) => g.campaign.id)).toEqual([10, 11]);
+    expect(visible.map((g) => g.campaign.id)).toEqual([10, 11, 13]);
     expect(hiddenCount).toBe(0);
   });
 });
